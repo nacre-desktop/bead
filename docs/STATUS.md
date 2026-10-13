@@ -1,7 +1,8 @@
 # Status
 
 2026-10-13: Feature 1 built and locally validated. Public repository; ADR 0001
-approved with amendments. Final main integration/push/CI verification in progress.
+approved with amendments. Feature 1 integrated and pushed; CI passed for code
+8a5069d in run 38391925119. Final screenshot/handoff update is documentation only.
 
 Done: MIT/Apache bead-wayland + GPL nacre-shell, full-width 32px strip per output,
 no keyboard focus/input capture/reserved space; event-driven idle; signal cleanup.
@@ -20,7 +21,9 @@ dark strip at the top of the separate nested desktop. Close its window or Ctrl+C
 to stop. No session config/autostart/install changes. Existing Rust/labwc used;
 cargo-deny 0.20.2 added locally, no system packages installed.
 
-Next action: integrate/push to main and verify exact-head CI, then STOP for next.
+Next action: **WAIT for next/feedback.** Feature 1 is complete. No Feature 2 work
+is authorized yet. [Screenshot](../examples/feature1.png): Bead is the dark top
+strip; the central hotkeys overlay belongs to the nested compositor.
 Feature 2 must add drawing/palette and stress a launcher-sized rounded/shadowed,
 lots-of-text/color-emoji panel with damage tracking at real 2880×1800 / effective
 1.5 scale / 120 Hz. Report p50/p99, CPU and loaded-font PSS. Tell owner if CPU

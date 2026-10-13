@@ -43,6 +43,7 @@ Hypr screenshots timed out for both clients; bounded timeout added, numbers reta
 Its nested backend also logged an xdg configure warning on preview shutdown.
 Both Bead instances exit 0/surfaces=0. No daily shell/config changes. Tests: fmt,
 clippy -D warnings, 2 geometry tests, actual lifecycle and measurements, cargo-deny;
+GitHub CI 38391925119 passed for feature code 8a5069d.
 strict license policy also correctly rejects GPL shell when deliberately selected.
 408 new Rust lines plus small fixtures/runner updates; ~1 hour including setup
 and measurements. Installed cargo-deny 0.20.2 locally; no system packages added
