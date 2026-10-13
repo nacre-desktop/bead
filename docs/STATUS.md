@@ -2,7 +2,8 @@
 
 2026-10-13: Gate B approved. Overnight Feature4/5 authorized; in progress.
 Worktree bead-feature4-authoring from mainfeae2b2. Authoring ADR0002 complete: Luau chosen (31UI lines vs KDL27/QML-like34),
-real Lua/KDL syntax checks pass. Current milestone frontend + Taffy/layout/lists.
+real Lua/KDL syntax checks pass. Frontend/Taffy/layout/lists complete;25 tests and both nested toy smokes pass.
+Current milestone real Nacre launcher sidebar + app-grid port.
 Choose Luau unless concrete evidence rejects it; no intermediate choice wait.
 Nice10/Cargo-j2, nested only. Stop afterFeature5; morning summary will replace
 this progress note. Deferred baking/shader-cache work stays deferred.
@@ -26,8 +27,7 @@ Color emoji confirmed renderer log, not just mapped files. No further live appro
 Cold UI startup314.89ms vs QML228.35; later108.01 vs162.31ms.
 Earlier nested GL102.43ms callback p99 remains recorded; do not hide it.
 
-Next: publish ADR0002 three same-panel formats; implement frontend boundary,
-Taffy/layout/keyed repeaters/components/imports; port real launcher sidebar/grid;
+Next: port real launcher sidebar/grid in Luau, with GPL shell catalog data;
 100reload bounded-resource test + keyed mutation state test; animation/input/focus,
 basic IME/AccessKit; then neutral backends + GPL adapters/events/actions/reconnect
 and nested proofs. Commit/push + short FEASIBILITY entry each milestone.

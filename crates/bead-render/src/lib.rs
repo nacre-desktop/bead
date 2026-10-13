@@ -125,6 +125,7 @@ pub struct Scene {
     pub opacity: f32,
     pub resource_revision: u64,
     pub asset_data: std::collections::BTreeMap<std::path::PathBuf, std::sync::Arc<[u8]>>,
+    pub clips: std::collections::BTreeMap<usize, Rect>,
     pub font_files: Vec<std::path::PathBuf>,
     pub width: f32,
     pub slide: Option<Slide>,
@@ -462,17 +463,6 @@ impl Renderer for CpuRenderer {
             self.old_mask = None;
         }
         let mask = self.mask.as_mut().unwrap();
-        if let Some(old) = self.old_mask {
-            for y in old.y..old.y + old.h {
-                let i = (y * width + old.x) as usize;
-                mask.data_mut()[i..i + old.w as usize].fill(0);
-            }
-        }
-        for y in d.y..d.y + d.h {
-            let i = (y * width + d.x) as usize;
-            mask.data_mut()[i..i + d.w as usize].fill(255);
-        }
-        self.old_mask = Some(d);
         let mut pix = PixmapMut::from_bytes(bytes, width, height).ok_or("invalid SHM target")?;
         let transform = Transform::from_scale(scale, scale).post_translate(
             (scene.offset.0 * scale).round(),
@@ -484,7 +474,39 @@ impl Renderer for CpuRenderer {
             d.w as f32 / scale,
             d.h as f32 / scale,
         );
-        for p in &scene.primitives {
+        for (index, p) in scene.primitives.iter().enumerate() {
+            let clipped = scene.clips.get(&index).map(|clip| {
+                clip.translated(scene.offset.0, scene.offset.1)
+                    .pixels(scale, width, height)
+            });
+            let region = if let Some(c) = clipped {
+                let x = d.x.max(c.x);
+                let y = d.y.max(c.y);
+                Damage {
+                    x,
+                    y,
+                    w: (d.x + d.w).min(c.x + c.w).saturating_sub(x),
+                    h: (d.y + d.h).min(c.y + c.h).saturating_sub(y),
+                }
+            } else {
+                d
+            };
+            if region.w == 0 || region.h == 0 {
+                continue;
+            }
+            if self.old_mask != Some(region) {
+                if let Some(old) = self.old_mask {
+                    for y in old.y..old.y + old.h {
+                        let i = (y * width + old.x) as usize;
+                        mask.data_mut()[i..i + old.w as usize].fill(0);
+                    }
+                }
+                for y in region.y..region.y + region.h {
+                    let i = (y * width + region.x) as usize;
+                    mask.data_mut()[i..i + region.w as usize].fill(255);
+                }
+                self.old_mask = Some(region);
+            }
             let bounds = match p {
                 Primitive::Rounded { rect, border, .. } => {
                     let pad = border.map_or(1., |(_, w)| w + 1.);
@@ -706,6 +728,52 @@ impl Palette {
 mod tests {
     use super::*;
     #[test]
+    fn clipped_primitives_leave_pixels_outside_the_scroll_viewport_intact() {
+        let scene = Scene {
+            opacity: 1.,
+            resource_revision: 1,
+            asset_data: Default::default(),
+            clips: std::collections::BTreeMap::from([(1, Rect::new(0., 0., 2., 2.))]),
+            font_files: vec![],
+            width: 4.,
+            slide: None,
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 4., 4.),
+            primitives: vec![
+                Primitive::Rounded {
+                    rect: Rect::new(0., 0., 4., 4.),
+                    radius: 0.,
+                    fill: [0, 255, 0, 255],
+                    border: None,
+                },
+                Primitive::Rounded {
+                    rect: Rect::new(0., 0., 4., 4.),
+                    radius: 0.,
+                    fill: [255, 0, 0, 255],
+                    border: None,
+                },
+            ],
+        };
+        let mut renderer = CpuRenderer::default();
+        let mut bytes = vec![0; 64];
+        renderer.prepare(&scene, 1.).unwrap();
+        renderer
+            .render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: 4,
+                    height: 4,
+                    scale: 1.,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(4, 4),
+            )
+            .unwrap();
+        assert_eq!(&bytes[0..4], &[255, 0, 0, 255]);
+        assert_eq!(&bytes[12..16], &[0, 255, 0, 255]);
+    }
+    #[test]
     fn rejects_invalid_palette_versions_and_colors() {
         assert!(Palette::parse(br#"{"formatVersion":2,"colours":{}}"#).is_err());
         assert!(
@@ -737,6 +805,7 @@ mod tests {
                     opacity: 1.,
                     resource_revision: 0,
                     asset_data: Default::default(),
+                    clips: Default::default(),
                     font_files: Vec::new(),
                     width: 40.,
                     slide: None,

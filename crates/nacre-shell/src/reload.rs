@@ -15,6 +15,9 @@ impl Runtime {
     }
 }
 impl SceneSource for Runtime {
+    fn viewport(&mut self, width: u32, height: u32) -> bool {
+        self.session.set_viewport(width, height)
+    }
     fn watch(
         &mut self,
         wakeup: Box<dyn Fn(Result<(), String>) + Send>,
@@ -26,6 +29,7 @@ impl SceneSource for Runtime {
         let reload = matches!(event, UiEvent::Reload);
         let mut scene = match event {
             UiEvent::Reload => Some(self.session.reload()?),
+            UiEvent::Relayout => self.session.relayout()?,
             UiEvent::WatchError(error) => return Err(error.into()),
             UiEvent::Click { x, y } => self.session.click(x, y)?,
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,

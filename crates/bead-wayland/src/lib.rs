@@ -55,6 +55,7 @@ use wayland_protocols::wp::{
 #[derive(Clone, Debug)]
 pub enum UiEvent {
     Reload,
+    Relayout,
     WatchError(String),
     Click { x: f32, y: f32 },
     Scroll { x: f32, y: f32, delta: f64 },
@@ -73,6 +74,9 @@ impl std::fmt::Display for GpuUnavailable {
 #[cfg(feature = "gpu")]
 impl Error for GpuUnavailable {}
 pub trait SceneSource {
+    fn viewport(&mut self, _width: u32, _height: u32) -> bool {
+        false
+    }
     fn watch(
         &mut self,
         wakeup: Box<dyn Fn(Result<(), String>) + Send>,
@@ -438,6 +442,20 @@ impl App {
                     println!("UI_STATE {}", runtime.state_summary());
                 }
                 self.scene = scene;
+                if self.options.content_size {
+                    let width = self.scene.bounds.w.ceil().max(1.) as u32;
+                    let height = (self.scene.bounds.y
+                        + self.scene.bounds.h
+                        + self.scene.slide.map_or(self.scene.offset.1, |s| s.open_y))
+                    .ceil()
+                    .max(1.) as u32;
+                    for surface in &self.surfaces {
+                        if surface.width != width || surface.height != height {
+                            surface.layer.set_size(width, height);
+                            surface.layer.commit();
+                        }
+                    }
+                }
                 println!(
                     "UI_COMMIT generation={} reload={} prepare_ms={:.3}",
                     self.scene.resource_revision,
@@ -1240,9 +1258,29 @@ impl LayerShellHandler for App {
             s.width = config.new_size.0;
             s.height = config.new_size.1;
             s.configured = true;
+            // One shared view fits the smallest output; anonymous layout boxes never own state.
+            let viewport = self
+                .surfaces
+                .iter()
+                .filter_map(|surface| {
+                    self.output
+                        .info(&surface.output)
+                        .and_then(|info| info.logical_size)
+                })
+                .fold(None, |old: Option<(i32, i32)>, size| {
+                    Some(old.map_or(size, |old| (old.0.min(size.0), old.1.min(size.1))))
+                });
+            let viewport_changed =
+                if let (Some(runtime), Some((w, h))) = (&mut self.runtime, viewport) {
+                    runtime.viewport(w.max(1) as u32, h.max(1) as u32)
+                } else {
+                    false
+                };
             if self.runtime.is_some() && !self.ui_initialized {
                 self.ui_initialized = true;
                 self.ui(UiEvent::Reload);
+            } else if viewport_changed {
+                self.ui(UiEvent::Relayout);
             } else {
                 self.draw(i, qh);
             }

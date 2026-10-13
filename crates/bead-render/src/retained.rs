@@ -91,6 +91,12 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
     scale.to_bits().hash(&mut h);
     scene.resource_revision.hash(&mut h);
     scene.font_files.hash(&mut h);
+    for (index, rect) in &scene.clips {
+        index.hash(&mut h);
+        for value in [rect.x, rect.y, rect.w, rect.h] {
+            value.to_bits().hash(&mut h);
+        }
+    }
     for f in [
         scene.bounds.x,
         scene.bounds.y,
@@ -223,6 +229,7 @@ mod tests {
             opacity: 1.,
             resource_revision: 0,
             asset_data: Default::default(),
+            clips: Default::default(),
             width: 40.,
             slide: None,
             offset: (0., 0.),

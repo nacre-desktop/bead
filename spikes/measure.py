@@ -82,7 +82,7 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
     else:
         renderer=mode.removeprefix('ui-').replace('-memory','').removesuffix('-3')
         command=[str(target/'nacre-shell'),'--animate','--start-open','--renderer',renderer,'--palette',str(ROOT/'spikes/palette-stress.json'),'--namespace','bead-dev-retained']
-        if ui:command+=['--ui','ui/main.json'];command.remove('--animate')
+        if ui:command+=['--ui',os.environ.get('BEAD_UI_ENTRY','ui/main.json')];command.remove('--animate')
         if '-memory' in mode:command+=['--memory-usage']
         if mode.endswith('-3'):command+=['--surfaces','3']
         if layout=='content':command+=['--content-size']

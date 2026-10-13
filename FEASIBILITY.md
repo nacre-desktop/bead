@@ -181,3 +181,24 @@ No rendered runtime: memory(PSS+DRM)/CPU/pacing N/A. Syntax spike only, no produ
 UI code changed; nice10/Cargo-j2 used. No system installs. ADR0002 contains the
 side-by-side sources, criteria and replaceable frontend boundary. Runtime layout
 and model semantics are next; no implied parity from source counts. Verdict: **on track**.
+
+## Feature 4 milestone — typed frontend, layout and lists (2026-10-13)
+
+Luau now builds the common view tree; Taffy handles rows/columns/grids, padding,
+alignment, flex growth and parent percentages. Reusable functions/imports work.
+Repeat keys define scoped identity; duplicate keys reject the whole update.
+Scroll clipping, source diagnostics and content-surface resizing are implemented.
+
+| Private static toy panel | PSS + DRM MiB | CPU % / interval | Startup ms |
+| --- | ---: | --- | ---: |
+| niri,800×480 logical,scale1 | 67.81 (43.44+24.36) | 0 /10s | 229.53 |
+| Hyprland, same panel,scale1.5 | 97.60 (47.60+50.00) | 0 /10s | 238.85 |
+
+Short smoke measurements, not60s claims; static pacing N/A, and no equivalent
+QML port yet. Four model rows, no color emoji: these totals are not comparable
+to the old full stress panel. Private/nested only, nice10/Cargo-j2. View fits
+smallest output viewport; independent per-output layouts remain a limitation.
+25 tests + fmt/clippy/independent cargo-deny pass; imports/cycles/source errors,
+key uniqueness/action args/relative widths/grid rows/pixel clipping verified.
+Taffy0.15.0 MIT; no system installs. Current example is a toolkit proof, not the
+real launcher. Next: port sidebar/app grid and measure equivalent QML. **On track**.

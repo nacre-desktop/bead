@@ -78,6 +78,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             opacity: 1.,
             resource_revision: 0,
             asset_data: Default::default(),
+            clips: Default::default(),
             font_files: vec![],
             width: 1100.,
             slide: Some(Slide {
@@ -101,6 +102,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             opacity: 1.,
             resource_revision: 0,
             asset_data: Default::default(),
+            clips: Default::default(),
             font_files: Vec::new(),
             width: 20000.,
             slide: None,
@@ -305,6 +307,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         opacity: 1.,
         resource_revision: 0,
         asset_data: Default::default(),
+        clips: Default::default(),
         font_files: Vec::new(),
         width: 1100.,
         slide: Some(Slide {

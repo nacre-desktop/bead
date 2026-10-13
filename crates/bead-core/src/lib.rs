@@ -8,6 +8,7 @@ pub enum Value {
     Bool(bool),
     Number(f64),
     Text(String),
+    List(Vec<serde_json::Value>),
 }
 impl Value {
     fn same_type(&self, other: &Self) -> bool {
@@ -17,6 +18,11 @@ impl Value {
         match self {
             Self::Number(n) => n.is_finite(),
             Self::Text(s) => s.len() <= 65536,
+            Self::List(items) => {
+                items.len() <= 2048
+                    && items.iter().all(|item| item.is_object())
+                    && serde_json::to_vec(items).is_ok_and(|bytes| bytes.len() <= 1024 * 1024)
+            }
             _ => true,
         }
     }

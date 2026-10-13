@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Replaceable typed views and bounded Luau behavior over durable Rust state.
+pub mod frontend;
+pub mod layout;
 pub mod script;
 use bead_core::{Stores, Value};
 use bead_render::{Palette, Primitive, Rect, Scene};
@@ -50,6 +52,14 @@ pub struct Node {
     pub icon: Option<String>,
     pub input: Option<String>,
     pub scroll: Option<String>,
+    #[serde(default)]
+    pub action_arg: Option<Value>,
+    #[serde(default)]
+    pub scroll_store: Option<String>,
+    #[serde(default)]
+    pub focusable: bool,
+    #[serde(skip)]
+    pub clip: Option<Rect>,
 }
 impl Node {
     fn diagnostic(&self, message: impl ToString) -> Diagnostic {
@@ -118,6 +128,8 @@ pub struct Generation {
     pub sources: BTreeMap<PathBuf, Vec<u8>>,
     pub revision: u64,
     assets: BTreeMap<PathBuf, std::sync::Arc<[u8]>>,
+    markup_entry: Option<PathBuf>,
+    root: PathBuf,
 }
 struct Loader {
     root: PathBuf,
@@ -158,6 +170,9 @@ impl Generation {
             .filter(|component| !matches!(component, std::path::Component::CurDir))
             .collect::<PathBuf>();
         let entry = normalized_entry.as_path();
+        if entry.extension().is_some_and(|ext| ext == "luau") {
+            return Self::load_markup(root, entry, stores, revision);
+        }
         let mut loader = Loader {
             root: root
                 .canonicalize()
@@ -308,11 +323,185 @@ impl Generation {
             sources: loader.sources,
             revision,
             assets,
+            markup_entry: None,
+            root: loader.root.clone(),
         };
         // Validate properties even when a node is currently hidden.
         generation.scene(&stores, &Palette(std::collections::HashMap::new()), false)?;
         generation.check_sources(&loader.root)?;
         Ok((generation, stores))
+    }
+    fn load_markup(
+        root: &Path,
+        entry: &Path,
+        stores: &Stores,
+        revision: u64,
+    ) -> Result<(Self, Stores), Diagnostic> {
+        let mut loader = Loader {
+            root: root
+                .canonicalize()
+                .map_err(|e| Diagnostic::new(entry, 1, 1, e))?,
+            sources: BTreeMap::new(),
+        };
+        let mut directories = vec![entry.parent().unwrap_or(Path::new("")).to_path_buf()];
+        let mut count = 0;
+        while let Some(directory) = directories.pop() {
+            for item in fs::read_dir(loader.root.join(&directory))
+                .map_err(|e| Diagnostic::new(&directory, 1, 1, e))?
+            {
+                let item = item.map_err(|e| Diagnostic::new(&directory, 1, 1, e))?;
+                let path = directory.join(item.file_name());
+                count += 1;
+                if count > 256 {
+                    return Err(Diagnostic::new(&path, 1, 1, "UI bundle exceeds256sources"));
+                }
+                if item
+                    .file_type()
+                    .map_err(|e| Diagnostic::new(&path, 1, 1, e))?
+                    .is_dir()
+                {
+                    directories.push(path);
+                    continue;
+                }
+                match path.extension().and_then(|s| s.to_str()) {
+                    Some("luau") => {
+                        let bytes = loader.read(&path)?;
+                        script::Script::validate_source(&bytes, &path)?;
+                    }
+                    Some("json") => {
+                        let _: serde_json::Value = loader.json(&path)?;
+                    }
+                    Some("svg" | "png" | "jpg" | "jpeg" | "webp") => {
+                        loader.read(&path)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // Root assets are snapshots too, including ones initially outside the scroll viewport.
+        for item in fs::read_dir(&loader.root).map_err(|e| Diagnostic::new(entry, 1, 1, e))? {
+            let item = item.map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
+            let path = PathBuf::from(item.file_name());
+            if path.extension().is_some_and(|ext| {
+                ["svg", "png", "jpg", "jpeg", "webp"]
+                    .iter()
+                    .any(|s| ext == *s)
+            }) {
+                loader.read(&path)?;
+            }
+        }
+        let script_path = entry
+            .parent()
+            .unwrap_or(Path::new(""))
+            .join("behavior.luau");
+        let script = script::Script::load(
+            loader.sources.get(&script_path).ok_or_else(|| {
+                Diagnostic::new(&script_path, 1, 1, "missing sibling behavior.luau")
+            })?,
+            &script_path,
+        )?;
+        let mut defaults = script.schema()?;
+        for (id, value) in [
+            ("bead.focused", Value::Text(String::new())),
+            ("bead.hovered", Value::Text(String::new())),
+        ] {
+            if defaults.insert(id.into(), value).is_some() {
+                return Err(Diagnostic::new(
+                    &script_path,
+                    1,
+                    1,
+                    format!("{id} is reserved"),
+                ));
+            }
+        }
+        let stores = stores
+            .reconcile(&defaults)
+            .map_err(|e| Diagnostic::new(&script_path, 1, 1, e))?;
+        script.validate_computed(&stores)?;
+        for (path, bytes) in &loader.sources {
+            if path.extension().is_some_and(|ext| {
+                ["svg", "png", "jpg", "jpeg", "webp"]
+                    .iter()
+                    .any(|s| ext == *s)
+            }) {
+                bead_render::validate_asset(path, bytes)
+                    .map_err(|e| Diagnostic::new(path, 1, 1, e))?;
+            }
+        }
+        let assets = loader
+            .sources
+            .iter()
+            .filter(|(path, _)| {
+                path.extension().is_some_and(|ext| {
+                    ["svg", "png", "jpg", "jpeg", "webp"]
+                        .iter()
+                        .any(|s| ext == *s)
+                })
+            })
+            .map(|(path, data)| (loader.root.join(path), std::sync::Arc::from(data.clone())))
+            .collect();
+        let generation = Self {
+            script,
+            nodes: vec![],
+            width: 1100.,
+            bounds: Rect::new(-32., -32., 1164., 654.),
+            sources: loader.sources,
+            revision,
+            assets,
+            markup_entry: Some(entry.to_path_buf()),
+            root: loader.root,
+        };
+        generation.check_sources(root)?;
+        Ok((generation, stores))
+    }
+    pub fn materialize(
+        &self,
+        stores: &Stores,
+        palette: &Palette,
+        viewport: (f32, f32),
+    ) -> Result<(Scene, Vec<Node>), Diagnostic> {
+        if let Some(entry) = &self.markup_entry {
+            use frontend::FrontEnd;
+            self.script.begin();
+            let resolve = |name: &str| self.script.resolve(name, stores);
+            let raw = frontend::LuauFrontEnd.build(entry, &self.sources, &resolve)?;
+            let view = layout::ViewSpec::from_raw(&raw, &resolve)?;
+            let mut result = layout::layout(&view, &resolve, palette, self.revision, viewport)?;
+            for node in &result.nodes {
+                if let Some(action) = &node.action {
+                    self.script.validate_action(action)?;
+                }
+                if let Some(input) = &node.input
+                    && !matches!(stores.get(input), Some(Value::Text(_)))
+                {
+                    return Err(node.diagnostic("input binding must name a mutable text store"));
+                }
+                if let Some(scroll) = &node.scroll_store
+                    && !matches!(stores.get(scroll), Some(Value::Number(_)))
+                {
+                    return Err(node.diagnostic("scroll binding must name a mutable number store"));
+                }
+            }
+            for primitive in &mut result.scene.primitives {
+                if let Primitive::Image { path, .. } = primitive
+                    && !path.to_str().is_some_and(|s| s.starts_with("@icon:"))
+                {
+                    let full = self.root.join(&*path);
+                    if !self.assets.contains_key(&full) {
+                        return Err(Diagnostic::new(
+                            path,
+                            1,
+                            1,
+                            "asset not in this generation's snapshot",
+                        ));
+                    }
+                    *path = full;
+                }
+            }
+            result.scene.asset_data = self.assets.clone();
+            return Ok((result.scene, result.nodes));
+        }
+        Ok((self.scene(stores, palette, true)?, self.nodes.clone()))
     }
     pub fn check_sources(&self, root: &Path) -> Result<(), Diagnostic> {
         for (path, bytes) in &self.sources {
@@ -333,6 +522,9 @@ impl Generation {
         palette: &Palette,
         colors: bool,
     ) -> Result<Scene, Diagnostic> {
+        if self.markup_entry.is_some() {
+            return Ok(self.materialize(stores, palette, (1200., 800.))?.0);
+        }
         self.script.begin();
         let mut primitives = Vec::new();
         for node in &self.nodes {
@@ -411,6 +603,7 @@ impl Generation {
             bounds: self.bounds,
             resource_revision: self.revision,
             asset_data: self.assets.clone(),
+            clips: Default::default(),
         })
     }
     pub fn hit(&self, stores: &Stores, x: f32, y: f32) -> Option<&Node> {
@@ -468,6 +661,7 @@ struct Pending {
     palette: Palette,
     palette_bytes: Option<Vec<u8>>,
     watch_revision: u64,
+    nodes: Vec<Node>,
 }
 pub struct Session {
     root: PathBuf,
@@ -479,6 +673,8 @@ pub struct Session {
     pending: Option<Pending>,
     watch_revision: std::sync::Arc<std::sync::atomic::AtomicU64>,
     current: Scene,
+    current_nodes: Vec<Node>,
+    viewport: (f32, f32),
     error: Option<String>,
     attempts: u64,
     watcher: Option<notify::RecommendedWatcher>,
@@ -501,6 +697,8 @@ impl Session {
             pending: None,
             watch_revision: Default::default(),
             current: fallback,
+            current_nodes: vec![],
+            viewport: (1200., 800.),
             error: None,
             attempts: 0,
             watcher: None,
@@ -566,13 +764,14 @@ impl Session {
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
         let (generation, stores) =
             Generation::load(&self.root, &self.entry, &self.stores, self.attempts)?;
-        let scene = generation.scene(&stores, &palette, true)?;
+        let (scene, nodes) = generation.materialize(&stores, &palette, self.viewport)?;
         self.pending = Some(Pending {
             generation: Some(generation),
             stores,
             palette,
             palette_bytes: Some(palette_bytes),
             watch_revision,
+            nodes,
         });
         Ok(scene)
     }
@@ -581,6 +780,7 @@ impl Session {
             generation,
             stores,
             palette,
+            nodes,
             ..
         }) = self.pending.take()
         {
@@ -591,6 +791,7 @@ impl Session {
             self.stores = stores;
             self.palette = palette;
             self.current = scene;
+            self.current_nodes = nodes;
         }
     }
     pub fn reject(&mut self, message: String) -> Scene {
@@ -601,15 +802,17 @@ impl Session {
     pub fn error_scene(&self) -> Scene {
         let mut scene = self.current.clone();
         if let Some(error) = &self.error {
+            let banner_y = (scene.bounds.h - 64. - 84.).max(16.);
+            let banner_width = (scene.width - 32.).max(64.);
             scene.resource_revision = self.attempts;
             scene.primitives.push(Primitive::Rounded {
-                rect: Rect::new(16., 505., 1068., 68.),
+                rect: Rect::new(16., banner_y, banner_width, 68.),
                 radius: 8.,
                 fill: [75, 20, 25, 250],
                 border: Some(([255, 140, 150, 255], 1.)),
             });
             scene.primitives.push(Primitive::Text {
-                rect: Rect::new(28., 515., 1044., 52.),
+                rect: Rect::new(28., banner_y + 10., (banner_width - 24.).max(1.), 52.),
                 text: format!(
                     "Reload failed — old UI kept\n{}",
                     error.chars().take(500).collect::<String>()
@@ -621,15 +824,32 @@ impl Session {
         }
         scene
     }
+    fn hit(&self, x: f32, y: f32, scroll: bool) -> Option<&Node> {
+        let generation = self.generation.as_ref()?;
+        if generation.markup_entry.is_none() {
+            return generation.hit(&self.stores, x, y);
+        }
+        self.current_nodes.iter().rev().find(|node| {
+            let r = rect(&node.draw);
+            let inside = |r: Rect| x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
+            inside(r)
+                && node.clip.is_none_or(inside)
+                && if scroll {
+                    node.scroll_store.is_some()
+                } else {
+                    node.focusable
+                }
+        })
+    }
     pub fn click(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let hit = generation.hit(&self.stores, x, y);
+        let hit = self.hit(x, y, false);
         let (action, focused) = hit.map_or((None, String::new()), |node| {
             (
                 node.action.clone(),
-                if node.input.is_some() {
+                if node.input.is_some() || node.focusable {
                     node.id.clone()
                 } else {
                     String::new()
@@ -644,9 +864,12 @@ impl Session {
             )]))
             .map_err(|e| generation.script.error(e))?;
         if let Some(action) = action {
-            stores = generation
-                .script
-                .action(&action, &stores, Value::Bool(true))?;
+            stores = generation.script.action(
+                &action,
+                &stores,
+                hit.and_then(|node| node.action_arg.clone())
+                    .unwrap_or(Value::Bool(true)),
+            )?;
         }
         self.stage_state(stores)
     }
@@ -654,15 +877,28 @@ impl Session {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let Some(action) = generation
-            .hit(&self.stores, x, y)
-            .and_then(|node| node.scroll.clone())
-        else {
+        let Some(node) = self.hit(x, y, true) else {
             return Ok(None);
         };
-        let stores = generation
-            .script
-            .action(&action, &self.stores, Value::Number(delta))?;
+        let stores = if let Some(id) = &node.scroll_store {
+            let Some(Value::Number(value)) = self.stores.get(id) else {
+                return Err(node.diagnostic("scroll store not a number"));
+            };
+            let mut stores = self.stores.clone();
+            stores
+                .commit(BTreeMap::from([(
+                    id.clone(),
+                    Value::Number((value + delta).max(0.)),
+                )]))
+                .map_err(|e| node.diagnostic(e))?;
+            stores
+        } else if let Some(action) = &node.scroll {
+            generation
+                .script
+                .action(action, &self.stores, Value::Number(delta))?
+        } else {
+            return Ok(None);
+        };
         self.stage_state(stores)
     }
     pub fn key(&mut self, text: &str, backspace: bool) -> Result<Option<Scene>, Diagnostic> {
@@ -672,8 +908,8 @@ impl Session {
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
             return Ok(None);
         };
-        let Some(id) = generation
-            .nodes
+        let Some(id) = self
+            .current_nodes
             .iter()
             .find(|node| &node.id == focused)
             .and_then(|node| node.input.clone())
@@ -702,7 +938,7 @@ impl Session {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let mut scene = generation.scene(&stores, &self.palette, true)?;
+        let (mut scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
         scene.font_files = self.current.font_files.clone();
         if self.error.is_some() {
             let old = self.current.clone();
@@ -716,8 +952,46 @@ impl Session {
             palette: Palette(self.palette.0.clone()),
             palette_bytes: None,
             watch_revision: 0,
+            nodes,
         });
         Ok(Some(scene))
+    }
+    /// External model updates use the same staged view transaction as input.
+    pub fn update(
+        &mut self,
+        changes: BTreeMap<String, Value>,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        let mut stores = self.stores.clone();
+        stores
+            .commit(changes)
+            .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        self.stage_state(stores)
+    }
+    pub fn set_viewport(&mut self, width: u32, height: u32) -> bool {
+        let next = (width.max(1) as f32, height.max(1) as f32);
+        let changed = self.viewport != next;
+        self.viewport = next;
+        changed
+    }
+    pub fn relayout(&mut self) -> Result<Option<Scene>, Diagnostic> {
+        let Some(generation) = &self.generation else {
+            return Ok(None);
+        };
+        let (mut scene, nodes) =
+            generation.materialize(&self.stores, &self.palette, self.viewport)?;
+        scene.font_files = self.current.font_files.clone();
+        self.pending = Some(Pending {
+            generation: None,
+            stores: self.stores.clone(),
+            palette: Palette(self.palette.0.clone()),
+            palette_bytes: None,
+            watch_revision: 0,
+            nodes,
+        });
+        Ok(Some(scene))
+    }
+    pub fn view_nodes(&self) -> &[Node] {
+        &self.current_nodes
     }
     pub fn check_sources(&self) -> Result<(), Diagnostic> {
         if let Some(pending) = &self.pending
@@ -759,3 +1033,6 @@ impl Session {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod markup_tests;

@@ -2,9 +2,9 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Fixture(PathBuf);
+pub(super) struct Fixture(pub(super) PathBuf);
 impl Fixture {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
             "bead-reload-{}-{}",
             std::process::id(),
@@ -48,11 +48,12 @@ impl Fixture {
         )
         .unwrap();
     }
-    fn session(&self) -> Session {
+    pub(super) fn session(&self) -> Session {
         let fallback = Scene {
             opacity: 1.,
             resource_revision: 0,
             asset_data: Default::default(),
+            clips: Default::default(),
             font_files: vec![],
             width: 100.,
             slide: None,
