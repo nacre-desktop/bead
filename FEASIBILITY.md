@@ -163,3 +163,21 @@ Live: ONE paired60s niri episode, real2880×1800/1.5/120Hz; CPU55s after5s warmu
 Latest five-edit reload proof: wgpu/niri78.85–82.99ms, GL/Hyprland99.92–102.71ms, CPU fallback/niri82.06–83.66ms; matched QML50.01–109.05ms. File-write→first presentation, small samples, not robust p99; state/error/fix passed. Idle CPU0 means zero observed ticks. Emoji loaded/rendered in GL; mapped-file test alone misses copied font data. Cold GL context/shaders ~213ms; targeted font selection already avoids system-wide scanning.
 Memory is requested PSS+deduplicated DRM, not exclusive VRAM; shared system allocation may overlap PSS. CPU0 DRM means no app GPU descriptors. See prior comparison for full-screen memory. Basic absolute geometry/input only; no full controls/IME. Dependencies mlua0.12.2/Luau, notify8.2.0, glutin0.32.3 verified permissive by cargo-deny; no system installs.
 Validation: fmt/clippy -D warnings,20 tests, CPU-only build, GUI state/error/fix + demo on both compositors, independent cargo-deny graphs and CI38461567225 (8265525) pass. ~2.5h elapsed since first GL edits; 2648 net Rust lines plus fixtures/probes; raw evidence private .research/feature3. [Error screenshot](examples/hot-reload-error.png). Verdict/Gate B: **adjust — retain native GL + small layers/CPU fallback; improve cold startup and off-thread reload baking; proceed to Feature4 only after owner OK**.
+
+## Feature 4 milestone — authoring decision (2026-10-13)
+
+Compared one identical search/sidebar/keyed-grid panel in three formats.
+Choose Luau tables/functions: existing parser/runtime, components and imports;
+KDL is slightly shorter but adds binding/component conventions; QML-like adds a grammar.
+Static Luau checking is not in mlua; strict Rust property/binding validation remains essential.
+
+| Format | UI lines | With shared behavior | Syntax check | License |
+| --- | ---: | ---: | --- | --- |
+| Luau | 31 | 44 | actual compiler pass | MIT |
+| KDL + Luau | 27 | 40 | kdl6.7.1 parse pass | Apache-2.0 + MIT |
+| QML-like | 34 | 47 | proposal only, not parsed | own MIT/Apache |
+
+No rendered runtime: memory(PSS+DRM)/CPU/pacing N/A. Syntax spike only, no production
+UI code changed; nice10/Cargo-j2 used. No system installs. ADR0002 contains the
+side-by-side sources, criteria and replaceable frontend boundary. Runtime layout
+and model semantics are next; no implied parity from source counts. Verdict: **on track**.

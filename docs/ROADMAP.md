@@ -1,10 +1,12 @@
 # Roadmap and gates
 
-Updated 2026-10-13. Feature 3 built; Gate B awaiting owner decision.
+Updated 2026-10-13. Feature 3 built; Gate B approved, overnight Feature4/5 authorized.
 Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
 One authorized live niri comparison matched QML physical120Hz timing; cold startup
 and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
-Stop here before Feature 4 (Taffy layout, animation and full input/focus).
+Current order: authoring ADR → layout/lists → real launcher port → GateB tests →
+input/focus/IME/a11y → native backends. Stop afterFeature5; owner may veto ADR0002
+in the morning. Off-thread baking and cold shader-cache work deferred.
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
 current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;
@@ -31,7 +33,7 @@ If CPU cannot keep up, explain before starting Feature 3.
 | 2. Drawing and palette | Current Nacre primitives/rounded corners/borders/shadows; real font fallback/emoji; PNG/SVG/theme icons; validated existing Orient/presentation palette and last-good fallback | Does CPU-first rendering actually match the look at useful size? Compare GPU alternative if necessary |
 | 3. Reactive UI/reload | Minimal typed markup/store/action schema plus Luau candidate VM; include the smallest working editor, keyed scroll list and Taffy layout needed to prove state preservation; invalid multi-file/script/resource candidate retains old UI with file/line error; no leaks across 100 cycles | **Gate B:** go/adjust/stop from measured reload/preservation/memory, owner decision |
 | 4. Layout/animation/input | Taffy integration for real scene, easing/springs, pointer/scroll/keyboard/focus; basic selection/clipboard, IME and AccessKit semantics; matched animated panel pacing | Does a toolkit replacement work beyond static rectangles? Input/IME/a11y move early |
-| 5. Backend state/actions | Same neutral output/workspace/window/event interface on Hyprland/niri; existing Python facade can bridge first, independent native transports next; IDs/capability errors/reconnect tested | Are backend semantics coherent rather than widget-specific hacks? |
+| 5. Backend state/actions | Same neutral output/workspace/window/event interface on Hyprland/niri; direct Hyprland socket + GPL niri-ipc adapter; IDs/capability errors/reconnect tested | Are backend semantics coherent rather than widget-specific hacks? |
 | 6. Bar v1 | Clock/workspaces, SNI+DBusMenu tray, PipeWire audio, UPower battery, network/Bluetooth display and helper actions; daemon/item restarts; per-output look | Can actual service-driven UI sleep and share contexts? SNI is new in audited QML snapshot |
 | 7. Command/files/helpers | Private versioned command socket/client plus compatibility target/method catalog; all current CLI/keybinding routes tested in fixtures; bounded runner/watch/helper protocol | Can existing tools call Bead without changing live configs? Minimal helper transport may already support earlier proofs |
 | 8. Popouts/panels | One actual panel and animations, open/close/focus/dismiss across outputs; preserved state and pacing; output disappearance | **Gate C:** bar parity on both + panel; measured benefit versus cost; owner decision |

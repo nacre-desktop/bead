@@ -41,3 +41,11 @@
 - At each feature run fmt, clippy with warnings denied, tests and feature proofs;
   compare matched QML components, never a blank Bead surface against full Nacre.
 - Stop at owner gates. Use the one-feature workflow described in docs/ROADMAP.md.
+
+- Overnight authorization 2026-10-13: finish Feature4 and Feature5 without stopping
+  at intermediate owner gates. Choose Luau markup by default after ADR0002.
+  Keep frontend independent of stores/reload/layout/rendering. Nested only; no
+  live tests. Local commands nice10, Cargo two jobs. Commit/push each milestone:
+  format ADR, layout/lists, launcher port, Gate B tests, input/focus, backends.
+  Defer off-thread baking and shader-cache startup work. Stop after Feature5;
+  morning summary at top of STATUS, blocked owner decisions recorded.

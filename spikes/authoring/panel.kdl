@@ -1,0 +1,27 @@
+import "bead.ui"
+behavior "./behavior.luau"
+component "AppTile" {
+    property "item" type="App" required=#true
+    button id="tile" text=(field)"item.name" selected=(field)"item.selected" \
+        action="select" argument=(field)"item.id"
+}
+panel id="launcher" width=800 height=480 padding=12 {
+    column gap=8 {
+        text-input id="search" text=(bind)"launcher.query" placeholder="Search applications"
+        row gap=12 grow=1 {
+            column width="20%" gap=4 {
+                repeat id="nav" model=(bind)"launcher.navigation" key="id" {
+                    button id="entry" text=(field)"item.name" selected=(field)"item.selected" \
+                        action="navigate" argument=(field)"item.id"
+                }
+            }
+            scroll id="apps-scroll" scroll=(bind)"launcher.scroll" grow=1 {
+                grid columns=3 gap=8 {
+                    repeat id="apps" model=(bind)"launcher.apps" key="id" {
+                        AppTile item=(row)"item"
+                    }
+                }
+            }
+        }
+    }
+}
