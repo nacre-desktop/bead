@@ -1,0 +1,170 @@
+{
+  "sctk": {
+    "url": "https://github.com/Smithay/client-toolkit",
+    "commit": "e97622a8796cd2ab4f4105ab89584f2ace1f5a40",
+    "commit_date": "2026-09-04T10:06:05-04:00",
+    "accessed": "2026-10-13"
+  },
+  "vello": {
+    "url": "https://github.com/linebender/vello",
+    "commit": "235739c4f08eb48d900e1512459d453a9ab77f96",
+    "commit_date": "2026-10-09T06:47:56Z",
+    "accessed": "2026-10-13"
+  },
+  "femtovg": {
+    "url": "https://github.com/femtovg/femtovg",
+    "commit": "fe7b9bd420cbc14d4b349c871ab3864c63213c19",
+    "commit_date": "2026-10-12T15:17:57-07:00",
+    "accessed": "2026-10-13"
+  },
+  "tiny-skia": {
+    "url": "https://github.com/linebender/tiny-skia",
+    "commit": "5d4754777746eef0828be166896eaf482c49f8f2",
+    "commit_date": "2026-08-20T13:48:05+01:00",
+    "accessed": "2026-10-13"
+  },
+  "parley": {
+    "url": "https://github.com/linebender/parley",
+    "commit": "bfed4e47caf1353e8afb797bd51bf504edd61c96",
+    "commit_date": "2026-10-12T14:30:00Z",
+    "accessed": "2026-10-13"
+  },
+  "cosmic-text": {
+    "url": "https://github.com/pop-os/cosmic-text",
+    "commit": "f1a3461f3e8df67d2bbcfafb8bc61dc7aee5b2a6",
+    "commit_date": "2026-09-30T10:06:26-06:00",
+    "accessed": "2026-10-13"
+  },
+  "slint": {
+    "url": "https://github.com/slint-ui/slint",
+    "commit": "448a6af2f6d1ce53b3b0223eb7b43747a7e0e42d",
+    "commit_date": "2026-10-13T10:11:01+02:00",
+    "accessed": "2026-10-13"
+  },
+  "iced": {
+    "url": "https://github.com/iced-rs/iced",
+    "commit": "a8231fd9ddf3570f95affba2d45a9be092007f71",
+    "commit_date": "2026-10-07T12:25:50+02:00",
+    "accessed": "2026-10-13"
+  },
+  "xilem": {
+    "url": "https://github.com/linebender/xilem",
+    "commit": "271a27a6d4a930f7878d404f9014e3c50a3a9b88",
+    "commit_date": "2026-09-14T11:54:24Z",
+    "accessed": "2026-10-13"
+  },
+  "mlua": {
+    "url": "https://github.com/mlua-rs/mlua",
+    "commit": "a186d461c7772aed4cb0a9fa1d1899121c6450e7",
+    "commit_date": "2026-10-03T11:11:56+01:00",
+    "accessed": "2026-10-13"
+  },
+  "rhai": {
+    "url": "https://github.com/rhaiscript/rhai",
+    "commit": "804aca7f6cd7c858c1219ca89ece18d1342b276f",
+    "commit_date": "2026-10-07T08:31:30+08:00",
+    "accessed": "2026-10-13"
+  },
+  "quickshell": {
+    "url": "https://github.com/quickshell-mirror/quickshell",
+    "commit": "4f508be500dea6e5732cc3d50382a0048b17e7b1",
+    "commit_date": "2026-10-08T01:42:54-07:00",
+    "accessed": "2026-10-13"
+  },
+  "noctalia": {
+    "url": "https://github.com/noctalia-dev/noctalia",
+    "commit": "0c8808e8392b49385459422ce14ff28e2c2aed83",
+    "commit_date": "2026-10-12T20:56:24-04:00",
+    "accessed": "2026-10-13"
+  },
+  "niri": {
+    "url": "https://github.com/niri-wm/niri",
+    "commit": "7da6ae44032ec92f4ff28a42ca23f11c092f487f",
+    "commit_date": "2026-10-13T00:52:33-07:00",
+    "accessed": "2026-10-13"
+  },
+  "dioxus": {
+    "url": "https://github.com/DioxusLabs/dioxus",
+    "commit": "f420ca3d6cb6812ed27a021e239d7ec0941ff317",
+    "commit_date": "2026-10-13T00:03:45+01:00",
+    "accessed": "2026-10-13"
+  },
+  "blitz": {
+    "url": "https://github.com/DioxusLabs/blitz",
+    "commit": "4a512051d8726c04ab24ef8200dae7b4117711ea",
+    "commit_date": "2026-10-13T05:34:22+01:00",
+    "accessed": "2026-10-13"
+  },
+  "ashell": {
+    "url": "https://github.com/MalpenZibo/ashell",
+    "commit": "eccd249ee5755cb1ed4d4772b5010f3e26410a72",
+    "commit_date": "2026-10-13T08:36:26+02:00",
+    "accessed": "2026-10-13"
+  },
+  "ironbar": {
+    "url": "https://github.com/JakeStanger/ironbar",
+    "commit": "ef7ffc16ab171587b85cbb0f0438d847acdb0639",
+    "commit_date": "2026-10-10T15:21:22+01:00",
+    "accessed": "2026-10-13"
+  },
+  "eww": {
+    "url": "https://github.com/elkowar/eww",
+    "commit": "48f5aa8b379adf29da0b0bb9ca04164f65d8bdaa",
+    "commit_date": "2026-07-17T09:29:44+02:00",
+    "accessed": "2026-10-13"
+  },
+  "waybar": {
+    "url": "https://github.com/Alexays/Waybar",
+    "commit": "4e207a0cb51a9eb89b4245d90245721f5e39bf06",
+    "commit_date": "2026-10-11T00:43:29+02:00",
+    "accessed": "2026-10-13"
+  },
+  "cosmic-panel": {
+    "url": "https://github.com/pop-os/cosmic-panel",
+    "commit": "3ce6ce1cec97669f91e809962d9446aaefe8a06e",
+    "commit_date": "2026-10-06T21:41:43+02:00",
+    "accessed": "2026-10-13"
+  },
+  "cosmic-applets": {
+    "url": "https://github.com/pop-os/cosmic-applets",
+    "commit": "406d1b7d627138fdf4078f654268d3d8774e50f1",
+    "commit_date": "2026-10-06T20:44:51+02:00",
+    "accessed": "2026-10-13"
+  },
+  "zbus": {
+    "url": "https://github.com/dbus2/zbus",
+    "commit": "bb1e01cc2438fa01423f35d274fc16ca8b2ed059",
+    "commit_date": "2026-10-13T00:13:18+02:00",
+    "accessed": "2026-10-13"
+  },
+  "pipewire": {
+    "url": "https://gitlab.freedesktop.org/pipewire/pipewire-rs",
+    "commit": "71022422eebd1bb2cb5a3259362819639fd29b58",
+    "commit_date": "2026-08-26T05:34:14-05:00",
+    "accessed": "2026-10-13"
+  },
+  "accesskit": {
+    "url": "https://github.com/AccessKit/accesskit",
+    "commit": "fb7efa8cdbe6ebb48106f30c1c66163ebc781b49",
+    "commit_date": "2026-10-11T12:19:27+02:00",
+    "accessed": "2026-10-13"
+  },
+  "taffy": {
+    "url": "https://github.com/DioxusLabs/taffy",
+    "commit": "eb6450694f33e2b7413e40677f230ff63f0fc194",
+    "commit_date": "2026-10-12T12:50:15+01:00",
+    "accessed": "2026-10-13"
+  },
+  "wgpu": {
+    "url": "https://github.com/gfx-rs/wgpu",
+    "commit": "eddf0b4c8f2c50b7895ad26ee946401e563cdd32",
+    "commit_date": "2026-10-13T03:10:04Z",
+    "accessed": "2026-10-13"
+  },
+  "libcosmic": {
+    "url": "https://github.com/pop-os/libcosmic",
+    "commit": "a6ac45c7cd3645df3b4e25c4e0636e66e9d662fa",
+    "commit_date": "2026-10-12T21:12:24+02:00",
+    "accessed": "2026-10-13"
+  }
+}

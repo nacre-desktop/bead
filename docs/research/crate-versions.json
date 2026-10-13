@@ -1,0 +1,393 @@
+{
+  "smithay-client-toolkit": {
+    "version": "0.21.1",
+    "released": "2026-07-23T15:30:54.187336Z",
+    "license": "MIT",
+    "repository": "https://github.com/smithay/client-toolkit",
+    "rust_version": "1.86",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/smithay-client-toolkit"
+  },
+  "wayland-client": {
+    "version": "0.31.15",
+    "released": "2026-07-22T20:35:54.669482Z",
+    "license": "MIT",
+    "repository": "https://github.com/smithay/wayland-rs",
+    "rust_version": "1.71",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/wayland-client"
+  },
+  "wayland-protocols": {
+    "version": "0.32.13",
+    "released": "2026-06-19T15:32:40.359346Z",
+    "license": "MIT",
+    "repository": "https://github.com/smithay/wayland-rs",
+    "rust_version": "1.86",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/wayland-protocols"
+  },
+  "wayland-protocols-wlr": {
+    "version": "0.3.12",
+    "released": "2026-03-31T02:22:47.529355Z",
+    "license": "MIT",
+    "repository": "https://github.com/smithay/wayland-rs",
+    "rust_version": "1.71",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/wayland-protocols-wlr"
+  },
+  "wayland-protocols-hyprland": {
+    "version": "1.2.0",
+    "released": "2025-11-12T18:47:34.776646Z",
+    "license": "LGPL-3.0-only",
+    "repository": "https://github.com/zefr0x/wayland-protocols-hyprland",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/wayland-protocols-hyprland"
+  },
+  "wgpu": {
+    "version": "30.0.1",
+    "released": "2026-08-22T02:53:38.229945Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/gfx-rs/wgpu",
+    "rust_version": "1.87.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/wgpu"
+  },
+  "vello": {
+    "version": "0.11.0",
+    "released": "2026-10-02T19:48:21.154901Z",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/linebender/vello",
+    "rust_version": "1.89",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/vello"
+  },
+  "femtovg": {
+    "version": "0.27.0",
+    "released": "2026-08-31T08:28:58.839687Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/femtovg/femtovg",
+    "rust_version": "1.88",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/femtovg"
+  },
+  "skia-safe": {
+    "version": "0.153.3",
+    "released": "2026-09-04T16:55:51.184155Z",
+    "license": "MIT",
+    "repository": "https://github.com/rust-skia/rust-skia",
+    "rust_version": "1.85",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/skia-safe"
+  },
+  "tiny-skia": {
+    "version": "0.12.0",
+    "released": "2026-02-02T20:46:06.263750Z",
+    "license": "BSD-3-Clause",
+    "repository": "https://github.com/linebender/tiny-skia",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/tiny-skia"
+  },
+  "cosmic-text": {
+    "version": "0.19.0",
+    "released": "2026-04-22T19:17:33.337964Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/pop-os/cosmic-text",
+    "rust_version": "1.89",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/cosmic-text"
+  },
+  "parley": {
+    "version": "0.12.0",
+    "released": "2026-10-09T15:47:47.108068Z",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/linebender/parley",
+    "rust_version": "1.88",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/parley"
+  },
+  "slint": {
+    "version": "1.18.1",
+    "released": "2026-09-21T08:52:15.993358Z",
+    "license": "GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0",
+    "repository": "https://github.com/slint-ui/slint",
+    "rust_version": "1.92",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/slint"
+  },
+  "slint-interpreter": {
+    "version": "1.18.1",
+    "released": "2026-09-21T08:52:12.023518Z",
+    "license": "GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0",
+    "repository": "https://github.com/slint-ui/slint",
+    "rust_version": "1.92",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/slint-interpreter"
+  },
+  "iced": {
+    "version": "0.14.0",
+    "released": "2025-12-07T20:51:51.386769Z",
+    "license": "MIT",
+    "repository": "https://github.com/iced-rs/iced",
+    "rust_version": "1.88",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/iced"
+  },
+  "iced_wgpu": {
+    "version": "0.14.0",
+    "released": "2025-12-07T20:51:29.230226Z",
+    "license": "MIT",
+    "repository": "https://github.com/iced-rs/iced",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/iced_wgpu"
+  },
+  "iced_tiny_skia": {
+    "version": "0.14.1",
+    "released": "2026-09-06T14:31:30.843415Z",
+    "license": "MIT",
+    "repository": "https://github.com/iced-rs/iced",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/iced_tiny_skia"
+  },
+  "libcosmic": {
+    "error": "HTTP Error 404: Not Found",
+    "accessed": "2026-10-13"
+  },
+  "xilem": {
+    "version": "0.4.0",
+    "released": "2025-10-29T10:11:56.076173Z",
+    "license": "Apache-2.0",
+    "repository": "https://github.com/linebender/xilem",
+    "rust_version": "1.88",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/xilem"
+  },
+  "masonry": {
+    "version": "0.4.0",
+    "released": "2025-10-29T10:11:50.653117Z",
+    "license": "Apache-2.0",
+    "repository": "https://github.com/linebender/xilem",
+    "rust_version": "1.88",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/masonry"
+  },
+  "dioxus": {
+    "version": "0.7.10",
+    "released": "2026-07-30T23:14:52.497403Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/DioxusLabs/dioxus/",
+    "rust_version": "1.83.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/dioxus"
+  },
+  "subsecond": {
+    "version": "0.7.10",
+    "released": "2026-07-30T23:02:28.657315Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/DioxusLabs/dioxus/tree/main/packages/subsecond",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/subsecond"
+  },
+  "blitz-dom": {
+    "version": "0.2.4",
+    "released": "2025-10-22T10:30:13.801253Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dioxuslabs/blitz",
+    "rust_version": "1.86.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/blitz-dom"
+  },
+  "mlua": {
+    "version": "0.12.2",
+    "released": "2026-10-03T10:44:26.264428Z",
+    "license": "MIT",
+    "repository": "https://github.com/mlua-rs/mlua",
+    "rust_version": "1.88",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/mlua"
+  },
+  "rhai": {
+    "version": "1.26.1",
+    "released": "2026-09-10T01:36:21.131836Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rhaiscript/rhai",
+    "rust_version": "1.66.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/rhai"
+  },
+  "taffy": {
+    "version": "0.15.0",
+    "released": "2026-10-12T11:50:39.778300Z",
+    "license": "MIT",
+    "repository": "https://github.com/DioxusLabs/taffy",
+    "rust_version": "1.71",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/taffy"
+  },
+  "zbus": {
+    "version": "5.19.0",
+    "released": "2026-08-09T17:48:33.130343Z",
+    "license": "MIT",
+    "repository": "https://github.com/z-galaxy/zbus/",
+    "rust_version": "1.87",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/zbus"
+  },
+  "pipewire": {
+    "version": "0.10.1",
+    "released": "2026-08-19T06:12:32.168828Z",
+    "license": "MIT",
+    "repository": "https://gitlab.freedesktop.org/pipewire/pipewire-rs",
+    "rust_version": "1.80",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/pipewire"
+  },
+  "niri-ipc": {
+    "version": "26.4.0",
+    "released": "2026-04-25T13:51:08.523709Z",
+    "license": "GPL-3.0-or-later",
+    "repository": "https://github.com/niri-wm/niri",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/niri-ipc"
+  },
+  "libmpv2": {
+    "version": "6.0.0",
+    "released": "2026-05-12T16:01:33.576507Z",
+    "license": "LGPL-2.1",
+    "repository": "https://github.com/kohsine/libmpv-rs",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/libmpv2"
+  },
+  "gstreamer": {
+    "version": "0.25.4",
+    "released": "2026-09-21T12:57:38.333260Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs",
+    "rust_version": "1.92",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/gstreamer"
+  },
+  "notify": {
+    "version": "8.2.0",
+    "released": "2025-08-03T14:54:41.092775Z",
+    "license": "CC0-1.0",
+    "repository": "https://github.com/notify-rs/notify.git",
+    "rust_version": "1.77",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/notify"
+  },
+  "accesskit": {
+    "version": "0.25.1",
+    "released": "2026-09-25T19:40:54.207184Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/AccessKit/accesskit",
+    "rust_version": "1.87",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/accesskit"
+  },
+  "accesskit_unix": {
+    "version": "0.24.0",
+    "released": "2026-09-25T19:41:04.918104Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/AccessKit/accesskit",
+    "rust_version": "1.87",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/accesskit_unix"
+  },
+  "image": {
+    "version": "0.25.10",
+    "released": "2026-03-10T16:29:18.250581Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/image-rs/image",
+    "rust_version": "1.88.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/image"
+  },
+  "resvg": {
+    "version": "0.48.1",
+    "released": "2026-08-02T14:13:58.499282Z",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/linebender/resvg",
+    "rust_version": "1.85.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/resvg"
+  },
+  "usvg": {
+    "version": "0.48.1",
+    "released": "2026-08-02T14:13:55.187963Z",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/linebender/resvg",
+    "rust_version": "1.85.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/usvg"
+  },
+  "freedesktop-icons": {
+    "version": "0.4.0",
+    "released": "2025-04-16T07:01:41.092999Z",
+    "license": "MIT",
+    "repository": "https://github.com/oknozor/freedestkop-icons",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/freedesktop-icons"
+  },
+  "calloop": {
+    "version": "0.14.5",
+    "released": "2026-10-01T22:59:02.117890Z",
+    "license": "MIT",
+    "repository": "https://github.com/Smithay/calloop",
+    "rust_version": "1.86.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/calloop"
+  },
+  "serde": {
+    "version": "1.0.229",
+    "released": "2026-07-18T23:05:13.266456Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/serde",
+    "rust_version": "1.56",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/serde"
+  },
+  "tokio": {
+    "version": "1.53.2",
+    "released": "2026-10-03T11:18:32.487780Z",
+    "license": "MIT",
+    "repository": "https://github.com/tokio-rs/tokio",
+    "rust_version": "1.71",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/tokio"
+  },
+  "xkbcommon": {
+    "version": "0.9.0",
+    "released": "2025-08-09T20:18:41.686157Z",
+    "license": "MIT",
+    "repository": "https://github.com/rust-x-bindings/xkbcommon-rs",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/xkbcommon"
+  },
+  "fontdb": {
+    "version": "0.24.0",
+    "released": "2026-07-29T18:12:54.329508Z",
+    "license": "MIT",
+    "repository": "https://github.com/RazrFalcon/fontdb",
+    "rust_version": "1.71",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/fontdb"
+  },
+  "unicode-segmentation": {
+    "version": "1.13.3",
+    "released": "2026-06-01T15:58:43.979474Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/unicode-rs/unicode-segmentation",
+    "rust_version": "1.85.0",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/unicode-segmentation"
+  }
+}

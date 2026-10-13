@@ -14,20 +14,23 @@ Updated: 2026-10-13. Phase 0 in progress. Feature 1 is not authorized.
 
 ## In progress
 
-Shell inventory, dated primary-source research, renderer measurement spikes.
+Research reports 00, 01, 03 and 04 drafted with indexed scope and license
+boundaries. Three repeated 60-second samples completed for each Rust renderer;
+QML marker logging fixed and matched QML baseline now running. Earlier
+interrupted/5-second samples are excluded from the final baseline.
 
-## Blocker
+## Private remote
 
-GitHub `gh repo create nacre-desktop/bead --private` returned HTTP 401.
-Owner was asked to refresh the existing login. No remote created or publication.
-Retry after authentication; organization permission failure then permits a
-private personal-account fallback. Authentication failure does not justify
-changing account or authentication configuration.
+Created https://github.com/nacre-desktop/bead after owner refreshed GitHub CLI
+authentication. Verified isPrivate=true and visibility=PRIVATE; initial checkpoint
+47b5a30 pushed to main. No account/configuration changes made by the experiment.
 
 ## Exact next step
 
-Generate location-indexed shell inventory, pin candidate dependency versions and
-sources, then build isolated blank layer-shell renderer spikes. Write research
+Inventory generated: 224 files / 27,723 QML lines / 42 IPC handlers; 26 upstream
+source revisions and 43 published crate metadata entries captured. Blank surface
+spike compiles against pinned SCTK/wgpu/Vello/femtovg/tiny-skia; nested-niri
+measurements in progress (raw logs ignored). Review collected source evidence. Write research
 00–05, ADR 0001 and gated roadmap. Review evidence and stop for owner approval.
 
 ## Commands
