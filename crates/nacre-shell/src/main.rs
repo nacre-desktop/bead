@@ -337,3 +337,26 @@ fn select_renderer(options: &mut Options, name: &str) -> Result<(), Box<dyn std:
     };
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checked_in_ui_bundle_and_assets_are_complete() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+        let palette_path = root.join("palette.json");
+        let palette = Palette::read(&palette_path).unwrap();
+        let fallback = panel(&palette, &root).unwrap();
+        let mut session =
+            bead_ui::Session::new(root, "ui/main.json".into(), palette_path, palette, fallback);
+        let scene = session.reload().unwrap();
+        session.check_sources().unwrap();
+        assert!(scene.primitives.len() > 40);
+        assert!(!scene.asset_data.is_empty());
+        session.commit(scene);
+        let state: serde_json::Value = serde_json::from_str(&session.state_summary()).unwrap();
+        assert_eq!(state["launcher.search.text"], "");
+        assert_eq!(state["launcher.open"], true);
+    }
+}
