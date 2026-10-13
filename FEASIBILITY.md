@@ -27,16 +27,18 @@ The GPL shell runs it in nested Hyprland and niri, sleeps when idle and exits cl
 Hyprland passed second-output add/remove/re-add; niri passed scale-change redraws.
 Cargo-deny checks the full workspace and permissive-only framework graphs in CI.
 
-| Compositor / client | PSS / USS MiB | Idle CPU | Startup median ms |
+| Compositor / client | PSS / USS MiB | Idle CPU | Startup ms |
 | --- | ---: | ---: | ---: |
-| Hyprland / Bead | 1.07 / 0.95 | <0.017% | 2.47 |
-| Hyprland / QML | 58.58 / 48.85 | <0.017% | 87.69 |
-| niri / Bead | 1.07 / 0.98 | <0.017% | 21.21 |
-| niri / QML | 58.66 / 48.27 | <0.017% | 99.99 |
+| Hyprland / Bead | 1.06 / 0.94 | <0.017% | 5.00 |
+| Hyprland / QML | 71.52 / 56.35 | <0.017% | 156.91 |
+| niri / Bead | 1.10 / 1.01 | <0.017% | 25.11 |
+| niri / QML | 70.95 / 56.69 | 0.017% | 282.04 |
 
-Three 60-second samples per row; zero CPU ticks/SwapPss. Startup is process launch
-→ first frame-callback log observation on both, not physical presentation. Bead
-startup ranges: Hypr 2.43–6.53, niri 17.36–25.70 ms; QML 87.66–185.63 / 99.54–132.02.
+One final clean 60-second sample per row, after stopping a stale early QML
+screenshot process. The prior three-pair PSS values (~58.6 MiB QML) are superseded;
+shared pages/other allocation state affected them. No SwapPss. QML/niri used one
+CPU tick, all other rows zero. Startup is process launch → first frame-callback
+log observation on both, not physical presentation; cache state is not controlled.
 Matched full-width 32px strips, scale 1; Hypr 1920×1080@60, niri 1278×692@60.
 Hypr used a desktop-nested window; headless labwc gave no active Hypr output.
 Hypr screenshots timed out for both clients; bounded timeout added, numbers retained.
@@ -45,7 +47,7 @@ Both Bead instances exit 0/surfaces=0. No daily shell/config changes. Tests: fmt
 clippy -D warnings, 2 geometry tests, actual lifecycle and measurements, cargo-deny;
 GitHub CI 38391925119 passed for feature code 8a5069d.
 strict license policy also correctly rejects GPL shell when deliberately selected.
-408 new Rust lines plus small fixtures/runner updates; ~1 hour including setup
+408 new Rust lines plus small fixtures/runner updates; ~90 minutes including setup
 and measurements. Installed cargo-deny 0.20.2 locally; no system packages added
 (sudo unavailable; existing Rust/labwc reused). Reload/pacing/fonts are N/A here.
 Verdict: surfaces on track; nested-Hypr testbed concern, no full-shell savings claim.

@@ -21,9 +21,12 @@ dark strip at the top of the separate nested desktop. Close its window or Ctrl+C
 to stop. No session config/autostart/install changes. Existing Rust/labwc used;
 cargo-deny 0.20.2 added locally, no system packages installed.
 
-Next action: **WAIT for next/feedback.** Feature 1 is complete. No Feature 2 work
-is authorized yet. [Screenshot](../examples/feature1.png): Bead is the dark top
-strip; the central hotkeys overlay belongs to the nested compositor.
+Final cleanup found/stopped an old QML screenshot attempt. One fresh 60-second
+pair per compositor supersedes earlier PSS: Bead 1.06/1.10 MiB, QML 71.52/70.95.
+QML/niri one CPU tick; others zero. See FEASIBILITY for startup/USS and caveats.
+
+Next action: **WAIT for next/feedback.** Feature 1 complete; do not start Feature 2.
+[Screenshot](../examples/feature1.png): dark top strip is Bead; central overlay is niri.
 Feature 2 must add drawing/palette and stress a launcher-sized rounded/shadowed,
 lots-of-text/color-emoji panel with damage tracking at real 2880×1800 / effective
 1.5 scale / 120 Hz. Report p50/p99, CPU and loaded-font PSS. Tell owner if CPU
