@@ -1,7 +1,7 @@
 # Status
 
-Updated: 2026-10-13. Phase 0 research complete locally; final push/CI verification
-pending, then STOP for the owner. **Feature 1 is not approved.**
+Updated: 2026-10-13. **Phase 0 complete and pushed. Waiting for the owner’s
+architecture decision. Feature 1 is not approved.**
 
 Private remote: https://github.com/nacre-desktop/bead, isPrivate=true,
 visibility=PRIVATE, default branch main verified. Isolated main worktree backed
@@ -18,7 +18,9 @@ by a separate bare repository. No production framework/shell code yet.
   Rust-port branch; no engine duplication. Neither reference checkout edited.
 - Twelve final measurements: three 60-second runs per renderer, zero recorded
   CPU ticks/SwapPss. Vello first-run 177.48 MiB PSS and QML 71.85 MiB sample retained.
-- Workspace/lock/license split; CI configured for fmt/clippy/tests. Spike only.
+- Workspace/lock/license split; CI fmt/clippy/tests passed for research code
+  revision 7abc5af in [run 38381794452](https://github.com/nacre-desktop/bead/actions/runs/38381794452).
+  Subsequent handoff commit changes documentation only. Spike only.
 - Local fmt --all --check, clippy --workspace --all-targets --locked with
   -D warnings, cargo test --workspace --locked pass. Rust spike has zero unit tests;
   functional evidence is actual surface mapping and the measured runs.
@@ -55,8 +57,9 @@ Checks: `cargo fmt --all --check`,
 
 ## Exact next step
 
-Push the completed research package to private main and verify latest CI/remote
-revision. Then post recommendation and **wait for owner architecture OK**.
+**Wait for owner architecture OK.** No implementation work remains authorized
+before that gate. Research code 7abc5af and its CI pass are published on private
+main; the final handoff update is documentation only.
 After OK start only Feature 1: minimum production surface crate/nacre-shell,
 blank surface per output on nested Hyprland and niri, clean startup/exit/hotplug
 and matched common-boundary metrics. Earlier “continue” does not approve Feature 1.

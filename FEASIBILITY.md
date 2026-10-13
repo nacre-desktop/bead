@@ -71,8 +71,8 @@ services, multiple outputs and Hyprland runtime parity: NOT TESTED in this spike
 Local fmt, clippy -D warnings and cargo test pass. Spike has zero unit tests;
 functional proof is real surfaces and 12 valid idle runs. Nested screenshot
 inspected; root run.sh smoke passed all four clients after relocation, and final
-baseline restored. JSON/TOML/link/privacy/publish=false checks pass. GitHub CI
-status recorded in STATUS.md after push; no premature CI success claim.
+baseline restored. JSON/TOML/link/privacy/publish=false checks pass. GitHub CI passed all steps for research code 7abc5af in run 38381794452;
+final handoff is documentation only.
 
 Task-local additions: Rust 1.99.0/rustfmt/clippy, Cargo dependencies, extracted
 labwc 0.20.2/wlroots 0.20.2/libsfdo 0.1.4. Native archives verified against official
@@ -81,8 +81,8 @@ install, Git identity/config, desktop/keybinding/autostart or installed Nacre ch
 All task-private compositor/client/portal processes stopped.
 
 At research review: about 640 authored Rust/Python/runner lines; 1,900 Markdown
-research/index lines; 23,500 generated JSON evidence lines before final property
-appendix. Generated data is not authored implementation. Framework/shell LOC 0.
+research/index lines; approximately 33384 generated JSON evidence lines including the property appendix.
+Generated data is not authored implementation. Framework/shell LOC 0.
 Wall time from first checkpoint 10:22:26 +02 to review ~12:05 +02: about 103 minutes,
 excluding pre-checkpoint setup and later CI/publication. Includes downloads,
 failures/repeated campaigns/reader review; no full-parity forecast from that pace.
