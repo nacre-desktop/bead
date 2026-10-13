@@ -176,6 +176,9 @@ impl GlRenderer {
     }
 }
 impl Renderer for GlRenderer {
+    fn resource_counts(&self) -> (usize, usize) {
+        (self.cache.layer_count(), self.images.len())
+    }
     fn stage_resources(&mut self, target: crate::ResourceTarget<'_>) -> Result<()> {
         let crate::ResourceTarget::Gl { display } = target else {
             return Err("GL resource target missing".into());

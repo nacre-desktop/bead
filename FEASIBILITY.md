@@ -202,3 +202,32 @@ smallest output viewport; independent per-output layouts remain a limitation.
 key uniqueness/action args/relative widths/grid rows/pixel clipping verified.
 Taffy0.15.0 MIT; no system installs. Current example is a toolkit proof, not the
 real launcher. Next: port sidebar/app grid and measure equivalent QML. **On track**.
+
+## Feature 4 milestone — real launcher sidebar/grid port (2026-10-14)
+
+Ported NacreAppBrowser's sidebar, responsive app tiles and bottom search field
+into reusable Luau components. UI69lines + behavior34 =103; comparison regions
+are232QML lines (sidebar107,grid107,search18), not the full1310-line browser.
+Primary UI has no hand-listed rows/visibility; legacy JSON moved to legacy-ui.
+
+| Matched63-item static panel / run | PSS + DRM MiB (components) | CPU % /60s | Startup ms |
+| --- | ---: | ---: | ---: |
+| GL / first | 102.81 (52.90+49.91) | 0 | 273.28 |
+| GL / later | 88.79 (38.88+49.91) | 0 | 94.25 |
+| QML / first | 193.77 (106.04+87.73) | 0 | 277.05 |
+| QML / later | 192.75 (105.02+87.73) | 0 | 154.62 |
+
+PrivateHypr virtual2880×1800/1.5/120Hz; static pacing N/A(one frame), notphysical.
+Same dataset/SVG override/loadedfonts, including3rendered color emoji; first private
+shader caches fresh, OS/other-agent load uncontrolled. Startupfirst populated
+callback/presentation receipt; phase boundary can differ byone refresh. No live run.
+SourceNacreAppBrowser public/local identical, SHAa3d574e4; ranges489–595/651–757/
+1029–1046. QML regions contain favorites/hidden-item/key handlers not yet all
+ported: LOC is scope/count evidence, not equal-behavior compression orfullparity.
+SystemXDG catalog uses existingMPL2 desktop parser only in GPL shell; Bead graphs
+remain permissive. App execution/ranking/favorites/other-route panels stay later;
+current callbacks select/navigate UI state. Static logo/theme and text-fit/elision
+still have limitations. Pixel geometry checked in [screenshot](examples/launcher-port.png).
+27tests + fmt/clippy/cargo-deny pass. No system installs; ~70min since layout
+milestone, mostly parser/style/integration. Animation/input/a11y and100reload
+resource proof next. **On track for bounded component proof; full launcher not claimed**.

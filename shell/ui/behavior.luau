@@ -1,38 +1,34 @@
 -- SPDX-License-Identifier: GPL-3.0-only
--- Persistent data belongs to Rust stores; this VM is replaced on every reload.
 return {
   stores = {
-    ["launcher.open"] = true,
-    ["launcher.search.text"] = "",
-    ["launcher.scroll.y"] = 0,
+    ["launcher.open"] = true, ["launcher.catalog"] = {},
+    ["launcher.selection"] = "", ["launcher.route"] = "home",
+    ["launcher.search.text"] = "", ["launcher.scroll.y"] = 0,
   },
   actions = {
+    select_app = function(s,id) s["launcher.selection"] = id end,
+    navigate = function(s,id) s["launcher.route"] = id end,
     toggle = function(s) s["launcher.open"] = not s["launcher.open"] end,
-    scroll = function(s,delta) s["launcher.scroll.y"] = math.clamp(s["launcher.scroll.y"] + delta,0,160) end,
   },
   computed = {
-    ["color_surface"] = function(s) return "surface" end,
-    ["color_surfaceContainer"] = function(s) return "surfaceContainer" end,
-    ["color_onSurface"] = function(s) return "onSurface" end,
-    ["color_onSurfaceVariant"] = function(s) return "onSurfaceVariant" end,
-    ["color_primary"] = function(s) return "primary" end,
-    ["color_outlineVariant"] = function(s) return "outlineVariant" end,
-    row_0_visible = function(s) local y = 128 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_1_visible = function(s) local y = 171 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_2_visible = function(s) local y = 214 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_3_visible = function(s) local y = 257 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_4_visible = function(s) local y = 300 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_5_visible = function(s) local y = 343 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_6_visible = function(s) local y = 386 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_7_visible = function(s) local y = 429 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    row_8_visible = function(s) local y = 472 - s["launcher.scroll.y"]; return s["launcher.open"] and y >= 128 and y <= 472 end,
-    scroll_offset = function(s) return -s["launcher.scroll.y"] end,
-    search_label = function(s)
-      local text = s["launcher.search.text"]
-      return text == "" and "Search applications…" or text
+    ["launcher.route_title"] = function(s)
+      return ({home="Home",applications="Applications",system="System",settings="Settings",files="Files",wallpaper="Wallpaper"})[s["launcher.route"]] or "Home"
     end,
-    status_label = function(s)
-      return "Font fallback: Ελληνικά · العربية · 日本語 · 😀 🌈 🚀    Scroll: " .. tostring(s["launcher.scroll.y"])
+    ["launcher.apps"] = function(s)
+      local rows={}; local query=string.lower(s["launcher.search.text"])
+      for _,app in s["launcher.catalog"] do
+        if string.find(string.lower(app.name),query,1,true) then
+          table.insert(rows,{id=app.id,name=app.name,icon=app.icon,selected=s["launcher.selection"]==app.id})
+        end
+      end
+      return rows
+    end,
+    ["launcher.navigation"] = function(s)
+      local rows={}
+      for _,item in {{id="home",name="Home",icon="home"},{id="applications",name="Applications",icon="apps"},{id="system",name="System",icon="computer"},{id="settings",name="Settings",icon="settings"},{id="files",name="Files",icon="folder"},{id="wallpaper",name="Wallpaper",icon="wallpaper"}} do
+        table.insert(rows,{id=item.id,name=item.name,icon=item.icon,selected=s["launcher.route"]==item.id})
+      end
+      return rows
     end,
   },
 }

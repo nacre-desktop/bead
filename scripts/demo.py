@@ -37,7 +37,7 @@ def main():
             env['AQ_DRM_DEVICES'] = '/dev/null'
         child = subprocess.Popen(commands[compositor], cwd=root, env=env, start_new_session=True)
         try:
-            content = root/'shell/ui/content.json'
+            content = root/'shell/ui/main.luau'
             original = content.read_text()
             behavior = root/'shell/ui/behavior.luau'
             print('DEMO: type in Search and scroll now. Every eight seconds: valid edit, broken file, recovery. Only a temporary copy changes.', flush=True)
@@ -50,7 +50,7 @@ def main():
                     content.write_text(original.replace('Applications', 'Applications · reloaded'))
                     behavior.write_text(behavior.read_text().replace('["launcher.search.text"] = ""', '["launcher.search.text"] = "new default"'))
                 elif stage == 'broken':
-                    content.write_text('{"nodes": [ broken file')
+                    content.write_text('return { broken file')
                 else:
                     content.write_text(original)
                 print('DEMO: '+stage+'; your input, scroll and Home state should survive.', flush=True)

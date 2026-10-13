@@ -40,10 +40,16 @@ impl SceneSource for Runtime {
                 if let bead_render::Primitive::Image { path, .. } = draw
                     && let Some(icon) = path.to_str().and_then(|s| s.strip_prefix("@icon:"))
                 {
-                    *path = freedesktop_icons::lookup(icon)
-                        .with_size(48)
-                        .find()
-                        .unwrap_or_else(|| std::path::PathBuf::from("shell/sample.svg"));
+                    *path = if std::env::var_os("BEAD_MATCHED_ICONS").is_some() {
+                        std::env::var_os("BEAD_ICON_PATH")
+                            .map(std::path::PathBuf::from)
+                            .unwrap_or_else(|| "shell/sample.svg".into())
+                    } else {
+                        freedesktop_icons::lookup(icon)
+                            .with_size(48)
+                            .find()
+                            .unwrap_or_else(|| "shell/sample.svg".into())
+                    };
                     let data = if !reload {
                         if let Some(data) = self.session.asset_snapshot(path) {
                             data
@@ -67,6 +73,9 @@ impl SceneSource for Runtime {
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         self.session.check_sources()?;
         Ok(())
+    }
+    fn resource_counts(&self) -> String {
+        self.session.resource_counts()
     }
     fn state_summary(&self) -> String {
         self.session.state_summary()

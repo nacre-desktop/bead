@@ -3,7 +3,10 @@
 2026-10-13: Gate B approved. Overnight Feature4/5 authorized; in progress.
 Worktree bead-feature4-authoring from mainfeae2b2. Authoring ADR0002 complete: Luau chosen (31UI lines vs KDL27/QML-like34),
 real Lua/KDL syntax checks pass. Frontend/Taffy/layout/lists complete;25 tests and both nested toy smokes pass.
-Current milestone real Nacre launcher sidebar + app-grid port.
+Real launcher sidebar/grid/search port complete:69UI +34behavior lines vs232
+selected QML regions (full browser1310; parity limitations in FEASIBILITY).
+Matched60s first/later GL102.81/88.79MiB total vsQML193.77/192.75; CPU0both.
+27tests pass. Current milestone GateB100reload resource + keyed-mutation proofs.
 Choose Luau unless concrete evidence rejects it; no intermediate choice wait.
 Nice10/Cargo-j2, nested only. Stop afterFeature5; morning summary will replace
 this progress note. Deferred baking/shader-cache work stays deferred.

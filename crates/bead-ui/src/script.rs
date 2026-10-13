@@ -66,15 +66,19 @@ impl Script {
         self.deadline
             .set(Instant::now() + Duration::from_millis(50));
     }
+    pub fn binding_count(&self) -> usize {
+        self.cache.borrow().len()
+    }
     pub fn error(&self, message: impl ToString) -> Diagnostic {
         Diagnostic::new(&self.path, 1, 1, message)
     }
     pub fn schema(&self) -> Result<BTreeMap<String, Value>, Diagnostic> {
         self.lua
-            .from_value(
+            .from_value_with(
                 self.exports
                     .get("stores")
                     .map_err(|e| lua_error(&self.path, e))?,
+                mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(true),
             )
             .map_err(|e| lua_error(&self.path, e))
     }
@@ -123,10 +127,18 @@ impl Script {
             .map_err(|e| lua_error(&self.path, e))?;
         let changes: BTreeMap<String, Value> = self
             .lua
-            .from_value(mlua::Value::Table(table))
+            .from_value_with(
+                mlua::Value::Table(table),
+                mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(true),
+            )
             .map_err(|e| lua_error(&self.path, e))?;
         if changes.keys().ne(stores.values().keys()) {
             return Err(self.error("actions cannot create or remove durable stores"));
+        }
+        for (id, value) in &changes {
+            if id.starts_with("bead.") && stores.get(id) != Some(value) {
+                return Err(self.error(format!("{id} is Rust-owned and read-only to actions")));
+            }
         }
         let mut next = stores.clone();
         next.commit(changes).map_err(|e| self.error(e))?;
@@ -229,9 +241,12 @@ fn evaluate(
         )?,
     )?;
     proxy.set_metatable(Some(meta))?;
-    let result = function
-        .call::<mlua::Value>(proxy)
-        .and_then(|value| lua.from_value(value));
+    let result = function.call::<mlua::Value>(proxy).and_then(|value| {
+        lua.from_value_with(
+            value,
+            mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(true),
+        )
+    });
     stack.borrow_mut().pop();
     result
 }

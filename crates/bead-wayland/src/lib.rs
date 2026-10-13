@@ -84,6 +84,9 @@ pub trait SceneSource {
     fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>>;
     fn validate(&self) -> Result<(), Box<dyn Error>>;
     fn state_summary(&self) -> String;
+    fn resource_counts(&self) -> String {
+        String::new()
+    }
     fn commit(&mut self);
     fn error_scene(&mut self, error: String) -> Scene;
 }
@@ -456,6 +459,14 @@ impl App {
                         }
                     }
                 }
+                let (layers, images) = self.renderer.resource_counts();
+                println!(
+                    "UI_RESOURCES {} layers={} gpu_images={} surfaces={}",
+                    runtime.resource_counts(),
+                    layers,
+                    images,
+                    self.surfaces.len()
+                );
                 println!(
                     "UI_COMMIT generation={} reload={} prepare_ms={:.3}",
                     self.scene.resource_revision,

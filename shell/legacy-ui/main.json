@@ -6,9 +6,9 @@
     "y": -32.0
   },
   "includes": [
-    "ui/content.json"
+    "legacy-ui/content.json"
   ],
-  "script": "ui/behavior.luau",
+  "script": "legacy-ui/behavior.luau",
   "version": 1,
   "width": 1100.0,
   "nodes": [

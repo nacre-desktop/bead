@@ -120,3 +120,89 @@ fn import_cycles_and_deleted_modules_keep_previous_ui() {
     fs::remove_file(f.0.join("ui/components/card.luau")).unwrap();
     assert!(session.reload().err().unwrap().message.contains("tracked"));
 }
+
+#[test]
+fn keyed_reorder_insert_delete_keep_focus_selection_scroll_and_input() {
+    let f = fixture();
+    let mut session = session(&f);
+    let rows: Vec<_> = (0..20)
+        .map(|i| serde_json::json!({"id":format!("{i}"),"name":format!("Item{i}")}))
+        .collect();
+    let scene = session
+        .update(BTreeMap::from([("rows".into(), Value::List(rows.clone()))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let card = session
+        .view_nodes()
+        .iter()
+        .find(|node| node.id.contains("k30.tile"))
+        .unwrap();
+    let r = rect(&card.draw);
+    let scene = session.click(r.x + 2., r.y + 2.).unwrap().unwrap();
+    session.commit(scene);
+    let focused = session.stores.get("bead.focused").cloned();
+    let scene = session
+        .update(BTreeMap::from([
+            ("query".into(), Value::Text("saved😀".into())),
+            ("scroll".into(), Value::Number(18.)),
+        ]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let mut moved = rows;
+    moved.swap(0, 3);
+    moved.insert(1, serde_json::json!({"id":"new","name":"New"}));
+    moved.retain(|row| row["id"] != "5");
+    let scene = session
+        .update(BTreeMap::from([("rows".into(), Value::List(moved))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    assert_eq!(session.stores.get("bead.focused"), focused.as_ref());
+    assert_eq!(
+        session.stores.get("selected"),
+        Some(&Value::Text("0".into()))
+    );
+    assert_eq!(session.stores.get("scroll"), Some(&Value::Number(18.)));
+    assert_eq!(
+        session.stores.get("query"),
+        Some(&Value::Text("saved😀".into()))
+    );
+    assert!(
+        session
+            .view_nodes()
+            .iter()
+            .any(|node| Some(&Value::Text(node.id.clone())) == focused.as_ref())
+    );
+    let scene = session.reload().unwrap();
+    session.commit(scene);
+    assert_eq!(session.stores.get("bead.focused"), focused.as_ref());
+}
+#[test]
+fn runtime_component_properties_reject_unknown_and_wrong_types() {
+    let f = fixture();
+    let mut session = session(&f);
+    fs::write(f.0.join("ui/components/card.luau"),r#"local ui=require('bead.ui')
+local Card=ui.component('Card',{item={id='string',name='string'}},function(p)return ui.Button{id='tile',text=p.item.name,on_activate=ui.action('select',p.item.id)}end)
+return function(p)return Card{item=p.item,typo=true}end"#).unwrap();
+    assert!(
+        session
+            .reload()
+            .err()
+            .unwrap()
+            .message
+            .contains("unknown property typo")
+    );
+    fs::write(f.0.join("ui/components/card.luau"),r#"local ui=require('bead.ui')
+local Card=ui.component('Card',{item={id='string',name='string'}},function(p)return ui.Button{id='tile',text=p.item.name,on_activate=ui.action('select',p.item.id)}end)
+return function(p)return Card{item={id=p.item.id,name=42}}end"#).unwrap();
+    assert!(
+        session
+            .reload()
+            .err()
+            .unwrap()
+            .message
+            .contains("must be string")
+    );
+}

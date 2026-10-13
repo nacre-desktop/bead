@@ -23,9 +23,10 @@ pub enum Widget {
     TextInput,
     Image,
     Group,
+    Box,
 }
 impl Widget {
-    pub fn constructors() -> [(&'static str, Self); 10] {
+    pub fn constructors() -> [(&'static str, Self); 11] {
         [
             ("Panel", Self::Panel),
             ("Row", Self::Row),
@@ -37,6 +38,7 @@ impl Widget {
             ("TextInput", Self::TextInput),
             ("Image", Self::Image),
             ("Group", Self::Group),
+            ("Box", Self::Box),
         ]
     }
 }
@@ -71,6 +73,8 @@ pub fn allowed_property(name: &str) -> bool {
         "grow",
         "shrink",
         "gap",
+        "gap_x",
+        "gap_y",
         "padding",
         "padding_left",
         "padding_right",
@@ -97,6 +101,14 @@ pub fn allowed_property(name: &str) -> bool {
         "icon",
         "path",
         "aria_label",
+        "text_align",
+        "position",
+        "left",
+        "top",
+        "right",
+        "bottom",
+        "hover_fill",
+        "selected_fill",
     ]
     .contains(&name)
 }
@@ -122,6 +134,9 @@ pub struct ViewSpec {
     pub icon: Option<String>,
     pub path: Option<PathBuf>,
     pub aria_label: String,
+    pub text_align: Option<bead_render::TextAlign>,
+    pub hover_fill: Option<Json>,
+    pub selected_fill: Option<Json>,
     pub children: Vec<ViewSpec>,
     pub source: Source,
 }
@@ -244,6 +259,7 @@ impl ViewSpec {
             }
             let visible = boolean(p, "visible", true, source)?;
             let mut style = Style {
+                position: Position::Relative,
                 display: if !visible {
                     Display::None
                 } else if raw.kind == Widget::Grid {
@@ -267,6 +283,19 @@ impl ViewSpec {
                 Widget::Button | Widget::TextInput => 40.,
                 Widget::Image => 32.,
                 _ => 0.,
+            };
+            if p.contains_key("position") {
+                style.position = match text(p, "position", "relative", source)?.as_str() {
+                    "relative" => Position::Relative,
+                    "absolute" => Position::Absolute,
+                    _ => return Err(source.error("position must be relative/absolute")),
+                };
+            }
+            style.inset = taffy::Rect {
+                left: dimension(p, "left", auto(), source)?,
+                right: dimension(p, "right", auto(), source)?,
+                top: dimension(p, "top", auto(), source)?,
+                bottom: dimension(p, "bottom", auto(), source)?,
             };
             style.size = Size {
                 width: dimension(
@@ -325,8 +354,8 @@ impl ViewSpec {
                 return Err(source.error("padding/gap cannot be negative"));
             }
             style.gap = Size {
-                width: length(gap),
-                height: length(gap),
+                width: length(number(p, "gap_x", gap, source)?),
+                height: length(number(p, "gap_y", gap, source)?),
             };
             style.align_items = match text(p, "align", "stretch", source)?.as_str() {
                 "start" => AlignItems::START,
@@ -461,6 +490,15 @@ impl ViewSpec {
                     .map(|_| text(p, "path", "", source).map(PathBuf::from))
                     .transpose()?,
                 aria_label: text(p, "aria_label", "", source)?,
+                text_align: p
+                    .get("text_align")
+                    .map(|v| {
+                        serde_json::from_value(v.clone())
+                            .map_err(|_| source.error("text_align needs left/center/right"))
+                    })
+                    .transpose()?,
+                hover_fill: p.get("hover_fill").cloned(),
+                selected_fill: p.get("selected_fill").cloned(),
                 children,
                 source: raw.source.clone(),
             })
@@ -480,7 +518,42 @@ fn color(
 ) -> Result<[u8; 4], Diagnostic> {
     match value {
         None => Ok(default),
+        Some(Json::String(role)) if role == "transparent" => Ok([0, 0, 0, 0]),
         Some(Json::String(role)) => palette.get(role).map_err(|e| source.error(e)),
+        Some(Json::Object(object)) if object.contains_key("role") => {
+            let role = object
+                .get("role")
+                .and_then(Json::as_str)
+                .ok_or_else(|| source.error("color role must be text"))?;
+            let alpha = object
+                .get("alpha")
+                .and_then(Json::as_f64)
+                .filter(|a| (0. ..=1.).contains(a))
+                .ok_or_else(|| source.error("alpha needs0..1"))?;
+            let mut c = palette.get(role).map_err(|e| source.error(e))?;
+            c[3] = (f64::from(c[3]) * alpha).round() as u8;
+            Ok(c)
+        }
+        Some(Json::Object(object)) if object.contains_key("base") => {
+            let base = object
+                .get("base")
+                .and_then(Json::as_str)
+                .ok_or_else(|| source.error("base role must be text"))?;
+            let over = object
+                .get("over")
+                .and_then(Json::as_str)
+                .ok_or_else(|| source.error("overlay role must be text"))?;
+            let alpha = object
+                .get("alpha")
+                .and_then(Json::as_f64)
+                .filter(|a| (0. ..=1.).contains(a))
+                .ok_or_else(|| source.error("tint amount needs0..1"))?;
+            let a = palette.get(base).map_err(|e| source.error(e))?;
+            let b = palette.get(over).map_err(|e| source.error(e))?;
+            Ok(std::array::from_fn(|i| {
+                (f64::from(a[i]) * (1. - alpha) + f64::from(b[i]) * alpha).round() as u8
+            }))
+        }
         Some(value) => serde_json::from_value(value.clone())
             .map_err(|_| source.error("color requires a palette role or RGBA array")),
     }
@@ -595,7 +668,13 @@ pub fn layout(
         let accent = palette_role("primary", ink);
         let selected = view.selected || hover == view.id;
         let fill = color(
-            view.fill.as_ref(),
+            if hover == view.id {
+                view.hover_fill.as_ref().or(view.fill.as_ref())
+            } else if view.selected {
+                view.selected_fill.as_ref().or(view.fill.as_ref())
+            } else {
+                view.fill.as_ref()
+            },
             if view.kind == Widget::Panel {
                 body
             } else if selected || view.kind == Widget::TextInput {
@@ -667,6 +746,7 @@ pub fn layout(
                     view.text.clone()
                 },
                 family: view.family.clone(),
+                align: view.text_align,
                 size: view.font_size,
                 color: if input_empty { muted } else { foreground },
             });

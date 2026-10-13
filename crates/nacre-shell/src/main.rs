@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+mod catalog;
 mod font_sources;
 mod reload;
 use bead_render::{Palette, Primitive, Rect, Scene, Slide};
@@ -16,6 +17,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut options = Options::default();
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
+    let mut catalog: Option<PathBuf> = None;
     if let Ok(name) = std::env::var("BEAD_RENDERER") {
         select_renderer(&mut options, &name)?;
     }
@@ -27,6 +29,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                 profile = true;
                 options.panel = true;
             }
+            "--catalog" => catalog = Some(args.next().ok_or("--catalog needs path")?.into()),
             "--ui" => {
                 ui = Some(args.next().ok_or("--ui needs bundle-relative path")?.into());
                 options.panel = true;
@@ -150,13 +153,22 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if let Some(entry) = ui {
-        let session = bead_ui::Session::new(
+        let ui_entry_is_launcher = entry == Path::new("ui/main.luau");
+        let mut session = bead_ui::Session::new(
             std::path::PathBuf::from("shell"),
             entry,
             palette,
             colors,
             scene.clone(),
         );
+        if ui_entry_is_launcher {
+            session.stores = session
+                .stores
+                .reconcile(&std::collections::BTreeMap::from([(
+                    "launcher.catalog".into(),
+                    bead_core::Value::List(catalog::load(catalog.as_deref())?),
+                )]))?;
+        }
         let renderer = bead_render::renderer(options.renderer)?;
         bead_wayland::run_runtime(
             options,
@@ -206,6 +218,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
                 rect: Rect::new(x, y, w, h),
                 text: s.into(),
                 family: "IBM Plex Sans".into(),
+                align: None,
                 size,
                 color,
             })
@@ -351,8 +364,13 @@ mod tests {
         let palette_path = root.join("palette.json");
         let palette = Palette::read(&palette_path).unwrap();
         let fallback = panel(&palette, &root).unwrap();
-        let mut session =
-            bead_ui::Session::new(root, "ui/main.json".into(), palette_path, palette, fallback);
+        let mut session = bead_ui::Session::new(
+            root,
+            "legacy-ui/main.json".into(),
+            palette_path,
+            palette,
+            fallback,
+        );
         let scene = session.reload().unwrap();
         session.check_sources().unwrap();
         assert!(scene.primitives.len() > 40);
@@ -361,5 +379,16 @@ mod tests {
         let state: serde_json::Value = serde_json::from_str(&session.state_summary()).unwrap();
         assert_eq!(state["launcher.search.text"], "");
         assert_eq!(state["launcher.open"], true);
+        session = bead_ui::Session::new(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell"),
+            "ui/main.luau".into(),
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json"),
+            Palette::read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json"))
+                .unwrap(),
+            session.error_scene(),
+        );
+        let scene = session.reload().unwrap();
+        assert!(scene.primitives.len() > 20);
+        session.commit(scene);
     }
 }

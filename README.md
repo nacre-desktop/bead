@@ -50,7 +50,7 @@ Click Search and type; scroll the application rows; click Home to collapse/open.
 Every eight seconds the demo edits a temporary UI copy: valid change, syntax
 error, then recovery. Your input/scroll/open state should survive all three.
 Close the nested window or Ctrl+C to stop. Use `hyprland` for the other compositor.
-Without `--demo`, edit `shell/ui/*.json` or `behavior.luau` yourself while it runs.
+Without `--demo`, edit `shell/ui/*.luau` or the imported component files yourself while it runs.
 
 `auto` (default) uses one native OpenGL/femtovg context shared by all surfaces,
 with tiny-skia if hardware GL initialization is unavailable. `BEAD_RENDERER=cpu`
@@ -59,7 +59,8 @@ only the retained stress fixture. The CPU-only build is
 `cargo build -p nacre-shell --no-default-features`; it creates no GPU context.
 GPU content is currently CPU-baked once and uploaded, then composited on GPU.
 
-UI v1 is a small, strict JSON primitive format, not complete QML parity. Stable
+The primary UI format is Luau markup (ADR0002); legacy JSON fixtures live in
+`shell/legacy-ui`. Taffy owns layout and repeaters use stable model keys. Stable
 node/store IDs, typed Luau stores/actions/computed bindings, included JSON and
 asset snapshots are staged before all configured surfaces swap. Failures show
 file/line/column and keep the previous UI; fixing the source clears the overlay.

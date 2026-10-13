@@ -97,6 +97,8 @@ pub enum Primitive {
         border: Option<([u8; 4], f32)>,
     },
     Text {
+        #[serde(default)]
+        align: Option<TextAlign>,
         rect: Rect,
         text: String,
         family: String,
@@ -112,6 +114,13 @@ pub enum Primitive {
         radius: f32,
         blur: f32,
     },
+}
+#[derive(Clone, Copy, Debug, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextAlign {
+    Left,
+    Center,
+    Right,
 }
 /// Positions are logical pixels. Resources stay independent of surface buffers.
 #[derive(Clone, Copy)]
@@ -189,6 +198,9 @@ pub enum ResourceTarget<'a> {
     },
 }
 pub trait Renderer {
+    fn resource_counts(&self) -> (usize, usize) {
+        (0, 0)
+    }
     #[cfg(feature = "gpu")]
     fn stage_resources(&mut self, _: ResourceTarget<'_>) -> Result<()> {
         Ok(())
@@ -263,8 +275,9 @@ fn key(p: &Primitive, scale: f32) -> String {
             family,
             size,
             color,
+            align,
         } => format!(
-            "t:{scale}:{}:{}:{family}:{size}:{color:?}:{text}",
+            "t:{scale}:{}:{}:{family}:{size}:{color:?}:{align:?}:{text}",
             rect.w, rect.h
         ),
         Primitive::Image { rect, path } => {
@@ -338,6 +351,7 @@ impl Renderer for CpuRenderer {
                     family,
                     size,
                     color,
+                    align,
                 } => {
                     let (w, h) = dimensions(*rect, scale);
                     let mut pix = Pixmap::new(w, h).ok_or("text allocation")?;
@@ -349,7 +363,11 @@ impl Renderer for CpuRenderer {
                         text,
                         &Attrs::new().family(Family::Name(family)),
                         Shaping::Advanced,
-                        None,
+                        align.map(|a| match a {
+                            TextAlign::Left => cosmic_text::Align::Left,
+                            TextAlign::Center => cosmic_text::Align::Center,
+                            TextAlign::Right => cosmic_text::Align::Right,
+                        }),
                     );
                     buf.shape_until_scroll(fonts, false);
                     for run in buf.layout_runs() {
@@ -822,6 +840,7 @@ mod tests {
                             rect: Rect::new(3., 3., 34., 20.),
                             text: "A 😀".into(),
                             family: "sans-serif".into(),
+                            align: None,
                             size: 10.,
                             color: [20, 120, 210, 255],
                         },

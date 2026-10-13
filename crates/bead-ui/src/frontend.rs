@@ -49,6 +49,35 @@ impl FrontEnd for LuauFrontEnd {
                         .create_function(move |lua, props: Table| make_node(lua, kind, props))?;
                     sdk.set(name, constructor)?;
                 }
+                sdk.set("alpha",scope.create_function(|lua,(role,alpha):(String,f64)| {let t=lua.create_table()?;t.set("role",role)?;t.set("alpha",alpha)?;Ok(t)})?)?;
+                sdk.set("tint",scope.create_function(|lua,(base,over,alpha):(String,String,f64)| {let t=lua.create_table()?;t.set("base",base)?;t.set("over",over)?;t.set("alpha",alpha)?;Ok(t)})?)?;
+                sdk.set("resolve_for_check",scope.create_function(|lua,value:mlua::Value| {
+                    if let mlua::Value::Table(table)=&value && let Ok(name)=table.get::<String>("__bind") {
+                        return lua.to_value(&resolve(&name).map_err(mlua::Error::external)?);
+                    }
+                    Ok(value)
+                })?)?;
+                let install:Function=lua.load(r#"
+return function(ui)
+    local function check(value, schema, path)
+        value = ui.resolve_for_check(value)
+        if type(schema) == "string" then
+            if type(value) ~= schema then error(path .. " must be " .. schema, 3) end
+        else
+            if type(value) ~= "table" then error(path .. " must be a record", 3) end
+            for key, expected in schema do check(value[key], expected, path .. "." .. key) end
+        end
+    end
+    ui.component = function(name, schema, render)
+        return function(props)
+            for key in props do if schema[key] == nil then error(name .. ": unknown property " .. key, 2) end end
+            for key, expected in schema do check(props[key], expected, name .. "." .. key) end
+            return render(props)
+        end
+    end
+end
+"#).set_name("@bead.ui").eval()?;
+                install.call::<()>(sdk.clone())?;
                 sdk.set(
                     "bind",
                     scope.create_function(|lua, name: String| {

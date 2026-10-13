@@ -77,12 +77,13 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
     # Qt is a startup control: trace is required for the same first-frame marker.
     env['WAYLAND_DEBUG']='1' if qml and not os.environ.get('BEAD_QML_PROBE') else '0'
     if qml:
-        command=['quickshell','--path',str(ROOT/('spikes/panel-reload.qml' if ui else 'spikes/panel.qml'))]
+        command=['quickshell','--path',os.environ.get('BEAD_QML_PANEL',str(ROOT/('spikes/panel-reload.qml' if ui else 'spikes/panel.qml')))]
         if os.environ.get('BEAD_QML_PROBE'):env['LD_PRELOAD']=os.environ['BEAD_QML_PROBE']
     else:
         renderer=mode.removeprefix('ui-').replace('-memory','').removesuffix('-3')
         command=[str(target/'nacre-shell'),'--animate','--start-open','--renderer',renderer,'--palette',str(ROOT/'spikes/palette-stress.json'),'--namespace','bead-dev-retained']
         if ui:command+=['--ui',os.environ.get('BEAD_UI_ENTRY','ui/main.json')];command.remove('--animate')
+        if os.environ.get('BEAD_CATALOG'):command+=['--catalog',os.environ['BEAD_CATALOG']]
         if '-memory' in mode:command+=['--memory-usage']
         if mode.endswith('-3'):command+=['--surfaces','3']
         if layout=='content':command+=['--content-size']
@@ -111,6 +112,7 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
             if client.poll() is not None or time.monotonic()>deadline:raise RuntimeError(f'{label}: startup failed, exit={client.poll()}; inspect ignored raw log')
             m=memory(client.pid);peak_pss=max(peak_pss,m['pss_mib'])
             for k,v in (drm_memory(client.pid) or {}).items():peak_gpu[k]=max(peak_gpu.get(k,0),v)
+        if ui and not qml and (b'UI_COMMIT' not in data or b'UI_ERROR' in data):raise RuntimeError('UI candidate did not commit; fallback/error panel is not a valid benchmark')
         time.sleep(5)
         before_mem=memory(client.pid);before_gpu=drm_memory(client.pid);before_ticks=ticks(client.pid);before=time.monotonic()
         (raw/f'{label}-before.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps_rollup').read_text())
@@ -121,6 +123,8 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
             for k,v in (drm_memory(client.pid) or {}).items():peak_gpu[k]=max(peak_gpu.get(k,0),v)
             time.sleep(min(1,max(0,before+seconds-time.monotonic())))
         elapsed=time.monotonic()-before
+        if os.environ.get('BEAD_CAPTURE'):
+            subprocess.run(['grim',str(raw/(label+'.png'))],env=env,capture_output=True,timeout=5,check=True)
         after_mem=memory(client.pid);after_gpu=drm_memory(client.pid);peak_pss=max(peak_pss,after_mem['pss_mib'],before_mem['pss_mib']);cpu=100*(ticks(client.pid)-before_ticks)/os.sysconf('SC_CLK_TCK')/elapsed
         (raw/f'{label}-after.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps_rollup').read_text())
     finally:
@@ -136,9 +140,9 @@ def sample_reload(env,raw,target,renderer):
     # Only the temporary bundle is edited; reference repos and checkout UI stay intact.
     with tempfile.TemporaryDirectory(prefix='bead-ui-') as directory:
         bundle=pathlib.Path(directory);shutil.copytree(ROOT/'shell',bundle/'shell')
-        behavior=bundle/'shell/ui/behavior.luau'
+        behavior=bundle/'shell/legacy-ui/behavior.luau'
         behavior.write_text(behavior.read_text().replace('["launcher.search.text"] = ""','["launcher.search.text"] = "saved 😀"').replace('["launcher.scroll.y"] = 0','["launcher.scroll.y"] = 42'))
-        command=[str(target/'nacre-shell'),'--ui','ui/main.json','--renderer',renderer,'--trace-state','--namespace','bead-dev-reload']
+        command=[str(target/'nacre-shell'),'--ui','legacy-ui/main.json','--renderer',renderer,'--trace-state','--namespace','bead-dev-reload']
         log=[];condition=threading.Condition();path=raw/('reload-'+renderer+'.log')
         client=subprocess.Popen(command,cwd=bundle,env={**env,'WAYLAND_DEBUG':'0'},stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,text=True,bufsize=1)
         def drain():
@@ -162,7 +166,7 @@ def sample_reload(env,raw,target,renderer):
             first=wait('UI_PRESENTED generation=1');initial=next(json.loads(line.split(' ',1)[1]) for line in log if line.startswith('UI_STATE '))
             assert initial['launcher.search.text']=='saved 😀' and initial['launcher.scroll.y']==42 and initial['launcher.open'] is True
             shot('reload-valid-'+renderer)
-            source=bundle/'shell/ui/content.json';original=source.read_bytes();latencies=[]
+            source=bundle/'shell/legacy-ui/content.json';original=source.read_bytes();latencies=[]
             for i in range(5):
                 offset=len(log);written=time.monotonic_ns();source.write_bytes(original.replace(b'Application 01',f'Application {i+30:02}'.encode()))
                 result=wait('UI_PRESENTED generation=',offset)
@@ -181,6 +185,59 @@ def sample_reload(env,raw,target,renderer):
             print(f'RELOAD_PROOF renderer={renderer} edits={len(latencies)} file_to_presentation_ms={latencies} preserved_state=true broken_dependency_kept_old_ui=true recovered=true',flush=True)
         finally:stop(client);reader.join(timeout=5)
         if client.returncode!=0:raise RuntimeError(f'reload client exit {client.returncode}')
+
+def sample_gate_b(env, raw, target, renderer):
+    with tempfile.TemporaryDirectory(prefix='bead-gate-b-') as directory:
+        bundle=pathlib.Path(directory);shutil.copytree(ROOT/'shell',bundle/'shell')
+        source=bundle/'shell/ui/main.luau';original=source.read_text()
+        catalog=ROOT/'spikes/launcher-fixture.json'
+        command=[str(target/'nacre-shell'),'--ui','ui/main.luau','--catalog',str(catalog),'--renderer',renderer,'--namespace','bead-dev-gate-b','--palette',str(ROOT/'spikes/palette-stress.json')]
+        if env.get('HYPRLAND_INSTANCE_SIGNATURE'):command+=['--output','bead-bench']
+        log=[];condition=threading.Condition();path=raw/('gate-b-'+renderer+'.log')
+        client=subprocess.Popen(command,cwd=bundle,env={**env,'WAYLAND_DEBUG':'0'},stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,text=True,bufsize=1)
+        def drain():
+            with path.open('w') as stream:
+                for line in client.stdout:
+                    stream.write(line);stream.flush()
+                    with condition:log.append(line.rstrip());condition.notify_all()
+        reader=threading.Thread(target=drain);reader.start()
+        def wait(marker,offset=0):
+            deadline=time.monotonic()+20
+            with condition:
+                while True:
+                    found=next((line for line in log[offset:] if marker in line),None)
+                    if found:return found
+                    if client.poll() is not None or time.monotonic()>deadline:raise RuntimeError('GateB missing '+marker+'; inspect ignored raw log')
+                    condition.wait(.05)
+        def counts():
+            line=next(line for line in reversed(log) if line.startswith('UI_RESOURCES'))
+            return dict((key,int(value)) for key,value in re.findall(r'(\w+)=(\d+)',line))
+        def mem():
+            values=memory(client.pid);drm=drm_memory(client.pid)
+            return values['pss_mib']+sum((drm or {}).values()),values['pss_mib'],sum((drm or {}).values())
+        try:
+            wait('UI_PRESENTED generation=1');time.sleep(2)
+            # Prewarm both source strings before the reference sample, then do100 measured edits.
+            for i in range(4):
+                offset=len(log);source.write_text(original.replace('text="Applications"', 'text="Applications · reloaded"') if i%2 else original)
+                wait('UI_COMMIT',offset);wait('UI_PRESENTED generation=',offset)
+            time.sleep(1);initial_counts=counts();before=mem();before_fds=len(list(pathlib.Path(f'/proc/{client.pid}/fd').iterdir()))
+            samples=[];latencies=[]
+            for i in range(100):
+                offset=len(log);written=time.monotonic_ns()
+                source.write_text(original.replace('text="Applications"','text="Applications · reloaded"') if i%2 else original)
+                wait('UI_COMMIT',offset);line=wait('UI_PRESENTED generation=',offset)
+                presented=int(re.search(r'monotonic_ns=(\d+)',line)[1]);latencies.append((presented-written)/1e6)
+                assert counts()==initial_counts,'owned resources grew or subscriptions changed'
+                if i%10==9:samples.append(mem()[0])
+            time.sleep(1);after=mem();after_fds=len(list(pathlib.Path(f'/proc/{client.pid}/fd').iterdir()))
+            assert before_fds==after_fds,'FD count grew'
+            # PSS/DRM include allocator and driver pools, so report real drift rather than fabricate exact zero.
+            print(f'GATE_B reloads=100 renderer={renderer} before_PSS_plus_DRM={before[0]:.3f} after={after[0]:.3f} delta={after[0]-before[0]:.3f}MiB PSS_before_after={before[1]:.3f}/{after[1]:.3f} DRM_before_after={before[2]:.3f}/{after[2]:.3f} FDs={before_fds}/{after_fds} counts={initial_counts} ten_reload_samples={samples} latency_p50_p99={sorted(latencies)[49]:.3f}/{sorted(latencies)[98]:.3f}ms',flush=True)
+            if after[0]-before[0]>2:print('GATE_B verdict=concern memory drift exceeds2MiB; investigate, not a no-growth claim',flush=True)
+            else:print('GATE_B verdict=pass owned counts/FDs stable; memory bounded within2MiB measurement tolerance',flush=True)
+        finally:stop(client);reader.join(timeout=5)
+        if client.returncode!=0:raise RuntimeError('GateB client did not exit cleanly')
 
 def sample_qml_reload(env,raw):
     with tempfile.TemporaryDirectory(prefix='bead-qml-ui-') as directory:
@@ -379,6 +436,9 @@ def main():
                 return 0
             if args.qml_reload_test:
                 sample_qml_reload(env,raw);return 0
+            if args.reload_test and os.environ.get('BEAD_GATE_B'):
+                target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
+                sample_gate_b(env,raw,target,args.renderer);return 0
             if args.reload_test:
                 target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
                 sample_reload(env,raw,target,args.renderer);return 0

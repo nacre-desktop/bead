@@ -22,6 +22,9 @@ pub struct LayerCache {
     scales: std::collections::BTreeMap<u32, Layer>,
 }
 impl LayerCache {
+    pub fn layer_count(&self) -> usize {
+        self.scales.len()
+    }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         let key = content_key(scene, scale);
         if let Some(layer) = self
