@@ -6,7 +6,9 @@ real Lua/KDL syntax checks pass. Frontend/Taffy/layout/lists complete;25 tests a
 Real launcher sidebar/grid/search port complete:69UI +34behavior lines vs232
 selected QML regions (full browser1310; parity limitations in FEASIBILITY).
 Matched60s first/later GL102.81/88.79MiB total vsQML193.77/192.75; CPU0both.
-27tests pass. Current milestone GateB100reload resource + keyed-mutation proofs.
+27tests pass. GateB100reload + keyed-mutation proofs complete: GL+1.08MiB/FD17stable;
+CPU+.40MiB/FD13stable; owned counts fixed. Memory tolerance2MiB, not exactzero.
+Current milestone animation/input/focus/basicIME/AccessKit, thenFeature5.
 Choose Luau unless concrete evidence rejects it; no intermediate choice wait.
 Nice10/Cargo-j2, nested only. Stop afterFeature5; morning summary will replace
 this progress note. Deferred baking/shader-cache work stays deferred.

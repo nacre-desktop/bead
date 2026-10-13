@@ -231,3 +231,28 @@ still have limitations. Pixel geometry checked in [screenshot](examples/launcher
 27tests + fmt/clippy/cargo-deny pass. No system installs; ~70min since layout
 milestone, mostly parser/style/integration. Animation/input/a11y and100reload
 resource proof next. **On track for bounded component proof; full launcher not claimed**.
+
+## Feature 4 milestone — missing Gate B tests (2026-10-14)
+
+100consecutive valid source edits/presentations keep owned resource counts and
+file descriptors constant. Keyed reorder/insert/delete + reload preserve focus,
+selection, scroll and input while the focused item remains present.
+Memory has bounded allocator/driver variation; this is not an exactzero-growth claim.
+
+| 100reload path | PSS + DRM before→after MiB | Drift | FDs | Reload p50/p99 ms |
+| --- | ---: | ---: | --- | ---: |
+| GL,Hypr virtual1.5/120 | 125.46→126.53 (59.52+65.94→60.47+66.06) | +1.08MiB | 17→17 | 100.54/116.02 |
+| CPU,niri virtual1/60 | 30.89→31.29 (DRM0,no GPU fd) | +.40MiB | 13→13 | 139.09/144.22 |
+
+GL eachcycle:8stores,50visible interactive nodes,1watcher/subscription,3cached
+bindings,7source snapshots,1retained layer,1GPU image,1surface. No new context.
+Driver/allocator pools peak above endpoints (GL135.77MiB); final20reload samples
+stable126.47–126.53. CPU final50samples stable31.27–31.29; not linear accumulation.
+Tolerance2MiB disclosed; strict memory-equality requirement remains **concern**,
+while owned counts/FDs/keyed-state tests pass. No subscribed UI services yet beyond
+watcher; later backend/a11y subscriptions must be rechecked after integration.
+CPU instrumentation initially omitted cached-layer count (reported0); corrected
+method reports actual layer count. Removal of focused item currently leaves a
+stored ID tombstone; explicit fallback focus behavior is part of input milestone.
+27tests + fmt/clippy pass; no system installs, nested/nice10/j2 only. No live tests.
+Next: animation/input/focus/basicIME/AccessKit, thennative backends. **Continue with concern**.

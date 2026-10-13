@@ -161,6 +161,9 @@ pub struct RetainedCpuRenderer {
     previous: Option<Damage>,
 }
 impl Renderer for RetainedCpuRenderer {
+    fn resource_counts(&self) -> (usize, usize) {
+        (self.cache.layer_count(), 0)
+    }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         self.cache.prepare(scene, scale)
     }
