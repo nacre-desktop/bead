@@ -1,43 +1,48 @@
 # Status
 
-2026-10-13: Feature 1 built and locally validated. Public repository; ADR 0001
-approved with amendments. Feature 1 integrated and validated. Repository recreated
-with seven content-identical commits under Nacre contributors/noreply identity;
-old commit links and CI run references are historical. New base: c4aed383.
+2026-10-13: Feature 2 implemented and measured. **Concern: CPU drawing misses120Hz.**
+ADR0001 approved; no Feature3/GPU follow-up authorization yet. Stop for feedback.
 
-Done: MIT/Apache bead-wayland + GPL nacre-shell, full-width 32px strip per output,
-no keyboard focus/input capture/reserved space; event-driven idle; signal cleanup.
-Nested Hyprland second-output add/remove/re-add and niri scale redraws passed.
-Three matched 60-second Bead/QML samples on each compositor; Bead exits 0 and
-releases all surfaces. fmt/clippy/tests/cargo-deny pass; strict framework license
-check rejects GPL in its negative test. Details: [FEASIBILITY](../FEASIBILITY.md).
+Done: bead-render scene/renderer boundary; rounded corners/borders, cached SVG
+Gaussian shadow, cosmic-text fallback/color emoji, SVG/PNG/theme icon loading;
+Orient format 1 JSON consumer, no Orient engine duplication. Fractional-scale+
+viewporter with buffer_scale=1; direct PixmapMut over SHM, ABGR preferred or damaged
+ARGB swizzle. Three buffers reused, each accumulates damage since its last use.
+Full-vs-partial pixel equality includes text/images/shadow/edges at 1.5 in both formats.
+Nested niri RGBA and Hypr ARGB static 1.5 proofs passed, all own processes stopped.
 
-Issues: headless labwc parent gives no Hypr outputs; desktop-nested Hypr works.
-Hypr screenshot requests time out for both clients; bounded, explicitly reported.
-Its backend also logged an xdg configure warning on preview shutdown.
-No animated pacing/text/emoji or reload claim. Nacre/Orient remain read-only.
+Real monitor stress completed:2880×1800/1.5/120Hz,1100×590 logical panel. 60s
+untraced client CPU damageON51.30%,OFF59.18%,QML5.75%; PSS42.49/42.44/105.60MiB.
+Draw p99 ON23.63ms/OFF24.61ms versus8.33ms budget. Matched10s callback p99
+25.51/29.05/9.22ms. Startup400.11/404.08/143.25ms, callback log not photons.
+Private nested idle60s recorded zero ticks; fonts/geometry differ from live stress.
+Exact scope, USS, memory variation and limitations: [FEASIBILITY](../FEASIBILITY.md).
+Raw evidence retained in ignored canonical .research/feature2; not new ledgers.
 
-Run from a Wayland terminal: `./scripts/dev.sh niri` (or `hyprland`). Inspect the
-dark strip at the top of the separate nested desktop. Close its window or Ctrl+C
-to stop. No session config/autostart/install changes. Existing Rust/labwc used;
-cargo-deny 0.20.2 added locally, no system packages installed.
+Owner stopped white live overlays via another active chat. **Do not respawn on
+active niri.** Future checks private/nested only unless owner authorizes otherwise.
+Never stop installed Nacre or modify configs/keybindings/autostart. No system
+packages added. Installed-font experiment tracks unmaintained ttf-parser through
+an explicit cargo-deny exception; MPL icon resolver dependency belongs only to
+GPL shell. Framework graphs remain permissive. SVG text/embedded images untested.
 
-Final cleanup found/stopped an old QML screenshot attempt. One fresh 60-second
-pair per compositor supersedes earlier PSS: Bead 1.06/1.10 MiB, QML 71.52/70.95.
-QML/niri one CPU tick; others zero. See FEASIBILITY for startup/USS and caveats.
+Run from a Wayland terminal: `./scripts/dev.sh niri` (or `hyprland`). Look for the
+sliding drawing panel, readable fallback/emoji, corners/shadow and sample icons.
+Maximize the nested window if needed to see the full panel. Close it or Ctrl+C.
+[Private nested screenshot](../examples/feature2.png). This is not a working launcher.
 
-In progress: **Feature 2 authorized.** Implement fractional scaling, renderer
-interface, direct reusable wl_shm buffers and buffer-age damage before stress.
-[Screenshot](../examples/feature1.png): dark top strip is Bead; central overlay is niri.
-Feature 2 must add drawing/palette and stress a launcher-sized rounded/shadowed,
-lots-of-text/color-emoji panel with damage tracking at real 2880×1800 / effective
-1.5 scale / 120 Hz. Report p50/p99, CPU and loaded-font PSS. Tell owner if CPU
-cannot keep up before Feature 3. Compare damage enabled/disabled.
+Local fmt/clippy -D warnings/workspace tests/cargo-deny pass. Publication/CI pending.
+Active isolated worktree: bead-feature2 based on fa49b64; integrate directly into
+main, push, verify exact-head CI, then stop. Next proposed step: matched GPU panel
+comparison before Feature3. Owner decides; no further feature work now.
 
-Policies: no new ledgers; cargo-deny in CI. CC0/0BSD/Unlicense/MIT-0 permitted.
-niri-ipc adapter belongs in GPL nacre-shell behind neutral Bead interface in
-Feature 5; libmpv later. Each future feature log under about 40 lines.
+Repository remains public. Original seven commits were recreated with identical
+trees/messages/dates under Nacre contributors/noreply author+committer identity.
+Old SHA APIs unavailable; old public HEAD page404. Repo-local identity protects
+future Bead commits; global Git identity unchanged. Old CI/commit links historical.
+No releases/packages/crates.io. Policies: cargo-deny/no new ledgers; short logs;
+GPL niri-ipc/libmpv adapters later in shell behind neutral Bead interfaces.
 
-Identity repair verified: all seven public commits use contributor author and
-committer identity; old commit API lookups unavailable and old public HEAD page
-HTTP 404. Repo-local identity prevents recurrence; global Git config untouched.
+Default preview corrected to an existing Orient dark palette matching all six
+active Nacre rendering roles. Matched measurements used the retained light
+spikes/palette-stress.json input; future benchmark runs explicitly select it.

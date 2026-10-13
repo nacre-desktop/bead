@@ -10,4 +10,5 @@ publish = false
 smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["calloop"] }
 wayland-client = "=0.31.15"
 calloop = { version = "=0.14.5", features = ["signals"] }
-tiny-skia = "=0.12.0"
+bead-render = { path = "../bead-render" }
+wayland-protocols = { version = "=0.32.13", features = ["client", "staging"] }

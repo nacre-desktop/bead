@@ -45,7 +45,7 @@ Hypr screenshots timed out for both clients; bounded timeout added, numbers reta
 Its nested backend also logged an xdg configure warning on preview shutdown.
 Both Bead instances exit 0/surfaces=0. No daily shell/config changes. Tests: fmt,
 clippy -D warnings, 2 geometry tests, actual lifecycle and measurements, cargo-deny;
-GitHub CI 38391925119 passed for feature code 8a5069d.
+Original Feature 1 CI passed; later identity repair preserved identical source trees.
 strict license policy also correctly rejects GPL shell when deliberately selected.
 408 new Rust lines plus small fixtures/runner updates; ~90 minutes including setup
 and measurements. Installed cargo-deny 0.20.2 locally; no system packages added
@@ -53,3 +53,41 @@ and measurements. Installed cargo-deny 0.20.2 locally; no system packages added
 Verdict: surfaces on track; nested-Hypr testbed concern, no full-shell savings claim.
 Next: Feature 2 drawing
 and real 2880×1800 / scale 1.5 / 120 Hz text/emoji/shadow animation stress gate.
+
+
+## Feature 2 — fractional drawing and damage (2026-10-13)
+
+Bead draws rounded/bordered shapes, cached shadows, text/emoji, PNG/SVG and theme icons.
+Orient colors are read from its existing JSON; no engine code was copied.
+Fractional-scale + viewporter, direct SHM rendering and three reusable buffers work.
+Damage improves CPU usage, but CPU drawing fails the real 120 Hz pacing target.
+
+| Client / workload | PSS / USS MiB | CPU % | Draw p50 / p99 ms | Callback p50 / p99 ms | Startup ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Bead damage / animated | 42.49 / 22.30 | 51.30 | 3.82 / 23.63 | 8.68 / 25.51 | 400.11 |
+| Bead full / animated | 42.44 / 22.24 | 59.18 | 4.94 / 24.61 | 8.93 / 29.05 | 404.08 |
+| QML / animated | 105.60 / 87.35 | 5.75 | GPU; not compared | 8.33 / 9.22 | 143.25 |
+| Bead / nested idle | 14.92 / 12.95 | <0.017 | N/A | N/A | 211.85 |
+| QML / nested idle | 106.01 / 85.56 | <0.017 | N/A | N/A | 179.84 |
+
+One 60s untraced CPU/memory run per animated row; draw statistics exclude first 2s.
+Matched traced 10s runs supply callback intervals/startup (launch → callback log,
+not photons). Client CPU is % of one core, excluding compositor/GPU. No SwapPss.
+Measurements used the same light Orient fixture; default preview now matches active dark.
+Live stress: 1100×590 logical panel; full 2880×1800 buffers, scale 1.5,120 Hz.
+Bead presentation feedback p99 was 33.33 ms ON/OFF; budget 8.33 ms. Memory before/after
+QML was121.79→105.60 MiB; trace run 126.36 MiB. PSS excludes some GPU allocations.
+Idle: private labwc→niri, 1278×692/scale 1/60Hz, Noto fallback rather than unavailable
+IBM Plex Sans. Separate scope from live stress. Both idle rows recorded zero ticks.
+Live white overlays were stopped at owner request; no further live spawning.
+Pixel equality tests cover aged buffers, RGBA/ARGB, text/images/shadows and clipping.
+Nested niri RGBA/Hypr ARGB scale 1.5 static proofs passed. Protocol traces show only
+three buffer allocations per stress run; zero full-frame intermediate copies.
+fmt/clippy/tests/cargo-deny pass locally; CI status in STATUS. No system installs.
+MPL option-ext is confined to GPL shell; [ttf-parser maintenance notice](https://rustsec.org/advisories/RUSTSEC-2026-0192.html)
+exception is explicit in cargo-deny. Installed fonts only; SVG text/embedded rasters
+not covered. Hot reload N/A. Resources/interface are a CPU proof, not shell parity.
+~40 minutes build/measure/checks; 1134 net Rust lines plus 208 fixture/tool lines.
+[Preview](examples/feature2.png) is a private nested screenshot, not the live desktop.
+Verdict: **concern — CPU renderer misses120 Hz**. Propose the same panel on GPU before
+Feature 3; STOP for owner feedback. Raw evidence retained locally under .research/feature2.

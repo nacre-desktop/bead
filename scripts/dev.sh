@@ -14,7 +14,7 @@ if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
     printf '%s\n' 'Run from a Wayland desktop terminal; this command starts a nested window.' >&2
     exit 1
 fi
-printf '%s\n' 'A blank dark strip appears at the top of the nested desktop. Close the window or press Ctrl+C to stop.'
+printf '%s\n' 'A drawing preview panel opens and closes in the nested desktop. Close the window or press Ctrl+C to stop.'
 unset NACRE_COMPOSITOR NIRI_SOCKET HYPRLAND_INSTANCE_SIGNATURE DISPLAY
 case "${1:-niri}" in
     niri) exec niri --config "$bead_root/examples/niri.kdl" ;;

@@ -8,3 +8,6 @@ publish = false
 
 [dependencies]
 bead-wayland = { path = "../bead-wayland" }
+bead-render = { path = "../bead-render" }
+
+freedesktop-icons = "0.4"

@@ -1,8 +1,12 @@
 # Full workspace, including the GPL application. Framework has a separate check.
 [licenses]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "ISC", "Unicode-3.0", "Unicode-DFS-2016", "CC0-1.0", "0BSD", "Unlicense", "MIT-0", "GPL-3.0-only", "GPL-3.0-or-later"]
+exceptions = [{ crate = "option-ext@0.2.0", allow = ["MPL-2.0"] }] # GPL shell icon resolver only; never allowed in Bead.
 [bans]
 multiple-versions = "warn"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+
+[advisories]
+ignore = [{ id = "RUSTSEC-2026-0192", reason = "Informational unmaintained ttf-parser via fontdb/cosmic-text and usvg; no patched release. Feature 2 uses installed fonts only. Track replacement before loading untrusted font files; other advisories remain errors." }]

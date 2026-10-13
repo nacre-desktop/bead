@@ -54,6 +54,8 @@ def main():
     p.add_argument('--compositor', choices=['niri','hyprland'], default='niri')
     p.add_argument('--parent', choices=['headless','desktop'], default='headless')
     p.add_argument('--lifecycle', action='store_true')
+    p.add_argument('--palette', type=pathlib.Path, default=None)
+    p.add_argument('--panel', action='store_true', help='Static Feature 2 loaded-font panel, nested only')
     p.add_argument('--modes', nargs='+', default=['tiny-skia','vello','femtovg','qml'])
     p.add_argument('--in-private-bus', action='store_true')
     args = p.parse_args()
@@ -70,9 +72,9 @@ def main():
                 path.mkdir(mode=0o700)
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
-            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),'--modes', *args.modes],env=env)
+            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
     raw = ROOT / 'spikes/results/raw'
-    if 'bead' in args.modes: raw=raw/args.compositor
+    if 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
     raw.mkdir(parents=True, exist_ok=True)
     save_baseline = 'bead' not in args.modes
     tools = pathlib.Path(os.environ.get('BEAD_RESEARCH_TOOLS',str(ROOT/'.tools')))
@@ -158,8 +160,12 @@ def main():
             for run in range(args.runs):
                 for mode in args.modes:
                     target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
-                    fixture='blank-outputs.qml' if 'bead' in args.modes else 'blank.qml'
+                    fixture='panel.qml' if args.panel else ('blank-outputs.qml' if 'bead' in args.modes else 'blank.qml')
                     command = ['quickshell', '--log-rules', 'qml.debug=true', '--path', str(ROOT/'spikes'/fixture)] if mode == 'qml' else ([str(target/'nacre-shell')] if mode=='bead' else [str(target/'bead-spike-blank-layer'), mode])
+                    if args.panel:
+                        palette_path=(args.palette or ROOT/'spikes/palette-stress.json').resolve()
+                        env.update({'BEAD_IDLE':'1','BEAD_PALETTE_PATH':str(palette_path),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
+                        if mode=='bead': command+=['--panel','--palette',str(palette_path)]
                     env['WAYLAND_DEBUG']='1' if 'bead' in args.modes else '0'
                     started = time.monotonic()
                     client = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, bufsize=0)
@@ -222,7 +228,7 @@ def main():
                     row = {'renderer':mode, 'run':run, 'ready_wall_ms':(ready_at-started)*1000, 'before':before_mem, 'after':after_mem,
                            'idle_seconds':elapsed, 'cpu_ticks':after_ticks-before_ticks,
                            'idle_cpu_one_core_percent':100*(after_ticks-before_ticks)/os.sysconf('SC_CLK_TCK')/elapsed,
-                           'ready_kind':'QML component completion' if mode=='qml' else 'wl_surface frame callback; not presentation timestamp'}
+                           'ready_kind':'wl_surface frame callback; not presentation timestamp' if 'bead' in args.modes else ('QML component completion' if mode=='qml' else 'renderer ready')}
                     row['gpu']=row_gpu
                     result['runs'].append(row)
                     if save_baseline: (ROOT/'spikes/results/baseline.json').write_text(json.dumps(result,indent=2)+'\n')

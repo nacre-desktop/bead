@@ -1,7 +1,9 @@
 # Roadmap and gates
 
-Updated 2026-10-13. ADR 0001 approved with amendments; Feature 1 authorized.
+Updated 2026-10-13. ADR 0001 approved with amendments; Feature 2 built; CPU renderer concern, owner feedback pending.
 This is a feasibility order, not a commitment to complete every feature.
+Feature 2 missed the 120 Hz CPU gate: propose a matched GPU comparison before
+Feature 3. This is a recommendation awaiting the owner, not authorization.
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
 current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;

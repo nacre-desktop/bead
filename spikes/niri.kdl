@@ -4,3 +4,5 @@ input {
 }
 prefer-no-csd
 animations { off; }
+
+hotkey-overlay { skip-at-startup; }

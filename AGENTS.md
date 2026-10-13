@@ -22,6 +22,8 @@
   renderer interface and correct damage history before stress measurements.
   Compare damage enabled/disabled at effective scale 1.5.
 - Every crate, including spikes, sets publish = false.
+- Owner stopped live Feature 2 overlays after the completed stress runs. Do not
+  respawn benchmark panels on the active desktop; use private/nested displays.
 - Test in an isolated nested compositor by default. Never stop the daily shell,
   change desktop configs, keybindings, autostart or installed Nacre.
 - No personal paths, usernames or private machine inventory in committed files.
