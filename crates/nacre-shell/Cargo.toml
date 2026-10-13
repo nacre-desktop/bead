@@ -11,3 +11,11 @@ bead-wayland = { path = "../bead-wayland" }
 bead-render = { path = "../bead-render" }
 
 freedesktop-icons = "0.4"
+
+fontconfig = "=0.11.0"
+fontdb = "=0.23.0"
+skrifa = "=0.44.0"
+
+[features]
+default=["gpu"]
+gpu=["bead-wayland/gpu","bead-render/gpu"]

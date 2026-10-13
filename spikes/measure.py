@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -47,6 +48,79 @@ def stop(process):
             process.wait(timeout=5)
 
 
+def drm_memory(pid):
+    # Deduplicate descriptors sharing a DRM client, prefer modern totals to legacy aliases.
+    clients={}
+    for p in pathlib.Path(f'/proc/{pid}/fdinfo').glob('*'):
+        try:fields=dict(line.split(':',1) for line in p.read_text().splitlines() if line.startswith('drm-'))
+        except (OSError,ValueError):continue
+        if not any(k.startswith(('drm-total-','drm-memory-')) for k in fields):continue
+        key=(fields.get('drm-driver',''),fields.get('drm-pdev',''),fields.get('drm-client-id',p.name))
+        values={}
+        for prefix in ['drm-memory-','drm-total-']:
+            for k,v in fields.items():
+                if k.startswith(prefix):
+                    words=v.split();scale={'KiB':1024,'MiB':1024**2,'GiB':1024**3,'B':1}.get(words[1] if len(words)>1 else 'B',1)
+                    values[k[len(prefix):]]=int(words[0])*scale/1024**2
+        clients[key]=values
+    regions={}
+    for values in clients.values():
+        for k,v in values.items():regions[k]=regions.get(k,0)+v
+    return regions or None
+
+def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
+    label=f'{mode}-{layout}-{run}'
+    env.update({'BEAD_IDLE':'0','BEAD_START_OPEN':'1','BEAD_CONTENT_SIZE':'1' if layout=='content' else '0','BEAD_LAYER':'1','BEAD_PALETTE_PATH':str(ROOT/'spikes/palette-stress.json'),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
+    # Primary variants use their own callback statistics with tracing disabled.
+    # Qt is a startup control: trace is required for the same first-frame marker.
+    env['WAYLAND_DEBUG']='1' if mode=='qml' else '0'
+    if mode=='qml':command=['quickshell','--path',str(ROOT/'spikes/panel.qml')]
+    else:
+        command=[str(target/'nacre-shell'),'--animate','--start-open','--renderer',mode,'--palette',str(ROOT/'spikes/palette-stress.json'),'--namespace','bead-dev-retained']
+        if layout=='content':command+=['--content-size']
+        if virtual120:command+=['--output','bead-bench']
+    started=time.monotonic();data=bytearray();ready=threading.Event();first=[];pending=set()
+    path=raw/f'{label}.log'
+    client=subprocess.Popen(command,cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,bufsize=0)
+    def drain():
+        with path.open('wb') as log:
+            for line in client.stdout:
+                log.write(line);data.extend(line)
+                if mode=='qml':
+                    request=re.search(rb'wl_surface[@#]\d+\.frame\((?:new id )?wl_callback[@#](\d+)',line)
+                    done=re.search(rb'wl_callback[@#](\d+)\.done(?:,\s*)?\(',line)
+                    if request:pending.add(request[1])
+                    if done and done[1] in pending and not first:first.append(time.monotonic());ready.set()
+                elif line.startswith(b'READY') and not first:first.append(time.monotonic());ready.set()
+    reader=threading.Thread(target=drain);reader.start()
+    print(f'{label}: private PID {client.pid}; stop: kill -TERM {client.pid}',flush=True)
+    peak_pss=0.;peak_gpu={}
+    try:
+        deadline=started+45
+        while not ready.wait(.02):
+            if client.poll() is not None or time.monotonic()>deadline:raise RuntimeError(f'{label}: startup failed, exit={client.poll()}; inspect ignored raw log')
+            m=memory(client.pid);peak_pss=max(peak_pss,m['pss_mib'])
+            for k,v in (drm_memory(client.pid) or {}).items():peak_gpu[k]=max(peak_gpu.get(k,0),v)
+        time.sleep(5)
+        before_mem=memory(client.pid);before_gpu=drm_memory(client.pid);before_ticks=ticks(client.pid);before=time.monotonic()
+        (raw/f'{label}-before.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps_rollup').read_text())
+        print(f'{label}: sampling {seconds:g}s, first populated callback {(first[0]-started)*1000:.3f}ms',flush=True)
+        while time.monotonic()<before+seconds:
+            if client.poll() is not None:raise RuntimeError(f'{label}: exited during sample')
+            m=memory(client.pid);peak_pss=max(peak_pss,m['pss_mib'])
+            for k,v in (drm_memory(client.pid) or {}).items():peak_gpu[k]=max(peak_gpu.get(k,0),v)
+            time.sleep(min(1,max(0,before+seconds-time.monotonic())))
+        elapsed=time.monotonic()-before
+        after_mem=memory(client.pid);after_gpu=drm_memory(client.pid);peak_pss=max(peak_pss,after_mem['pss_mib'],before_mem['pss_mib']);cpu=100*(ticks(client.pid)-before_ticks)/os.sysconf('SC_CLK_TCK')/elapsed
+        (raw/f'{label}-after.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps_rollup').read_text())
+    finally:
+        stop(client);reader.join(timeout=5)
+        if reader.is_alive():raise RuntimeError('client log reader did not stop')
+    print(f'{label}: CPU={cpu:.3f}% startup_ms={(first[0]-started)*1000:.3f} PSS/USS={after_mem["pss_mib"]:.3f}/{after_mem["uss_mib"]:.3f} peak_PSS={peak_pss:.3f} GPU_before={before_gpu} GPU_after={after_gpu} GPU_peak={peak_gpu or None} exit={client.returncode}',flush=True)
+    for line in data.decode(errors='replace').splitlines():
+        if line.startswith(('PROFILE','RESOURCES','BUFFER','METRICS','ACQUIRE','STOP','FALLBACK')):print(label+': '+line,flush=True)
+    if mode!='qml' and (client.returncode!=0 or b'STOP surfaces=0' not in data):raise RuntimeError('renderer did not exit cleanly')
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--seconds', type=float, default=60)
@@ -55,10 +129,18 @@ def main():
     p.add_argument('--parent', choices=['headless','desktop'], default='headless')
     p.add_argument('--lifecycle', action='store_true')
     p.add_argument('--palette', type=pathlib.Path, default=None)
+    p.add_argument('--retained', action='store_true', help='One round of retained CPU/femtovg/Vello; private compositor only')
+    p.add_argument('--layouts',nargs='+',choices=['full','content'],default=['full','content'])
+    p.add_argument('--renderer', choices=['cpu','femtovg','vello','auto'],default='cpu')
+    p.add_argument('--animate', action='store_true')
+    p.add_argument('--content-size', action='store_true')
+    p.add_argument('--virtual120', action='store_true', help='Isolated Hyprland virtual 2880x1800/1.5/120Hz output')
     p.add_argument('--panel', action='store_true', help='Static Feature 2 loaded-font panel, nested only')
-    p.add_argument('--modes', nargs='+', default=['tiny-skia','vello','femtovg','qml'])
+    p.add_argument('--modes', nargs='+', default=None)
     p.add_argument('--in-private-bus', action='store_true')
     args = p.parse_args()
+    if args.modes is None:args.modes=['cpu','femtovg','vello','qml'] if args.retained else ['tiny-skia','vello','femtovg','qml']
+    if args.retained and args.parent!='headless':p.error('Retained comparison is private only; live desktop needs separate owner approval')
     if not args.in_private_bus:
         # D-Bus activation inherits its daemon's environment: isolate XDG BEFORE
         # starting the bus, not just before launching its clients.
@@ -67,16 +149,18 @@ def main():
             display=env.get('WAYLAND_DISPLAY','')
             if display and not display.startswith('/'): display=str(pathlib.Path(env['XDG_RUNTIME_DIR'])/display)
             env['BEAD_PARENT_WAYLAND']=display
+            env['BEAD_FONT_DIR']=str(pathlib.Path(os.environ.get('XDG_DATA_HOME',str(pathlib.Path.home()/'.local/share')))/'fonts')
             for key, name in [('XDG_RUNTIME_DIR','runtime'),('XDG_CONFIG_HOME','config'),('XDG_CACHE_HOME','cache'),('XDG_STATE_HOME','state'),('XDG_DATA_HOME','data')]:
                 path=pathlib.Path(directory)/name
                 path.mkdir(mode=0o700)
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
-            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
+            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
     raw = ROOT / 'spikes/results/raw'
-    if 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
+    if args.retained:raw=raw/('retained-'+args.compositor)
+    elif 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
     raw.mkdir(parents=True, exist_ok=True)
-    save_baseline = 'bead' not in args.modes
+    save_baseline = 'bead' not in args.modes and not args.retained
     tools = pathlib.Path(os.environ.get('BEAD_RESEARCH_TOOLS',str(ROOT/'.tools')))
     result = {'date': '2026-10-13', 'surface': {'width': 512, 'height': 32, 'scale': 1, 'outputs': 1, 'namespace': 'bead-dev-spike'},
               'method': 'client /proc smaps_rollup; CPU ticks over monotonic interval; READY is frame callback for Rust, QML component completion (not comparable first-frame); separate nested niri/private D-Bus/XDG', 'runs': []}
@@ -94,6 +178,10 @@ def main():
         env['WGPU_BACKEND'] = 'vulkan'
         env['WGPU_POWER_PREF'] = 'low'
         env['QSG_INFO']='1'
+        from xml.sax.saxutils import escape
+        fonts=private/'fonts.conf'
+        fonts.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><include ignore_missing="yes">/etc/fonts/fonts.conf</include><dir>'+escape(env.get('BEAD_FONT_DIR','/usr/share/fonts'))+'</dir></fontconfig>')
+        env['FONTCONFIG_FILE']=str(fonts)
         # An offscreen headless parent avoids visible preview-window closure
         # interrupting unattended measurements. niri remains the client-facing
         # compositor; the labwc process is outside measured client PSS/CPU.
@@ -146,6 +234,22 @@ def main():
                 time.sleep(0.1)
             else:
                 raise RuntimeError('Nested niri did not create a Wayland socket')
+            if args.virtual120:
+                if args.compositor!='hyprland':raise RuntimeError('virtual120 needs isolated Hyprland')
+                signatures=[]
+                for _ in range(100):
+                    signatures=list(runtime.glob('hypr/*/.socket.sock'))
+                    if signatures:break
+                    if compositor.poll() is not None:break
+                    time.sleep(.05)
+                if not signatures:raise RuntimeError('No private Hyprland IPC socket; inspect private compositor log')
+                env['HYPRLAND_INSTANCE_SIGNATURE']=signatures[0].parent.name
+                subprocess.run(['hyprctl','output','create','headless','bead-bench'],env=env,check=True,capture_output=True,timeout=5)
+                configured=subprocess.run(['hyprctl','eval','hl.monitor({output="bead-bench",mode="2880x1800@120",position="0x0",scale=1.5})'],env=env,check=True,capture_output=True,text=True,timeout=5)
+                print('Private virtual monitor configuration:',configured.stdout.strip(),flush=True)
+                time.sleep(1)
+                monitors=json.loads(subprocess.check_output(['hyprctl','-j','monitors'],env=env,text=True,timeout=5))
+                print('Private outputs:',[{k:m.get(k) for k in ['name','width','height','refreshRate','scale']}for m in monitors],flush=True)
             info=subprocess.run(['wayland-info'],env=env,capture_output=True,text=True,timeout=10,check=True)
             (raw/'wayland-info.log').write_text(info.stdout)
             result['globals']=[{'interface':name,'version':int(version)} for name,version in re.findall(r"interface: '([^']+)',\s*version:\s*(\d+)",info.stdout)]
@@ -157,6 +261,14 @@ def main():
             if args.compositor=='hyprland':
                 sockets=list(runtime.glob('hypr/*/.socket.sock'))
                 if sockets: env['HYPRLAND_INSTANCE_SIGNATURE']=sockets[0].parent.name
+            if args.retained:
+                target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
+                for run in range(args.runs):
+                    for layout in args.layouts:
+                        for mode in args.modes:
+                            case_env=env.copy();cache=private/'renderer-cache'/(mode+'-'+layout);cache.mkdir(parents=True,exist_ok=True);case_env['XDG_CACHE_HOME']=str(cache)
+                            sample_retained(case_env,raw,target,mode,layout,run,args.seconds,args.virtual120)
+                return 0
             for run in range(args.runs):
                 for mode in args.modes:
                     target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
@@ -164,8 +276,11 @@ def main():
                     command = ['quickshell', '--log-rules', 'qml.debug=true', '--path', str(ROOT/'spikes'/fixture)] if mode == 'qml' else ([str(target/'nacre-shell')] if mode=='bead' else [str(target/'bead-spike-blank-layer'), mode])
                     if args.panel:
                         palette_path=(args.palette or ROOT/'spikes/palette-stress.json').resolve()
-                        env.update({'BEAD_IDLE':'1','BEAD_PALETTE_PATH':str(palette_path),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
-                        if mode=='bead': command+=['--panel','--palette',str(palette_path)]
+                        env.update({'BEAD_IDLE':'0' if args.animate else '1','BEAD_PALETTE_PATH':str(palette_path),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
+                        if mode=='bead':
+                            command+=['--animate' if args.animate else '--panel','--palette',str(palette_path),'--renderer',args.renderer]
+                            if args.virtual120:command+=['--output','bead-bench']
+                            if args.content_size:command+=['--content-size']
                     env['WAYLAND_DEBUG']='1' if 'bead' in args.modes else '0'
                     started = time.monotonic()
                     client = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, bufsize=0)

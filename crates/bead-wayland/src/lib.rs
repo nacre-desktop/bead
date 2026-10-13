@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
-use bead_render::{CpuRenderer, Damage, PixelFormat, Rect, Renderer, Scene, ShmTarget};
+use bead_render::{
+    Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
+};
 use calloop::{
     EventLoop, LoopSignal,
     signals::{Signal, Signals},
@@ -53,6 +55,12 @@ pub struct Options {
     pub force_argb: bool,
     pub seconds: Option<f64>,
     pub panel: bool,
+    pub content_size: bool,
+    pub renderer: RendererKind,
+    pub output: Option<String>,
+    pub auto_fallback: bool,
+    pub started: Instant,
+    pub start_open: bool,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -63,6 +71,12 @@ impl Default for Options {
             force_argb: false,
             seconds: None,
             panel: false,
+            content_size: false,
+            renderer: RendererKind::Cpu,
+            output: None,
+            auto_fallback: false,
+            started: Instant::now(),
+            start_open: false,
         }
     }
 }
@@ -74,6 +88,8 @@ struct Surface {
     output: wl_output::WlOutput,
     layer: LayerSurface,
     pool: SlotPool,
+    #[cfg(feature = "gpu")]
+    gpu: Option<bead_render::gpu::Surface>,
     buffers: Vec<Reusable>,
     width: u32,
     height: u32,
@@ -90,6 +106,7 @@ struct Surface {
     allocations: usize,
     frames: usize,
     render_ms: Vec<f64>,
+    acquire_ms: Vec<f64>,
     callbacks_ms: Vec<f64>,
     last_callback: Option<Instant>,
     presented_ms: Vec<f64>,
@@ -99,6 +116,8 @@ struct Surface {
 }
 impl Drop for Surface {
     fn drop(&mut self) {
+        #[cfg(feature = "gpu")]
+        drop(self.gpu.take());
         if let Some(f) = &self.fractional {
             f.destroy();
         }
@@ -108,6 +127,10 @@ impl Drop for Surface {
     }
 }
 struct App {
+    #[cfg(feature = "gpu")]
+    gpu: Option<bead_render::gpu::Transport>,
+    #[cfg(feature = "gpu")]
+    conn: Connection,
     registry: RegistryState,
     output: OutputState,
     compositor: CompositorState,
@@ -125,7 +148,8 @@ struct App {
     renderer: Box<dyn Renderer>,
 }
 pub fn run(options: Options, scene: Scene) -> Result<(), Box<dyn Error>> {
-    run_with_renderer(options, scene, Box::new(CpuRenderer::default()))
+    let renderer = bead_render::renderer(options.renderer)?;
+    run_with_renderer(options, scene, renderer)
 }
 /// Shell widgets supply Scene commands; they never call the rasterizer.
 pub fn run_with_renderer(
@@ -139,7 +163,7 @@ pub fn run_with_renderer(
     {
         return Err("invalid layer namespace".into());
     }
-    let started = Instant::now();
+    let started = options.started;
     let conn = Connection::connect_to_env()?;
     let (globals, events) = registry_queue_init(&conn)?;
     let qh = events.handle();
@@ -150,6 +174,10 @@ pub fn run_with_renderer(
         |_, _, app| app.signal.stop(),
     )?;
     let mut app = App {
+        #[cfg(feature = "gpu")]
+        gpu: None,
+        #[cfg(feature = "gpu")]
+        conn: conn.clone(),
         registry: RegistryState::new(&globals),
         output: OutputState::new(&globals, &qh),
         compositor: CompositorState::bind(&globals, &qh)?,
@@ -186,6 +214,11 @@ pub fn run_with_renderer(
     }
     let result = loop_.run(None, &mut app, |_| {});
     for s in &app.surfaces {
+        println!(
+            "ACQUIRE p50_ms={:.3} p99_ms={:.3}",
+            percentile(&s.acquire_ms, 0.5),
+            percentile(&s.acquire_ms, 0.99)
+        );
         println!(
             "METRICS output={} frames={} allocations={} render_p50_ms={:.3} render_p99_ms={:.3} callback_p50_ms={:.3} callback_p99_ms={:.3} presented_p50_ms={:.3} presented_p99_ms={:.3} presented_samples={} refresh_ns={} discarded={}",
             s.output.id().protocol_id(),
@@ -225,6 +258,11 @@ impl App {
         self.signal.stop();
     }
     fn add_output(&mut self, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
+        if self.options.output.as_ref().is_some_and(|name| {
+            self.output.info(&output).and_then(|i| i.name).as_ref() != Some(name)
+        }) {
+            return;
+        }
         if self.surfaces.iter().any(|s| s.output == output) {
             return;
         }
@@ -253,12 +291,25 @@ impl App {
                 Some(&self.options.namespace),
                 Some(&output),
             );
-            layer.set_anchor(if self.options.panel {
+            let content = self.options.panel && self.options.content_size;
+            layer.set_anchor(if content {
+                Anchor::TOP
+            } else if self.options.panel {
                 Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT
             } else {
                 Anchor::TOP | Anchor::LEFT | Anchor::RIGHT
             });
-            layer.set_size(0, if self.options.panel { 0 } else { 32 });
+            if content {
+                let height = self.scene.bounds.y
+                    + self.scene.bounds.h
+                    + self.scene.slide.map_or(0., |s| s.open_y);
+                layer.set_size(
+                    self.scene.bounds.w.ceil() as u32,
+                    height.ceil().max(1.) as u32,
+                );
+            } else {
+                layer.set_size(0, if self.options.panel { 0 } else { 32 });
+            }
             layer.set_exclusive_zone(if self.options.panel { -1 } else { 0 });
             layer.set_keyboard_interactivity(KeyboardInteractivity::None);
             layer.commit();
@@ -270,6 +321,8 @@ impl App {
                 output,
                 layer,
                 pool: SlotPool::new(4096, &self.shm)?,
+                #[cfg(feature = "gpu")]
+                gpu: None,
                 buffers: Vec::new(),
                 width: 0,
                 height: 32,
@@ -286,6 +339,7 @@ impl App {
                 allocations: 0,
                 frames: 0,
                 render_ms: Vec::new(),
+                acquire_ms: Vec::new(),
                 callbacks_ms: Vec::new(),
                 last_callback: None,
                 presented_ms: Vec::new(),
@@ -312,22 +366,156 @@ impl App {
             s.redraw = false;
             let scale = s.scale120 as f32 / 120.;
             let (w, h, stride, size) = buffer_dimensions(s.width, s.height, s.scale120)?;
+            if !self.options.panel {
+                self.scene.bounds.w = s.width as f32;
+                self.scene.bounds.h = s.height as f32;
+                self.scene.width = s.width as f32;
+            }
             if self.options.panel {
                 self.scene.offset.0 = ((s.width as f32 - self.scene.width) / 2.).max(0.);
                 if let Some(slide) = self.scene.slide {
                     let progress = if self.options.animate {
-                        let t = (self.started.elapsed().as_secs_f32() % slide.period_seconds)
-                            / (slide.period_seconds / 2.);
-                        if t <= 1. { t } else { 2. - t }
+                        let elapsed = self.started.elapsed().as_secs_f32();
+                        if self.options.start_open && (elapsed < 3. || !s.ready) {
+                            1.
+                        } else {
+                            let t = ((elapsed - if self.options.start_open { 3. } else { 0. })
+                                % slide.period_seconds)
+                                / (slide.period_seconds / 2.);
+                            let progress = if t <= 1. { t } else { 2. - t };
+                            if self.options.start_open {
+                                1. - progress
+                            } else {
+                                progress
+                            }
+                        }
                     } else {
                         1.
                     };
                     let eased = progress * progress * (3. - 2. * progress);
+                    self.scene.opacity = eased;
                     let y = slide.closed_y + (slide.open_y - slide.closed_y) * eased;
                     self.scene.offset.1 = (y * scale).round() / scale;
                 }
             }
             self.renderer.prepare(&self.scene, scale)?;
+            if let Some(viewport) = &s.viewport {
+                s.layer.wl_surface().set_buffer_scale(1);
+                viewport.set_destination(s.width as i32, s.height as i32);
+            } else {
+                s.layer
+                    .wl_surface()
+                    .set_buffer_scale((s.scale120 / 120) as i32);
+            }
+            #[cfg(feature = "gpu")]
+            if self.renderer.wants_gpu() {
+                if self.gpu.is_none() {
+                    self.gpu = Some(bead_render::gpu::Transport::default());
+                }
+                let transport = self.gpu.as_mut().unwrap();
+                if s.gpu.is_none() {
+                    use raw_window_handle::{
+                        RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle,
+                        WaylandWindowHandle,
+                    };
+                    use std::ptr::NonNull;
+                    let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+                        NonNull::new(self.conn.backend().display_ptr().cast())
+                            .ok_or("native display missing")?,
+                    ));
+                    let surface = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+                        NonNull::new(s.layer.wl_surface().id().as_ptr().cast())
+                            .ok_or("native surface missing")?,
+                    ));
+                    // SAFETY: Surface::drop destroys GPU surface before protocol surface;
+                    // app clears surfaces while the connection is still alive.
+                    let created = unsafe {
+                        transport.create_surface(
+                            display,
+                            surface,
+                            w as u32,
+                            h as u32,
+                            self.options.renderer,
+                        )
+                    };
+                    match created {
+                        Ok(gpu) => s.gpu = Some(gpu),
+                        Err(e) => {
+                            if !self.options.auto_fallback {
+                                return Err(e);
+                            }
+                            eprintln!("FALLBACK GPU unavailable: {e}");
+                            self.renderer = bead_render::renderer(RendererKind::Cpu)?;
+                            self.options.renderer = RendererKind::Cpu;
+                            self.gpu = None;
+                        }
+                    }
+                    if s.gpu.is_some() {
+                        println!(
+                            "BUFFER output={} logical={}x{} physical={}x{} scale={scale} transport=GPU",
+                            s.output.id().protocol_id(),
+                            s.width,
+                            s.height,
+                            w,
+                            h
+                        );
+                    }
+                }
+                if let Some(gpu) = s.gpu.as_mut() {
+                    let transport = self.gpu.as_mut().unwrap();
+                    transport.resize(gpu, w as u32, h as u32);
+                    let dev = &transport.context.devices[gpu.dev_id];
+                    use bead_render::gpu::{GpuTarget, wgpu};
+                    let acquired = Instant::now();
+                    let frame = match gpu.surface.get_current_texture() {
+                        wgpu::CurrentSurfaceTexture::Success(f)
+                        | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
+                        other => return Err(format!("GPU acquire failed: {other:?}").into()),
+                    };
+                    let acquire_ms = acquired.elapsed().as_secs_f64() * 1000.;
+                    let start = Instant::now();
+                    self.renderer.draw(
+                        &self.scene,
+                        RenderTarget::Gpu(GpuTarget {
+                            device: &dev.device,
+                            queue: &dev.queue,
+                            texture: &frame.texture,
+                            target_view: gpu.target.as_ref().map(|(_, view, _)| view),
+                            width: w as u32,
+                            height: h as u32,
+                        }),
+                        Damage::full(w as u32, h as u32),
+                    )?;
+                    if let Some((_, view, blitter)) = &gpu.target {
+                        let mut encoder = dev.device.create_command_encoder(&Default::default());
+                        blitter.copy(
+                            &dev.device,
+                            &mut encoder,
+                            view,
+                            &frame.texture.create_view(&Default::default()),
+                        );
+                        dev.queue.submit([encoder.finish()]);
+                    }
+                    if self.started.elapsed().as_secs_f64() > 2. {
+                        s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
+                        s.acquire_ms.push(acquire_ms);
+                    }
+                    s.layer.wl_surface().damage_buffer(0, 0, w, h);
+                    s.layer
+                        .wl_surface()
+                        .frame(qh, FrameCallbackData(s.layer.wl_surface().clone()));
+                    s.frame_pending = true;
+                    if let Some(p) = &self.presentation {
+                        p.feedback(s.layer.wl_surface(), qh, s.layer.wl_surface().clone());
+                    }
+                    dev.queue.present(frame);
+                    let _ = dev.device.poll(wgpu::PollType::Poll);
+                    s.frames += 1;
+                    return Ok(());
+                }
+                // An explicitly permitted automatic fallback uses the same retained Scene.
+                self.renderer.prepare(&self.scene, scale)?;
+            }
             let format = if cfg!(target_endian = "little")
                 && !self.options.force_argb
                 && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
@@ -380,22 +568,19 @@ impl App {
             } else {
                 Damage::full(w as u32, h as u32)
             };
-            // Each slot accumulates all changes since *its* last use, not just last frame.
             for b in &mut s.buffers {
                 b.pending = b.pending.union(d);
             }
-            let Some(b) = s
+            let b = s
                 .buffers
                 .iter_mut()
                 .find(|b| !b.buffer.slot().has_active_buffers())
-            else {
-                return Err("three buffers still in use at frame callback".into());
-            };
+                .ok_or("three buffers still in use at callback")?;
             let damage = b.pending;
             let start = Instant::now();
-            self.renderer.render(
+            self.renderer.draw(
                 &self.scene,
-                ShmTarget {
+                RenderTarget::Shm(ShmTarget {
                     bytes: b
                         .buffer
                         .canvas(&mut s.pool)
@@ -404,19 +589,11 @@ impl App {
                     height: h as u32,
                     scale,
                     format,
-                },
+                }),
                 damage,
             )?;
             if self.started.elapsed().as_secs_f64() > 2. {
                 s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
-            }
-            if let Some(viewport) = &s.viewport {
-                s.layer.wl_surface().set_buffer_scale(1);
-                viewport.set_destination(s.width as i32, s.height as i32);
-            } else {
-                s.layer
-                    .wl_surface()
-                    .set_buffer_scale((s.scale120 / 120) as i32);
             }
             s.layer.wl_surface().damage_buffer(
                 damage.x as i32,

@@ -91,3 +91,46 @@ not covered. Hot reload N/A. Resources/interface are a CPU proof, not shell pari
 [Preview](examples/feature2.png) is a private nested screenshot, not the live desktop.
 Verdict: **concern — CPU renderer misses120 Hz**. Propose the same panel on GPU before
 Feature 3; STOP for owner feedback. Raw evidence retained locally under .research/feature2.
+
+
+## Retained renderer comparison — before Feature 3 (2026-10-13)
+
+All three paths now animate one cached panel picture, never its content each frame.
+Content-sized surfaces save memory; startup profiling fixed the large shadow bake.
+Femtovg/wgpu is the recommended next renderer; tiny-skia remains the no-GPU fallback.
+Virtual callback tails still fail a strict 120 Hz gate, so this is an adjust verdict.
+
+| Renderer/surface/run | CPU % | Draw/submit p50/p99 ms | Callback p50/p99 ms | PSS/USS MiB | DRM total MiB | Startup ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| cpu/full/first | 38.78 | 5.105/21.413 | 8.459/36.120 | 31.41/21.32 | no app GPU fd | 178.88 |
+| cpu/full/later | 54.05 | 4.693/15.430 | 8.419/17.017 | 31.27/21.27 | no app GPU fd | 110.24 |
+| cpu/content/first | 47.45 | 4.544/16.545 | 8.533/19.648 | 21.56/18.06 | no app GPU fd | 156.29 |
+| cpu/content/later | 53.75 | 4.769/13.955 | 8.471/15.807 | 21.23/17.86 | no app GPU fd | 83.86 |
+| femtovg/full/first | 2.95 | 0.328/0.766 | 9.420/119.575 | 45.38/44.15 | 162.40 | 281.08 |
+| femtovg/full/later | 1.92 | 0.313/2.546 | 9.980/184.044 | 38.81/37.52 | 162.40 | 110.22 |
+| femtovg/content/first | 4.62 | 0.185/0.591 | 8.345/11.524 | 45.73/44.20 | 121.05 | 223.29 |
+| femtovg/content/later | 5.42 | 0.272/0.592 | 8.344/10.756 | 36.00/32.11 | 121.05 | 109.99 |
+| vello/full/first | 4.77 | 0.896/1.275 | 16.317/108.184 | 151.64/148.03 | 429.92 | 839.94 |
+| vello/full/later | 1.37 | 1.030/2.568 | 67.240/408.570 | 24.37/20.77 | 429.92 | 433.07 |
+| vello/content/first | 6.82 | 0.780/1.354 | 9.326/74.304 | 155.09/151.23 | 388.57 | 1207.59 |
+| vello/content/later | 1.88 | 0.942/1.868 | 24.502/676.600 | 45.88/42.07 | 388.57 | 619.55 |
+| qml/full/first | 39.88 | N/A (trace control) | N/A | 84.44/71.81 | 220.21 | 330.14 |
+| qml/full/later | 28.25 | N/A (trace control) | N/A | 83.68/70.11 | 220.21 | 183.31 |
+| qml/content/first | 34.17 | N/A (trace control) | N/A | 92.51/76.15 | 106.04 | 330.85 |
+| qml/content/later | 22.28 | N/A (trace control) | N/A | 82.62/71.78 | 106.07 | 223.74 |
+
+Private labwc→Hypr virtual2880×1800/1.5/120Hz; refresh feedback0, not physical scanout.
+Each row60s after5s warmup, common CPU-baked picture; GPU times are CPU submission,
+not GPU execution. Full buffers2880×1800; content1746×978. First private caches fresh,
+later reused; OS caches uncontrolled. Other busy QML/GPU tests ran; no processes killed.
+Qt traces affect CPU (not ranked); startup first populated callback. DRM system0
+totals deduplicated, not VRAM; fonts/emoji retained in picture;
+PSS overlaps/misses allocations. No SwapPss.
+Old shadow342ms→12ms; old font-scan786ms outlier/repeats13ms; select5 files/14 faces
+lazily in GPL shell. Initial default-AA Vello728ms/223PSS/389DRM, peak293MiB retained.
+First-pass Vello alpha wrong; corrected transfer pixel-matches all3,4 rows rerun.
+Exact retained partial/full pixels and≤2/255 shadow; no-GPU fallback and8 checks pass.
+No system installs; ~4h elapsed; 1122 net Rust lines;
+raw evidence .research/retained-comparison. [Private preview](examples/retained-renderers.png).
+Verdict: **adjust — choose femtovg + small retained surfaces; keep CPU fallback**.
+No physical120Hz pass claimed; Vello's first/large-surface costs reject it here. STOP.

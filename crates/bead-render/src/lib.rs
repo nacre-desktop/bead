@@ -7,10 +7,14 @@ use std::{
     collections::{BTreeSet, HashMap},
     error::Error,
     path::Path,
+    time::Instant,
 };
 use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
 };
+#[cfg(feature = "gpu")]
+pub mod gpu;
+pub mod retained;
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -113,7 +117,10 @@ pub struct Slide {
     pub open_y: f32,
     pub period_seconds: f32,
 }
+#[derive(Clone)]
 pub struct Scene {
+    pub opacity: f32,
+    pub font_files: Vec<std::path::PathBuf>,
     pub width: f32,
     pub slide: Option<Slide>,
     pub primitives: Vec<Primitive>,
@@ -139,13 +146,44 @@ pub struct ShmTarget<'a> {
     pub scale: f32,
     pub format: PixelFormat,
 }
+pub enum RenderTarget<'a> {
+    Shm(ShmTarget<'a>),
+    #[cfg(feature = "gpu")]
+    Gpu(gpu::GpuTarget<'a>),
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum RendererKind {
+    #[default]
+    Cpu,
+    Femtovg,
+    Vello,
+}
+pub fn renderer(kind: RendererKind) -> Result<Box<dyn Renderer>> {
+    match kind {
+        RendererKind::Cpu => Ok(Box::<retained::RetainedCpuRenderer>::default()),
+        #[cfg(feature = "gpu")]
+        RendererKind::Femtovg | RendererKind::Vello => Ok(Box::new(gpu::GpuRenderer::new(kind))),
+        #[cfg(not(feature = "gpu"))]
+        _ => Err("GPU support disabled; use the tiny-skia fallback".into()),
+    }
+}
 pub trait Renderer {
+    fn wants_gpu(&self) -> bool {
+        false
+    }
+    fn draw(&mut self, scene: &Scene, target: RenderTarget<'_>, damage: Damage) -> Result<()> {
+        match target {
+            RenderTarget::Shm(t) => self.render(scene, t, damage),
+            #[cfg(feature = "gpu")]
+            RenderTarget::Gpu(_) => Err("GPU target unsupported by CPU renderer".into()),
+        }
+    }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()>;
     fn render(&mut self, scene: &Scene, target: ShmTarget<'_>, damage: Damage) -> Result<()>;
 }
 
 pub struct CpuRenderer {
-    fonts: FontSystem,
+    fonts: Option<FontSystem>,
     glyphs: SwashCache,
     textures: HashMap<String, Pixmap>,
     mask: Option<Mask>,
@@ -156,7 +194,7 @@ pub struct CpuRenderer {
 impl Default for CpuRenderer {
     fn default() -> Self {
         Self {
-            fonts: FontSystem::new(),
+            fonts: None,
             glyphs: SwashCache::new(),
             textures: HashMap::new(),
             mask: None,
@@ -165,6 +203,29 @@ impl Default for CpuRenderer {
             color_glyphs: 0,
         }
     }
+}
+fn scene_fonts(scene: &Scene) -> Result<FontSystem> {
+    let start = Instant::now();
+    if scene.font_files.is_empty() {
+        return Ok(FontSystem::new());
+    }
+    let mut db = fontdb::Database::new();
+    for path in &scene.font_files {
+        db.load_font_file(path)?;
+    }
+    db.set_sans_serif_family("Noto Sans");
+    db.set_monospace_family("Noto Sans Mono");
+    db.set_serif_family("DejaVu Serif");
+    println!(
+        "PROFILE stage=font_load ms={:.3} files={} faces={}",
+        start.elapsed().as_secs_f64() * 1000.,
+        scene.font_files.len(),
+        db.len()
+    );
+    let locale = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_else(|_| "en-US".into());
+    Ok(FontSystem::new_with_locale_and_db(locale, db))
 }
 fn key(p: &Primitive, scale: f32) -> String {
     match p {
@@ -223,7 +284,16 @@ fn rounded(rect: Rect, r: f32) -> Option<tiny_skia::Path> {
 }
 impl Renderer for CpuRenderer {
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if self.fonts.is_none()
+            && scene
+                .primitives
+                .iter()
+                .any(|p| matches!(p, Primitive::Text { .. }))
+        {
+            self.fonts = Some(scene_fonts(scene)?);
+        }
         let before = self.textures.len();
+        let mut stages = [0f64; 3];
         for p in &scene.primitives {
             if matches!(p, Primitive::Rounded { .. }) {
                 continue;
@@ -232,6 +302,7 @@ impl Renderer for CpuRenderer {
             if self.textures.contains_key(&k) {
                 continue;
             }
+            let resource_start = Instant::now();
             let pixmap = match p {
                 Primitive::Text {
                     rect,
@@ -242,10 +313,9 @@ impl Renderer for CpuRenderer {
                 } => {
                     let (w, h) = dimensions(*rect, scale);
                     let mut pix = Pixmap::new(w, h).ok_or("text allocation")?;
-                    let mut buf = Buffer::new(
-                        &mut self.fonts,
-                        Metrics::new(size * scale, size * scale * 1.4),
-                    );
+                    let fonts = self.fonts.as_mut().unwrap();
+                    let mut buf =
+                        Buffer::new(fonts, Metrics::new(size * scale, size * scale * 1.4));
                     buf.set_size(Some(w as f32), Some(h as f32));
                     buf.set_text(
                         text,
@@ -253,10 +323,10 @@ impl Renderer for CpuRenderer {
                         Shaping::Advanced,
                         None,
                     );
-                    buf.shape_until_scroll(&mut self.fonts, false);
+                    buf.shape_until_scroll(fonts, false);
                     for run in buf.layout_runs() {
                         for glyph in run.glyphs {
-                            if let Some(face) = self.fonts.db().face(glyph.font_id) {
+                            if let Some(face) = fonts.db().face(glyph.font_id) {
                                 for (family, _) in &face.families {
                                     self.used_fonts.insert(family.clone());
                                 }
@@ -264,7 +334,7 @@ impl Renderer for CpuRenderer {
                             let physical = glyph.physical((0., run.line_y), 1.);
                             if self
                                 .glyphs
-                                .get_image(&mut self.fonts, physical.cache_key)
+                                .get_image(fonts, physical.cache_key)
                                 .as_ref()
                                 .is_some_and(|image| {
                                     image.content == cosmic_text::SwashContent::Color
@@ -275,7 +345,7 @@ impl Renderer for CpuRenderer {
                         }
                     }
                     buf.draw(
-                        &mut self.fonts,
+                        fonts,
                         &mut self.glyphs,
                         TextColor::rgba(color[0], color[1], color[2], color[3]),
                         |x, y, cw, ch, c| {
@@ -305,23 +375,23 @@ impl Renderer for CpuRenderer {
                 }
                 Primitive::Image { rect, path } => load_image(path, *rect, scale)?,
                 Primitive::Shadow { rect, radius, blur } => {
-                    let (w, h) = dimensions(*rect, scale);
-                    let pad = blur * 3.;
-                    let svg = format!(
-                        "<svg xmlns='http://www.w3.org/2000/svg' width='{}' height='{}'><defs><filter id='s' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='{}'/></filter></defs><rect x='{pad}' y='{pad}' width='{}' height='{}' rx='{radius}' fill='black' fill-opacity='.32' filter='url(#s)'/></svg>",
-                        rect.w,
-                        rect.h,
-                        blur,
-                        rect.w - 2. * pad,
-                        rect.h - 2. * pad
-                    );
-                    svg_pixmap(svg.as_bytes(), w, h)?
+                    shadow_pixmap(*rect, *radius, *blur, scale)?
                 }
                 _ => unreachable!(),
             };
+            let stage = match p {
+                Primitive::Text { .. } => 0,
+                Primitive::Image { .. } => 1,
+                _ => 2,
+            };
+            stages[stage] += resource_start.elapsed().as_secs_f64() * 1000.;
             self.textures.insert(k, pixmap);
         }
         if self.textures.len() != before {
+            println!(
+                "PROFILE stage=resources text_ms={:.3} images_ms={:.3} shadow_ms={:.3}",
+                stages[0], stages[1], stages[2]
+            );
             println!(
                 "RESOURCES scale={scale} textures={} color_glyphs={} fonts={:?}",
                 self.textures.len(),
@@ -471,6 +541,57 @@ pub fn swizzle(bytes: &mut [u8], width: u32, d: Damage) {
         }
     }
 }
+fn shadow_svg(w: f32, h: f32, radius: f32, blur: f32) -> String {
+    let pad = blur * 3.;
+    format!(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='{w}' height='{h}'><defs><filter id='s' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='{blur}'/></filter></defs><rect x='{pad}' y='{pad}' width='{}' height='{}' rx='{radius}' fill='black' fill-opacity='.32' filter='url(#s)'/></svg>",
+        w - 2. * pad,
+        h - 2. * pad
+    )
+}
+fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixmap> {
+    let (w, h) = dimensions(rect, scale);
+    // Preserve the same Gaussian corners/edges, stretching only straight sections.
+    // Bake a small template with enough room for radius + 3 sigma on either side.
+    let cut = ((radius + 6. * blur) * scale).ceil() as u32;
+    let side = cut * 2 + 2;
+    if cut == 0 || w < side || h < side {
+        return svg_pixmap(shadow_svg(rect.w, rect.h, radius, blur).as_bytes(), w, h);
+    }
+    let logical_side = side as f32 / scale;
+    let template = svg_pixmap(
+        shadow_svg(logical_side, logical_side, radius, blur).as_bytes(),
+        side,
+        side,
+    )?;
+    let mut result = Pixmap::new(w, h).ok_or("shadow allocation")?;
+    let src = [0, cut, side - cut, side];
+    let xs = [0, cut, w - cut, w];
+    let ys = [0, cut, h - cut, h];
+    for row in 0..3 {
+        for col in 0..3 {
+            let tile = template
+                .clone_rect(
+                    tiny_skia::IntRect::from_xywh(
+                        src[col] as i32,
+                        src[row] as i32,
+                        src[col + 1] - src[col],
+                        src[row + 1] - src[row],
+                    )
+                    .ok_or("shadow tile")?,
+                )
+                .ok_or("shadow crop")?;
+            // Separable nine-patch: corners stay at native resolution, edge tangents stretch.
+            let tr = Transform::from_scale(
+                (xs[col + 1] - xs[col]) as f32 / tile.width() as f32,
+                (ys[row + 1] - ys[row]) as f32 / tile.height() as f32,
+            )
+            .post_translate(xs[col] as f32, ys[row] as f32);
+            result.draw_pixmap(0, 0, tile.as_ref(), &PixmapPaint::default(), tr, None);
+        }
+    }
+    Ok(result)
+}
 fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
     let tree = resvg::usvg::Tree::from_data(data, &resvg::usvg::Options::default())?;
     let mut pix = Pixmap::new(w, h).ok_or("SVG allocation")?;
@@ -570,6 +691,8 @@ mod tests {
             let mut previous = Rect::new(0., 0., 0., 0.);
             for frame in 0..30 {
                 let mut scene = Scene {
+                    opacity: 1.,
+                    font_files: Vec::new(),
                     width: 40.,
                     slide: None,
                     offset: ((frame * 7 % 60) as f32, (frame * 3 % 30) as f32),
@@ -642,5 +765,21 @@ mod tests {
                 assert_eq!(buffers[index], full, "frame {frame}, {format:?}");
             }
         }
+    }
+    #[test]
+    fn nine_patch_shadow_preserves_gaussian_appearance() {
+        let rect = Rect::new(0., 0., 500., 300.);
+        let scale = 1.5;
+        let (w, h) = dimensions(rect, scale);
+        let exact = svg_pixmap(shadow_svg(rect.w, rect.h, 12., 10.).as_bytes(), w, h).unwrap();
+        let fast = shadow_pixmap(rect, 12., 10., scale).unwrap();
+        let max = exact
+            .data()
+            .iter()
+            .zip(fast.data())
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap();
+        assert!(max <= 2, "shadow channel difference {max}/255");
     }
 }

@@ -17,25 +17,34 @@ ShellRoot {
             id: window
             required property ShellScreen modelData
             screen: modelData
-            anchors { top: true; bottom: true; left: true; right: true }
+            property bool contentSize: Quickshell.env("BEAD_CONTENT_SIZE") === "1"
+            implicitWidth: contentSize ? 1164 : 0
+            implicitHeight: contentSize ? 652 : 0
+            anchors { top: true; bottom: !window.contentSize; left: !window.contentSize; right: !window.contentSize }
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             mask: Region {}
             WlrLayershell.namespace: "bead-dev-f2-qml"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            property real progress: Quickshell.env("BEAD_IDLE") === "1" ? 1 : 0
+            property bool startOpen: Quickshell.env("BEAD_START_OPEN") === "1"
+            property bool animateReady: !startOpen
+            Timer { interval: 3000; running: window.startOpen; onTriggered: window.animateReady=true }
+            property real progress: Quickshell.env("BEAD_IDLE") === "1" || startOpen ? 1 : 0
             readonly property real eased: progress * progress * (3 - 2 * progress)
             SequentialAnimation on progress {
-                running: Quickshell.env("BEAD_IDLE") !== "1"
+                running: Quickshell.env("BEAD_IDLE") !== "1" && window.animateReady
                 loops: Animation.Infinite
-                NumberAnimation { from: 0; to: 1; duration: 1000 }
-                NumberAnimation { from: 1; to: 0; duration: 1000 }
+                NumberAnimation { from: window.startOpen ? 1 : 0; to: window.startOpen ? 0 : 1; duration: 1000 }
+                NumberAnimation { from: window.startOpen ? 0 : 1; to: window.startOpen ? 1 : 0; duration: 1000 }
             }
             Item {
                 id: panel
                 x: Math.max(0, (window.width - 1100) / 2)
                 y: Math.round((-650 + window.eased * 680) * window.screen.devicePixelRatio) / window.screen.devicePixelRatio
                 width: 1100; height: 590
+                opacity: window.eased
+                layer.enabled: Quickshell.env("BEAD_LAYER") === "1"
+                layer.sourceRect: Qt.rect(-32,-32,1164,654)
                 Rectangle {
                     id: body
                     anchors.fill: parent

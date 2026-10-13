@@ -1,5 +1,5 @@
 // Nested development only. Never install as the session configuration.
-spawn-at-startup "nacre-shell" "--namespace" "bead-dev" "--animate"
+spawn-at-startup "nacre-shell" "--namespace" "bead-dev" "--animate" "--content-size"
 hotkey-overlay { skip-at-startup; }
 animations { off; }
 binds { Mod+Shift+E { quit; }; }

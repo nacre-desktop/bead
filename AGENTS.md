@@ -1,7 +1,7 @@
 # Bead experiment
 
 - Public repository by owner request. Integrate into main and push each feature.
-- ADR 0001 approved 2026-10-13; Feature 2 authorized. Stop after each feature.
+- ADR 0001 approved 2026-10-13; Retained CPU/femtovg/Vello comparison authorized before Feature 3. Stop after each feature.
 - Nacre and Orient are read-only references. Do not duplicate Orient or port
   Python helpers. Use the existing palette JSON and helper JSON-lines protocol.
 - Framework crates: MIT OR Apache-2.0, permissive dependencies only. Never copy
@@ -22,8 +22,12 @@
   renderer interface and correct damage history before stress measurements.
   Compare damage enabled/disabled at effective scale 1.5.
 - Every crate, including spikes, sets publish = false.
-- Owner stopped live Feature 2 overlays after the completed stress runs. Do not
-  respawn benchmark panels on the active desktop; use private/nested displays.
+- Never test on the live desktop without asking the owner first. Prior live
+  authorization does not persist. Retained comparison uses private/nested
+  sessions; synthetic 120 Hz scheduling is not physical scanout timing.
+- One retained-layer comparison: same cached panel, CPU/femtovg/Vello, full vs
+  content surfaces, first/later cost, startup and DRM fdinfo. Recommend and stop;
+  no Feature 3 implementation yet. Keep CPU as the no-GPU fallback.
 - Test in an isolated nested compositor by default. Never stop the daily shell,
   change desktop configs, keybindings, autostart or installed Nacre.
 - No personal paths, usernames or private machine inventory in committed files.

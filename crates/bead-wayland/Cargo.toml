@@ -7,8 +7,13 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["calloop"] }
-wayland-client = "=0.31.15"
+smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["calloop", "system"] }
+wayland-client = {version="=0.31.15", features=["system"]}
 calloop = { version = "=0.14.5", features = ["signals"] }
 bead-render = { path = "../bead-render" }
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging"] }
+
+raw-window-handle = {version="=0.6.2",optional=true}
+
+[features]
+gpu=["bead-render/gpu","dep:raw-window-handle"]

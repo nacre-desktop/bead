@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+mod font_sources;
 use bead_render::{Palette, Primitive, Rect, Scene, Slide};
 use bead_wayland::{Options, run};
 use std::path::{Path, PathBuf};
@@ -9,11 +10,26 @@ fn main() {
     }
 }
 fn start() -> Result<(), Box<dyn std::error::Error>> {
+    let started = std::time::Instant::now();
+    let mut profile = false;
     let mut options = Options::default();
+    if let Ok(name) = std::env::var("BEAD_RENDERER") {
+        select_renderer(&mut options, &name)?;
+    }
     let mut palette = PathBuf::from("shell/palette.json");
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--profile-scene" => {
+                profile = true;
+                options.panel = true;
+            }
+            "--renderer" => {
+                select_renderer(&mut options, &args.next().ok_or("--renderer needs value")?)?
+            }
+            "--start-open" => options.start_open = true,
+            "--content-size" => options.content_size = true,
+            "--output" => options.output = Some(args.next().ok_or("--output needs value")?),
             "--namespace" => options.namespace = args.next().ok_or("--namespace needs value")?,
             "--panel" => options.panel = true,
             "--animate" => {
@@ -32,7 +48,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--panel|--animate] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 2 drawing preview. Click-through, no reserved space. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--panel|--animate] [--renderer cpu|femtovg|vello|auto] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 2 drawing preview. Click-through, no reserved space. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
@@ -40,10 +56,12 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let colors = Palette::read(&palette)?;
-    let scene = if options.panel {
+    let mut scene = if options.panel {
         panel(&colors, Path::new("shell"))?
     } else {
         Scene {
+            opacity: 1.,
+            font_files: Vec::new(),
             width: 20000.,
             slide: None,
             primitives: vec![Primitive::Rounded {
@@ -56,6 +74,37 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             bounds: Rect::new(0., 0., 20000., 32.),
         }
     };
+    scene.font_files = font_sources::select(&scene)?;
+    println!(
+        "PROFILE stage=cli_scene ms={:.3}",
+        started.elapsed().as_secs_f64() * 1000.
+    );
+    if profile {
+        use bead_render::{CpuRenderer, Damage, PixelFormat, Renderer, ShmTarget};
+        let mut renderer = CpuRenderer::default();
+        renderer.prepare(&scene, 1.5)?;
+        let width = (scene.bounds.w * 1.5).ceil() as u32;
+        let height = (scene.bounds.h * 1.5).ceil() as u32;
+        let mut bytes = vec![0; width as usize * height as usize * 4];
+        let t = std::time::Instant::now();
+        renderer.render(
+            &scene,
+            ShmTarget {
+                bytes: &mut bytes,
+                width,
+                height,
+                scale: 1.5,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )?;
+        println!(
+            "PROFILE stage=raster ms={:.3} total_ms={:.3}",
+            t.elapsed().as_secs_f64() * 1000.,
+            started.elapsed().as_secs_f64() * 1000.
+        );
+        return Ok(());
+    }
     run(options, scene)
 }
 fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>> {
@@ -166,7 +215,11 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         rect: Rect::new(96., 422., 48., 48.),
         path: assets.join("sample.png"),
     });
-    let theme = freedesktop_icons::default_theme_gtk().unwrap_or_else(|| "hicolor".into());
+    let theme = if std::env::var_os("BEAD_ICON_PATH").is_none() {
+        freedesktop_icons::default_theme_gtk().unwrap_or_else(|| "hicolor".into())
+    } else {
+        "hicolor".into()
+    };
     let icon = std::env::var_os("BEAD_ICON_PATH")
         .map(PathBuf::from)
         .or_else(|| {
@@ -190,6 +243,8 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         eprintln!("ICON folder unavailable in installed themes");
     }
     Ok(Scene {
+        opacity: 1.,
+        font_files: Vec::new(),
         width: 1100.,
         slide: Some(Slide {
             closed_y: -650.,
@@ -200,4 +255,23 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         offset: (0., 0.),
         bounds: Rect::new(-32., -32., 1164., 654.),
     })
+}
+
+fn select_renderer(options: &mut Options, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use bead_render::RendererKind;
+    options.auto_fallback = name == "auto";
+    options.renderer = match name {
+        "cpu" => RendererKind::Cpu,
+        "femtovg" => RendererKind::Femtovg,
+        "vello" => RendererKind::Vello,
+        "auto" => {
+            if cfg!(feature = "gpu") {
+                RendererKind::Femtovg
+            } else {
+                RendererKind::Cpu
+            }
+        }
+        _ => return Err("renderer must be cpu, femtovg, vello or auto".into()),
+    };
+    Ok(())
 }

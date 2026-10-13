@@ -1,49 +1,46 @@
 # Status
 
-2026-10-13: Feature 2 implemented and measured. **Concern: CPU drawing misses120Hz.**
-ADR0001 approved; no Feature3/GPU follow-up authorization yet. Stop for feedback.
+2026-10-13: Retained renderer comparison complete locally. Recommend femtovg/wgpu
+with content-sized retained layers; tiny-skia remains the no-GPU fallback.
+**Adjust verdict:** virtual callback tails fail strict120Hz; no physical scanout
+pass claimed. Owner authorized this comparison only; STOP before Feature3.
+Never test on live desktop without asking first. All work here private/nested.
 
-Done: bead-render scene/renderer boundary; rounded corners/borders, cached SVG
-Gaussian shadow, cosmic-text fallback/color emoji, SVG/PNG/theme icon loading;
-Orient format 1 JSON consumer, no Orient engine duplication. Fractional-scale+
-viewporter with buffer_scale=1; direct PixmapMut over SHM, ABGR preferred or damaged
-ARGB swizzle. Three buffers reused, each accumulates damage since its last use.
-Full-vs-partial pixel equality includes text/images/shadow/edges at 1.5 in both formats.
-Nested niri RGBA and Hypr ARGB static 1.5 proofs passed, all own processes stopped.
+Built: same immutable CPU-baked RGBA panel for CPU/femtovg/Vello; position/opacity
+only per frame. Direct reusable SHM fallback; GPU picture uploaded once, shared
+context, Vello-only intermediate texture. Content1164×652 logical /1746×978
+pixels versus full1920×1200 /2880×1800 at1.5. Same text, color emoji, image/icon,
+shadow/corners/palette. Native font selection in GPL shell chooses5 files/14
+faces; permissive Bead consumes paths/data and loads lazily, no C Fontconfig graph.
+Old full shadow342ms→small Gaussian template12ms; error bounded2/255. An old
+font-discovery786ms outlier was retained. UI source/layout/Orient engine not ported.
 
-Real monitor stress completed:2880×1800/1.5/120Hz,1100×590 logical panel. 60s
-untraced client CPU damageON51.30%,OFF59.18%,QML5.75%; PSS42.49/42.44/105.60MiB.
-Draw p99 ON23.63ms/OFF24.61ms versus8.33ms budget. Matched10s callback p99
-25.51/29.05/9.22ms. Startup400.11/404.08/143.25ms, callback log not photons.
-Private nested idle60s recorded zero ticks; fonts/geometry differ from live stress.
-Exact scope, USS, memory variation and limitations: [FEASIBILITY](../FEASIBILITY.md).
-Raw evidence retained in ignored canonical .research/feature2; not new ledgers.
+Formal16 cases,60s each, then4 Vello-only repeats after fixing straight-alpha
+output→Wayland premultiplied transfer. All3 private static screenshots pixel-
+identical after fix. Auto fallback with Vulkan disabled passes; all own processes
+stopped. Measurements/scopes/problems in [FEASIBILITY](../FEASIBILITY.md).
+Private Hypr virtual2880×1800/1.5/120Hz; presentation refresh0. Other active QML
+loads interfered; no unrelated processes stopped. First/later private caches,
+OS caches uncontrolled. CPU/DRM memory per process; PSS not total GPU memory.
+First/late femtovg content startup223.29/109.99ms, QML330.85/223.74ms. Femtovg
+content draw/submit p99.591/.592ms, callback11.524/10.756ms. Later PSS36.00/USS32.11,
+DRMsystem121.05MiB; fullDRM162.40. CPU still misses budget, Vello expensive and
+pacing poor; latest corrected tail676.60ms kept, not hidden. See full table.
 
-Owner stopped white live overlays via another active chat. **Do not respawn on
-active niri.** Future checks private/nested only unless owner authorizes otherwise.
-Never stop installed Nacre or modify configs/keybindings/autostart. No system
-packages added. Installed-font experiment tracks unmaintained ttf-parser through
-an explicit cargo-deny exception; MPL icon resolver dependency belongs only to
-GPL shell. Framework graphs remain permissive. SVG text/embedded images untested.
+Raw evidence in canonical ignored .research/retained-comparison (smoke, first-
+pass, corrected-vello, private screenshots), plus worktree ignored raw files.
+No generated ledger. No system packages installed. Existing native libs used.
+Framework all-feature cargo-deny graphs pass;8 tests, fmt/clippy incl CPU-only
+build pass locally. Runtime fallback passed; no Feature3/reload implementation.
 
-Run from a Wayland terminal: `./scripts/dev.sh niri` (or `hyprland`). Look for the
-sliding drawing panel, readable fallback/emoji, corners/shadow and sample icons.
-Maximize the nested window if needed to see the full panel. Close it or Ctrl+C.
-[Private nested screenshot](../examples/feature2.png). This is not a working launcher.
+Run from repo Wayland terminal:
+`BEAD_RENDERER=femtovg ./scripts/dev.sh niri`
+Nested preview only; maximize if needed. Inspect fonts/emoji/corners/shadow and
+smooth slide/fade. Close window or Ctrl+C. `cpu`/`vello`/`auto` are alternatives.
+[Private preview](../examples/retained-renderers.png). Default palette matches
+active dark; benchmark retains frozen light Orient fixture for reproducibility.
 
-Local fmt/clippy -D warnings/workspace tests/cargo-deny pass. Feature code
-0f71173 integrated and pushed; CI38400965824 passed (fmt/clippy/tests/cargo-deny).
-Final handoff only adjusts preview configs/docs; verify its exact-head CI and stop.
-Active isolated worktree: bead-feature2. Next proposed step: matched GPU panel
-comparison before Feature3. Owner decides; no further feature work now.
-
-Repository remains public. Original seven commits were recreated with identical
-trees/messages/dates under Nacre contributors/noreply author+committer identity.
-Old SHA APIs unavailable; old public HEAD page404. Repo-local identity protects
-future Bead commits; global Git identity unchanged. Old CI/commit links historical.
-No releases/packages/crates.io. Policies: cargo-deny/no new ledgers; short logs;
-GPL niri-ipc/libmpv adapters later in shell behind neutral Bead interfaces.
-
-Default preview corrected to an existing Orient dark palette matching all six
-active Nacre rendering roles. Matched measurements used the retained light
-spikes/palette-stress.json input; future benchmark runs explicitly select it.
+Active isolated worktree bead-retained-renderers based on f6904e3. Publication/
+CI pending: commit/integrate/push main, verify exact-head CI, then STOP for owner
+renderer decision. No further feature work. Repo public; contributor/noreply
+Git identity only, global untouched. References Nacre/Orient remain read-only.
