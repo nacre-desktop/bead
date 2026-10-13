@@ -1,0 +1,13 @@
+[package]
+name = "bead-wayland"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["calloop"] }
+wayland-client = "=0.31.15"
+calloop = { version = "=0.14.5", features = ["signals"] }
+tiny-skia = "=0.12.0"

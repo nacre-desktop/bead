@@ -1,9 +1,24 @@
 # ADR 0001 — A bounded CPU-first, interpreted shell experiment
 
-Date: 2026-10-13. Status: **proposed; waiting for owner approval**.
-Scope: private Bead framework + GPL Nacre Shell experiment, not deployment.
+Date: 2026-10-13. Status: **approved 2026-10-13, with the following owner amendments**.
+Scope: Bead framework + GPL Nacre Shell experiment, not deployment.
 
-## Decision proposed
+## Owner amendments (supersede the research options below)
+
+- Repository public by explicit request. Feature 1 authorized; stop after each feature.
+- CC0-1.0, 0BSD, Unlicense, MIT-0 added to Bead's permissive licenses; notify eligible.
+- niri-ipc is used in a GPL nacre-shell adapter behind Bead's neutral interface,
+  beginning with compositor IPC in Feature 5. Do not reimplement niri's protocol.
+  GPL dependencies are allowed in nacre-shell; libmpv uses that boundary later.
+- cargo-deny in CI replaces new manual/generated ledgers. FEASIBILITY entries
+  begin with 3–5 plain-language lines, a small table, under about 40 lines.
+- Normal system build dependencies allowed; list installations. No additional
+  isolation tooling. Use both nested Hyprland and niri for Feature 1.
+- Feature 2 must stress real-size/scale/refresh animation with rounded corners,
+  shadow, lots of text/color emoji and damage tracking. Report p50/p99, CPU and
+  loaded-font PSS; warn about CPU pacing failure before Feature 3.
+
+## Approved decision
 
 Proceed through Feature 3/Gate B with SCTK, tiny-skia, cosmic-text, Taffy and a
 small typed markup format plus optional Luau through mlua. Rust owns durable
@@ -99,9 +114,9 @@ policy. Package metadata is evidence, not a complete legal certification.
 | femtovg 0.27.0 / wgpu 30.0.1 / Vello 0.11.0 / Parley 0.12.0 | MIT/Apache; optional measured alternatives, not all eagerly linked/initialized in production |
 | Slint/interpreter 1.18.1 | GPL/custom/commercial; excluded from Bead |
 | libcosmic pinned source | MPL-2.0; excluded from Bead |
-| niri-ipc 26.4.0 | GPL-3.0-or-later; independently implement documented protocol, or a GPL shell backend adapter; never copy enum/code |
+| niri-ipc 26.4.0 | GPL-3.0-or-later; use the crate in a GPL nacre-shell backend adapter behind the neutral Bead interface |
 | wayland-protocols-hyprland 1.2.0 | LGPL-3.0-only; excluded. Audit/generate official permissive XML bindings independently where needed |
-| notify 8.2.0 | CC0-1.0, outside enumerated allowlist; Linux inotify via eligible rustix instead |
+| notify 8.2.0 | CC0-1.0; eligible under owner amendment |
 | libmpv2 6.0.0 / native mpv; GStreamer native | Non-permissive wrapper/native terms; GPL shell-side frame provider or separate process, never default framework dependency |
 
 Phase 0's locked spike has a metadata audit of every resolved package (including
@@ -198,5 +213,5 @@ allowed, then recommend adjust/stop rather than hide or indefinitely tune it.
 - Any disallowed framework dependency with no accepted boundary is a license
   blocker. If essentials require writing our own engine, stop/adjust architecture.
 
-Owner decision requested: approve this bounded path to Feature 1, ask for an
-architecture adjustment, or stop. **Do not start Feature 1 before that decision.**
+Owner approved Feature 1 with the amendments above. Stop after each feature;
+formal recommendations still require owner decisions at Gates B, C and D.

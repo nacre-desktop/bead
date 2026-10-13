@@ -1,5 +1,5 @@
-# Framework and shell crates
+# Crates
 
-Feature 1 will add only the minimum production surface crate and nacre-shell
-executable after approval. Framework crates use MIT OR Apache-2.0; nacre-shell
-uses GPL-3.0. All crates set publish=false.
+`bead-wayland`: MIT OR Apache-2.0 surface lifecycle; `nacre-shell`: GPL-3.0-only
+application. All crates set publish=false. Add further framework components only
+when their feature requires them; cargo-deny enforces the dependency boundaries.

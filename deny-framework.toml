@@ -1,0 +1,8 @@
+# Check bead-* roots independently: GPL may never leak into their dependencies.
+[licenses]
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "ISC", "Unicode-3.0", "Unicode-DFS-2016", "CC0-1.0", "0BSD", "Unlicense", "MIT-0"]
+[bans]
+multiple-versions = "warn"
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

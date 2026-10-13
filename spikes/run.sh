@@ -11,6 +11,6 @@ if [[ ! -x "$CARGO_HOME/bin/cargo" || ! -x .tools/native/usr/bin/labwc ]]; then
   exit 1
 fi
 mkdir -p spikes/results/raw
-cargo build --release --locked --quiet
+cargo build -p bead-spike-blank-layer --release --locked --quiet
 printf '%s\n' 'Measuring blank surfaces in offscreen nested niri. Results: spikes/results/baseline.json'
 python spikes/measure.py "$@"

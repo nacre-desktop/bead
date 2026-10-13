@@ -1,6 +1,6 @@
 # Roadmap and gates
 
-Updated 2026-10-13. Phase 0 recommendation is proposed. No Feature 1 approval yet.
+Updated 2026-10-13. ADR 0001 approved with amendments; Feature 1 authorized.
 This is a feasibility order, not a commitment to complete every feature.
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
@@ -14,6 +14,11 @@ Do not bundle unrequested later features into the current proof.
 Scope/source/protocol/renderer/UI/service/prior-art research, blank renderer spikes,
 ADR 0001, roadmap and handoff. Cargo workspace/CI initially covers only measurement
 spikes; Feature 1 adds production surface/shell crates. Stop for architecture OK.
+
+Feature 2 stress gate added by the owner: launcher-sized rounded/shadowed panel
+with lots of text and color emoji, animating at real monitor resolution/scale/
+refresh with damage tracking. Report p50/p99 frame times, CPU and loaded-font PSS.
+If CPU cannot keep up, explain before starting Feature 3.
 
 ## Feature order
 
@@ -66,6 +71,6 @@ Nested compositors by default; task-owned processes and exact PID/namespace stop
 commands for any real-session test. Never replace/kill daily Nacre or edit installed
 shell/config/bindings/autostart. Runtime/fixtures privately scoped. Nacre and Orient
 remain read-only; external helpers remain Python; no duplicated palette engine.
-Private main only, no PRs/publication/crates/AUR/releases. Every crate publish=false.
+Integrate into public main; no PRs/crates/AUR/releases. Every crate publish=false.
 
 Current run command/status and the exact next action are in [STATUS.md](STATUS.md).

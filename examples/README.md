@@ -1,4 +1,5 @@
-# Examples
+# Nested previews
 
-Production Bead examples begin after Phase 0 architecture approval. The current
-blank-surface comparison is a throwaway spike, not an example application API.
+From a Wayland terminal, `./scripts/dev.sh niri` or `./scripts/dev.sh hyprland`
+opens a separate nested desktop with the blank strip. Close the nested window
+or press Ctrl+C to stop. These fixtures are never installed as session configs.

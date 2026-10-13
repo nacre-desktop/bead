@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import select
+import shutil
 import signal
 import stat
 import subprocess
@@ -50,6 +51,9 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--seconds', type=float, default=60)
     p.add_argument('--runs', type=int, default=3)
+    p.add_argument('--compositor', choices=['niri','hyprland'], default='niri')
+    p.add_argument('--parent', choices=['headless','desktop'], default='headless')
+    p.add_argument('--lifecycle', action='store_true')
     p.add_argument('--modes', nargs='+', default=['tiny-skia','vello','femtovg','qml'])
     p.add_argument('--in-private-bus', action='store_true')
     args = p.parse_args()
@@ -58,20 +62,27 @@ def main():
         # starting the bus, not just before launching its clients.
         with tempfile.TemporaryDirectory(prefix='bead-bus-') as directory:
             env=os.environ.copy()
+            display=env.get('WAYLAND_DISPLAY','')
+            if display and not display.startswith('/'): display=str(pathlib.Path(env['XDG_RUNTIME_DIR'])/display)
+            env['BEAD_PARENT_WAYLAND']=display
             for key, name in [('XDG_RUNTIME_DIR','runtime'),('XDG_CONFIG_HOME','config'),('XDG_CACHE_HOME','cache'),('XDG_STATE_HOME','state'),('XDG_DATA_HOME','data')]:
                 path=pathlib.Path(directory)/name
                 path.mkdir(mode=0o700)
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
-            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--modes', *args.modes],env=env)
+            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),'--modes', *args.modes],env=env)
     raw = ROOT / 'spikes/results/raw'
+    if 'bead' in args.modes: raw=raw/args.compositor
     raw.mkdir(parents=True, exist_ok=True)
+    save_baseline = 'bead' not in args.modes
+    tools = pathlib.Path(os.environ.get('BEAD_RESEARCH_TOOLS',str(ROOT/'.tools')))
     result = {'date': '2026-10-13', 'surface': {'width': 512, 'height': 32, 'scale': 1, 'outputs': 1, 'namespace': 'bead-dev-spike'},
               'method': 'client /proc smaps_rollup; CPU ticks over monotonic interval; READY is frame callback for Rust, QML component completion (not comparable first-frame); separate nested niri/private D-Bus/XDG', 'runs': []}
-    with tempfile.TemporaryDirectory(prefix='bead-phase0-') as directory:
+    # Hyprland's instance signature consumes most of Unix's 108-byte socket path.
+    with tempfile.TemporaryDirectory(prefix='bd-') as directory:
         private = pathlib.Path(directory)
         env = os.environ.copy()
-        for key, name in [('XDG_RUNTIME_DIR','runtime'), ('XDG_CONFIG_HOME','config'), ('XDG_CACHE_HOME','cache'), ('XDG_STATE_HOME','state'), ('XDG_DATA_HOME','data')]:
+        for key, name in [('XDG_RUNTIME_DIR','r'), ('XDG_CONFIG_HOME','config'), ('XDG_CACHE_HOME','cache'), ('XDG_STATE_HOME','state'), ('XDG_DATA_HOME','data')]:
             path = private / name
             path.mkdir(mode=0o700)
             env[key] = str(path)
@@ -91,24 +102,34 @@ def main():
         (parent_config/'autostart').write_text('')
         parent_env = env.copy()
         parent_env.update({'XDG_RUNTIME_DIR':str(parent_runtime), 'WLR_BACKENDS':'headless', 'WLR_HEADLESS_OUTPUTS':'1', 'WLR_RENDERER':'gles2',
-                           'LD_LIBRARY_PATH':str(ROOT/'.tools/native/usr/lib')})
+                           'LD_LIBRARY_PATH':str(tools/'native/usr/lib')})
         parent_env.pop('WAYLAND_DISPLAY', None)
         parent_log = (raw/'labwc.log').open('w')
-        parent = subprocess.Popen([str(ROOT/'.tools/native/usr/bin/labwc'), '--config-dir', str(parent_config)],env=parent_env,stdout=parent_log,stderr=parent_log,start_new_session=True)
-        deadline = time.monotonic()+20
-        while time.monotonic()<deadline:
-            sockets = [f for f in parent_runtime.glob('wayland-*') if stat.S_ISSOCK(f.stat().st_mode)]
-            if sockets:
-                env['WAYLAND_DISPLAY']=str(sockets[0])
-                break
-            if parent.poll() is not None:
-                raise RuntimeError('Offscreen parent exited; inspect ignored labwc.log')
-            time.sleep(0.1)
+        parent=None
+        if args.parent=='desktop':
+            env['WAYLAND_DISPLAY']=env['BEAD_PARENT_WAYLAND']
+            if not env['WAYLAND_DISPLAY']: raise RuntimeError('No parent Wayland desktop')
         else:
-            stop(parent)
-            raise RuntimeError('Offscreen parent did not start')
-        log = (raw / 'niri.log').open('w')
-        compositor = subprocess.Popen(['niri', '--config', str(ROOT/'spikes/niri.kdl')], env=env, stdout=log, stderr=log, start_new_session=True)
+            parent = subprocess.Popen([shutil.which('labwc') or str(tools/'native/usr/bin/labwc'), '--config-dir', str(parent_config)],env=parent_env,stdout=parent_log,stderr=parent_log,start_new_session=True)
+            deadline = time.monotonic()+20
+            while time.monotonic()<deadline:
+                sockets = [f for f in parent_runtime.glob('wayland-*') if stat.S_ISSOCK(f.stat().st_mode)]
+                if sockets:
+                    env['WAYLAND_DISPLAY']=str(sockets[0])
+                    break
+                if parent.poll() is not None:
+                    raise RuntimeError('Offscreen parent exited; inspect ignored labwc.log')
+                time.sleep(0.1)
+            else:
+                stop(parent)
+                raise RuntimeError('Offscreen parent did not start')
+        log = (raw / f'{args.compositor}.log').open('w')
+        if args.compositor=='niri':
+            command=['niri','--config',str(ROOT/'spikes/niri.kdl')]
+        else:
+            env['AQ_DRM_DEVICES']='/dev/null'
+            command=['Hyprland','--config',str(ROOT/'spikes/hyprland.lua')]
+        compositor = subprocess.Popen(command, env=env, stdout=log, stderr=log, start_new_session=True)
         client = None
         try:
             deadline = time.monotonic() + 20
@@ -126,23 +147,44 @@ def main():
             info=subprocess.run(['wayland-info'],env=env,capture_output=True,text=True,timeout=10,check=True)
             (raw/'wayland-info.log').write_text(info.stdout)
             result['globals']=[{'interface':name,'version':int(version)} for name,version in re.findall(r"interface: '([^']+)',\s*version:\s*(\d+)",info.stdout)]
-            sockets=list(runtime.glob('niri.*.sock'))
+            sockets=list(runtime.glob('niri.*.sock')) if args.compositor=='niri' else []
             if sockets:
                 env['NIRI_SOCKET']=str(sockets[0])
                 outputs=subprocess.run(['niri','msg','--json','outputs'],env=env,capture_output=True,text=True,timeout=10,check=True)
                 result['output_properties']=json.loads(outputs.stdout)
+            if args.compositor=='hyprland':
+                sockets=list(runtime.glob('hypr/*/.socket.sock'))
+                if sockets: env['HYPRLAND_INSTANCE_SIGNATURE']=sockets[0].parent.name
             for run in range(args.runs):
                 for mode in args.modes:
-                    command = ['quickshell', '--log-rules', 'qml.debug=true', '--path', str(ROOT/'spikes/blank.qml')] if mode == 'qml' else [str(ROOT/'target/release/bead-spike-blank-layer'), mode]
+                    target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
+                    fixture='blank-outputs.qml' if 'bead' in args.modes else 'blank.qml'
+                    command = ['quickshell', '--log-rules', 'qml.debug=true', '--path', str(ROOT/'spikes'/fixture)] if mode == 'qml' else ([str(target/'nacre-shell')] if mode=='bead' else [str(target/'bead-spike-blank-layer'), mode])
+                    env['WAYLAND_DEBUG']='1' if 'bead' in args.modes else '0'
                     started = time.monotonic()
                     client = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, bufsize=0)
                     data, ready_at = b'', None
+                    frames=set()
+                    trace_cursor=0
                     deadline = started + 60
                     while time.monotonic() < deadline:
                         if select.select([client.stdout], [], [], 0.1)[0]:
                             chunk = os.read(client.stdout.fileno(), 65536)
                             data += chunk
-                            if b'READY' in data:
+                            if 'bead' in args.modes:
+                                ready=False
+                                # Callback IDs can be reused after a registry sync.
+                                # Only a done event AFTER its frame request counts.
+                                for line in data[trace_cursor:].splitlines(keepends=True):
+                                    if not line.endswith(b'\n'): break
+                                    trace_cursor+=len(line)
+                                    request=re.search(rb'wl_surface[@#]\d+\.frame\((?:new id )?wl_callback[@#](\d+)',line)
+                                    done=re.search(rb'wl_callback[@#](\d+)\.done(?:,\s*)?\(',line)
+                                    if request: frames.add(request[1])
+                                    if done and done[1] in frames: ready=True
+                            else:
+                                ready=b'READY' in data
+                            if ready:
                                 ready_at = time.monotonic()
                                 break
                             if not chunk:
@@ -183,22 +225,48 @@ def main():
                            'ready_kind':'QML component completion' if mode=='qml' else 'wl_surface frame callback; not presentation timestamp'}
                     row['gpu']=row_gpu
                     result['runs'].append(row)
-                    (ROOT/'spikes/results/baseline.json').write_text(json.dumps(result,indent=2)+'\n')
+                    if save_baseline: (ROOT/'spikes/results/baseline.json').write_text(json.dumps(result,indent=2)+'\n')
                     print(f"{mode} run {run}: PSS {after_mem['pss_mib']:.2f} MiB / USS {after_mem['uss_mib']:.2f} MiB / CPU {row['idle_cpu_one_core_percent']:.3f}% / SwapPss {after_mem['swap_pss_mib']:.2f} MiB", flush=True)
-                    subprocess.run(['grim', '-t', 'png', str(raw/f'{mode}-{run}.png')],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                    if mode=='bead' and args.lifecycle:
+                        if args.compositor=='hyprland':
+                            for action in ['create','remove','create','remove']:
+                                command=['hyprctl','output',action]+(['headless'] if action=='create' else [])+['bead-test']
+                                changed=subprocess.run(command,env=env,capture_output=True,text=True,timeout=5,check=True)
+                                print('Nested output '+action+': '+changed.stdout.strip(),flush=True)
+                                time.sleep(0.5)
+                        else:
+                            name=next(iter(result['output_properties']))
+                            for scale in ['2','1']:
+                                subprocess.run(['niri','msg','output',name,'scale',scale],env=env,capture_output=True,text=True,timeout=5,check=True)
+                                time.sleep(0.5)
+                    try:
+                        subprocess.run(['grim', '-t', 'png', str(raw/f'{mode}-{run}.png')],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False,timeout=5)
+                    except subprocess.TimeoutExpired:
+                        print(f'{args.compositor} {mode}: screenshot timed out; measurements retained',flush=True)
                     stop(client)
+                    print(f'{args.compositor} {mode}: startup/frame callback {row["ready_wall_ms"]:.2f} ms; exit={client.returncode}',flush=True)
                     data+=client.stdout.read()
                     (raw/f'{mode}-{run}.log').write_bytes(data)
+                    if mode=='bead':
+                        assert client.returncode==0, 'Bead did not shut down cleanly'
+                        assert b'STOP surfaces=0' in data, 'Missing resource cleanup marker'
+                        if args.lifecycle and args.compositor=='hyprland':
+                            assert data.count(b'READY output=')>=3 and data.count(b'OUTPUT_REMOVED')>=2, 'Hotplug lifecycle did not map/release every output'
+                        if args.lifecycle and args.compositor=='niri':
+                            assert b'set_buffer_scale(2)' in data and b'set_buffer_scale(1)' in data, 'Scale change did not redraw'
+                        if args.lifecycle: print(args.compositor+' lifecycle: PASS',flush=True)
                     client = None
             return 0
         finally:
+            for detail in pathlib.Path(env['XDG_RUNTIME_DIR']).glob('hypr/*/hyprland.log'):
+                shutil.copyfile(detail,raw/'hyprland-detail.log')
             if client is not None:
                 stop(client)
             stop(compositor)
-            stop(parent)
+            if parent is not None: stop(parent)
             log.close()
             parent_log.close()
-            (ROOT/'spikes/results/baseline.json').write_text(json.dumps(result,indent=2)+'\n')
+            if save_baseline: (ROOT/'spikes/results/baseline.json').write_text(json.dumps(result,indent=2)+'\n')
 
 
 if __name__ == '__main__':

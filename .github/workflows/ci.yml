@@ -20,3 +20,20 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
         run: cargo test --workspace --locked
+      - name: Install cargo-deny
+        shell: bash
+        run: |
+          asset=cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
+          base=https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2
+          curl -fsSL "$base/$asset" -o "$RUNNER_TEMP/$asset"
+          curl -fsSL "$base/$asset.sha256" -o "$RUNNER_TEMP/deny.sha256"
+          cd "$RUNNER_TEMP"
+          printf '%s  %s\n' "$(cat deny.sha256)" "$asset" | sha256sum -c -
+          tar -xzf "$asset"
+          install -m 755 "$RUNNER_TEMP/${asset%.tar.gz}/cargo-deny" "$HOME/.cargo/bin/cargo-deny"
+      - name: Dependency and license checks
+        run: |
+          cargo deny check
+          for manifest in crates/bead-*/Cargo.toml; do
+            cargo deny --manifest-path "$manifest" --config deny-framework.toml check
+          done
