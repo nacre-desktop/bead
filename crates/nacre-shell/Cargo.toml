@@ -12,6 +12,7 @@ bead-render = { path = "../bead-render" }
 bead-ui = { path = "../bead-ui" }
 bead-core = { path = "../bead-core" }
 serde_json = "1"
+accesskit = "=0.25.1"
 
 freedesktop-icons = "0.4"
 

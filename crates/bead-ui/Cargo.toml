@@ -14,3 +14,7 @@ serde_json = "1"
 mlua = { version = "=0.12.2", features = ["luau", "vendored", "serde"] }
 notify = { version = "=8.2.0", default-features = false }
 taffy = { version = "=0.15.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "content_size"] }
+
+unicode-segmentation = "1.13"
+
+accesskit = "=0.25.1"

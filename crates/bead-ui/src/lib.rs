@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Replaceable typed views and bounded Luau behavior over durable Rust state.
+pub mod accessibility;
 pub mod frontend;
+pub mod input;
 pub mod layout;
 pub mod script;
 use bead_core::{Stores, Value};
@@ -60,6 +62,8 @@ pub struct Node {
     pub focusable: bool,
     #[serde(skip)]
     pub clip: Option<Rect>,
+    #[serde(default)]
+    pub label: String,
 }
 impl Node {
     fn diagnostic(&self, message: impl ToString) -> Diagnostic {
@@ -498,6 +502,20 @@ impl Generation {
                     *path = full;
                 }
             }
+            if let Some(Value::Text(focused)) = stores.get("bead.focused")
+                && let Some(node) = result.nodes.iter().find(|n| &n.id == focused)
+            {
+                let index = result.scene.primitives.len();
+                result.scene.primitives.push(Primitive::Rounded {
+                    rect: rect(&node.draw),
+                    radius: 8.,
+                    fill: [0, 0, 0, 0],
+                    border: Some((palette.get("primary").unwrap_or([200, 200, 200, 255]), 1.)),
+                });
+                if let Some(clip) = node.clip {
+                    result.scene.clips.insert(index, clip);
+                }
+            }
             result.scene.asset_data = self.assets.clone();
             return Ok((result.scene, result.nodes));
         }
@@ -595,6 +613,7 @@ impl Generation {
         }
         Ok(Scene {
             opacity: 1.,
+            motion: None,
             font_files: Vec::new(),
             width: self.width,
             slide: None,
@@ -674,6 +693,8 @@ pub struct Session {
     watch_revision: std::sync::Arc<std::sync::atomic::AtomicU64>,
     current: Scene,
     current_nodes: Vec<Node>,
+    editors: BTreeMap<String, input::Editor>,
+    committed_editors: BTreeMap<String, input::Editor>,
     viewport: (f32, f32),
     error: Option<String>,
     attempts: u64,
@@ -699,6 +720,8 @@ impl Session {
             current: fallback,
             current_nodes: vec![],
             viewport: (1200., 800.),
+            editors: BTreeMap::new(),
+            committed_editors: BTreeMap::new(),
             error: None,
             attempts: 0,
             watcher: None,
@@ -762,9 +785,25 @@ impl Session {
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
         let palette = Palette::parse(&palette_bytes)
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
-        let (generation, stores) =
+        let (generation, mut stores) =
             Generation::load(&self.root, &self.entry, &self.stores, self.attempts)?;
-        let (scene, nodes) = generation.materialize(&stores, &palette, self.viewport)?;
+        let (mut scene, mut nodes) = generation.materialize(&stores, &palette, self.viewport)?;
+        if let Some(Value::Text(focused)) = stores.get("bead.focused")
+            && !focused.is_empty()
+            && !nodes
+                .iter()
+                .any(|n| &n.id == focused && (n.focusable || n.input.is_some()))
+        {
+            let next = nodes
+                .iter()
+                .find(|n| n.focusable || n.input.is_some())
+                .map_or(String::new(), |n| n.id.clone());
+            stores
+                .commit(BTreeMap::from([("bead.focused".into(), Value::Text(next))]))
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+            (scene, nodes) = generation.materialize(&stores, &palette, self.viewport)?;
+        }
+
         self.pending = Some(Pending {
             generation: Some(generation),
             stores,
@@ -792,16 +831,25 @@ impl Session {
             self.palette = palette;
             self.current = scene;
             self.current_nodes = nodes;
+            self.committed_editors = self.editors.clone();
         }
     }
     pub fn reject(&mut self, message: String) -> Scene {
         self.pending = None;
         self.error = Some(message);
+        self.editors = self.committed_editors.clone();
         self.error_scene()
     }
     pub fn error_scene(&self) -> Scene {
         let mut scene = self.current.clone();
         if let Some(error) = &self.error {
+            if scene.motion.as_ref().is_some_and(|m| !m.open) {
+                scene.primitives.clear();
+                scene.clips.clear();
+            }
+            scene.motion = None;
+            scene.opacity = 1.;
+            scene.offset.1 = 32.;
             let banner_y = (scene.bounds.h - 64. - 84.).max(16.);
             let banner_width = (scene.width - 32.).max(64.);
             scene.resource_revision = self.attempts;
@@ -902,35 +950,315 @@ impl Session {
         };
         self.stage_state(stores)
     }
-    pub fn key(&mut self, text: &str, backspace: bool) -> Result<Option<Scene>, Diagnostic> {
-        let Some(generation) = &self.generation else {
+    pub fn hover(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        if self.stores.get("bead.hovered").is_none() {
             return Ok(None);
+        }
+        let id = self
+            .hit(x, y, false)
+            .map_or(String::new(), |node| node.id.clone());
+        self.update(BTreeMap::from([("bead.hovered".into(), Value::Text(id))]))
+    }
+    pub fn focus_next(&mut self, backward: bool) -> Result<Option<Scene>, Diagnostic> {
+        let ids: Vec<_> = self
+            .current_nodes
+            .iter()
+            .filter(|n| n.focusable || n.input.is_some())
+            .map(|n| n.id.clone())
+            .collect();
+        if ids.is_empty() {
+            return Ok(None);
+        }
+        let current = self.stores.get("bead.focused");
+        let index = ids
+            .iter()
+            .position(|id| current == Some(&Value::Text(id.clone())));
+        let next = match index {
+            None => {
+                if backward {
+                    ids.len() - 1
+                } else {
+                    0
+                }
+            }
+            Some(i) => {
+                if backward {
+                    (i + ids.len() - 1) % ids.len()
+                } else {
+                    (i + 1) % ids.len()
+                }
+            }
         };
+        self.focus_id(&ids[next])
+    }
+    pub fn focus_id(&mut self, id: &str) -> Result<Option<Scene>, Diagnostic> {
+        if !self
+            .current_nodes
+            .iter()
+            .any(|node| node.id == id && (node.focusable || node.input.is_some()))
+        {
+            return Err(Diagnostic::new(
+                &self.entry,
+                1,
+                1,
+                "focus target is not visible/focusable",
+            ));
+        }
+        self.update(BTreeMap::from([(
+            "bead.focused".into(),
+            Value::Text(id.into()),
+        )]))
+    }
+    pub fn activate_focused(&mut self) -> Result<Option<Scene>, Diagnostic> {
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
             return Ok(None);
         };
-        let Some(id) = self
-            .current_nodes
-            .iter()
-            .find(|node| &node.id == focused)
-            .and_then(|node| node.input.clone())
-        else {
+        let Some(node) = self.current_nodes.iter().find(|n| &n.id == focused) else {
             return Ok(None);
         };
-        let Some(Value::Text(value)) = self.stores.get(&id) else {
+        let Some(action) = &node.action else {
             return Ok(None);
         };
-        let mut value = value.clone();
-        if backspace {
-            value.pop();
-        } else {
-            value.extend(text.chars().filter(|c| !c.is_control()));
-        }
-        let mut stores = self.stores.clone();
-        stores
-            .commit(BTreeMap::from([(id, Value::Text(value))]))
-            .map_err(|e| generation.script.error(e))?;
+        let generation = self.generation.as_ref().unwrap();
+        let stores = generation.script.action(
+            action,
+            &self.stores,
+            node.action_arg.clone().unwrap_or(Value::Bool(true)),
+        )?;
         self.stage_state(stores)
+    }
+    fn focused_input(&self) -> Option<(String, String, String)> {
+        let Value::Text(focused) = self.stores.get("bead.focused")? else {
+            return None;
+        };
+        let node = self.current_nodes.iter().find(|n| &n.id == focused)?;
+        let store = node.input.as_ref()?;
+        let Value::Text(text) = self.stores.get(store)? else {
+            return None;
+        };
+        Some((focused.clone(), store.clone(), text.clone()))
+    }
+    pub fn edit_key(
+        &mut self,
+        key: input::EditKey,
+        shift: bool,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        let Some((id, store, mut text)) = self.focused_input() else {
+            return Ok(None);
+        };
+        let editor = self
+            .editors
+            .entry(id)
+            .or_insert_with(|| input::Editor::new(text.len()));
+        editor.clamp(&text);
+        if matches!(key, input::EditKey::SelectAll) {
+            editor.anchor = 0;
+            editor.cursor = text.len();
+        } else if matches!(key, input::EditKey::Delete) {
+            let end = if editor.cursor == editor.anchor {
+                input::move_cursor(&text, editor.cursor, input::EditKey::Right)
+            } else {
+                editor.anchor
+            };
+            let (new, cursor) = input::replace(&text, editor.cursor, end, "");
+            text = new;
+            editor.cursor = cursor;
+            editor.anchor = cursor;
+        } else {
+            editor.cursor = input::move_cursor(&text, editor.cursor, key);
+            if !shift {
+                editor.anchor = editor.cursor;
+            }
+        }
+        self.update(BTreeMap::from([(store, Value::Text(text))]))?
+            .map_or_else(|| self.relayout(), |scene| Ok(Some(scene)))
+    }
+    pub fn ime(
+        &mut self,
+        preedit: String,
+        commit: Option<String>,
+        before: u32,
+        after: u32,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        let Some((id, store, mut text)) = self.focused_input() else {
+            return Ok(None);
+        };
+        let editor = self
+            .editors
+            .entry(id)
+            .or_insert_with(|| input::Editor::new(text.len()));
+        editor.clamp(&text);
+        let start = editor.cursor.saturating_sub(before as usize);
+        let end = (editor.cursor + after as usize).min(text.len());
+        if !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+            return Err(Diagnostic::new(
+                &self.entry,
+                1,
+                1,
+                "IME deletion must use UTF-8 boundaries",
+            ));
+        }
+        if before > 0 || after > 0 {
+            let (new, cursor) = input::replace(&text, start, end, "");
+            text = new;
+            editor.cursor = cursor;
+            editor.anchor = cursor;
+        }
+        if let Some(commit) = commit {
+            let (new, cursor) = input::replace(&text, editor.cursor, editor.anchor, &commit);
+            text = new;
+            editor.cursor = cursor;
+            editor.anchor = cursor;
+        }
+        editor.preedit = preedit;
+        self.update(BTreeMap::from([(store, Value::Text(text))]))?
+            .map_or_else(|| self.relayout(), |scene| Ok(Some(scene)))
+    }
+    pub fn decorate_inputs(&self, scene: &mut Scene) -> Result<(), Diagnostic> {
+        let nodes = self
+            .pending
+            .as_ref()
+            .map_or(&self.current_nodes, |p| &p.nodes);
+        let stores = self.pending.as_ref().map_or(&self.stores, |p| &p.stores);
+        let Some(Value::Text(focused)) = stores.get("bead.focused") else {
+            return Ok(());
+        };
+        let Some(node) = nodes.iter().find(|n| &n.id == focused && n.input.is_some()) else {
+            return Ok(());
+        };
+        let Some(Value::Text(value)) = stores.get(node.input.as_ref().unwrap()) else {
+            return Ok(());
+        };
+        let r = rect(&node.draw);
+        let editor = self.editors.get(focused);
+        let cursor = input::boundaries(value)
+            .into_iter()
+            .rfind(|p| *p <= editor.map_or(value.len(), |e| e.cursor))
+            .unwrap_or(0);
+        let anchor = input::boundaries(value)
+            .into_iter()
+            .rfind(|p| *p <= editor.map_or(cursor, |e| e.anchor))
+            .unwrap_or(0);
+        let preedit = editor.map_or("", |e| e.preedit.as_str());
+        let text_index=scene.primitives.iter().position(|p|matches!(p,Primitive::Text{rect,..}if rect.x>=r.x&&rect.y>=r.y&&rect.x<r.x+r.w&&rect.y<r.y+r.h));
+        let Some(index) = text_index else {
+            return Ok(());
+        };
+        let Primitive::Text {
+            rect: area,
+            text,
+            family,
+            size,
+            ..
+        } = &scene.primitives[index]
+        else {
+            return Ok(());
+        };
+        let area = *area;
+        let family = family.clone();
+        let size = *size;
+        let _ = text;
+        let measure = |pos| {
+            bead_render::text_boundary_x(scene, value, pos, &family, size, area.w)
+                .map_err(|e| node.diagnostic(e))
+        };
+        let x = measure(cursor)?;
+        let end = measure(anchor)?;
+        if cursor != anchor {
+            let highlight = Primitive::Rounded {
+                rect: Rect::new(
+                    area.x + x.min(end),
+                    area.y,
+                    (x - end).abs().max(1.),
+                    size * 1.4,
+                ),
+                radius: 1.,
+                fill: {
+                    let mut c = self.palette.get("primary").unwrap_or([120, 120, 120, 255]);
+                    c[3] = 70;
+                    c
+                },
+                border: None,
+            };
+            // Insert behind the text; move clip indices along with the command.
+            scene.primitives.insert(index, highlight);
+            scene.clips = scene
+                .clips
+                .iter()
+                .map(|(i, r)| (if *i >= index { i + 1 } else { *i }, *r))
+                .collect();
+        }
+        let text_index = if cursor != anchor { index + 1 } else { index };
+        if !preedit.is_empty()
+            && let Primitive::Text { text, .. } = &mut scene.primitives[text_index]
+        {
+            *text = format!("{}{}{}", &value[..cursor], preedit, &value[cursor..]);
+        }
+        scene.primitives.push(Primitive::Rounded {
+            rect: Rect::new(area.x + x, area.y, 1., size * 1.4),
+            radius: 0.,
+            fill: self
+                .palette
+                .get("onSurface")
+                .unwrap_or([220, 220, 220, 255]),
+            border: None,
+        });
+        Ok(())
+    }
+    pub fn pointer_cursor(&self, x: f32, y: f32) -> &'static str {
+        self.hit(x, y, false).map_or("default", |n| {
+            if n.input.is_some() { "text" } else { "pointer" }
+        })
+    }
+    pub fn selected_text(&self) -> Option<String> {
+        let (id, _, text) = self.focused_input()?;
+        let editor = self.editors.get(&id)?;
+        let points = input::boundaries(&text);
+        let cursor = points
+            .iter()
+            .copied()
+            .rfind(|p| *p <= editor.cursor)
+            .unwrap_or(0);
+        let anchor = points
+            .into_iter()
+            .rfind(|p| *p <= editor.anchor)
+            .unwrap_or(0);
+        (cursor != anchor).then(|| text[cursor.min(anchor)..cursor.max(anchor)].to_owned())
+    }
+    pub fn surrounding_text(&self) -> Option<(String, i32, i32)> {
+        let (id, _, text) = self.focused_input()?;
+        let editor = self.editors.get(&id);
+        Some((
+            text.clone(),
+            editor.map_or(text.len(), |e| e.cursor).min(text.len()) as i32,
+            editor.map_or(text.len(), |e| e.anchor).min(text.len()) as i32,
+        ))
+    }
+    pub fn key(&mut self, text: &str, backspace: bool) -> Result<Option<Scene>, Diagnostic> {
+        let Some((id, store, value)) = self.focused_input() else {
+            return Ok(None);
+        };
+        let editor = self
+            .editors
+            .entry(id)
+            .or_insert_with(|| input::Editor::new(value.len()));
+        editor.clamp(&value);
+        let anchor = if backspace && editor.cursor == editor.anchor {
+            input::move_cursor(&value, editor.cursor, input::EditKey::Left)
+        } else {
+            editor.anchor
+        };
+        let insert: String = text.chars().filter(|c| !c.is_control()).collect();
+        let (value, cursor) = input::replace(
+            &value,
+            editor.cursor,
+            anchor,
+            if backspace { "" } else { &insert },
+        );
+        editor.cursor = cursor;
+        editor.anchor = cursor;
+        editor.preedit.clear();
+        self.update(BTreeMap::from([(store, Value::Text(value))]))
     }
     fn stage_state(&mut self, stores: Stores) -> Result<Option<Scene>, Diagnostic> {
         if stores.revision() == self.stores.revision() {
@@ -939,7 +1267,25 @@ impl Session {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let (mut scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+        let mut stores = stores;
+        let (mut scene, mut nodes) =
+            generation.materialize(&stores, &self.palette, self.viewport)?;
+        if let Some(Value::Text(focused)) = stores.get("bead.focused")
+            && !focused.is_empty()
+            && !nodes
+                .iter()
+                .any(|n| &n.id == focused && (n.focusable || n.input.is_some()))
+        {
+            let next = nodes
+                .iter()
+                .find(|n| n.focusable || n.input.is_some())
+                .map_or(String::new(), |n| n.id.clone());
+            stores
+                .commit(BTreeMap::from([("bead.focused".into(), Value::Text(next))]))
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+            (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+        }
+
         scene.font_files = self.current.font_files.clone();
         if self.error.is_some() {
             let old = self.current.clone();
@@ -1026,6 +1372,62 @@ impl Session {
     }
     pub fn asset_snapshot(&self, path: &Path) -> Option<std::sync::Arc<[u8]>> {
         self.current.asset_data.get(path).cloned()
+    }
+    pub fn accessibility_tree(&self) -> accesskit::TreeUpdate {
+        accessibility::tree(&self.current_nodes, &self.stores)
+    }
+    pub fn accessibility_action(
+        &mut self,
+        target: u64,
+        action: &str,
+        value: Option<String>,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        let node = self
+            .current_nodes
+            .iter()
+            .find(|n| accessibility::id(&n.id).0 == target)
+            .ok_or_else(|| {
+                Diagnostic::new(&self.entry, 1, 1, "accessibility target unavailable")
+            })?;
+        let id = node.id.clone();
+        let input = node.input.clone();
+        match action {
+            "focus" => self.focus_id(&id),
+            "click" => {
+                let node = self.current_nodes.iter().find(|n| n.id == id).unwrap();
+                let action = node.action.clone();
+                let arg = node.action_arg.clone().unwrap_or(Value::Bool(true));
+                let mut stores = self.stores.clone();
+                stores
+                    .commit(BTreeMap::from([("bead.focused".into(), Value::Text(id))]))
+                    .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+                if let Some(action) = action {
+                    stores = self
+                        .generation
+                        .as_ref()
+                        .unwrap()
+                        .script
+                        .action(&action, &stores, arg)?;
+                }
+                self.stage_state(stores)
+            }
+            "set-value" => {
+                let store = input
+                    .ok_or_else(|| Diagnostic::new(&self.entry, 1, 1, "target is not editable"))?;
+                self.update(BTreeMap::from([(
+                    store,
+                    Value::Text(value.ok_or_else(|| {
+                        Diagnostic::new(&self.entry, 1, 1, "set-value requires text")
+                    })?),
+                )]))
+            }
+            _ => Err(Diagnostic::new(
+                &self.entry,
+                1,
+                1,
+                "unsupported accessibility action",
+            )),
+        }
     }
     pub fn resource_counts(&self) -> String {
         format!(

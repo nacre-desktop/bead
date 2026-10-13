@@ -8,7 +8,19 @@ selected QML regions (full browser1310; parity limitations in FEASIBILITY).
 Matched60s first/later GL102.81/88.79MiB total vsQML193.77/192.75; CPU0both.
 27tests pass. GateB100reload + keyed-mutation proofs complete: GL+1.08MiB/FD17stable;
 CPU+.40MiB/FD13stable; owned counts fixed. Memory tolerance2MiB, not exactzero.
-Current milestone animation/input/focus/basicIME/AccessKit, thenFeature5.
+Input/focus/animation/basicIME/AccessKit milestone implemented and validated.
+Current milestone Feature5 native compositor backends (neutral draft notyetcompiled).
+31tests pass, clippy passes; keyboard/editor/selection, focus fallback, retained
+ease/spring motion, text-input-v3 binding and AccessKit Unix bridge implemented.
+Private animatedGL104.69MiB total/2.38%CPU, syntheticpresent8.343/9.327ms vs
+QML201.48MiB/4.97%,8.330/9.412. Native keyboard proof passes both nested compositors; virtual keyboard needs
+300ms keymap/focus settling. PrivateATSPi status activation succeeds both; registry
+connection hits private dbus-broker/systemd integration issue, not yet screen-reader
+end-to-end proof. No realIME engine composition run. Platform100reloadGL FD22
+stable,1layer/1GPUimage; total128.99→129.46MiB (+.48), latency108.20/125.33ms.
+Next publish this milestone, thenimplement Feature5 neutralinterface + GPLadapters,
+reconnect/fixtures/hotplug and nestedindicator/title/latency/idle proofs.
+IME-engine/screen-reader integration gaps remain honest limitations, not doneclaims.
 Choose Luau unless concrete evidence rejects it; no intermediate choice wait.
 Nice10/Cargo-j2, nested only. Stop afterFeature5; morning summary will replace
 this progress note. Deferred baking/shader-cache work stays deferred.
@@ -32,7 +44,7 @@ Color emoji confirmed renderer log, not just mapped files. No further live appro
 Cold UI startup314.89ms vs QML228.35; later108.01 vs162.31ms.
 Earlier nested GL102.43ms callback p99 remains recorded; do not hide it.
 
-Next: port real launcher sidebar/grid in Luau, with GPL shell catalog data;
+Next: Feature5 neutraloutputs/workspaces/windows/focus/event/actions/capabilities;
 100reload bounded-resource test + keyed mutation state test; animation/input/focus,
 basic IME/AccessKit; then neutral backends + GPL adapters/events/actions/reconnect
 and nested proofs. Commit/push + short FEASIBILITY entry each milestone.

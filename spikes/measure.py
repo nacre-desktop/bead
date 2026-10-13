@@ -71,8 +71,9 @@ def drm_memory(pid):
 def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
     label=f'{mode}-{layout}-{run}'
     qml=mode.startswith('qml')
-    ui=mode.startswith('ui-') or mode=='qml-ui'
-    env.update({'BEAD_IDLE':'1' if ui else '0','BEAD_START_OPEN':'1','BEAD_CONTENT_SIZE':'1' if layout=='content' else '0','BEAD_LAYER':'1','BEAD_PALETTE_PATH':str(ROOT/'spikes/palette-stress.json'),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
+    ui=mode.startswith(('ui-','anim-')) or mode=='qml-ui'
+    animated=mode.startswith('anim-') or os.environ.get('BEAD_ANIMATION')=='1'
+    env.update({'BEAD_IDLE':'1' if ui and not animated else '0','BEAD_START_OPEN':'1','BEAD_CONTENT_SIZE':'1' if layout=='content' else '0','BEAD_LAYER':'1','BEAD_PALETTE_PATH':str(ROOT/'spikes/palette-stress.json'),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
     # Primary variants use their own callback statistics with tracing disabled.
     # Qt is a startup control: trace is required for the same first-frame marker.
     env['WAYLAND_DEBUG']='1' if qml and not os.environ.get('BEAD_QML_PROBE') else '0'
@@ -80,9 +81,10 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
         command=['quickshell','--path',os.environ.get('BEAD_QML_PANEL',str(ROOT/('spikes/panel-reload.qml' if ui else 'spikes/panel.qml')))]
         if os.environ.get('BEAD_QML_PROBE'):env['LD_PRELOAD']=os.environ['BEAD_QML_PROBE']
     else:
-        renderer=mode.removeprefix('ui-').replace('-memory','').removesuffix('-3')
+        renderer=mode.removeprefix('ui-').removeprefix('anim-').replace('-memory','').removesuffix('-3')
         command=[str(target/'nacre-shell'),'--animate','--start-open','--renderer',renderer,'--palette',str(ROOT/'spikes/palette-stress.json'),'--namespace','bead-dev-retained']
-        if ui:command+=['--ui',os.environ.get('BEAD_UI_ENTRY','ui/main.json')];command.remove('--animate')
+        if ui:command+=['--ui',os.environ.get('BEAD_UI_ENTRY','ui/main.luau')]
+        if ui and not animated:command.remove('--animate')
         if os.environ.get('BEAD_CATALOG'):command+=['--catalog',os.environ['BEAD_CATALOG']]
         if '-memory' in mode:command+=['--memory-usage']
         if mode.endswith('-3'):command+=['--surfaces','3']
@@ -186,6 +188,51 @@ def sample_reload(env,raw,target,renderer):
         finally:stop(client);reader.join(timeout=5)
         if client.returncode!=0:raise RuntimeError(f'reload client exit {client.returncode}')
 
+def sample_input(env,raw,target):
+    with tempfile.TemporaryDirectory(prefix='bead-input-') as directory:
+        bundle=pathlib.Path(directory);shutil.copytree(ROOT/'shell',bundle/'shell')
+        command=[str(target/'nacre-shell'),'--ui','ui/main.luau','--catalog',str(ROOT/'spikes/launcher-fixture.json'),'--renderer','auto','--namespace','bead-dev-input','--test-keyboard','--trace-state','--palette',str(ROOT/'spikes/palette-stress.json')]
+        if env.get('HYPRLAND_INSTANCE_SIGNATURE'):command+=['--output','bead-bench']
+        log=[];condition=threading.Condition();path=raw/'input-proof.log'
+        client=subprocess.Popen(command,cwd=bundle,env={**env,"WAYLAND_DEBUG":"1"},stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,text=True,bufsize=1)
+        def drain():
+            with path.open('w') as stream:
+                for line in client.stdout:
+                    stream.write(line);stream.flush()
+                    with condition:log.append(line.rstrip());condition.notify_all()
+        reader=threading.Thread(target=drain);reader.start()
+        def wait(marker,offset=0):
+            deadline=time.monotonic()+20
+            with condition:
+                while True:
+                    found=next((l for l in log[offset:] if marker in l),None)
+                    if found:return found
+                    if client.poll() is not None or time.monotonic()>deadline:raise RuntimeError('Input proof missing '+marker)
+                    condition.wait(.05)
+        def state():return json.loads(next(l.split(' ',1)[1] for l in reversed(log) if l.startswith('UI_STATE ')))
+        def type_command(*args):subprocess.run(['wtype','-s','300',*args,'-s','300'],env=env,capture_output=True,text=True,check=True,timeout=10);time.sleep(.2)
+        try:
+            wait('UI_PRESENTED generation=1');time.sleep(.5)
+            if env.get('HYPRLAND_INSTANCE_SIGNATURE'):subprocess.run(['hyprctl','eval','hl.dispatch(hl.dsp.focus({monitor="bead-bench"}))'],env=env,capture_output=True,check=True,timeout=5)
+            type_command('-M','shift','-k','Tab','-m','shift');assert state()['bead.focused'].endswith('.search')
+            type_command('saved');assert state()['launcher.search.text']=='saved'
+            original=(bundle/'shell/ui/main.luau').read_text();offset=len(log)
+            (bundle/'shell/ui/main.luau').write_text(original.replace('text="Applications"','text="Applications · reloaded"'))
+            wait('UI_COMMIT',offset);assert state()['launcher.search.text']=='saved' and state()['bead.focused'].endswith('.search')
+            type_command('-M','ctrl','-k','a','-m','ctrl','after');assert state()['launcher.search.text']=='after'
+            type_command('-M','ctrl','-k','a','-k','c','-m','ctrl')
+            type_command('-M','ctrl','-k','a','-m','ctrl','x');type_command('-M','ctrl','-k','a','-k','v','-m','ctrl');assert state()['launcher.search.text']=='after'
+            offset=len(log);(bundle/'shell/ui/main.luau').write_text('return broken source')
+            wait('UI_ERROR',offset);type_command('-k','BackSpace');assert state()['launcher.search.text']=='afte'
+            offset=len(log);(bundle/'shell/ui/main.luau').write_text(original);wait('UI_COMMIT',offset);assert state()['launcher.search.text']=='afte'
+            # Activate the bridge only on this task's private D-Bus.
+            activation=subprocess.run(['gdbus','call','--session','--dest','org.a11y.Bus','--object-path','/org/a11y/bus','--method','org.freedesktop.DBus.Properties.Set','org.a11y.Status','IsEnabled','<true>'],env=env,capture_output=True,text=True,timeout=5)
+            if activation.returncode:print('AT-SPI private activation error:',activation.stderr[:250],flush=True)
+            print(f'INPUT_PROOF native_keyboard=true focus/type/select-all/backspace/reload/error-recovery=true text_input_v3={any("IME_PROTOCOL" in l for l in log)} atspi_activation_exit={activation.returncode}',flush=True)
+            subprocess.run(['grim',str(raw/'input-proof.png')],env=env,capture_output=True,timeout=5)
+        finally:stop(client);reader.join(timeout=5)
+        if client.returncode!=0:raise RuntimeError('Input proof did not stop cleanly')
+
 def sample_gate_b(env, raw, target, renderer):
     with tempfile.TemporaryDirectory(prefix='bead-gate-b-') as directory:
         bundle=pathlib.Path(directory);shutil.copytree(ROOT/'shell',bundle/'shell')
@@ -211,7 +258,10 @@ def sample_gate_b(env, raw, target, renderer):
                     condition.wait(.05)
         def counts():
             line=next(line for line in reversed(log) if line.startswith('UI_RESOURCES'))
-            return dict((key,int(value)) for key,value in re.findall(r'(\w+)=(\d+)',line))
+            values=dict((key,int(value)) for key,value in re.findall(r'(\w+)=(\d+)',line))
+            platform=next((l for l in reversed(log) if l.startswith('UI_PLATFORM')), '')
+            values.update(('platform_'+k,int(v)) for k,v in re.findall(r'(\w+)=(\d+)',platform))
+            return values
         def mem():
             values=memory(client.pid);drm=drm_memory(client.pid)
             return values['pss_mib']+sum((drm or {}).values()),values['pss_mib'],sum((drm or {}).values())
@@ -436,6 +486,9 @@ def main():
                 return 0
             if args.qml_reload_test:
                 sample_qml_reload(env,raw);return 0
+            if args.reload_test and os.environ.get('BEAD_INPUT_TEST'):
+                target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
+                sample_input(env,raw,target);return 0
             if args.reload_test and os.environ.get('BEAD_GATE_B'):
                 target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
                 sample_gate_b(env,raw,target,args.renderer);return 0

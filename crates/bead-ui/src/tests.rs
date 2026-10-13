@@ -51,6 +51,7 @@ impl Fixture {
     pub(super) fn session(&self) -> Session {
         let fallback = Scene {
             opacity: 1.,
+            motion: None,
             resource_revision: 0,
             asset_data: Default::default(),
             clips: Default::default(),

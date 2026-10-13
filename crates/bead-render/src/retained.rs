@@ -233,6 +233,7 @@ mod tests {
         Scene {
             font_files: vec![],
             opacity: 1.,
+            motion: None,
             resource_revision: 0,
             asset_data: Default::default(),
             clips: Default::default(),

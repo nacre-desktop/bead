@@ -36,6 +36,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                 options.content_size = true;
                 options.interactive = true;
             }
+            "--test-keyboard" => options.test_keyboard = true,
             "--trace-state" => options.trace_state = true,
             "--memory-usage" => options.memory_usage = true,
             "--surfaces" => {
@@ -79,6 +80,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut scene = if ui.is_some() {
         Scene {
             opacity: 1.,
+            motion: None,
             resource_revision: 0,
             asset_data: Default::default(),
             clips: Default::default(),
@@ -103,6 +105,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         Scene {
             opacity: 1.,
+            motion: None,
             resource_revision: 0,
             asset_data: Default::default(),
             clips: Default::default(),
@@ -318,6 +321,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
     }
     Ok(Scene {
         opacity: 1.,
+        motion: None,
         resource_revision: 0,
         asset_data: Default::default(),
         clips: Default::default(),

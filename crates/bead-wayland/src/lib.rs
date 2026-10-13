@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
+mod accessibility;
 use bead_render::{
     Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
 };
@@ -41,6 +42,14 @@ use wayland_client::{
     globals::registry_queue_init,
     protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
 };
+use wayland_protocols::wp::cursor_shape::v1::client::{
+    wp_cursor_shape_device_v1::{self, WpCursorShapeDeviceV1},
+    wp_cursor_shape_manager_v1::WpCursorShapeManagerV1,
+};
+use wayland_protocols::wp::text_input::zv3::client::{
+    zwp_text_input_manager_v3::ZwpTextInputManagerV3,
+    zwp_text_input_v3::{self, ZwpTextInputV3},
+};
 use wayland_protocols::wp::{
     fractional_scale::v1::client::{
         wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1,
@@ -56,10 +65,39 @@ use wayland_protocols::wp::{
 pub enum UiEvent {
     Reload,
     Relayout,
+    Hover {
+        x: f32,
+        y: f32,
+    },
+    Command {
+        command: String,
+        shift: bool,
+    },
+    Accessibility {
+        target: u64,
+        action: String,
+        value: Option<String>,
+    },
+    Ime {
+        preedit: String,
+        commit: Option<String>,
+        before: u32,
+        after: u32,
+    },
     WatchError(String),
-    Click { x: f32, y: f32 },
-    Scroll { x: f32, y: f32, delta: f64 },
-    Key { text: String, backspace: bool },
+    Click {
+        x: f32,
+        y: f32,
+    },
+    Scroll {
+        x: f32,
+        y: f32,
+        delta: f64,
+    },
+    Key {
+        text: String,
+        backspace: bool,
+    },
 }
 /// Candidate state is committed only after render resources have been prepared.
 #[cfg(feature = "gpu")]
@@ -74,6 +112,15 @@ impl std::fmt::Display for GpuUnavailable {
 #[cfg(feature = "gpu")]
 impl Error for GpuUnavailable {}
 pub trait SceneSource {
+    fn accessibility_tree(&self) -> Option<accesskit::TreeUpdate> {
+        None
+    }
+    fn pointer_cursor(&self, _x: f32, _y: f32) -> &str {
+        "default"
+    }
+    fn surrounding_text(&self) -> Option<(String, i32, i32)> {
+        None
+    }
     fn viewport(&mut self, _width: u32, _height: u32) -> bool {
         false
     }
@@ -107,6 +154,7 @@ pub struct Options {
     pub memory_usage: bool,
     pub surface_count: usize,
     pub interactive: bool,
+    pub test_keyboard: bool,
     pub trace_state: bool,
 }
 impl Default for Options {
@@ -127,6 +175,7 @@ impl Default for Options {
             memory_usage: false,
             surface_count: 1,
             interactive: false,
+            test_keyboard: false,
             trace_state: false,
         }
     }
@@ -195,6 +244,16 @@ struct App {
     keyboard: Option<wl_keyboard::WlKeyboard>,
     pointer: Option<wl_pointer::WlPointer>,
     keyboard_surface: Option<wl_surface::WlSurface>,
+    modifiers: Modifiers,
+    accessibility: Option<accessibility::Bridge>,
+    cursor_manager: Option<WpCursorShapeManagerV1>,
+    cursor_device: Option<WpCursorShapeDeviceV1>,
+    cursor_enter_serial: u32,
+    text_input_manager: Option<ZwpTextInputManagerV3>,
+    text_input: Option<ZwpTextInputV3>,
+    ime_surface: Option<wl_surface::WlSurface>,
+    ime_pending: (String, Option<String>, u32, u32),
+    ime_last: Option<(String, i32, i32)>,
     reload_pending: bool,
     ui_initialized: bool,
     qh: QueueHandle<App>,
@@ -219,6 +278,7 @@ struct App {
     started: Instant,
     scene: Scene,
     renderer: Box<dyn Renderer>,
+    animations: bead_core::animation::Animations,
 }
 pub fn run(options: Options, scene: Scene) -> Result<(), Box<dyn Error>> {
     let renderer = bead_render::renderer(options.renderer)?;
@@ -260,6 +320,16 @@ pub fn run_runtime(
         keyboard: None,
         pointer: None,
         keyboard_surface: None,
+        modifiers: Modifiers::default(),
+        accessibility: None,
+        cursor_manager: globals.bind(&qh, 1..=1, ()).ok(),
+        cursor_device: None,
+        cursor_enter_serial: 0,
+        text_input_manager: globals.bind(&qh, 1..=1, ()).ok(),
+        text_input: None,
+        ime_surface: None,
+        ime_pending: Default::default(),
+        ime_last: None,
         reload_pending: false,
         ui_initialized: false,
         qh: qh.clone(),
@@ -284,6 +354,7 @@ pub fn run_runtime(
         started,
         scene,
         renderer,
+        animations: Default::default(),
     };
     println!(
         "START pid={} namespace={} damage={} direct_shm=true buffers_max=3",
@@ -299,6 +370,15 @@ pub fn run_runtime(
                 TimeoutAction::Drop
             },
         )?;
+    }
+    if app.runtime.is_some() {
+        let (sender, receiver) = calloop::channel::channel::<UiEvent>();
+        loop_.handle().insert_source(receiver, |event, _, app| {
+            if let calloop::channel::Event::Msg(event) = event {
+                app.ui(event);
+            }
+        })?;
+        app.accessibility = Some(accessibility::Bridge::new(sender));
     }
     if let Some(runtime) = &mut app.runtime {
         let (sender, channel) = calloop::channel::channel::<Result<(), String>>();
@@ -441,6 +521,11 @@ impl App {
         match staged {
             Ok(Some(scene)) => {
                 runtime.commit();
+                if let (Some(bridge), Some(tree)) =
+                    (&mut self.accessibility, runtime.accessibility_tree())
+                {
+                    bridge.update(tree);
+                }
                 if self.options.trace_state {
                     println!("UI_STATE {}", runtime.state_summary());
                 }
@@ -459,6 +544,12 @@ impl App {
                         }
                     }
                 }
+                println!(
+                    "UI_PLATFORM a11y_adapters={} ime_objects={} ui_channels={}",
+                    usize::from(self.accessibility.is_some()),
+                    usize::from(self.text_input.is_some()),
+                    if self.accessibility.is_some() { 2 } else { 1 }
+                );
                 let (layers, images) = self.renderer.resource_counts();
                 println!(
                     "UI_RESOURCES {} layers={} gpu_images={} surfaces={}",
@@ -484,6 +575,7 @@ impl App {
             }
         }
         self.runtime = Some(runtime);
+        self.sync_ime();
         let qh = self.qh.clone();
         for i in 0..self.surfaces.len() {
             self.draw(i, &qh);
@@ -538,6 +630,49 @@ impl App {
             }
         }
         Ok(())
+    }
+    fn sync_ime(&mut self) {
+        let Some(input) = &self.text_input else {
+            return;
+        };
+        if self.ime_surface.is_none() {
+            return;
+        }
+        let current = self.runtime.as_ref().and_then(|r| r.surrounding_text());
+        if current == self.ime_last {
+            return;
+        }
+        if let Some((text, cursor, anchor)) = &current {
+            input.enable();
+            input.set_content_type(
+                zwp_text_input_v3::ContentHint::None,
+                zwp_text_input_v3::ContentPurpose::Normal,
+            );
+            let mut start = (*cursor as usize).saturating_sub(2000);
+            while !text.is_char_boundary(start) {
+                start += 1;
+            }
+            let mut end = (start + 4000).min(text.len());
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            let cursor = (*cursor as usize).clamp(start, end) - start;
+            let mut anchor = (*anchor as usize).clamp(start, end);
+            while !text.is_char_boundary(anchor) {
+                anchor -= 1;
+            }
+            input.set_surrounding_text(
+                text[start..end].to_owned(),
+                cursor as i32,
+                (anchor - start) as i32,
+            );
+            input.set_cursor_rectangle(32, 32, 1, 24);
+            input.commit();
+        } else {
+            input.disable();
+            input.commit();
+        }
+        self.ime_last = current;
     }
     fn fail(&mut self, error: impl std::fmt::Display) {
         self.failure = Some(error.to_string());
@@ -600,7 +735,9 @@ impl App {
                 layer.set_size(0, if self.options.panel { 0 } else { 32 });
             }
             layer.set_exclusive_zone(if self.options.panel { -1 } else { 0 });
-            layer.set_keyboard_interactivity(if self.options.interactive {
+            layer.set_keyboard_interactivity(if self.options.test_keyboard {
+                KeyboardInteractivity::Exclusive
+            } else if self.options.interactive {
                 KeyboardInteractivity::OnDemand
             } else {
                 KeyboardInteractivity::None
@@ -669,6 +806,33 @@ impl App {
                 return Ok(());
             }
             s.redraw = false;
+            if let Some(motion) = &self.scene.motion {
+                let now = self.started.elapsed().as_secs_f64();
+                let open = if self.options.animate {
+                    ((now - 3.).max(0.) % 2.) >= 1. || now < 3.
+                } else {
+                    motion.open
+                };
+                self.animations.target(
+                    &motion.id,
+                    if open { 1. } else { 0. },
+                    now,
+                    if self.options.animate {
+                        1.
+                    } else {
+                        motion.duration
+                    },
+                    if motion.spring {
+                        bead_core::animation::Curve::Spring
+                    } else {
+                        bead_core::animation::Curve::EaseOut
+                    },
+                );
+                let progress = self.animations.value(&motion.id, now).unwrap().0;
+                self.scene.opacity = progress;
+                self.scene.offset.1 = 32. - (1. - progress) * self.scene.bounds.h;
+            }
+
             let scale = s.scale120 as f32 / 120.;
             let (w, h, stride, size) = buffer_dimensions(s.width, s.height, s.scale120)?;
             if !self.options.panel {
@@ -1115,7 +1279,10 @@ impl CompositorHandler for App {
                 .is_some_and(|secs| self.started.elapsed().as_secs_f64() >= secs)
             {
                 self.signal.stop();
-            } else if self.options.animate || s.redraw {
+            } else if self.options.animate
+                || s.redraw
+                || self.animations.active(self.started.elapsed().as_secs_f64())
+            {
                 self.draw(i, qh);
             }
         }
@@ -1269,6 +1436,16 @@ impl LayerShellHandler for App {
             s.width = config.new_size.0;
             s.height = config.new_size.1;
             s.configured = true;
+            if let Some(bridge) = &mut self.accessibility {
+                let bounds = accesskit::Rect {
+                    x0: 0.,
+                    y0: 0.,
+                    x1: f64::from(s.width),
+                    y1: f64::from(s.height),
+                };
+                bridge.adapter.set_root_window_bounds(bounds, bounds);
+            }
+
             // One shared view fits the smallest output; anonymous layout boxes never own state.
             let viewport = self
                 .surfaces
@@ -1323,6 +1500,13 @@ impl SeatHandler for App {
         }
         match capability {
             Capability::Keyboard if self.keyboard.is_none() => {
+                if self.text_input.is_none()
+                    && let Some(manager) = &self.text_input_manager
+                {
+                    self.text_input = Some(manager.get_text_input(&seat, qh, ()));
+                    println!("IME_PROTOCOL text_input_v3=true");
+                }
+
                 match self.seat.get_keyboard(qh, &seat, None) {
                     Ok(k) => self.keyboard = Some(k),
                     Err(e) => self.fail(e),
@@ -1330,7 +1514,12 @@ impl SeatHandler for App {
             }
             Capability::Pointer if self.pointer.is_none() => match self.seat.get_pointer(qh, &seat)
             {
-                Ok(p) => self.pointer = Some(p),
+                Ok(p) => {
+                    if let Some(manager) = &self.cursor_manager {
+                        self.cursor_device = Some(manager.get_pointer(&p, qh, ()));
+                    }
+                    self.pointer = Some(p)
+                }
                 Err(e) => self.fail(e),
             },
             _ => {}
@@ -1381,7 +1570,24 @@ impl PointerHandler for App {
             if !surface.configured {
                 continue;
             }
+            if let PointerEventKind::Enter { serial, .. } = event.kind {
+                self.cursor_enter_serial = serial;
+            }
+            if let Some(device) = &self.cursor_device
+                && self.cursor_enter_serial != 0
+            {
+                let shape = match self.runtime.as_ref().map(|r| r.pointer_cursor(x, y)) {
+                    Some("text") => wp_cursor_shape_device_v1::Shape::Text,
+                    Some("pointer") => wp_cursor_shape_device_v1::Shape::Pointer,
+                    _ => wp_cursor_shape_device_v1::Shape::Default,
+                };
+                device.set_shape(self.cursor_enter_serial, shape);
+            }
             match event.kind {
+                PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
+                    self.ui(UiEvent::Hover { x, y })
+                }
+                PointerEventKind::Leave { .. } => self.ui(UiEvent::Hover { x: -1., y: -1. }),
                 PointerEventKind::Press { button: 0x110, .. } => self.ui(UiEvent::Click { x, y }),
                 PointerEventKind::Axis { vertical, .. } => self.ui(UiEvent::Scroll {
                     x,
@@ -1404,7 +1610,13 @@ impl KeyboardHandler for App {
         _: &[u32],
         _: &[Keysym],
     ) {
+        if self.options.trace_state {
+            println!("INPUT_ENTER surface={}", surface.id().protocol_id());
+        }
         self.keyboard_surface = Some(surface.clone());
+        if let Some(bridge) = &mut self.accessibility {
+            bridge.adapter.update_window_focus_state(true);
+        }
     }
     fn leave(
         &mut self,
@@ -1415,6 +1627,9 @@ impl KeyboardHandler for App {
         _: u32,
     ) {
         self.keyboard_surface = None;
+        if let Some(bridge) = &mut self.accessibility {
+            bridge.adapter.update_window_focus_state(false);
+        }
     }
     fn press_key(
         &mut self,
@@ -1424,15 +1639,45 @@ impl KeyboardHandler for App {
         _: u32,
         event: KeyEvent,
     ) {
+        if self.options.trace_state {
+            println!(
+                "INPUT_KEY sym={:?} focused_surface={}",
+                event.keysym,
+                self.keyboard_surface.is_some()
+            );
+        }
         if self.keyboard_surface.as_ref().is_some_and(|surface| {
             self.surfaces
                 .iter()
                 .any(|s| s.layer.wl_surface() == surface)
         }) {
-            self.ui(UiEvent::Key {
-                text: event.utf8.unwrap_or_default(),
-                backspace: event.keysym == Keysym::BackSpace,
-            });
+            let command = match event.keysym {
+                Keysym::Tab | Keysym::ISO_Left_Tab => Some("tab"),
+                Keysym::Return | Keysym::KP_Enter => Some("enter"),
+                Keysym::Left => Some("left"),
+                Keysym::Right => Some("right"),
+                Keysym::Up => Some("up"),
+                Keysym::Down => Some("down"),
+                Keysym::Home => Some("home"),
+                Keysym::End => Some("end"),
+                Keysym::Delete => Some("delete"),
+                Keysym::a if self.modifiers.ctrl => Some("select-all"),
+                Keysym::c if self.modifiers.ctrl => Some("clipboard-copy"),
+                Keysym::x if self.modifiers.ctrl => Some("clipboard-cut"),
+                Keysym::v if self.modifiers.ctrl => Some("clipboard-paste"),
+                _ => None,
+            };
+            if let Some(command) = command {
+                self.ui(UiEvent::Command {
+                    command: command.into(),
+                    shift: self.modifiers.shift || event.keysym == Keysym::ISO_Left_Tab,
+                });
+            } else if !self.modifiers.ctrl && !self.modifiers.alt {
+                self.ui(UiEvent::Key {
+                    text: event.utf8.unwrap_or_default(),
+                    backspace: event.keysym == Keysym::BackSpace,
+                });
+            }
         }
     }
     fn repeat_key(
@@ -1460,10 +1705,11 @@ impl KeyboardHandler for App {
         _: &QueueHandle<Self>,
         _: &wl_keyboard::WlKeyboard,
         _: u32,
-        _: Modifiers,
+        modifiers: Modifiers,
         _: RawModifiers,
         _: u32,
     ) {
+        self.modifiers = modifiers;
     }
 }
 
@@ -1494,3 +1740,51 @@ mod tests {
         }
     }
 }
+impl Dispatch<ZwpTextInputV3, ()> for App {
+    fn event(
+        state: &mut Self,
+        input: &ZwpTextInputV3,
+        event: zwp_text_input_v3::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            zwp_text_input_v3::Event::Enter { surface } => {
+                state.ime_surface = Some(surface);
+                state.sync_ime();
+            }
+            zwp_text_input_v3::Event::Leave { .. } => {
+                state.ime_surface = None;
+                input.disable();
+                input.commit();
+                state.ime_last = None;
+            }
+            zwp_text_input_v3::Event::PreeditString { text, .. } => {
+                state.ime_pending.0 = text.unwrap_or_default()
+            }
+            zwp_text_input_v3::Event::CommitString { text } => state.ime_pending.1 = text,
+            zwp_text_input_v3::Event::DeleteSurroundingText {
+                before_length,
+                after_length,
+            } => {
+                state.ime_pending.2 = before_length;
+                state.ime_pending.3 = after_length;
+            }
+            zwp_text_input_v3::Event::Done { .. } => {
+                let (preedit, commit, before, after) = std::mem::take(&mut state.ime_pending);
+                state.ui(UiEvent::Ime {
+                    preedit,
+                    commit,
+                    before,
+                    after,
+                });
+            }
+            _ => {}
+        }
+    }
+}
+wayland_client::delegate_noop!(App:ZwpTextInputManagerV3);
+
+wayland_client::delegate_noop!(App:WpCursorShapeManagerV1);
+wayland_client::delegate_noop!(App:WpCursorShapeDeviceV1);

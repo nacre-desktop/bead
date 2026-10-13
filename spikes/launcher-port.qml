@@ -19,10 +19,10 @@ ShellRoot {
             WlrLayershell.namespace:"bead-dev-launcher-qml"; WlrLayershell.keyboardFocus:WlrKeyboardFocus.None
             property real progress:1
             SequentialAnimation on progress {running:Quickshell.env("BEAD_IDLE")==="0";loops:Animation.Infinite
-                NumberAnimation {from:1;to:0;duration:1000;easing.type:Easing.InOutQuad}
-                NumberAnimation {from:0;to:1;duration:1000;easing.type:Easing.InOutQuad}
+                NumberAnimation {from:1;to:0;duration:1000;easing.type:Easing.OutCubic}
+                NumberAnimation {from:0;to:1;duration:1000;easing.type:Easing.OutCubic}
             }
-            Item {id:panel;x:32;y:32;width:1100;height:590;opacity:window.progress;layer.enabled:true
+            Item {id:panel;x:32;y:32-(1-window.progress)*654;width:1100;height:590;opacity:window.progress;layer.enabled:true
                 property string route:"home";property string selection:""
                 Rectangle {id:body;anchors.fill:parent;radius:12;color:c("surface");border.width:1;border.color:c("outlineVariant")}
                 MultiEffect {source:body;anchors.fill:body;z:-1;shadowEnabled:true;shadowColor:"#52000000";shadowBlur:1;blurMax:30;autoPaddingEnabled:true}

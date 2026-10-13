@@ -101,6 +101,9 @@ pub fn allowed_property(name: &str) -> bool {
         "icon",
         "path",
         "aria_label",
+        "open",
+        "transition",
+        "duration",
         "text_align",
         "position",
         "left",
@@ -137,6 +140,7 @@ pub struct ViewSpec {
     pub text_align: Option<bead_render::TextAlign>,
     pub hover_fill: Option<Json>,
     pub selected_fill: Option<Json>,
+    pub motion: Option<bead_render::Motion>,
     pub children: Vec<ViewSpec>,
     pub source: Source,
 }
@@ -458,7 +462,7 @@ impl ViewSpec {
                 return Err(source.error("Button requires text or content children"));
             }
             Ok(ViewSpec {
-                id,
+                id: id.clone(),
                 kind: raw.kind,
                 style,
                 text: content,
@@ -490,6 +494,16 @@ impl ViewSpec {
                     .map(|_| text(p, "path", "", source).map(PathBuf::from))
                     .transpose()?,
                 aria_label: text(p, "aria_label", "", source)?,
+                motion: if p.contains_key("open") {
+                    Some(bead_render::Motion {
+                        id: id.clone(),
+                        open: boolean(p, "open", true, source)?,
+                        duration: f64::from(number(p, "duration", 0.2, source)?),
+                        spring: text(p, "transition", "ease", source)? == "spring",
+                    })
+                } else {
+                    None
+                },
                 text_align: p
                     .get("text_align")
                     .map(|v| {
@@ -505,6 +519,19 @@ impl ViewSpec {
         }
         build(raw, resolve, "", 0, "view", &mut BTreeSet::new(), &mut 0)
     }
+}
+fn first_label(view: &ViewSpec) -> String {
+    view.children
+        .iter()
+        .find_map(|child| {
+            if !child.text.is_empty() {
+                Some(child.text.clone())
+            } else {
+                let label = first_label(child);
+                (!label.is_empty()).then_some(label)
+            }
+        })
+        .unwrap_or_default()
 }
 pub struct LaidOut {
     pub scene: Scene,
@@ -610,6 +637,7 @@ pub fn layout(
     let mut output = LaidOut {
         scene: Scene {
             opacity: 1.,
+            motion: None,
             resource_revision: revision,
             asset_data: Default::default(),
             clips: Default::default(),
@@ -622,6 +650,7 @@ pub fn layout(
         },
         nodes: vec![],
     };
+    output.scene.motion = view.motion.clone();
     let hover = resolve("bead.hovered")
         .ok()
         .and_then(|v| {
@@ -782,6 +811,15 @@ pub fn layout(
                 scroll_store: inherited_scroll.map(str::to_owned),
                 focusable: view.action.is_some() || view.input.is_some(),
                 clip,
+                label: if !view.aria_label.is_empty() {
+                    view.aria_label.clone()
+                } else if !view.text.is_empty() {
+                    view.text.clone()
+                } else if view.input.is_some() {
+                    view.placeholder.clone()
+                } else {
+                    first_label(view)
+                },
             });
         }
         let mut children_pos = (r.x, r.y);

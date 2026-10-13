@@ -11,9 +11,16 @@ smithay-client-toolkit = { version = "=0.21.1", default-features = false, featur
 wayland-client = {version="=0.31.15", features=["system"]}
 calloop = { version = "=0.14.5", features = ["signals"] }
 bead-render = { path = "../bead-render" }
-wayland-protocols = { version = "=0.32.13", features = ["client", "staging"] }
+bead-core = { path = "../bead-core" }
+wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }
 
 raw-window-handle = {version="=0.6.2",optional=true}
+
+[dependencies.accesskit]
+version="=0.25.1"
+
+[dependencies.accesskit_unix]
+version="=0.24.0"
 
 [features]
 gpu=["bead-render/gpu","dep:raw-window-handle"]

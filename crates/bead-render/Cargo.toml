@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
+bead-core = { path = "../bead-core" }
 tiny-skia = "=0.12.0"
 cosmic-text = "0.19"
 resvg = { version = "0.47", default-features = false }

@@ -256,3 +256,34 @@ method reports actual layer count. Removal of focused item currently leaves a
 stored ID tombstone; explicit fallback focus behavior is part of input milestone.
 27tests + fmt/clippy pass; no system installs, nested/nice10/j2 only. No live tests.
 Next: animation/input/focus/basicIME/AccessKit, thennative backends. **Continue with concern**.
+
+## Feature 4 milestone — animation, input/focus, IME and accessibility (2026-10-14)
+
+Retained root position/opacity animations use easing or critically damped spring,
+with animation state outside views. Pointer hover/cursor-shapes and visible focus,
+Tab/activation/arrows, grapheme editing/selection/caret/preedit are implemented.
+Native keyboard + reload/error/edit/fix proofs pass both nested compositors.
+
+| Matched animated63-item panel /60s | PSS + DRM MiB | CPU % | Draw p50/p99 ms | Callback p50/p99 ms | Synthetic present p50/p99 ms | Startup ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| GL native | 104.69 (60.61+44.08) | 2.38 | .029/.136 | 8.347/9.392 | 8.343/9.327 | 361.87 |
+| QML retained | 201.48 (106.51+94.97) | 4.97 | N/A | N/A | 8.330/9.412 | 307.74 |
+
+PrivateHypr virtual2880×1800/1.5/120Hz, refresh0; notphysical scanout. Samefixture/
+SVG/font/emoji workload; RootOutCubic position/opacity, no per-frame content bake.
+Oneupload/layer per scale. Animationstate survives reload/reversal; spring is the
+critical-damping variant, not a general configurable physics engine. Cold slowdown
+with platform bridge retained, startup/shader-cache improvements deferred.
+Text-input-v3 is bound/advertised on both; preedit/commit/UTF8delete tests pass;
+actual IME engine composition notyet exercised. AccessKit0.25.1/Unix0.24 MIT/Apache
+bridge registers roles/bounds/focus/actions and activatesprivate status; private
+registry hitsdbus-broker/systemd activation issue. Screen-reader end-to-end unverified.
+Basic flat accessibility tree/primary-surface bounds only; notfull a11y parity.
+GPL shell copy/cut/paste uses installedwl-copy/wl-paste; native privatekeyboard
+copy/paste proof passes. These helpers are temporary adapters, not ported Python.
+Protocol cursor positions currentlycoarse; bidi text-selection geometry remains
+limited.31tests,fmt/clippy,CPU-only build,independent cargo-deny pass; no systeminstalls.
+Post-platform100reload: total128.99→129.46MiB (+.48), FD22stable, layer/image1stable;
+latency108.20/125.33ms. Late pools stable within2MiB tolerance, not exactequality.
+No live tests. **Concern: basicplatform paths exist, integration gaps explicitly open**.
+NextFeature5 nativebackends; no wait tonight. Off-threadbake/shadercache deferred.

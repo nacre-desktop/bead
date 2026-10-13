@@ -206,3 +206,101 @@ return function(p)return Card{item={id=p.item.id,name=42}}end"#).unwrap();
             .contains("must be string")
     );
 }
+#[test]
+fn keyboard_selection_preedit_commits_and_accessibility_survive_reload() {
+    let f = fixture();
+    let mut session = session(&f);
+    let search = session
+        .view_nodes()
+        .iter()
+        .find(|n| n.input.is_some())
+        .unwrap()
+        .id
+        .clone();
+    let scene = session.focus_id(&search).unwrap().unwrap();
+    session.commit(scene);
+    let scene = session.key("A👩‍🚀é", false).unwrap().unwrap();
+    session.commit(scene);
+    let scene = session
+        .edit_key(input::EditKey::Left, false)
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let scene = session.key("", true).unwrap().unwrap();
+    session.commit(scene);
+    assert_eq!(session.stores.get("query"), Some(&Value::Text("Aé".into())));
+    let scene = session.ime("に".into(), None, 0, 0).unwrap().unwrap();
+    session.commit(scene);
+    let scene = session.reload().unwrap();
+    session.commit(scene);
+    assert_eq!(session.editors[&search].preedit, "に");
+    let scene = session
+        .ime("".into(), Some("日本語".into()), 0, 0)
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    assert_eq!(
+        session.stores.get("query"),
+        Some(&Value::Text("A日本語é".into()))
+    );
+    let scene = session
+        .edit_key(input::EditKey::SelectAll, false)
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let scene = session.key("replaced", false).unwrap().unwrap();
+    session.commit(scene);
+    assert_eq!(
+        session.stores.get("query"),
+        Some(&Value::Text("replaced".into()))
+    );
+    let tree = session.accessibility_tree();
+    assert_eq!(tree.focus, accessibility::id(&search));
+    let editable = tree
+        .nodes
+        .iter()
+        .find(|(id, _)| *id == accessibility::id(&search))
+        .unwrap();
+    assert_eq!(editable.1.role(), accesskit::Role::TextInput);
+    assert_eq!(editable.1.value(), Some("replaced"));
+    let scene = session
+        .accessibility_action(
+            accessibility::id(&search).0,
+            "set-value",
+            Some("screen reader".into()),
+        )
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    assert_eq!(
+        session.stores.get("query"),
+        Some(&Value::Text("screen reader".into()))
+    );
+}
+#[test]
+fn removing_focused_key_picks_a_visible_fallback_without_changing_search_scroll() {
+    let f = fixture();
+    let mut session = session(&f);
+    let node = session
+        .view_nodes()
+        .iter()
+        .find(|n| n.id.contains("k61.tile"))
+        .unwrap()
+        .id
+        .clone();
+    let scene = session.focus_id(&node).unwrap().unwrap();
+    session.commit(scene);
+    let scene = session
+        .update(BTreeMap::from([(
+            "rows".into(),
+            Value::List(vec![serde_json::json!({"id":"b","name":"B"})]),
+        )]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let Some(Value::Text(focus)) = session.stores.get("bead.focused") else {
+        panic!("no focus");
+    };
+    assert_ne!(focus, &node);
+    assert!(session.view_nodes().iter().any(|n| &n.id == focus));
+}

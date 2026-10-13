@@ -130,8 +130,16 @@ pub struct Slide {
     pub period_seconds: f32,
 }
 #[derive(Clone)]
+pub struct Motion {
+    pub id: String,
+    pub open: bool,
+    pub duration: f64,
+    pub spring: bool,
+}
+#[derive(Clone)]
 pub struct Scene {
     pub opacity: f32,
+    pub motion: Option<Motion>,
     pub resource_revision: u64,
     pub asset_data: std::collections::BTreeMap<std::path::PathBuf, std::sync::Arc<[u8]>>,
     pub clips: std::collections::BTreeMap<usize, Rect>,
@@ -742,6 +750,39 @@ impl Palette {
             .ok_or_else(|| format!("missing palette role {name}").into())
     }
 }
+/// Measure a UTF-8 boundary with the same shaper/font selection as painted text.
+pub fn text_boundary_x(
+    scene: &Scene,
+    text: &str,
+    boundary: usize,
+    family: &str,
+    size: f32,
+    width: f32,
+) -> Result<f32> {
+    let mut fonts = scene_fonts(scene)?;
+    let mut buffer = Buffer::new(&mut fonts, Metrics::new(size, size * 1.4));
+    buffer.set_size(Some(width), Some(size * 2.));
+    buffer.set_text(
+        text,
+        &Attrs::new().family(Family::Name(family)),
+        Shaping::Advanced,
+        None,
+    );
+    buffer.shape_until_scroll(&mut fonts, false);
+    let Some(run) = buffer.layout_runs().next() else {
+        return Ok(0.);
+    };
+    for glyph in run.glyphs {
+        if boundary <= glyph.start {
+            return Ok(glyph.x);
+        }
+        if boundary < glyph.end {
+            return Ok(glyph.x + glyph.w);
+        }
+    }
+    Ok(run.line_w)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -749,6 +790,7 @@ mod tests {
     fn clipped_primitives_leave_pixels_outside_the_scroll_viewport_intact() {
         let scene = Scene {
             opacity: 1.,
+            motion: None,
             resource_revision: 1,
             asset_data: Default::default(),
             clips: std::collections::BTreeMap::from([(1, Rect::new(0., 0., 2., 2.))]),
@@ -821,6 +863,7 @@ mod tests {
             for frame in 0..30 {
                 let mut scene = Scene {
                     opacity: 1.,
+                    motion: None,
                     resource_revision: 0,
                     asset_data: Default::default(),
                     clips: Default::default(),
