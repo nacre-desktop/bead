@@ -13,7 +13,8 @@ import re
 import subprocess
 import time
 import threading
-from measure import memory, ticks, stop
+import signal
+from measure import memory, ticks, stop, drm_memory
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -103,6 +104,7 @@ def sample(mode, seconds, traced, idle):
             elapsed=time.monotonic()-begin
             cpu=(ticks(client.pid)-before)/os.sysconf('SC_CLK_TCK')/elapsed*100
             after_mem=memory(client.pid)
+            after_gpu=drm_memory(client.pid)
             maps=pathlib.Path(f'/proc/{client.pid}/maps').read_text()
             emoji_mapped='NotoColorEmoji' in maps or 'NotoColorEmoji' in maps.replace('-','')
             print(f'{label}: color emoji font mapped={emoji_mapped}',flush=True)
@@ -113,11 +115,88 @@ def sample(mode, seconds, traced, idle):
             if reader.is_alive():raise RuntimeError("client log reader did not stop")
     text=(raw/f'{label}.log').read_text(errors='replace')
     metrics=[line for line in text.splitlines() if line.startswith(('BUFFER','RESOURCES','METRICS','STOP'))]
-    print(label,{'cpu_one_core_pct':round(cpu,3),'before':before_mem,'after':after_mem,**(pacing(text) if traced else {})},flush=True)
+    print(label,{'cpu_one_core_pct':round(cpu,3),'PSS_plus_DRM_mib':after_mem['pss_mib']+sum((after_gpu or {}).values()),'DRM_total_mib':sum((after_gpu or {}).values()),'before':before_mem,'after':after_mem,**(pacing(text) if traced else {})},flush=True)
     for line in metrics:
         print(line,flush=True)
     if first_frame:print('launch_to_first_frame_callback_ms',round(first_frame[0],3))
     print(f'{label}: stopped, exit={client.returncode}',flush=True)
+
+def paired(seconds, arm_file):
+    """One bounded, supervised live episode; paired clients share desktop load."""
+    if seconds != 60:
+        raise ValueError('The approved paired episode is exactly 60 seconds')
+    probe = pathlib.Path(os.environ['BEAD_QML_PROBE'])
+    if not probe.is_file():
+        raise ValueError('Build the QML presentation probe first')
+    clients, readers, lines, first, started = {}, [], {}, {}, {}
+    def interrupted(*_):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+    raw = ROOT/'spikes/results/raw/feature3-live'
+    raw.mkdir(parents=True, exist_ok=True)
+    print(f'ARMED supervisor={os.getpid()} stop: kill -TERM {os.getpid()}; no surfaces until arm file exists', flush=True)
+    try:
+        while not arm_file.exists():
+            time.sleep(.1)
+        env = {**os.environ, 'WAYLAND_DEBUG':'0', 'BEAD_IDLE':'0', 'BEAD_START_OPEN':'1',
+               'BEAD_CONTENT_SIZE':'1', 'BEAD_LAYER':'1',
+               'BEAD_PALETTE_PATH':str(ROOT/'spikes/palette-stress.json'),
+               'BEAD_SHELL_DIR':str(ROOT/'shell'),
+               'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'}
+        target = pathlib.Path(env.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release/nacre-shell'
+        commands = {'bead-gl':[str(target),'--animate','--start-open','--content-size',
+                    '--renderer','femtovg-gl','--namespace','bead-dev-f3-live',
+                    '--palette',env['BEAD_PALETTE_PATH']],
+                    'qml':['quickshell','--path',str(ROOT/'spikes/panel.qml')]}
+        def drain(name, client):
+            with (raw/(name+'.log')).open('w') as log:
+                for line in client.stdout:
+                    log.write(line); log.flush(); lines[name].append(line.rstrip())
+                    if (line.startswith('READY') if name=='bead-gl' else line.startswith('QML_READY')) and name not in first:
+                        first[name] = time.monotonic()
+        begin = time.monotonic()
+        for name, command in commands.items():
+            lines[name] = []; started[name] = time.monotonic()
+            client_env = {**env, **({'LD_PRELOAD':str(probe)} if name=='qml' else {})}
+            client = subprocess.Popen(command, cwd=ROOT, env=client_env, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT, start_new_session=True, text=True, bufsize=1)
+            clients[name] = client
+            reader = threading.Thread(target=drain,args=(name,client)); reader.start(); readers.append(reader)
+            print(f'LIVE {name} pid={client.pid}',flush=True)
+        baseline = None
+        while time.monotonic() < begin + seconds:
+            if any(client.poll() is not None for client in clients.values()):
+                raise RuntimeError('A live comparison client exited early; do not repeat without approval')
+            elapsed = time.monotonic()-begin
+            if baseline is None and elapsed>=5:
+                if len(first)!=2:
+                    raise RuntimeError('Both clients must present within 5 seconds')
+                baseline = (time.monotonic(), {name:ticks(client.pid) for name,client in clients.items()})
+                print('LIVE populated; sampling CPU for the remaining 55 seconds',flush=True)
+            time.sleep(min(.2,max(0,begin+seconds-time.monotonic())))
+        measured = time.monotonic()-baseline[0]
+        for name, client in clients.items():
+            mem = memory(client.pid); drm = drm_memory(client.pid)
+            maps = pathlib.Path(f'/proc/{client.pid}/maps').read_text()
+            cpu = 100*(ticks(client.pid)-baseline[1][name])/os.sysconf('SC_CLK_TCK')/measured
+            print(f'LIVE_RESULT {name} CPU={cpu:.3f}% CPU_seconds={measured:.3f} '
+                  f'PSS_plus_DRM={mem["pss_mib"]+sum((drm or {}).values()):.3f}MiB '
+                  f'PSS={mem["pss_mib"]:.3f} USS={mem["uss_mib"]:.3f} DRM={sum((drm or {}).values()):.3f}MiB '
+                  f'startup_ms={(first[name]-started[name])*1000:.3f} '
+                  f'color_emoji_mapped={"NotoColorEmoji" in maps.replace("-", "")}',flush=True)
+    finally:
+        for client in clients.values():
+            stop(client)
+        for reader in readers:
+            reader.join(timeout=5)
+        for name, client in clients.items():
+            summaries = [line for line in lines[name] if line.startswith(('METRICS','GPU_SHARED','STOP','QML_PRESENTATION'))]
+            if name=='qml':
+                summaries += [line for line in lines[name] if line.startswith('QML_PRESENTED')][-1:]
+            for line in summaries:
+                print(f'LIVE_METRICS {name} {line}',flush=True)
+            print(f'LIVE_STOPPED {name} exit={client.returncode}',flush=True)
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -125,8 +204,14 @@ def main():
     parser.add_argument('--seconds',type=float,default=60)
     parser.add_argument('--trace',action='store_true')
     parser.add_argument('--idle',action='store_true')
+    parser.add_argument('--paired',action='store_true',help='Exactly one paired 60-second episode after explicit owner approval')
+    parser.add_argument('--arm-file',type=pathlib.Path,help='Supervisor waits for this file before opening live surfaces')
     parser.add_argument('--modes',nargs='+',choices=['bead-damage','bead-full','qml'],default=['bead-damage','bead-full','qml'])
     args=parser.parse_args()
     if not args.live:parser.error('Use --live only for the separate bead-dev-f2 measurement; preview with scripts/dev.sh')
+    if args.paired:
+        if args.arm_file is None:parser.error('--paired needs --arm-file')
+        paired(args.seconds,args.arm_file)
+        return
     for mode in args.modes:sample(mode,args.seconds,args.trace,args.idle)
 if __name__=='__main__':main()

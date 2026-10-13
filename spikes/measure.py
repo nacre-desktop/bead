@@ -70,13 +70,21 @@ def drm_memory(pid):
 
 def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
     label=f'{mode}-{layout}-{run}'
-    env.update({'BEAD_IDLE':'0','BEAD_START_OPEN':'1','BEAD_CONTENT_SIZE':'1' if layout=='content' else '0','BEAD_LAYER':'1','BEAD_PALETTE_PATH':str(ROOT/'spikes/palette-stress.json'),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
+    qml=mode.startswith('qml')
+    ui=mode.startswith('ui-') or mode=='qml-ui'
+    env.update({'BEAD_IDLE':'1' if ui else '0','BEAD_START_OPEN':'1','BEAD_CONTENT_SIZE':'1' if layout=='content' else '0','BEAD_LAYER':'1','BEAD_PALETTE_PATH':str(ROOT/'spikes/palette-stress.json'),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
     # Primary variants use their own callback statistics with tracing disabled.
     # Qt is a startup control: trace is required for the same first-frame marker.
-    env['WAYLAND_DEBUG']='1' if mode=='qml' else '0'
-    if mode=='qml':command=['quickshell','--path',str(ROOT/'spikes/panel.qml')]
+    env['WAYLAND_DEBUG']='1' if qml and not os.environ.get('BEAD_QML_PROBE') else '0'
+    if qml:
+        command=['quickshell','--path',str(ROOT/('spikes/panel-reload.qml' if ui else 'spikes/panel.qml'))]
+        if os.environ.get('BEAD_QML_PROBE'):env['LD_PRELOAD']=os.environ['BEAD_QML_PROBE']
     else:
-        command=[str(target/'nacre-shell'),'--animate','--start-open','--renderer',mode,'--palette',str(ROOT/'spikes/palette-stress.json'),'--namespace','bead-dev-retained']
+        renderer=mode.removeprefix('ui-').replace('-memory','').removesuffix('-3')
+        command=[str(target/'nacre-shell'),'--animate','--start-open','--renderer',renderer,'--palette',str(ROOT/'spikes/palette-stress.json'),'--namespace','bead-dev-retained']
+        if ui:command+=['--ui','ui/main.json'];command.remove('--animate')
+        if '-memory' in mode:command+=['--memory-usage']
+        if mode.endswith('-3'):command+=['--surfaces','3']
         if layout=='content':command+=['--content-size']
         if virtual120:command+=['--output','bead-bench']
     started=time.monotonic();data=bytearray();ready=threading.Event();first=[];pending=set()
@@ -86,7 +94,9 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
         with path.open('wb') as log:
             for line in client.stdout:
                 log.write(line);data.extend(line)
-                if mode=='qml':
+                if qml and os.environ.get('BEAD_QML_PROBE'):
+                    if line.startswith(b'QML_READY') and not first:first.append(time.monotonic());ready.set()
+                elif qml:
                     request=re.search(rb'wl_surface[@#]\d+\.frame\((?:new id )?wl_callback[@#](\d+)',line)
                     done=re.search(rb'wl_callback[@#](\d+)\.done(?:,\s*)?\(',line)
                     if request:pending.add(request[1])
@@ -116,10 +126,98 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
     finally:
         stop(client);reader.join(timeout=5)
         if reader.is_alive():raise RuntimeError('client log reader did not stop')
-    print(f'{label}: CPU={cpu:.3f}% startup_ms={(first[0]-started)*1000:.3f} PSS/USS={after_mem["pss_mib"]:.3f}/{after_mem["uss_mib"]:.3f} peak_PSS={peak_pss:.3f} GPU_before={before_gpu} GPU_after={after_gpu} GPU_peak={peak_gpu or None} exit={client.returncode}',flush=True)
+    drm_total=sum((after_gpu or {}).values());total=after_mem['pss_mib']+drm_total
+    print(f'{label}: total_PSS_plus_DRM={total:.3f}MiB DRM_total={drm_total:.3f}MiB CPU={cpu:.3f}% startup_ms={(first[0]-started)*1000:.3f} PSS/USS={after_mem["pss_mib"]:.3f}/{after_mem["uss_mib"]:.3f} peak_PSS={peak_pss:.3f} GPU_before={before_gpu} GPU_after={after_gpu} GPU_peak={peak_gpu or None} exit={client.returncode}',flush=True)
     for line in data.decode(errors='replace').splitlines():
-        if line.startswith(('PROFILE','RESOURCES','BUFFER','METRICS','ACQUIRE','STOP','FALLBACK')):print(label+': '+line,flush=True)
-    if mode!='qml' and (client.returncode!=0 or b'STOP surfaces=0' not in data):raise RuntimeError('renderer did not exit cleanly')
+        if line.startswith(('PROFILE','RESOURCES','BUFFER','METRICS','ACQUIRE','STOP','FALLBACK','GPU_SHARED','QML_PRESENTED','QML_PRESENTATION','QML_UI_PRESENTED')):print(label+': '+line,flush=True)
+    if not qml and (client.returncode!=0 or b'STOP surfaces=0' not in data):raise RuntimeError('renderer did not exit cleanly')
+
+def sample_reload(env,raw,target,renderer):
+    # Only the temporary bundle is edited; reference repos and checkout UI stay intact.
+    with tempfile.TemporaryDirectory(prefix='bead-ui-') as directory:
+        bundle=pathlib.Path(directory);shutil.copytree(ROOT/'shell',bundle/'shell')
+        behavior=bundle/'shell/ui/behavior.luau'
+        behavior.write_text(behavior.read_text().replace('["launcher.search.text"] = ""','["launcher.search.text"] = "saved 😀"').replace('["launcher.scroll.y"] = 0','["launcher.scroll.y"] = 42'))
+        command=[str(target/'nacre-shell'),'--ui','ui/main.json','--renderer',renderer,'--trace-state','--namespace','bead-dev-reload']
+        log=[];condition=threading.Condition();path=raw/('reload-'+renderer+'.log')
+        client=subprocess.Popen(command,cwd=bundle,env={**env,'WAYLAND_DEBUG':'0'},stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,text=True,bufsize=1)
+        def drain():
+            with path.open('w') as stream:
+                for line in client.stdout:
+                    stream.write(line);stream.flush()
+                    with condition:log.append(line.rstrip());condition.notify_all()
+        reader=threading.Thread(target=drain);reader.start()
+        def wait(marker,offset=0):
+            deadline=time.monotonic()+15
+            with condition:
+                while True:
+                    found=next((line for line in log[offset:] if marker in line),None)
+                    if found:return found
+                    if client.poll() is not None or time.monotonic()>deadline:raise RuntimeError(f'private reload proof: missing {marker}; inspect ignored raw log')
+                    condition.wait(.1)
+        def shot(label):
+            try:subprocess.run(['grim',str(raw/(label+'.png'))],env=env,capture_output=True,timeout=5,check=True)
+            except (subprocess.TimeoutExpired,subprocess.CalledProcessError):print(label+': screenshot unavailable',flush=True)
+        try:
+            first=wait('UI_PRESENTED generation=1');initial=next(json.loads(line.split(' ',1)[1]) for line in log if line.startswith('UI_STATE '))
+            assert initial['launcher.search.text']=='saved 😀' and initial['launcher.scroll.y']==42 and initial['launcher.open'] is True
+            shot('reload-valid-'+renderer)
+            source=bundle/'shell/ui/content.json';original=source.read_bytes();latencies=[]
+            for i in range(5):
+                offset=len(log);written=time.monotonic_ns();source.write_bytes(original.replace(b'Application 01',f'Application {i+30:02}'.encode()))
+                result=wait('UI_PRESENTED generation=',offset)
+                ns=int(re.search(r'monotonic_ns=(\d+)',result)[1]);latencies.append((ns-written)/1e6)
+                state=next(json.loads(line.split(' ',1)[1]) for line in log[offset:] if line.startswith('UI_STATE '));assert state==initial
+            offset=len(log);source.write_text('{\n broken')
+            wait('UI_ERROR',offset);wait('UI_PRESENTED generation=',offset);shot('reload-error-'+renderer)
+            assert client.poll() is None
+            offset=len(log);behavior.write_text(behavior.read_text().replace('saved 😀','reset must not win').replace('= 42','= 0'))
+            # Two dependent edits are invalid until the broken file is fixed.
+            time.sleep(.2);assert client.poll() is None
+            offset=len(log);written=time.monotonic_ns();source.write_bytes(original)
+            wait('UI_COMMIT',offset);result=wait('UI_PRESENTED generation=',offset)
+            state=next(json.loads(line.split(' ',1)[1]) for line in log[offset:] if line.startswith('UI_STATE '));assert state==initial
+            shot('reload-recovered-'+renderer)
+            print(f'RELOAD_PROOF renderer={renderer} edits={len(latencies)} file_to_presentation_ms={latencies} preserved_state=true broken_dependency_kept_old_ui=true recovered=true',flush=True)
+        finally:stop(client);reader.join(timeout=5)
+        if client.returncode!=0:raise RuntimeError(f'reload client exit {client.returncode}')
+
+def sample_qml_reload(env,raw):
+    with tempfile.TemporaryDirectory(prefix='bead-qml-ui-') as directory:
+        fixture=pathlib.Path(directory)/'shell.qml'
+        source=(ROOT/'spikes/panel-reload.qml').read_text().replace('property string searchText: ""','property string searchText: "saved 😀"').replace('property real scrollY: 0','property real scrollY: 42')
+        fixture.write_text(source)
+        env.update({'LD_PRELOAD':os.environ['BEAD_QML_PROBE'],'WAYLAND_DEBUG':'0','BEAD_IDLE':'1','BEAD_CONTENT_SIZE':'1','BEAD_LAYER':'1','BEAD_PALETTE_PATH':str(ROOT/'spikes/palette-stress.json'),'BEAD_SHELL_DIR':str(ROOT/'shell'),'BEAD_ICON_PATH':'/usr/share/icons/Adwaita/scalable/places/folder.svg'})
+        client=subprocess.Popen(['quickshell','--path',str(fixture)],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,text=True,bufsize=1)
+        log=[];condition=threading.Condition()
+        def drain():
+            with (raw/'qml-reload.log').open('w') as output:
+                for line in client.stdout:
+                    output.write(line);output.flush()
+                    with condition:log.append(line.strip());condition.notify_all()
+        reader=threading.Thread(target=drain);reader.start()
+        def wait(marker,offset=0):
+            deadline=time.monotonic()+15
+            with condition:
+                while True:
+                    found=next((line for line in log[offset:] if marker in line),None)
+                    if found:return found
+                    if client.poll() is not None or time.monotonic()>deadline:raise RuntimeError('QML reload proof failed: '+marker)
+                    condition.wait(.1)
+        try:
+            wait('QML_UI_PRESENTED generation=1 ');latencies=[]
+            for generation in range(2,7):
+                offset=len(log);written=time.monotonic_ns()
+                fixture.write_text(source.replace('testGeneration: 1',f'testGeneration: {generation}').replace('Application 01',f'Application {generation+30:02}').replace('saved 😀','reset should lose').replace('scrollY: 42','scrollY: 0'))
+                result=wait(f'QML_UI_PRESENTED generation={generation} ',offset)
+                ns=int(re.search(r'monotonic_ns=(\d+)',result)[1]);latencies.append((ns-written)/1e6)
+                state=json.loads(wait('QML_STATE ',offset).split('QML_STATE ',1)[1]);assert state=={'open':True,'search':'saved 😀','scroll':42}
+            offset=len(log);fixture.write_text('import QtQuick\nShellRoot { broken syntax ???')
+            time.sleep(.4);assert client.poll() is None
+            offset=len(log);fixture.write_text(source.replace('testGeneration: 1','testGeneration: 7'))
+            wait('QML_UI_PRESENTED generation=7 ',offset)
+            print(f'QML_RELOAD_PROOF edits={len(latencies)} file_to_presentation_ms={latencies} persistent_properties=true syntax_error_kept_running=true recovered=true',flush=True)
+        finally:stop(client);reader.join(timeout=5)
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
@@ -129,9 +227,12 @@ def main():
     p.add_argument('--parent', choices=['headless','desktop'], default='headless')
     p.add_argument('--lifecycle', action='store_true')
     p.add_argument('--palette', type=pathlib.Path, default=None)
+    p.add_argument('--qml-reload-test',action='store_true')
+    p.add_argument('--demo-test',action='store_true',help='Smoke-test the owner demo inside the private compositor')
+    p.add_argument('--reload-test',action='store_true',help='Private temporary UI bundle reload/state/error proof')
     p.add_argument('--retained', action='store_true', help='One round of retained CPU/femtovg/Vello; private compositor only')
     p.add_argument('--layouts',nargs='+',choices=['full','content'],default=['full','content'])
-    p.add_argument('--renderer', choices=['cpu','femtovg','vello','auto'],default='cpu')
+    p.add_argument('--renderer', choices=['cpu','femtovg','femtovg-gl','vello','auto'],default='cpu')
     p.add_argument('--animate', action='store_true')
     p.add_argument('--content-size', action='store_true')
     p.add_argument('--virtual120', action='store_true', help='Isolated Hyprland virtual 2880x1800/1.5/120Hz output')
@@ -140,7 +241,7 @@ def main():
     p.add_argument('--in-private-bus', action='store_true')
     args = p.parse_args()
     if args.modes is None:args.modes=['cpu','femtovg','vello','qml'] if args.retained else ['tiny-skia','vello','femtovg','qml']
-    if args.retained and args.parent!='headless':p.error('Retained comparison is private only; live desktop needs separate owner approval')
+    if (args.retained or args.reload_test or args.qml_reload_test or args.demo_test) and args.parent!='headless':p.error('Retained comparison is private only; live desktop needs separate owner approval')
     if not args.in_private_bus:
         # D-Bus activation inherits its daemon's environment: isolate XDG BEFORE
         # starting the bus, not just before launching its clients.
@@ -155,12 +256,12 @@ def main():
                 path.mkdir(mode=0o700)
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
-            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
+            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
     raw = ROOT / 'spikes/results/raw'
     if args.retained:raw=raw/('retained-'+args.compositor)
     elif 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
     raw.mkdir(parents=True, exist_ok=True)
-    save_baseline = 'bead' not in args.modes and not args.retained
+    save_baseline = 'bead' not in args.modes and not (args.retained or args.reload_test or args.qml_reload_test or args.demo_test)
     tools = pathlib.Path(os.environ.get('BEAD_RESEARCH_TOOLS',str(ROOT/'.tools')))
     result = {'date': '2026-10-13', 'surface': {'width': 512, 'height': 32, 'scale': 1, 'outputs': 1, 'namespace': 'bead-dev-spike'},
               'method': 'client /proc smaps_rollup; CPU ticks over monotonic interval; READY is frame callback for Rust, QML component completion (not comparable first-frame); separate nested niri/private D-Bus/XDG', 'runs': []}
@@ -261,6 +362,26 @@ def main():
             if args.compositor=='hyprland':
                 sockets=list(runtime.glob('hypr/*/.socket.sock'))
                 if sockets: env['HYPRLAND_INSTANCE_SIGNATURE']=sockets[0].parent.name
+            if args.demo_test:
+                target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
+                env['PATH']=str(target)+os.pathsep+env['PATH']
+                env.pop('NIRI_SOCKET',None);env.pop('HYPRLAND_INSTANCE_SIGNATURE',None)
+                with (raw/('demo-'+args.compositor+'.log')).open('w') as demo_log:
+                    demo=subprocess.Popen([sys.executable,str(ROOT/'scripts/demo.py'),args.compositor],env=env,cwd=ROOT,stdout=demo_log,stderr=demo_log,start_new_session=True)
+                    try:
+                        time.sleep(27)
+                        if demo.poll() is not None:raise RuntimeError('Demo exited early')
+                    finally:stop(demo)
+                text=(raw/('demo-'+args.compositor+'.log')).read_text()
+                for marker in ['DEMO: valid','DEMO: broken','DEMO: recovered','UI_COMMIT','UI_ERROR']:
+                    if marker not in text:raise RuntimeError('Demo missing '+marker+'; inspect ignored raw log')
+                print('DEMO_PROOF nested='+args.compositor+' valid/broken/recovered=true',flush=True)
+                return 0
+            if args.qml_reload_test:
+                sample_qml_reload(env,raw);return 0
+            if args.reload_test:
+                target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
+                sample_reload(env,raw,target,args.renderer);return 0
             if args.retained:
                 target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
                 for run in range(args.runs):

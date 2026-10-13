@@ -40,16 +40,35 @@ checked-in preview palette contains colors/mode from an existing Orient output
 matching the active dark palette. The stress fixture preserves the measured light
 palette. Both omit wallpaper metadata and personal paths. No color engine is copied.
 
-Retained renderer preview, safely inside a nested window:
+Stateful hot-reload demo, safely inside a nested window:
 
 ```sh
-BEAD_RENDERER=femtovg ./scripts/dev.sh niri
+./scripts/dev.sh niri --demo
 ```
 
-Use `cpu` for the no-GPU fallback or `vello` for the comparison. `auto` attempts
-femtovg and falls back to CPU if graphics initialization fails. The CPU-only
-build is `cargo build -p nacre-shell --no-default-features`. No GPU context is
-created in the CPU path. Renderer choice remains explicit pending the owner.
+Click Search and type; scroll the application rows; click Home to collapse/open.
+Every eight seconds the demo edits a temporary UI copy: valid change, syntax
+error, then recovery. Your input/scroll/open state should survive all three.
+Close the nested window or Ctrl+C to stop. Use `hyprland` for the other compositor.
+Without `--demo`, edit `shell/ui/*.json` or `behavior.luau` yourself while it runs.
+
+`auto` (default) uses one native OpenGL/femtovg context shared by all surfaces,
+with tiny-skia if hardware GL initialization is unavailable. `BEAD_RENDERER=cpu`
+selects the no-GPU path; `femtovg` selects wgpu for comparison, and `vello` supports
+only the retained stress fixture. The CPU-only build is
+`cargo build -p nacre-shell --no-default-features`; it creates no GPU context.
+GPU content is currently CPU-baked once and uploaded, then composited on GPU.
+
+UI v1 is a small, strict JSON primitive format, not complete QML parity. Stable
+node/store IDs, typed Luau stores/actions/computed bindings, included JSON and
+asset snapshots are staged before all configured surfaces swap. Failures show
+file/line/column and keep the previous UI; fixing the source clears the overlay.
+Store values (including input, open state, scroll and focused ID) outlive views.
+Computed bindings must be pure; state changes belong in named actions. Luau has
+an 8 MiB VM limit and a 50 ms action/binding-batch execution limit. Directory and
+source bounds prevent accidental unbounded bundles. Full controls, layout,
+animations, IME and accessibility remain later features. Reload still bakes on
+the UI thread; the measured 80–103 ms interruption needs reducing for larger UIs.
 
 Private measurement round (no live desktop surfaces):
 
@@ -71,8 +90,9 @@ GPU variants upload that picture once and composite position/opacity each frame;
 this round compares retained composition, not GPU text/vector generation.
 GPU draw times mean CPU encoding/submission time, exclude acquisition and do not
 measure asynchronous GPU execution. Callback timing measures client scheduling.
-DRM totals are reported per client/region after descriptor deduplication; do not
-add them to PSS or treat them as exclusive VRAM on an integrated GPU.
+Memory comparisons now use **PSS + DRM total**, with DRM descriptors deduplicated
+by client/region. This requested sum can overlap shared system-memory accounting
+and is not a measure of exclusive VRAM; component values are retained in FEASIBILITY.
 
 Vello returns straight-alpha output; its existing transfer blit converts it to
 premultiplied alpha for Wayland. Private static screenshots match CPU/femtovg

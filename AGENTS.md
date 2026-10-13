@@ -25,9 +25,11 @@
 - Never test on the live desktop without asking the owner first. Prior live
   authorization does not persist. Retained comparison uses private/nested
   sessions; synthetic 120 Hz scheduling is not physical scanout timing.
-- One retained-layer comparison: same cached panel, CPU/femtovg/Vello, full vs
-  content surfaces, first/later cost, startup and DRM fdinfo. Recommend and stop;
-  no Feature 3 implementation yet. Keep CPU as the no-GPU fallback.
+- Feature 3 approved: femtovg content-sized retained layers, tiny-skia fallback.
+  Compare native GL/wgpu and allocation hints; prove shared context with 1/3
+  surfaces. Report PSS + DRM total for all memory comparisons. One supervised
+  60-second live niri comparison is authorized: announce exact stop command
+  beforehand and stop it afterwards. This does not authorize additional live runs.
 - Test in an isolated nested compositor by default. Never stop the daily shell,
   change desktop configs, keybindings, autostart or installed Nacre.
 - No personal paths, usernames or private machine inventory in committed files.

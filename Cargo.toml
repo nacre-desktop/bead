@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/bead-wayland", "crates/bead-render", "crates/nacre-shell", "spikes/blank-layer"]
+members = ["crates/bead-core", "crates/bead-ui", "crates/bead-wayland", "crates/bead-render", "crates/nacre-shell", "spikes/blank-layer"]
 default-members = ["crates/nacre-shell"]
 
 [workspace.package]

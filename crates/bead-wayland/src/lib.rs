@@ -15,6 +15,11 @@ use smithay_client_toolkit::{
     reexports::calloop_wayland_source::WaylandSource,
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
+    seat::{
+        Capability, SeatHandler, SeatState,
+        keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers, RawModifiers},
+        pointer::{PointerEvent, PointerEventKind, PointerHandler},
+    },
     shell::{
         WaylandSurface,
         wlr_layer::{
@@ -34,7 +39,7 @@ use std::{
 use wayland_client::{
     Connection, Dispatch, Proxy, QueueHandle, delegate_noop,
     globals::registry_queue_init,
-    protocol::{wl_output, wl_shm, wl_surface},
+    protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
 };
 use wayland_protocols::wp::{
     fractional_scale::v1::client::{
@@ -47,6 +52,37 @@ use wayland_protocols::wp::{
     },
     viewporter::client::{wp_viewport::WpViewport, wp_viewporter::WpViewporter},
 };
+#[derive(Clone, Debug)]
+pub enum UiEvent {
+    Reload,
+    WatchError(String),
+    Click { x: f32, y: f32 },
+    Scroll { x: f32, y: f32, delta: f64 },
+    Key { text: String, backspace: bool },
+}
+/// Candidate state is committed only after render resources have been prepared.
+#[cfg(feature = "gpu")]
+#[derive(Debug)]
+struct GpuUnavailable(String);
+#[cfg(feature = "gpu")]
+impl std::fmt::Display for GpuUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+#[cfg(feature = "gpu")]
+impl Error for GpuUnavailable {}
+pub trait SceneSource {
+    fn watch(
+        &mut self,
+        wakeup: Box<dyn Fn(Result<(), String>) + Send>,
+    ) -> Result<(), Box<dyn Error>>;
+    fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>>;
+    fn validate(&self) -> Result<(), Box<dyn Error>>;
+    fn state_summary(&self) -> String;
+    fn commit(&mut self);
+    fn error_scene(&mut self, error: String) -> Scene;
+}
 #[derive(Clone)]
 pub struct Options {
     pub namespace: String,
@@ -61,6 +97,10 @@ pub struct Options {
     pub auto_fallback: bool,
     pub started: Instant,
     pub start_open: bool,
+    pub memory_usage: bool,
+    pub surface_count: usize,
+    pub interactive: bool,
+    pub trace_state: bool,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -77,8 +117,17 @@ impl Default for Options {
             auto_fallback: false,
             started: Instant::now(),
             start_open: false,
+            memory_usage: false,
+            surface_count: 1,
+            interactive: false,
+            trace_state: false,
         }
     }
+}
+#[derive(Clone)]
+struct PresentationData {
+    surface: wl_surface::WlSurface,
+    generation: u64,
 }
 struct Reusable {
     buffer: Buffer,
@@ -90,6 +139,8 @@ struct Surface {
     pool: SlotPool,
     #[cfg(feature = "gpu")]
     gpu: Option<bead_render::gpu::Surface>,
+    #[cfg(feature = "gpu")]
+    gl: Option<bead_render::gl::Surface>,
     buffers: Vec<Reusable>,
     width: u32,
     height: u32,
@@ -101,6 +152,7 @@ struct Surface {
     fractional: Option<WpFractionalScaleV1>,
     viewport: Option<WpViewport>,
     geometry: (i32, i32),
+    offset: (f32, f32),
     format: PixelFormat,
     previous: Option<Rect>,
     allocations: usize,
@@ -112,12 +164,16 @@ struct Surface {
     presented_ms: Vec<f64>,
     last_presented: Option<u64>,
     refresh_ns: u32,
+    presentation_kind: u32,
     discarded: usize,
+    presented_generation: Option<u64>,
 }
 impl Drop for Surface {
     fn drop(&mut self) {
         #[cfg(feature = "gpu")]
         drop(self.gpu.take());
+        #[cfg(feature = "gpu")]
+        drop(self.gl.take());
         if let Some(f) = &self.fractional {
             f.destroy();
         }
@@ -127,8 +183,18 @@ impl Drop for Surface {
     }
 }
 struct App {
+    runtime: Option<Box<dyn SceneSource>>,
+    seat: SeatState,
+    keyboard: Option<wl_keyboard::WlKeyboard>,
+    pointer: Option<wl_pointer::WlPointer>,
+    keyboard_surface: Option<wl_surface::WlSurface>,
+    reload_pending: bool,
+    ui_initialized: bool,
+    qh: QueueHandle<App>,
     #[cfg(feature = "gpu")]
     gpu: Option<bead_render::gpu::Transport>,
+    #[cfg(feature = "gpu")]
+    gl: Option<bead_render::gl::Transport>,
     #[cfg(feature = "gpu")]
     conn: Connection,
     registry: RegistryState,
@@ -157,6 +223,14 @@ pub fn run_with_renderer(
     scene: Scene,
     renderer: Box<dyn Renderer>,
 ) -> Result<(), Box<dyn Error>> {
+    run_runtime(options, scene, renderer, None)
+}
+pub fn run_runtime(
+    options: Options,
+    scene: Scene,
+    renderer: Box<dyn Renderer>,
+    runtime: Option<Box<dyn SceneSource>>,
+) -> Result<(), Box<dyn Error>> {
     if options.namespace.is_empty()
         || options.namespace.len() > 128
         || options.namespace.contains('\0')
@@ -174,8 +248,18 @@ pub fn run_with_renderer(
         |_, _, app| app.signal.stop(),
     )?;
     let mut app = App {
+        runtime,
+        seat: SeatState::new(&globals, &qh),
+        keyboard: None,
+        pointer: None,
+        keyboard_surface: None,
+        reload_pending: false,
+        ui_initialized: false,
+        qh: qh.clone(),
         #[cfg(feature = "gpu")]
         gpu: None,
+        #[cfg(feature = "gpu")]
+        gl: None,
         #[cfg(feature = "gpu")]
         conn: conn.clone(),
         registry: RegistryState::new(&globals),
@@ -209,6 +293,33 @@ pub fn run_with_renderer(
             },
         )?;
     }
+    if let Some(runtime) = &mut app.runtime {
+        let (sender, channel) = calloop::channel::channel::<Result<(), String>>();
+        runtime.watch(Box::new(move |event| {
+            let _ = sender.send(event);
+        }))?;
+        let handle = loop_.handle();
+        let timer_handle = handle.clone();
+        handle.insert_source(channel, move |event, _, app| {
+            if let calloop::channel::Event::Msg(result) = event {
+                if let Err(error) = result {
+                    app.ui(UiEvent::WatchError(error));
+                } else if !app.reload_pending {
+                    app.reload_pending = true;
+                    if let Err(error) = timer_handle.insert_source(
+                        Timer::from_duration(Duration::from_millis(50)),
+                        |_, _, app| {
+                            app.reload_pending = false;
+                            app.ui(UiEvent::Reload);
+                            TimeoutAction::Drop
+                        },
+                    ) {
+                        app.fail(error);
+                    }
+                }
+            }
+        })?;
+    }
     for output in app.output.outputs() {
         app.add_output(&qh, output);
     }
@@ -220,7 +331,7 @@ pub fn run_with_renderer(
             percentile(&s.acquire_ms, 0.99)
         );
         println!(
-            "METRICS output={} frames={} allocations={} render_p50_ms={:.3} render_p99_ms={:.3} callback_p50_ms={:.3} callback_p99_ms={:.3} presented_p50_ms={:.3} presented_p99_ms={:.3} presented_samples={} refresh_ns={} discarded={}",
+            "METRICS output={} frames={} allocations={} render_p50_ms={:.3} render_p99_ms={:.3} callback_p50_ms={:.3} callback_p99_ms={:.3} presented_p50_ms={:.3} presented_p99_ms={:.3} presented_samples={} refresh_ns={} kind={} discarded={}",
             s.output.id().protocol_id(),
             s.frames,
             s.allocations,
@@ -232,9 +343,12 @@ pub fn run_with_renderer(
             percentile(&s.presented_ms, 0.99),
             s.presented_ms.len(),
             s.refresh_ns,
+            s.presentation_kind,
             s.discarded
         );
     }
+    // Destroy GPU-owned renderer objects while their context/surfaces are alive.
+    app.renderer = bead_render::renderer(RendererKind::Cpu)?;
     app.surfaces.clear();
     let _ = conn.flush();
     println!("STOP surfaces=0");
@@ -253,6 +367,149 @@ fn percentile(samples: &[f64], p: f64) -> f64 {
     v[((v.len() - 1) as f64 * p).ceil() as usize]
 }
 impl App {
+    fn ui(&mut self, event: UiEvent) {
+        let Some(mut runtime) = self.runtime.take() else {
+            return;
+        };
+        let reload = matches!(event, UiEvent::Reload);
+        let started = Instant::now();
+        let staged = runtime.stage(event).and_then(|scene| {
+            if let Some(scene) = &scene {
+                let indices: Vec<_> = self
+                    .surfaces
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| s.configured)
+                    .map(|(i, _)| i)
+                    .collect();
+                for i in indices {
+                    #[cfg(feature = "gpu")]
+                    if self.renderer.wants_gpu()
+                        && let Err(error) = self.ensure_gpu(i)
+                    {
+                        if !self.options.auto_fallback {
+                            return Err(error);
+                        }
+                        eprintln!("FALLBACK GPU unavailable during staging: {error}");
+                        self.renderer = bead_render::renderer(RendererKind::Cpu)?;
+                        for surface in &mut self.surfaces {
+                            drop(surface.gl.take());
+                            drop(surface.gpu.take());
+                        }
+                        self.gl = None;
+                        self.gpu = None;
+                        self.options.renderer = RendererKind::Cpu;
+                    }
+                    let surface = &self.surfaces[i];
+                    self.renderer
+                        .prepare(scene, surface.scale120 as f32 / 120.)?;
+                    #[cfg(feature = "gpu")]
+                    if let Some(gl) = &surface.gl {
+                        let transport = self.gl.as_ref().ok_or("missing shared GL context")?;
+                        let (w, h, _, _) =
+                            buffer_dimensions(surface.width, surface.height, surface.scale120)?;
+                        transport.activate(gl, w as u32, h as u32)?;
+                        self.renderer
+                            .stage_resources(bead_render::ResourceTarget::Gl {
+                                display: &transport.display,
+                            })?;
+                    } else if let Some(gpu) = &surface.gpu {
+                        let device = &self
+                            .gpu
+                            .as_ref()
+                            .ok_or("missing shared GPU device")?
+                            .context
+                            .devices[gpu.dev_id];
+                        self.renderer
+                            .stage_resources(bead_render::ResourceTarget::Wgpu {
+                                device: &device.device,
+                                queue: &device.queue,
+                            })?;
+                    }
+                }
+            }
+            runtime.validate()?;
+            Ok(scene)
+        });
+        match staged {
+            Ok(Some(scene)) => {
+                runtime.commit();
+                if self.options.trace_state {
+                    println!("UI_STATE {}", runtime.state_summary());
+                }
+                self.scene = scene;
+                println!(
+                    "UI_COMMIT generation={} reload={} prepare_ms={:.3}",
+                    self.scene.resource_revision,
+                    reload,
+                    started.elapsed().as_secs_f64() * 1000.
+                );
+            }
+            Ok(None) => {
+                self.runtime = Some(runtime);
+                return;
+            }
+            Err(error) => {
+                eprintln!("UI_ERROR {error}");
+                self.scene = runtime.error_scene(error.to_string());
+            }
+        }
+        self.runtime = Some(runtime);
+        let qh = self.qh.clone();
+        for i in 0..self.surfaces.len() {
+            self.draw(i, &qh);
+        }
+    }
+
+    #[cfg(feature = "gpu")]
+    fn ensure_gpu(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
+        use raw_window_handle::{
+            RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
+        };
+        use std::ptr::NonNull;
+        let surface = &mut self.surfaces[index];
+        let (w, h, _, _) = buffer_dimensions(surface.width, surface.height, surface.scale120)?;
+        let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+            NonNull::new(self.conn.backend().display_ptr().cast())
+                .ok_or("native display missing")?,
+        ));
+        let window = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+            NonNull::new(surface.layer.wl_surface().id().as_ptr().cast())
+                .ok_or("native surface missing")?,
+        ));
+        if self.options.renderer == RendererKind::FemtovgGl {
+            if self.gl.is_none() {
+                // SAFETY: the retained connection outlives the EGL context/surfaces.
+                self.gl = Some(unsafe { bead_render::gl::Transport::new(display) }?);
+            }
+            if surface.gl.is_none() {
+                // SAFETY: Surface::drop drops EGL before its wl_surface.
+                surface.gl = Some(unsafe {
+                    self.gl
+                        .as_mut()
+                        .unwrap()
+                        .create_surface(window, w as u32, h as u32)
+                }?);
+            }
+        } else {
+            if self.gpu.is_none() {
+                self.gpu = Some(bead_render::gpu::Transport::new(self.options.memory_usage));
+            }
+            if surface.gpu.is_none() {
+                // SAFETY: Surface::drop drops swapchains before their protocol objects.
+                surface.gpu = Some(unsafe {
+                    self.gpu.as_mut().unwrap().create_surface(
+                        display,
+                        window,
+                        w as u32,
+                        h as u32,
+                        self.options.renderer,
+                    )
+                }?);
+            }
+        }
+        Ok(())
+    }
     fn fail(&mut self, error: impl std::fmt::Display) {
         self.failure = Some(error.to_string());
         self.signal.stop();
@@ -263,13 +520,16 @@ impl App {
         }) {
             return;
         }
-        if self.surfaces.iter().any(|s| s.output == output) {
+        if self.surfaces.iter().filter(|s| s.output == output).count() >= self.options.surface_count
+        {
             return;
         }
         let result = (|| -> Result<Surface, Box<dyn Error>> {
             let surface = self.compositor.create_surface(qh);
             let empty = Region::new(&self.compositor)?;
-            surface.set_input_region(Some(empty.wl_region()));
+            if !self.options.interactive {
+                surface.set_input_region(Some(empty.wl_region()));
+            }
             let fractional = if self.viewporter.is_some() {
                 self.fractional
                     .as_ref()
@@ -311,18 +571,24 @@ impl App {
                 layer.set_size(0, if self.options.panel { 0 } else { 32 });
             }
             layer.set_exclusive_zone(if self.options.panel { -1 } else { 0 });
-            layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+            layer.set_keyboard_interactivity(if self.options.interactive {
+                KeyboardInteractivity::OnDemand
+            } else {
+                KeyboardInteractivity::None
+            });
             layer.commit();
             let scale120 = self
                 .output
                 .info(&output)
                 .map_or(120, |i| i.scale_factor.max(1) as u32 * 120);
             Ok(Surface {
-                output,
+                output: output.clone(),
                 layer,
                 pool: SlotPool::new(4096, &self.shm)?,
                 #[cfg(feature = "gpu")]
                 gpu: None,
+                #[cfg(feature = "gpu")]
+                gl: None,
                 buffers: Vec::new(),
                 width: 0,
                 height: 32,
@@ -334,6 +600,7 @@ impl App {
                 fractional,
                 viewport,
                 geometry: (0, 0),
+                offset: (0., 0.),
                 format: PixelFormat::Bgra,
                 previous: None,
                 allocations: 0,
@@ -345,11 +612,20 @@ impl App {
                 presented_ms: Vec::new(),
                 last_presented: None,
                 refresh_ns: 0,
+                presentation_kind: 0,
                 discarded: 0,
+                presented_generation: None,
             })
         })();
         match result {
-            Ok(s) => self.surfaces.push(s),
+            Ok(s) => {
+                self.surfaces.push(s);
+                if self.surfaces.iter().filter(|s| s.output == output).count()
+                    < self.options.surface_count
+                {
+                    self.add_output(qh, output);
+                }
+            }
             Err(e) => self.fail(e),
         }
     }
@@ -398,6 +674,7 @@ impl App {
                     self.scene.offset.1 = (y * scale).round() / scale;
                 }
             }
+            s.offset = self.scene.offset;
             self.renderer.prepare(&self.scene, scale)?;
             if let Some(viewport) = &s.viewport {
                 s.layer.wl_surface().set_buffer_scale(1);
@@ -408,9 +685,80 @@ impl App {
                     .set_buffer_scale((s.scale120 / 120) as i32);
             }
             #[cfg(feature = "gpu")]
+            if self.options.renderer == RendererKind::FemtovgGl {
+                use raw_window_handle::{
+                    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
+                };
+                use std::ptr::NonNull;
+                let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+                    NonNull::new(self.conn.backend().display_ptr().cast())
+                        .ok_or("native display missing")?,
+                ));
+                let window = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+                    NonNull::new(s.layer.wl_surface().id().as_ptr().cast())
+                        .ok_or("native surface missing")?,
+                ));
+                if self.gl.is_none() {
+                    // SAFETY: the connection outlives Transport and surfaces.
+                    self.gl = Some(
+                        unsafe { bead_render::gl::Transport::new(display) }
+                            .map_err(|e| GpuUnavailable(e.to_string()))?,
+                    );
+                }
+                let transport = self.gl.as_mut().unwrap();
+                if s.gl.is_none() {
+                    // SAFETY: EGL surface is dropped before the retained wl_surface.
+                    s.gl = Some(
+                        unsafe { transport.create_surface(window, w as u32, h as u32) }
+                            .map_err(|e| GpuUnavailable(e.to_string()))?,
+                    );
+                    println!(
+                        "BUFFER output={} logical={}x{} physical={}x{} scale={scale} transport=GL",
+                        s.output.id().protocol_id(),
+                        s.width,
+                        s.height,
+                        w,
+                        h
+                    );
+                }
+                let surface = s.gl.as_ref().unwrap();
+                transport.activate(surface, w as u32, h as u32)?;
+                let start = Instant::now();
+                self.renderer.draw(
+                    &self.scene,
+                    RenderTarget::Gl(bead_render::gl::GlTarget {
+                        display: &transport.display,
+                        width: w as u32,
+                        height: h as u32,
+                    }),
+                    Damage::full(w as u32, h as u32),
+                )?;
+                if self.started.elapsed().as_secs_f64() > 2. {
+                    s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
+                }
+                s.layer.wl_surface().damage_buffer(0, 0, w, h);
+                s.layer
+                    .wl_surface()
+                    .frame(qh, FrameCallbackData(s.layer.wl_surface().clone()));
+                s.frame_pending = true;
+                if let Some(p) = &self.presentation {
+                    p.feedback(
+                        s.layer.wl_surface(),
+                        qh,
+                        PresentationData {
+                            surface: s.layer.wl_surface().clone(),
+                            generation: self.scene.resource_revision,
+                        },
+                    );
+                }
+                transport.present(surface)?;
+                s.frames += 1;
+                return Ok(());
+            }
+            #[cfg(feature = "gpu")]
             if self.renderer.wants_gpu() {
                 if self.gpu.is_none() {
-                    self.gpu = Some(bead_render::gpu::Transport::default());
+                    self.gpu = Some(bead_render::gpu::Transport::new(self.options.memory_usage));
                 }
                 let transport = self.gpu.as_mut().unwrap();
                 if s.gpu.is_none() {
@@ -506,7 +854,14 @@ impl App {
                         .frame(qh, FrameCallbackData(s.layer.wl_surface().clone()));
                     s.frame_pending = true;
                     if let Some(p) = &self.presentation {
-                        p.feedback(s.layer.wl_surface(), qh, s.layer.wl_surface().clone());
+                        p.feedback(
+                            s.layer.wl_surface(),
+                            qh,
+                            PresentationData {
+                                surface: s.layer.wl_surface().clone(),
+                                generation: self.scene.resource_revision,
+                            },
+                        );
                     }
                     dev.queue.present(frame);
                     let _ = dev.device.poll(wgpu::PollType::Poll);
@@ -606,7 +961,14 @@ impl App {
                 .frame(qh, FrameCallbackData(s.layer.wl_surface().clone()));
             s.frame_pending = true;
             if let Some(p) = &self.presentation {
-                p.feedback(s.layer.wl_surface(), qh, s.layer.wl_surface().clone());
+                p.feedback(
+                    s.layer.wl_surface(),
+                    qh,
+                    PresentationData {
+                        surface: s.layer.wl_surface().clone(),
+                        generation: self.scene.resource_revision,
+                    },
+                );
             }
             b.buffer.attach_to(s.layer.wl_surface())?;
             s.layer.commit();
@@ -616,6 +978,25 @@ impl App {
             Ok(())
         })();
         if let Err(e) = result {
+            #[cfg(feature = "gpu")]
+            if self.options.auto_fallback && e.downcast_ref::<GpuUnavailable>().is_some() {
+                eprintln!("FALLBACK GPU unavailable: {e}");
+                if let Ok(renderer) = bead_render::renderer(RendererKind::Cpu) {
+                    self.renderer = renderer;
+                }
+                for surface in &mut self.surfaces {
+                    drop(surface.gl.take());
+                    drop(surface.gpu.take());
+                    surface.frame_pending = false;
+                }
+                self.gl = None;
+                self.gpu = None;
+                self.options.renderer = RendererKind::Cpu;
+                for i in 0..self.surfaces.len() {
+                    self.draw(i, qh);
+                }
+                return;
+            }
             self.fail(e);
         }
     }
@@ -761,19 +1142,19 @@ impl Dispatch<WpPresentation, ()> for App {
         }
     }
 }
-impl Dispatch<WpPresentationFeedback, wl_surface::WlSurface> for App {
+impl Dispatch<WpPresentationFeedback, PresentationData> for App {
     fn event(
         state: &mut Self,
         _: &WpPresentationFeedback,
         event: wp_presentation_feedback::Event,
-        surface: &wl_surface::WlSurface,
+        data: &PresentationData,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         if let Some(s) = state
             .surfaces
             .iter_mut()
-            .find(|s| s.layer.wl_surface() == surface)
+            .find(|s| s.layer.wl_surface() == &data.surface)
         {
             match event {
                 wp_presentation_feedback::Event::Presented {
@@ -781,6 +1162,7 @@ impl Dispatch<WpPresentationFeedback, wl_surface::WlSurface> for App {
                     tv_sec_lo,
                     tv_nsec,
                     refresh,
+                    flags,
                     ..
                 } => {
                     let ns = ((u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo)) * 1_000_000_000
@@ -791,8 +1173,16 @@ impl Dispatch<WpPresentationFeedback, wl_surface::WlSurface> for App {
                     {
                         s.presented_ms.push((ns - last) as f64 / 1_000_000.);
                     }
+                    if s.presented_generation != Some(data.generation) {
+                        println!(
+                            "UI_PRESENTED generation={} monotonic_ns={} refresh_ns={}",
+                            data.generation, ns, refresh
+                        );
+                        s.presented_generation = Some(data.generation);
+                    }
                     s.last_presented = Some(ns);
                     s.refresh_ns = refresh;
+                    s.presentation_kind = flags.into();
                 }
                 wp_presentation_feedback::Event::Discarded => s.discarded += 1,
                 _ => {}
@@ -850,7 +1240,12 @@ impl LayerShellHandler for App {
             s.width = config.new_size.0;
             s.height = config.new_size.1;
             s.configured = true;
-            self.draw(i, qh);
+            if self.runtime.is_some() && !self.ui_initialized {
+                self.ui_initialized = true;
+                self.ui(UiEvent::Reload);
+            } else {
+                self.draw(i, qh);
+            }
         }
     }
 }
@@ -859,9 +1254,170 @@ impl ProvidesRegistryState for App {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry
     }
-    registry_handlers![OutputState];
+    registry_handlers![OutputState, SeatState];
 }
 smithay_client_toolkit::delegate_dispatch2!(App);
+impl SeatHandler for App {
+    fn seat_state(&mut self) -> &mut SeatState {
+        &mut self.seat
+    }
+    fn new_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+    fn new_capability(
+        &mut self,
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+        seat: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        if !self.options.interactive {
+            return;
+        }
+        match capability {
+            Capability::Keyboard if self.keyboard.is_none() => {
+                match self.seat.get_keyboard(qh, &seat, None) {
+                    Ok(k) => self.keyboard = Some(k),
+                    Err(e) => self.fail(e),
+                }
+            }
+            Capability::Pointer if self.pointer.is_none() => match self.seat.get_pointer(qh, &seat)
+            {
+                Ok(p) => self.pointer = Some(p),
+                Err(e) => self.fail(e),
+            },
+            _ => {}
+        }
+    }
+    fn remove_capability(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: wl_seat::WlSeat,
+        capability: Capability,
+    ) {
+        match capability {
+            Capability::Keyboard => {
+                if let Some(k) = self.keyboard.take() {
+                    k.release();
+                    self.keyboard_surface = None;
+                }
+            }
+            Capability::Pointer => {
+                if let Some(p) = self.pointer.take() {
+                    p.release();
+                }
+            }
+            _ => {}
+        }
+    }
+    fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+}
+impl PointerHandler for App {
+    fn pointer_frame(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_pointer::WlPointer,
+        events: &[PointerEvent],
+    ) {
+        for event in events {
+            let Some(surface) = self
+                .surfaces
+                .iter()
+                .find(|s| s.layer.wl_surface() == &event.surface)
+            else {
+                continue;
+            };
+            let x = event.position.0 as f32 - surface.offset.0;
+            let y = event.position.1 as f32 - surface.offset.1;
+            if !surface.configured {
+                continue;
+            }
+            match event.kind {
+                PointerEventKind::Press { button: 0x110, .. } => self.ui(UiEvent::Click { x, y }),
+                PointerEventKind::Axis { vertical, .. } => self.ui(UiEvent::Scroll {
+                    x,
+                    y,
+                    delta: vertical.absolute,
+                }),
+                _ => {}
+            }
+        }
+    }
+}
+impl KeyboardHandler for App {
+    fn enter(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        surface: &wl_surface::WlSurface,
+        _: u32,
+        _: &[u32],
+        _: &[Keysym],
+    ) {
+        self.keyboard_surface = Some(surface.clone());
+    }
+    fn leave(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: &wl_surface::WlSurface,
+        _: u32,
+    ) {
+        self.keyboard_surface = None;
+    }
+    fn press_key(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        event: KeyEvent,
+    ) {
+        if self.keyboard_surface.as_ref().is_some_and(|surface| {
+            self.surfaces
+                .iter()
+                .any(|s| s.layer.wl_surface() == surface)
+        }) {
+            self.ui(UiEvent::Key {
+                text: event.utf8.unwrap_or_default(),
+                backspace: event.keysym == Keysym::BackSpace,
+            });
+        }
+    }
+    fn repeat_key(
+        &mut self,
+        c: &Connection,
+        qh: &QueueHandle<Self>,
+        k: &wl_keyboard::WlKeyboard,
+        s: u32,
+        event: KeyEvent,
+    ) {
+        self.press_key(c, qh, k, s, event);
+    }
+    fn release_key(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        _: KeyEvent,
+    ) {
+    }
+    fn update_modifiers(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        _: Modifiers,
+        _: RawModifiers,
+        _: u32,
+    ) {
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

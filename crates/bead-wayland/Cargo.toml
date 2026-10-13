@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["calloop", "system"] }
+smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["calloop", "system", "xkbcommon"] }
 wayland-client = {version="=0.31.15", features=["system"]}
 calloop = { version = "=0.14.5", features = ["signals"] }
 bead-render = { path = "../bead-render" }

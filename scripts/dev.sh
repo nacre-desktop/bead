@@ -14,8 +14,11 @@ if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
     printf '%s\n' 'Run from a Wayland desktop terminal; this command starts a nested window.' >&2
     exit 1
 fi
-printf '%s\n' 'A drawing preview panel opens and closes in the nested desktop. Close the window or press Ctrl+C to stop.'
+printf '%s\n' 'Stateful UI in a nested window. Click the search box and type; scroll the rows; click Home to collapse/open the panel. Close the window or Ctrl+C to stop.'
 unset NACRE_COMPOSITOR NIRI_SOCKET HYPRLAND_INSTANCE_SIGNATURE DISPLAY
+if [[ ${2:-} == --demo ]]; then
+    exec python3 "$bead_root/scripts/demo.py" "${1:-niri}"
+fi
 case "${1:-niri}" in
     niri) exec niri --config "$bead_root/examples/niri.kdl" ;;
     hyprland) export AQ_DRM_DEVICES=/dev/null; exec Hyprland --config "$bead_root/examples/hyprland.lua" ;;

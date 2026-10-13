@@ -18,6 +18,23 @@ Scope: Bead framework + GPL Nacre Shell experiment, not deployment.
   shadow, lots of text/color emoji and damage tracking. Report p50/p99, CPU and
   loaded-font PSS; warn about CPU pacing failure before Feature 3.
 
+## Feature 3 renderer decision (2026-10-13)
+
+Owner approved femtovg/content-sized retained layers and tiny-skia fallback.
+Native EGL/OpenGL is now the default: one context and retained image per scale
+shared by all surfaces. wgpu/default and MemoryUsage remain comparison paths.
+GL used less PSS + DRM than either wgpu variant and matched QML's physical
+120 Hz presentation p99 in the one authorized live paired run. No additional
+live runs are authorized. All reloads stage CPU content and GPU uploads before
+state/view commit; original source, palette and watch revision are rechecked.
+Typed JSON + sandboxed Luau is the bounded Feature 3 proof, with stable-ID stores
+outside the view tree and tracked computed dependencies. Taffy/full controls are
+Feature 4. No production Qt dependency. Added mlua/Luau and glutin are MIT;
+notify is CC0-1.0; cargo-deny independently checks every framework graph.
+Gate B recommendation: **adjust**. Cold GL startup missed QML; one nested run
+had a 102 ms callback p99; UI-thread layer baking pauses reloads ~80–103 ms.
+Physical retained animation passed, not a claim of full-shell/control parity.
+
 ## Approved decision
 
 Proceed through Feature 3/Gate B with SCTK, tiny-skia, cosmic-text, Taffy and a

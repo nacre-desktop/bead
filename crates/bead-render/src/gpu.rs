@@ -9,13 +9,38 @@ use rgb::FromSlice;
 use std::{sync::Arc, time::Instant};
 pub use wgpu;
 
-pub struct Transport {
-    pub context: vello::util::RenderContext,
+pub struct Device {
+    adapter: wgpu::Adapter,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
 }
-impl Default for Transport {
-    fn default() -> Self {
+impl Device {
+    pub fn adapter(&self) -> &wgpu::Adapter {
+        &self.adapter
+    }
+}
+pub struct Context {
+    pub instance: wgpu::Instance,
+    pub devices: Vec<Device>,
+}
+pub struct Transport {
+    pub context: Context,
+    memory_usage: bool,
+}
+impl Transport {
+    pub fn new(memory_usage: bool) -> Self {
         Self {
-            context: vello::util::RenderContext::new(),
+            context: Context {
+                instance: wgpu::Instance::new(wgpu::InstanceDescriptor {
+                    backends: wgpu::Backends::VULKAN,
+                    display: None,
+                    flags: wgpu::InstanceFlags::from_build_config(),
+                    memory_budget_thresholds: Default::default(),
+                    backend_options: Default::default(),
+                }),
+                devices: Vec::new(),
+            },
+            memory_usage,
         }
     }
 }
@@ -46,8 +71,42 @@ impl Transport {
                     raw_window_handle: window,
                 })
         }?;
-        let dev_id = pollster::block_on(self.context.device(Some(&surface)))
-            .ok_or("no compatible hardware GPU")?;
+        if self.context.devices.is_empty() {
+            let adapter = pollster::block_on(self.context.instance.request_adapter(
+                &wgpu::RequestAdapterOptions {
+                    compatible_surface: Some(&surface),
+                    ..Default::default()
+                },
+            ))?;
+            let (device, queue) =
+                pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+                    required_features: adapter.features()
+                        & (wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE),
+                    memory_hints: if self.memory_usage {
+                        wgpu::MemoryHints::MemoryUsage
+                    } else {
+                        wgpu::MemoryHints::default()
+                    },
+                    ..Default::default()
+                }))?;
+            self.context.devices.push(Device {
+                adapter,
+                device,
+                queue,
+            });
+        }
+        let dev_id = 0;
+        if !self.context.devices[0]
+            .adapter
+            .is_surface_supported(&surface)
+        {
+            return Err("surface cannot use the existing shared GPU device".into());
+        }
+        println!(
+            "GPU_SHARED devices={} device_id=0 memory_usage={}",
+            self.context.devices.len(),
+            self.memory_usage
+        );
         let dev = &self.context.devices[dev_id];
         let info = dev.adapter().get_info();
         if info.device_type == wgpu::DeviceType::Cpu {
@@ -166,6 +225,7 @@ pub struct GpuRenderer {
     cache: LayerCache,
     femto: Option<femtovg::Canvas<femtovg::renderer::WGPURenderer>>,
     femto_image: Option<femtovg::ImageId>,
+    femto_images: std::collections::BTreeMap<u32, (u64, femtovg::ImageId)>,
     vello: Option<vello::Renderer>,
     image: Option<vello::peniko::ImageData>,
     uploaded_key: Option<u64>,
@@ -177,13 +237,95 @@ impl GpuRenderer {
             cache: LayerCache::default(),
             femto: None,
             femto_image: None,
+            femto_images: Default::default(),
             vello: None,
             image: None,
             uploaded_key: None,
         }
     }
 }
+impl GpuRenderer {
+    fn upload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<()> {
+        let layer = self
+            .cache
+            .layer
+            .as_ref()
+            .ok_or("unprepared retained layer")?;
+        let (w, h) = (layer.pixels.width(), layer.pixels.height());
+        if self.femto.is_none() {
+            let start = Instant::now();
+            self.femto = Some(femtovg::Canvas::new(femtovg::renderer::WGPURenderer::new(
+                device.clone(),
+                queue.clone(),
+            ))?);
+            println!(
+                "PROFILE stage=femtovg_init ms={:.3}",
+                start.elapsed().as_secs_f64() * 1000.
+            );
+        }
+        let canvas = self.femto.as_mut().unwrap();
+        if self
+            .femto_images
+            .get(&layer.scale.to_bits())
+            .is_none_or(|(key, _)| *key != layer.key)
+        {
+            let start = Instant::now();
+            let next_image = canvas.create_image(
+                femtovg::ImageSource::Rgba(imgref::Img::new(
+                    layer.pixels.data().as_rgba(),
+                    w as usize,
+                    h as usize,
+                )),
+                femtovg::ImageFlags::PREMULTIPLIED,
+            )?;
+            if let Some((_, image)) = self.femto_images.remove(&layer.scale.to_bits()) {
+                canvas.delete_image(image);
+            }
+            self.femto_image = Some(next_image);
+            self.femto_images.insert(
+                layer.scale.to_bits(),
+                (layer.key, self.femto_image.unwrap()),
+            );
+            println!(
+                "PROFILE stage=layer_upload ms={:.3} uploads={}",
+                start.elapsed().as_secs_f64() * 1000.,
+                self.cache.builds
+            );
+        }
+        self.femto_image = Some(self.femto_images[&layer.scale.to_bits()].1);
+        while self.femto_images.len() > 8 {
+            let scale = *self
+                .femto_images
+                .keys()
+                .find(|&&s| s != layer.scale.to_bits())
+                .unwrap();
+            if let Some((_, image)) = self.femto_images.remove(&scale) {
+                canvas.delete_image(image);
+            }
+        }
+        Ok(())
+    }
+}
 impl Renderer for GpuRenderer {
+    fn stage_resources(&mut self, target: crate::ResourceTarget<'_>) -> Result<()> {
+        let crate::ResourceTarget::Wgpu { device, queue } = target else {
+            return Err("wgpu resource target missing".into());
+        };
+        if self.kind != RendererKind::Femtovg {
+            return Err("Vello is a comparison path; UI reload uses femtovg or CPU".into());
+        }
+        let allocation_scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let result = self.upload(device, queue);
+        let validation = pollster::block_on(validation_scope.pop());
+        let allocation = pollster::block_on(allocation_scope.pop());
+        result?;
+        if let Some(error) = validation.or(allocation) {
+            return Err(error.to_string().into());
+        }
+        Ok(())
+    }
+
     fn wants_gpu(&self) -> bool {
         true
     }
@@ -197,6 +339,9 @@ impl Renderer for GpuRenderer {
         let RenderTarget::Gpu(target) = target else {
             return Err("wrong renderer target".into());
         };
+        if self.kind == RendererKind::Femtovg {
+            self.upload(target.device, target.queue)?;
+        }
         let layer = self.cache.layer.as_ref().ok_or("layer not prepared")?;
         let x = ((scene.offset.0 + layer.origin.0) * layer.scale).round();
         let y = ((scene.offset.1 + layer.origin.1) * layer.scale).round();
@@ -204,38 +349,7 @@ impl Renderer for GpuRenderer {
         let h = layer.pixels.height();
         match self.kind {
             RendererKind::Femtovg => {
-                if self.femto.is_none() {
-                    let start = Instant::now();
-                    self.femto = Some(femtovg::Canvas::new(femtovg::renderer::WGPURenderer::new(
-                        target.device.clone(),
-                        target.queue.clone(),
-                    ))?);
-                    println!(
-                        "PROFILE stage=femtovg_init ms={:.3}",
-                        start.elapsed().as_secs_f64() * 1000.
-                    );
-                }
                 let canvas = self.femto.as_mut().unwrap();
-                if self.uploaded_key != Some(layer.key) {
-                    let start = Instant::now();
-                    if let Some(old) = self.femto_image.take() {
-                        canvas.delete_image(old);
-                    }
-                    self.femto_image = Some(canvas.create_image(
-                        femtovg::ImageSource::Rgba(imgref::Img::new(
-                            layer.pixels.data().as_rgba(),
-                            w as usize,
-                            h as usize,
-                        )),
-                        femtovg::ImageFlags::PREMULTIPLIED,
-                    )?);
-                    self.uploaded_key = Some(layer.key);
-                    println!(
-                        "PROFILE stage=layer_upload ms={:.3} uploads={}",
-                        start.elapsed().as_secs_f64() * 1000.,
-                        self.cache.builds
-                    );
-                }
                 canvas.set_size(target.width, target.height, 1.);
                 canvas.clear_rect(
                     0,
@@ -307,7 +421,9 @@ impl Renderer for GpuRenderer {
                     },
                 )?;
             }
-            RendererKind::Cpu => return Err("CPU renderer selected for GPU".into()),
+            RendererKind::Cpu | RendererKind::FemtovgGl => {
+                return Err("CPU renderer selected for GPU".into());
+            }
         }
         Ok(())
     }

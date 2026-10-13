@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod font_sources;
+mod reload;
 use bead_render::{Palette, Primitive, Rect, Scene, Slide};
 use bead_wayland::{Options, run};
 use std::path::{Path, PathBuf};
@@ -13,6 +14,8 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let started = std::time::Instant::now();
     let mut profile = false;
     let mut options = Options::default();
+    select_renderer(&mut options, "auto")?;
+    let mut ui: Option<std::path::PathBuf> = None;
     if let Ok(name) = std::env::var("BEAD_RENDERER") {
         select_renderer(&mut options, &name)?;
     }
@@ -23,6 +26,20 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             "--profile-scene" => {
                 profile = true;
                 options.panel = true;
+            }
+            "--ui" => {
+                ui = Some(args.next().ok_or("--ui needs bundle-relative path")?.into());
+                options.panel = true;
+                options.content_size = true;
+                options.interactive = true;
+            }
+            "--trace-state" => options.trace_state = true,
+            "--memory-usage" => options.memory_usage = true,
+            "--surfaces" => {
+                options.surface_count = args.next().ok_or("--surfaces needs value")?.parse()?;
+                if !(1..=3).contains(&options.surface_count) {
+                    return Err("surfaces must be 1..3".into());
+                }
             }
             "--renderer" => {
                 select_renderer(&mut options, &args.next().ok_or("--renderer needs value")?)?
@@ -48,7 +65,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--panel|--animate] [--renderer cpu|femtovg|vello|auto] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 2 drawing preview. Click-through, no reserved space. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto uses shared native GL, then CPU if unavailable. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
@@ -56,11 +73,34 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let colors = Palette::read(&palette)?;
-    let mut scene = if options.panel {
+    let mut scene = if ui.is_some() {
+        Scene {
+            opacity: 1.,
+            resource_revision: 0,
+            asset_data: Default::default(),
+            font_files: vec![],
+            width: 1100.,
+            slide: Some(Slide {
+                closed_y: 32.,
+                open_y: 32.,
+                period_seconds: 2.,
+            }),
+            offset: (32., 32.),
+            bounds: Rect::new(-32., -32., 1164., 654.),
+            primitives: vec![Primitive::Rounded {
+                rect: Rect::new(0., 0., 1100., 590.),
+                radius: 12.,
+                fill: colors.get("surface")?,
+                border: None,
+            }],
+        }
+    } else if options.panel {
         panel(&colors, Path::new("shell"))?
     } else {
         Scene {
             opacity: 1.,
+            resource_revision: 0,
+            asset_data: Default::default(),
             font_files: Vec::new(),
             width: 20000.,
             slide: None,
@@ -74,7 +114,9 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             bounds: Rect::new(0., 0., 20000., 32.),
         }
     };
-    scene.font_files = font_sources::select(&scene)?;
+    if ui.is_none() {
+        scene.font_files = font_sources::select(&scene)?;
+    }
     println!(
         "PROFILE stage=cli_scene ms={:.3}",
         started.elapsed().as_secs_f64() * 1000.
@@ -105,7 +147,24 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
-    run(options, scene)
+    if let Some(entry) = ui {
+        let session = bead_ui::Session::new(
+            std::path::PathBuf::from("shell"),
+            entry,
+            palette,
+            colors,
+            scene.clone(),
+        );
+        let renderer = bead_render::renderer(options.renderer)?;
+        bead_wayland::run_runtime(
+            options,
+            scene,
+            renderer,
+            Some(Box::new(reload::Runtime::new(session))),
+        )
+    } else {
+        run(options, scene)
+    }
 }
 fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>> {
     let body = p.get("surface")?;
@@ -244,6 +303,8 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
     }
     Ok(Scene {
         opacity: 1.,
+        resource_revision: 0,
+        asset_data: Default::default(),
         font_files: Vec::new(),
         width: 1100.,
         slide: Some(Slide {
@@ -263,15 +324,16 @@ fn select_renderer(options: &mut Options, name: &str) -> Result<(), Box<dyn std:
     options.renderer = match name {
         "cpu" => RendererKind::Cpu,
         "femtovg" => RendererKind::Femtovg,
+        "femtovg-gl" => RendererKind::FemtovgGl,
         "vello" => RendererKind::Vello,
         "auto" => {
             if cfg!(feature = "gpu") {
-                RendererKind::Femtovg
+                RendererKind::FemtovgGl
             } else {
                 RendererKind::Cpu
             }
         }
-        _ => return Err("renderer must be cpu, femtovg, vello or auto".into()),
+        _ => return Err("renderer must be cpu, femtovg-gl, femtovg, vello or auto".into()),
     };
     Ok(())
 }

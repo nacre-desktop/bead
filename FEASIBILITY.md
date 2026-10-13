@@ -134,3 +134,32 @@ No system installs; ~4h elapsed; 1122 net Rust lines;
 CI38439776660 passed; raw .research/retained-comparison. [Preview](examples/retained-renderers.png).
 Verdict: **adjust — choose femtovg + small retained surfaces; keep CPU fallback**.
 No physical120Hz pass claimed; Vello's first/large-surface costs reject it here. STOP.
+
+## Feature 3 — stateful hot reload + shared native GL (2026-10-13)
+
+Typed JSON/Luau reloads preserve stable-ID input, scroll, focus and open panels.
+All UI sources/assets, bindings, palette and GPU uploads stage before one swap;
+broken files keep the old UI with file/line error overlay, and fixing clears it.
+Native GL is lightest and matched QML physical120Hz; CPU remains the no-GPU fallback.
+Cold startup misses QML, and reload bakes still pause the UI thread ~80–103ms.
+
+| Variant/run | CPU % | Draw p50/p99 ms | Callback p50/p99 ms | PSS + DRM total (PSS/USS + DRM), MiB | Startup ms |
+| --- | ---: | ---: | ---: | --- | ---: |
+| GL/first | 2.62 | .048/.153 | 8.341/9.383 | 90.56 (46.48/43.45 +44.08) | 268.88 |
+| GL/later | 5.23 | .061/**29.690** | 8.366/**102.434** | 93.03 (32.98/30.82 +60.05) | 112.49 |
+| wgpu default/first | 4.55 | .210/.437 | 8.331/9.341 | 166.97 (45.92/43.92 +121.05) | 197.04 |
+| wgpu default/later | 4.67 | .221/.479 | 8.334/9.809 | 159.77 (38.72/37.27 +121.05) | 410.72 |
+| wgpu MemoryUsage/first | 4.17 | .269/.549 | 8.400/71.810 | 130.34 (45.49/43.90 +84.84) | 185.37 |
+| wgpu MemoryUsage/later | 4.43 | .265/.570 | 8.382/36.222 | 123.55 (38.71/37.45 +84.84) | 97.94 |
+| GL/3 surfaces/first, later | 6.25,13.60 | — | — | 144.09,132.09 (45.65/43.60 +98.44; 33.53/31.40 +98.56) | 373.88,139.68 |
+| UI GL idle/first, later | 0,0 | static | static | 101.29,87.29 (51.27/46.80 +50.02; 37.52/33.38 +49.77) | 314.89,108.01 |
+| UI CPU idle/first, later | 0,0 | static | static | 23.72,23.32 (23.72/20.03 +0; 23.32/19.78 +0) | 129.39,81.67 |
+| UI QML idle/first, later | 0,.017 | static | static | 200.81,194.31 (104.99/84.79 +95.82; 98.46/75.13 +95.85) | 228.35,162.31 |
+| Live GL | 1.51 | .041/.159 | 8.322/9.989 | 95.64 (51.62/46.31 +44.02) | 233.58 |
+| Live QML | 3.29 | not measured | not measured | 187.89 (97.98/73.61 +89.90) | 176.04 |
+
+Private60s rows: nested virtual2880×1800/1.5/120Hz, content1746×978; first fresh private caches, OS caches uncontrolled. GL20s repeats callback p99 9.53/9.24ms do not erase the bad60s run. Shared device/context ID0 only; same-scale layer built/uploaded once for1/3 surfaces; peak3-surface DRM144.65/146.66MiB. No hidden per-surface devices.
+Live: ONE paired60s niri episode, real2880×1800/1.5/120Hz; CPU55s after5s warmup. Both physical presentation p50/p99 **8.333/8.337ms**, refresh8333313ns, flags7; discarded GL21/QML22 updates. Both stopped; Nacre untouched. Paired GPU load; no additional live authorization.
+Latest five-edit reload proof: wgpu/niri78.85–82.99ms, GL/Hyprland99.92–102.71ms, CPU fallback/niri82.06–83.66ms; matched QML50.01–109.05ms. File-write→first presentation, small samples, not robust p99; state/error/fix passed. Idle CPU0 means zero observed ticks. Emoji loaded/rendered in GL; mapped-file test alone misses copied font data. Cold GL context/shaders ~213ms; targeted font selection already avoids system-wide scanning.
+Memory is requested PSS+deduplicated DRM, not exclusive VRAM; shared system allocation may overlap PSS. CPU0 DRM means no app GPU descriptors. See prior comparison for full-screen memory. Basic absolute geometry/input only; no full controls/IME. Dependencies mlua0.12.2/Luau, notify8.2.0, glutin0.32.3 verified permissive by cargo-deny; no system installs.
+Validation: fmt/clippy -D warnings,19 tests, CPU-only build, GUI state/error/fix + demo on both compositors, independent cargo-deny graphs pass. ~2.5h elapsed since first GL edits; 2625 net Rust lines plus fixtures/probes; raw evidence private .research/feature3. [Error screenshot](examples/hot-reload-error.png). Verdict/Gate B: **adjust — retain native GL + small layers/CPU fallback; improve cold startup and off-thread reload baking; proceed to Feature4 only after owner OK**.

@@ -8,6 +8,7 @@ use std::{
 };
 use tiny_skia::{Mask, Pixmap, PixmapMut, PixmapPaint, Transform};
 
+#[derive(Clone)]
 pub struct Layer {
     pub pixels: Arc<Pixmap>,
     pub scale: f32,
@@ -18,11 +19,17 @@ pub struct Layer {
 pub struct LayerCache {
     pub layer: Option<Layer>,
     pub builds: usize,
+    scales: std::collections::BTreeMap<u32, Layer>,
 }
 impl LayerCache {
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         let key = content_key(scene, scale);
-        if self.layer.as_ref().is_some_and(|l| l.key == key) {
+        if let Some(layer) = self
+            .scales
+            .get(&scale.to_bits())
+            .filter(|layer| layer.key == key)
+        {
+            self.layer = Some(layer.clone());
             return Ok(());
         }
         let start = Instant::now();
@@ -31,6 +38,9 @@ impl LayerCache {
         content.opacity = 1.;
         let w = (scene.bounds.w * scale).ceil() as u32;
         let h = (scene.bounds.h * scale).ceil() as u32;
+        if u64::from(w) * u64::from(h) * 4 > 64 * 1024 * 1024 {
+            return Err("retained layer exceeds 64 MiB".into());
+        }
         let mut pixels = Pixmap::new(w, h).ok_or("layer allocation")?;
         let mut raster = CpuRenderer::default();
         raster.prepare(&content, scale)?;
@@ -55,12 +65,22 @@ impl LayerCache {
             h,
             self.builds
         );
-        self.layer = Some(Layer {
+        let layer = Layer {
             pixels: Arc::new(pixels),
             scale,
             key,
             origin: (scene.bounds.x, scene.bounds.y),
-        });
+        };
+        self.scales.insert(scale.to_bits(), layer.clone());
+        while self.scales.len() > 8 {
+            let key = *self
+                .scales
+                .keys()
+                .find(|&&key| key != scale.to_bits())
+                .unwrap();
+            self.scales.remove(&key);
+        }
+        self.layer = Some(layer);
         Ok(())
     }
 }
@@ -69,6 +89,7 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
     use crate::Primitive;
     let mut h = std::collections::hash_map::DefaultHasher::new();
     scale.to_bits().hash(&mut h);
+    scene.resource_revision.hash(&mut h);
     scene.font_files.hash(&mut h);
     for f in [
         scene.bounds.x,
@@ -200,6 +221,8 @@ mod tests {
         Scene {
             font_files: vec![],
             opacity: 1.,
+            resource_revision: 0,
+            asset_data: Default::default(),
             width: 40.,
             slide: None,
             offset: (0., 0.),
@@ -211,6 +234,17 @@ mod tests {
                 border: None,
             }],
         }
+    }
+    #[test]
+    fn multiple_scales_reuse_their_own_cached_layer() {
+        let scene = scene();
+        let mut cache = LayerCache::default();
+        for _ in 0..3 {
+            for scale in [1., 1.5, 2.] {
+                cache.prepare(&scene, scale).unwrap();
+            }
+        }
+        assert_eq!(cache.builds, 3);
     }
     #[test]
     fn pose_reuses_layer_and_content_edits_rebuild_it() {

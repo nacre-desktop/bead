@@ -13,11 +13,13 @@ use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
 };
 #[cfg(feature = "gpu")]
+pub mod gl;
+#[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod retained;
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,
@@ -85,7 +87,8 @@ impl Damage {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Primitive {
     Rounded {
         rect: Rect,
@@ -120,6 +123,8 @@ pub struct Slide {
 #[derive(Clone)]
 pub struct Scene {
     pub opacity: f32,
+    pub resource_revision: u64,
+    pub asset_data: std::collections::BTreeMap<std::path::PathBuf, std::sync::Arc<[u8]>>,
     pub font_files: Vec<std::path::PathBuf>,
     pub width: f32,
     pub slide: Option<Slide>,
@@ -150,24 +155,44 @@ pub enum RenderTarget<'a> {
     Shm(ShmTarget<'a>),
     #[cfg(feature = "gpu")]
     Gpu(gpu::GpuTarget<'a>),
+    #[cfg(feature = "gpu")]
+    Gl(gl::GlTarget<'a>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum RendererKind {
     #[default]
     Cpu,
     Femtovg,
+    FemtovgGl,
     Vello,
 }
 pub fn renderer(kind: RendererKind) -> Result<Box<dyn Renderer>> {
     match kind {
         RendererKind::Cpu => Ok(Box::<retained::RetainedCpuRenderer>::default()),
         #[cfg(feature = "gpu")]
+        RendererKind::FemtovgGl => Ok(Box::<gl::GlRenderer>::default()),
+        #[cfg(feature = "gpu")]
         RendererKind::Femtovg | RendererKind::Vello => Ok(Box::new(gpu::GpuRenderer::new(kind))),
         #[cfg(not(feature = "gpu"))]
         _ => Err("GPU support disabled; use the tiny-skia fallback".into()),
     }
 }
+#[cfg(feature = "gpu")]
+pub enum ResourceTarget<'a> {
+    Wgpu {
+        device: &'a gpu::wgpu::Device,
+        queue: &'a gpu::wgpu::Queue,
+    },
+    Gl {
+        display: &'a glutin::display::Display,
+    },
+}
 pub trait Renderer {
+    #[cfg(feature = "gpu")]
+    fn stage_resources(&mut self, _: ResourceTarget<'_>) -> Result<()> {
+        Ok(())
+    }
+
     fn wants_gpu(&self) -> bool {
         false
     }
@@ -175,7 +200,9 @@ pub trait Renderer {
         match target {
             RenderTarget::Shm(t) => self.render(scene, t, damage),
             #[cfg(feature = "gpu")]
-            RenderTarget::Gpu(_) => Err("GPU target unsupported by CPU renderer".into()),
+            RenderTarget::Gpu(_) | RenderTarget::Gl(_) => {
+                Err("GPU target unsupported by CPU renderer".into())
+            }
         }
     }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()>;
@@ -373,7 +400,12 @@ impl Renderer for CpuRenderer {
                     );
                     pix
                 }
-                Primitive::Image { rect, path } => load_image(path, *rect, scale)?,
+                Primitive::Image { rect, path } => load_image(
+                    path,
+                    *rect,
+                    scale,
+                    scene.asset_data.get(path).map(|data| data.as_ref()),
+                )?,
                 Primitive::Shadow { rect, radius, blur } => {
                     shadow_pixmap(*rect, *radius, *blur, scale)?
                 }
@@ -603,12 +635,23 @@ fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
     );
     Ok(pix)
 }
-fn load_image(path: &Path, rect: Rect, scale: f32) -> Result<Pixmap> {
+/// Validate an immutable asset snapshot with the same decoder used for drawing.
+pub fn validate_asset(path: &Path, bytes: &[u8]) -> Result<()> {
+    load_image(path, Rect::new(0., 0., 4., 4.), 1., Some(bytes)).map(|_| ())
+}
+fn load_image(path: &Path, rect: Rect, scale: f32, snapshot: Option<&[u8]>) -> Result<Pixmap> {
+    let file;
+    let bytes = if let Some(snapshot) = snapshot {
+        snapshot
+    } else {
+        file = std::fs::read(path)?;
+        &file
+    };
     let (w, h) = dimensions(rect, scale);
     if path.extension().is_some_and(|e| e == "svg") {
-        return svg_pixmap(&std::fs::read(path)?, w, h);
+        return svg_pixmap(bytes, w, h);
     }
-    let raw = image::open(path)?
+    let raw = image::load_from_memory(bytes)?
         .resize_exact(w, h, image::imageops::FilterType::Lanczos3)
         .to_rgba8();
     let mut pix = Pixmap::new(w, h).ok_or("image allocation")?;
@@ -692,6 +735,8 @@ mod tests {
             for frame in 0..30 {
                 let mut scene = Scene {
                     opacity: 1.,
+                    resource_revision: 0,
+                    asset_data: Default::default(),
                     font_files: Vec::new(),
                     width: 40.,
                     slide: None,

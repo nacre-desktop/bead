@@ -1,15 +1,15 @@
 # Roadmap and gates
 
-Updated 2026-10-13. ADR 0001 approved with amendments; Feature 2 built; CPU renderer concern, owner feedback pending.
-This is a feasibility order, not a commitment to complete every feature.
-The retained comparison recommends femtovg/wgpu with content-sized layers and a
-CPU fallback. Virtual callback tails remain a concern; no physical120Hz pass.
-Owner chooses the renderer before Feature3. Comparison work is complete; STOP.
+Updated 2026-10-13. Feature 3 built; Gate B awaiting owner decision.
+Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
+One authorized live niri comparison matched QML physical120Hz timing; cold startup
+and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
+Stop here before Feature 4 (Taffy layout, animation and full input/focus).
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
 current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;
 append FEASIBILITY.md with time/LOC/numbers/problems/verdict; update STATUS.md;
-commit/push private main; provide one command/what to inspect; **stop for next**.
+commit/push main (public by owner request); provide one command/what to inspect; **stop for next**.
 Do not bundle unrequested later features into the current proof.
 
 ## Phase 0 — current
