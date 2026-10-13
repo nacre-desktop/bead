@@ -131,6 +131,6 @@ lazily in GPL shell. Initial default-AA Vello728ms/223PSS/389DRM, peak293MiB ret
 First-pass Vello alpha wrong; corrected transfer pixel-matches all3,4 rows rerun.
 Exact retained partial/full pixels and≤2/255 shadow; no-GPU fallback and8 checks pass.
 No system installs; ~4h elapsed; 1122 net Rust lines;
-raw evidence .research/retained-comparison. [Private preview](examples/retained-renderers.png).
+CI38439776660 passed; raw .research/retained-comparison. [Preview](examples/retained-renderers.png).
 Verdict: **adjust — choose femtovg + small retained surfaces; keep CPU fallback**.
 No physical120Hz pass claimed; Vello's first/large-surface costs reject it here. STOP.

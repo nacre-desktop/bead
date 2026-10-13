@@ -40,7 +40,8 @@ smooth slide/fade. Close window or Ctrl+C. `cpu`/`vello`/`auto` are alternatives
 [Private preview](../examples/retained-renderers.png). Default palette matches
 active dark; benchmark retains frozen light Orient fixture for reproducibility.
 
-Active isolated worktree bead-retained-renderers based on f6904e3. Publication/
-CI pending: commit/integrate/push main, verify exact-head CI, then STOP for owner
-renderer decision. No further feature work. Repo public; contributor/noreply
+Comparison code31cf490 integrated/pushed; exact-head CI38439776660 passed.
+Active isolated worktree bead-retained-renderers clean. Final handoff is docs-only.
+Next: **STOP for owner renderer decision / Feature3 authorization.** No further
+feature work. Repo public; contributor/noreply
 Git identity only, global untouched. References Nacre/Orient remain read-only.
