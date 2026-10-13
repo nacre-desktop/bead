@@ -1,7 +1,7 @@
 # Status
 
 2026-10-13: Feature 3 built and validated; Gate B waiting for owner.
-Core code published as dfbe296; bundled UI and final handoff follow in this commit.
+Code/UI revision8265525 published; CI38461567225 passed. This handoff changes docs only.
 Typed JSON/Luau, stable-ID typed stores, reactive bindings, asset snapshots,
 atomic CPU/GPU staging, error overlay and event-driven watch are built.
 State/input/scroll/open/focus survive view replacement; broken files keep old UI.
@@ -24,8 +24,9 @@ Earlier nested GL102.43ms callback p99 remains recorded; do not hide it.
 Next: owner Gate B decision (go / adjust / stop). Recommended adjust: keep shared
 native GL/content layers/CPU fallback; address cold startup and move reload baking
 off the UI thread as the experiment grows. Feature4: Taffy layout, animation and
-full pointer/keyboard/focus. Do not start before owner OK. CI verification pending;
-all local checks pass. Git author/committer use contributors/noreply.
+full pointer/keyboard/focus. Do not start before owner OK. All local checks and
+code CI pass. Git author/committer use contributors/noreply. Both worktrees clean
+after this handoff commit; raw evidence remains ignored.
 
 Owner command: `./scripts/dev.sh niri --demo` (nested only; valid/error/recovery).
 Click Search/type/scroll/Home; state should survive. Close window or Ctrl+C stops it.

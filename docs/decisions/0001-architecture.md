@@ -1,4 +1,4 @@
-# ADR 0001 — A bounded CPU-first, interpreted shell experiment
+# ADR 0001 — An interpreted shell with retained rendering
 
 Date: 2026-10-13. Status: **approved 2026-10-13, with the following owner amendments**.
 Scope: Bead framework + GPL Nacre Shell experiment, not deployment.
