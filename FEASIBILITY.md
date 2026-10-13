@@ -87,7 +87,7 @@ fmt/clippy/tests/cargo-deny pass locally; CI status in STATUS. No system install
 MPL option-ext is confined to GPL shell; [ttf-parser maintenance notice](https://rustsec.org/advisories/RUSTSEC-2026-0192.html)
 exception is explicit in cargo-deny. Installed fonts only; SVG text/embedded rasters
 not covered. Hot reload N/A. Resources/interface are a CPU proof, not shell parity.
-~40 minutes build/measure/checks; 1134 net Rust lines plus 208 fixture/tool lines.
+~40 minutes build/measure/checks; 1155 net Rust lines plus 208 fixture/tool lines.
 [Preview](examples/feature2.png) is a private nested screenshot, not the live desktop.
 Verdict: **concern — CPU renderer misses120 Hz**. Propose the same panel on GPU before
 Feature 3; STOP for owner feedback. Raw evidence retained locally under .research/feature2.

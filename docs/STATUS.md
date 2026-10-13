@@ -31,9 +31,10 @@ sliding drawing panel, readable fallback/emoji, corners/shadow and sample icons.
 Maximize the nested window if needed to see the full panel. Close it or Ctrl+C.
 [Private nested screenshot](../examples/feature2.png). This is not a working launcher.
 
-Local fmt/clippy -D warnings/workspace tests/cargo-deny pass. Publication/CI pending.
-Active isolated worktree: bead-feature2 based on fa49b64; integrate directly into
-main, push, verify exact-head CI, then stop. Next proposed step: matched GPU panel
+Local fmt/clippy -D warnings/workspace tests/cargo-deny pass. Feature code
+0f71173 integrated and pushed; CI38400965824 passed (fmt/clippy/tests/cargo-deny).
+Final handoff only adjusts preview configs/docs; verify its exact-head CI and stop.
+Active isolated worktree: bead-feature2. Next proposed step: matched GPU panel
 comparison before Feature3. Owner decides; no further feature work now.
 
 Repository remains public. Original seven commits were recreated with identical
