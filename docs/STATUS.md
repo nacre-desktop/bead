@@ -1,8 +1,9 @@
 # Status
 
 2026-10-13: Feature 1 built and locally validated. Public repository; ADR 0001
-approved with amendments. Feature 1 integrated and pushed; CI passed for code
-8a5069d in run 38391925119. Final screenshot/handoff update is documentation only.
+approved with amendments. Feature 1 integrated and validated. Repository recreated
+with seven content-identical commits under Nacre contributors/noreply identity;
+old commit links and CI run references are historical. New base: c4aed383.
 
 Done: MIT/Apache bead-wayland + GPL nacre-shell, full-width 32px strip per output,
 no keyboard focus/input capture/reserved space; event-driven idle; signal cleanup.
@@ -25,13 +26,18 @@ Final cleanup found/stopped an old QML screenshot attempt. One fresh 60-second
 pair per compositor supersedes earlier PSS: Bead 1.06/1.10 MiB, QML 71.52/70.95.
 QML/niri one CPU tick; others zero. See FEASIBILITY for startup/USS and caveats.
 
-Next action: **WAIT for next/feedback.** Feature 1 complete; do not start Feature 2.
+In progress: **Feature 2 authorized.** Implement fractional scaling, renderer
+interface, direct reusable wl_shm buffers and buffer-age damage before stress.
 [Screenshot](../examples/feature1.png): dark top strip is Bead; central overlay is niri.
 Feature 2 must add drawing/palette and stress a launcher-sized rounded/shadowed,
 lots-of-text/color-emoji panel with damage tracking at real 2880×1800 / effective
 1.5 scale / 120 Hz. Report p50/p99, CPU and loaded-font PSS. Tell owner if CPU
-cannot keep up before Feature 3. Do not start Feature 2 without next/feedback.
+cannot keep up before Feature 3. Compare damage enabled/disabled.
 
 Policies: no new ledgers; cargo-deny in CI. CC0/0BSD/Unlicense/MIT-0 permitted.
 niri-ipc adapter belongs in GPL nacre-shell behind neutral Bead interface in
 Feature 5; libmpv later. Each future feature log under about 40 lines.
+
+Identity repair verified: all seven public commits use contributor author and
+committer identity; old commit API lookups unavailable and old public HEAD page
+HTTP 404. Repo-local identity prevents recurrence; global Git config untouched.
