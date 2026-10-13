@@ -1,0 +1,7 @@
+.tools/
+.research/
+target/
+**/target/
+spikes/results/raw/
+__pycache__/
+*.pyc
