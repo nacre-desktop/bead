@@ -1,0 +1,11 @@
+[workspace]
+resolver = "3"
+members = ["spikes/blank-layer"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[profile.release]
+opt-level = 3

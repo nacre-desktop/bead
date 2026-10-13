@@ -38,7 +38,11 @@ Primary APIs checked/read:
 [logind](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.login1.html).
 Live hardware/system service behavior remains unverified. Latest API pages often
 do not expose a dated version; capture date/hash is the evidence, not an invented
-release number. Exact fetch failures are retained in spec-sources.
+release number. Exact fetch failures are retained in spec-sources. Logind and BlueZ page fetches
+failed; the official
+[logind XML](https://github.com/systemd/systemd/blob/main/man/org.freedesktop.login1.xml)
+and [BlueZ API source](https://github.com/bluez/bluez/blob/master/doc/org.bluez.Adapter.rst)
+were successfully read as fallbacks.
 
 Do not add a GPL/LGPL convenience crate merely because its public interface is
 convenient. Reuse a permissive zbus proxy crate only after audit; a few small
@@ -93,7 +97,7 @@ the permissive core's dependency graph. See
 and [published license](https://crates.io/crates/niri-ipc/26.4.0).
 
 Preferred first backend proof uses the existing Python compositor helper to
-preserve its already-validated identity/capability normalization, then adds
+preserve its existing identity/capability normalization, then adds
 independent native Rust transports behind the same interface in Feature 5.
 This does not port the helpers or use their GPL code as a framework library.
 Performance must count the helper process when comparing that implementation.

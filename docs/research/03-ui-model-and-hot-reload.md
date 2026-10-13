@@ -154,6 +154,10 @@ locations are acceptance criteria, not polish deferred until parity.
 
 ## Feature 3 acceptance / Gate B
 
+Feature 3 includes minimal real editing/selection, scrolling and Taffy layout
+for the preservation fixture. Feature 4 expands those into general focus/gesture,
+clipboard, IME and accessibility behavior; it does not postpone the state proof.
+
 - Panel open, typed input/selection and scroll anchor survive 100 valid structural
   edits, including keyed list reorder and multi-file imports.
 - Invalid syntax, wrong type, duplicate ID, cycle, missing asset and script loop

@@ -4,6 +4,7 @@
 SPDX-License-Identifier: MIT OR Apache-2.0
 """
 import argparse
+import ast
 import collections
 import json
 import pathlib
@@ -32,11 +33,14 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('reference', type=pathlib.Path)
     p.add_argument('output', type=pathlib.Path)
+    p.add_argument('--revision', help='Exact revision for an exported read-only snapshot')
     args = p.parse_args()
     root = args.reference
-    data = {'revision': subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(),
+    data = {'revision': args.revision or subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(),
             'method': 'lexical imports/object declarations/member references; comment and string aware brace matching; dynamic expressions require runtime confirmation',
             'files': [], 'imports': {}, 'types': {}, 'ipc': [], 'processes': [], 'file_views': [], 'shortcuts': [], 'qualified_references': {}}
+    data['all_process_file_mentions'] = {'Process': [], 'FileView': []}
+    data['typed_properties'] = []
     imports, types, refs = collections.defaultdict(list), collections.defaultdict(list), collections.defaultdict(list)
     for file in sorted((root / 'nacre/shell').rglob('*.qml')):
         text = file.read_text()
@@ -45,6 +49,8 @@ def main():
         def loc(offset):
             return f'{rel}:{text.count(chr(10), 0, offset) + 1}'
         fi = {'path': rel, 'lines': len(text.splitlines()), 'imports': [], 'types': []}
+        for m in re.finditer(r'\bproperty\s+([\w.<>]+)\s+(\w+)\b',structural):
+            data['typed_properties'].append({'type':m.group(1),'name':m.group(2),'location':loc(m.start())})
         for m in re.finditer(r'^\s*import\s+([^\n]+)', clean, re.M):
             imp = m.group(1).strip()
             imports[imp].append(loc(m.start()))
@@ -57,6 +63,8 @@ def main():
             fi['types'].append(m.group(1))
         for m in re.finditer(r'\b([A-Z]\w*(?:\.\w+)+)', structural):
             refs[m.group(1)].append(loc(m.start()))
+        for name in data['all_process_file_mentions']:
+            data['all_process_file_mentions'][name].extend(loc(m.start()) for m in re.finditer(r'\b'+name+r'\b',structural))
         for name, key in [('IpcHandler', 'ipc'), ('Process', 'processes'), ('FileView', 'file_views'), ('GlobalShortcut', 'shortcuts'), ('NacreShortcut', 'shortcuts')]:
             for start, end, body in blocks(text, name):
                 obj = {'type': name, 'location': loc(start)}
@@ -88,6 +96,10 @@ def main():
         for number, line in enumerate(file.read_text(errors='replace').splitlines(), 1):
             if re.search(r'ipc[\s\x22,]+(?:call|\x22call)|\bqs.*\bipc|\bipc\(', line):
                 calls.append({'location': f'{file.relative_to(root).as_posix()}:{number}', 'expression': line.strip()})
+        if file.suffix == '.py':
+            for node in ast.walk(ast.parse(file.read_text())):
+                if isinstance(node, ast.Call) and any(isinstance(arg, ast.List) and any(isinstance(value, ast.Constant) and value.value == 'ipc' for value in arg.elts) for arg in node.args):
+                    calls.append({'location': f'{file.relative_to(root).as_posix()}:{node.lineno}', 'expression': ast.unparse(node), 'method': 'Python AST multiline argv'})
     data['helper_cli_ipc_calls'] = calls
     data['helper_task_instances'] = []
     for file in sorted((root/'nacre/shell').rglob('*.qml')):

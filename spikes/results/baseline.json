@@ -1,0 +1,644 @@
+{
+  "date": "2026-10-13",
+  "surface": {
+    "width": 512,
+    "height": 32,
+    "scale": 1,
+    "outputs": 1,
+    "namespace": "bead-dev-spike"
+  },
+  "method": "final three-run campaign; isolated XDG before private D-Bus startup; nested niri on headless labwc GLES; static 512x32 layer surface; five-second settle; 60-second one-core CPU tick interval; PSS/USS/SwapPss via smaps_rollup; Rust frame callback versus QML component-completion startup markers are not comparable",
+  "runs": [
+    {
+      "renderer": "tiny-skia",
+      "run": 0,
+      "ready_wall_ms": 25.641193000410567,
+      "before": {
+        "pss_mib": 1.8603515625,
+        "uss_mib": 1.8125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 0.546875,
+        "pss_file_mib": 1.2822265625,
+        "pss_shmem_mib": 0.03125
+      },
+      "after": {
+        "pss_mib": 1.8603515625,
+        "uss_mib": 1.8125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 0.546875,
+        "pss_file_mib": 1.2822265625,
+        "pss_shmem_mib": 0.03125
+      },
+      "idle_seconds": 60.00007486699997,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": []
+      }
+    },
+    {
+      "renderer": "vello",
+      "run": 0,
+      "ready_wall_ms": 675.5703779999749,
+      "before": {
+        "pss_mib": 177.4765625,
+        "uss_mib": 173.03515625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 160.6796875,
+        "pss_file_mib": 16.763671875,
+        "pss_shmem_mib": 0.0322265625
+      },
+      "after": {
+        "pss_mib": 177.478515625,
+        "uss_mib": 173.03515625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 160.6796875,
+        "pss_file_mib": 16.765625,
+        "pss_shmem_mib": 0.0322265625
+      },
+      "idle_seconds": 60.00017365099984,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {},
+          {
+            "drm-resident-system0": 225.62109375
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "femtovg",
+      "run": 0,
+      "ready_wall_ms": 79.6621980002783,
+      "before": {
+        "pss_mib": 26.79296875,
+        "uss_mib": 22.36328125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 11.68359375,
+        "pss_file_mib": 15.076171875,
+        "pss_shmem_mib": 0.0322265625
+      },
+      "after": {
+        "pss_mib": 26.791015625,
+        "uss_mib": 22.36328125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 11.68359375,
+        "pss_file_mib": 15.07421875,
+        "pss_shmem_mib": 0.0322265625
+      },
+      "idle_seconds": 60.000072201999956,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {},
+          {
+            "drm-resident-system0": 90.859375
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "qml",
+      "run": 0,
+      "ready_wall_ms": 79.46968899977946,
+      "before": {
+        "pss_mib": 58.208984375,
+        "uss_mib": 48.3671875,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 48.27734375,
+        "pss_file_mib": 9.921875,
+        "pss_shmem_mib": 0.0087890625
+      },
+      "after": {
+        "pss_mib": 59.5078125,
+        "uss_mib": 47.3125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 47.1015625,
+        "pss_file_mib": 12.3974609375,
+        "pss_shmem_mib": 0.0087890625
+      },
+      "idle_seconds": 60.000274587999684,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "QML component completion",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {
+            "drm-resident-system0": 10.8046875
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "tiny-skia",
+      "run": 1,
+      "ready_wall_ms": 16.60536300005333,
+      "before": {
+        "pss_mib": 1.8984375,
+        "uss_mib": 1.8515625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 0.546875,
+        "pss_file_mib": 1.3203125,
+        "pss_shmem_mib": 0.03125
+      },
+      "after": {
+        "pss_mib": 1.8994140625,
+        "uss_mib": 1.8515625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 0.546875,
+        "pss_file_mib": 1.3212890625,
+        "pss_shmem_mib": 0.03125
+      },
+      "idle_seconds": 60.0000888630002,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": []
+      }
+    },
+    {
+      "renderer": "vello",
+      "run": 1,
+      "ready_wall_ms": 77.32229900011589,
+      "before": {
+        "pss_mib": 32.0576171875,
+        "uss_mib": 27.6328125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 21.640625,
+        "pss_file_mib": 10.3896484375,
+        "pss_shmem_mib": 0.02734375
+      },
+      "after": {
+        "pss_mib": 32.0537109375,
+        "uss_mib": 27.6328125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 21.640625,
+        "pss_file_mib": 10.3857421875,
+        "pss_shmem_mib": 0.02734375
+      },
+      "idle_seconds": 60.00013574400009,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {},
+          {
+            "drm-resident-system0": 225.60546875
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "femtovg",
+      "run": 1,
+      "ready_wall_ms": 57.24138200002926,
+      "before": {
+        "pss_mib": 19.75,
+        "uss_mib": 15.37890625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 10.04296875,
+        "pss_file_mib": 9.6796875,
+        "pss_shmem_mib": 0.02734375
+      },
+      "after": {
+        "pss_mib": 19.8017578125,
+        "uss_mib": 15.37890625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 10.04296875,
+        "pss_file_mib": 9.7314453125,
+        "pss_shmem_mib": 0.02734375
+      },
+      "idle_seconds": 60.00012191800033,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {},
+          {
+            "drm-resident-system0": 90.859375
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "qml",
+      "run": 1,
+      "ready_wall_ms": 70.11891199999809,
+      "before": {
+        "pss_mib": 62.7158203125,
+        "uss_mib": 48.15625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 47.92578125,
+        "pss_file_mib": 14.7861328125,
+        "pss_shmem_mib": 0.00390625
+      },
+      "after": {
+        "pss_mib": 71.853515625,
+        "uss_mib": 65.125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 46.75390625,
+        "pss_file_mib": 25.095703125,
+        "pss_shmem_mib": 0.00390625
+      },
+      "idle_seconds": 60.000192566999885,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "QML component completion",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {
+            "drm-resident-system0": 7.3828125
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "tiny-skia",
+      "run": 2,
+      "ready_wall_ms": 15.784229000018968,
+      "before": {
+        "pss_mib": 1.876953125,
+        "uss_mib": 1.828125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 0.546875,
+        "pss_file_mib": 1.298828125,
+        "pss_shmem_mib": 0.03125
+      },
+      "after": {
+        "pss_mib": 1.8759765625,
+        "uss_mib": 1.828125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 0.546875,
+        "pss_file_mib": 1.2978515625,
+        "pss_shmem_mib": 0.03125
+      },
+      "idle_seconds": 60.00007786700007,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": []
+      }
+    },
+    {
+      "renderer": "vello",
+      "run": 2,
+      "ready_wall_ms": 159.85498100008044,
+      "before": {
+        "pss_mib": 32.3974609375,
+        "uss_mib": 27.9765625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 22.078125,
+        "pss_file_mib": 10.2919921875,
+        "pss_shmem_mib": 0.02734375
+      },
+      "after": {
+        "pss_mib": 32.3935546875,
+        "uss_mib": 27.9765625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 22.078125,
+        "pss_file_mib": 10.2880859375,
+        "pss_shmem_mib": 0.02734375
+      },
+      "idle_seconds": 60.00011429899996,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {},
+          {
+            "drm-resident-system0": 225.62109375
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "femtovg",
+      "run": 2,
+      "ready_wall_ms": 44.512776999908965,
+      "before": {
+        "pss_mib": 19.876953125,
+        "uss_mib": 15.45703125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 10.02734375,
+        "pss_file_mib": 9.822265625,
+        "pss_shmem_mib": 0.02734375
+      },
+      "after": {
+        "pss_mib": 19.8798828125,
+        "uss_mib": 15.45703125,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 10.02734375,
+        "pss_file_mib": 9.8251953125,
+        "pss_shmem_mib": 0.02734375
+      },
+      "idle_seconds": 60.000079100999756,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "wl_surface frame callback; not presentation timestamp",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {},
+          {
+            "drm-resident-system0": 90.859375
+          }
+        ]
+      }
+    },
+    {
+      "renderer": "qml",
+      "run": 2,
+      "ready_wall_ms": 74.42466599968611,
+      "before": {
+        "pss_mib": 59.9638671875,
+        "uss_mib": 45.2265625,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 45.13671875,
+        "pss_file_mib": 14.8232421875,
+        "pss_shmem_mib": 0.00390625
+      },
+      "after": {
+        "pss_mib": 59.5732421875,
+        "uss_mib": 44.8671875,
+        "swap_pss_mib": 0.0,
+        "swap_mib": 0.0,
+        "pss_anon_mib": 44.77734375,
+        "pss_file_mib": 14.7919921875,
+        "pss_shmem_mib": 0.00390625
+      },
+      "idle_seconds": 60.00007944100025,
+      "cpu_ticks": 0,
+      "idle_cpu_one_core_percent": 0.0,
+      "ready_kind": "QML component completion",
+      "gpu": {
+        "note": "driver accounting where available; PSS does not include all GPU allocations",
+        "resident_mib_by_unique_client": [
+          {
+            "drm-resident-system0": 10.2890625
+          }
+        ]
+      }
+    }
+  ],
+  "globals": [
+    {
+      "interface": "wl_compositor",
+      "version": 6
+    },
+    {
+      "interface": "wl_subcompositor",
+      "version": 1
+    },
+    {
+      "interface": "xdg_wm_base",
+      "version": 7
+    },
+    {
+      "interface": "zxdg_decoration_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "org_kde_kwin_server_decoration_manager",
+      "version": 1
+    },
+    {
+      "interface": "zwlr_layer_shell_v1",
+      "version": 5
+    },
+    {
+      "interface": "ext_session_lock_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "wl_shm",
+      "version": 2
+    },
+    {
+      "interface": "zxdg_output_manager_v1",
+      "version": 3
+    },
+    {
+      "interface": "wp_fractional_scale_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwp_tablet_manager_v2",
+      "version": 1
+    },
+    {
+      "interface": "zwp_pointer_gestures_v1",
+      "version": 3
+    },
+    {
+      "interface": "zwp_relative_pointer_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwp_pointer_constraints_v1",
+      "version": 1
+    },
+    {
+      "interface": "ext_idle_notifier_v1",
+      "version": 2
+    },
+    {
+      "interface": "zwp_idle_inhibit_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "wl_data_device_manager",
+      "version": 3
+    },
+    {
+      "interface": "zwp_primary_selection_device_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwlr_data_control_manager_v1",
+      "version": 2
+    },
+    {
+      "interface": "ext_data_control_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "wp_presentation",
+      "version": 2
+    },
+    {
+      "interface": "wp_security_context_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwp_text_input_manager_v3",
+      "version": 1
+    },
+    {
+      "interface": "zwp_input_method_manager_v2",
+      "version": 1
+    },
+    {
+      "interface": "zwp_keyboard_shortcuts_inhibit_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwp_virtual_keyboard_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwlr_virtual_pointer_manager_v1",
+      "version": 2
+    },
+    {
+      "interface": "ext_foreign_toplevel_list_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwlr_foreign_toplevel_manager_v1",
+      "version": 3
+    },
+    {
+      "interface": "ext_workspace_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zwlr_output_manager_v1",
+      "version": 4
+    },
+    {
+      "interface": "zwlr_screencopy_manager_v1",
+      "version": 3
+    },
+    {
+      "interface": "wp_viewporter",
+      "version": 1
+    },
+    {
+      "interface": "ext_background_effect_manager_v1",
+      "version": 1
+    },
+    {
+      "interface": "zxdg_exporter_v2",
+      "version": 1
+    },
+    {
+      "interface": "zxdg_importer_v2",
+      "version": 1
+    },
+    {
+      "interface": "xdg_activation_v1",
+      "version": 1
+    },
+    {
+      "interface": "mutter_x11_interop",
+      "version": 1
+    },
+    {
+      "interface": "wl_seat",
+      "version": 9
+    },
+    {
+      "interface": "wp_cursor_shape_manager_v1",
+      "version": 2
+    },
+    {
+      "interface": "zwp_linux_dmabuf_v1",
+      "version": 5
+    },
+    {
+      "interface": "wl_output",
+      "version": 4
+    }
+  ],
+  "output_properties": {
+    "winit": {
+      "name": "winit",
+      "make": "Smithay",
+      "model": "Winit",
+      "serial": null,
+      "physical_size": null,
+      "modes": [
+        {
+          "width": 1278,
+          "height": 692,
+          "refresh_rate": 60000,
+          "is_preferred": true
+        }
+      ],
+      "current_mode": 0,
+      "is_custom_mode": true,
+      "vrr_supported": false,
+      "vrr_enabled": false,
+      "logical": {
+        "x": 0,
+        "y": 0,
+        "width": 1278,
+        "height": 692,
+        "scale": 1.0,
+        "transform": "Flipped180"
+      }
+    }
+  },
+  "clock_ticks_hz": 100,
+  "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "versions": {
+    "sctk": "0.21.1",
+    "wgpu": "30.0.1",
+    "vello": "0.11.0",
+    "femtovg": "0.27.0",
+    "tiny-skia": "0.12.0",
+    "quickshell": "0.3.2",
+    "qt": "6.12.0",
+    "niri": "26.04 (8ed0da4)",
+    "labwc": "0.20.2",
+    "wlroots": "0.20.2",
+    "mesa": "26.2.4",
+    "gpu": "Intel ARL integrated; Vulkan for Rust GPU modes, OpenGL for Qt"
+  },
+  "lockfile_sha256": "117a150cec4d92ee28fb3fc153567ea6803cfc631dbffaa626192ec0abf46825",
+  "measured_binary_sha256": "68bb391faec39878d3f08020c6c8fe8f2f5dee756ca3ebe8c74e9e6753a1d393"
+}

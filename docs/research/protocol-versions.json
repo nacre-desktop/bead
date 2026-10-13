@@ -1,0 +1,194 @@
+[
+  {
+    "file": "unstable/text-input/text-input-unstable-v3.xml",
+    "protocol": "text_input_unstable_v3",
+    "interfaces": [
+      {
+        "name": "zwp_text_input_v3",
+        "version": 2
+      },
+      {
+        "name": "zwp_text_input_manager_v3",
+        "version": 2
+      }
+    ],
+    "sha256": "160815cda13c285a30df1971d8f0a5b3aac07071537df59916d2f748b18e4f59",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "unstable/xdg-shell/xdg-shell-unstable-v5.xml",
+    "protocol": "xdg_shell_unstable_v5",
+    "interfaces": [
+      {
+        "name": "xdg_shell",
+        "version": 1
+      },
+      {
+        "name": "xdg_surface",
+        "version": 1
+      },
+      {
+        "name": "xdg_popup",
+        "version": 1
+      }
+    ],
+    "sha256": "d771caedd1cd4eb965f05242005f87c7eccbd5eac2ddf8f1ee879bd4b45fb546",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "unstable/xdg-shell/xdg-shell-unstable-v6.xml",
+    "protocol": "xdg_shell_unstable_v6",
+    "interfaces": [
+      {
+        "name": "zxdg_shell_v6",
+        "version": 1
+      },
+      {
+        "name": "zxdg_positioner_v6",
+        "version": 1
+      },
+      {
+        "name": "zxdg_surface_v6",
+        "version": 1
+      },
+      {
+        "name": "zxdg_toplevel_v6",
+        "version": 1
+      },
+      {
+        "name": "zxdg_popup_v6",
+        "version": 1
+      }
+    ],
+    "sha256": "2299fcb1ce5b337d82247e7d988cf9da150af346f2fc65e9778d4950916981d1",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "staging/cursor-shape/cursor-shape-v1.xml",
+    "protocol": "cursor_shape_v1",
+    "interfaces": [
+      {
+        "name": "wp_cursor_shape_manager_v1",
+        "version": 2
+      },
+      {
+        "name": "wp_cursor_shape_device_v1",
+        "version": 2
+      }
+    ],
+    "sha256": "bb57d91e53a79dadab7c612dab87c233393cee73673feefa7442cfbfdd9aed2f",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "staging/ext-background-effect/ext-background-effect-v1.xml",
+    "protocol": "ext_background_effect_v1",
+    "interfaces": [
+      {
+        "name": "ext_background_effect_manager_v1",
+        "version": 1
+      },
+      {
+        "name": "ext_background_effect_surface_v1",
+        "version": 1
+      }
+    ],
+    "sha256": "e463b7863c97d7be05489b52b15cd0b3a5d8290b51340f62023b47d03b4217e3",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "staging/ext-session-lock/ext-session-lock-v1.xml",
+    "protocol": "ext_session_lock_v1",
+    "interfaces": [
+      {
+        "name": "ext_session_lock_manager_v1",
+        "version": 1
+      },
+      {
+        "name": "ext_session_lock_v1",
+        "version": 1
+      },
+      {
+        "name": "ext_session_lock_surface_v1",
+        "version": 1
+      }
+    ],
+    "sha256": "a05df7d95c5e523e457037b3a149484e8064828cda66971f3c7caeb87d597a81",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "staging/fractional-scale/fractional-scale-v1.xml",
+    "protocol": "fractional_scale_v1",
+    "interfaces": [
+      {
+        "name": "wp_fractional_scale_manager_v1",
+        "version": 1
+      },
+      {
+        "name": "wp_fractional_scale_v1",
+        "version": 1
+      }
+    ],
+    "sha256": "5941de5d28f427ecdadddc8623a6f6af0a30b0ab4726847236ba7a7652b81316",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "stable/presentation-time/presentation-time.xml",
+    "protocol": "presentation_time",
+    "interfaces": [
+      {
+        "name": "wp_presentation",
+        "version": 2
+      },
+      {
+        "name": "wp_presentation_feedback",
+        "version": 2
+      }
+    ],
+    "sha256": "dffac93bcb2bb1d8c385e72b8a8c2c0d4d79a336866322f3ba886dce2b27b1e2",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "stable/viewporter/viewporter.xml",
+    "protocol": "viewporter",
+    "interfaces": [
+      {
+        "name": "wp_viewporter",
+        "version": 1
+      },
+      {
+        "name": "wp_viewport",
+        "version": 1
+      }
+    ],
+    "sha256": "dcb12279a03746301fe490aaed4b38a403485a925abfce2ccfceb644e104fe71",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "stable/xdg-shell/xdg-shell.xml",
+    "protocol": "xdg_shell",
+    "interfaces": [
+      {
+        "name": "xdg_wm_base",
+        "version": 7
+      },
+      {
+        "name": "xdg_positioner",
+        "version": 7
+      },
+      {
+        "name": "xdg_surface",
+        "version": 7
+      },
+      {
+        "name": "xdg_toplevel",
+        "version": 7
+      },
+      {
+        "name": "xdg_popup",
+        "version": 7
+      }
+    ],
+    "sha256": "7ba7f9c8473deee674cb1f154a18abd0bb0cc072604fc055b0c15e459fc4c7df",
+    "accessed": "2026-10-13"
+  }
+]

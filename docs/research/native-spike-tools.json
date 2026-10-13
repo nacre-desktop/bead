@@ -1,0 +1,23 @@
+[
+  {
+    "file": "libsfdo-0.1.4-1-x86_64.pkg.tar.zst",
+    "url": "https://geo.mirror.pkgbuild.com/extra/os/x86_64/libsfdo-0.1.4-1-x86_64.pkg.tar.zst",
+    "sha256": "a35b1bf01a858c06ca24efd57fbf9326a4714597d8661cad4e02a50355ccc550",
+    "signature": "verified",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "wlroots0.20-0.20.2-1-x86_64.pkg.tar.zst",
+    "url": "https://geo.mirror.pkgbuild.com/extra/os/x86_64/wlroots0.20-0.20.2-1-x86_64.pkg.tar.zst",
+    "sha256": "8b1da3fbf29cc45908d8de771bd22a5813b298a9049462df5b8952f23c3ffb8f",
+    "signature": "verified",
+    "accessed": "2026-10-13"
+  },
+  {
+    "file": "labwc-0.20.2-1-x86_64.pkg.tar.zst",
+    "url": "https://geo.mirror.pkgbuild.com/extra/os/x86_64/labwc-0.20.2-1-x86_64.pkg.tar.zst",
+    "sha256": "dfe9ca7c79dfa746e46c465d7ba8dc86136219fdde6036c154a4dc19b918733a",
+    "signature": "verified",
+    "accessed": "2026-10-13"
+  }
+]

@@ -389,5 +389,50 @@
     "rust_version": "1.85.0",
     "accessed": "2026-10-13",
     "url": "https://crates.io/api/v1/crates/unicode-segmentation"
+  },
+  "toml": {
+    "version": "1.1.8+spec-1.1.0",
+    "released": "2026-10-09T02:46:31.816670Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/toml-rs/toml",
+    "rust_version": "1.85",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/toml"
+  },
+  "toml_edit": {
+    "version": "0.25.17+spec-1.1.0",
+    "released": "2026-10-09T02:46:32.456236Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/toml-rs/toml",
+    "rust_version": "1.85",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/toml_edit"
+  },
+  "rustix": {
+    "version": "1.1.5",
+    "released": "2026-09-16T23:05:02.319690Z",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/rustix",
+    "rust_version": "1.65",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/rustix"
+  },
+  "swash": {
+    "version": "0.2.10",
+    "released": "2026-07-17T16:35:36.216435Z",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/dfrg/swash",
+    "rust_version": null,
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/swash"
+  },
+  "serde_json": {
+    "version": "1.0.154",
+    "released": "2026-10-11T15:31:46.076577Z",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/json",
+    "rust_version": "1.71",
+    "accessed": "2026-10-13",
+    "url": "https://crates.io/api/v1/crates/serde_json"
   }
 }

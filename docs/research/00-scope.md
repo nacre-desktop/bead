@@ -1,16 +1,16 @@
 # 00 — The scope of replacing Qt/QML
 
 Audited 2026-10-13. Read-only source: nacre-desktop/nacre
-`b547d06a02f8ff0dc0a6f76d366be086657e0bea`. This report describes that revision,
+`68df8dd3b25cbf202d3859d0178a50cceffbea0d`. This report describes that revision,
 not the installed personal desktop and not an assumed future Nacre version.
 
 ## Evidence and counting method
 
-The shell contains **224 QML files / 27,723 QML lines**, agreeing with the supplied
+The shell contains **224 QML files / 27,854 QML lines**, agreeing with the supplied
 rounded size. [scope-index.md](scope-index.md) enumerates every import, object type
 spelling, IPC handler signature, Process/FileView declaration, helper task,
 shortcut and discovered CLI IPC call site. [scope-inventory.json](scope-inventory.json)
-contains every location, per-file imports/types, all namespace member references,
+contains every location, per-file imports/types, property type annotations, all namespace member references,
 and the entire compositor declaration contract as data.
 
 Reproduce: `python spikes/inventory.py NACRE_CHECKOUT docs/research/scope-inventory.json`.
@@ -23,12 +23,14 @@ processes or windows. Installed Qt/Quickshell qmltypes were cross-checked to
 identify exported types, with project/inline types taking precedence over
 same-named toolkit exports.
 
-There are 79 distinct import spellings (including aliases and local JS imports),
-238 object type spellings, **42 IpcHandler declarations**, **56 Process object
+There are 82 distinct import spellings (including aliases and local JS imports),
+239 object type spellings, **43 IpcHandler declarations**, **57 Process object
 declarations**, **29 FileView object declarations**, 14 helper/palette task
-declarations and 12 native/project shortcut declarations. The supplied 60 Process
-and 31 FileView counts are references/uses rather than this narrower declaration
-metric; typed properties and wrappers must not disappear from scope.
+declarations and 12 native/project shortcut declarations. All token references were also indexed: exactly 61 Process and 31 FileView
+mentions, compared with the supplied initial 60/31 counts. The initial snapshot b547d06 had 27,723 lines / 42 handlers / 60 Process mentions;
+concurrent upstream integration added a window-title IPC/process before the final
+audit. The declaration-versus-reference difference comes from type references
+in addition to declarations; typed properties and wrappers remain in scope.
 
 ## Feature inventory and rough size
 
@@ -38,19 +40,19 @@ judgments: S is a contained adapter/widget, XL crosses many toolkit facilities.
 
 | Feature | Module QML files / lines | What must be rebuilt | Rough effort |
 | --- | ---: | --- | --- |
-| Bar and top header | 19 / 1,944 | Workspaces, focus, status controls, clock, popouts, output placement | L |
-| Drawers/shell orchestration | 9 / 923, plus IPC/shortcuts 302 lines | Output-local views, dismissal, focus, panel ownership | L |
-| Dashboard | 23 / 3,001 | Media artwork/controls, calendar, resources, host/weather cards | L |
-| Launcher | 11 / 2,565 | Catalog, ranking, grid virtualization, modes, inputs, selectors | XL |
-| Extras/left drawer | 7 / 1,649 | AI streaming/sidebar, clipboard, keybindings, overview, palette | XL |
-| Settings | 21 / 2,290 | Controls, preferences, helper actions, persistent window geometry | L |
+| Bar and top header | 19 / 1,996 | Workspaces, focus, status controls, clock, popouts, output placement | L |
+| Drawers/shell orchestration | 9 / 927, plus IPC/shortcuts 302 lines | Output-local views, dismissal, focus, panel ownership | L |
+| Dashboard | 23 / 3,003 | Media artwork/controls, calendar, resources, host/weather cards | L |
+| Launcher | 11 / 2,567 | Catalog, ranking, grid virtualization, modes, inputs, selectors | XL |
+| Extras/left drawer | 7 / 1,650 | AI streaming/sidebar, clipboard, keybindings, overview, palette | XL |
+| Settings | 21 / 2,227 | Controls, preferences, helper actions, persistent window geometry | L |
 | Colors and welcome | 11 / 1,921 | Palette previews, wallpaper/style workflows, tutorial posters | L |
 | Background | 3 / 327 | Static/video wallpaper, image cropping, crossfade, frame sync | L |
 | Pearls | 2 / 405 | xdg windows, docking, output coordinates, compositor-owned placement | XL |
 | Notifications and OSD | 5 / 494 | D-Bus server, history, actions, inhibition, timed overlays | L |
-| Session and control center | 5 / 646 | Power/session actions, audio/media/device controls | M |
-| Reusable widgets | 22 / 1,364 | Typography, surfaces, sliders, text editing, clipping, range input | XL |
-| Service layer | 72 / 9,441 | All persistent state, workers, compositor/device/media adapters | XL |
+| Session and control center | 5 / 647 | Power/session actions, audio/media/device controls | M |
+| Reusable widgets | 22 / 1,365 | Typography, surfaces, sliders, text editing, clipping, range input | XL |
+| Service layer | 72 / 9,572 | All persistent state, workers, compositor/device/media adapters | XL |
 | Root/config/utils/lock preview | 11 / 451 | Tokens, paths, initialization, localization, lock-preview widgets | M |
 
 Feature totals in the machine inventory distinguish root module files, avoiding
@@ -86,7 +88,7 @@ Do not omit it from the planned bar.
 
 ## Command and keybinding compatibility
 
-All 42 handlers and their complete method signatures are in the location index.
+All 43 handlers and their complete method signatures are in the location index.
 Targets cover `nacre`, `drawers`, `pearls`, `nacreCompositor`, device/media/state
 queries, notifications, AI, settings/colors/welcome, wallpaper controls and
 selectors. Some targets are per screen (`header-<screen>`, `barStatus-<screen>`,
@@ -109,7 +111,7 @@ floating/pin/pseudo, group.toggle/previous/next, layout.toggle-split,
 keymap.switch, compositor.reload, shell.shortcut and panel.drag/finish. All
 individual declarations/parameters/options remain in the JSON appendix.
 The runtime contract additionally comes from
-[Nacre's compositor interface](https://github.com/nacre-desktop/nacre/blob/b547d06a02f8ff0dc0a6f76d366be086657e0bea/docs/development/compositors.md)
+[Nacre's compositor interface](https://github.com/nacre-desktop/nacre/blob/68df8dd3b25cbf202d3859d0178a50cceffbea0d/docs/development/compositors.md)
 and NacreCompositor.qml/compositor.py. Backend-specific unsupported declarations
 are explicit; “mirroring the contract” does not make niri support Hyprland-only
 pinning or release shortcuts.

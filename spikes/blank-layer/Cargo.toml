@@ -1,0 +1,16 @@
+[package]
+name = "bead-spike-blank-layer"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["system"] }
+wayland-client = { version = "=0.31.15", features = ["system"] }
+raw-window-handle = "=0.6.2"
+tiny-skia = "=0.12.0"
+wgpu = { version = "=30.0.1", default-features = false, features = ["vulkan", "wgsl"] }
+vello = { version = "=0.11.0", default-features = false, features = ["wgpu"] }
+femtovg = { version = "=0.27.0", default-features = false, features = ["wgpu"] }
+pollster = "=0.4.0"

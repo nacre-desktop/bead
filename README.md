@@ -12,7 +12,7 @@ the recommendation. See [current status](docs/STATUS.md) and
 Planned licensing: `crates/bead-*` is MIT OR Apache-2.0. `crates/nacre-shell`
 and `shell/` retain Nacre's GPL-3.0 terms. Each future crate must set
 `publish = false`. Research tooling and measurement spikes are MIT OR Apache-2.0
-unless an upstream notice specifies otherwise. License texts and the production
-Cargo workspace/CI are established with Feature 1 after approval.
+unless an upstream notice specifies otherwise. License texts and Cargo workspace/CI cover research spikes now; production
+framework/shell crates begin with Feature 1 after approval.
 
 Never publish this repository, crates, packages or releases.

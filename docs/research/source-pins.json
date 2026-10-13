@@ -166,5 +166,11 @@
     "commit": "a6ac45c7cd3645df3b4e25c4e0636e66e9d662fa",
     "commit_date": "2026-10-12T21:12:24+02:00",
     "accessed": "2026-10-13"
+  },
+  "rust-skia": {
+    "url": "https://github.com/rust-skia/rust-skia",
+    "commit": "91be1b03d70b8afe9a8389133209f68f1aa8f781",
+    "commit_date": "2026-10-10T22:27:12+02:00",
+    "accessed": "2026-10-13"
   }
 }

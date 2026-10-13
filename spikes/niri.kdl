@@ -1,0 +1,6 @@
+// Isolated nested measurement compositor. Never install as a session config.
+input {
+    keyboard { xkb { layout "us"; }; }
+}
+prefer-no-csd
+animations { off; }

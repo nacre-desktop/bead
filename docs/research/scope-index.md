@@ -1,6 +1,6 @@
 # Static scope location index
 
-Source: nacre-desktop/nacre `b547d06a02f8ff0dc0a6f76d366be086657e0bea`, audited 2026-10-13.
+Source: nacre-desktop/nacre `68df8dd3b25cbf202d3859d0178a50cceffbea0d`, audited 2026-10-13.
 
 Generated with `python spikes/inventory.py REFERENCE docs/research/scope-inventory.json`.
 Counts are declarations/member mentions, not active runtime instances. Dynamic
@@ -11,9 +11,11 @@ paths/commands/targets retain their source expressions; do not guess resolved va
 | Import | Files | First location |
 | --- | ---: | --- |
 | `".." as Dashboard` | 1 | `nacre/shell/modules/dashboard/overview/NacreMediaCard.qml:6` |
+| `"../../../utils/scripts/window-title.js" as WindowTitle` | 1 | `nacre/shell/modules/bar/components/NacreActiveTitle.qml:7` |
 | `"../../dashboard/media"` | 1 | `nacre/shell/modules/settings/pages/NacreAudioNode.qml:5` |
 | `"../../dashboard/overview/overview.js" as Calendar` | 1 | `nacre/shell/modules/bar/popouts/NacreCalendarPopup.qml:5` |
 | `"../../notifications"` | 1 | `nacre/shell/modules/settings/pages/NacreNotificationPage.qml:4` |
+| `"../../utils/scripts/window-title.js" as WindowTitle` | 1 | `nacre/shell/modules/topbar/NacreWorkspaceRow.qml:2` |
 | `"../branding/LogoData.js" as LogoData` | 1 | `nacre/shell/widgets/BrandLogo.qml:3` |
 | `"../colors"` | 1 | `nacre/shell/modules/welcome/NacreWelcomeDemo.qml:4` |
 | `"../i18n/translation.js" as Translation` | 1 | `nacre/shell/services/NacreI18n.qml:5` |
@@ -56,7 +58,7 @@ paths/commands/targets retain their source expressions; do not guess resolved va
 | `Quickshell` | 103 | `nacre/shell/lock-preview.qml:3` |
 | `Quickshell.Bluetooth as Bluez` | 1 | `nacre/shell/services/NacreBluetooth.qml:3` |
 | `Quickshell.Hyprland as Native` | 2 | `nacre/shell/services/compositor/HyprlandBackend.qml:6` |
-| `Quickshell.Io` | 61 | `nacre/shell/lock-preview.qml:4` |
+| `Quickshell.Io` | 62 | `nacre/shell/lock-preview.qml:4` |
 | `Quickshell.Services.Mpris` | 2 | `nacre/shell/modules/dashboard/NacreMediaPage.qml:4` |
 | `Quickshell.Services.Notifications` | 1 | `nacre/shell/services/NacreNotifs.qml:6` |
 | `Quickshell.Services.Pipewire` | 4 | `nacre/shell/modules/bar/popouts/NacreSoundPopup.qml:2` |
@@ -67,6 +69,7 @@ paths/commands/targets retain their source expressions; do not guess resolved va
 | `qs.modules` | 1 | `nacre/shell/shell.qml:4` |
 | `qs.modules.background` | 1 | `nacre/shell/shell.qml:6` |
 | `qs.modules.bar.components` | 1 | `nacre/shell/modules/topbar/NacreHeader.qml:7` |
+| `qs.modules.bar.popouts as Connectivity` | 1 | `nacre/shell/modules/settings/pages/NacreNetworkPage.qml:4` |
 | `qs.modules.bar.popouts as Details` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:8` |
 | `qs.modules.bar.popouts as Popouts` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:7` |
 | `qs.modules.colors` | 1 | `nacre/shell/shell.qml:9` |
@@ -87,7 +90,7 @@ paths/commands/targets retain their source expressions; do not guess resolved va
 | `qs.modules.topbar` | 1 | `nacre/shell/modules/drawers/NacreScreen.qml:8` |
 | `qs.modules.welcome` | 1 | `nacre/shell/shell.qml:11` |
 | `qs.services` | 117 | `nacre/shell/config/NacreBar.qml:3` |
-| `qs.utils` | 8 | `nacre/shell/modules/bar/components/NacreActiveTitle.qml:5` |
+| `qs.utils` | 8 | `nacre/shell/modules/bar/components/NacreActiveTitle.qml:6` |
 | `qs.widgets` | 109 | `nacre/shell/config/NacreAppearance.qml:3` |
 
 ## Every object type spelling
@@ -97,7 +100,7 @@ and namespace member references are in scope-inventory.json.
 
 | Type | Declarations | First location |
 | --- | ---: | --- |
-| `ActionButton` | 173 | `nacre/shell/modules/bar/popouts/NacreBluetoothPopup.qml:30` |
+| `ActionButton` | 170 | `nacre/shell/modules/bar/popouts/NacreBluetoothPopup.qml:30` |
 | `AnimatedImage` | 3 | `nacre/shell/modules/background/NacreWallpaperScene.qml:117` |
 | `Box` | 12 | `nacre/shell/modules/drawers/NacrePanelMask.qml:6` |
 | `BrandLogo` | 11 | `nacre/shell/modules/colors/NacreThemePreview.qml:36` |
@@ -106,52 +109,53 @@ and namespace member references are in scope-inventory.json.
 | `Cards.NacreCalendarCard` | 1 | `nacre/shell/modules/dashboard/NacreDashboardSummary.qml:18` |
 | `Cards.NacreHostCard` | 1 | `nacre/shell/modules/dashboard/NacreDashboardSummary.qml:34` |
 | `Cards.NacreMediaCard` | 2 | `nacre/shell/modules/dashboard/NacreDashboardSummary.qml:79` |
-| `ChatCard` | 3 | `nacre/shell/modules/extras/LeftDrawer.qml:391` |
-| `ChatPane` | 1 | `nacre/shell/modules/extras/LeftDrawer.qml:136` |
+| `ChatCard` | 3 | `nacre/shell/modules/extras/LeftDrawer.qml:392` |
+| `ChatPane` | 1 | `nacre/shell/modules/extras/LeftDrawer.qml:137` |
 | `CircleControl` | 2 | `nacre/shell/modules/notifications/NacreNotice.qml:146` |
 | `ClippingRectangle` | 1 | `nacre/shell/widgets/NacreClip.qml:4` |
 | `ColorAnimation` | 2 | `nacre/shell/widgets/NacreClip.qml:22` |
 | `Column` | 81 | `nacre/shell/modules/bar/components/NacreStatusIcons.qml:24` |
-| `Component` | 47 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:281` |
-| `Connections` | 65 | `nacre/shell/modules/background/NacreDesktopVideo.qml:42` |
+| `Component` | 47 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:282` |
+| `Connections` | 66 | `nacre/shell/modules/background/NacreDesktopVideo.qml:42` |
+| `Connectivity.NacreNetworkPopup` | 1 | `nacre/shell/modules/settings/pages/NacreNetworkPage.qml:17` |
 | `Controls.NacreAlbum` | 1 | `nacre/shell/modules/dashboard/NacreMediaPage.qml:145` |
 | `Controls.NacreControlCenter` | 1 | `nacre/shell/modules/pearls/NacrePearlWindow.qml:322` |
 | `Controls.NacreMediaButton` | 5 | `nacre/shell/modules/dashboard/NacreMediaPage.qml:193` |
 | `Controls.NacreMediaSlider` | 2 | `nacre/shell/modules/dashboard/NacreMediaPage.qml:226` |
 | `Dashboard.NacreAlbumHalo` | 1 | `nacre/shell/modules/dashboard/overview/NacreMediaCard.qml:157` |
-| `Dashboard.NacreDashboardPanel` | 2 | `nacre/shell/modules/drawers/NacrePanelHost.qml:162` |
+| `Dashboard.NacreDashboardPanel` | 2 | `nacre/shell/modules/drawers/NacrePanelHost.qml:164` |
 | `Dashboard.NacreMiniPlayer` | 1 | `nacre/shell/modules/pearls/NacrePearlWindow.qml:333` |
-| `Details.NacreBatteryPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:301` |
-| `Details.NacreBluetoothPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:289` |
-| `Details.NacreNetworkPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:283` |
-| `Details.NacreSoundPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:295` |
+| `Details.NacreBatteryPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:302` |
+| `Details.NacreBluetoothPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:290` |
+| `Details.NacreNetworkPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:284` |
+| `Details.NacreSoundPopup` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:296` |
 | `DragHandler` | 1 | `nacre/shell/widgets/NacrePanelDrag.qml:15` |
 | `DropArea` | 5 | `nacre/shell/modules/colors/NacreAccentTarget.qml:56` |
-| `Extras.Clipboard` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:123` |
-| `Extras.Keybindings` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:130` |
+| `Extras.Clipboard` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:124` |
+| `Extras.Keybindings` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:131` |
 | `Extras.LeftDrawer` | 2 | `nacre/shell/modules/drawers/NacrePanelHost.qml:85` |
-| `Extras.Overview` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:116` |
-| `Extras.Palette` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:102` |
+| `Extras.Overview` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:117` |
+| `Extras.Palette` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:103` |
 | `FastScroll` | 30 | `nacre/shell/modules/bar/popouts/NacreQuickList.qml:18` |
 | `FileDialog` | 1 | `nacre/shell/modules/colors/NacreColorsView.qml:67` |
 | `FileView` | 29 | `nacre/shell/modules/dashboard/overview/NacreHostCard.qml:51` |
 | `Flickable` | 17 | `nacre/shell/modules/bar/popouts/NacreQuickList.qml:5` |
 | `FloatingWindow` | 5 | `nacre/shell/lock-preview.qml:12` |
-| `Flow` | 48 | `nacre/shell/modules/colors/NacreColorsView.qml:213` |
+| `Flow` | 47 | `nacre/shell/modules/colors/NacreColorsView.qml:213` |
 | `FocusScope` | 2 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:11` |
 | `FontMetrics` | 3 | `nacre/shell/modules/colors/NacreColorsView.qml:44` |
 | `Gradient` | 12 | `nacre/shell/modules/dashboard/NacreDashboardHero.qml:23` |
 | `GradientStop` | 47 | `nacre/shell/modules/dashboard/NacreCompactMetric.qml:43` |
 | `Grid` | 4 | `nacre/shell/modules/bar/popouts/NacreCalendarPopup.qml:48` |
-| `GridLayout` | 5 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:113` |
+| `GridLayout` | 5 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:114` |
 | `GridView` | 2 | `nacre/shell/modules/extras/Overview.qml:91` |
 | `HoverHandler` | 9 | `nacre/shell/modules/dashboard/NacreTodayPage.qml:251` |
 | `HyprlandShortcut` | 1 | `nacre/shell/services/compositor/HyprlandBackend.qml:142` |
 | `HyprlandWindow` | 1 | `nacre/shell/services/compositor/HyprlandBackend.qml:249` |
 | `Image` | 21 | `nacre/shell/lock-preview.qml:21` |
-| `IpcHandler` | 42 | `nacre/shell/modules/NacreShellIpc.qml:117` |
+| `IpcHandler` | 43 | `nacre/shell/modules/NacreShellIpc.qml:117` |
 | `Item` | 95 | `nacre/shell/lock-preview.qml:31` |
-| `Launcher.NacreLauncherPanel` | 2 | `nacre/shell/modules/drawers/NacrePanelHost.qml:211` |
+| `Launcher.NacreLauncherPanel` | 2 | `nacre/shell/modules/drawers/NacrePanelHost.qml:214` |
 | `LazyLoader` | 3 | `nacre/shell/modules/colors/NacreColorsHost.qml:4` |
 | `Level` | 4 | `nacre/shell/modules/controlcenter/NacreControlLevels.qml:10` |
 | `LinearGradient` | 6 | `nacre/shell/modules/dashboard/NacreCompactMetric.qml:38` |
@@ -166,7 +170,7 @@ and namespace member references are in scope-inventory.json.
 | `NacreActiveTitle` | 1 | `nacre/shell/modules/topbar/NacreHeader.qml:175` |
 | `NacreAdjustSlider` | 2 | `nacre/shell/modules/colors/NacreColorsView.qml:425` |
 | `NacreAiPage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:288` |
-| `NacreAppBrowser` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:79` |
+| `NacreAppBrowser` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:80` |
 | `NacreAppHeader` | 3 | `nacre/shell/modules/colors/NacreColorsWindow.qml:32` |
 | `NacreAppearancePage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:248` |
 | `NacreAudioNode` | 1 | `nacre/shell/modules/settings/pages/NacreSoundPage.qml:35` |
@@ -184,18 +188,18 @@ and namespace member references are in scope-inventory.json.
 | `NacreColorsWindow` | 1 | `nacre/shell/modules/colors/NacreColorsHost.qml:6` |
 | `NacreCompactMetric` | 1 | `nacre/shell/modules/dashboard/NacreDashboardSummary.qml:70` |
 | `NacreControlCenter` | 1 | `nacre/shell/modules/osd/NacreOsdPanel.qml:3` |
-| `NacreControlLevels` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:109` |
-| `NacreControlTile` | 6 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:118` |
-| `NacreDashboardCustomize` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:156` |
+| `NacreControlLevels` | 1 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:110` |
+| `NacreControlTile` | 6 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:119` |
+| `NacreDashboardCustomize` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:157` |
 | `NacreDashboardHero` | 4 | `nacre/shell/modules/dashboard/NacreFocusPage.qml:25` |
-| `NacreDashboardNavigation` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:52` |
+| `NacreDashboardNavigation` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:53` |
 | `NacreDashboardSummary` | 1 | `nacre/shell/modules/dashboard/NacreTodayPage.qml:215` |
 | `NacreDesktop` | 1 | `nacre/shell/shell.qml:20` |
 | `NacreDesktopPage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:252` |
 | `NacreDisplaysPage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:256` |
 | `NacreDockFilm` | 1 | `nacre/shell/modules/pearls/NacreDockGuide.qml:51` |
 | `NacreDockGuide` | 1 | `nacre/shell/shell.qml:21` |
-| `NacreFocusPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:150` |
+| `NacreFocusPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:151` |
 | `NacreFrameLip` | 3 | `nacre/shell/modules/drawers/NacreFrameLips.qml:50` |
 | `NacreFrameLips` | 1 | `nacre/shell/modules/drawers/NacreScreen.qml:118` |
 | `NacreFrameRim` | 1 | `nacre/shell/modules/drawers/NacreScreen.qml:84` |
@@ -211,7 +215,7 @@ and namespace member references are in scope-inventory.json.
 | `NacreLockPage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:280` |
 | `NacreMaintenancePage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:292` |
 | `NacreMediaButton` | 1 | `nacre/shell/modules/settings/pages/NacreAudioNode.qml:53` |
-| `NacreMediaPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:137` |
+| `NacreMediaPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:138` |
 | `NacreMediaSlider` | 1 | `nacre/shell/modules/settings/pages/NacreAudioNode.qml:62` |
 | `NacreMenuButton` | 18 | `nacre/shell/modules/launcher/NacreAppBrowser.qml:584` |
 | `NacreMenuContext` | 2 | `nacre/shell/modules/pearls/NacrePearlWindow.qml:112` |
@@ -219,13 +223,13 @@ and namespace member references are in scope-inventory.json.
 | `NacreMenuIcon` | 3 | `nacre/shell/modules/launcher/NacreAppBrowser.qml:692` |
 | `NacreNetworkPage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:264` |
 | `NacreNotice` | 4 | `nacre/shell/modules/bar/popouts/NacreHistoryPopup.qml:62` |
-| `NacreNotificationEntry` | 1 | `nacre/shell/services/NacreNotifs.qml:164` |
+| `NacreNotificationEntry` | 1 | `nacre/shell/services/NacreNotifs.qml:178` |
 | `NacreNotificationPage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:272` |
 | `NacreNumberField` | 4 | `nacre/shell/modules/settings/pages/NacreAppearancePage.qml:166` |
 | `NacreOverviewCard` | 3 | `nacre/shell/modules/dashboard/overview/NacreCalendarCard.qml:6` |
 | `NacrePaletteTask` | 2 | `nacre/shell/services/NacreWallpapers.qml:419` |
 | `NacrePaletteTile` | 2 | `nacre/shell/modules/settings/pages/NacreAppearancePage.qml:296` |
-| `NacrePanelDrag` | 4 | `nacre/shell/modules/drawers/NacrePanelHost.qml:104` |
+| `NacrePanelDrag` | 4 | `nacre/shell/modules/drawers/NacrePanelHost.qml:105` |
 | `NacrePanelHost` | 1 | `nacre/shell/modules/drawers/NacreScreen.qml:99` |
 | `NacrePanelInput` | 1 | `nacre/shell/modules/drawers/NacreScreen.qml:91` |
 | `NacrePanelMask` | 1 | `nacre/shell/modules/drawers/NacreScreen.qml:52` |
@@ -237,12 +241,12 @@ and namespace member references are in scope-inventory.json.
 | `NacreReservedEdges` | 1 | `nacre/shell/modules/drawers/NacreScreen.qml:55` |
 | `NacreScreen` | 1 | `nacre/shell/modules/drawers/NacreDesktop.qml:9` |
 | `NacreScrollBar` | 11 | `nacre/shell/modules/bar/popouts/NacreQuickList.qml:17` |
-| `NacreSearchPanel` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:109` |
+| `NacreSearchPanel` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:110` |
 | `NacreSessionControls` | 1 | `nacre/shell/modules/session/NacreSessionPanel.qml:35` |
 | `NacreSettingToggle` | 15 | `nacre/shell/modules/settings/pages/NacreAiPage.qml:33` |
 | `NacreSettingsHost` | 1 | `nacre/shell/shell.qml:24` |
 | `NacreSettingsPage` | 12 | `nacre/shell/modules/settings/pages/NacreAiPage.qml:5` |
-| `NacreSettingsSection` | 35 | `nacre/shell/modules/settings/pages/NacreAiPage.qml:13` |
+| `NacreSettingsSection` | 34 | `nacre/shell/modules/settings/pages/NacreAiPage.qml:13` |
 | `NacreSettingsView` | 1 | `nacre/shell/modules/settings/NacreSettingsWindow.qml:61` |
 | `NacreSettingsWindow` | 1 | `nacre/shell/modules/settings/NacreSettingsHost.qml:6` |
 | `NacreShellIpc` | 1 | `nacre/shell/shell.qml:23` |
@@ -252,19 +256,19 @@ and namespace member references are in scope-inventory.json.
 | `NacreStatusHint` | 1 | `nacre/shell/modules/topbar/NacreHeader.qml:183` |
 | `NacreStatusIcons` | 1 | `nacre/shell/modules/topbar/NacreHeader.qml:223` |
 | `NacreSurface` | 83 | `nacre/shell/modules/bar/components/NacrePowerButton.qml:5` |
-| `NacreSystemPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:144` |
+| `NacreSystemPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:145` |
 | `NacreTabStrip` | 1 | `nacre/shell/widgets/NacreAppHeader.qml:46` |
-| `NacreText` | 304 | `nacre/shell/lock-preview.qml:36` |
+| `NacreText` | 300 | `nacre/shell/lock-preview.qml:36` |
 | `NacreTextField` | 16 | `nacre/shell/modules/colors/NacreColorsView.qml:95` |
 | `NacreThemePreview` | 4 | `nacre/shell/modules/colors/NacreColorsView.qml:350` |
 | `NacreTimePage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:284` |
-| `NacreTodayPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:124` |
+| `NacreTodayPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:125` |
 | `NacreWallpaperBackdrop` | 1 | `nacre/shell/modules/launcher/NacreWallpaperPicker.qml:110` |
 | `NacreWallpaperHex` | 1 | `nacre/shell/modules/launcher/NacreWallpaperPicker.qml:322` |
 | `NacreWallpaperMotion` | 2 | `nacre/shell/modules/launcher/NacreWallpaperHex.qml:35` |
-| `NacreWallpaperPicker` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:93` |
+| `NacreWallpaperPicker` | 1 | `nacre/shell/modules/launcher/NacreLauncherPanel.qml:94` |
 | `NacreWallpaperScene` | 1 | `nacre/shell/modules/background/NacreBackground.qml:24` |
-| `NacreWeatherPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:131` |
+| `NacreWeatherPage` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:132` |
 | `NacreWeatherSky` | 1 | `nacre/shell/modules/dashboard/NacreWeatherPage.qml:39` |
 | `NacreWelcomeDemo` | 1 | `nacre/shell/modules/welcome/NacreWelcomeView.qml:147` |
 | `NacreWelcomeHost` | 1 | `nacre/shell/shell.qml:26` |
@@ -273,42 +277,42 @@ and namespace member references are in scope-inventory.json.
 | `NacreWelcomeWindow` | 1 | `nacre/shell/modules/welcome/NacreWelcomeHost.qml:6` |
 | `NacreWindow` | 5 | `nacre/shell/modules/background/NacreBackground.qml:9` |
 | `NacreWorkflowsPage` | 1 | `nacre/shell/modules/settings/NacreSettingsView.qml:276` |
-| `NacreWorkspaceAppIcon` | 1 | `nacre/shell/modules/topbar/NacreWorkspaceRow.qml:225` |
-| `NacreWorkspacePearl` | 2 | `nacre/shell/modules/topbar/NacreWorkspaceRow.qml:169` |
+| `NacreWorkspaceAppIcon` | 1 | `nacre/shell/modules/topbar/NacreWorkspaceRow.qml:226` |
+| `NacreWorkspacePearl` | 2 | `nacre/shell/modules/topbar/NacreWorkspaceRow.qml:170` |
 | `NacreWorkspaceRow` | 1 | `nacre/shell/modules/topbar/NacreHeader.qml:168` |
 | `Native.GlobalShortcut` | 1 | `nacre/shell/services/compositor/HyprlandShortcut.qml:59` |
-| `NiriShortcut` | 1 | `nacre/shell/services/compositor/NiriBackend.qml:103` |
-| `NiriWindow` | 1 | `nacre/shell/services/compositor/NiriBackend.qml:99` |
-| `NotificationServer` | 1 | `nacre/shell/services/NacreNotifs.qml:215` |
-| `Notifications.NacreNotificationStack` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:204` |
+| `NiriShortcut` | 1 | `nacre/shell/services/compositor/NiriBackend.qml:138` |
+| `NiriWindow` | 1 | `nacre/shell/services/compositor/NiriBackend.qml:134` |
+| `NotificationServer` | 1 | `nacre/shell/services/NacreNotifs.qml:229` |
+| `Notifications.NacreNotificationStack` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:207` |
 | `NumberAnimation` | 44 | `nacre/shell/modules/background/NacreWallpaperScene.qml:185` |
-| `Osd.NacreOsdEvents` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:245` |
-| `Osd.NacreOsdPanel` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:118` |
+| `Osd.NacreOsdEvents` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:249` |
+| `Osd.NacreOsdPanel` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:119` |
 | `PanelWindow` | 2 | `nacre/shell/modules/pearls/NacreDockGuide.qml:10` |
-| `ParallelAnimation` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:96` |
+| `ParallelAnimation` | 1 | `nacre/shell/modules/dashboard/NacreDashboardPanel.qml:97` |
 | `PathAngleArc` | 4 | `nacre/shell/modules/dashboard/NacreChamberGauge.qml:33` |
 | `PathSvg` | 8 | `nacre/shell/modules/drawers/NacreChrome.qml:39` |
-| `Pearl.NacrePearlWindow` | 1 | `nacre/shell/services/NacrePearls.qml:26` |
+| `Pearl.NacrePearlWindow` | 1 | `nacre/shell/services/NacrePearls.qml:27` |
 | `PersistentProperties` | 2 | `nacre/shell/modules/drawers/NacreScreen.qml:27` |
-| `Popouts.NacrePopupPanel` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:195` |
+| `Popouts.NacrePopupPanel` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:198` |
 | `Popup` | 1 | `nacre/shell/modules/launcher/NacreAppBrowser.qml:1147` |
 | `Poster` | 3 | `nacre/shell/modules/background/NacreWallpaperScene.qml:108` |
-| `Process` | 56 | `nacre/shell/lock-preview.qml:171` |
+| `Process` | 57 | `nacre/shell/lock-preview.qml:171` |
 | `ProfileButton` | 3 | `nacre/shell/modules/bar/popouts/NacreBatteryPopup.qml:76` |
 | `PropertyAnimation` | 2 | `nacre/shell/modules/pearls/NacreDockGuide.qml:57` |
 | `PwObjectTracker` | 3 | `nacre/shell/modules/bar/popouts/NacreSoundPopup.qml:18` |
 | `QtObject` | 37 | `nacre/shell/config/Appearance.qml:4` |
 | `Rectangle` | 72 | `nacre/shell/lock-preview.qml:27` |
 | `Region` | 7 | `nacre/shell/modules/background/NacreBackground.qml:23` |
-| `Repeater` | 91 | `nacre/shell/lock-preview.qml:133` |
-| `Row` | 73 | `nacre/shell/lock-preview.qml:118` |
-| `RowLayout` | 8 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:95` |
+| `Repeater` | 90 | `nacre/shell/lock-preview.qml:133` |
+| `Row` | 72 | `nacre/shell/lock-preview.qml:118` |
+| `RowLayout` | 8 | `nacre/shell/modules/controlcenter/NacreControlCenter.qml:96` |
 | `Scope` | 7 | `nacre/shell/modules/NacreShellIpc.qml:6` |
 | `ScreencopyView` | 1 | `nacre/shell/modules/extras/Overview.qml:113` |
 | `ScrollBar` | 7 | `nacre/shell/modules/extras/ChatPane.qml:98` |
 | `ScrollView` | 2 | `nacre/shell/modules/extras/ChatPane.qml:290` |
 | `SearchSurface` | 4 | `nacre/shell/modules/extras/Clipboard.qml:8` |
-| `Session.NacreSessionPanel` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:154` |
+| `Session.NacreSessionPanel` | 1 | `nacre/shell/modules/drawers/NacrePanelHost.qml:156` |
 | `Shape` | 11 | `nacre/shell/modules/dashboard/NacreChamberGauge.qml:23` |
 | `ShapePath` | 12 | `nacre/shell/modules/dashboard/NacreChamberGauge.qml:28` |
 | `ShellRoot` | 2 | `nacre/shell/lock-preview.qml:8` |
@@ -336,6 +340,13 @@ and namespace member references are in scope-inventory.json.
 | `WallpaperControl` | 3 | `nacre/shell/modules/dashboard/NacreTodayPage.qml:186` |
 | `WheelHandler` | 3 | `nacre/shell/modules/launcher/NacreWallpaperPicker.qml:264` |
 
+## Every property type spelling
+
+`Component`, `Connections`, `FileView`, `Image`, `Item`, `NumberAnimation`, `PersistentProperties`, `Process`, `QtObject`, `ShellScreen`, `Timer`, `alias`, `bool`, `color`, `date`, `int`, `point`, `real`, `rect`, `size`, `string`, `url`, `var`
+
+Complete names and locations, including Qt primitives and service object types,
+are in scope-inventory.json under typed_properties.
+
 ## Every IPC handler and method
 
 - `"leftDrawer"` — `nacre/shell/modules/NacreShellIpc.qml:117`: `section(name: string): void`; `state(): string`
@@ -343,15 +354,16 @@ and namespace member references are in scope-inventory.json.
 - `"drawers"` — `nacre/shell/modules/NacreShellShortcuts.qml:86`: `toggle(drawer: string): void`; `list(): string`
 - `"wallpaperMotion-" + root.screenName` — `nacre/shell/modules/background/NacreDesktopVideo.qml:61`: `state(): string`
 - `"wallpaperFrame-" + root.screenName` — `nacre/shell/modules/background/NacreWallpaperScene.qml:191`: `state(): string`
+- `"windowTitle-" + (root.monitor?.name || "default")` — `nacre/shell/modules/bar/components/NacreActiveTitle.qml:24`: `state(): string`
 - `"barStatus-" + root.screenName` — `nacre/shell/modules/bar/components/NacreStatusIcons.qml:69`: `state(): string`
 - `"leftEdge"` — `nacre/shell/modules/drawers/NacreDesktop.qml:15`: `state(): string`
 - `"frame"` — `nacre/shell/modules/drawers/NacreDesktop.qml:28`: `state(): string`
-- `root.detached ? "leftDrawerWindow" + root.visibilities.windowKey : "leftDrawer-" + root.screen.name` — `nacre/shell/modules/extras/LeftDrawer.qml:457`: `section(name: string): void`; `state(): string`
+- `root.detached ? "leftDrawerWindow" + root.visibilities.windowKey : "leftDrawer-" + root.screen.name` — `nacre/shell/modules/extras/LeftDrawer.qml:458`: `section(name: string): void`; `state(): string`
 - `"overview"` — `nacre/shell/modules/extras/Overview.qml:223`: `state(): string`; `move(address: string, workspace: int): void`
 - `root.detached ? "featureSearchWindow" + root.visibilities.windowKey : "featureSearch"` — `nacre/shell/modules/extras/SearchSurface.qml:26`: `query(text: string): void`; `state(): string`
 - `root.detached ? "appBrowserWindow" + root.visibilities.windowKey : "appBrowser"` — `nacre/shell/modules/launcher/NacreAppBrowser.qml:1276`: `selectCategory(id: string): void`; `openRoute(id: string): void`; `state(): string`
 - `"header-" + root.screen.name` — `nacre/shell/modules/topbar/NacreHeader.qml:293`: `state(): string`
-- `"chatTitle"` — `nacre/shell/services/ChatWindowTitle.qml:12`: `state(): string`
+- `"chatTitle"` — `nacre/shell/services/ChatWindowTitle.qml:13`: `state(): string`
 - `"desktopActions"` — `nacre/shell/services/DesktopActions.qml:249`: `run(action: string, value: string): void`
 - `"extras"` — `nacre/shell/services/DesktopExtras.qml:97`: `counts(): string`; `refresh(kind: string): void`; `search(query: string): void`
 - `"desktopSettings"` — `nacre/shell/services/DesktopSettings.qml:120`: `state(): string`; `set(key: string, value: string): void`
@@ -365,8 +377,8 @@ and namespace member references are in scope-inventory.json.
 - `"keyboardLight"` — `nacre/shell/services/NacreKeyboardLight.qml:45`: `step(direction: string): void`; `set(value: real): void`; `state(): string`
 - `"menuPrompt"` — `nacre/shell/services/NacreMenuPrompt.qml:118`: `open(ident: string): void`; `cancel(ident: string): void`; `state(): string`
 - `"networkStatus"` — `nacre/shell/services/NacreNetwork.qml:129`: `state(): string`; `refresh(): void`
-- `"notifs"` — `nacre/shell/services/NacreNotifs.qml:228`: `counts(): string`; `clear(): void`; `dismissKey(key: string): void`; `clearHistory(): void`
-- `"pearls"` — `nacre/shell/services/NacrePearls.qml:511`: `open(kind: string): void`; `detach(): void`; `dock(key: string): void`; `close(key: string): void`; `gesture(): string`; `state(): string`
+- `"notifs"` — `nacre/shell/services/NacreNotifs.qml:242`: `counts(): string`; `clear(): void`; `dismissKey(key: string): void`; `clearHistory(): void`
+- `"pearls"` — `nacre/shell/services/NacrePearls.qml:570`: `open(kind: string): void`; `detach(): void`; `dock(key: string): void`; `close(key: string): void`; `gesture(): string`; `state(): string`
 - `"mpris"` — `nacre/shell/services/NacrePlayers.qml:37`: `getActive(prop: string): string`; `list(): string`; `play(): void`; `pause(): void`; `playPause(): void`; `previous(): void`; `next(): void`; `stop(): void`
 - `"presentationState"` — `nacre/shell/services/NacrePresentation.qml:106`: `state(): string`
 - `"settingsApp"` — `nacre/shell/services/NacreSettingsApp.qml:98`: `open(page: string): void`; `close(): void`; `state(): string`
@@ -379,7 +391,7 @@ and namespace member references are in scope-inventory.json.
 - `"sidebarChat"` — `nacre/shell/services/SidebarChat.qml:6`: `state(): string`; `send(text: string): void`; `stop(): void`
 - `"wallpaperPlayback"` — `nacre/shell/services/WallpaperPlayback.qml:19`: `state(): string`
 - `"compositorState"` — `nacre/shell/services/compositor/HyprlandBackend.qml:349`: `state(): string`
-- `"nacreCompositor"` — `nacre/shell/services/compositor/NiriBackend.qml:125`: `shortcut(name: string): bool`
+- `"nacreCompositor"` — `nacre/shell/services/compositor/NiriBackend.qml:160`: `shortcut(name: string): bool`
 
 ## Every Process declaration
 
@@ -388,10 +400,11 @@ and namespace member references are in scope-inventory.json.
 - `nacre/shell/modules/pearls/NacrePearlWindow.qml:61` — `{"id": ["fitWorker"], "command": ["[\"python3\", (Quickshell.env(\"NACRE_PEARL_TOOLS\") || Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools\") + \"/pearl-window.py\", \"fit\", root.title, Quickshell.processId.toString(), \"0\", \"0\", Math.min(640, root.screen.width - 40).toString(), Math.min(root.screen.height - 100, Math.max(500, Math.min(820, root.width * .58 + 96))).toString()]"], "onExited": ["{"]}`
 - `nacre/shell/modules/pearls/NacrePearlWindow.qml:191` — `{"id": ["focusWorker"], "command": ["[\"python3\", (Quickshell.env(\"NACRE_PEARL_TOOLS\") || Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools\") + \"/pearl-window.py\", \"focus\", root.title, Quickshell.processId.toString()]"], "onExited": ["{"]}`
 - `nacre/shell/modules/pearls/NacrePearlWindow.qml:202` — `{"id": ["worker"], "command": ["[\"python3\", (Quickshell.env(\"NACRE_PEARL_TOOLS\") || Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools\") + \"/pearl-window.py\", action, root.title, Quickshell.processId.toString(), px.toString(), py.toString(), root.ready ? \"0\" : root.implicitWidth.toString(), root.ready ? \"0\" : root.implicitHeight.toString()]"], "onExited": ["(exitCode, exitStatus) => {"]}`
-- `nacre/shell/services/ChatWindowTitle.qml:69` — `{"id": ["reader"], "command": ["[\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/window-chat-title.py\", requestPid.toString()]"], "onExited": ["root.next()"]}`
+- `nacre/shell/services/ChatWindowTitle.qml:74` — `{"id": ["reader"], "command": ["[\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/window-chat-title.py\", requestPid.toString()]"], "onExited": ["root.next()"]}`
 - `nacre/shell/services/DesktopExtras.qml:58` — `{"id": ["worker"], "stdinEnabled": ["true"], "command": ["[\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/desktop-extras.py\", action]"], "onExited": ["{"]}`
 - `nacre/shell/services/DesktopSettings.qml:111` — `{"id": ["worker"], "onExited": ["code => root.finish(code)"]}`
-- `nacre/shell/services/DeviceActions.qml:21` — `{"id": ["worker"], "onExited": ["{"]}`
+- `nacre/shell/services/DeviceActions.qml:26` — `{"id": ["connector"], "onExited": ["(exitCode, exitStatus) => {"]}`
+- `nacre/shell/services/DeviceActions.qml:34` — `{"id": ["worker"], "onExited": ["{"]}`
 - `nacre/shell/services/DisplayRecovery.qml:129` — `{"id": ["lockLayout"], "command": ["[\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/lock-config.py\"]"]}`
 - `nacre/shell/services/DisplayRecovery.qml:133` — `{"id": ["fallback"], "stdinEnabled": ["true"], "command": ["[\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/display-recover.py\", \"-\"]"]}`
 - `nacre/shell/services/LockWidgets.qml:81` — `{"id": ["writer"], "stdinEnabled": ["true"], "command": ["[\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/lock-prepare.py\"]"], "onExited": ["{"]}`
@@ -416,8 +429,8 @@ and namespace member references are in scope-inventory.json.
 - `nacre/shell/services/NacreMenuPrompt.qml:91` — `{"id": ["writer"], "onExited": ["followup.restart()"], "stdinEnabled": ["true"], "command": ["[\"python3\", root.cli, \"respond\", ident]"]}`
 - `nacre/shell/services/NacreNetwork.qml:94` — `{"id": ["monitor"], "command": ["[\"nmcli\", \"--colors\", \"no\", \"monitor\"]"], "running": ["true"], "onExited": ["{"]}`
 - `nacre/shell/services/NacrePaletteTask.qml:102` — `{"command": ["[\"python3\", root.tool, \"serve\"]"], "stdinEnabled": ["true"], "running": ["root.transport === null"], "onExited": ["(code, status) => {"]}`
-- `nacre/shell/services/NacrePearls.qml:150` — `{"id": ["layoutReader"], "running": ["NacreProfile.ready"], "command": ["[\"python3\", (Quickshell.env(\"NACRE_PEARL_TOOLS\") || Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools\") + \"/pearl-state.py\", \"load\"]"]}`
-- `nacre/shell/services/NacrePearls.qml:164` — `{"id": ["layoutWriter"], "stdinEnabled": ["true"], "command": ["[\"python3\", (Quickshell.env(\"NACRE_PEARL_TOOLS\") || Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools\") + \"/pearl-state.py\", \"save\"]"], "onExited": ["(exitCode, exitStatus) => {"]}`
+- `nacre/shell/services/NacrePearls.qml:197` — `{"id": ["layoutReader"], "running": ["NacreProfile.ready"], "command": ["[\"python3\", (Quickshell.env(\"NACRE_PEARL_TOOLS\") || Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools\") + \"/pearl-state.py\", \"load\"]"]}`
+- `nacre/shell/services/NacrePearls.qml:211` — `{"id": ["layoutWriter"], "stdinEnabled": ["true"], "command": ["[\"python3\", (Quickshell.env(\"NACRE_PEARL_TOOLS\") || Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools\") + \"/pearl-state.py\", \"save\"]"], "onExited": ["(exitCode, exitStatus) => {"]}`
 - `nacre/shell/services/NacreSettingsApp.qml:79` — `{"id": ["minimizeJob"], "onExited": ["exitCode => {"]}`
 - `nacre/shell/services/NacreSystemUsage.qml:144` — `{"id": ["slow"], "command": ["[\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/resource-state.py\"]"], "onExited": ["(exitCode, exitStatus) => {"]}`
 - `nacre/shell/services/NacreWallpapers.qml:369` — `{"id": ["catalog"], "command": ["[\"python3\", root.tool, \"catalog\"]"], "onExited": ["(code, status) => {"]}`
@@ -436,8 +449,8 @@ and namespace member references are in scope-inventory.json.
 - `nacre/shell/services/compositor/HyprlandBackend.qml:233` — `{"id": ["panelWriter"], "command": ["[\"hyprctl\", \"eval\", value]"], "onExited": ["root.writePanelRegions()"]}`
 - `nacre/shell/services/compositor/HyprlandBackend.qml:321` — `{"id": ["cursor"], "command": ["[\"hyprctl\", \"cursorpos\", \"-j\"]"]}`
 - `nacre/shell/services/compositor/HyprlandBackend.qml:334` — `{"id": ["focusReader"], "command": ["[\"hyprctl\", \"activewindow\", \"-j\"]"]}`
-- `nacre/shell/services/compositor/NiriBackend.qml:131` — `{"id": ["stream"], "running": ["true"], "command": ["[\"python3\", root.toolsPath + \"/compositor.py\", \"events\"]"], "onExited": ["(exitCode, exitStatus) => {"]}`
-- `nacre/shell/services/compositor/NiriBackend.qml:181` — `{"id": ["worker"], "onExited": ["(exitCode, exitStatus) => {"]}`
+- `nacre/shell/services/compositor/NiriBackend.qml:166` — `{"id": ["stream"], "running": ["true"], "command": ["[\"python3\", root.toolsPath + \"/compositor.py\", \"events\"]"], "onExited": ["(exitCode, exitStatus) => {"]}`
+- `nacre/shell/services/compositor/NiriBackend.qml:221` — `{"id": ["worker"], "onExited": ["(exitCode, exitStatus) => {"]}`
 - `nacre/shell/utils/NacreIcons.qml:59` — `{"running": ["true"], "command": ["[\"python3\", \"-c\", \"import platform; print(platform.freedesktop_os_release().get('PRETTY_NAME', 'Linux'))\"]"]}`
 
 ## Every FileView declaration
@@ -460,7 +473,7 @@ and namespace member references are in scope-inventory.json.
 - `nacre/shell/services/NacreLightChannel.qml:118` — `{"path": ["root.present && root.device && !root.isDdc ? \"/sys/class/\" + (root.descriptor.kind === \"backlight\" ? \"backlight\" : \"leds\") + \"/\" + root.device + \"/max_brightness\" : \"\""]}`
 - `nacre/shell/services/NacreMenuContext.qml:938` — `{"path": ["root.shared ? \"\" : root.tools + \"/launcher-menu.json\""], "watchChanges": ["true"], "onFileChanged": ["reload()"]}`
 - `nacre/shell/services/NacreMenuContext.qml:949` — `{"path": ["root.shared ? \"\" : Quickshell.env(\"HOME\") + \"/.config/nacre/launcher-menu.json\""], "watchChanges": ["true"], "onFileChanged": ["reload()"]}`
-- `nacre/shell/services/NacreNotifs.qml:168` — `{"path": ["Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/notification-policy.json\""]}`
+- `nacre/shell/services/NacreNotifs.qml:182` — `{"path": ["Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/notification-policy.json\""]}`
 - `nacre/shell/services/NacrePresentation.qml:98` — `{"path": ["NacrePaths.state + \"/presentation.json\""], "watchChanges": ["true"], "onFileChanged": ["reload()"]}`
 - `nacre/shell/services/NacreProfile.qml:17` — `{"id": ["file"], "path": ["Quickshell.env(\"HOME\") + \"/.config/nacre/profile.json\""], "watchChanges": ["true"], "onFileChanged": ["reload()"]}`
 - `nacre/shell/services/NacreSystemUsage.qml:101` — `{"id": ["cpuFile"], "path": ["\"/proc/stat\""]}`
@@ -484,8 +497,8 @@ and namespace member references are in scope-inventory.json.
 - `nacre/shell/services/NacreMenuContext.qml:961` — `["command: [\"python3\", root.tools + \"/menu-backend.py\", \"state\", ...(force ? [\"--force\"] : [])]"]`
 - `nacre/shell/services/NacreMenuContext.qml:997` — `["command: [\"python3\", root.tools + \"/menu-backend.py\", \"packages\", query]"]`
 - `nacre/shell/services/NacreNetwork.qml:80` — `["command: [\"python3\", Quickshell.env(\"HOME\") + \"/.local/share/nacre/shell/tools/network-state.py\"]"]`
-- `nacre/shell/services/NacreNotifs.qml:190` — `["command: [\"python3\", root.helper, \"load\"]"]`
-- `nacre/shell/services/NacreNotifs.qml:201` — `["command: [\"python3\", root.helper, \"save\"]"]`
+- `nacre/shell/services/NacreNotifs.qml:204` — `["command: [\"python3\", root.helper, \"load\"]"]`
+- `nacre/shell/services/NacreNotifs.qml:215` — `["command: [\"python3\", root.helper, \"save\"]"]`
 - `nacre/shell/services/NacreWallpapers.qml:419` — `["command: [\"python3\", root.tool, \"select\", requestPath, \"--stream-presentation\"]"]`
 - `nacre/shell/services/NacreWallpapers.qml:444` — `["command: [\"python3\", root.tool, Object.keys(value).some(key => key.startsWith(\"palette\")) ? \"theme\" : \"preferences\", \"--stream-presentation\"]"]`
 
@@ -497,17 +510,22 @@ and namespace member references are in scope-inventory.json.
 - `nacre/shell/modules/NacreShellShortcuts.qml:81` — `{"name": ["\"launcherInterrupt\""], "onPressed": ["root.launcherInterrupt()"]}`
 - `nacre/shell/services/NacreBrightness.qml:137` — `{"name": ["\"brightnessUp\""], "onPressed": ["root.increaseBrightness()"]}`
 - `nacre/shell/services/NacreBrightness.qml:142` — `{"name": ["\"brightnessDown\""], "onPressed": ["root.decreaseBrightness()"]}`
-- `nacre/shell/services/NacreNotifs.qml:223` — `{"name": ["\"clearNotifs\""], "onPressed": ["root.hidePopups()"]}`
+- `nacre/shell/services/NacreNotifs.qml:237` — `{"name": ["\"clearNotifs\""], "onPressed": ["root.hidePopups()"]}`
 - `nacre/shell/services/NacrePlayers.qml:65` — `{"name": ["\"mediaToggle\""], "onPressed": ["root.control(\"playPause\")"]}`
 - `nacre/shell/services/NacrePlayers.qml:70` — `{"name": ["\"mediaNext\""], "onPressed": ["root.control(\"next\")"]}`
 - `nacre/shell/services/NacrePlayers.qml:75` — `{"name": ["\"mediaPrev\""], "onPressed": ["root.control(\"previous\")"]}`
 - `nacre/shell/services/NacrePlayers.qml:80` — `{"name": ["\"mediaStop\""], "onPressed": ["root.control(\"stop\")"]}`
 - `nacre/shell/services/compositor/HyprlandShortcut.qml:59` — `{"onPressed": ["if (!root.replacing && root.alive) {"], "onReleased": ["if (!root.replacing && root.alive) {"]}`
 
+## All Process/FileView type references
+
+- `Process`: `nacre/shell/lock-preview.qml:171`, `nacre/shell/modules/extras/Clipboard.qml:44`, `nacre/shell/modules/pearls/NacrePearlWindow.qml:61`, `nacre/shell/modules/pearls/NacrePearlWindow.qml:191`, `nacre/shell/modules/pearls/NacrePearlWindow.qml:202`, `nacre/shell/services/ChatWindowTitle.qml:74`, `nacre/shell/services/DesktopExtras.qml:58`, `nacre/shell/services/DesktopSettings.qml:111`, `nacre/shell/services/DeviceActions.qml:26`, `nacre/shell/services/DeviceActions.qml:34`, `nacre/shell/services/DisplayRecovery.qml:129`, `nacre/shell/services/DisplayRecovery.qml:133`, `nacre/shell/services/LockWidgets.qml:81`, `nacre/shell/services/Maintenance.qml:32`, `nacre/shell/services/NacreBatteryAlerts.qml:147`, `nacre/shell/services/NacreBrightness.qml:111`, `nacre/shell/services/NacreChatSession.qml:129`, `nacre/shell/services/NacreChatSession.qml:337`, `nacre/shell/services/NacreColorsApp.qml:244`, `nacre/shell/services/NacreColorsApp.qml:251`, `nacre/shell/services/NacreColorsApp.qml:271`, `nacre/shell/services/NacreColorsApp.qml:289`, `nacre/shell/services/NacreControlTools.qml:52`, `nacre/shell/services/NacreDashboardSystem.qml:79`, `nacre/shell/services/NacreHelpers.qml:93`, `nacre/shell/services/NacreLightChannel.qml:132`, `nacre/shell/services/NacreLightChannel.qml:132`, `nacre/shell/services/NacreLightChannel.qml:146`, `nacre/shell/services/NacreLightChannel.qml:146`, `nacre/shell/services/NacreMediaDetails.qml:78`, `nacre/shell/services/NacreMenuContext.qml:977`, `nacre/shell/services/NacreMenuContext.qml:1034`, `nacre/shell/services/NacreMenuPrompt.qml:59`, `nacre/shell/services/NacreMenuPrompt.qml:91`, `nacre/shell/services/NacreNetwork.qml:94`, `nacre/shell/services/NacrePaletteTask.qml:102`, `nacre/shell/services/NacrePaletteTask.qml:102`, `nacre/shell/services/NacrePearls.qml:197`, `nacre/shell/services/NacrePearls.qml:211`, `nacre/shell/services/NacreSettingsApp.qml:79`, `nacre/shell/services/NacreSystemUsage.qml:144`, `nacre/shell/services/NacreWallpapers.qml:369`, `nacre/shell/services/NacreWallpapers.qml:391`, `nacre/shell/services/NacreWallpapers.qml:466`, `nacre/shell/services/NacreWallpapers.qml:494`, `nacre/shell/services/NacreWallpapers.qml:509`, `nacre/shell/services/NacreWeather.qml:99`, `nacre/shell/services/NacreWelcomeApp.qml:251`, `nacre/shell/services/TimezoneSettings.qml:28`, `nacre/shell/services/TimezoneSettings.qml:46`, `nacre/shell/services/Updates.qml:16`, `nacre/shell/services/WallpaperPlayback.qml:31`, `nacre/shell/services/WallpaperPlayback.qml:47`, `nacre/shell/services/compositor/HyprlandBackend.qml:175`, `nacre/shell/services/compositor/HyprlandBackend.qml:233`, `nacre/shell/services/compositor/HyprlandBackend.qml:321`, `nacre/shell/services/compositor/HyprlandBackend.qml:334`, `nacre/shell/services/compositor/NiriBackend.qml:166`, `nacre/shell/services/compositor/NiriBackend.qml:221`, `nacre/shell/utils/NacreIcons.qml:59`, `nacre/shell/utils/NacreIcons.qml:59`
+- `FileView`: `nacre/shell/modules/dashboard/overview/NacreHostCard.qml:51`, `nacre/shell/modules/dashboard/overview/NacreHostCard.qml:56`, `nacre/shell/modules/settings/pages/NacreAppearancePage.qml:17`, `nacre/shell/services/DesktopSettings.qml:91`, `nacre/shell/services/LauncherPreferences.qml:92`, `nacre/shell/services/NacreBatteryAlerts.qml:110`, `nacre/shell/services/NacreColorsApp.qml:340`, `nacre/shell/services/NacreColours.qml:79`, `nacre/shell/services/NacreControlTools.qml:43`, `nacre/shell/services/NacreDashboardState.qml:182`, `nacre/shell/services/NacreDashboardSystem.qml:72`, `nacre/shell/services/NacreI18n.qml:79`, `nacre/shell/services/NacreI18n.qml:91`, `nacre/shell/services/NacreI18n.qml:101`, `nacre/shell/services/NacreLightChannel.qml:107`, `nacre/shell/services/NacreLightChannel.qml:107`, `nacre/shell/services/NacreLightChannel.qml:118`, `nacre/shell/services/NacreLightChannel.qml:118`, `nacre/shell/services/NacreMenuContext.qml:938`, `nacre/shell/services/NacreMenuContext.qml:949`, `nacre/shell/services/NacreNotifs.qml:182`, `nacre/shell/services/NacrePresentation.qml:98`, `nacre/shell/services/NacreProfile.qml:17`, `nacre/shell/services/NacreSystemUsage.qml:101`, `nacre/shell/services/NacreSystemUsage.qml:107`, `nacre/shell/services/NacreSystemUsage.qml:113`, `nacre/shell/services/NacreSystemUsage.qml:119`, `nacre/shell/services/NacreWallpapers.qml:345`, `nacre/shell/services/NacreWallpapers.qml:356`, `nacre/shell/services/NacreWeather.qml:88`, `nacre/shell/services/Updates.qml:27`
+
 ## CLI IPC call sites and wrapper invocations
 
-- `nacre/shell-tools/compositor_backends/niri_config.py:120` — `'if [ -n "${NACRE_QS_CONFIG:-}" ]; then exec "${NACRE_QS_BIN:-$HOME/.local/share/nacre/shell/bin/qs}" -p "$NACRE_QS_CONFIG" ipc call nacreCompositor shortcut '`
-- `nacre/shell-tools/compositor_backends/niri_config.py:122` — `+ '; else exec "${NACRE_QS_BIN:-$HOME/.local/share/nacre/shell/bin/qs}" -c nacre ipc call nacreCompositor shortcut '`
+- `nacre/shell-tools/compositor_backends/niri_config.py:124` — `'if [ -n "${NACRE_QS_CONFIG:-}" ]; then exec "${NACRE_QS_BIN:-$HOME/.local/share/nacre/shell/bin/qs}" -p "$NACRE_QS_CONFIG" ipc call nacreCompositor shortcut '`
+- `nacre/shell-tools/compositor_backends/niri_config.py:126` — `+ '; else exec "${NACRE_QS_BIN:-$HOME/.local/share/nacre/shell/bin/qs}" -c nacre ipc call nacreCompositor shortcut '`
 - `nacre/shell-tools/control.sh:10` — `exec "$HOME/.local/share/nacre/shell/bin/qs" -c nacre ipc call "$target" step "${2:-up}" ;;`
 - `nacre/shell-tools/control.sh:14` — `close) exec "$HOME/.local/share/nacre/shell/bin/qs" -c nacre ipc call nacre close ;;`
 - `nacre/shell-tools/control.sh:19` — `exec "$HOME/.local/share/nacre/shell/bin/qs" -c nacre ipc call nacre launcher ">wallpaper " ;;`
@@ -522,11 +540,17 @@ and namespace member references are in scope-inventory.json.
 - `nacre/shell-tools/control.sh:34` — `hide) exec "$HOME/.local/share/nacre/shell/bin/qs" -c nacre ipc call nacre hide ;;`
 - `nacre/shell-tools/control.sh:35` — `launcher) exec "$HOME/.local/share/nacre/shell/bin/qs" -c nacre ipc call nacre launcher "" ;;`
 - `nacre/shell-tools/control.sh:36` — `toggle) exec "$HOME/.local/share/nacre/shell/bin/qs" -c nacre ipc call drawers toggle dashboard ;;`
+- `nacre/shell-tools/desktop-actions.py:141` — `run([str(HOME / '.local/share/nacre/shell/bin/qs'), '-c', 'nacre', 'ipc', 'call', 'brightness', 'set', str(max(0.01, min(1, int(value) / 100)))])`
+- `nacre/shell-tools/install.py:422` — `subprocess.run([str(DEST / 'bin/qs'), '-c', 'nacre', 'ipc', 'call', 'nacre', 'state'], capture_output=True, text=True, timeout=3)`
 - `nacre/shell-tools/lock-info.py:25` — `def ipc(target, action):`
 - `nacre/shell-tools/lock-info.py:60` — `data = json.loads(ipc("lockWidgets", "state"))`
 - `nacre/shell-tools/lock-info.py:295` — `ipc("mpris", "playPause" if a.kind == "toggle" else a.kind)`
+- `nacre/shell-tools/lock-info.py:26` — `subprocess.run([str(HOME / '.local/share/nacre/shell/bin/qs'), '-c', 'nacre', 'ipc', 'call', target, action], capture_output=True, text=True, timeout=2)`
 - `nacre/shell-tools/menu-cli.py:194` — `def ipc(target, *args):`
 - `nacre/shell-tools/menu-cli.py:241` — `ipc("menuPrompt", "open", ident)`
 - `nacre/shell-tools/menu-cli.py:259` — `ipc("menuPrompt", "cancel", ident)`
 - `nacre/shell-tools/menu-cli.py:313` — `ipc("nacre", "menu", args.route, args.value)`
+- `nacre/shell-tools/menu-cli.py:195` — `subprocess.run([str(Path.home() / '.local/share/nacre/shell/bin/qs'), '-c', 'nacre', 'ipc', 'call', target, *args], check=True, capture_output=True, text=True, timeout=5)`
 - `nacre/shell-tools/session-watch.py:32` — `desktop = run([str(qs), "-c", "nacre", "ipc", "call", "nacre", "state"])`
+- `nacre/shell-tools/session-watch.py:32` — `run([str(qs), '-c', 'nacre', 'ipc', 'call', 'nacre', 'state'])`
+- `nacre/shell-tools/shell-supervisor.py:55` — `subprocess.run([str(ROOT / 'bin/qs'), '-c', 'nacre', 'ipc', 'call', 'nacre', 'state'], env=env, capture_output=True, text=True, timeout=2)`
