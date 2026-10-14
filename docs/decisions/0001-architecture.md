@@ -82,7 +82,7 @@ avoid empty architectural crates before they provide a useful tested boundary.
 | bead-render | Existing renderer/text integration, shared/bounded resource caches, backend-neutral drawing needs |
 | bead-ui | Typed markup AST/source spans, store/action references, Taffy wiring, controls/input, staging/swap |
 | bead-services | Shared bus/process/helper client abstractions, bounded event publication and reconnect |
-| bead-backends | Neutral compositor API; only modules here construct native compositor transport/actions |
+| bead-backends | Neutral snapshots/actions/events; native transports are self-contained GPL nacre-shell adapters |
 | nacre-shell + shell/ | GPL application stores/behavior/layout/assets, existing helper invocation, GPL-only video adapters where required |
 
 Feature 1 should introduce only the minimum useful framework surface crate and

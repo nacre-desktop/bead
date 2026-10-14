@@ -1,0 +1,6 @@
+// Private nested backend indicator/title preview. Never install as session config.
+spawn-at-startup "sh" "-c" "exec nacre-shell --namespace bead-dev-backend --ui backend/main.luau --backend auto --no-keyboard-focus"
+spawn-at-startup "quickshell" "--path" "spikes/backend-windows.qml"
+hotkey-overlay { skip-at-startup; }
+animations { off; }
+binds { Mod+Shift+E { quit; }; }

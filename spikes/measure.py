@@ -86,6 +86,7 @@ def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
         if ui:command+=['--ui',os.environ.get('BEAD_UI_ENTRY','ui/main.luau')]
         if ui and not animated:command.remove('--animate')
         if os.environ.get('BEAD_CATALOG'):command+=['--catalog',os.environ['BEAD_CATALOG']]
+        if os.environ.get('BEAD_BACKEND'):command+=['--backend','auto']
         if '-memory' in mode:command+=['--memory-usage']
         if mode.endswith('-3'):command+=['--surfaces','3']
         if layout=='content':command+=['--content-size']
@@ -187,6 +188,111 @@ def sample_reload(env,raw,target,renderer):
             print(f'RELOAD_PROOF renderer={renderer} edits={len(latencies)} file_to_presentation_ms={latencies} preserved_state=true broken_dependency_kept_old_ui=true recovered=true',flush=True)
         finally:stop(client);reader.join(timeout=5)
         if client.returncode!=0:raise RuntimeError(f'reload client exit {client.returncode}')
+
+def sample_backend(env,raw,target,compositor):
+    logs=[];condition=threading.Condition();path=raw/('backend-'+compositor+'.log')
+    (raw/(compositor+'-ipc.jsonl')).write_text('')
+    probe=subprocess.Popen([str(target/'nacre-shell'),'--backend-probe'],cwd=ROOT,env={**env,'BEAD_RECORD_IPC':str(raw/(compositor+'-ipc.jsonl'))},stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,text=True,bufsize=1)
+    def drain():
+        with path.open('w') as stream:
+            for line in probe.stdout:
+                stream.write(line);stream.flush()
+                with condition:logs.append(line.rstrip());condition.notify_all()
+    reader=threading.Thread(target=drain);reader.start();clients=[]
+    def wait(predicate,offset=0):
+        deadline=time.monotonic()+20
+        with condition:
+            while True:
+                for line in logs[offset:]:
+                    if line.startswith('BACKEND_SNAPSHOT '):
+                        snapshot=json.loads(line.split(' ',1)[1])
+                        if predicate(snapshot):return snapshot
+                if probe.poll() is not None or time.monotonic()>deadline:raise RuntimeError('Backend proof snapshot timeout; inspect ignored log')
+                condition.wait(.05)
+    def action(value):
+        offset=len(logs);probe.stdin.write(json.dumps(value)+'\n');probe.stdin.flush()
+        deadline=time.monotonic()+10
+        with condition:
+            while True:
+                line=next((line for line in logs[offset:] if line.startswith('BACKEND_RESULT ')),None)
+                if line:return json.loads(line.split(' ',1)[1])
+                if probe.poll() is not None or time.monotonic()>deadline:raise RuntimeError('Backend action timeout')
+                condition.wait(.05)
+    try:
+        snapshot=wait(lambda s:s['connected']);assert snapshot['outputs'] and snapshot['workspaces']
+        fixtures=raw/(compositor+'-fixtures');fixtures.mkdir(exist_ok=True)
+        if compositor=='hyprland':
+            for name in ['monitors','workspaces','clients','activewindow']:
+                p=subprocess.run(['hyprctl','-j',name],env=env,capture_output=True,text=True,check=True,timeout=5);(fixtures/(name+'.json')).write_text(p.stdout)
+        else:
+            for name in ['outputs','workspaces','windows']:
+                p=subprocess.run(['niri','msg','-j',name],env=env,capture_output=True,text=True,check=True,timeout=5);(fixtures/(name+'.json')).write_text(p.stdout)
+        windows=subprocess.Popen(['quickshell','--path',str(ROOT/'spikes/backend-windows.qml')],cwd=ROOT,env=env,stdout=(raw/(compositor+'-windows.log')).open('w'),stderr=subprocess.STDOUT,start_new_session=True)
+        clients.append(windows);snapshot=wait(lambda s:len([w for w in s['windows'] if w['title'].startswith('Bead fixture')])==2)
+        owned=[w for w in snapshot['windows'] if w['title'].startswith('Bead fixture')];latencies=[]
+        focused=next(w['id'] for w in owned if w['focused'])
+        owned.sort(key=lambda w:w['id']==focused)
+        for i in range(20):
+            result=action({'action':'focus-window','window':owned[i%2]['id']});assert result['ok'] and result['observed'];latencies.append(result['state_update_ms'])
+        result=action({'action':'window-trash','window':owned[0]['id']});assert not result['ok'] and 'unsupported' in result['error']
+        snapshot=wait(lambda s:len([w for w in s['windows'] if w['title'].startswith('Bead fixture')])==2)
+        if compositor=='hyprland':
+            offset=len(logs)
+            subprocess.run(['hyprctl','eval','hl.dispatch(hl.dsp.focus({workspace=2}))'],env=env,check=True,capture_output=True,timeout=5)
+            snapshot=wait(lambda s:any(w['index']==2 for w in s['workspaces']),offset)
+        candidates=[w for w in snapshot['workspaces'] if owned[0]['workspace']!=w['id']]
+        if candidates:
+            moved=action({'action':'move-window','window':owned[0]['id'],'workspace':candidates[0]['id'],'follow':False});assert moved['ok'] and moved['observed']
+            switched=action({'action':'switch-workspace','workspace':candidates[0]['id']});assert switched['ok'] and switched['observed']
+            print('BACKEND_MOVE_SWITCH '+compositor+' pass',flush=True)
+        assert candidates, 'Move proof requires a second existing workspace'
+        for floating in [True,False]:
+            result=action({'action':'set-floating','window':owned[0]['id'],'floating':floating});assert result['ok'] and result['observed']
+        if compositor=='hyprland':
+            for fullscreen in [True,False]:
+                result=action({'action':'set-fullscreen','window':owned[0]['id'],'fullscreen':fullscreen});assert result['ok'] and result['observed']
+            original_ids={w['id'] for w in owned};offset=len(logs)
+            subprocess.run(['hyprctl','output','create','headless','bead-hotplug'],env=env,check=True,capture_output=True,timeout=5)
+            added=wait(lambda s:any(o['name']=='bead-hotplug' for o in s['outputs']),offset)
+            output=next(o for o in added['outputs'] if o['name']=='bead-hotplug')
+            result=action({'action':'move-window-to-output','window':owned[0]['id'],'output':output['id'],'follow':True});assert result['ok'] and result['observed']
+            assert original_ids.issubset({w['id'] for w in added['windows']})
+            offset=len(logs);subprocess.run(['hyprctl','output','remove','bead-hotplug'],env=env,check=True,capture_output=True,timeout=5)
+            removed=wait(lambda s:all(o['name']!='bead-hotplug' for o in s['outputs']),offset)
+            assert original_ids.issubset({w['id'] for w in removed['windows']})
+            print('BACKEND_HOTPLUG hyprland add/move/remove stable-window-IDs=true',flush=True)
+        if os.environ.get('NACRE_REFERENCE'):
+            import importlib.util
+            spec=importlib.util.spec_from_file_location('backend_reference',ROOT/'spikes/backend-reference.py')
+            reference=importlib.util.module_from_spec(spec);spec.loader.exec_module(reference)
+            reference.sample(env,raw,compositor,memory,drm_memory,ticks,stop)
+        last=action({'action':'close-window','window':owned[0]['id']});assert last['ok'] and last['observed']
+        wait(lambda s:all(w['id']!=owned[0]['id'] for w in s['windows']))
+        print(f'BACKEND_PROOF {compositor} windows/focus/close/unsupported=true focus_state_update_p50_p99={sorted(latencies)[9]:.3f}/{sorted(latencies)[-1]:.3f}ms samples={len(latencies)}',flush=True)
+        # UI proof uses the same actual event stream; it is not a protocol stub.
+        ui=subprocess.Popen([str(target/'nacre-shell'),'--ui','backend/main.luau','--backend','auto','--renderer','auto','--namespace','bead-dev-backend','--trace-state','--no-keyboard-focus'],cwd=ROOT,env=env,stdout=(raw/(compositor+'-backend-ui.log')).open('w'),stderr=subprocess.STDOUT,start_new_session=True)
+        clients.append(ui);time.sleep(2)
+        result=action({'action':'focus-window','window':owned[1]['id']});assert result['ok'] and result['observed']
+        deadline=time.monotonic()+5
+        while True:
+            text=(raw/(compositor+'-backend-ui.log')).read_text()
+            states=[json.loads(l[9:]) for l in text.splitlines() if l.startswith('UI_STATE ')]
+            if states and states[-1].get('bead.focused_title')==owned[1]['title']:break
+            if time.monotonic()>deadline:raise RuntimeError('Bound focused title missing in live Luau UI')
+            time.sleep(.05)
+        print('BACKEND_UI '+compositor+' bound-workspaces/title=true',flush=True)
+        time.sleep(.5);subprocess.run(['grim',str(raw/(compositor+'-backend-ui.png'))],env=env,capture_output=True,timeout=5)
+        # A full idle measurement is separate from action timing/fixture activity.
+        before=ticks(ui.pid);begun=time.monotonic();time.sleep(2 if os.environ.get('BEAD_SKIP_IDLE') else 60);elapsed=time.monotonic()-begun
+        m=memory(ui.pid);drm=drm_memory(ui.pid);cpu=100*(ticks(ui.pid)-before)/os.sysconf('SC_CLK_TCK')/elapsed
+        print(f'BACKEND_IDLE {compositor} UI_CPU={cpu:.3f}% seconds={elapsed:.3f} PSS_plus_DRM={m["pss_mib"]+sum((drm or {}).values()):.3f}MiB PSS/USS={m["pss_mib"]:.3f}/{m["uss_mib"]:.3f} DRM={sum((drm or {}).values()):.3f}',flush=True)
+    finally:
+        for client in reversed(clients):stop(client)
+        if probe.poll() is None:probe.stdin.write('stop\n');probe.stdin.flush()
+        try:probe.wait(timeout=5)
+        except subprocess.TimeoutExpired:stop(probe)
+        reader.join(timeout=5)
+    if probe.returncode!=0:raise RuntimeError('Backend probe exit not clean')
 
 def sample_input(env,raw,target):
     with tempfile.TemporaryDirectory(prefix='bead-input-') as directory:
@@ -364,7 +470,7 @@ def main():
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
             return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
-    raw = ROOT / 'spikes/results/raw'
+    raw = pathlib.Path(os.environ.get('BEAD_RAW_DIR', str(ROOT / 'spikes/results/raw')))
     if args.retained:raw=raw/('retained-'+args.compositor)
     elif 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
     raw.mkdir(parents=True, exist_ok=True)
@@ -427,6 +533,7 @@ def main():
         else:
             env['AQ_DRM_DEVICES']='/dev/null'
             command=['Hyprland','--config',str(ROOT/'spikes/hyprland.lua')]
+        compositor_launch_env = env.copy()
         compositor = subprocess.Popen(command, env=env, stdout=log, stderr=log, start_new_session=True)
         client = None
         try:
@@ -486,6 +593,14 @@ def main():
                 return 0
             if args.qml_reload_test:
                 sample_qml_reload(env,raw);return 0
+            if args.reload_test and os.environ.get('BEAD_BACKEND_TEST'):
+                target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
+                sample_backend(env,raw,target,args.compositor)
+                import importlib.util
+                spec=importlib.util.spec_from_file_location('backend_restart',ROOT/'spikes/backend-restart.py')
+                restart=importlib.util.module_from_spec(spec);spec.loader.exec_module(restart)
+                compositor=restart.sample(env,compositor_launch_env,command,compositor,target,raw,stop)
+                return 0
             if args.reload_test and os.environ.get('BEAD_INPUT_TEST'):
                 target=pathlib.Path(os.environ.get('CARGO_TARGET_DIR',str(ROOT/'target')))/'release'
                 sample_input(env,raw,target);return 0

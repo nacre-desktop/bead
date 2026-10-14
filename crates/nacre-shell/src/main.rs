@@ -49,6 +49,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                     _ => return Err("backend must be auto/none".into()),
                 };
             }
+            "--no-keyboard-focus" => options.keyboard_focus = false,
             "--test-keyboard" => options.test_keyboard = true,
             "--trace-state" => options.trace_state = true,
             "--memory-usage" => options.memory_usage = true,

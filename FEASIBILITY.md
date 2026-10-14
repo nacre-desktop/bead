@@ -291,23 +291,39 @@ NextFeature5 nativebackends; no wait tonight. Off-threadbake/shadercache deferre
 
 ## Feature 5 — native compositor state/actions (2026-10-14)
 
-The neutral API and both GPL socket adapters are implemented. One shared backend
-feeds outputs, stable workspaces/windows and focused title into keyed Luau views.
-Unsupported operations fail explicitly; views never launch compositor commands.
-Recorded fixtures, dropped connections and replacement sockets pass unit tests.
+The same neutral API drives a live Luau workspace indicator and focused title on
+both nested compositors. Direct sockets replace process launches in the adapters;
+subscriptions sleep when idle, and unsupported actions return explicit errors.
+Reconnect, restart and stable workspace identity pass. Performance is mixed.
 
-| Check at first publication | Result |
-| --- | --- |
-| Fixture reduction, reconnect/restart, topology/IDs, subscription cleanup | Pass |
-| Framework permissive-only and complete workspace cargo-deny | Pass |
-| Nested indicator/title and subscribed idle | Earlier proof recovered; final comparison pending |
+| Minimal workspace/title panel | Bead / QML+helpers PSS+DRM MiB | Bead state p50/p99 ms | QML state p50/p99 ms | Idle CPU /60s |
+| --- | ---: | ---: | ---: | --- |
+| Hyprland virtual2880×1800/1.5 | 66.75 / 60.66 | .178 / 7.312 | 1 / 1 | 0ticks both |
+| niri window1278×692/1 | 65.14 / 105.10 | 32.026 / 49.071 | 37 / 39 | 0ticks both |
 
-Hyprland uses its request/event sockets directly; niri uses niri-ipc26.4.0 with
-one persistent command connection and a separate event stream. Session-scoped IDs
-survive index/output changes and reconnect, but reject IDs from replaced sockets.
-Capability names follow the Nacre contract/parity vocabulary; false flags describe
-this adapter's delivered subset, not every feature the compositor could support.
-These self-contained GPL modules should be reused by Nacre's Rust migration
-(Wave 2), rather than implementing another transport. No GPL enters bead-* graphs.
-Final nested hotplug/moves and matched QML/Python measurements remain in progress.
-**Verdict: code milestone validated; Feature 5 acceptance still pending.**
+Twenty alternating focus actions per path; p99 is the worst of this small sample.
+Bead uses monotonic action-entry→normalized-state observation; QML uses Date.now
+(ms resolution) at actual backend call→activeClient update. Neither is presentation
+or scanout latency. Reference uses unchanged Nacre QML backends at bad603e6 with
+only temporary path/i18n shims; niri's persistent Python event helper is included.
+Same 760×112 indicator/title content, not exact skin/font parity or full-shell cost.
+Memory is PSS + deduplicated DRM (shared/system-memory overlap possible); QML
+niri earlier93.84MiB versus final105.10 shows pool/cache variation.
+Zero CPU ticks over 60s means below~.017% of one core, not zero power.
+Native focus/close/workspace moves/switches/float pass both; fullscreen and live
+output add/window move/remove pass Hyprland. Recorded IPC replay plus topology
+mutations cover niri output add/remove/reindex; physical niri hotplug is unvalidated
+in its single-window nested backend. niri output geometry refreshes on topology
+and ConfigLoaded events; IPC-only geometry changes lack a dedicated output event.
+Connection drops preserve IDs; real compositor exit/relaunch via private stable
+socket aliases changes session IDs and rejects stale actions. Different live socket
+paths require a new endpoint/environment; no unrelated session is auto-selected.
+An initial blank-title proof exposed OnDemand layer focus; --no-keyboard-focus
+keeps the indicator from taking keyboard focus. Bound title assertions/screenshots
+now pass both ([niri](examples/backend-niri.png), [Hyprland](examples/backend-hyprland.png)).
+GPL adapters use niri-ipc 26.4.0/persistent command+event sockets and direct Hyprland
+request/event sockets. Nacre's Rust migration (Wave 2) should reuse these modules.
+242 neutral-crate / 911 adapter / 443 test / 13 Luau lines; 38 tests, fmt, clippy, CPU-only and
+workspace/all permissive framework deny graphs pass. No system installs/live runs.
+**Verdict: Feature 5 complete with concerns: tail latency, Hypr small-panel memory,
+and unvalidated physical niri hotplug. STOP before Feature 6; owner acceptance next.**

@@ -1,12 +1,13 @@
 # Roadmap and gates
 
-Updated 2026-10-13. Feature 3 built; Gate B approved, overnight Feature4/5 authorized.
+Updated 2026-10-14. Features1–5 built; stopped at owner gate before Feature6.
 Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
 One authorized live niri comparison matched QML physical120Hz timing; cold startup
 and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
-Current order: authoring ADR → layout/lists → real launcher port → GateB tests →
-input/focus/IME/a11y → native backends. Stop afterFeature5; owner may veto ADR0002
-in the morning. Off-thread baking and cold shader-cache work deferred.
+Authoring/layout/launcher/GateB/input/basicIME/a11y/native backends completed.
+Physical niri hotplug, real IME and screen-reader acceptance remain unvalidated.
+Feature5 concerns: tail latency and Hypr small-panel memory. Owner may veto
+ADR0002; Feature6 requires a new instruction. Baking/shader-cache work deferred.
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
 current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;

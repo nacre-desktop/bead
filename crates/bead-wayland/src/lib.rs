@@ -160,6 +160,7 @@ pub struct Options {
     pub memory_usage: bool,
     pub surface_count: usize,
     pub interactive: bool,
+    pub keyboard_focus: bool,
     pub test_keyboard: bool,
     pub trace_state: bool,
 }
@@ -181,6 +182,7 @@ impl Default for Options {
             memory_usage: false,
             surface_count: 1,
             interactive: false,
+            keyboard_focus: true,
             test_keyboard: false,
             trace_state: false,
         }
@@ -749,7 +751,7 @@ impl App {
             layer.set_exclusive_zone(if self.options.panel { -1 } else { 0 });
             layer.set_keyboard_interactivity(if self.options.test_keyboard {
                 KeyboardInteractivity::Exclusive
-            } else if self.options.interactive {
+            } else if self.options.interactive && self.options.keyboard_focus {
                 KeyboardInteractivity::OnDemand
             } else {
                 KeyboardInteractivity::None

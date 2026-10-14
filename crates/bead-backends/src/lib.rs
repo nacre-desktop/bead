@@ -71,6 +71,7 @@ pub const CAPABILITIES: &[&str] = &[
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Capabilities {
     pub features: BTreeMap<String, bool>,
+    #[serde(rename = "desktopOptions")]
     pub desktop_options: Vec<String>,
 }
 impl Capabilities {
