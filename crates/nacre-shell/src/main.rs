@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+mod backends;
 mod catalog;
 mod font_sources;
 mod reload;
@@ -12,12 +13,16 @@ fn main() {
     }
 }
 fn start() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|arg| arg == "--backend-probe") {
+        return backends::probe::run();
+    }
     let started = std::time::Instant::now();
     let mut profile = false;
     let mut options = Options::default();
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
     let mut catalog: Option<PathBuf> = None;
+    let mut backend_enabled = false;
     if let Ok(name) = std::env::var("BEAD_RENDERER") {
         select_renderer(&mut options, &name)?;
     }
@@ -35,6 +40,14 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                 options.panel = true;
                 options.content_size = true;
                 options.interactive = true;
+            }
+            "--backend" => {
+                let value = args.next().ok_or("--backend needs auto or none")?;
+                backend_enabled = match value.as_str() {
+                    "auto" => true,
+                    "none" => false,
+                    _ => return Err("backend must be auto/none".into()),
+                };
             }
             "--test-keyboard" => options.test_keyboard = true,
             "--trace-state" => options.trace_state = true,
@@ -173,12 +186,13 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                 )]))?;
         }
         let renderer = bead_render::renderer(options.renderer)?;
-        bead_wayland::run_runtime(
-            options,
-            scene,
-            renderer,
-            Some(Box::new(reload::Runtime::new(session))),
-        )
+        let runtime = reload::Runtime::new(session);
+        let runtime = if backend_enabled {
+            runtime.with_backend(backends::Native::from_env()?)
+        } else {
+            runtime
+        };
+        bead_wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))
     } else {
         run(options, scene)
     }

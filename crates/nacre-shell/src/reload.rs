@@ -1,20 +1,76 @@
 // SPDX-License-Identifier: GPL-3.0-only
+use bead_backends::Backend;
 use bead_render::Scene;
 use bead_wayland::{SceneSource, UiEvent};
 use std::error::Error;
 pub struct Runtime {
     pub session: bead_ui::Session,
     pending: Option<Scene>,
+    backend: Option<std::sync::Arc<crate::backends::Native>>,
+    subscription: Option<bead_backends::Subscription>,
 }
 impl Runtime {
     pub fn new(session: bead_ui::Session) -> Self {
         Self {
             session,
             pending: None,
+            backend: None,
+            subscription: None,
         }
+    }
+    pub fn with_backend(mut self, backend: std::sync::Arc<crate::backends::Native>) -> Self {
+        let values = backend_values(&backend.snapshot());
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&values)
+            .expect("valid native defaults");
+        self.backend = Some(backend);
+        self
+    }
+    fn backend_action(&self, name: &str, arg: bead_core::Value) -> Result<(), Box<dyn Error>> {
+        let backend = self.backend.as_ref().ok_or("backend unavailable")?;
+        let bead_core::Value::Text(id) = arg else {
+            return Err("backend action requires a stable ID".into());
+        };
+        let id = bead_backends::Id(id);
+        let action = match name {
+            "backend.workspace.switch" => bead_backends::Action::SwitchWorkspace { workspace: id },
+            "backend.window.focus" => bead_backends::Action::FocusWindow { window: id },
+            "backend.window.close" => bead_backends::Action::CloseWindow { window: id },
+            "backend.windowTrash" => bead_backends::Action::WindowTrash { window: id },
+            "backend.scratchpad" => bead_backends::Action::Scratchpad { window: Some(id) },
+            "backend.windowCapture" => bead_backends::Action::WindowCapture { window: id },
+            _ => {
+                return Err(bead_backends::Error::Unsupported {
+                    operation: name.into(),
+                    backend: backend.snapshot().backend.clone(),
+                }
+                .into());
+            }
+        };
+        let started = std::time::Instant::now();
+        backend.action(action)?;
+        println!(
+            "BACKEND_ACTION name={name} request_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.
+        );
+        Ok(())
     }
 }
 impl SceneSource for Runtime {
+    fn services(
+        &mut self,
+        wakeup: Box<dyn Fn(std::sync::Arc<bead_backends::Snapshot>) + Send + Sync>,
+    ) {
+        if let Some(backend) = &self.backend {
+            self.subscription = Some(backend.subscribe(Box::new(move |event| {
+                if let bead_backends::Event::Snapshot(snapshot) = event {
+                    wakeup(snapshot);
+                }
+            })));
+        }
+    }
     fn pointer_cursor(&self, x: f32, y: f32) -> &str {
         self.session.pointer_cursor(x, y)
     }
@@ -35,8 +91,31 @@ impl SceneSource for Runtime {
     }
     fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         self.pending = None;
+        let host_action = match &event {
+            UiEvent::Click { x, y } => self.session.action_at(*x, *y),
+            UiEvent::Command { command, .. } if command == "enter" => self.session.focused_action(),
+            _ => None,
+        };
+        if let Some((id, name, arg)) = host_action
+            && name.starts_with("backend.")
+        {
+            self.backend_action(&name, arg)?;
+            let scene = self.session.focus_id(&id)?;
+            self.pending = scene.clone();
+            return Ok(scene);
+        }
         let reload = matches!(event, UiEvent::Reload);
         let mut scene = match event {
+            UiEvent::Backend(snapshot) => {
+                println!(
+                    "BACKEND_UPDATE backend={} connected={} workspaces={} windows={}",
+                    snapshot.backend,
+                    snapshot.connected,
+                    snapshot.workspaces.len(),
+                    snapshot.windows.len()
+                );
+                self.session.update(backend_values(&snapshot))?
+            }
             UiEvent::Reload => Some(self.session.reload()?),
             UiEvent::Relayout => self.session.relayout()?,
             UiEvent::Accessibility {
@@ -176,4 +255,56 @@ impl SceneSource for Runtime {
         }
         scene
     }
+}
+
+fn backend_values(
+    snapshot: &bead_backends::Snapshot,
+) -> std::collections::BTreeMap<String, bead_core::Value> {
+    use bead_core::Value;
+    let mut values = std::collections::BTreeMap::from([
+        ("bead.connected".into(), Value::Bool(snapshot.connected)),
+        (
+            "bead.focused_title".into(),
+            Value::Text(
+                snapshot
+                    .focused_window()
+                    .map_or("", |w| w.title.as_str())
+                    .into(),
+            ),
+        ),
+        (
+            "bead.outputs".into(),
+            Value::List(
+                snapshot
+                    .outputs
+                    .iter()
+                    .map(|o| serde_json::to_value(o).unwrap())
+                    .collect(),
+            ),
+        ),
+        (
+            "bead.workspaces".into(),
+            Value::List(
+                snapshot
+                    .workspaces
+                    .iter()
+                    .map(|w| serde_json::to_value(w).unwrap())
+                    .collect(),
+            ),
+        ),
+        (
+            "bead.windows".into(),
+            Value::List(
+                snapshot
+                    .windows
+                    .iter()
+                    .map(|w| serde_json::to_value(w).unwrap())
+                    .collect(),
+            ),
+        ),
+    ]);
+    for (name, supported) in &snapshot.capabilities.features {
+        values.insert(format!("bead.cap.{name}"), Value::Bool(*supported));
+    }
+    values
 }

@@ -11,6 +11,9 @@ bead-wayland = { path = "../bead-wayland" }
 bead-render = { path = "../bead-render" }
 bead-ui = { path = "../bead-ui" }
 bead-core = { path = "../bead-core" }
+bead-backends = { path = "../bead-backends" }
+niri-ipc = "=26.4.0"
+nix = {version="0.31",features=["signal"]}
 serde_json = "1"
 accesskit = "=0.25.1"
 

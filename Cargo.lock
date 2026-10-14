@@ -282,6 +282,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bead-backends"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bead-core"
 version = "0.1.0"
 dependencies = [
@@ -346,6 +353,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "accesskit_unix",
+ "bead-backends",
  "bead-core",
  "bead-render",
  "calloop",
@@ -1441,6 +1449,7 @@ name = "nacre-shell"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bead-backends",
  "bead-core",
  "bead-render",
  "bead-ui",
@@ -1449,6 +1458,8 @@ dependencies = [
  "fontdb",
  "freedesktop-desktop-entry",
  "freedesktop-icons",
+ "niri-ipc",
+ "nix",
  "serde_json",
  "skrifa 0.44.0",
 ]
@@ -1489,6 +1500,16 @@ dependencies = [
  "indexmap",
  "rustc-hash 1.1.0",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "niri-ipc"
+version = "26.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a4adbddf4037ce047854d36a60b5bf80a7990b8db2f0a0b9ede7534b0bae09a"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

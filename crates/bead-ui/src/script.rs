@@ -83,6 +83,20 @@ impl Script {
             .map_err(|e| lua_error(&self.path, e))
     }
     pub fn validate_action(&self, name: &str) -> Result<(), Diagnostic> {
+        if [
+            "backend.workspace.switch",
+            "backend.window.focus",
+            "backend.window.close",
+            "backend.windowTrash",
+            "backend.scratchpad",
+            "backend.windowCapture",
+            "backend.monitorMirroring",
+        ]
+        .contains(&name)
+        {
+            return Ok(());
+        }
+
         let actions: Table = self
             .exports
             .get("actions")

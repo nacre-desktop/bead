@@ -64,6 +64,7 @@ use wayland_protocols::wp::{
 #[derive(Clone, Debug)]
 pub enum UiEvent {
     Reload,
+    Backend(std::sync::Arc<bead_backends::Snapshot>),
     Relayout,
     Hover {
         x: f32,
@@ -112,6 +113,11 @@ impl std::fmt::Display for GpuUnavailable {
 #[cfg(feature = "gpu")]
 impl Error for GpuUnavailable {}
 pub trait SceneSource {
+    fn services(
+        &mut self,
+        _wakeup: Box<dyn Fn(std::sync::Arc<bead_backends::Snapshot>) + Send + Sync>,
+    ) {
+    }
     fn accessibility_tree(&self) -> Option<accesskit::TreeUpdate> {
         None
     }
@@ -378,6 +384,12 @@ pub fn run_runtime(
                 app.ui(event);
             }
         })?;
+        if let Some(runtime) = &mut app.runtime {
+            let service_sender = sender.clone();
+            runtime.services(Box::new(move |snapshot| {
+                let _ = service_sender.send(UiEvent::Backend(snapshot));
+            }));
+        }
         app.accessibility = Some(accessibility::Bridge::new(sender));
     }
     if let Some(runtime) = &mut app.runtime {

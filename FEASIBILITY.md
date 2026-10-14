@@ -287,3 +287,27 @@ Post-platform100reload: total128.99→129.46MiB (+.48), FD22stable, layer/image1
 latency108.20/125.33ms. Late pools stable within2MiB tolerance, not exactequality.
 No live tests. **Concern: basicplatform paths exist, integration gaps explicitly open**.
 NextFeature5 nativebackends; no wait tonight. Off-threadbake/shadercache deferred.
+
+
+## Feature 5 — native compositor state/actions (2026-10-14)
+
+The neutral API and both GPL socket adapters are implemented. One shared backend
+feeds outputs, stable workspaces/windows and focused title into keyed Luau views.
+Unsupported operations fail explicitly; views never launch compositor commands.
+Recorded fixtures, dropped connections and replacement sockets pass unit tests.
+
+| Check at first publication | Result |
+| --- | --- |
+| Fixture reduction, reconnect/restart, topology/IDs, subscription cleanup | Pass |
+| Framework permissive-only and complete workspace cargo-deny | Pass |
+| Nested indicator/title and subscribed idle | Earlier proof recovered; final comparison pending |
+
+Hyprland uses its request/event sockets directly; niri uses niri-ipc26.4.0 with
+one persistent command connection and a separate event stream. Session-scoped IDs
+survive index/output changes and reconnect, but reject IDs from replaced sockets.
+Capability names follow the Nacre contract/parity vocabulary; false flags describe
+this adapter's delivered subset, not every feature the compositor could support.
+These self-contained GPL modules should be reused by Nacre's Rust migration
+(Wave 2), rather than implementing another transport. No GPL enters bead-* graphs.
+Final nested hotplug/moves and matched QML/Python measurements remain in progress.
+**Verdict: code milestone validated; Feature 5 acceptance still pending.**

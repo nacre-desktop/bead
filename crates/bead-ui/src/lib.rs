@@ -1009,6 +1009,25 @@ impl Session {
             Value::Text(id.into()),
         )]))
     }
+    pub fn action_at(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
+        let node = self.hit(x, y, false)?;
+        Some((
+            node.id.clone(),
+            node.action.clone()?,
+            node.action_arg.clone().unwrap_or(Value::Bool(true)),
+        ))
+    }
+    pub fn focused_action(&self) -> Option<(String, String, Value)> {
+        let Value::Text(focused) = self.stores.get("bead.focused")? else {
+            return None;
+        };
+        let node = self.current_nodes.iter().find(|n| &n.id == focused)?;
+        Some((
+            node.id.clone(),
+            node.action.clone()?,
+            node.action_arg.clone().unwrap_or(Value::Bool(true)),
+        ))
+    }
     pub fn activate_focused(&mut self) -> Result<Option<Scene>, Diagnostic> {
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
             return Ok(None);
@@ -1312,6 +1331,10 @@ impl Session {
         stores
             .commit(changes)
             .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        if self.generation.is_none() {
+            self.stores = stores;
+            return Ok(None);
+        }
         self.stage_state(stores)
     }
     pub fn set_viewport(&mut self, width: u32, height: u32) -> bool {

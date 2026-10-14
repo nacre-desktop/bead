@@ -1,0 +1,43 @@
+{"data": {"WorkspacesChanged": {"workspaces": [{"active_window_id": null, "id": 1, "idx": 1, "is_active": true, "is_focused": true, "is_urgent": false, "name": null, "output": "winit"}]}}, "kind": "niri-event"}
+{"data": {"WindowsChanged": {"windows": []}}, "kind": "niri-event"}
+{"data": {"KeyboardLayoutsChanged": {"keyboard_layouts": {"current_idx": 0, "names": ["English (US)"]}}}, "kind": "niri-event"}
+{"data": {"OverviewOpenedOrClosed": {"is_open": false}}, "kind": "niri-event"}
+{"data": {"ConfigLoaded": {"failed": false}}, "kind": "niri-event"}
+{"data": {"CastsChanged": {"casts": []}}, "kind": "niri-event"}
+{"data": {"WorkspacesChanged": {"workspaces": [{"active_window_id": 2, "id": 1, "idx": 1, "is_active": true, "is_focused": true, "is_urgent": false, "name": null, "output": "winit"}, {"active_window_id": null, "id": 2, "idx": 2, "is_active": false, "is_focused": false, "is_urgent": false, "name": null, "output": "winit"}]}}, "kind": "niri-event"}
+{"data": {"WindowOpenedOrChanged": {"window": {"app_id": "org.quickshell", "focus_timestamp": {"nanos": 153757132, "secs": 42505}, "id": 2, "is_floating": false, "is_focused": true, "is_urgent": false, "layout": {"pos_in_scrolling_layout": [1, 1], "tile_pos_in_workspace_view": null, "tile_size": [615.0, 660.0], "window_offset_in_tile": [0.0, 0.0], "window_size": [615, 660]}, "pid": 1532271, "title": "Bead fixture A", "workspace_id": 1}}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 3, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowOpenedOrChanged": {"window": {"app_id": "org.quickshell", "focus_timestamp": {"nanos": 154768387, "secs": 42505}, "id": 3, "is_floating": false, "is_focused": true, "is_urgent": false, "layout": {"pos_in_scrolling_layout": [2, 1], "tile_pos_in_workspace_view": null, "tile_size": [615.0, 660.0], "window_offset_in_tile": [0.0, 0.0], "window_size": [615, 660]}, "pid": 1532271, "title": "Bead fixture B", "workspace_id": 1}}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 2, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 2}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 3, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 3}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 2, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 2}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 3, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 3}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 2, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 2}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 3, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 3}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 2, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 2}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 3, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 3}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 2, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 2}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": 3, "workspace_id": 1}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 3}}, "kind": "niri-event"}
+{"data": {"WorkspacesChanged": {"workspaces": [{"active_window_id": 3, "id": 1, "idx": 1, "is_active": true, "is_focused": true, "is_urgent": false, "name": null, "output": "winit"}, {"active_window_id": 2, "id": 2, "idx": 2, "is_active": false, "is_focused": false, "is_urgent": false, "name": null, "output": "winit"}, {"active_window_id": null, "id": 3, "idx": 3, "is_active": false, "is_focused": false, "is_urgent": false, "name": null, "output": "winit"}]}}, "kind": "niri-event"}
+{"data": {"WindowOpenedOrChanged": {"window": {"app_id": "org.quickshell", "focus_timestamp": {"nanos": 153757132, "secs": 42505}, "id": 2, "is_floating": false, "is_focused": false, "is_urgent": false, "layout": {"pos_in_scrolling_layout": [1, 1], "tile_pos_in_workspace_view": null, "tile_size": [615.0, 660.0], "window_offset_in_tile": [0.0, 0.0], "window_size": [615, 660]}, "pid": 1532271, "title": "Bead fixture A", "workspace_id": 2}}}, "kind": "niri-event"}
+{"data": {"WindowLayoutsChanged": {"changes": [[3, {"pos_in_scrolling_layout": [1, 1], "tile_pos_in_workspace_view": null, "tile_size": [615.0, 660.0], "window_offset_in_tile": [0.0, 0.0], "window_size": [615, 660]}]]}}, "kind": "niri-event"}
+{"data": {"WorkspaceActivated": {"focused": true, "id": 2}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 2}}, "kind": "niri-event"}
+{"data": {"WorkspaceActiveWindowChanged": {"active_window_id": null, "workspace_id": 2}}, "kind": "niri-event"}
+{"data": {"WindowClosed": {"id": 2}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": null}}, "kind": "niri-event"}
+{"data": {"WorkspaceActivated": {"focused": true, "id": 1}}, "kind": "niri-event"}
+{"data": {"WorkspacesChanged": {"workspaces": [{"active_window_id": 3, "id": 1, "idx": 1, "is_active": true, "is_focused": true, "is_urgent": false, "name": null, "output": "winit"}, {"active_window_id": null, "id": 3, "idx": 2, "is_active": false, "is_focused": false, "is_urgent": false, "name": null, "output": "winit"}]}}, "kind": "niri-event"}
+{"data": {"WindowFocusChanged": {"id": 3}}, "kind": "niri-event"}
+{"data": {"Ok": {"Outputs": {"winit": {"current_mode": 0, "is_custom_mode": true, "logical": {"height": 692, "scale": 1.0, "transform": "Flipped180", "width": 1278, "x": 0, "y": 0}, "make": "Smithay", "model": "Winit", "modes": [{"height": 692, "is_preferred": true, "refresh_rate": 60000, "width": 1278}], "name": "winit", "physical_size": null, "serial": null, "vrr_enabled": false, "vrr_supported": false}}}}, "kind": "niri-reply"}
+{"data": {"Ok": "Handled"}, "kind": "niri-reply"}
