@@ -15,6 +15,7 @@ Tray prefers real named/application theme icons, then validated network-ARGB
 pixmaps; transparent pearl fixture replaces solid square. Asset bytes invalidate
 retained layers at the same stable path. Package_2 +0 precedes status capsule.
 45tests/fmt/clippy/CPU-only build/workspace +six framework deny policies pass.
+Step3 c3b2bb5 published; CI38544965302 passed.
 Step4 code now accepts a distinct passive GL companion via --bar --bar-panel;
 GPU transport remains shared. Timing traces distinguish action/state, UI queue,
 commit and compositor presentation update sequences. Full-size niri private
@@ -29,7 +30,12 @@ canonical CARGO_TARGET_DIR/BEAD_RESEARCH_TOOLS/BEAD_RAW_DIR. Hypr adds
 with distinct GL panel on both compositors; matched unchanged50px QML header.
 Final samples require60s idle,220 focus actions and separate pacing workload.
 Trace request/event/state wall vs thread CPU; compare BEAD_RECORD_IPC off/on.
-Early smoke results are not final numbers. Complete fullmatrix,inspect captures,
+Original8rows +QML +off/on traces finished; full .research/feature6/final-*
+retain them. Companion height omitted32px bottom shadow; corrected mixed rows
+will supersede those4original mixed rows. Repeat60s/220actions and add100rendered
+tray churn per corrected row. Named-icon indexed themes/Adwaita/undecodable
+fallback now covered. Original bar-only numbers remain valid atc3b2bb5.
+Complete corrected matrix,inspect captures,
 record concerns in FEASIBILITY, push+STATUS, then short Feature6 summary/STOP.
 Private evidence .research/feature6/lifecycle-routes (step3), lifecycle (initial
 failure), matrix-check* (smoke only). Capture milestones/step1–2 history retained

@@ -52,7 +52,10 @@ def sample(env,raw,compositor,stop):
         time.sleep(2)
         for renderer in ['cpu','femtovg-gl']:
             for companion in [False,True]:
-                label=f'{compositor}-{renderer}-'+('panel' if companion else 'alone')
+                case=renderer+'-'+('panel' if companion else 'alone')
+                cases=os.environ.get('BEAD_MATRIX_CASES','').split(',')
+                if cases != [''] and case not in cases:continue
+                label=f'{compositor}-'+case
                 path=raw/(label+'.log');client=None;probe=None;tray=None
                 command=[str(target/'nacre-shell'),'--bar','--renderer',renderer,'--trace-state','--memory-usage','--namespace','bead-feature6-matrix']+(['--bar-panel'] if companion else [])
                 if compositor=='hyprland':command+=['--output','bead-bench']
@@ -101,6 +104,28 @@ def sample(env,raw,compositor,stop):
                     row['ui_prepare_ms']=percentiles([s['ui_prepare_ms'] for s in samples if s['ui_prepare_ms'] is not None])
                     row['after_actions']=idle(client.pid,1)
                     probe.close();probe=None
+                    if os.environ.get('BEAD_BAR_UI_CHURN'):
+                        def tray_state(text,wanted,offset):
+                            states=[json.loads(l[9:]) for l in text[offset:].splitlines() if l.startswith('UI_STATE ')]
+                            return bool(states) and len(states[-1]['bead.desktop.tray'])==wanted
+                        offset=len(path.read_text());stop(tray);tray=None
+                        wait_log(path,lambda text:tray_state(text,0,offset))
+                        churn=[]
+                        for cycle in range(100):
+                            offset=len(path.read_text())
+                            tray=subprocess.Popen([str(target/'examples/tray-fixture')],env=env,stdout=(raw/(label+'-churn-tray.log')).open('a'),stderr=subprocess.STDOUT,start_new_session=True)
+                            wait_log(path,lambda text:tray_state(text,1,offset))
+                            offset=len(path.read_text());stop(tray);tray=None
+                            wait_log(path,lambda text:tray_state(text,0,offset))
+                            if cycle in [9,49,99]:
+                                time.sleep(.1)
+                                churn.append({'cycle':cycle+1,**services.resources(client.pid)})
+                        assert all(s['fds']==churn[0]['fds'] for s in churn),churn
+                        assert churn[-1]['pss_mib']-churn[0]['pss_mib']<2,churn
+                        resource_lines=[l for l in path.read_text().splitlines() if l.startswith('UI_RESOURCES ')]
+                        assert all('watchers=1 subscriptions=1' in l and 'layers=1' in l for l in resource_lines[-100:]),resource_lines[-3:]
+                        row['rendered_tray_churn']=churn
+                        print('BAR_UI_CHURN '+label+' '+json.dumps(churn),flush=True)
                     # Frame pacing is a separate continuously requested, unchanged-content workload.
                     stop(client);client=None
                     pacing_path=raw/(label+'-pacing.log')
@@ -118,6 +143,7 @@ def sample(env,raw,compositor,stop):
                     if client:stop(client)
                 assert 'STOP surfaces=0' in path.read_text() and 'UI_ERROR' not in path.read_text(),path.read_text()[-1500:]
                 if smoke:return
+        if os.environ.get('BEAD_MATRIX_CASES'):return
         # Matched 50px actual QML bar-only fixture, no generic/full-shell comparison.
         with tempfile.TemporaryDirectory(prefix='bead-qml-bar-') as directory:
             root=pathlib.Path(directory);reference.fixture(root)

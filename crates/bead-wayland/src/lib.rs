@@ -796,7 +796,9 @@ impl App {
                 Anchor::TOP | Anchor::LEFT | Anchor::RIGHT
             });
             if content {
-                let height = scene.bounds.y + scene.bounds.h + scene.slide.map_or(0., |s| s.open_y);
+                let height = scene.bounds.y
+                    + scene.bounds.h
+                    + scene.slide.map_or(scene.offset.1, |s| s.open_y);
                 layer.set_size(scene.bounds.w.ceil() as u32, height.ceil().max(1.) as u32);
             } else {
                 layer.set_size(
@@ -1265,7 +1267,10 @@ impl App {
         })();
         if let Err(e) = result {
             #[cfg(feature = "gpu")]
-            if self.options.auto_fallback && e.downcast_ref::<GpuUnavailable>().is_some() {
+            if self.options.auto_fallback
+                && !self.surfaces[index].companion
+                && e.downcast_ref::<GpuUnavailable>().is_some()
+            {
                 eprintln!("FALLBACK GPU unavailable: {e}");
                 if let Ok(renderer) = bead_render::renderer(RendererKind::Cpu) {
                     self.renderer = renderer;

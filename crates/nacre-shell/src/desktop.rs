@@ -55,17 +55,41 @@ fn named_icon(item: &bead_services::TrayItem) -> Option<std::path::PathBuf> {
     }
     // Some SNI applications ship icons outside the installed desktop theme.
     if !item.icon_theme_path.is_empty() && !item.icon_name.contains('/') {
-        for suffix in ["", ".png", ".svg", ".xpm"] {
-            let path =
-                PathBuf::from(&item.icon_theme_path).join(format!("{}{suffix}", item.icon_name));
-            if path.is_file() {
-                return Some(path);
+        let root = PathBuf::from(&item.icon_theme_path);
+        let mut directories = vec![root.clone()];
+        // IconThemePath may point to a flat app directory or a normal indexed theme.
+        if let Ok(index) = std::fs::read_to_string(root.join("index.theme")) {
+            for line in index.lines() {
+                if let Some(list) = line
+                    .strip_prefix("Directories=")
+                    .or_else(|| line.strip_prefix("ScaledDirectories="))
+                {
+                    directories.extend(
+                        list.split(',')
+                            .filter(|s| !s.is_empty())
+                            .map(|s| root.join(s.trim())),
+                    );
+                }
+            }
+        }
+        for directory in directories {
+            for suffix in ["", ".png", ".svg", ".xpm"] {
+                let path = directory.join(format!("{}{suffix}", item.icon_name));
+                if path.is_file() {
+                    return Some(path);
+                }
             }
         }
     }
     freedesktop_icons::lookup(&item.icon_name)
         .with_size(24)
         .find()
+        .or_else(|| {
+            freedesktop_icons::lookup(&item.icon_name)
+                .with_theme("Adwaita")
+                .with_size(24)
+                .find()
+        })
 }
 
 pub fn icons(
@@ -85,10 +109,13 @@ pub fn icons(
             .iter()
             .find(|item| item.id == id)
             .ok_or("tray icon disappeared")?;
-        if let Some(named) = named_icon(item) {
+        if let Some(named) = named_icon(item)
+            && let Ok(bytes) = std::fs::read(&named)
+            && bead_render::validate_asset(&named, &bytes).is_ok()
+        {
             scene
                 .asset_data
-                .insert(named.clone(), std::sync::Arc::from(std::fs::read(&named)?));
+                .insert(named.clone(), std::sync::Arc::from(bytes));
             *path = named;
             continue;
         }
@@ -223,8 +250,13 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("bead-icon-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let named = dir.join("fixture.png");
-        std::fs::write(&named, b"named icon fixture").unwrap();
-        let mut item = bead_services::TrayItem {
+        use image::ImageEncoder;
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(&[20, 40, 60, 255], 1, 1, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        std::fs::write(&named, &png).unwrap();
+        let item = bead_services::TrayItem {
             id: "fixture".into(),
             icon_name: "fixture".into(),
             icon_theme_path: dir.to_string_lossy().into(),
@@ -254,7 +286,17 @@ mod tests {
         };
         icons(&mut scene, &snapshot).unwrap();
         assert!(scene.asset_data.contains_key(&named));
-        item.icon_name = "bead-nonexistent-icon-7832".into();
+        let nested = dir.join("24x24/status");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(
+            dir.join("index.theme"),
+            "[Icon Theme]\nName=Fixture\nDirectories=24x24/status\n",
+        )
+        .unwrap();
+        std::fs::rename(&named, nested.join("fixture.png")).unwrap();
+        assert_eq!(named_icon(&item), Some(nested.join("fixture.png")));
+        // A found but undecodable named icon also falls back to the real pixmap.
+        std::fs::write(nested.join("fixture.png"), b"broken PNG").unwrap();
         scene.primitives[0] = bead_render::Primitive::Image {
             path: "@icon:tray:fixture".into(),
             rect: bead_render::Rect::new(0., 0., 24., 24.),
@@ -270,6 +312,23 @@ mod tests {
         let png = &scene.asset_data[&std::path::PathBuf::from("@tray-pixmap/fixture.png")];
         let decoded = image::load_from_memory(png).unwrap().to_rgba8();
         assert_eq!(decoded.get_pixel(0, 0).0, [20, 40, 60, 128]);
+        let mut missing = snapshot.tray[0].clone();
+        missing.icon_name = "bead-nonexistent-icon-7832".into();
+        scene.primitives[0] = bead_render::Primitive::Image {
+            path: "@icon:tray:fixture".into(),
+            rect: bead_render::Rect::new(0., 0., 24., 24.),
+        };
+        icons(
+            &mut scene,
+            &Snapshot {
+                tray: vec![missing],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            matches!(&scene.primitives[0],bead_render::Primitive::Image{path,..} if path.to_string_lossy().starts_with("@tray-pixmap/"))
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]

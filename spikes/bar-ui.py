@@ -11,6 +11,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_GL_UNAVAILABLE_PROOF'):
+        target=pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'
+        path=raw/(compositor+'-no-gl.log')
+        private={**env,'LIBGL_ALWAYS_SOFTWARE':'1','DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
+        client=subprocess.Popen([str(target),'--bar','--bar-panel','--renderer','auto','--seconds','3'],cwd=ROOT,env=private,stdout=path.open('w'),stderr=subprocess.STDOUT,start_new_session=True)
+        try:client.wait(timeout=15)
+        finally:stop(client)
+        text=path.read_text()
+        assert client.returncode==1 and 'software GL adapter' in text and 'STOP surfaces=0' in text,text
+        print('COMPANION_GL_UNAVAILABLE clean bounded error; no recursive fallback',flush=True)
+        return
     if os.environ.get('BEAD_BAR_MATRIX'):
         import importlib.util
         spec=importlib.util.spec_from_file_location('bar_matrix',ROOT/'spikes/bar-matrix.py')
