@@ -1,33 +1,24 @@
 # Status
 
-2026-10-14: Feature5 and its concerns accepted; Luau kept. Feature6 authorized.
-Feature6 ACTIVE in isolated bead-feature6-bar; service source b9e1769 published.
-CI38531712571 passed, including private sensor lifecycle. Context handoff next.
-Roadmap-only optimization milestone published at b7396ff; no optimization work done.
-Service foundation: typed snapshots, D-Bus/tray actor and native PipeWire worker.
-40 default tests +1 private sensor proof pass; fmt/clippy and both deny policies pass.
-Framework qualified Apache allowance is version-scoped to target-lexicon0.13.5.
-Repeat private proof with `python3 spikes/services-check.py` (isolated buses only).
-Tray and actual private PipeWire lifecycle proofs remain pending; no bar UI yet.
-Existing PW headers1.6.9 and private tools available; no machine installs needed.
-CI gets its own PW/Clang development prerequisites. Runtime/proof integration pending.
-Scope: Nacre-matched clock/workspaces/title/SNI+DBusMenu/audio/battery/network/BT.
-Capture QML reference only in private nested sessions; Nacre remains read-only.
-Framework services use permissive zbus/pipewire-rs; GPL stays in nacre-shell.
-Prove service/item restarts and bounded subscriptions/resources without busy loops.
-Measure CPU and GL bar alone/bar+GL panel at real sizes on both compositors.
-Record60s idle, PSS+DRM, pacing and200+action samples p50/p95/p99; trace Hypr tail.
-Optimization pass is scheduled after GateC only; no optimization candidates tested.
-Physical niri hotplug deferred to supervised live acceptance; ask when ready.
-No live run authorized now; nice10/Cargo-j2; stop after Feature6.
+2026-10-14: Feature6 ACTIVE; step1 reference capture complete.
+Service foundation b9e1769 retained; no service implementation repeated.
+Actual NacreHeader.qml and visual widgets captured unchanged, reference main e9e80a4.
+Disposable transport shims use the Bead palette and synthetic title/workspaces;
+no daily shell, settings, services or reference files changed. Both nested captures
+visually inspected:50logical px,34px capsules/radius17, margins15, centered title.
+Public captures: examples/bar-reference-{niri,hyprland}.png.
+Niri reference output1278×692/scale1; Hypr reference2880×1800/scale1.5.
+Private evidence canonical .research/feature6/capture; reproducible with
+NACRE_REFERENCE set and measure.py --bar-reference (Hypr adds --virtual120).
+Header has no SNI tray: add a matching compact native tray extension in step2.
+Step2 Luau bar/screenshots, step3 real lifecycle, step4 full measurement matrix
+remain pending, in that order. No Feature7 or optimization work authorized.
+No live tests; Nacre/Orient read-only; nice10/Cargo-j2; stop after Feature6.
 
 ## Exact next work — Feature6 is incomplete
 
-1. Capture the actual QML header in private nested sessions, using the read-only
-   Nacre reference. Actual component: modules/topbar/NacreHeader.qml; frame config
-   headerHeight=40+thickness=50logical pixels; workspace capsule34high, margin15,
-   title centered, compact status/clock on right. Last source inspected9e39583e.
-   No Feature6 screenshot has yet been captured. Honor that look in GPL shell markup.
+1. DONE: unchanged visual QML reference captured and inspected on both private
+   compositors; see examples/bar-reference-*.png and spikes/bar-reference.py.
 2. Prove real private PipeWire null sink/default metadata, volume/mute and restart;
    current private sensor test deliberately uses an ABSENT private PW socket.
    Add actual SNI+DBusMenu item/add/quit/update/menu-action fixtures and repeat churn
