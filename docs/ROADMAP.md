@@ -1,13 +1,15 @@
 # Roadmap and gates
 
-Updated 2026-10-14. Features1–5 built; stopped at owner gate before Feature6.
+Updated 2026-10-14. Features1–6 built; Feature6 complete with concerns.
+Stopped after Feature6; no Feature7 or optimization work authorized.
 Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
 One authorized live niri comparison matched QML physical120Hz timing; cold startup
 and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
 Authoring/layout/launcher/GateB/input/basicIME/a11y/native backends completed.
 Physical niri hotplug, real IME and screen-reader acceptance remain unvalidated.
-Feature5 concerns: tail latency and Hypr small-panel memory. Owner may veto
-ADR0002; Feature6 requires a new instruction. Baking/shader-cache work deferred.
+Feature6 concerns: GL fixed cost, niri shared-surface pacing and latency tails.
+Owner may veto ADR0002; next feature requires a new instruction.
+Baking/shader-cache work deferred.
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
 current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;

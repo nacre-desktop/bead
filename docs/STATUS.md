@@ -1,52 +1,66 @@
 # Status
 
-2026-10-14: Feature6 ACTIVE; steps1–3 complete, step4 measurements pending.
-Step3 proves real private PipeWire default/null sink, volume/mute, 3 daemon
-restarts; 100 SNI add/update/remove cycles, native Activate/AboutToShow/Event,
-normal/menu-only bar hit-testing routes and 3 whole-bus replacements.
-Native service owner late FD20/tasks7/subscription1 stable; PSS6.36→6.81MiB
-(+.45MiB after warmup), zero CPU ticks over60s. Final bus owner FD20/tasks7,
-subscription cleanup0/worker joins pass. Private fixtures do not prove hardware.
-Initial upstream DBusMenu listeners retained tasks after item exit; local MIT
-system-tray0.8.9 patch ends menu listeners on owner loss/connection EOF.
-Font uses actual JetBrainsMono Nerd Font (QML alias resolves this same file),
-including late-arriving titles; selects fonts when scene text changes.
-Tray prefers real named/application theme icons, then validated network-ARGB
-pixmaps; transparent pearl fixture replaces solid square. Asset bytes invalidate
-retained layers at the same stable path. Package_2 +0 precedes status capsule.
-45tests/fmt/clippy/CPU-only build/workspace +six framework deny policies pass.
-Step3 c3b2bb5 published; CI38544965302 passed.
-Step4 code now accepts a distinct passive GL companion via --bar --bar-panel;
-GPU transport remains shared. Timing traces distinguish action/state, UI queue,
-commit and compositor presentation update sequences. Full-size niri private
-output2880×1800/1.5 proven (nested60Hz); Hypr virtual120Hz matrix remains to run.
-No live tests, reference writes, installs, Feature7 or optimization work.
+2026-10-14: Feature6 COMPLETE with concerns; steps1–4 finished. STOP here.
+Source def7255, measurement-reader ab5bf02; CI38551709096/38552860857 passed.
+Matched actual QML header source9e39583 (visuals unchanged in fixture); reference
+734a4bc and native7ac9242 milestones retained. Service foundation b9e1769 reused.
+Window title now uses canonical JetBrainsMono Nerd Font, same file as QML alias;
+late title text refreshes font selection. Tray resolves named/absolute/app indexed
+icons plus Adwaita, then valid network-ARGB pixmaps (also when named decoding fails).
+Transparent real fixture icon replaces square; same-path asset changes invalidate
+retained layers. Package_2/count0 precedes status; updates helper remains future.
 
-## Exact next work — finish step4 and STOP
+## Feature6 proof and verdict
 
-Run spikes/measure.py --bar-ui with BEAD_BAR_MATRIX=1, NACRE_REFERENCE and
-canonical CARGO_TARGET_DIR/BEAD_RESEARCH_TOOLS/BEAD_RAW_DIR. Hypr adds
---compositor hyprland --virtual120. Eight native rows: CPU/GL bar alone and
-with distinct GL panel on both compositors; matched unchanged50px QML header.
-Final samples require60s idle,220 focus actions and separate pacing workload.
-Trace request/event/state wall vs thread CPU; compare BEAD_RECORD_IPC off/on.
-Original8rows +QML +off/on traces finished; full .research/feature6/final-*
-retain them. Companion height omitted32px bottom shadow; corrected mixed rows
-will supersede those4original mixed rows. Repeat60s/220actions and add100rendered
-tray churn per corrected row. Named-icon indexed themes/Adwaita/undecodable
-fallback now covered. Original bar-only numbers remain valid atc3b2bb5.
-Rendered churn found retained completed watcher handles and an extra Fontconfig
-pattern reference. Both are now corrected. Diagnostic100cycle PSS64.07→64.09MiB;
-FD43/tasks7/retainedwatcher1/Luau518384B stable. Source validation +full final8rows
-will supersede earlier source/geometry rows; keep failed evidence.
-Complete final matrix,inspect captures,
-record concerns in FEASIBILITY, push+STATUS, then short Feature6 summary/STOP.
-Private evidence .research/feature6/lifecycle-routes (step3), lifecycle (initial
-failure), matrix-check* (smoke only). Capture milestones/step1–2 history retained
-below and in FEASIBILITY. Existing task bead-feature6-bar/feature6-reference-bar.
-Before EVERY push fetch and inspect FULL origin/main..HEAD; only own commits,
-owner author+committer. Normal FF integration; never merge old history roots.
-Nacre/Orient read-only; shared packaging/pins/identity owned by attribution task.
+Real private PW null/default sink, volume/mute and3daemon restarts; native SNI
+add/update/quit100cycles, actual Activate/AboutToShow/DBusMenu Event; ordinary and
+menu-only bar hit testing, right-click/menu and click-mute/scroll-volume routes;
+3whole-bus replacements and stale item rejection after quit pass.
+Final owner FD20/live tasks7/retained watcher1/subscriptions1 stable; PSS6.48→6.58MiB
+late100cycles,0CPUticks60s, subscription drop0/worker joins. Hardware not tested.
+Rendered100cycle churn passes on all8CPU/GL/alone/panel rows: FD37–43 per mode stable,
+PSS growth.004–.65MiB after warmup, bus tasks7/retained1/subscriptions1/layer1 stable.
+Three real ownership issues repaired: menu listeners after owner exit, completed
+JoinSet task allocations, extra owned FcFontMatch reference in fontconfig0.11.0.
+Small MIT vendor patches preserve attribution. Initial failures retained; no
+forced GC, allocator trim or enlarged tolerance. No indefinite leak-free claim.
+
+Private2880×1800/scale1.5 outputs: niri nested60Hz, Hypr virtual120Hz. Distinct
+1164×654 GL panel, full shadow geometry and one shared native GL context proven.
+PSS+DRM MiB CPUbar /GLbar /CPUbar+GLpanel /GLbar+GLpanel /matched QMLbar:
+niri23.00 /65.03 /104.90 /109.24 /118.01; Hypr21.95 /65.70 /105.53 /111.67 /123.82.
+Eight60s intervals,220focus actions each, separate8s pacing. Native idle1–2ticks
+(~.017–.033% one core). Metadata/state and per-update presentation measured
+separately; presentation is private compositor feedback, not physical scanout.
+Concerns: niri mixed-surface period≈33ms; title p99 reaches152.34ms. Hypr title
+p99 18.54–23.94ms. Final off/on trace statep99 1.89/9.60ms; worst356.58ms sits in
+snapshot-reply waiting (.046ms worker CPU), append-window p99<.1ms. Keep failure,
+not an append-only diagnosis. Detailed bounds/p50/p95/p99/pacing in FEASIBILITY.
+CPU bar has lowest measured standalone cost; GL fixed cost and UI-thread baking
+remain concerns for GateC. No optimization/Feature7 work and no next gate started.
+
+45tests/fmt/clippy/CPU-only/private sensors/workspace+all6framework deny pass.
+Final CPU/GL and panel captures inspected in examples/bar-*.png. GL unavailable
+companion exits bounded, surfaces0. All task processes stopped; references clean.
+No live desktop tests, machine installs or Nacre/Orient writes.
+Menus inline; logo fixed fixture palette; fixture states differ from QML shims,
+which exclude real helpers/tray. Results are component measurements, not full shell.
+Roadmap now requires framework component kit/shared QML-matching tokens and
+blurred-artwork/level-meter/peek/segmented capabilities before/at GateC; docs only.
+
+## Evidence and reproduction
+
+Final ignored evidence .research/feature6/owned-niri (CPUalone),owned-niri-remaining
+(other3rows/QML/traces),owned-hyprland (allrows/QML/traces),owned-lifecycle;
+final-matrix-combined.json plus trace analysis/worst intervals. Earlier lifecycle,
+churn-diagnosis/corrected/matrix-check/final-* failures are superseded, preserved.
+Private reproduction: spikes/measure.py --bar-ui with BEAD_BAR_MATRIX=1,
+NACRE_REFERENCE and canonical CARGO_TARGET_DIR/BEAD_RESEARCH_TOOLS/BEAD_RAW_DIR;
+Hypr adds --compositor hyprland --virtual120. Build release shell +service examples.
+BEAD_SERVICES_LIFECYCLE=1 with --bar-ui runs the private native service proof.
+NEVER launch standalone --bar directly on daily desktop for these proofs.
+Task worktree/branch preserved: bead-feature6-bar/feature6-reference-bar.
+STOP after Feature6 summary. Future changes require the owner's next instruction.
 
 
 Feature5 code milestone af985ba published after concurrent attribution rewrite.

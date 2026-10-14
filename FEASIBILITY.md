@@ -410,3 +410,102 @@ Package glyph/count0 precedes status; the updates helper remains future scope.
 No installs/live runs/reference edits. Full-size mixed-scene matrix is pending;
 early smoke runs expose nested pacing variability and are not final verdicts.
 **Step3 complete; continue step4, then stop after Feature6.**
+
+
+## Feature6 — final full-size matrix (2026-10-14)
+
+Both private outputs now use2880×1800/scale1.5, with50px bars and a distinct
+1164×654 GL panel through one shared EGL context. CPU bars have the lowest
+measured footprint; native services sleep between changes. Lifecycle/churn passes,
+but nested title latency and niri mixed-surface pacing remain concerns.
+
+| Mode | PSS / DRM / total MiB | State p50/p95/p99 ms | Title presentation p50/p95/p99 ms | CPU ticks/60s |
+| --- | ---: | ---: | ---: | ---: |
+| niri CPU alone | 23.00 / 0.00 / 23.00 | 1.63/13.46/36.17 | 35.15/54.46/82.48 | 2 |
+| niri CPU panel | 63.03 / 41.88 / 104.90 | 0.88/25.75/100.19 | 45.23/63.89/152.34 | 2 |
+| niri GL alone | 42.76 / 22.27 / 65.03 | 1.08/2.04/2.28 | 33.95/35.62/39.46 | 2 |
+| niri GL panel | 54.78 / 54.46 / 109.24 | 1.62/2.39/2.77 | 35.25/50.07/52.42 | 2 |
+| hyprland CPU alone | 21.95 / 0.00 / 21.95 | 2.19/3.20/3.36 | 17.90/18.25/18.54 | 1 |
+| hyprland CPU panel | 63.64 / 41.89 / 105.53 | 2.15/3.29/3.65 | 17.86/19.21/23.94 | 1 |
+| hyprland GL alone | 43.36 / 22.34 / 65.70 | 2.13/3.28/3.59 | 17.79/18.34/21.98 | 1 |
+| hyprland GL panel | 55.19 / 56.48 / 111.67 | 2.14/3.40/4.05 | 17.70/19.15/20.46 | 2 |
+| niri-qml-bar | 91.00 / 27.00 / 118.01 | N/A | N/A | 0 |
+| hyprland-qml-bar | 91.54 / 32.28 / 123.82 | N/A | N/A | 0 |
+
+One60s interval per row,220 focus actions per native row, separate8s pacing below.
+State: native action-entry→normalized-state observation. Title: same action-entry
+→per-update Wayland presentation feedback (CLOCK_MONOTONIC), not physical scanout.
+PSS+deduplicated DRM can overlap system RAM. Services are inside the native process;
+test compositor/windows/tray/action driver excluded. QML is unchanged50px NacreHeader
+at9e39583 with deterministic transport shims, no tray extension/helper cost; QML
+action timings are N/A because shims do not call the compositor. Widget counts and
+status availability differ; this is a bar-component comparison, not full-shell savings.
+Niri nested60Hz /Hypr virtual120Hz. Private caches start fresh per compositor; later
+cases are warm. Diagnostic counters enabled; driver/allocator variability remains.
+Source def7255, reader-only fix ab5bf02; failed/superseded rows retained privately.
+**Feature6 complete with concerns; keep CPU bar option and shared GL capability.**
+
+
+## Feature6 — pacing and ownership verdict (2026-10-14)
+
+Unchanged-content drawing is cheap; content preparation and presentation cost more.
+Continuous8s callbacks below are separate from idle and focus-action workloads.
+Hypr stays near its virtual8.33ms period; niri with a GL panel often needs33ms.
+Actual hardware scanout and long-duration memory behavior remain unvalidated.
+
+| Mode | Draw p50/p99 ms | Bar period p50/p99 ms | Panel period p50/p99 ms |
+| --- | ---: | ---: | ---: |
+| niri CPU alone | 1.990/5.243 | 16.883/48.736 | N/A |
+| niri CPU panel | 1.472/1.624 | 32.444/89.428 | 32.461/118.133 |
+| niri GL alone | 0.063/0.172 | 16.489/17.756 | N/A |
+| niri GL panel | 0.062/0.173 | 33.260/34.604 | 33.256/34.534 |
+| hyprland CPU alone | 0.964/1.193 | 8.337/9.098 | N/A |
+| hyprland CPU panel | 0.959/1.254 | 8.328/9.106 | 8.329/9.247 |
+| hyprland GL alone | 0.031/0.130 | 8.326/9.068 | N/A |
+| hyprland GL panel | 0.034/0.134 | 8.343/9.116 | 8.343/9.116 |
+
+Draw excludes GL swap waiting and UI-thread content baking; it is not update latency.
+Niri shared-surface pacing misses its16.7ms synthetic period. No optimization applied.
+All8native rows pass100rendered tray add/exit cycles: late PSS growth.004–.65MiB;
+FD37–43 per mode stable, live bus tasks7/retained watcher1/desktop subscription1,
+bar layer1 and CPU0/GL1 images stable. Final service owner100cycles PSS6.48→6.58MiB,
+FD20/tasks7/retained1;3PW +3bus restarts, mute/volume/menu calls and routes pass;
+zero CPU ticks60s. One tick in a native bar interval≈.017% one core, not zero power.
+Initial menu-task leak, completed watcher handles and owned Fontconfig matches were
+fixed with small MIT source patches. Rendered-churn allocated heap/Luau diagnostics
+separated them; no forced GC, allocator trim or tolerance inflation. Fontconfig
+match ownership fix changes100cycle PSS64.07→64.09MiB; initial+2.23MiB failure retained.
+GL-unavailable companion exits with a bounded explicit error and releases surfaces.
+45tests/fmt/clippy/CPU-only/private sensors/workspace+six framework deny graphs and
+CI38551709096/38552860857 pass. Captures inspected; no installs/live/reference edits.
+Continuation≈2h; 554net Rust/397Python/4Luau lines, ~4k MIT vendor lines excluded.
+**STOP after Feature6. Component kit is roadmap-only before/at GateC.**
+
+
+## Feature6 — request/event/state tail diagnosis (2026-10-14)
+
+Recording comparisons use220focus actions per path with the same trace boundaries.
+Hypr has four snapshot queries per changed state; reply waiting dominates tails.
+Recording-on has a larger tail in this run, but the captured delay is in a reply
+wait, not its synchronous append. Samples are ordered controls, not a causal trial.
+
+| Probe, recording | State p50/p95/p99 ms | Action-thread CPU p99 ms |
+| --- | ---: | ---: |
+| niri, off | 29.69/30.94/31.70 | 0.101 |
+| niri, on | 29.61/31.27/31.70 | 0.178 |
+| hyprland, off | 1.12/1.74/1.89 | 0.200 |
+| hyprland, on | 1.05/1.39/9.60 | 0.233 |
+
+Final Hypr worst356.58ms: action reply.255ms; second snapshot query (workspaces)
+wait355.91ms with.046ms worker CPU; normalized state356.53ms after action-entry.
+Post-reply→recorded interval p99 off/on .023/.086ms (includes trace logging),
+event→state p99 wall1.50/1.33ms, CPU.425/.655ms. The p99-defining9.60ms case
+has8.57ms action-reply waiting; state is observed.049ms after normalization.
+This local Unix-socket trace does not measure processing inside the compositor or
+physical presentation. It provides no evidence for blaming append alone.
+No-bar niri probe≈29.6ms median with ~.1ms CPU; request waiting and workload
+coupling matter. With bars, title p99 ranges18.54–152.34ms across final cases.
+Retain these concerns for GateC; shared-surface scheduling/content baking remain
+future measured work. Reproduce privately with spikes/measure.py --bar-ui,
+BEAD_BAR_MATRIX=1 (Hypr adds --compositor hyprland --virtual120); canonical tool,
+Cargo target/raw directories required. Raw evidence .research/feature6/owned-*.
