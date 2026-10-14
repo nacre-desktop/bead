@@ -124,6 +124,10 @@ fn pixel_difference(before: &Pixmap, after: &Pixmap) -> Damage {
 }
 impl TreeCache {
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if let Some(frame) = scene.prepared.get(&scale.to_bits()) {
+            self.frame = Some(frame.clone());
+            return Ok(());
+        }
         if !scale.is_finite() || scale <= 0. {
             return Err("invalid layer scale".into());
         }
@@ -185,6 +189,7 @@ impl TreeCache {
                     content.primitives = vec![local(primitive)];
                     content.clips.clear();
                     content.layers.clear();
+                    content.prepared.clear();
                     content.offset = (0., 0.);
                     content.opacity = 1.;
                     self.raster.prepare(&content, scale)?;
@@ -555,6 +560,7 @@ mod tests {
                 subtree_end: 1,
                 bounds: Rect::new(2., 2., 8., 8.),
             }],
+            prepared: Default::default(),
             font_files: vec![],
             width: 24.,
             slide: None,

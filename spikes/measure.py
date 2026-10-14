@@ -145,7 +145,7 @@ def sample_reload(env,raw,target,renderer):
         bundle=pathlib.Path(directory);shutil.copytree(ROOT/'shell',bundle/'shell')
         behavior=bundle/'shell/legacy-ui/behavior.luau'
         behavior.write_text(behavior.read_text().replace('["launcher.search.text"] = ""','["launcher.search.text"] = "saved 😀"').replace('["launcher.scroll.y"] = 0','["launcher.scroll.y"] = 42'))
-        command=[str(target/'nacre-shell'),'--ui','legacy-ui/main.json','--renderer',renderer,'--trace-state','--namespace','bead-dev-reload']
+        command=[os.environ.get('BEAD_NATIVE_BINARY',str(target/'nacre-shell')),'--ui','legacy-ui/main.json','--renderer',renderer,'--trace-state','--namespace','bead-dev-reload']
         log=[];condition=threading.Condition();path=raw/('reload-'+renderer+'.log')
         client=subprocess.Popen(command,cwd=bundle,env={**env,'WAYLAND_DEBUG':'0'},stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,text=True,bufsize=1)
         def drain():

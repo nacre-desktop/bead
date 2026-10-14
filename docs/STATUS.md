@@ -1,45 +1,43 @@
 # Status
 
-2026-10-14: Feature6b ACTIVE, architecture hardening; STOP after6b before Feature7.
-New isolated bead-feature6b/feature6b-architecture at9a8b7c7. Six steps plus owner
-step0 are authorized; commit/push+CI per step, nice10/-j2, nested sessions only.
-0a ACTIVE: swap interval0 + existing per-surface callbacks implemented; no full pass.
-Nested niri GL pairs remain≈32–33ms, though steady swaps<.4ms; CPU+CPU≈16ms.
-Hypr120 medians8.34ms; panel p99 up15.68ms. No excess frame counts; idle not proven
-unchanged (failed-audio retry samples5–11ticks/60s). Callback batching experiment
-failed and was reverted; Mesa interval0 still has a sync-callback throttle.
-Physical acceptance needs explicit owner permission; do not launch a live test.
-0a checkpoint bdc2a7c pushed, CI38564257025 SUCCESS. One bounded physical check
-explicitly approved and consumed; both processes exited. No further live permission.
-Physical120 CPU+GL bar/panel presentation p99≈8.338ms; GL+GL p99=16.667ms,≈1.8%
-missed steady refreshes.494/511 UI commits versus3/9 bakes identify repeated layout/
-script work; defer further proof until worker changes. No personal-state fields logged.
-Stale inherited IPC resolved via current user-session manager, not guessed endpoints.
-0b COMPLETE: one ordered Hypr batch on existing worker; bounded4-document parser,
-malformed/reconnect/action tests pass. Hypr state p99 before4.47/4.26/3.71/4.26ms,
-after2.39/2.49/2.92/2.37; allfour modes220actions. Presentation tails mixed; niri
-unchanged source still varies (afterGLalone237.69ms p99); retain concerns honestly.
-No-bar niri action reply28.75/29.96/30.51ms p50/95/99, median threadCPU.063ms;
-compositor wait separately from UI preparation. Full paired matrix in FEASIBILITY.
-0b source e9028b7 published, CI38571991561 SUCCESS. Step1 COMPLETE with remaining
-script/layout tails: retained node packets/local raster cache, direct GL fills,
-partial texture updates, semantic<=4rectangle EGL+Wayland damage and CPU history.
-51tests/fmt/clippy/CPU-only pass; private GUI/capture/wire proofs pass. Typing CPU
-87.55→29.61%, visible scroll56.48→24.00%, progress85.26→6.99%; progressframep99
-56.55→1.40ms atvirtual120. UIprepare tails16.84/224.55ms remain for worker step2.
-Hoverdamage1.29%, typing2.64%, progress.30%median;520wirecalls no INTMAX substitute.
-Scroll shrink/cull bug fixed/tested, matched controls use shrink0. Invalid input/
-blank-list/budget/shutdown runs retained, no tolerance/budget raised. Baseline600ms
-script stall0newcommits/1queuedpresentation/longest610.15ms; afterworker stillpending.
-Before executable proof-before-bin, e902+timing/debug instrumentation; unchanged
-old cache. Step2 ACTIVE next: script+bake worker, reload pause, stall proof. Steps3–6
-remain pending;0a tail/idleinvariance retained for final6b proof.
+## 2026-10-15 — 6b step 2 complete; step 3 next
 
-No live configs/installs/releases. Nacre/Orient read-only. Canonical tools/target;
-private evidence .research/feature6b. Baseline9a8b7c7 native executable preserved.
-Pleamar953b1b4 BSD-3-Clause researched for independent logic/render loops and bounded
-rectangle damage; reimplementation preferred, no code copied. Gray square in
-bar-panel captures is intentional shell/sample.png fixture, not missing-icon fallback.
+Architecture hardening 6b is active. Stop after 6b; do not start Feature 7.
+Steps 0b, 1 and 2 are implemented. Step 0a remains open for nested niri
+pacing and idle invariance. Steps 3–6 remain pending.
+
+Step 2 moves Luau handlers, binds, reload compilation and CPU raster baking
+onto one worker. The draw thread stages resources before acknowledging the
+candidate; only a validated acknowledgement commits stores and the scene.
+Retained content survives reloads (61 initial raster builds, unchanged by
+five edits to filtered rows). A pixel-identical accepted generation now
+requests one-pixel damage and actual presentation feedback; previously its
+callback-only commit caused the strict reload proof to time out.
+
+Private Hyprland 2880×1800 / scale 1.5 / virtual 120 Hz results:
+- Reload draw-thread preparation median/max: 41.81/234.98 → 0.098/0.153 ms.
+- Five file-write-to-presentation samples: 66.46–75.08 ms, including the
+  existing 50 ms file-event debounce; state/error/recovery proof passes.
+- 600.07 ms Luau stall: 71 commits and 71 presentations; longest interval
+  around the stall 9.34 ms, versus zero new commits and 610.15 ms before.
+  Whole-run presentation p50/p99 8.37/16.85 ms; jitter is still a concern.
+- Typing CPU 29.61 → 32.66% of one core (regression); draw-thread preparation
+  p50/p99 0.091/0.457 ms versus 3.70/16.84 ms. Scroll worker cost remains
+  unmeasured; the prior 224.55 ms UI tail is not claimed resolved end-to-end.
+
+Workspace tests, fmt, clippy with warnings denied and CPU-only build pass.
+The private reload and typing/stall harnesses shut down cleanly. The GVfs
+bus diagnostic occurs after the passing proof when dbus-run-session ends;
+its exact string exists in gvfsd, not Bead, and the private bus successfully
+activated services during the proof. No live desktop or reference changes.
+Inherited work is also preserved on local wip/6b-step2-inherited-20261014.
+Evidence: ignored .research/feature6b/takeover-{reload,stall,typing}.
+
+Next: implement lazy per-surface rendering, prove CPU first frame and GL
+idle release, and compare bar-only/bar+panel PSS plus DRM. Then shared kit
+and edge tokens, robustness, feature/module hygiene in roadmap order.
+Use the existing bead-feature6b worktree and canonical tools/target.
+Nested sessions only; no installation, release or further physical test.
 
 ## Preserved Feature6 checkpoint
 

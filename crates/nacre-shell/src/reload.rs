@@ -151,6 +151,30 @@ impl SceneSource for Runtime {
             })));
         }
     }
+    fn input_regions(&self) -> Vec<bead_wayland::InputRegion> {
+        self.session
+            .view_nodes()
+            .iter()
+            .filter(|node| node.input.is_some() || node.action.is_some())
+            .map(|node| {
+                let rect = match &node.draw {
+                    bead_render::Primitive::Rounded { rect, .. }
+                    | bead_render::Primitive::Text { rect, .. }
+                    | bead_render::Primitive::Image { rect, .. }
+                    | bead_render::Primitive::Shadow { rect, .. } => *rect,
+                };
+                bead_wayland::InputRegion {
+                    rect,
+                    clip: node.clip,
+                    cursor: if node.input.is_some() {
+                        "text"
+                    } else {
+                        "pointer"
+                    },
+                }
+            })
+            .collect()
+    }
     fn pointer_cursor(&self, x: f32, y: f32) -> &str {
         self.session.pointer_cursor(x, y)
     }
@@ -223,6 +247,7 @@ impl SceneSource for Runtime {
                 );
                 self.session.update(backend_values(&snapshot))?
             }
+            UiEvent::Worker(_) => return Err("worker packet cannot reach script executor".into()),
             UiEvent::DebugScriptStall(ms) => {
                 let clock = || crate::backends::clock_ns(nix::libc::CLOCK_MONOTONIC);
                 println!("DEBUG_SCRIPT_STALL begin_ns={} duration_ms={ms}", clock());
@@ -383,10 +408,11 @@ impl SceneSource for Runtime {
     fn state_summary(&self) -> String {
         self.session.state_summary()
     }
-    fn commit(&mut self) {
+    fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
         }
+        true
     }
     fn error_scene(&mut self, error: String) -> Scene {
         self.pending = None;
@@ -465,6 +491,7 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
         asset_data: Default::default(),
         clips: Default::default(),
         layers: Vec::new(),
+        prepared: Default::default(),
         font_files: vec![],
         width: 1920.,
         slide: None,

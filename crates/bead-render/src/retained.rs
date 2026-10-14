@@ -243,6 +243,7 @@ mod tests {
             asset_data: Default::default(),
             clips: Default::default(),
             layers: Vec::new(),
+            prepared: Default::default(),
             width: 40.,
             slide: None,
             offset: (0., 0.),

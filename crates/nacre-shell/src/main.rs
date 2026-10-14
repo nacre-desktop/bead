@@ -158,6 +158,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             asset_data: Default::default(),
             clips: Default::default(),
             layers: Vec::new(),
+            prepared: Default::default(),
             font_files: vec![],
             width: 1100.,
             slide: Some(Slide {
@@ -184,6 +185,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             asset_data: Default::default(),
             clips: Default::default(),
             layers: Vec::new(),
+            prepared: Default::default(),
             font_files: Vec::new(),
             width: 20000.,
             slide: None,
@@ -240,33 +242,35 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(entry) = ui {
         let ui_entry_is_launcher = entry == Path::new("ui/main.luau");
-        let mut session = bead_ui::Session::new(
-            std::path::PathBuf::from("shell"),
-            entry,
-            palette,
-            colors,
-            scene.clone(),
-        );
-        if ui_entry_is_launcher {
-            session.stores = session
-                .stores
-                .reconcile(&std::collections::BTreeMap::from([(
-                    "launcher.catalog".into(),
-                    bead_core::Value::List(catalog::load(catalog.as_deref())?),
-                )]))?;
-        }
+        let fallback = scene.clone();
+        let bar = options.bar;
+        let factory: bead_wayland::worker::Factory = Box::new(move || {
+            let result =
+                (|| -> Result<Box<dyn bead_wayland::SceneSource>, Box<dyn std::error::Error>> {
+                    let mut session =
+                        bead_ui::Session::new("shell".into(), entry, palette, colors, fallback);
+                    if ui_entry_is_launcher {
+                        session.stores =
+                            session
+                                .stores
+                                .reconcile(&std::collections::BTreeMap::from([(
+                                    "launcher.catalog".into(),
+                                    bead_core::Value::List(catalog::load(catalog.as_deref())?),
+                                )]))?;
+                    }
+                    let runtime = reload::Runtime::new(session);
+                    let runtime = if backend_enabled {
+                        runtime.with_backend(backends::Native::from_env()?)
+                    } else {
+                        runtime
+                    };
+                    let runtime = if bar { runtime.with_desktop() } else { runtime };
+                    Ok(Box::new(runtime))
+                })();
+            result.map_err(|e| e.to_string())
+        });
         let renderer = bead_render::renderer(options.renderer)?;
-        let runtime = reload::Runtime::new(session);
-        let runtime = if backend_enabled {
-            runtime.with_backend(backends::Native::from_env()?)
-        } else {
-            runtime
-        };
-        let runtime = if options.bar {
-            runtime.with_desktop()
-        } else {
-            runtime
-        };
+        let runtime = bead_wayland::worker::Source::new(factory, scene.clone());
         bead_wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))
     } else {
         run(options, scene)
@@ -415,6 +419,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         asset_data: Default::default(),
         clips: Default::default(),
         layers: Vec::new(),
+        prepared: Default::default(),
         font_files: Vec::new(),
         width: 1100.,
         slide: Some(Slide {

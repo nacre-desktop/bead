@@ -637,3 +637,31 @@ partial updates. Local-raster bake counts differ from old whole-window counts.
 scroll reuse, same-path update, partial SHM, group opacity and removal/hover damage.
 Evidence ignored .research/feature6b/layers-*,scroll-paced-*,hover-bounded-after,
 damage-wire-after; invalid/blank-list/timeout runs preserved, not ranked.
+
+## Feature 6b step 2 — script and raster worker (2026-10-15)
+
+Luau and CPU baking now run independently of drawing/animation. GPU resource
+acknowledgement precedes candidate validation/store commit. Unchanged reload
+pixels reuse rasters; accepted identical generations still request actual
+presentation feedback. Strict state/error/recovery proof passes unchanged.
+Typing CPU increased slightly; worker isolation is not a total-CPU saving.
+
+| Matched before → after | Result |
+|---|---|
+| Reload draw-thread preparation median/max | 41.81/234.98 → 0.098/0.153 ms |
+| Typing preparation p50/p99 | 3.70/16.84 → 0.091/0.457 ms |
+| Typing CPU, one core | 29.61 → 32.66% (regression) |
+| 600 ms stall commits/presentations | 0/1 queued → 71/71 |
+| Longest interval around stall | 610.15 → 9.34 ms |
+| Whole-run presentation p50/p99 | After 8.37/16.85 ms; tail retained |
+| Five reload file→presentation samples | 66.46–75.08 ms (50 ms debounce included) |
+
+Private Hyprland 2880×1800/1.5/virtual120, same workload/binaries as step1;
+no physical scanout claim. Worker initial61 raster builds remain61 across five
+filtered-row edits. Prior missing-generation failures preserved; callback-only
+no-damage commits were missing feedback, not a renamed marker. One-pixel damage
+requests real feedback without re-baking unchanged content. GVfs prints its bus
+message after successful teardown; activation during the proof succeeds.
+Workspace tests/fmt/clippy/CPU-only pass. Evidence .research/feature6b/takeover-*.
+Step0a niri/idle and whole-run jitter remain open. Scroll worker end-to-end tail
+is unmeasured; do not substitute draw-thread commit time for script latency.

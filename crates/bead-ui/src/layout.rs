@@ -642,6 +642,7 @@ pub fn layout(
             asset_data: Default::default(),
             clips: Default::default(),
             layers: Vec::new(),
+            prepared: Default::default(),
             font_files: vec![],
             width: root_size.width,
             slide: None,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
 mod accessibility;
+pub mod worker;
 use bead_render::{
     Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
 };
@@ -66,6 +67,7 @@ pub enum UiEvent {
     Reload,
     /// Deliberately block the script executor for a bounded diagnostic interval.
     DebugScriptStall(u64),
+    Worker(std::sync::Arc<worker::Packet>),
     Desktop(std::sync::Arc<bead_services::Snapshot>),
     Backend(std::sync::Arc<bead_backends::Snapshot>),
     Relayout,
@@ -119,7 +121,18 @@ impl std::fmt::Display for GpuUnavailable {
 }
 #[cfg(feature = "gpu")]
 impl Error for GpuUnavailable {}
+#[derive(Clone)]
+pub struct InputRegion {
+    pub rect: Rect,
+    pub clip: Option<Rect>,
+    pub cursor: &'static str,
+}
 pub trait SceneSource {
+    fn scales(&mut self, _: Vec<f32>) {}
+    fn input_regions(&self) -> Vec<InputRegion> {
+        Vec::new()
+    }
+
     fn services(&mut self, _wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {}
     fn accessibility_tree(&self) -> Option<accesskit::TreeUpdate> {
         None
@@ -143,7 +156,7 @@ pub trait SceneSource {
     fn resource_counts(&self) -> String {
         String::new()
     }
-    fn commit(&mut self);
+    fn commit(&mut self) -> bool;
     fn error_scene(&mut self, error: String) -> Scene;
 }
 #[derive(Clone)]
@@ -541,7 +554,20 @@ impl App {
         let Some(mut runtime) = self.runtime.take() else {
             return;
         };
-        let reload = matches!(event, UiEvent::Reload);
+        let mut scales: Vec<_> = self
+            .surfaces
+            .iter()
+            .filter(|s| s.configured && !s.companion)
+            .map(|s| s.scale120 as f32 / 120.)
+            .collect();
+        scales.sort_by(f32::total_cmp);
+        scales.dedup();
+        if scales.is_empty() {
+            scales.push(1.);
+        }
+        runtime.scales(scales);
+        let reload = matches!(event, UiEvent::Reload)
+            || matches!(&event,UiEvent::Worker(packet) if packet.is_reload());
         let started = Instant::now();
         if self.options.trace_state
             && let UiEvent::Backend(snapshot) = &event
@@ -612,7 +638,10 @@ impl App {
         });
         match staged {
             Ok(Some(scene)) => {
-                runtime.commit();
+                if !runtime.commit() {
+                    self.runtime = Some(runtime);
+                    return;
+                }
                 if let (Some(bridge), Some(tree)) =
                     (&mut self.accessibility, runtime.accessibility_tree())
                 {
@@ -1021,7 +1050,7 @@ impl App {
             }
             s.offset = scene.offset;
             renderer.prepare(scene, scale)?;
-            let regions = if self.options.damage {
+            let mut regions = if self.options.damage {
                 if let Some(frame) = renderer.prepared_frame() {
                     s.visual_damage.update(
                         &frame,
@@ -1036,6 +1065,17 @@ impl App {
             } else {
                 vec![Damage::full(w as u32, h as u32)]
             };
+            // An accepted generation can be pixel-identical (including edits to
+            // filtered rows). Request actual compositor feedback for that new
+            // transaction too; a callback-only commit has no presentation event.
+            if regions.is_empty() && s.presented_generation != Some(self.ui_serial) {
+                regions.push(Damage {
+                    x: 0,
+                    y: 0,
+                    w: 1,
+                    h: 1,
+                });
+            }
             if self.options.trace_state || self.options.debug_progress {
                 let pixels: u64 = regions
                     .iter()

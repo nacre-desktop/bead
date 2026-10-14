@@ -51,7 +51,7 @@ def sample(env, raw, compositor, stop):
                         committed = [int(n) for n in re.findall(r'DEBUG_FRAME monotonic_ns=(\d+)', text)]
                         presented = [int(n) for n in re.findall(r'DEBUG_PRESENTED monotonic_ns=(\d+)', text)]
                         nearby = [n for n in presented if begin-100_000_000 <= n <= end+100_000_000]
-                        row = {'case': case, 'workload_log_offset': offset, 'stall_ms': (end-begin)/1e6,
+                        row = {'case': case, 'stall_ms': (end-begin)/1e6,
                                'committed_during_stall': sum(begin <= n <= end for n in committed),
                                'presented_during_stall': sum(begin <= n <= end for n in presented),
                                'longest_period_ms': max((b-a)/1e6 for a,b in zip(nearby, nearby[1:]))}
@@ -86,7 +86,7 @@ def sample(env, raw, compositor, stop):
                             time.sleep(.15 if case == 'scroll' else .03 if case != 'progress' else .1)
                             operations += 1
                         elapsed = time.monotonic()-started
-                        row = {'case': case, 'operations': operations, 'seconds': elapsed,
+                        row = {'case': case, 'workload_log_offset': offset, 'operations': operations, 'seconds': elapsed,
                                'cpu_one_core_percent': 100*(matrix.measure.ticks(client.pid)-before)/os.sysconf('SC_CLK_TCK')/elapsed,
                                'memory': matrix.measure.memory(client.pid), 'drm_mib': matrix.measure.drm_memory(client.pid)}
             finally:
