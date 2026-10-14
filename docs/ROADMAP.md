@@ -1,7 +1,7 @@
 # Roadmap and gates
 
 Updated 2026-10-14. Features1–6 built; Feature6 complete with concerns.
-Stopped after Feature6; no Feature7 or optimization work authorized.
+Feature6b architecture hardening is authorized next; stop after6b, before Feature7.
 Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
 One authorized live niri comparison matched QML physical120Hz timing; cold startup
 and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
@@ -38,6 +38,7 @@ If CPU cannot keep up, explain before starting Feature 3.
 | 4. Layout/animation/input | Taffy integration for real scene, easing/springs, pointer/scroll/keyboard/focus; basic selection/clipboard, IME and AccessKit semantics; matched animated panel pacing | Does a toolkit replacement work beyond static rectangles? Input/IME/a11y move early |
 | 5. Backend state/actions | Same neutral output/workspace/window/event interface on Hyprland/niri; direct Hyprland socket + GPL niri-ipc adapter; IDs/capability errors/reconnect tested | Are backend semantics coherent rather than widget-specific hacks? |
 | 6. Bar v1 | Clock/workspaces, SNI+DBusMenu tray, PipeWire audio, UPower battery, network/Bluetooth display and helper actions; daemon/item restarts; per-output look | Can actual service-driven UI sleep and share contexts? SNI is new in audited QML snapshot |
+| 6b. Architecture hardening | Six ordered steps below; measured layer/damage, independent script/bake workers, lazy per-surface rendering, shared kit, restart recovery and feature/module hygiene | Can the framework remove the measured architectural costs before adding more shell features? |
 | 7. Command/files/helpers | Private versioned command socket/client plus compatibility target/method catalog; all current CLI/keybinding routes tested in fixtures; bounded runner/watch/helper protocol | Can existing tools call Bead without changing live configs? Minimal helper transport may already support earlier proofs |
 | 8. Popouts/panels | One actual panel and animations, open/close/focus/dismiss across outputs; preserved state and pacing; output disappearance | **Gate C:** bar parity on both + panel; measured benefit versus cost; owner decision |
 | Optimization pass — immediately after Gate C | Measure each candidate on the bar + one panel scene on both compositors at real sizes; retain only measured improvements | Can fixed costs, caches, allocator behavior and reload work be improved without regressions? |
@@ -56,10 +57,41 @@ Secure session lock, if included beyond the current lock-preview, is a separate
 fail-closed protocol/safety gate before any daily-session trial. It is not silently
 counted as done with a session menu or decorative lock widget.
 
+## 6b — architecture hardening (before Feature7)
+
+Authorized2026-10-14. Commit/push each numbered step, check CI after every push,
+keep STATUS current and stop after6b. Nested only, nice10/Cargo-j2. Preserve6
+baselines and report before/after under matched output/workload conditions.
+
+1. Retained layer tree: own layers per section/list row, dirty-only re-baking,
+   changed-region uploads; direct femtovg fills/caret/selection/progress. Prove
+   launcher typing, list scrolling and moving progress at2880×1800/1.5/120Hz,
+   p50/p99 frame times and CPU before/after. Send real GL compositor damage,
+   up to a few rectangles; report hover/typing/progress surface-damage shares.
+2. Worker baking and script work: draw/animation must continue while handlers,
+   binds and reload compilation run. Swap validated candidates only when ready;
+   re-bake only changed reload content. Compare reload pauses. Debug Luau stall
+   flag must prove panel-open animation during600ms stall: frames/longest frame,
+   before/after at120Hz. Study pleamar (BSD-3-Clause), prefer reimplementation;
+   copied code must preserve copyright in third-party notices.
+3. Per-surface renderer policy behind existing interface: static CPU SHM bar,
+   lazy GL when animated surface opens, CPU first frame during GL startup, release
+   GL after idle. Measure bar-only and bar+panel PSS+DRM and lifecycle transitions.
+4. Extract the component kit/shared QML-matching tokens below into the framework.
+5. Robustness: logging panic hook; service/backend/reload unwrap/expect become
+   errors; source systemd user unit Restart=on-failure; durable stores restore
+   panel state after crash/restart. Introduce action capability registry now;
+   user-visible permission prompts remain deferred until theme sharing exists.
+6. Hygiene: CPU+native GL default, wgpu/Vello opt-in; split bead-wayland/lib.rs
+   and bead-ui/lib.rs; gate mallinfo2/thread tracing behind trace feature.
+
+No release/deployment/session installation is authorized; source commits still
+integrate normally into main. Physical120Hz scanout needs separate live approval;
+private virtual120Hz results must be labeled accordingly, with niri parity checks.
+
 ## Reusable component kit — before or at Gate C
 
-Before or at Feature8/GateC, extract a reusable component kit into the framework
-layer. This is scheduled framework work; do not implement it during Feature6.
+Extract this kit in6b step4, before Feature8/GateC, into the framework layer.
 The kit must include Button, IconButton, Slider, Switch, Tile with separate toggle
 and detail zones, SegmentedControl, List/ListRow, Card, Popover/Peek, Tooltip,
 and TextInput. Shell views should compose these shared components.
@@ -73,6 +105,24 @@ level meters, peek cards, and segmented controls. Include these capabilities in
 the component/rendering proof and GateC review rather than leaving them as
 one-off shell widgets.
 
+## Additional requirements before Gate C
+
+- Generate Luau type definitions from the Rust schema; run luau-analyze in CI.
+- A bead facade crate used exclusively by nacre-shell for framework APIs, plus
+  a tiny non-Nacre example shell proving reusable boundaries.
+- Native clipboard via wl_data_device and ext-data-control.
+- nacre-shell --check FILE validates UI without a screen; --report records30s
+  of frame times/CPU to a file containing no personal data.
+
+## Additional requirements after Gate C
+
+- Nightly cargo-fuzz coverage of loaders.
+- Theme-sharing permission prompts backed by the capability registry introduced
+  in6b; avoid premature prompts before sharing exists.
+- Human documentation and a README.
+- Hardware validation: fcitx5, Orca with hierarchical AccessKit tree, NVIDIA,
+  multi-monitor hotplug. Actual desktop changes/tests require separate approval.
+
 ## Optimization pass — after Gate C
 
 Run this milestone immediately after Feature 8/Gate C, before Feature 9. It is
@@ -83,14 +133,13 @@ only changes that measurably help. Record every result in FEASIBILITY.md,
 including candidates that do not improve the measurements and any tradeoffs.
 
 - GL fixed cost: no MSAA/depth/stencil; compare 2 versus 3 buffers; cap glyph and
-  texture atlases; lazy GPU initialization with a CPU-rendered bar until a GL
-  surface is needed.
+  texture atlases. Lazy per-surface GL is built in6b; compare policy refinements.
 - Allocator: system versus mimalloc versus jemalloc, including MALLOC_ARENA_MAX;
   measure memory after one hour of use as well as startup.
 - Release profile: LTO, codegen-units=1, panic=abort where safe, and stripping.
 - Inventory threads and stack sizes; test merging idle threads.
 - Decode images at display size and apply explicit cache budgets.
-- Move reload baking off the UI thread, preserving transactional reload guarantees.
+- Off-thread baking is built in6b; profile further scheduling/bake improvements.
 
 ## Measurement gates and reproducibility
 
