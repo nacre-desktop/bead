@@ -223,6 +223,13 @@ impl SceneSource for Runtime {
                 );
                 self.session.update(backend_values(&snapshot))?
             }
+            UiEvent::DebugScriptStall(ms) => {
+                let clock = || crate::backends::clock_ns(nix::libc::CLOCK_MONOTONIC);
+                println!("DEBUG_SCRIPT_STALL begin_ns={} duration_ms={ms}", clock());
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+                println!("DEBUG_SCRIPT_STALL end_ns={}", clock());
+                None
+            }
             UiEvent::Reload => Some(self.session.reload()?),
             UiEvent::Relayout => self.session.relayout()?,
             UiEvent::Accessibility {
@@ -457,6 +464,7 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
         resource_revision: 0,
         asset_data: Default::default(),
         clips: Default::default(),
+        layers: Vec::new(),
         font_files: vec![],
         width: 1920.,
         slide: None,

@@ -21,9 +21,20 @@ after2.39/2.49/2.92/2.37; allfour modes220actions. Presentation tails mixed; nir
 unchanged source still varies (afterGLalone237.69ms p99); retain concerns honestly.
 No-bar niri action reply28.75/29.96/30.51ms p50/95/99, median threadCPU.063ms;
 compositor wait separately from UI preparation. Full paired matrix in FEASIBILITY.
-Step1 layer tree next;0a residuals carried into worker/full6b proofs.1layer tree/realGL damage;2script+bake worker/600ms stall;
-3lazy per-surface CPU/GL;4kit/tokens;5panic/errors/unit/persistence/capabilities;
-6features/modules/trace. See FEASIBILITY step0a for exact paired results/failures.
+0b source e9028b7 published, CI38571991561 SUCCESS. Step1 COMPLETE with remaining
+script/layout tails: retained node packets/local raster cache, direct GL fills,
+partial texture updates, semantic<=4rectangle EGL+Wayland damage and CPU history.
+51tests/fmt/clippy/CPU-only pass; private GUI/capture/wire proofs pass. Typing CPU
+87.55→29.61%, visible scroll56.48→24.00%, progress85.26→6.99%; progressframep99
+56.55→1.40ms atvirtual120. UIprepare tails16.84/224.55ms remain for worker step2.
+Hoverdamage1.29%, typing2.64%, progress.30%median;520wirecalls no INTMAX substitute.
+Scroll shrink/cull bug fixed/tested, matched controls use shrink0. Invalid input/
+blank-list/budget/shutdown runs retained, no tolerance/budget raised. Baseline600ms
+script stall0newcommits/1queuedpresentation/longest610.15ms; afterworker stillpending.
+Before executable proof-before-bin, e902+timing/debug instrumentation; unchanged
+old cache. Step2 ACTIVE next: script+bake worker, reload pause, stall proof. Steps3–6
+remain pending;0a tail/idleinvariance retained for final6b proof.
+
 No live configs/installs/releases. Nacre/Orient read-only. Canonical tools/target;
 private evidence .research/feature6b. Baseline9a8b7c7 native executable preserved.
 Pleamar953b1b4 BSD-3-Clause researched for independent logic/render loops and bounded

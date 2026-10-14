@@ -304,3 +304,33 @@ fn removing_focused_key_picks_a_visible_fallback_without_changing_search_scroll(
     assert_ne!(focus, &node);
     assert!(session.view_nodes().iter().any(|n| &n.id == focus));
 }
+
+#[test]
+fn overflowing_scroll_grid_keeps_rows_visible_beyond_its_assigned_container_box() {
+    let f = fixture();
+    let mut session = session(&f);
+    let rows = (0..60)
+        .map(|i| serde_json::json!({"id":format!("row-{i}"),"name":format!("Item {i}")}))
+        .collect();
+    let scene = session
+        .update(BTreeMap::from([("rows".into(), Value::List(rows))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let scroll = session
+        .view_nodes()
+        .iter()
+        .find(|n| n.id.ends_with(".scroll"))
+        .unwrap();
+    let r = rect(&scroll.draw);
+    let scene = session
+        .scroll(r.x + r.w / 2., r.y + r.h / 2., 350.)
+        .unwrap()
+        .unwrap();
+    assert!(
+        scene
+            .primitives
+            .iter()
+            .any(|p| matches!(p,Primitive::Text{text,..} if text.starts_with("Item ")))
+    );
+}

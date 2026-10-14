@@ -64,6 +64,8 @@ use wayland_protocols::wp::{
 #[derive(Clone, Debug)]
 pub enum UiEvent {
     Reload,
+    /// Deliberately block the script executor for a bounded diagnostic interval.
+    DebugScriptStall(u64),
     Desktop(std::sync::Arc<bead_services::Snapshot>),
     Backend(std::sync::Arc<bead_backends::Snapshot>),
     Relayout,
@@ -148,6 +150,9 @@ pub trait SceneSource {
 pub struct Options {
     pub namespace: String,
     pub animate: bool,
+    pub debug_continuous: bool,
+    pub debug_progress: bool,
+    pub debug_luau_stall_ms: Option<u64>,
     pub damage: bool,
     pub force_argb: bool,
     pub seconds: Option<f64>,
@@ -175,6 +180,9 @@ impl Default for Options {
         Self {
             namespace: "bead-dev".into(),
             animate: false,
+            debug_continuous: false,
+            debug_progress: false,
+            debug_luau_stall_ms: None,
             damage: true,
             force_argb: false,
             seconds: None,
@@ -230,9 +238,11 @@ struct Surface {
     offset: (f32, f32),
     format: PixelFormat,
     previous: Option<Rect>,
+    visual_damage: bead_render::damage::FrameDamage,
     allocations: usize,
     frames: usize,
     render_ms: Vec<f64>,
+    frame_ms: Vec<f64>,
     acquire_ms: Vec<f64>,
     swap_ms: Vec<f64>,
     activate_ms: Vec<f64>,
@@ -446,6 +456,15 @@ pub fn run_runtime(
     for output in app.output.outputs() {
         app.add_output(&qh, output);
     }
+    if let Some(ms) = app.options.debug_luau_stall_ms {
+        loop_.handle().insert_source(
+            Timer::from_duration(Duration::from_millis(4100)),
+            move |_, _, app| {
+                app.ui(UiEvent::DebugScriptStall(ms));
+                TimeoutAction::Drop
+            },
+        )?;
+    }
     let result = loop_.run(None, &mut app, |_| {});
     for s in &app.surfaces {
         println!(
@@ -454,7 +473,7 @@ pub fn run_runtime(
             percentile(&s.acquire_ms, 0.99)
         );
         println!(
-            "METRICS companion={} output={} frames={} allocations={} render_p50_ms={:.3} render_p99_ms={:.3} callback_p50_ms={:.3} callback_p99_ms={:.3} presented_p50_ms={:.3} presented_p99_ms={:.3} presented_samples={} refresh_ns={} kind={} discarded={} swap_p50_ms={:.3} swap_p99_ms={:.3} swap_max_ms={:.3} activate_p99_ms={:.3}",
+            "METRICS companion={} output={} frames={} allocations={} render_p50_ms={:.3} render_p99_ms={:.3} callback_p50_ms={:.3} callback_p99_ms={:.3} presented_p50_ms={:.3} presented_p99_ms={:.3} presented_samples={} refresh_ns={} kind={} discarded={} swap_p50_ms={:.3} swap_p99_ms={:.3} swap_max_ms={:.3} activate_p99_ms={:.3} frame_p50_ms={:.3} frame_p99_ms={:.3} frame_max_ms={:.3}",
             s.companion,
             s.output.id().protocol_id(),
             s.frames,
@@ -476,7 +495,14 @@ pub fn run_runtime(
                 .copied()
                 .reduce(f64::max)
                 .unwrap_or(f64::NAN),
-            percentile(&s.activate_ms, 0.99)
+            percentile(&s.activate_ms, 0.99),
+            percentile(&s.frame_ms, 0.50),
+            percentile(&s.frame_ms, 0.99),
+            s.frame_ms
+                .iter()
+                .copied()
+                .reduce(f64::max)
+                .unwrap_or(f64::NAN)
         );
     }
     // Destroy GPU-owned renderer objects while their context/surfaces are alive.
@@ -872,9 +898,11 @@ impl App {
                 offset: (0., 0.),
                 format: PixelFormat::Bgra,
                 previous: None,
+                visual_damage: Default::default(),
                 allocations: 0,
                 frames: 0,
                 render_ms: Vec::new(),
+                frame_ms: Vec::new(),
                 acquire_ms: Vec::new(),
                 swap_ms: Vec::new(),
                 activate_ms: Vec::new(),
@@ -899,6 +927,8 @@ impl App {
         }
     }
     fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        let frame_started = Instant::now();
+        let previous_frames = self.surfaces[index].frames;
         let result = (|| -> Result<(), Box<dyn Error>> {
             let s = &mut self.surfaces[index];
             let (scene, renderer, _kind, panel) = if s.companion {
@@ -982,8 +1012,42 @@ impl App {
                     scene.offset.1 = (y * scale).round() / scale;
                 }
             }
+            if self.options.debug_progress
+                && let Some(bead_render::Primitive::Rounded { rect, .. }) =
+                    scene.primitives.last_mut()
+            {
+                let phase = self.started.elapsed().as_secs_f32() % 2.;
+                rect.w = 1. + 299. * if phase < 1. { phase } else { 2. - phase };
+            }
             s.offset = scene.offset;
             renderer.prepare(scene, scale)?;
+            let regions = if self.options.damage {
+                if let Some(frame) = renderer.prepared_frame() {
+                    s.visual_damage.update(
+                        &frame,
+                        scene.offset,
+                        scene.opacity,
+                        w as u32,
+                        h as u32,
+                    )?
+                } else {
+                    vec![Damage::full(w as u32, h as u32)]
+                }
+            } else {
+                vec![Damage::full(w as u32, h as u32)]
+            };
+            if self.options.trace_state || self.options.debug_progress {
+                let pixels: u64 = regions
+                    .iter()
+                    .map(|r| u64::from(r.w) * u64::from(r.h))
+                    .sum();
+                println!(
+                    "DAMAGE rectangles={} pixels={} share={:.6}",
+                    regions.len(),
+                    pixels,
+                    pixels as f64 / (f64::from(w) * f64::from(h))
+                );
+            }
             if let Some(viewport) = &s.viewport {
                 s.layer.wl_surface().set_buffer_scale(1);
                 viewport.set_destination(s.width as i32, s.height as i32);
@@ -1036,6 +1100,15 @@ impl App {
                     s.activate_ms
                         .push(activate_started.elapsed().as_secs_f64() * 1000.);
                 }
+                if regions.is_empty() {
+                    s.layer
+                        .wl_surface()
+                        .frame(qh, FrameCallbackData(s.layer.wl_surface().clone()));
+                    s.frame_pending = true;
+                    s.layer.commit();
+                    s.frames += 1;
+                    return Ok(());
+                }
                 let start = Instant::now();
                 renderer.draw(
                     scene,
@@ -1049,7 +1122,14 @@ impl App {
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
                 }
-                s.layer.wl_surface().damage_buffer(0, 0, w, h);
+                for region in &regions {
+                    s.layer.wl_surface().damage_buffer(
+                        region.x as i32,
+                        region.y as i32,
+                        region.w as i32,
+                        region.h as i32,
+                    );
+                }
                 s.layer
                     .wl_surface()
                     .frame(qh, FrameCallbackData(s.layer.wl_surface().clone()));
@@ -1066,7 +1146,7 @@ impl App {
                     );
                 }
                 let swap_started = Instant::now();
-                transport.present(surface)?;
+                transport.present(surface, &regions)?;
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.swap_ms.push(swap_started.elapsed().as_secs_f64() * 1000.);
                 }
@@ -1229,13 +1309,10 @@ impl App {
                 );
             }
             let current = scene.bounds();
-            let d = if self.options.damage {
-                s.previous.map_or(Damage::full(w as u32, h as u32), |old| {
-                    old.union(current).pixels(scale, w as u32, h as u32)
-                })
-            } else {
-                Damage::full(w as u32, h as u32)
-            };
+            let d = regions
+                .iter()
+                .copied()
+                .fold(Damage::full(0, 0), Damage::union);
             for b in &mut s.buffers {
                 b.pending = b.pending.union(d);
             }
@@ -1263,12 +1340,14 @@ impl App {
             if self.started.elapsed().as_secs_f64() > 2. {
                 s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
             }
-            s.layer.wl_surface().damage_buffer(
-                damage.x as i32,
-                damage.y as i32,
-                damage.w as i32,
-                damage.h as i32,
-            );
+            for region in &regions {
+                s.layer.wl_surface().damage_buffer(
+                    region.x as i32,
+                    region.y as i32,
+                    region.w as i32,
+                    region.h as i32,
+                );
+            }
             s.layer
                 .wl_surface()
                 .frame(qh, FrameCallbackData(s.layer.wl_surface().clone()));
@@ -1291,6 +1370,20 @@ impl App {
             s.frames += 1;
             Ok(())
         })();
+        if self.surfaces[index].frames > previous_frames
+            && self.started.elapsed().as_secs_f64() > 2.
+        {
+            if self.options.debug_luau_stall_ms.is_some() {
+                println!(
+                    "DEBUG_FRAME monotonic_ns={} companion={}",
+                    monotonic_ns(),
+                    self.surfaces[index].companion
+                );
+            }
+            self.surfaces[index]
+                .frame_ms
+                .push(frame_started.elapsed().as_secs_f64() * 1000.);
+        }
         if let Err(e) = result {
             #[cfg(feature = "gpu")]
             if self.options.auto_fallback
@@ -1404,6 +1497,7 @@ impl CompositorHandler for App {
             {
                 self.signal.stop();
             } else if self.options.animate
+                || self.options.debug_continuous
                 || s.redraw
                 || self.animations.active(self.started.elapsed().as_secs_f64())
             {
@@ -1492,6 +1586,12 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                         && ns > last
                     {
                         s.presented_ms.push((ns - last) as f64 / 1_000_000.);
+                    }
+                    if state.options.debug_luau_stall_ms.is_some() {
+                        println!(
+                            "DEBUG_PRESENTED monotonic_ns={ns} companion={}",
+                            s.companion
+                        );
                     }
                     if s.presented_generation != Some(data.update) {
                         println!(

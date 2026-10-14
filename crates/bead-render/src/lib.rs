@@ -12,11 +12,13 @@ use std::{
 use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
 };
+pub mod damage;
 #[cfg(feature = "gpu")]
 pub mod gl;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod retained;
+pub mod tree;
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -136,6 +138,15 @@ pub struct Motion {
     pub duration: f64,
     pub spring: bool,
 }
+/// Retained logical ownership; own primitives precede the ordered child layers.
+#[derive(Clone, Debug)]
+pub struct SceneLayer {
+    pub id: String,
+    pub parent: Option<String>,
+    pub own: std::ops::Range<usize>,
+    pub subtree_end: usize,
+    pub bounds: Rect,
+}
 #[derive(Clone)]
 pub struct Scene {
     pub opacity: f32,
@@ -143,6 +154,7 @@ pub struct Scene {
     pub resource_revision: u64,
     pub asset_data: std::collections::BTreeMap<std::path::PathBuf, std::sync::Arc<[u8]>>,
     pub clips: std::collections::BTreeMap<usize, Rect>,
+    pub layers: Vec<SceneLayer>,
     pub font_files: Vec<std::path::PathBuf>,
     pub width: f32,
     pub slide: Option<Slide>,
@@ -186,7 +198,7 @@ pub enum RendererKind {
 }
 pub fn renderer(kind: RendererKind) -> Result<Box<dyn Renderer>> {
     match kind {
-        RendererKind::Cpu => Ok(Box::<retained::RetainedCpuRenderer>::default()),
+        RendererKind::Cpu => Ok(Box::<tree::TreeCpuRenderer>::default()),
         #[cfg(feature = "gpu")]
         RendererKind::FemtovgGl => Ok(Box::<gl::GlRenderer>::default()),
         #[cfg(feature = "gpu")]
@@ -206,6 +218,9 @@ pub enum ResourceTarget<'a> {
     },
 }
 pub trait Renderer {
+    fn prepared_frame(&self) -> Option<std::sync::Arc<tree::Frame>> {
+        None
+    }
     fn resource_counts(&self) -> (usize, usize) {
         (0, 0)
     }
@@ -794,6 +809,7 @@ mod tests {
             resource_revision: 1,
             asset_data: Default::default(),
             clips: std::collections::BTreeMap::from([(1, Rect::new(0., 0., 2., 2.))]),
+            layers: Vec::new(),
             font_files: vec![],
             width: 4.,
             slide: None,
@@ -867,6 +883,7 @@ mod tests {
                     resource_revision: 0,
                     asset_data: Default::default(),
                     clips: Default::default(),
+                    layers: Vec::new(),
                     font_files: Vec::new(),
                     width: 40.,
                     slide: None,

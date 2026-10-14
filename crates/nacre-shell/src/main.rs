@@ -85,6 +85,23 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             "--renderer" => {
                 select_renderer(&mut options, &args.next().ok_or("--renderer needs value")?)?
             }
+            "--debug-continuous" => options.debug_continuous = true,
+            "--debug-progress" => {
+                options.debug_progress = true;
+                options.debug_continuous = true;
+                options.panel = true;
+                options.content_size = true;
+            }
+            "--debug-luau-stall-ms" => {
+                let ms: u64 = args
+                    .next()
+                    .ok_or("--debug-luau-stall-ms needs milliseconds")?
+                    .parse()?;
+                if ms > 5000 {
+                    return Err("debug script stall must be at most 5000ms".into());
+                }
+                options.debug_luau_stall_ms = Some(ms);
+            }
             "--start-open" => options.start_open = true,
             "--content-size" => options.content_size = true,
             "--output" => options.output = Some(args.next().ok_or("--output needs value")?),
@@ -140,6 +157,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             resource_revision: 0,
             asset_data: Default::default(),
             clips: Default::default(),
+            layers: Vec::new(),
             font_files: vec![],
             width: 1100.,
             slide: Some(Slide {
@@ -165,6 +183,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             resource_revision: 0,
             asset_data: Default::default(),
             clips: Default::default(),
+            layers: Vec::new(),
             font_files: Vec::new(),
             width: 20000.,
             slide: None,
@@ -178,6 +197,14 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             bounds: Rect::new(0., 0., 20000., 32.),
         }
     };
+    if options.debug_progress {
+        scene.primitives.push(Primitive::Rounded {
+            rect: Rect::new(64., 540., 300., 12.),
+            radius: 6.,
+            fill: colors.get("primary")?,
+            border: None,
+        });
+    }
     if ui.is_none() {
         scene.font_files = font_sources::select(&scene)?;
     }
@@ -387,6 +414,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         resource_revision: 0,
         asset_data: Default::default(),
         clips: Default::default(),
+        layers: Vec::new(),
         font_files: Vec::new(),
         width: 1100.,
         slide: Some(Slide {

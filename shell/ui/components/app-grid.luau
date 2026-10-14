@@ -14,7 +14,7 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
 end)
 return ui.component("AppGrid",{},function(_)
     return ui.Scroll{id="app-grid",scroll=ui.bind("launcher.scroll.y"),grow=1,
-        ui.Grid{min_cell_width=110,gap_x=6,gap_y=5,padding_right=6,padding_bottom=5,row_height=76.2,
+        ui.Grid{shrink=0,min_cell_width=110,gap_x=6,gap_y=5,padding_right=6,padding_bottom=5,row_height=76.2,
             ui.Repeat{id="apps",model=ui.bind("launcher.apps"),key="id",render=function(item)return Tile{item=item}end},
         },
     }

@@ -55,6 +55,7 @@ impl Fixture {
             resource_revision: 0,
             asset_data: Default::default(),
             clips: Default::default(),
+            layers: Vec::new(),
             font_files: vec![],
             width: 100.,
             slide: None,

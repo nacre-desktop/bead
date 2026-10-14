@@ -641,6 +641,7 @@ pub fn layout(
             resource_revision: revision,
             asset_data: Default::default(),
             clips: Default::default(),
+            layers: Vec::new(),
             font_files: vec![],
             width: root_size.width,
             slide: None,
@@ -667,6 +668,7 @@ pub fn layout(
         tree: &TaffyTree<()>,
         ids: &BTreeMap<String, NodeId>,
         parent: (f32, f32),
+        parent_layer: Option<&str>,
         clip: Option<Rect>,
         scroll_store: Option<&str>,
         resolve: &Resolve<'_>,
@@ -686,9 +688,21 @@ pub fn layout(
             l.size.width,
             l.size.height,
         );
-        if r.w <= 0. || r.h <= 0. || clip.is_some_and(|c| intersect(c, r).is_none()) {
+        let own_visible = r.w > 0. && r.h > 0. && !clip.is_some_and(|c| intersect(c, r).is_none());
+        // Containers may have overflowing/absolute descendants outside their
+        // assigned box. Cull leaves; retain traversal through such containers.
+        if !own_visible && view.children.is_empty() {
             return Ok(());
         }
+        let layer_index = out.scene.layers.len();
+        let own_start = out.scene.primitives.len();
+        out.scene.layers.push(bead_render::SceneLayer {
+            id: view.id.clone(),
+            parent: parent_layer.map(str::to_owned),
+            own: own_start..own_start,
+            subtree_end: own_start,
+            bounds: r,
+        });
         let source = &view.source;
         let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);
         let body = palette_role("surface", [24, 24, 24, 255]);
@@ -721,6 +735,9 @@ pub fn layout(
             source,
         )?;
         let mut emit = |primitive: Primitive| {
+            if !own_visible {
+                return;
+            }
             let index = out.scene.primitives.len();
             out.scene.primitives.push(primitive);
             if let Some(c) = clip {
@@ -790,8 +807,9 @@ pub fn layout(
             };
             emit(Primitive::Image { rect: r, path });
         }
+        out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);
-        if view.action.is_some() || view.input.is_some() || view.scroll.is_some() {
+        if own_visible && (view.action.is_some() || view.input.is_some() || view.scroll.is_some()) {
             out.nodes.push(Node {
                 id: view.id.clone(),
                 source: Some((PathBuf::from(&source.file), source.line, 1)),
@@ -841,6 +859,7 @@ pub fn layout(
                 tree,
                 ids,
                 children_pos,
+                Some(&view.id),
                 child_clip,
                 inherited_scroll,
                 resolve,
@@ -849,6 +868,7 @@ pub fn layout(
                 out,
             )?;
         }
+        out.scene.layers[layer_index].subtree_end = out.scene.primitives.len();
         Ok(())
     }
     draw(
@@ -856,6 +876,7 @@ pub fn layout(
         &tree,
         &ids,
         (0., 0.),
+        None,
         None,
         None,
         resolve,

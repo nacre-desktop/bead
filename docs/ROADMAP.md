@@ -80,6 +80,7 @@ baselines and report before/after under matched output/workload conditions.
    launcher typing, list scrolling and moving progress at2880×1800/1.5/120Hz,
    p50/p99 frame times and CPU before/after. Send real GL compositor damage,
    up to a few rectangles; report hover/typing/progress surface-damage shares.
+   Step1 implemented/proven with retained preparation tails; see FEASIBILITY.
 2. Worker baking and script work: draw/animation must continue while handlers,
    binds and reload compilation run. Swap validated candidates only when ready;
    re-bake only changed reload content. Compare reload pauses. Debug Luau stall

@@ -623,6 +623,7 @@ impl Generation {
             resource_revision: self.revision,
             asset_data: self.assets.clone(),
             clips: Default::default(),
+            layers: Vec::new(),
         })
     }
     pub fn hit(&self, stores: &Stores, x: f32, y: f32) -> Option<&Node> {
@@ -1201,6 +1202,18 @@ impl Session {
             };
             // Insert behind the text; move clip indices along with the command.
             scene.primitives.insert(index, highlight);
+            for layer in &mut scene.layers {
+                if layer.own.contains(&index) {
+                    layer.own.end += 1;
+                } else if layer.own.start >= index {
+                    layer.own.start += 1;
+                    layer.own.end += 1;
+                }
+                if layer.subtree_end > index {
+                    layer.subtree_end += 1;
+                }
+            }
+
             scene.clips = scene
                 .clips
                 .iter()

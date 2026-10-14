@@ -603,3 +603,37 @@ that wait follows commit, so its absence after batching alone proves no causal c
 orders replies; parser/reconnect/action tests pass. Evidence .research/feature6b/
 title-before-*,title-after-*,niri-compositor-cost; future reuse BEAD_NATIVE_BINARY,
 BEAD_MATRIX_NO_PACING and BEAD_MATRIX_PROBE_ONLY in the existing matrix harness.
+
+## Feature6b step1 — retained layers and real damage (2026-10-14)
+
+Each view subtree has retained ownership; local text/image/shadow rasters survive
+position/clip changes. Fills, caret, selection and progress use direct GL paths;
+changed pixels update existing textures. CPU repaint history is separate from
+semantic damage. EGL KHR/EXT damage swaps preserve up to4 Wayland rectangles.
+CPU improves, but script/layout preparation still blocks and remains step2 work.
+
+| Workload before→after | CPU % one core | Frame processing p50/p99 ms | UI preparation p50/p99 ms |
+|---|---|---|---|
+| Launcher typing |87.55→29.61|.213/1.466→.232/.817|39.79/69.09→3.70/16.84|
+| Visible list scroll |56.48→24.00|.237/88.768→.666/2.489|79.44/310.45→23.73/224.55|
+| Moving progress |85.26→6.99|40.356/56.546→.642/1.404|N/A (native primitive)|
+| Hover damaged share |1.29% median/p99|Wire rect186×119|48-item launcher|
+| Typing/progress damage |2.64%/.30% median|Typing max51.87%|Progress max.58%|
+
+Private2880×1800/1.5/120Hz Hypr output,8s work intervals, same instrumented control
+binary with the old monolithic cache. Typing127operations; scroll53 at150ms gaps;
+progressnative120Hz requests. Frameprocessing includes prepare/draw/swap; UIprepare
+is separate. No-damage frames now commit callbacks without swapping, so sparse
+presentation intervals cannot be ranked as continuous frame periods. Progress
+presentation8.33/9.21ms p50/p99; strict jitter/typing/scroll tails remain unresolved.
+Scroll grid shrink/cull bug repaired, regression tested; matched controls explicitly
+use shrink0. Faster scroll queue overwhelmed control shutdown; retained as failure.
+Pointer/keyboard readiness failures and a240-item hover50ms Luau-limit failure kept;
+no raised budget. Wire proof520damage calls, no INTMAX full-surface substitutions;
+only initial1746×981 and actual hover186×119 rectangles. Static GPU uploads occur
+once for progress (67local rasters); dynamic fill uploads none. Changed text uses
+partial updates. Local-raster bake counts differ from old whole-window counts.
+51tests/fmt/clippy/CPU-only pass; private capture inspected. Pixel proofs cover
+scroll reuse, same-path update, partial SHM, group opacity and removal/hover damage.
+Evidence ignored .research/feature6b/layers-*,scroll-paced-*,hover-bounded-after,
+damage-wire-after; invalid/blank-list/timeout runs preserved, not ranked.

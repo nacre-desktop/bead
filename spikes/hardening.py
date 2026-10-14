@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_HARDENING') in ['layers', 'stall']:
+        spec = importlib.util.spec_from_file_location('layer_proof', ROOT/'spikes/layer-proof.py')
+        proof = importlib.util.module_from_spec(spec); spec.loader.exec_module(proof)
+        return proof.sample(env, raw, compositor, stop)
     env = {**env, 'DBUS_SYSTEM_BUS_ADDRESS': env['DBUS_SESSION_BUS_ADDRESS'],
            'PIPEWIRE_REMOTE': 'bead-private-unavailable'}
     binary = pathlib.Path(os.environ.get('BEAD_HARDENING_BINARY',

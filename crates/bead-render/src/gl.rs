@@ -1,23 +1,38 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! One native EGL/OpenGL context and one retained image shared by all surfaces.
-use crate::{Damage, RenderTarget, Renderer, Result, Scene, ShmTarget, retained::LayerCache};
+//! Shared native EGL context, retained subtree rasters and direct vector primitives.
+use crate::{Damage, RenderTarget, Renderer, Result, Scene, ShmTarget};
 use glutin::{
     config::{Config, ConfigTemplateBuilder},
     context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version},
-    display::{Display, DisplayApiPreference},
+    display::{AsRawDisplay, Display, DisplayApiPreference},
     prelude::*,
-    surface::{Surface as EglSurface, SurfaceAttributesBuilder, SwapInterval, WindowSurface},
+    surface::{
+        AsRawSurface, Surface as EglSurface, SurfaceAttributesBuilder, SwapInterval, WindowSurface,
+    },
 };
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use rgb::FromSlice;
 use std::num::NonZeroU32;
+type DamageSwap = unsafe extern "system" fn(
+    *const std::ffi::c_void,
+    *const std::ffi::c_void,
+    *const i32,
+    i32,
+) -> u32;
 pub struct Transport {
     pub display: Display,
     config: Config,
     context: Option<PossiblyCurrentContext>,
+    swap_damage: unsafe extern "system" fn(
+        *const std::ffi::c_void,
+        *const std::ffi::c_void,
+        *const i32,
+        i32,
+    ) -> u32,
 }
 pub struct Surface {
     surface: EglSurface<WindowSurface>,
+    height: std::cell::Cell<u32>,
 }
 pub struct GlTarget<'a> {
     pub display: &'a Display,
@@ -39,10 +54,51 @@ impl Transport {
         let config = unsafe { display.find_configs(template) }?
             .next()
             .ok_or("no transparent EGL config")?;
+        let query = display.get_proc_address(c"eglQueryString");
+        if query.is_null() {
+            return Err("missing EGL extension query".into());
+        }
+        let raw_display = match display.raw_display() {
+            glutin::display::RawDisplay::Egl(display) => display,
+            #[allow(unreachable_patterns)] // Other consumers may enable additional glutin APIs.
+            _ => return Err("native EGL required".into()),
+        };
+        // SAFETY: initialized retained EGL display; EGL_EXTENSIONS returns a driver-owned C string.
+        let query: unsafe extern "system" fn(
+            *const std::ffi::c_void,
+            i32,
+        ) -> *const std::ffi::c_char = unsafe { std::mem::transmute(query) };
+        // SAFETY: raw_display belongs to this live Display, and 0x3055 is EGL_EXTENSIONS.
+        let extensions = unsafe { query(raw_display, 0x3055) };
+        if extensions.is_null() {
+            return Err("missing EGL extension string".into());
+        }
+        // SAFETY: validated non-null driver-owned extension string.
+        let extensions = unsafe { std::ffi::CStr::from_ptr(extensions) }.to_string_lossy();
+        let name = if extensions
+            .split_whitespace()
+            .any(|e| e == "EGL_KHR_swap_buffers_with_damage")
+        {
+            c"eglSwapBuffersWithDamageKHR"
+        } else if extensions
+            .split_whitespace()
+            .any(|e| e == "EGL_EXT_swap_buffers_with_damage")
+        {
+            c"eglSwapBuffersWithDamageEXT"
+        } else {
+            return Err("EGL damage swaps unavailable; use CPU fallback".into());
+        };
+        let address = display.get_proc_address(name);
+        if address.is_null() {
+            return Err("missing EGL damage swap function".into());
+        }
+        // SAFETY: both advertised extensions use the standard EGL damage-swap signature.
+        let swap_damage: DamageSwap = unsafe { std::mem::transmute(address) };
         Ok(Self {
             display,
             config,
             context: None,
+            swap_damage,
         })
     }
     /// # Safety
@@ -98,11 +154,15 @@ impl Transport {
             SwapInterval::DontWait,
         )?;
         println!("GPU_SHARED devices=1 device_id=0 api=OpenGL");
-        Ok(Surface { surface })
+        Ok(Surface {
+            surface,
+            height: std::cell::Cell::new(height),
+        })
     }
     pub fn activate(&self, surface: &Surface, w: u32, h: u32) -> Result<()> {
         let context = self.context.as_ref().ok_or("missing EGL context")?;
         context.make_current(&surface.surface)?;
+        surface.height.set(h);
         surface.surface.resize(
             context,
             NonZeroU32::new(w).ok_or("zero width")?,
@@ -110,24 +170,69 @@ impl Transport {
         );
         Ok(())
     }
-    pub fn present(&self, surface: &Surface) -> Result<()> {
-        surface
-            .surface
-            .swap_buffers(self.context.as_ref().ok_or("missing EGL context")?)?;
+    pub fn present(&self, surface: &Surface, damage: &[Damage]) -> Result<()> {
+        if damage.is_empty() {
+            return Err("empty EGL damage must use a callback-only commit".into());
+        }
+        let display = match self.display.raw_display() {
+            glutin::display::RawDisplay::Egl(display) => display,
+            #[allow(unreachable_patterns)]
+            _ => return Err("native EGL display missing".into()),
+        };
+        let window = match surface.surface.raw_surface() {
+            glutin::surface::RawSurface::Egl(window) => window,
+            #[allow(unreachable_patterns)]
+            _ => return Err("native EGL surface missing".into()),
+        };
+        let mut rectangles = Vec::with_capacity(damage.len() * 4);
+        for region in damage {
+            rectangles.extend([
+                i32::try_from(region.x)?,
+                i32::try_from(
+                    surface
+                        .height
+                        .get()
+                        .checked_sub(region.y + region.h)
+                        .ok_or("damage outside EGL surface")?,
+                )?,
+                i32::try_from(region.w)?,
+                i32::try_from(region.h)?,
+            ]);
+        }
+        // SAFETY: extension was advertised, handles are retained and current; rectangles
+        // use EGL's bottom-left origin, with validated physical-buffer coordinates.
+        let ok = unsafe {
+            (self.swap_damage)(
+                display,
+                window,
+                rectangles.as_ptr(),
+                i32::try_from(damage.len())?,
+            )
+        };
+        if ok == 0 {
+            return Err("EGL damage swap failed".into());
+        }
         Ok(())
     }
 }
+struct Texture {
+    key: u64,
+    image: femtovg::ImageId,
+    pixels: std::sync::Arc<tiny_skia::Pixmap>,
+    touched: u64,
+}
 #[derive(Default)]
 pub struct GlRenderer {
-    cache: LayerCache,
+    cache: crate::tree::TreeCache,
     canvas: Option<femtovg::Canvas<femtovg::renderer::OpenGl>>,
-    image: Option<femtovg::ImageId>,
-    images: std::collections::BTreeMap<u32, (u64, femtovg::ImageId)>,
+    images: std::collections::BTreeMap<(String, u32), Texture>,
+    serial: u64,
+    group: Option<(femtovg::ImageId, u32, u32, u64)>,
 }
 impl GlRenderer {
     fn upload(&mut self, display: &Display) -> Result<()> {
         if self.canvas.is_none() {
-            // SAFETY: Transport has made its single retained context current on this thread.
+            // SAFETY: Transport made its retained context current on this thread.
             let renderer = unsafe {
                 femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
                     display.get_proc_address(name).cast()
@@ -135,51 +240,185 @@ impl GlRenderer {
             }?;
             self.canvas = Some(femtovg::Canvas::new(renderer)?);
         }
-        let layer = self
-            .cache
-            .layer
-            .as_ref()
-            .ok_or("unprepared retained layer")?;
-        let canvas = self.canvas.as_mut().unwrap();
-        let (w, h) = (layer.pixels.width(), layer.pixels.height());
-        if self
-            .images
-            .get(&layer.scale.to_bits())
-            .is_none_or(|(key, _)| *key != layer.key)
-        {
-            let next_image = canvas.create_image(
-                femtovg::ImageSource::Rgba(imgref::Img::new(
-                    layer.pixels.data().as_rgba(),
-                    w as usize,
-                    h as usize,
-                )),
-                femtovg::ImageFlags::PREMULTIPLIED,
-            )?;
-            if let Some((_, image)) = self.images.remove(&layer.scale.to_bits()) {
-                canvas.delete_image(image);
-            }
-            self.image = Some(next_image);
-            self.images
-                .insert(layer.scale.to_bits(), (layer.key, self.image.unwrap()));
-            println!("PROFILE stage=layer_upload uploads={}", self.cache.builds);
-        }
-        while self.images.len() > 8 {
-            let scale = *self
+        let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
+        let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
+        self.serial += 1;
+        for item in &frame.items {
+            let Some(raster) = &item.raster else {
+                continue;
+            };
+            let slot = (item.id.clone(), frame.scale.to_bits());
+            let (w, h) = (raster.pixels.width(), raster.pixels.height());
+            if self
                 .images
-                .keys()
-                .find(|&&s| s != layer.scale.to_bits())
-                .unwrap();
-            if let Some((_, image)) = self.images.remove(&scale) {
-                canvas.delete_image(image);
+                .get(&slot)
+                .is_none_or(|old| old.pixels.width() != w || old.pixels.height() != h)
+            {
+                let image = canvas.create_image(
+                    femtovg::ImageSource::Rgba(imgref::Img::new(
+                        raster.pixels.data().as_rgba(),
+                        w as usize,
+                        h as usize,
+                    )),
+                    femtovg::ImageFlags::PREMULTIPLIED,
+                )?;
+                if let Some(old) = self.images.remove(&slot) {
+                    canvas.delete_image(old.image);
+                }
+                self.images.insert(
+                    slot.clone(),
+                    Texture {
+                        key: raster.key,
+                        image,
+                        pixels: raster.pixels.clone(),
+                        touched: self.serial,
+                    },
+                );
+                println!(
+                    "PROFILE stage=layer_upload id={} pixels={} region=full",
+                    item.id,
+                    w * h
+                );
+            } else if let Some(old) = self.images.get_mut(&slot) {
+                if old.key != raster.key {
+                    let changed = if raster.base_key == Some(old.key) {
+                        raster.changed
+                    } else {
+                        Damage::full(w, h)
+                    };
+                    if changed.w > 0 && changed.h > 0 {
+                        let crop = raster
+                            .pixels
+                            .clone_rect(
+                                tiny_skia::IntRect::from_xywh(
+                                    changed.x as i32,
+                                    changed.y as i32,
+                                    changed.w,
+                                    changed.h,
+                                )
+                                .ok_or("invalid upload rectangle")?,
+                            )
+                            .ok_or("upload rectangle outside raster")?;
+                        canvas.update_image(
+                            old.image,
+                            femtovg::ImageSource::Rgba(imgref::Img::new(
+                                crop.data().as_rgba(),
+                                crop.width() as usize,
+                                crop.height() as usize,
+                            )),
+                            changed.x as usize,
+                            changed.y as usize,
+                        )?;
+                        println!(
+                            "PROFILE stage=layer_upload id={} pixels={} region=partial",
+                            item.id,
+                            changed.w * changed.h
+                        );
+                    }
+                    old.key = raster.key;
+                    old.pixels = raster.pixels.clone();
+                }
+                old.touched = self.serial;
             }
         }
-        self.image = Some(self.images[&layer.scale.to_bits()].1);
+        while self.images.len() > 1024
+            || self
+                .images
+                .values()
+                .map(|t| t.pixels.data().len())
+                .sum::<usize>()
+                > 64 * 1024 * 1024
+        {
+            let victim = self
+                .images
+                .iter()
+                .filter(|(_, t)| t.touched != self.serial)
+                .min_by_key(|(_, t)| t.touched)
+                .map(|(id, _)| id.clone());
+            let Some(victim) = victim else {
+                return Err("active GL images exceed budget".into());
+            };
+            if let Some(texture) = self.images.remove(&victim) {
+                canvas.delete_image(texture.image);
+            }
+        }
+        Ok(())
+    }
+    fn paint(
+        canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+        frame: &crate::tree::Frame,
+        images: &std::collections::BTreeMap<(String, u32), Texture>,
+        offset: (f32, f32),
+    ) -> Result<()> {
+        for item in &frame.items {
+            canvas.reset_scissor();
+            if let Some(clip) = item.clip {
+                canvas.scissor(
+                    (clip.x + offset.0) * frame.scale,
+                    (clip.y + offset.1) * frame.scale,
+                    clip.w * frame.scale,
+                    clip.h * frame.scale,
+                );
+            }
+            let r = crate::tree::rect(&item.primitive);
+            let (x, y) = (
+                (r.x + offset.0) * frame.scale,
+                (r.y + offset.1) * frame.scale,
+            );
+            if let Some(raster) = &item.raster {
+                let texture = images
+                    .get(&(item.id.clone(), frame.scale.to_bits()))
+                    .ok_or("GL layer image missing")?;
+                let mut path = femtovg::Path::new();
+                let (w, h) = (raster.pixels.width() as f32, raster.pixels.height() as f32);
+                path.rect(x.round(), y.round(), w, h);
+                canvas.fill_path(
+                    &path,
+                    &femtovg::Paint::image(texture.image, x.round(), y.round(), w, h, 0., 1.),
+                );
+            } else if let crate::Primitive::Rounded {
+                radius,
+                fill,
+                border,
+                ..
+            } = &item.primitive
+            {
+                let mut path = femtovg::Path::new();
+                path.rounded_rect(
+                    x,
+                    y,
+                    r.w * frame.scale,
+                    r.h * frame.scale,
+                    radius.min(r.w / 2.).min(r.h / 2.) * frame.scale,
+                );
+                canvas.fill_path(
+                    &path,
+                    &femtovg::Paint::color(femtovg::Color::rgba(
+                        fill[0], fill[1], fill[2], fill[3],
+                    )),
+                );
+                if let Some((color, line)) = border {
+                    let mut paint = femtovg::Paint::color(femtovg::Color::rgba(
+                        color[0], color[1], color[2], color[3],
+                    ));
+                    paint.set_line_width(*line * frame.scale);
+                    canvas.stroke_path(&path, &paint);
+                }
+            }
+        }
+        canvas.reset_scissor();
         Ok(())
     }
 }
 impl Renderer for GlRenderer {
+    fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
+        self.cache.frame.clone()
+    }
     fn resource_counts(&self) -> (usize, usize) {
-        (self.cache.layer_count(), self.images.len())
+        (
+            self.cache.frame.as_ref().map_or(0, |f| f.layer_count),
+            self.images.len() + usize::from(self.group.is_some()),
+        )
     }
     fn stage_resources(&mut self, target: crate::ResourceTarget<'_>) -> Result<()> {
         let crate::ResourceTarget::Gl { display } = target else {
@@ -190,16 +429,15 @@ impl Renderer for GlRenderer {
         if address.is_null() {
             return Err("missing glGetError".into());
         }
-        // SAFETY: a current desktop GL context provides this standard signature.
+        // SAFETY: a current desktop GL context supplies the standard signature.
         let get_error: unsafe extern "system" fn() -> u32 = unsafe { std::mem::transmute(address) };
-        // SAFETY: this context is current throughout upload/staging.
+        // SAFETY: this context remains current throughout staging.
         let error = unsafe { get_error() };
         if error != 0 {
             return Err(format!("GL resource staging error 0x{error:x}").into());
         }
         Ok(())
     }
-
     fn wants_gpu(&self) -> bool {
         true
     }
@@ -214,14 +452,10 @@ impl Renderer for GlRenderer {
             return Err("GL target missing".into());
         };
         self.upload(target.display)?;
-        let layer = self
-            .cache
-            .layer
-            .as_ref()
-            .ok_or("unprepared retained layer")?;
-        let (w, h) = (layer.pixels.width(), layer.pixels.height());
-        let canvas = self.canvas.as_mut().unwrap();
+        let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
+        let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
         canvas.set_size(target.width, target.height, 1.);
+        canvas.set_render_target(femtovg::RenderTarget::Screen);
         canvas.clear_rect(
             0,
             0,
@@ -229,20 +463,56 @@ impl Renderer for GlRenderer {
             target.height,
             femtovg::Color::rgba(0, 0, 0, 0),
         );
-        let x = (scene.offset.0 + layer.origin.0) * layer.scale;
-        let y = (scene.offset.1 + layer.origin.1) * layer.scale;
-        let mut path = femtovg::Path::new();
-        path.rect(x, y, w as f32, h as f32);
-        let paint = femtovg::Paint::image(
-            self.image.unwrap(),
-            x,
-            y,
-            w as f32,
-            h as f32,
-            0.,
-            scene.opacity,
-        );
-        canvas.fill_path(&path, &paint);
+        if scene.opacity >= 1. {
+            Self::paint(canvas, frame, &self.images, scene.offset)?;
+        } else if scene.opacity > 0. {
+            let (w, h) = (
+                (scene.bounds.w * frame.scale).ceil() as u32,
+                (scene.bounds.h * frame.scale).ceil() as u32,
+            );
+            if u64::from(w) * u64::from(h) * 4 > 64 * 1024 * 1024 {
+                return Err("GL opacity group exceeds budget".into());
+            }
+            if self.group.is_none_or(|(_, ow, oh, _)| ow != w || oh != h) {
+                if let Some((old, _, _, _)) = self.group.take() {
+                    canvas.delete_image(old);
+                }
+                self.group = Some((
+                    canvas.create_image_empty(
+                        w as usize,
+                        h as usize,
+                        femtovg::PixelFormat::Rgba8,
+                        femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y,
+                    )?,
+                    w,
+                    h,
+                    0,
+                ));
+            }
+            let (image, _, _, key) = self.group.as_mut().ok_or("GL opacity group missing")?;
+            if *key != frame.key {
+                canvas.set_render_target(femtovg::RenderTarget::Image(*image));
+                canvas.clear_rect(0, 0, w, h, femtovg::Color::rgba(0, 0, 0, 0));
+                Self::paint(
+                    canvas,
+                    frame,
+                    &self.images,
+                    (-scene.bounds.x, -scene.bounds.y),
+                )?;
+                *key = frame.key;
+            }
+            canvas.set_render_target(femtovg::RenderTarget::Screen);
+            let (x, y) = (
+                (scene.offset.0 + scene.bounds.x) * frame.scale,
+                (scene.offset.1 + scene.bounds.y) * frame.scale,
+            );
+            let mut path = femtovg::Path::new();
+            path.rect(x, y, w as f32, h as f32);
+            canvas.fill_path(
+                &path,
+                &femtovg::Paint::image(*image, x, y, w as f32, h as f32, 0., scene.opacity),
+            );
+        }
         canvas.flush();
         Ok(())
     }
