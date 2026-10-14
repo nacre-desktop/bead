@@ -16,8 +16,9 @@
 - Feature 2 must stress a launcher-sized rounded/shadowed text/emoji panel at real
   monitor resolution/scale/refresh with damage tracking; report p50/p99 frame
   times, CPU and loaded-font PSS. Report CPU-rendering failure before Feature 3.
-- Commits use Nacre contributors <nacre-desktop@users.noreply.github.com> for
-  author and committer. Never expose a personal email in Git metadata.
+- Owner update 2026-10-14: commits use siverteh
+  <92440237+Siverteh@users.noreply.github.com> for author and committer.
+  This supersedes the generic Nacre contributors identity; keep work email private.
 - Feature 2: fractional-scale + viewporter, direct reusable wl_shm buffers,
   renderer interface and correct damage history before stress measurements.
   Compare damage enabled/disabled at effective scale 1.5.
