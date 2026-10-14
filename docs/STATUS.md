@@ -1,6 +1,28 @@
 # Status
 
-## 2026-10-15 — 6b step 2 complete; step 3 next
+## 2026-10-14 — 6b step 3 complete; step 4 next
+
+Automatic bars use CPU SHM. The companion has a CPU first frame, warms GL
+on a later frame callback, and returns to CPU after two idle seconds.
+The idle timer stops when released. Animated reopening warms it again.
+A current EGL context must be unbound before destruction. glutin keeps
+non-reference-counted EGL displays initialized; Bead explicitly terminates
+its exclusively owned display only after every GL renderer/surface is gone.
+Private two-cycle activate/release proofs pass on niri and Hyprland.
+
+PSS + deduplicated DRM, MiB (2880×1800/1.5; niri 60, Hypr virtual120):
+- CPU bar: niri 22.44, Hypr 21.33; neither opens a DRM client.
+- Bar + panel warm → idle: niri 143.21 → 76.27; Hypr 150.49 → 75.63.
+- DRM warm → idle: niri 66.96 → 0, Hypr 74.95 → 0 MiB.
+Warm totals regress against Feature6 CPUbar+GLpanel 104.90/105.53 MiB;
+CPU-first raster/allocator retention remains a measured tradeoff.
+No trim/forced GC, tolerance changes or live-desktop modifications.
+Lifecycle test/fmt/clippy/workspace tests and CPU-only build pass.
+Step2 source 1f548b4 CI38643279009 passed. Step3 CI recorded after push.
+Evidence: ignored .research/feature6b/policy-{niri,hypr}-cycle.
+Step0a pacing/idle invariance remains open. Steps4–6 next, in order.
+
+### Preserved step 2 result
 
 Architecture hardening 6b is active. Stop after 6b; do not start Feature 7.
 Steps 0b, 1 and 2 are implemented. Step 0a remains open for nested niri

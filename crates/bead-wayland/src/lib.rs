@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
 mod accessibility;
+mod policy;
 pub mod worker;
 use bead_render::{
     Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
 };
 use calloop::{
-    EventLoop, LoopSignal,
+    EventLoop, LoopHandle, LoopSignal,
     signals::{Signal, Signals},
     timer::{TimeoutAction, Timer},
 };
@@ -175,6 +176,8 @@ pub struct Options {
     pub renderer: RendererKind,
     pub output: Option<String>,
     pub auto_fallback: bool,
+    pub lazy_gl: bool,
+    pub debug_policy_cycle: bool,
     pub started: Instant,
     pub start_open: bool,
     pub memory_usage: bool,
@@ -205,6 +208,8 @@ impl Default for Options {
             renderer: RendererKind::Cpu,
             output: None,
             auto_fallback: false,
+            lazy_gl: false,
+            debug_policy_cycle: false,
             started: Instant::now(),
             start_open: false,
             memory_usage: false,
@@ -302,6 +307,9 @@ struct App {
     ui_initialized: bool,
     ui_serial: u64,
     qh: QueueHandle<App>,
+    loop_handle: LoopHandle<'static, App>,
+    release_timer: bool,
+    companion_policy: policy::Policy,
     #[cfg(feature = "gpu")]
     gpu: Option<bead_render::gpu::Transport>,
     #[cfg(feature = "gpu")]
@@ -363,7 +371,14 @@ pub fn run_runtime(
     let companion = options
         .companion
         .as_ref()
-        .map(|(s, k)| bead_render::renderer(*k).map(|r| (s.clone(), r, *k)))
+        .map(|(s, k)| {
+            let effective = if options.lazy_gl && *k == RendererKind::FemtovgGl {
+                RendererKind::Cpu
+            } else {
+                *k
+            };
+            bead_render::renderer(effective).map(|r| (s.clone(), r, effective))
+        })
         .transpose()?;
     let mut app = App {
         runtime,
@@ -385,6 +400,9 @@ pub fn run_runtime(
         ui_initialized: false,
         ui_serial: 0,
         qh: qh.clone(),
+        loop_handle: loop_.handle(),
+        release_timer: false,
+        companion_policy: Default::default(),
         #[cfg(feature = "gpu")]
         gpu: None,
         #[cfg(feature = "gpu")]
@@ -477,6 +495,21 @@ pub fn run_runtime(
                 TimeoutAction::Drop
             },
         )?;
+    }
+    if app.options.debug_policy_cycle {
+        for (seconds, active) in [(4, true), (6, false)] {
+            let qh = qh.clone();
+            loop_.handle().insert_source(
+                Timer::from_duration(Duration::from_secs(seconds)),
+                move |_, _, app| {
+                    app.options.animate = active;
+                    for i in 0..app.surfaces.len() {
+                        app.draw(i, &qh);
+                    }
+                    TimeoutAction::Drop
+                },
+            )?;
+        }
     }
     let result = loop_.run(None, &mut app, |_| {});
     for s in &app.surfaces {
@@ -704,6 +737,77 @@ impl App {
         for i in 0..self.surfaces.len() {
             self.draw(i, &qh);
         }
+    }
+
+    fn update_companion_policy(
+        &mut self,
+        index: usize,
+        qh: &QueueHandle<Self>,
+    ) -> Result<(), Box<dyn Error>> {
+        if !self.options.lazy_gl
+            || !self.surfaces[index].companion
+            || !self.surfaces[index].configured
+            || self.surfaces[index].frame_pending
+        {
+            return Ok(());
+        }
+        let desired = self.options.companion.as_ref().map(|(_, kind)| *kind);
+        if desired != Some(RendererKind::FemtovgGl) {
+            return Ok(());
+        }
+        let now = self.started.elapsed().as_secs_f64();
+        let animated = self.options.animate || self.animations.active(now);
+        if self.companion_policy.frame(now, animated) {
+            if let Some((_, renderer, kind)) = &mut self.companion {
+                *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
+                *kind = RendererKind::FemtovgGl;
+            }
+            self.surfaces[index].visual_damage = Default::default();
+            println!("RENDER_POLICY companion=true transition=cpu-to-gl");
+            if !self.release_timer {
+                let qh = qh.clone();
+                self.loop_handle.insert_source(Timer::from_duration(Duration::from_secs(2)), move |_, _, app| {
+                    let now = app.started.elapsed().as_secs_f64();
+                    if app.companion_policy.expire(now) {
+                        if let Some((_, renderer, kind)) = &mut app.companion {
+                            match bead_render::renderer(RendererKind::Cpu) {
+                                Ok(cpu) => { *renderer = cpu; *kind = RendererKind::Cpu; }
+                                Err(error) => { app.fail(error); return TimeoutAction::Drop; }
+                            }
+                        }
+                        #[cfg(feature = "gpu")]
+                        {
+                            for surface in app.surfaces.iter_mut().filter(|s| s.companion) {
+                                drop(surface.gl.take());
+                                drop(surface.gpu.take());
+                                surface.visual_damage = Default::default();
+                            }
+                            if app.surfaces.iter().all(|s| s.gl.is_none()) && app.options.renderer == RendererKind::Cpu
+                                && let Some(transport) = app.gl.take() {
+                                    // SAFETY: the CPU bar/companion own no GL resources;
+                                    // this process owns one EGL display and all EGL surfaces are gone.
+                                    if let Err(error) = unsafe { transport.shutdown_exclusive() } {
+                                        app.fail(error); return TimeoutAction::Drop;
+                                    }
+                            }
+                            if app.surfaces.iter().all(|s| s.gpu.is_none()) { app.gpu = None; }
+                        }
+                        println!("RENDER_POLICY companion=true transition=gl-to-cpu shared_context_released={}", app.options.renderer == RendererKind::Cpu);
+                        app.release_timer = false;
+                        let indices: Vec<_> = app.surfaces.iter().enumerate().filter(|(_, s)| s.companion).map(|(i, _)| i).collect();
+                        for i in indices { app.draw(i, &qh); }
+                        TimeoutAction::Drop
+                    } else {
+                        TimeoutAction::ToDuration(Duration::from_secs_f64(app.companion_policy.remaining(now)))
+                    }
+                })?;
+                self.release_timer = true;
+            }
+        } else if self.surfaces[index].frames == 0 {
+            self.surfaces[index].redraw = true;
+            println!("RENDER_POLICY companion=true first_frame=cpu");
+        }
+        Ok(())
     }
 
     #[cfg(feature = "gpu")]
@@ -957,6 +1061,10 @@ impl App {
     }
     fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
         let frame_started = Instant::now();
+        if let Err(error) = self.update_companion_policy(index, qh) {
+            self.fail(error);
+            return;
+        }
         let previous_frames = self.surfaces[index].frames;
         let result = (|| -> Result<(), Box<dyn Error>> {
             let s = &mut self.surfaces[index];
@@ -1539,6 +1647,7 @@ impl CompositorHandler for App {
             } else if self.options.animate
                 || self.options.debug_continuous
                 || s.redraw
+                || (s.companion && self.options.lazy_gl && self.companion_policy.needs_warmup())
                 || self.animations.active(self.started.elapsed().as_secs_f64())
             {
                 self.draw(i, qh);

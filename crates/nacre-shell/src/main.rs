@@ -37,6 +37,13 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bar-panel" => bar_panel = true,
+            "--lazy-gl" => options.lazy_gl = true,
+            "--debug-policy-cycle" => {
+                if std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() != Ok("1") {
+                    return Err("policy cycle requires private proof environment".into());
+                }
+                options.debug_policy_cycle = true;
+            }
             "--panel-renderer" => {
                 let mut panel_options = Options::default();
                 select_renderer(
@@ -138,6 +145,10 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         options.interactive = false;
         options.keyboard_focus = false;
         options.test_keyboard = false;
+    }
+    if options.bar && options.auto_fallback {
+        options.renderer = bead_render::RendererKind::Cpu;
+        options.lazy_gl = true;
     }
     let colors = Palette::read(&palette)?;
     if bar_panel {

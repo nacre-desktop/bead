@@ -34,12 +34,51 @@ pub struct Surface {
     surface: EglSurface<WindowSurface>,
     height: std::cell::Cell<u32>,
 }
+impl Drop for Transport {
+    fn drop(&mut self) {
+        // EGL defers deletion of a context that is still current. Unbind it
+        // before destroying the last owner so idle policy really frees it.
+        if let Some(context) = self.context.take() {
+            if let Err(error) = context.make_not_current_in_place() {
+                eprintln!("GL_RELEASE_ERROR {error}");
+            }
+            drop(context);
+        }
+    }
+}
 pub struct GlTarget<'a> {
     pub display: &'a Display,
     pub width: u32,
     pub height: u32,
 }
 impl Transport {
+    /// Release a process-owned EGL display, including the driver's display pool.
+    ///
+    /// # Safety
+    /// Every renderer, context and surface using this native display must already
+    /// be destroyed. No other library may own EGL objects on this display.
+    pub unsafe fn shutdown_exclusive(mut self) -> Result<()> {
+        if let Some(context) = self.context.take() {
+            context.make_not_current_in_place()?;
+            drop(context);
+        }
+        #[allow(unreachable_patterns)]
+        let raw = match self.display.raw_display() {
+            glutin::display::RawDisplay::Egl(raw) => raw,
+            _ => return Err("exclusive shutdown requires EGL".into()),
+        };
+        let address = self.display.get_proc_address(c"eglTerminate");
+        if address.is_null() {
+            return Err("missing eglTerminate".into());
+        }
+        // SAFETY: EGL exports this signature; exclusive ownership is the caller's contract.
+        let terminate: unsafe extern "system" fn(*const std::ffi::c_void) -> u32 =
+            unsafe { std::mem::transmute(address) };
+        if unsafe { terminate(raw) } == 0 {
+            return Err("eglTerminate failed".into());
+        }
+        Ok(())
+    }
     /// # Safety
     /// Display must remain alive until the context and all surfaces are destroyed.
     pub unsafe fn new(display: RawDisplayHandle) -> Result<Self> {

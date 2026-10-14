@@ -638,7 +638,7 @@ scroll reuse, same-path update, partial SHM, group opacity and removal/hover dam
 Evidence ignored .research/feature6b/layers-*,scroll-paced-*,hover-bounded-after,
 damage-wire-after; invalid/blank-list/timeout runs preserved, not ranked.
 
-## Feature 6b step 2 — script and raster worker (2026-10-15)
+## Feature 6b step 2 — script and raster worker (2026-10-14)
 
 Luau and CPU baking now run independently of drawing/animation. GPU resource
 acknowledgement precedes candidate validation/store commit. Unchanged reload
@@ -665,3 +665,28 @@ message after successful teardown; activation during the proof succeeds.
 Workspace tests/fmt/clippy/CPU-only pass. Evidence .research/feature6b/takeover-*.
 Step0a niri/idle and whole-run jitter remain open. Scroll worker end-to-end tail
 is unmeasured; do not substitute draw-thread commit time for script latency.
+
+## Feature 6b step 3 — CPU-first surfaces and idle GL release (2026-10-14)
+
+Automatic bars remain on CPU SHM; companion panels start on CPU, warm native
+GL after a callback and return to CPU after two idle seconds. Idle timers then
+stop. Tests activate/release twice. Context unbinding alone freed little;
+exclusive EGL display termination releases the remaining driver pool.
+Warm memory regresses; idle driver release is verified, not allocator trimming.
+
+| PSS + DRM MiB | niri | Hyprland |
+|---|---|---|
+| CPU bar alone |22.44|21.33|
+| Bar + panel GL warm |143.21|150.49|
+| Bar + panel after idle release |76.27|75.63|
+| Warm DRM → released DRM |66.96 → 0|74.95 → 0|
+| Feature6 CPUbar + GLpanel control |104.90|105.53|
+
+Private2880×1800/1.5; niri nested60Hz, Hypr virtual120Hz. CPU-first retains
+CPU raster/allocator allocations in addition to warm GL. No claimed full-shell
+saving. Final display termination requires exclusive ownership and occurs only
+with a CPU primary renderer, no remaining EGL surfaces and a CPU companion.
+Explicit GL bars keep their shared transport. Drop-only/unbind-only failures
+retained. Reinitialization and final STOP surfaces=0 pass both compositors.
+Workspace tests/fmt/clippy/CPU-only pass; policy lifecycle regression tested.
+Evidence .research/feature6b/policy-{niri,hypr}-cycle. Step0a still open.

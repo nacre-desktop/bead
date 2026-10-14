@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_HARDENING') == 'policy':
+        spec=importlib.util.spec_from_file_location('policy_proof',ROOT/'spikes/policy-proof.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_HARDENING') in ['layers', 'stall']:
         spec = importlib.util.spec_from_file_location('layer_proof', ROOT/'spikes/layer-proof.py')
         proof = importlib.util.module_from_spec(spec); spec.loader.exec_module(proof)
