@@ -1,170 +1,109 @@
-# Roadmap and gates
+# Status
 
-Updated 2026-10-14. Features1–6 built; Feature6 complete with concerns.
-Feature6b architecture hardening is authorized next; stop after6b, before Feature7.
-Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
-One authorized live niri comparison matched QML physical120Hz timing; cold startup
-and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
-Authoring/layout/launcher/GateB/input/basicIME/a11y/native backends completed.
-Physical niri hotplug, real IME and screen-reader acceptance remain unvalidated.
-Feature6 concerns: GL fixed cost, niri shared-surface pacing and latency tails.
-Owner may veto ADR0002; next feature requires a new instruction.
-Baking/shader-cache work deferred.
+2026-10-14: Feature6b ACTIVE, architecture hardening; STOP after6b before Feature7.
+New isolated bead-feature6b/feature6b-architecture at9a8b7c7. Six steps plus owner
+step0 are authorized; commit/push+CI per step, nice10/-j2, nested sessions only.
+0a mixed GL pacing ACTIVE;0b batched Hypr queries next;1layer tree/realGL damage;
+2script+bake worker/600ms stall;3lazy per-surface CPU/GL;4kit/tokens;
+5panic/errors/systemd unit/persistence/capability registry;6features/modules/trace.
+No physical niri test without asking after0a; no live configs/installs/releases.
+Nacre/Orient read-only. Canonical tools/target; private evidence .research/feature6b.
+Baseline9a8b7c7 preserved; capture matched before/after, raw tails and failures.
+Pleamar BSD-3-Clause read-only research; reimplementation preferred. No code copied.
+Gray square in bar-panel captures is intentional shell/sample.png raster fixture,
+not a missing-icon placeholder; code places it at96,422 at48×48 next to sample.svg.
+The actual missing named-icon fallback is separate (sample.svg/generic app icon).
 
-For every feature: state the smallest proof and acceptance criteria; match Nacre's
-current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;
-append FEASIBILITY.md with time/LOC/numbers/problems/verdict; update STATUS.md;
-commit/push main (public by owner request); provide one command/what to inspect; **stop for next**.
-Do not bundle unrequested later features into the current proof.
+## Preserved Feature6 checkpoint
 
-## Phase 0 — current
+2026-10-14: Feature6 COMPLETE with concerns; steps1–4 finished. STOP here.
+Source def7255, measurement-reader ab5bf02; CI38551709096/38552860857 passed.
+Matched actual QML header source9e39583 (visuals unchanged in fixture); reference
+734a4bc and native7ac9242 milestones retained. Service foundation b9e1769 reused.
+Window title now uses canonical JetBrainsMono Nerd Font, same file as QML alias;
+late title text refreshes font selection. Tray resolves named/absolute/app indexed
+icons plus Adwaita, then valid network-ARGB pixmaps (also when named decoding fails).
+Transparent real fixture icon replaces square; same-path asset changes invalidate
+retained layers. Package_2/count0 precedes status; updates helper remains future.
 
-Scope/source/protocol/renderer/UI/service/prior-art research, blank renderer spikes,
-ADR 0001, roadmap and handoff. Cargo workspace/CI initially covers only measurement
-spikes; Feature 1 adds production surface/shell crates. Stop for architecture OK.
+## Feature6 proof and verdict
 
-Feature 2 stress gate added by the owner: launcher-sized rounded/shadowed panel
-with lots of text and color emoji, animating at real monitor resolution/scale/
-refresh with damage tracking. Report p50/p99 frame times, CPU and loaded-font PSS.
-If CPU cannot keep up, explain before starting Feature 3.
+Real private PW null/default sink, volume/mute and3daemon restarts; native SNI
+add/update/quit100cycles, actual Activate/AboutToShow/DBusMenu Event; ordinary and
+menu-only bar hit testing, right-click/menu and click-mute/scroll-volume routes;
+3whole-bus replacements and stale item rejection after quit pass.
+Final owner FD20/live tasks7/retained watcher1/subscriptions1 stable; PSS6.48→6.58MiB
+late100cycles,0CPUticks60s, subscription drop0/worker joins. Hardware not tested.
+Rendered100cycle churn passes on all8CPU/GL/alone/panel rows: FD37–43 per mode stable,
+PSS growth.004–.65MiB after warmup, bus tasks7/retained1/subscriptions1/layer1 stable.
+Three real ownership issues repaired: menu listeners after owner exit, completed
+JoinSet task allocations, extra owned FcFontMatch reference in fontconfig0.11.0.
+Small MIT vendor patches preserve attribution. Initial failures retained; no
+forced GC, allocator trim or enlarged tolerance. No indefinite leak-free claim.
 
-## Feature order
+Private2880×1800/scale1.5 outputs: niri nested60Hz, Hypr virtual120Hz. Distinct
+1164×654 GL panel, full shadow geometry and one shared native GL context proven.
+PSS+DRM MiB CPUbar /GLbar /CPUbar+GLpanel /GLbar+GLpanel /matched QMLbar:
+niri23.00 /65.03 /104.90 /109.24 /118.01; Hypr21.95 /65.70 /105.53 /111.67 /123.82.
+Eight60s intervals,220focus actions each, separate8s pacing. Native idle1–2ticks
+(~.017–.033% one core). Metadata/state and per-update presentation measured
+separately; presentation is private compositor feedback, not physical scanout.
+Concerns: niri mixed-surface period≈33ms; title p99 reaches152.34ms. Hypr title
+p99 18.54–23.94ms. Final off/on trace statep99 1.89/9.60ms; worst356.58ms sits in
+snapshot-reply waiting (.046ms worker CPU), append-window p99<.1ms. Keep failure,
+not an append-only diagnosis. Detailed bounds/p50/p95/p99/pacing in FEASIBILITY.
+CPU bar has lowest measured standalone cost; GL fixed cost and UI-thread baking
+remain concerns for GateC. No optimization/Feature7 work and no next gate started.
 
-| Feature | Smallest useful proof / acceptance | What the gate answers |
-| --- | --- | --- |
-| 1. Production skeleton and surfaces | Minimal Bead surface crate + nacre-shell executable; blank separate-namespace layer on every output on nested Hyprland and niri; clean startup/exit and hotplug removal; fmt/clippy/test CI | Can the surface/lifecycle foundation work on both without touching daily Nacre? |
-| 2. Drawing and palette | Current Nacre primitives/rounded corners/borders/shadows; real font fallback/emoji; PNG/SVG/theme icons; validated existing Orient/presentation palette and last-good fallback | Does CPU-first rendering actually match the look at useful size? Compare GPU alternative if necessary |
-| 3. Reactive UI/reload | Minimal typed markup/store/action schema plus Luau candidate VM; include the smallest working editor, keyed scroll list and Taffy layout needed to prove state preservation; invalid multi-file/script/resource candidate retains old UI with file/line error; no leaks across 100 cycles | **Gate B:** go/adjust/stop from measured reload/preservation/memory, owner decision |
-| 4. Layout/animation/input | Taffy integration for real scene, easing/springs, pointer/scroll/keyboard/focus; basic selection/clipboard, IME and AccessKit semantics; matched animated panel pacing | Does a toolkit replacement work beyond static rectangles? Input/IME/a11y move early |
-| 5. Backend state/actions | Same neutral output/workspace/window/event interface on Hyprland/niri; direct Hyprland socket + GPL niri-ipc adapter; IDs/capability errors/reconnect tested | Are backend semantics coherent rather than widget-specific hacks? |
-| 6. Bar v1 | Clock/workspaces, SNI+DBusMenu tray, PipeWire audio, UPower battery, network/Bluetooth display and helper actions; daemon/item restarts; per-output look | Can actual service-driven UI sleep and share contexts? SNI is new in audited QML snapshot |
-| 6b. Architecture hardening | Six ordered steps below; measured layer/damage, independent script/bake workers, lazy per-surface rendering, shared kit, restart recovery and feature/module hygiene | Can the framework remove the measured architectural costs before adding more shell features? |
-| 7. Command/files/helpers | Private versioned command socket/client plus compatibility target/method catalog; all current CLI/keybinding routes tested in fixtures; bounded runner/watch/helper protocol | Can existing tools call Bead without changing live configs? Minimal helper transport may already support earlier proofs |
-| 8. Popouts/panels | One actual panel and animations, open/close/focus/dismiss across outputs; preserved state and pacing; output disappearance | **Gate C:** bar parity on both + panel; measured benefit versus cost; owner decision |
-| Optimization pass — immediately after Gate C | Measure each candidate on the bar + one panel scene on both compositors at real sizes; retain only measured improvements | Can fixed costs, caches, allocator behavior and reload work be improved without regressions? |
-| 9. Notifications/OSD | Server on private bus, replacement/actions/expiry/history/DND, inhibition and visual transitions; no takeover of live notification service | Is native notification behavior complete enough for parity? |
-| 10. Launcher | Same launcher-menu.json catalog/modes/ranking, populated-catalog grid/selection, cold/warm launch/idle reopen and preserved inputs | **Gate D:** estimate all remaining work from measured pace; owner decision on full parity |
-| 11. Dashboard | MPRIS/media, resource/calendar/system/weather cards, wallpaper/palette presentation; retained helpers and bounded artwork caches | Can rich data/views stay efficient and resilient? |
-| 12. Pearls | xdg detachable managed windows, geometry/docking, ownership/focus/output mapping, backend-specific placement | Is native managed-window behavior possible without unauthorized rules/config changes? |
-| 13. Wallpaper/video/effects | Static/video comparison with GPL shell-side playback boundary, GPU/copy/decode/frame sync accounting, Canvas/MultiEffect-style parity | Do media/effects erase gains or require an incompatible renderer? |
-| 14. AI/sidebar and remainder | Streaming chat/markdown/input/attachments, left/extras/settings/colors/welcome/control/session and audited remaining scope | Full parity recommendation from proven behavior, not a feature checklist of stubs |
+45tests/fmt/clippy/CPU-only/private sensors/workspace+all6framework deny pass.
+Final CPU/GL and panel captures inspected in examples/bar-*.png. GL unavailable
+companion exits bounded, surfaces0. All task processes stopped; references clean.
+No live desktop tests, machine installs or Nacre/Orient writes.
+Menus inline; logo fixed fixture palette; fixture states differ from QML shims,
+which exclude real helpers/tray. Results are component measurements, not full shell.
+Roadmap now requires framework component kit/shared QML-matching tokens and
+blurred-artwork/level-meter/peek/segmented capabilities before/at GateC; docs only.
 
-Gate D is explicitly placed **after Feature 10**, resolving the original list's
-later label placement. It must forecast difficult unbuilt pearls/video/AI/input
-work rather than extrapolate the easier bar features at a uniform rate.
+## Evidence and reproduction
 
-Secure session lock, if included beyond the current lock-preview, is a separate
-fail-closed protocol/safety gate before any daily-session trial. It is not silently
-counted as done with a session menu or decorative lock widget.
+Final ignored evidence .research/feature6/owned-niri (CPUalone),owned-niri-remaining
+(other3rows/QML/traces),owned-hyprland (allrows/QML/traces),owned-lifecycle;
+final-matrix-combined.json plus trace analysis/worst intervals. Earlier lifecycle,
+churn-diagnosis/corrected/matrix-check/final-* failures are superseded, preserved.
+Private reproduction: spikes/measure.py --bar-ui with BEAD_BAR_MATRIX=1,
+NACRE_REFERENCE and canonical CARGO_TARGET_DIR/BEAD_RESEARCH_TOOLS/BEAD_RAW_DIR;
+Hypr adds --compositor hyprland --virtual120. Build release shell +service examples.
+BEAD_SERVICES_LIFECYCLE=1 with --bar-ui runs the private native service proof.
+NEVER launch standalone --bar directly on daily desktop for these proofs.
+Task worktree/branch preserved: bead-feature6-bar/feature6-reference-bar.
+STOP after Feature6 summary. Future changes require the owner's next instruction.
 
-## 6b — architecture hardening (before Feature7)
 
-Authorized2026-10-14. Commit/push each numbered step, check CI after every push,
-keep STATUS current and stop after6b. Nested only, nice10/Cargo-j2. Preserve6
-baselines and report before/after under matched output/workload conditions.
+Feature5 code milestone af985ba published after concurrent attribution rewrite.
+Equivalent code at earlier5687bea passed CI38524233362; final CI checked separately.
+Final proof/publication includes non-focusing indicator mode and asserted live title,
+reference comparison harness, restart/stale-action verifier and nested demo configs.
+Source revision 8481e4b CI passed; the final docs checkpoint intentionally skips CI.
+Features1–4 remain published. Luau ADR0002 chosen; owner may veto.
+Feature5 accepted and Luau kept; Feature6 active. No live tests authorized or performed.
+Real IME-engine composition and screen-reader end-to-end remain unvalidated;
+GateB allocator/driver memory tolerance is2MiB, while owned counts/FDs stay stable.
+Off-thread baking/shader-cache startup improvements remain deferred.
 
-1. Retained layer tree: own layers per section/list row, dirty-only re-baking,
-   changed-region uploads; direct femtovg fills/caret/selection/progress. Prove
-   launcher typing, list scrolling and moving progress at2880×1800/1.5/120Hz,
-   p50/p99 frame times and CPU before/after. Send real GL compositor damage,
-   up to a few rectangles; report hover/typing/progress surface-damage shares.
-2. Worker baking and script work: draw/animation must continue while handlers,
-   binds and reload compilation run. Swap validated candidates only when ready;
-   re-bake only changed reload content. Compare reload pauses. Debug Luau stall
-   flag must prove panel-open animation during600ms stall: frames/longest frame,
-   before/after at120Hz. Study pleamar (BSD-3-Clause), prefer reimplementation;
-   copied code must preserve copyright in third-party notices.
-3. Per-surface renderer policy behind existing interface: static CPU SHM bar,
-   lazy GL when animated surface opens, CPU first frame during GL startup, release
-   GL after idle. Measure bar-only and bar+panel PSS+DRM and lifecycle transitions.
-4. Extract the component kit/shared QML-matching tokens below into the framework.
-5. Robustness: logging panic hook; service/backend/reload unwrap/expect become
-   errors; source systemd user unit Restart=on-failure; durable stores restore
-   panel state after crash/restart. Introduce action capability registry now;
-   user-visible permission prompts remain deferred until theme sharing exists.
-6. Hygiene: CPU+native GL default, wgpu/Vello opt-in; split bead-wayland/lib.rs
-   and bead-ui/lib.rs; gate mallinfo2/thread tracing behind trace feature.
+Nested demonstration: `./scripts/dev.sh niri --backend` or
+`./scripts/dev.sh hyprland --backend`. Two test fixture windows supply live titles;
+focus a window and click workspace buttons. Close nested window/Ctrl+C to stop.
+The fixture clients use Quickshell only for testing; native shell has no Qt dependency.
+Scripts use nice10/Cargo-j2. Never install these test configs as a session.
+Recorded events are reduced in one shared backend; views/reload own no transports.
+Socket replacement at a known endpoint reconnects. A new real-session socket path
+requires reinitializing with the new environment, never guessing another session.
+Niri IPC-only output geometry changes have no dedicated event; topology/config
+reloads refresh outputs. Physical niri output unplug/replug still needs acceptance.
+GPL adapters should be reused for Nacre's Rust migration (Wave2).
 
-No release/deployment/session installation is authorized; source commits still
-integrate normally into main. Physical120Hz scanout needs separate live approval;
-private virtual120Hz results must be labeled accordingly, with niri parity checks.
-
-## Reusable component kit — before or at Gate C
-
-Extract this kit in6b step4, before Feature8/GateC, into the framework layer.
-The kit must include Button, IconButton, Slider, Switch, Tile with separate toggle
-and detail zones, SegmentedControl, List/ListRow, Card, Popover/Peek, Tooltip,
-and TextInput. Shell views should compose these shared components.
-
-Share design tokens for colors from Orient roles, spacing, radii, typography,
-and motion timings. Match Nacre's QML tokens (`NacreTokens`/`NacreAppearance`)
-so components preserve the same appearance and interaction behavior across views.
-
-Track QML redesign needs as framework requirements: blurred artwork backgrounds,
-level meters, peek cards, and segmented controls. Include these capabilities in
-the component/rendering proof and GateC review rather than leaving them as
-one-off shell widgets.
-
-## Additional requirements before Gate C
-
-- Generate Luau type definitions from the Rust schema; run luau-analyze in CI.
-- A bead facade crate used exclusively by nacre-shell for framework APIs, plus
-  a tiny non-Nacre example shell proving reusable boundaries.
-- Native clipboard via wl_data_device and ext-data-control.
-- nacre-shell --check FILE validates UI without a screen; --report records30s
-  of frame times/CPU to a file containing no personal data.
-
-## Additional requirements after Gate C
-
-- Nightly cargo-fuzz coverage of loaders.
-- Theme-sharing permission prompts backed by the capability registry introduced
-  in6b; avoid premature prompts before sharing exists.
-- Human documentation and a README.
-- Hardware validation: fcitx5, Orca with hierarchical AccessKit tree, NVIDIA,
-  multi-monitor hotplug. Actual desktop changes/tests require separate approval.
-
-## Optimization pass — after Gate C
-
-Run this milestone immediately after Feature 8/Gate C, before Feature 9. It is
-scheduled work, not part of Feature 6. Measure every individual change against
-its baseline on the bar + one panel scene, both compositors, at real sizes.
-Record PSS + DRM, idle CPU and frame pacing under comparable conditions; retain
-only changes that measurably help. Record every result in FEASIBILITY.md,
-including candidates that do not improve the measurements and any tradeoffs.
-
-- GL fixed cost: no MSAA/depth/stencil; compare 2 versus 3 buffers; cap glyph and
-  texture atlases. Lazy per-surface GL is built in6b; compare policy refinements.
-- Allocator: system versus mimalloc versus jemalloc, including MALLOC_ARENA_MAX;
-  measure memory after one hour of use as well as startup.
-- Release profile: LTO, codegen-units=1, panic=abort where safe, and stripping.
-- Inventory threads and stack sizes; test merging idle threads.
-- Decode images at display size and apply explicit cache budgets.
-- Off-thread baking is built in6b; profile further scheduling/bake improvements.
-
-## Measurement gates and reproducibility
-
-Each feature records client PSS/USS, SwapPss, aggregate helper cost where relevant,
-60-second idle CPU, common-boundary startup, hot-reload median/p95 and presentation
-pacing where applicable. Use repeated matched workload/output/scale/cache conditions.
-Record cold/warm shader/font/catalog state, versions/revision, elapsed work and
-authored versus generated LOC. The full-shell 212/306 MiB reference is context;
-component comparisons require equivalent QML fixtures. Missing values are N/A
-with a reason; no stub metric is zero.
-
-Keep output timestamps precise: save notification/validation/commit/first callback/
-presentation are different boundaries. Cross-monitor process-atomic reload can
-display on adjacent refreshes. PSS is resident process memory, not total GPU RAM.
-
-Budgets/kill criteria are proposed in ADR 0001. A concern is surfaced immediately,
-and at each owner gate results include a go/adjust/stop recommendation. A credible
-negative outcome is a successful experiment.
-
-## Safety and release boundary
-
-Nested compositors by default; task-owned processes and exact PID/namespace stop
-commands for any real-session test. Never replace/kill daily Nacre or edit installed
-shell/config/bindings/autostart. Runtime/fixtures privately scoped. Nacre and Orient
-remain read-only; external helpers remain Python; no duplicated palette engine.
-Integrate into public main; no PRs/crates/AUR/releases. Every crate publish=false.
-
-Current run command/status and the exact next action are in [STATUS.md](STATUS.md).
+Canonical ignored evidence: `.research/feature5` (recovered-raw, final raw/logs,
+check logs and final niri stale-ID restart proof). Preserve it; no raw logs in Git.
+Public screenshots: `examples/backend-niri.png`, `examples/backend-hyprland.png`.
+Measurement boundaries/sample limits and earlier failures are in FEASIBILITY.md.
+Reload demonstration remains `./scripts/dev.sh niri --demo` (nested only).

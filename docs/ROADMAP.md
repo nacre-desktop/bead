@@ -63,6 +63,15 @@ Authorized2026-10-14. Commit/push each numbered step, check CI after every push,
 keep STATUS current and stop after6b. Nested only, nice10/Cargo-j2. Preserve6
 baselines and report before/after under matched output/workload conditions.
 
+0. Feature6 concerns first:
+   - 0a: non-blocking GL swaps; each surface paced by its own wl_surface.frame.
+     Prove CPUbar+GLpanel and GLbar+GLpanel on niri/Hypr: both surface-period
+     p50/p99 at output rate, no overdraw beyond that rate, idleCPU unchanged.
+     Ask before any physical/non-nested niri test after this step.
+   - 0b: one batched Hypr snapshot request, or event-directed partial refresh on
+     its worker; title-latency p50/p95/p99 before/after. Report niri's ~30ms
+     action-reply cost separately from UI/native state work.
+
 1. Retained layer tree: own layers per section/list row, dirty-only re-baking,
    changed-region uploads; direct femtovg fills/caret/selection/progress. Prove
    launcher typing, list scrolling and moving progress at2880×1800/1.5/120Hz,
