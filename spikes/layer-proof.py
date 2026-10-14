@@ -46,6 +46,7 @@ def sample(env, raw, compositor, stop):
                     if case == 'stall':
                         client.wait(timeout=20)
                         text = path.read_text()
+                        assert 'PRESENTATION clock_id=1' in text, 'stall timestamps require CLOCK_MONOTONIC feedback'
                         begin = int(re.search(r'DEBUG_SCRIPT_STALL begin_ns=(\d+)', text)[1])
                         end = int(re.search(r'DEBUG_SCRIPT_STALL end_ns=(\d+)', text)[1])
                         committed = [int(n) for n in re.findall(r'DEBUG_FRAME monotonic_ns=(\d+)', text)]

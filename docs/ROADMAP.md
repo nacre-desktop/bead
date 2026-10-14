@@ -1,7 +1,8 @@
 # Roadmap and gates
 
 Updated 2026-10-14. Features1–6 built; Feature6 complete with concerns.
-Feature6b architecture hardening is authorized next; stop after6b, before Feature7.
+Feature6b numbered implementation steps are complete with measured concerns.
+Step0a pacing/idle acceptance remains open. Stop before Feature7.
 Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
 One authorized live niri comparison matched QML physical120Hz timing; cold startup
 and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
@@ -101,6 +102,8 @@ baselines and report before/after under matched output/workload conditions.
    user-visible permission prompts remain deferred until theme sharing exists.
 6. Hygiene: CPU+native GL default, wgpu/Vello opt-in; split bead-wayland/lib.rs
    and bead-ui/lib.rs; gate mallinfo2/thread tracing behind trace feature.
+   Step6 complete; default/optional feature checks and module/callback proofs
+   recorded in FEASIBILITY. STOP before7; step0a concerns are retained.
 
 No release/deployment/session installation is authorized; source commits still
 integrate normally into main. Physical120Hz scanout needs separate live approval;

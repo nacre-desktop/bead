@@ -11,7 +11,7 @@ libc = "0.2"
 smithay-client-toolkit = { version = "=0.21.1", default-features = false, features = ["calloop", "system", "xkbcommon"] }
 wayland-client = {version="=0.31.15", features=["system"]}
 calloop = { version = "=0.14.5", features = ["signals"] }
-bead-render = { path = "../bead-render" }
+bead-render = { path = "../bead-render", default-features = false }
 bead-core = { path = "../bead-core" }
 bead-backends = { path = "../bead-backends" }
 bead-services = { path = "../bead-services" }
@@ -26,4 +26,8 @@ version="=0.25.1"
 version="=0.24.0"
 
 [features]
-gpu=["bead-render/gpu","dep:raw-window-handle"]
+default = ["native-gl"]
+native-gl = ["bead-render/native-gl", "dep:raw-window-handle"]
+wgpu = ["bead-render/wgpu", "dep:raw-window-handle"]
+vello = ["wgpu"]
+gpu = ["native-gl", "wgpu"]

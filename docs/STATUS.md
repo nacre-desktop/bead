@@ -1,5 +1,53 @@
 # Status
 
+## 2026-10-15 — 6b implementation complete with pacing concerns
+
+STOP before Feature 7. The six numbered hardening steps and step 0b are
+implemented and published in order. Step 0a performance acceptance remains
+OPEN: nested niri GL-pair pacing and matched idle invariance are unresolved.
+No new physical test, installation, release or Nacre/Orient write occurred.
+
+Final step 6: normal build is CPU + native EGL/femtovg; wgpu/Vello require
+explicit features. The historical blank-layer benchmark remains intact as
+an opt-in standalone manifest. Default dependency graph excludes wgpu/Vello.
+Allocator/thread diagnostics require trace. Public UI exports are retained;
+loading, state and interaction are split, as are Wayland lifecycle,
+transactions, rendering and protocol dispatch.
+
+Frame requests now carry per-surface generations. Reopening a closed panel
+and returning from idle GPU rendering invalidate parked callbacks; late
+replies cannot grant duplicate frames. Regression tests cover this case.
+Launcher keeps its original top-edge pose; kit demo covers side edges.
+
+Final private evidence (2880×1800/1.5; Hypr virtual120, niri nested60):
+- CPU bar PSS+DRM: niri 23.28 / Hypr 23.24 MiB; no DRM client.
+- Bar+panel warm → idle: niri 143.23 → 76.47 MiB;
+  Hypr 152.55 → 77.46 MiB. Driver allocation returns to zero on both;
+  warm memory remains above Feature6 (~105 MiB). CPU pools are not trimmed.
+- Strict five-edit state/error/recovery reload proof passes; final isolated
+  file-write→presentation samples 63.91–67.03 ms, including 50 ms debounce.
+- Final injected 600.27 ms script-worker pause: 67 commits/presentations,
+  longest interval 16.82 ms; whole-run presentation p50/p99 8.37/17.00 ms.
+  Earlier matched step2 run: 71 frames, longest 9.34 ms. Both retained.
+  Script isolation works; strict uninterrupted 120 Hz is NOT proven.
+- Step2 typing CPU regression 29.61 → 32.66% remains; full scroll worker
+  tail is unmeasured. Commit preparation is not total script latency.
+
+Validation: 60 workspace tests, fmt, clippy (default/all-features/CPU),
+CPU-only build, native release build, wgpu-only and all-feature checks,
+private service owners, workspace and six framework license graphs pass.
+Two GPU activation/release cycles pass on both compositors. Final reload
+and callback-generation/panic/state/capability regressions pass. Feedback
+clock_id=1 confirms CLOCK_MONOTONIC for pause/reload timestamp comparison.
+Private compositor feedback is not physical scanout/hardware acceptance.
+
+Steps2–5 CI passed: 38643279009 / 38644193181 / 38645580955 / 38647082113.
+Step6 CI is checked after publication and recorded in the private checkpoint.
+Evidence: ignored .research/feature6b/epoch-*, takeover/step6-*.
+Existing worktrees, before binaries, failed probes and WIP preservation branch
+remain intact. Canonical checkout was not edited; this worktree's STATUS is
+newer. Next work requires an owner instruction; do not start Feature7 here.
+
 ## 2026-10-15 — 6b step 5 complete; step 6 next
 
 Panic logging is installed for all threads. A script-worker panic becomes

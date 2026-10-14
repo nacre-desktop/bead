@@ -3,7 +3,7 @@ local ui = require("bead.ui")
 local kit = require("bead.kit")
 local Sidebar = require("./components/sidebar")
 local AppGrid = require("./components/app-grid")
-return kit.Panel {edge="left",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
+return kit.Panel {edge="top",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
     open=ui.bind("launcher.open"),transition="ease",duration=.2,
     radius=12,fill="surface",border_width=1,border_color="outlineVariant",
     padding_left=12,padding_right=20,padding_top=16,padding_bottom=18,gap=15,

@@ -32,3 +32,24 @@ blur, not a compositor backdrop-blur promise.
 Example: `shell/kit/main.luau` composes the complete kit; its behavior file
 contains actions/stores only. The native bar and launcher compose shared kit
 components. No physical keyboard/assistive-technology acceptance is claimed.
+
+## Build and lifecycle policy
+
+The normal shell build includes CPU plus native EGL/femtovg. `--renderer auto`
+keeps the bar on CPU and gives companion panels a CPU first frame, lazy GL,
+and a CPU return after idle. The launcher retains its original top-edge pose;
+the kit sample demonstrates left/right placement. Explicit renderers remain
+available for measurements.
+
+`cargo build -p nacre-shell --no-default-features` builds CPU only.
+`--features wgpu` (or `vello`) explicitly enables comparison paths. The old
+`gpu` feature is a compatibility alias for both graphics families. The historical
+blank-layer benchmark is a separate opt-in manifest under spikes/blank-layer;
+its code and saved binaries remain intact.
+
+`--features trace` includes allocator and thread diagnostics. Environment
+trace switches cannot enable code excluded from the normal binary. UI/state
+proof markers remain explicit developer options. The UI implementation is split
+into generation, session and interaction modules; Wayland execution is split
+into runtime, transactions, rendering and protocol dispatch. Public API exports
+are retained.

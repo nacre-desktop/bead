@@ -114,6 +114,9 @@ pub(crate) fn clock_ns(clock: nix::libc::clockid_t) -> u64 {
     }
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
+#[cfg(not(feature = "trace"))]
+pub(crate) fn trace(_: &str) {}
+#[cfg(feature = "trace")]
 pub(crate) fn trace(stage: &str) {
     if std::env::var_os("BEAD_TRACE_BACKEND").is_some() {
         println!(

@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 bead-core = { path = "../bead-core" }
-bead-render = { path = "../bead-render" }
+bead-render = { path = "../bead-render", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 mlua = { version = "=0.12.2", features = ["luau", "vendored", "serde"] }

@@ -311,6 +311,7 @@ impl Renderer for GpuRenderer {
         (self.cache.layer_count(), self.femto_images.len())
     }
     fn stage_resources(&mut self, target: crate::ResourceTarget<'_>) -> Result<()> {
+        #[allow(irrefutable_let_patterns)]
         let crate::ResourceTarget::Wgpu { device, queue } = target else {
             return Err("wgpu resource target missing".into());
         };

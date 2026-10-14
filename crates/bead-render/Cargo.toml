@@ -18,11 +18,16 @@ fontdb = "=0.23.0"
 raw-window-handle = { version = "=0.6.2", optional = true }
 wgpu = { version = "=30.0.1", default-features = false, features = ["vulkan", "wgsl"], optional = true }
 vello = { version = "=0.11.0", default-features = false, features = ["wgpu"], optional = true }
-femtovg = { version = "=0.27.0", default-features = false, features = ["wgpu"], optional = true }
+femtovg = { version = "=0.27.0", default-features = false, optional = true }
 pollster = { version = "=0.4.0", optional = true }
 rgb = { version = "0.8", optional = true }
 imgref = { version = "1", optional = true }
 glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"], optional = true }
 
 [features]
-gpu = ["dep:wgpu", "dep:vello", "dep:femtovg", "dep:pollster", "dep:raw-window-handle", "dep:rgb", "dep:imgref", "dep:glutin"]
+default = ["native-gl"]
+native-gl = ["dep:femtovg", "dep:raw-window-handle", "dep:rgb", "dep:imgref", "dep:glutin"]
+wgpu = ["dep:wgpu", "dep:vello", "dep:femtovg", "femtovg/wgpu", "dep:pollster", "dep:raw-window-handle", "dep:rgb", "dep:imgref"]
+vello = ["wgpu"]
+# Compatibility for explicit historical benchmark invocations.
+gpu = ["native-gl", "wgpu"]

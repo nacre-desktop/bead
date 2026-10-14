@@ -36,7 +36,11 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut profile = false;
     let mut bar_panel = false;
     let mut panel_edge = bead_core::Edge::Right;
-    let mut panel_renderer = bead_render::RendererKind::FemtovgGl;
+    let mut panel_renderer = if cfg!(feature = "native-gl") {
+        bead_render::RendererKind::FemtovgGl
+    } else {
+        bead_render::RendererKind::Cpu
+    };
     let mut options = Options::default();
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
@@ -154,7 +158,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--bar [--bar-panel] [--panel-renderer cpu|femtovg-gl]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto uses shared native GL, then CPU if unavailable. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--bar-panel] [--panel-renderer cpu|femtovg-gl]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
@@ -488,7 +492,7 @@ fn select_renderer(options: &mut Options, name: &str) -> Result<(), Box<dyn std:
         "femtovg-gl" => RendererKind::FemtovgGl,
         "vello" => RendererKind::Vello,
         "auto" => {
-            if cfg!(feature = "gpu") {
+            if cfg!(feature = "native-gl") {
                 RendererKind::FemtovgGl
             } else {
                 RendererKind::Cpu

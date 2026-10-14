@@ -20,6 +20,10 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
         run: cargo test --workspace --locked
+      - name: Renderer feature configurations
+        run: |
+          cargo check -p nacre-shell --no-default-features --locked -j2
+          cargo check --workspace --all-features --locked -j2
       - name: Private service owner lifecycle
         run: python3 spikes/services-check.py
       - name: Install cargo-deny

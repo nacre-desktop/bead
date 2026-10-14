@@ -57,3 +57,45 @@ mod tests {
         assert!(p.expire(7.));
     }
 }
+
+/// Each surface owns one live frame request. Parked callbacks become stale when
+/// content reopens or its renderer changes; late replies must not grant a frame.
+#[derive(Default)]
+pub(crate) struct Callbacks {
+    pub pending: bool,
+    epoch: u64,
+}
+impl Callbacks {
+    pub fn request(&mut self) -> u64 {
+        self.epoch = self.epoch.wrapping_add(1);
+        self.pending = true;
+        self.epoch
+    }
+    pub fn invalidate(&mut self) {
+        self.epoch = self.epoch.wrapping_add(1);
+        self.pending = false;
+    }
+    pub fn accept(&mut self, epoch: u64) -> bool {
+        if self.pending && epoch == self.epoch {
+            self.pending = false;
+            true
+        } else {
+            false
+        }
+    }
+}
+#[cfg(test)]
+mod callback_tests {
+    use super::*;
+    #[test]
+    fn reopening_discards_parked_callback_and_never_grants_a_duplicate_frame() {
+        let mut c = Callbacks::default();
+        let parked = c.request();
+        c.invalidate();
+        let current = c.request();
+        assert!(!c.accept(parked));
+        assert!(c.pending);
+        assert!(c.accept(current));
+        assert!(!c.accept(current));
+    }
+}

@@ -13,9 +13,9 @@ use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
 };
 pub mod damage;
-#[cfg(feature = "gpu")]
+#[cfg(feature = "native-gl")]
 pub mod gl;
-#[cfg(feature = "gpu")]
+#[cfg(feature = "wgpu")]
 pub mod gpu;
 pub mod retained;
 pub mod tree;
@@ -187,9 +187,9 @@ pub struct ShmTarget<'a> {
 }
 pub enum RenderTarget<'a> {
     Shm(ShmTarget<'a>),
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "wgpu")]
     Gpu(gpu::GpuTarget<'a>),
-    #[cfg(feature = "gpu")]
+    #[cfg(feature = "native-gl")]
     Gl(gl::GlTarget<'a>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -203,20 +203,22 @@ pub enum RendererKind {
 pub fn renderer(kind: RendererKind) -> Result<Box<dyn Renderer>> {
     match kind {
         RendererKind::Cpu => Ok(Box::<tree::TreeCpuRenderer>::default()),
-        #[cfg(feature = "gpu")]
+        #[cfg(feature = "native-gl")]
         RendererKind::FemtovgGl => Ok(Box::<gl::GlRenderer>::default()),
-        #[cfg(feature = "gpu")]
+        #[cfg(feature = "wgpu")]
         RendererKind::Femtovg | RendererKind::Vello => Ok(Box::new(gpu::GpuRenderer::new(kind))),
-        #[cfg(not(feature = "gpu"))]
+        #[allow(unreachable_patterns)]
         _ => Err("GPU support disabled; use the tiny-skia fallback".into()),
     }
 }
-#[cfg(feature = "gpu")]
+#[cfg(any(feature = "native-gl", feature = "wgpu"))]
 pub enum ResourceTarget<'a> {
+    #[cfg(feature = "wgpu")]
     Wgpu {
         device: &'a gpu::wgpu::Device,
         queue: &'a gpu::wgpu::Queue,
     },
+    #[cfg(feature = "native-gl")]
     Gl {
         display: &'a glutin::display::Display,
     },
@@ -228,7 +230,7 @@ pub trait Renderer {
     fn resource_counts(&self) -> (usize, usize) {
         (0, 0)
     }
-    #[cfg(feature = "gpu")]
+    #[cfg(any(feature = "native-gl", feature = "wgpu"))]
     fn stage_resources(&mut self, _: ResourceTarget<'_>) -> Result<()> {
         Ok(())
     }
@@ -239,10 +241,8 @@ pub trait Renderer {
     fn draw(&mut self, scene: &Scene, target: RenderTarget<'_>, damage: Damage) -> Result<()> {
         match target {
             RenderTarget::Shm(t) => self.render(scene, t, damage),
-            #[cfg(feature = "gpu")]
-            RenderTarget::Gpu(_) | RenderTarget::Gl(_) => {
-                Err("GPU target unsupported by CPU renderer".into())
-            }
+            #[cfg(any(feature = "native-gl", feature = "wgpu"))]
+            _ => Err("GPU target unsupported by CPU renderer".into()),
         }
     }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()>;

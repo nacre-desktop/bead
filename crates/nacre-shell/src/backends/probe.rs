@@ -33,6 +33,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let action: Action = serde_json::from_str(&line)?;
         let start = Instant::now();
         let action_ns = super::clock_ns(nix::libc::CLOCK_MONOTONIC);
+        #[cfg(feature = "trace")]
         let cpu_ns = super::clock_ns(nix::libc::CLOCK_THREAD_CPUTIME_ID);
         let result = backend.action(action.clone());
         let request_ms = start.elapsed().as_secs_f64() * 1000.;
@@ -53,10 +54,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             version = next;
         }
         let observed = observed(&backend.snapshot(), &action);
-        println!(
-            "BACKEND_RESULT {}",
-            serde_json::json!({"ok":true,"observed":observed,"request_ms":request_ms,"action_ns":action_ns,"thread_cpu_ms":(super::clock_ns(nix::libc::CLOCK_THREAD_CPUTIME_ID)-cpu_ns) as f64/1_000_000.,"state_update_ms":if observed{Some(start.elapsed().as_secs_f64()*1000.)}else{None}})
-        );
+        let result = serde_json::json!({"ok":true,"observed":observed,"request_ms":request_ms,"action_ns":action_ns,"state_update_ms":if observed{Some(start.elapsed().as_secs_f64()*1000.)}else{None}});
+        #[cfg(feature = "trace")]
+        let result = {
+            let mut result = result;
+            result["thread_cpu_ms"] = serde_json::json!(
+                (super::clock_ns(nix::libc::CLOCK_THREAD_CPUTIME_ID) - cpu_ns) as f64 / 1_000_000.
+            );
+            result
+        };
+        println!("BACKEND_RESULT {result}");
     }
     drop(_subscription);
     drop(backend);

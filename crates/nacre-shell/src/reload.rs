@@ -435,7 +435,7 @@ impl SceneSource for Runtime {
                     retained
                 ));
             }
-            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            #[cfg(all(feature = "trace", target_os = "linux", target_env = "gnu"))]
             {
                 // SAFETY: glibc returns a by-value read-only snapshot of its allocator accounting.
                 let heap = unsafe { nix::libc::mallinfo2() };

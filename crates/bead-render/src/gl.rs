@@ -460,6 +460,7 @@ impl Renderer for GlRenderer {
         )
     }
     fn stage_resources(&mut self, target: crate::ResourceTarget<'_>) -> Result<()> {
+        #[allow(irrefutable_let_patterns)]
         let crate::ResourceTarget::Gl { display } = target else {
             return Err("GL resource target missing".into());
         };

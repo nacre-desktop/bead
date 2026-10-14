@@ -8,8 +8,8 @@ publish = false
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
-bead-wayland = { path = "../bead-wayland" }
-bead-render = { path = "../bead-render" }
+bead-wayland = { path = "../bead-wayland", default-features = false }
+bead-render = { path = "../bead-render", default-features = false }
 bead-ui = { path = "../bead-ui" }
 bead-core = { path = "../bead-core" }
 bead-backends = { path = "../bead-backends" }
@@ -27,8 +27,12 @@ fontdb = "=0.23.0"
 skrifa = "=0.44.0"
 
 [features]
-default=["gpu"]
-gpu=["bead-wayland/gpu","bead-render/gpu"]
+default=["native-gl"]
+native-gl=["bead-wayland/native-gl","bead-render/native-gl"]
+wgpu=["bead-wayland/wgpu","bead-render/wgpu"]
+vello=["wgpu"]
+gpu=["native-gl","wgpu"]
+trace=[]
 
 [dependencies.freedesktop-desktop-entry]
 version = "=0.8.3"

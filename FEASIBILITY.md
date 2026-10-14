@@ -651,13 +651,14 @@ Typing CPU increased slightly; worker isolation is not a total-CPU saving.
 | Reload draw-thread preparation median/max | 41.81/234.98 → 0.098/0.153 ms |
 | Typing preparation p50/p99 | 3.70/16.84 → 0.091/0.457 ms |
 | Typing CPU, one core | 29.61 → 32.66% (regression) |
-| 600 ms stall commits/presentations | 0/1 queued → 71/71 |
+| Injected 600 ms script-worker pause commits/presentations | 0/1 queued → 71/71 |
 | Longest interval around stall | 610.15 → 9.34 ms |
 | Whole-run presentation p50/p99 | After 8.37/16.85 ms; tail retained |
 | Five reload file→presentation samples | 66.46–75.08 ms (50 ms debounce included) |
 
 Private Hyprland 2880×1800/1.5/virtual120, same workload/binaries as step1;
-no physical scanout claim. Worker initial61 raster builds remain61 across five
+no physical scanout claim. The injected pause sleeps in script event dispatch;
+it does not raise the 50 ms Luau execution budget. Worker initial61 raster builds remain61 across five
 filtered-row edits. Prior missing-generation failures preserved; callback-only
 no-damage commits were missing feedback, not a renamed marker. One-pixel damage
 requests real feedback without re-baking unchanged content. GVfs prints its bus
@@ -737,3 +738,29 @@ starvation case discovered in the first crash proof. No user-visible prompts.
 Workspace tests/fmt/clippy/CPU-only/private service owner checks pass. Source
 unit runtime restart is not claimed: the actual proof kills and relaunches
 only task-owned clients. Evidence .research/feature6b/restart-* and takeover.
+
+## Feature 6b step 6 — build boundaries and callback hygiene (2026-10-15)
+
+CPU/native GL are default; wgpu/Vello and allocator/thread diagnostics are
+opt-in. The old benchmark stays intact outside the default workspace graph.
+UI and Wayland modules are split without changing public UI exports. Parked
+frame callbacks use generations so reopening cannot grant duplicate frames.
+The six implementation steps are done; step0a acceptance remains open.
+
+| Final check / result | Evidence |
+|---|---|
+| Workspace tests / clippy / feature combinations |60 pass; default/all/CPU lint, CPU build, wgpu-only/all checks|
+| Dependency policy |No default wgpu/Vello; workspace + six framework graphs pass|
+| CPU bar PSS+DRM, niri/Hypr MiB |23.28 /23.24|
+| Bar+panel warm→idle PSS+DRM MiB |niri143.23→76.47; Hypr152.55→77.46; DRM→0|
+| Final isolated five reload file→presentation samples |63.91–67.03 ms; 50 ms debounce; state/error/recovery pass|
+| Final600ms injected worker pause |67 commits/presentations; longest16.82ms; earlier71/9.34ms retained|
+
+Private2880×1800/1.5, niri60/Hypr virtual120; CLOCK_MONOTONIC feedback verified.
+Final pause whole-run presentation8.37/17.00ms p50/p99: strict120Hz remains
+unproven. Typing32.66% vs29.61% regression and warm-memory regression persist.
+Full scroll worker tail is unmeasured. Parallel final-smoke reloads with longer
+tails94–401ms retained separately; isolated repeat is labeled, not substituted.
+Source user unit remains uninstalled; no deployment, physical test or Feature7.
+Evidence .research/feature6b/epoch-* and takeover/step6-*; failed probes retained.
+STOP. Nested niri pacing, idle invariance and physical acceptance remain open.
