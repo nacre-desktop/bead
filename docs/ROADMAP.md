@@ -73,6 +73,7 @@ baselines and report before/after under matched output/workload conditions.
    - 0b: one batched Hypr snapshot request, or event-directed partial refresh on
      its worker; title-latency p50/p95/p99 before/after. Report niri's ~30ms
      action-reply cost separately from UI/native state work.
+     0b complete: one worker-side batch; full before/after matrix in FEASIBILITY.
 
 1. Retained layer tree: own layers per section/list row, dirty-only re-baking,
    changed-region uploads; direct femtovg fills/caret/selection/progress. Prove

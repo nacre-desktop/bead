@@ -45,6 +45,7 @@ def idle(pid,seconds):
 def sample(env,raw,compositor,stop):
     env={**env,'DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-pw','BEAD_PRIVATE_SERVICES_TEST':'1'}
     target=pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release'
+    shell_binary=os.environ.get('BEAD_NATIVE_BINARY',str(target/'nacre-shell'))
     rows=[];pw=None;windows=None
     (raw/'source-revision.txt').write_text(subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True))
     seconds=float(os.environ.get('BEAD_MATRIX_SECONDS','60'))
@@ -62,7 +63,7 @@ def sample(env,raw,compositor,stop):
                 if cases != [''] and case not in cases:continue
                 label=f'{compositor}-'+case
                 path=raw/(label+'.log');client=None;probe=None;tray=None
-                command=[str(target/'nacre-shell'),'--bar','--renderer',renderer,'--trace-state','--memory-usage','--namespace','bead-feature6-matrix']+(['--bar-panel'] if companion else [])
+                command=[shell_binary,'--bar','--renderer',renderer,'--trace-state','--memory-usage','--namespace','bead-feature6-matrix']+(['--bar-panel'] if companion else [])
                 if compositor=='hyprland':command+=['--output','bead-bench']
                 try:
                     client=subprocess.Popen(command,cwd=ROOT,env=env,stdout=path.open('w'),stderr=subprocess.STDOUT,start_new_session=True)
@@ -79,7 +80,7 @@ def sample(env,raw,compositor,stop):
                     row={'label':label,'renderer':renderer,'companion':companion,'idle':idle(client.pid,seconds)}
                     subprocess.run(['grim',str(raw/(label+'.png'))],env=env,capture_output=True,check=True,timeout=8)
                     # Actual native focus actions drive the bar's title and a fresh scene generation.
-                    probe=services.Probe([str(target/'nacre-shell'),'--backend-probe'],env,raw/(label+'-probe.log'))
+                    probe=services.Probe([shell_binary,'--backend-probe'],env,raw/(label+'-probe.log'))
                     snapshot=probe.wait('BACKEND_SNAPSHOT',lambda s:len([w for w in s['windows'] if w['title'].startswith('Bead fixture')])==2)
                     owned=[w for w in snapshot['windows'] if w['title'].startswith('Bead fixture')]
                     focused=next((w['id'] for w in owned if w['focused']),None);owned.sort(key=lambda w:w['id']==focused)
@@ -104,6 +105,7 @@ def sample(env,raw,compositor,stop):
                         samples.append(observed)
                         time.sleep(.03)
                     row['action_samples']=samples
+                    row['request_ms']=percentiles([s['request_ms'] for s in samples])
                     row['state_ms']=percentiles([s['state_update_ms'] for s in samples])
                     row['presented_ms']=percentiles([s['action_to_presented_ms'] for s in samples])
                     row['ui_prepare_ms']=percentiles([s['ui_prepare_ms'] for s in samples if s['ui_prepare_ms'] is not None])
@@ -134,14 +136,15 @@ def sample(env,raw,compositor,stop):
                         assert all('watchers=1 subscriptions=1' in l and 'layers=1' in l for l in resource_lines[-100:]),resource_lines[-3:]
                         row['rendered_tray_churn']=churn
                         print('BAR_UI_CHURN '+label+' '+json.dumps(churn),flush=True)
-                    # Frame pacing is a separate continuously requested, unchanged-content workload.
-                    stop(client);client=None
-                    pacing_path=raw/(label+'-pacing.log')
-                    paced=subprocess.Popen(command+['--animate','--seconds','8'],cwd=ROOT,env=env,stdout=pacing_path.open('w'),stderr=subprocess.STDOUT,start_new_session=True)
-                    try:paced.wait(timeout=20)
-                    finally:stop(paced)
-                    assert paced.returncode==0,pacing_path.read_text()
-                    row['pacing']=[l for l in pacing_path.read_text().splitlines() if l.startswith(('METRICS','ACQUIRE'))]
+                    if not os.environ.get('BEAD_MATRIX_NO_PACING'):
+                        # Frame pacing is a separate continuously requested, unchanged-content workload.
+                        stop(client);client=None
+                        pacing_path=raw/(label+'-pacing.log')
+                        paced=subprocess.Popen(command+['--animate','--seconds','8'],cwd=ROOT,env=env,stdout=pacing_path.open('w'),stderr=subprocess.STDOUT,start_new_session=True)
+                        try:paced.wait(timeout=20)
+                        finally:stop(paced)
+                        assert paced.returncode==0,pacing_path.read_text()
+                        row['pacing']=[l for l in pacing_path.read_text().splitlines() if l.startswith(('METRICS','ACQUIRE'))]
                     rows.append(row)
                     (raw/'bar-matrix.json').write_text(json.dumps({'compositor':compositor,'scope':'private outputs; compositor presentation feedback, not physical scanout','rows':rows},indent=2)+'\n')
                     print('BAR_RESULT '+json.dumps({k:v for k,v in row.items() if k not in ['action_samples']}),flush=True)
@@ -151,24 +154,25 @@ def sample(env,raw,compositor,stop):
                     if client:stop(client)
                 assert 'STOP surfaces=0' in path.read_text() and 'UI_ERROR' not in path.read_text(),path.read_text()[-1500:]
                 if smoke:return
-        if os.environ.get('BEAD_MATRIX_CASES') and not os.environ.get('BEAD_MATRIX_REFERENCES'):return
-        # Matched 50px actual QML bar-only fixture, no generic/full-shell comparison.
-        with tempfile.TemporaryDirectory(prefix='bead-qml-bar-') as directory:
-            root=pathlib.Path(directory);reference.fixture(root)
-            path=raw/(compositor+'-qml-bar.log')
-            qml=subprocess.Popen(['quickshell','--path',str(root/'shell.qml')],env=env,stdout=path.open('w'),stderr=subprocess.STDOUT,start_new_session=True)
-            try:
-                time.sleep(4);assert qml.poll() is None,path.read_text()
-                print('QML_BAR_IDLE '+compositor+' '+str(seconds)+'s',flush=True)
-                rows.append({'label':compositor+'-qml-bar','idle':idle(qml.pid,seconds),'scope':'unchanged NacreHeader visual widgets, deterministic transport shims, no QML tray extension'})
-                subprocess.run(['grim','-g','0,0 1920x50',str(raw/(compositor+'-qml-bar.png'))],env=env,capture_output=True,check=True,timeout=8)
-            finally:stop(qml)
+        if os.environ.get('BEAD_MATRIX_CASES') and not (os.environ.get('BEAD_MATRIX_REFERENCES') or os.environ.get('BEAD_MATRIX_PROBE_ONLY')):return
+        if not os.environ.get('BEAD_MATRIX_PROBE_ONLY'):
+            # Matched 50px actual QML bar-only fixture, no generic/full-shell comparison.
+            with tempfile.TemporaryDirectory(prefix='bead-qml-bar-') as directory:
+                root=pathlib.Path(directory);reference.fixture(root)
+                path=raw/(compositor+'-qml-bar.log')
+                qml=subprocess.Popen(['quickshell','--path',str(root/'shell.qml')],env=env,stdout=path.open('w'),stderr=subprocess.STDOUT,start_new_session=True)
+                try:
+                    time.sleep(4);assert qml.poll() is None,path.read_text()
+                    print('QML_BAR_IDLE '+compositor+' '+str(seconds)+'s',flush=True)
+                    rows.append({'label':compositor+'-qml-bar','idle':idle(qml.pid,seconds),'scope':'unchanged NacreHeader visual widgets, deterministic transport shims, no QML tray extension'})
+                    subprocess.run(['grim','-g','0,0 1920x50',str(raw/(compositor+'-qml-bar.png'))],env=env,capture_output=True,check=True,timeout=8)
+                finally:stop(qml)
         # Trace 220 focus actions with recording OFF/ON at identical boundaries.
         for recording in [False,True]:
             label=compositor+'-trace-'+str(recording)
             trace_env={**env,'BEAD_TRACE_BACKEND':'1'}
             if recording:trace_env['BEAD_RECORD_IPC']=str(raw/(label+'-ipc.jsonl'))
-            probe=services.Probe([str(target/'nacre-shell'),'--backend-probe'],trace_env,raw/(label+'.log'))
+            probe=services.Probe([shell_binary,'--backend-probe'],trace_env,raw/(label+'.log'))
             try:
                 s=probe.wait('BACKEND_SNAPSHOT',lambda s:len([w for w in s['windows'] if w['title'].startswith('Bead fixture')])==2)
                 owned=[w for w in s['windows'] if w['title'].startswith('Bead fixture')];focused=next((w['id'] for w in owned if w['focused']),None);owned.sort(key=lambda w:w['id']==focused)

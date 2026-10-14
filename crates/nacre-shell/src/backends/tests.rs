@@ -210,15 +210,27 @@ fn both_transports_reconnect_after_recorded_socket_sessions_and_output_hotplug()
                                     let mut bytes = [0; 8192];
                                     let n = stream.read(&mut bytes).unwrap_or(0);
                                     let command = String::from_utf8_lossy(&bytes[..n]);
-                                    let reply = records
-                                        .iter()
-                                        .find(|r| {
-                                            r["kind"] == "hyprland-reply"
-                                                && r["data"]["command"].as_str()
-                                                    == Some(command.as_ref())
-                                        })
-                                        .and_then(|r| r["data"]["reply"].as_str())
-                                        .unwrap_or("ok");
+                                    let reply_for = |command: &str| {
+                                        records
+                                            .iter()
+                                            .find(|r| {
+                                                r["kind"] == "hyprland-reply"
+                                                    && r["data"]["command"].as_str()
+                                                        == Some(command)
+                                            })
+                                            .and_then(|r| r["data"]["reply"].as_str())
+                                            .unwrap_or("ok")
+                                    };
+                                    let reply =
+                                        if let Some(batch) = command.strip_prefix("[[BATCH]]") {
+                                            batch
+                                                .split(';')
+                                                .map(reply_for)
+                                                .collect::<Vec<_>>()
+                                                .join("\n\n\n")
+                                        } else {
+                                            reply_for(&command).to_owned()
+                                        };
                                     let _ = stream.write_all(reply.as_bytes());
                                     return;
                                 }
@@ -440,4 +452,24 @@ fn recorded_topology_can_hotplug_and_move_without_rekeying_workspaces() {
     assert_eq!(reducer.snapshot().outputs.len(), before.outputs.len());
     assert_eq!(reducer.snapshot().workspaces[0].id, ws_id);
     assert!(reducer.snapshot().workspaces[0].output.is_none());
+}
+
+#[test]
+fn hyprland_batch_decodes_ordered_documents_and_rejects_partial_or_extra_replies() {
+    use super::hyprland::normalize_batch;
+    let monitors = r#"[{"name":"proof","width":2880,"height":1800,"scale":1.5,"activeWorkspace":{"id":1},"focused":true}]"#;
+    let workspaces = r#"[{"id":1,"name":"one","monitor":"proof"}]"#;
+    let clients = r#"[{"address":"0xabc","title":"space; braces {} and \n text","class":"fixture","workspace":{"id":1}}]"#;
+    let active = r#"{"address":"0xabc"}"#;
+    let reply = [monitors, workspaces, clients, active].join("\n\n\n");
+    let snapshot = normalize_batch(7, &reply).unwrap();
+    assert_eq!(snapshot.outputs.len(), 1);
+    assert!(snapshot.workspaces[0].focused);
+    assert!(snapshot.windows[0].focused);
+    assert!(snapshot.windows[0].title.contains("braces {}"));
+    assert!(normalize_batch(7, &reply[..reply.len() - 2]).is_err());
+    assert!(normalize_batch(7, &(reply.clone() + " {} ")).is_err());
+    assert!(normalize_batch(7, "[] [] [] null").is_err());
+    assert!(normalize_batch(7, "[] [] []").is_err());
+    assert!(normalize_batch(7, "ok").is_err());
 }

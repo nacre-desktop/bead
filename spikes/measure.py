@@ -439,6 +439,7 @@ def main():
     p.add_argument('--compositor', choices=['niri','hyprland'], default='niri')
     p.add_argument('--parent', choices=['headless','desktop'], default='headless')
     p.add_argument('--bar-ui', action='store_true')
+    p.add_argument('--physical-pacing', action='store_true', help='Explicitly approved passive niri pacing acceptance only')
     p.add_argument('--bar-reference', action='store_true')
     p.add_argument('--lifecycle', action='store_true')
     p.add_argument('--palette', type=pathlib.Path, default=None)
@@ -455,6 +456,8 @@ def main():
     p.add_argument('--modes', nargs='+', default=None)
     p.add_argument('--in-private-bus', action='store_true')
     args = p.parse_args()
+    if args.physical_pacing and not (args.bar_ui and args.parent == 'desktop' and args.compositor == 'niri' and os.environ.get('BEAD_PHYSICAL_NIRI_APPROVED') == '1'):
+        p.error('Physical pacing requires --bar-ui --parent desktop --compositor niri and explicit owner approval')
     if args.modes is None:args.modes=['cpu','femtovg','vello','qml'] if args.retained else ['tiny-skia','vello','femtovg','qml']
     if (args.retained or args.reload_test or args.qml_reload_test or args.demo_test) and args.parent!='headless':p.error('Retained comparison is private only; live desktop needs separate owner approval')
     if not args.in_private_bus:
@@ -465,13 +468,14 @@ def main():
             display=env.get('WAYLAND_DISPLAY','')
             if display and not display.startswith('/'): display=str(pathlib.Path(env['XDG_RUNTIME_DIR'])/display)
             env['BEAD_PARENT_WAYLAND']=display
+            env['BEAD_PARENT_NIRI']=env.get('NIRI_SOCKET', '')
             env['BEAD_FONT_DIR']=str(pathlib.Path(os.environ.get('XDG_DATA_HOME',str(pathlib.Path.home()/'.local/share')))/'fonts')
             for key, name in [('XDG_RUNTIME_DIR','runtime'),('XDG_CONFIG_HOME','config'),('XDG_CACHE_HOME','cache'),('XDG_STATE_HOME','state'),('XDG_DATA_HOME','data')]:
                 path=pathlib.Path(directory)/name
                 path.mkdir(mode=0o700)
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
-            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--bar-ui'] if args.bar_ui else []),*(['--bar-reference'] if args.bar_reference else []),*(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
+            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', *(['--physical-pacing'] if args.physical_pacing else []), '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--bar-ui'] if args.bar_ui else []),*(['--bar-reference'] if args.bar_reference else []),*(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
     raw = pathlib.Path(os.environ.get('BEAD_RAW_DIR', str(ROOT / 'spikes/results/raw')))
     if args.retained:raw=raw/('retained-'+args.compositor)
     elif 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
@@ -498,6 +502,35 @@ def main():
         fonts=private/'fonts.conf'
         fonts.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><include ignore_missing="yes">/etc/fonts/fonts.conf</include><dir>'+escape(env.get('BEAD_FONT_DIR','/usr/share/fonts'))+'</dir></fontconfig>')
         env['FONTCONFIG_FILE']=str(fonts)
+        if args.physical_pacing:
+            # Reuse the private bus/XDG/font containment above; only the two
+            # explicitly authorized compositor endpoints refer to the desktop.
+            for key in ['BEAD_RECORD_IPC', 'BEAD_TRACE_BACKEND', 'BEAD_SERVICE_DIAGNOSTICS', 'WAYLAND_DEBUG']:
+                env.pop(key, None)
+            os.environ.pop('BEAD_GL_DEBUG', None)
+            os.environ.pop('BEAD_PANEL_RENDERER', None)
+            env['WAYLAND_DISPLAY'] = env.get('BEAD_PARENT_WAYLAND', '')
+            env['NIRI_SOCKET'] = env.get('BEAD_PARENT_NIRI', '')
+            if not env['WAYLAND_DISPLAY'] or not env['NIRI_SOCKET']:
+                raise RuntimeError('Physical niri endpoints unavailable')
+            outputs = json.loads(subprocess.check_output(['niri', 'msg', '-j', 'outputs'], env=env, text=True, timeout=5))
+            selected = []
+            for name, output in outputs.items():
+                index = output.get('current_mode')
+                if index is None: continue
+                mode = output['modes'][index]
+                if mode['width'] == 2880 and mode['height'] == 1800 and output.get('logical', {}).get('scale') == 1.5:
+                    selected.append((name, mode['refresh_rate']/1000))
+            if len(selected) != 1:
+                raise RuntimeError('Expected exactly one active 2880x1800/1.5 physical output')
+            name, hz = selected[0]
+            print('AUTHORIZED_PASSIVE_PACING size=2880x1800 scale=1.5 hz='+str(hz), flush=True)
+            os.environ.update({'BEAD_PROOF_OUTPUT': name, 'BEAD_PROOF_HZ': str(hz), 'BEAD_TEST_PASSIVE': '1', 'BEAD_PACING_ONLY': '1', 'BEAD_PACING_CASES': 'cpu,femtovg-gl'})
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('hardening', ROOT/'spikes/hardening.py')
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            module.sample(env, raw, 'niri', stop)
+            return 0
         # An offscreen headless parent avoids visible preview-window closure
         # interrupting unattended measurements. niri remains the client-facing
         # compositor; the labwc process is outside measured client PSS/CPU.

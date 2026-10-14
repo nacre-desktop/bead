@@ -23,6 +23,7 @@ def sample(env, raw, compositor, stop):
     if os.environ.get('BEAD_GL_DEBUG'):
         env['WAYLAND_DEBUG'] = '1'
     rows = []
+    deadline = time.monotonic()+45 if os.environ.get('BEAD_PACING_ONLY') else None
     for renderer in os.environ.get('BEAD_PACING_CASES', 'cpu,femtovg-gl').split(','):
         label = compositor+'-'+renderer
         command = [str(binary), '--bar', '--bar-panel', '--renderer', renderer,
@@ -35,28 +36,35 @@ def sample(env, raw, compositor, stop):
             command += ['--panel-renderer', os.environ['BEAD_PANEL_RENDERER']]
         if compositor == 'hyprland':
             command += ['--output', 'bead-bench']
-        path = raw/(label+'-idle.log')
-        with path.open('w') as log:
-            client = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log,
-                                      stderr=subprocess.STDOUT, start_new_session=True)
-            try:
-                matrix.wait_log(path, lambda t: 'UI_COMMIT' in t and 'READY output=' in t)
-                time.sleep(3)
-                idle = matrix.idle(client.pid, float(os.environ.get('BEAD_IDLE_SECONDS', '60')))
-                (raw/(label+'-idle.json')).write_text(json.dumps(idle, indent=2)+'\n')
-            finally:
-                stop(client)
-        assert 'STOP surfaces=0' in path.read_text(), path.read_text()
+        idle = None
+        if not os.environ.get('BEAD_PACING_ONLY'):
+            path = raw/(label+'-idle.log')
+            with path.open('w') as log:
+                client = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log,
+                                          stderr=subprocess.STDOUT, start_new_session=True)
+                try:
+                    matrix.wait_log(path, lambda t: 'UI_COMMIT' in t and 'READY output=' in t)
+                    time.sleep(3)
+                    idle = matrix.idle(client.pid, float(os.environ.get('BEAD_IDLE_SECONDS', '60')))
+                    (raw/(label+'-idle.json')).write_text(json.dumps(idle, indent=2)+'\n')
+                finally:
+                    stop(client)
+            assert 'STOP surfaces=0' in path.read_text(), path.read_text()
         path = raw/(label+'-pacing.log')
         seconds = 10
         with path.open('w') as log:
             client = subprocess.Popen(command+['--animate', '--seconds', str(seconds)],
                                       cwd=ROOT, env=env, stdout=log,
                                       stderr=subprocess.STDOUT, start_new_session=True)
+            if os.environ.get('BEAD_PACING_ONLY'):
+                (raw/'active.pid').write_text(str(client.pid)+'\n')
+                print('PASSIVE_PROOF_CLIENT pid='+str(client.pid), flush=True)
             try:
-                client.wait(timeout=25)
+                client.wait(timeout=min(25, max(.1, deadline-time.monotonic())) if deadline else 25)
             finally:
                 stop(client)
+                if deadline:
+                    (raw/'active.pid').unlink(missing_ok=True)
         assert client.returncode == 0, path.read_text()
         metrics = []
         for line in path.read_text().splitlines():

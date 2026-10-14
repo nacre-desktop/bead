@@ -45,16 +45,13 @@ impl Transport {
         super::trace("request_recorded");
         Ok(result)
     }
-    fn json(&self, name: &str) -> Result<Value, Error> {
-        serde_json::from_str(&self.request(&format!("j/{name}"))?).map_err(protocol)
-    }
     pub fn snapshot(&self) -> Result<Snapshot, Error> {
         let epoch = epoch(&self.directory.join(".socket.sock"));
-        let monitors = self.json("monitors")?;
-        let workspaces = self.json("workspaces")?;
-        let windows = self.json("clients")?;
-        let active = self.json("activewindow")?;
-        normalize(epoch, &monitors, &workspaces, &windows, &active)
+        // Socket1 batches preserve command order. Decode a stream of JSON
+        // documents, rather than splitting on whitespace inside pretty JSON.
+        // The event worker owns this round trip; drawing never waits for it.
+        let reply = self.request("[[BATCH]]j/monitors;j/workspaces;j/clients;j/activewindow")?;
+        normalize_batch(epoch, &reply)
     }
     pub fn action(&self, snapshot: &Snapshot, action: Action) -> Result<(), Error> {
         let expression = encode_action(snapshot, &action)?;
@@ -65,6 +62,20 @@ impl Transport {
             Err(protocol(format!("unexpected action reply: {reply}")))
         }
     }
+}
+pub(super) fn normalize_batch(epoch: u64, reply: &str) -> Result<Snapshot, Error> {
+    let documents = serde_json::Deserializer::from_str(reply)
+        .into_iter::<Value>()
+        .take(5) // Bound reply count too; a fifth document is always invalid.
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(protocol)?;
+    let [monitors, workspaces, windows, active]: [Value; 4] = documents
+        .try_into()
+        .map_err(|_| protocol("snapshot batch must contain exactly four JSON replies"))?;
+    if !active.is_object() {
+        return Err(protocol("activewindow reply must be an object"));
+    }
+    normalize(epoch, &monitors, &workspaces, &windows, &active)
 }
 fn string<'a>(v: &'a Value, key: &str) -> &'a str {
     v[key].as_str().unwrap_or("")

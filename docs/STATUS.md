@@ -9,7 +9,19 @@ Hypr120 medians8.34ms; panel p99 up15.68ms. No excess frame counts; idle not pro
 unchanged (failed-audio retry samples5–11ticks/60s). Callback batching experiment
 failed and was reverted; Mesa interval0 still has a sync-callback throttle.
 Physical acceptance needs explicit owner permission; do not launch a live test.
-0b batched Hypr queries next;1layer tree/realGL damage;2script+bake worker/600ms stall;
+0a checkpoint bdc2a7c pushed, CI38564257025 SUCCESS. One bounded physical check
+explicitly approved and consumed; both processes exited. No further live permission.
+Physical120 CPU+GL bar/panel presentation p99≈8.338ms; GL+GL p99=16.667ms,≈1.8%
+missed steady refreshes.494/511 UI commits versus3/9 bakes identify repeated layout/
+script work; defer further proof until worker changes. No personal-state fields logged.
+Stale inherited IPC resolved via current user-session manager, not guessed endpoints.
+0b COMPLETE: one ordered Hypr batch on existing worker; bounded4-document parser,
+malformed/reconnect/action tests pass. Hypr state p99 before4.47/4.26/3.71/4.26ms,
+after2.39/2.49/2.92/2.37; allfour modes220actions. Presentation tails mixed; niri
+unchanged source still varies (afterGLalone237.69ms p99); retain concerns honestly.
+No-bar niri action reply28.75/29.96/30.51ms p50/95/99, median threadCPU.063ms;
+compositor wait separately from UI preparation. Full paired matrix in FEASIBILITY.
+Step1 layer tree next;0a residuals carried into worker/full6b proofs.1layer tree/realGL damage;2script+bake worker/600ms stall;
 3lazy per-surface CPU/GL;4kit/tokens;5panic/errors/unit/persistence/capabilities;
 6features/modules/trace. See FEASIBILITY step0a for exact paired results/failures.
 No live configs/installs/releases. Nacre/Orient read-only. Canonical tools/target;

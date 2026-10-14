@@ -542,3 +542,64 @@ pacing-control-cpu-niri,pacing-batch-check-niri. Reuse measure.py --bar-ui with
 BEAD_HARDENING=1/BEAD_BAR_MATRIX=1; BEAD_HARDENING_BINARY selects the preserved
 control. --panel-renderer supports CPU/GL diagnostic pairs; --test-passive creates
 click-through surfaces with no exclusive zone for a separately authorized test.
+
+
+## Feature6b step0a — authorized physical acceptance (2026-10-14)
+
+One owner-approved bounded check, then stopped: passive bar/panel, private bus/XDG,
+no focus/exclusive zone, no screenshot/title recording or config changes.
+The real120Hz output removes the persistent nested33ms cadence. CPU+GL meets
+steady presentation pacing; GL+GL still misses≈1.8% of refreshes. This is an
+additional acceptance sample, not a matched physical before/after comparison.
+
+| Pair | Bar period p50/p99 ms | Panel period p50/p99 ms | Steady samples bar/panel | Swap maxima bar/panel ms |
+|---|---|---|---|---|
+| CPU+GL |8.333/8.337|8.333/8.338|960/953|N/A/1.045|
+| GL+GL |8.333/16.667|8.333/16.667|943/943|1.323/.221|
+
+2880×1800/1.5/120Hz,10s each; exclude first2s from quantiles. Hardware feedback
+kind7, refresh≈8.333313ms; total frames1148/1140 and1168/1167, within the rate cap.
+Callback receipt p99≈12.26–16.03ms differs from actual presentation periods.
+The logs also show494/511 backend-driven UI commits but only3/9 layer bakes:
+most commits repeat layout/script work without changing baked pixels. Preparation
+totals1.57/1.79s across10s, supporting the planned script/bake worker investigation.
+Do not assume which personal-state field changed; it was not recorded.
+Inherited IPC endpoint was stale; initial attempt made no surface. Current session
+manager supplied authoritative endpoints. Both exact test PIDs exited; active PID
+file removed. No further physical authorization remains. Evidence ignored in
+.research/feature6b/physical-niri; step0a remains open for GL tail/idle invariance.
+
+
+## Feature6b step0b — one Hypr snapshot round trip (2026-10-14)
+
+Hypr snapshots now use one ordered Socket1 batch on the existing event worker.
+Four JSON documents are decoded with bounded count; malformed/partial responses
+fail normally. All four Hypr state p99 values fall; presentation tails are mixed,
+so this does not claim to cure all latency. Niri source is unchanged and its
+control rows show substantial run-to-run variation, retained below.
+
+| Case | State p50/p95/p99 ms before→after | Presentation p50/p95/p99 ms before→after |
+|---|---|---|
+|hyprland-cpu-alone|1.69/3.57/4.47→1.24/2.15/2.39|18.11/24.79/25.97→17.86/23.00/24.09|
+|hyprland-cpu-panel|1.50/3.37/4.26→1.50/2.31/2.49|17.82/27.00/389.44→17.73/18.48/18.70|
+|hyprland-femtovg-gl-alone|1.81/3.10/3.71→1.33/2.38/2.92|18.03/21.32/22.97→17.84/20.21/27.23|
+|hyprland-femtovg-gl-panel|1.80/3.53/4.26→1.29/2.18/2.37|18.56/28.87/34.09→17.49/18.26/19.00|
+|niri-cpu-alone|1.34/2.17/2.46→1.60/2.03/2.55|34.70/36.25/36.62→35.55/36.34/49.55|
+|niri-cpu-panel|1.27/2.63/2.96→1.30/2.27/3.74|34.47/49.96/52.00→36.68/51.23/53.02|
+|niri-femtovg-gl-alone|1.19/2.09/2.51→0.94/5.75/46.40|34.10/35.37/36.03→34.15/147.25/237.69|
+|niri-femtovg-gl-panel|1.21/1.91/2.26→0.92/1.58/2.35|34.28/47.36/50.01→34.68/49.87/64.24|
+
+220 native focus actions per row, private2880×1800/1.5 niri60/Hypr120; no trace
+recording, preserved interval0 executable before, identical fixtures/30ms gaps.
+1s idle checks here are warmup only, not60s idle measurements. UI preparation
+still≈12–15ms median; it is separate from compositor request/state/presentation.
+Niri no-bar control220actions: action reply28.75/29.96/30.51ms; state28.99/30.37/30.68,
+median action-thread CPU.063ms. This is compositor waiting, not UI preparation;
+bar activity changes that cost (matrix reply medians≈1ms). Recording-on reply
+p99=132.84ms with.104ms median threadCPU; no universal fixed30ms claim.
+Hypr before CPU+panel worst519.79ms: reply.30,state1.33,UIprepare23.01ms; much of
+that wait follows commit, so its absence after batching alone proves no causal cure.
+[Official batch protocol](https://github.com/hyprwm/Hyprland/blob/main/src/ipc/s1/S1.cpp)
+orders replies; parser/reconnect/action tests pass. Evidence .research/feature6b/
+title-before-*,title-after-*,niri-compositor-cost; future reuse BEAD_NATIVE_BINARY,
+BEAD_MATRIX_NO_PACING and BEAD_MATRIX_PROBE_ONLY in the existing matrix harness.
