@@ -380,3 +380,33 @@ existing palette roles. No installs/live desktop tests/reference writes.
 Use spikes/measure.py --bar-reference / --bar-ui in the private harness;
 Hypr adds --virtual120. Public captures in examples/bar-*.png; ignored evidence
 in .research/feature6. Real private PW/tray churn and the full matrix remain.
+
+
+## Feature6 — service lifecycle and fidelity (2026-10-14)
+
+Real private PipeWire and SNI/DBusMenu operations now pass, including daemon,
+item and whole-bus replacement. Churn exposed an upstream menu-task leak;
+a small MIT source patch ties those listeners to item ownership.
+Native title and tray rendering now preserve actual font/icon selection.
+
+| Private lifecycle proof | Result |
+| --- | --- |
+| Tray add/update/remove, native activation/menu calls | 100 cycles; pass |
+| PipeWire null/default sink, volume/mute, restart | 3 restarts; pass |
+| Whole private bus replacement | 3 restarts; pass |
+| Late churn FD/tasks/subscriptions | 20 /7 /1 stable; drop→0 |
+| Late churn PSS,60s idle CPU | 6.36→6.81MiB;0ticks (<.017% one core) |
+
+Initial unpatched PSS6.74→9.24MiB retained; menu watchers never ended on owner
+loss. Patched tasks remain7, PSS growth+.45MiB within existing2MiB tolerance;
+this is a bounded100-cycle proof, not a one-hour hardware/leak guarantee.
+Private bar hit testing proves click mute, scroll volume, ordinary activation,
+menu-only activation, right-click prepare and actual DBusMenu clicked events.
+Named/app-directory icons precede valid ARGB pixmap fallback; transparent fixture
+and same-path asset updates render correctly. JetBrains Mono NF resolves to
+JetBrainsMono Nerd Font; a late title now triggers fresh font selection.
+Package glyph/count0 precedes status; the updates helper remains future scope.
+45tests,fmt,clippy,CPU-only and workspace/six permissive deny graphs pass.
+No installs/live runs/reference edits. Full-size mixed-scene matrix is pending;
+early smoke runs expose nested pacing variability and are not final verdicts.
+**Step3 complete; continue step4, then stop after Feature6.**

@@ -20,7 +20,7 @@ return ui.Row{id="bar",width="100%",height=50,radius=0,fill="surface",padding_le
     },
     ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=10,height=30,justify="center",align="center",gap=7,
         ui.Text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
-        ui.Text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=ui.bind("bead.focused_title"),height=24,width=ui.bind("bar.title.width"),max_width=550,family="JetBrains Mono NF",font_size=16,color="primary"},
+        ui.Text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=ui.bind("bead.focused_title"),height=24,width=ui.bind("bar.title.width"),max_width=550,family="JetBrainsMono Nerd Font",font_size=16,color="primary"},
         ui.Repeat{id="menu",model=ui.bind("bead.desktop.menu"),key="id",render=function(item)
             return ui.Button{id="entry",text=item.label,height=30,padding=4,font_size=13,on_activate=ui.action("services.menu",item.id)}
         end},
@@ -32,6 +32,10 @@ return ui.Row{id="bar",width="100%",height=50,radius=0,fill="surface",padding_le
                     ui.Image{id="icon",icon=item.icon,width=24,height=24},
                 }
             end},
+        },
+        ui.Row{id="updates",height=34,gap=4,shrink=0,align="center",
+            glyph("package","package_2","primary"),
+            ui.Text{id="count",text="0",width=10,height=24,font_size=16,color="primary"},
         },
         ui.Row{id="status",height=34,gap=7,shrink=0,padding_left=10,padding_right=10,align="center",fill="surfaceContainer",radius=17,
             ui.Button{id="audio",width=24,height=28,padding=0,fill="surfaceContainer",aria_label="Audio: click mute, scroll volume",on_activate=ui.action("services.audio"),

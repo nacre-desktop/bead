@@ -1,70 +1,42 @@
 # Status
 
-2026-10-14: Feature6 ACTIVE; steps1–2 complete; context handoff required.
-Step2 source7ac9242 published normally; CI38540251106 passed.
-Service foundation b9e1769 retained, not reimplemented. Step1 source734a4bc/CI
-38535278252 passed: actual unchanged Nacre QML header captured in private sessions.
-Step2 adds Luau bar, native snapshot wakeups/actions,50px/full-width/non-focusing
-mode, native tray ARGB icons, inline DBusMenu choices and audio click/scroll routing.
-Look follows the actual QML:34px capsules/radius17, margins15, pearl workspaces,
-centered mono title, warm dark palette and compact status/clock; tray is an extension.
-Clock/audio/battery/NM/BlueZ snapshots drive the UI; unavailable icons are explicit.
-Source bar logo resolves existing palette tokens; it is a fixed fixture-palette asset.
-Native backend transports/store ownership reused; no UI polling/process transports.
-Four screenshots inspected: examples/bar-{niri,hyprland}-{cpu,gl}.png.
-Niri capture1278×692/scale1; Hypr2880×1800/scale1.5 (bar2880×75physical).
-Private screenshot app fixture serves SNI+DBusMenu and a real ARGB icon. This is
-NOT yet a tray churn/menu-action/restart proof; real private PipeWire still pending.
-43default tests,fmt,clippy -D warnings,CPU-only compile,private sensor proof and
-workspace+all six independent framework deny policies pass. No machine installs.
-No live tests; Nacre/Orient read-only; test processes stopped/surfaces=0.
-No measured leak/idle/performance verdict yet. Feature6 remains incomplete.
-No Feature7/optimization work. Stop only after Feature6 (unless context handoff).
+2026-10-14: Feature6 ACTIVE; steps1–3 complete, step4 measurements pending.
+Step3 proves real private PipeWire default/null sink, volume/mute, 3 daemon
+restarts; 100 SNI add/update/remove cycles, native Activate/AboutToShow/Event,
+normal/menu-only bar hit-testing routes and 3 whole-bus replacements.
+Native service owner late FD20/tasks7/subscription1 stable; PSS6.36→6.81MiB
+(+.45MiB after warmup), zero CPU ticks over60s. Final bus owner FD20/tasks7,
+subscription cleanup0/worker joins pass. Private fixtures do not prove hardware.
+Initial upstream DBusMenu listeners retained tasks after item exit; local MIT
+system-tray0.8.9 patch ends menu listeners on owner loss/connection EOF.
+Font uses actual JetBrainsMono Nerd Font (QML alias resolves this same file),
+including late-arriving titles; selects fonts when scene text changes.
+Tray prefers real named/application theme icons, then validated network-ARGB
+pixmaps; transparent pearl fixture replaces solid square. Asset bytes invalidate
+retained layers at the same stable path. Package_2 +0 precedes status capsule.
+45tests/fmt/clippy/CPU-only build/workspace +six framework deny policies pass.
+Step4 code now accepts a distinct passive GL companion via --bar --bar-panel;
+GPU transport remains shared. Timing traces distinguish action/state, UI queue,
+commit and compositor presentation update sequences. Full-size niri private
+output2880×1800/1.5 proven (nested60Hz); Hypr virtual120Hz matrix remains to run.
+No live tests, reference writes, installs, Feature7 or optimization work.
 
-## Exact next work — continue steps3 then4
+## Exact next work — finish step4 and STOP
 
-1. DONE: actual NacreHeader.qml with unchanged drawn widgets captured on both
-   private compositors using deterministic transport shims. Reference main e9e80a4.
-   Reproduce: NACRE_REFERENCE set, spikes/measure.py --bar-reference; Hypr adds
-   --compositor hyprland --virtual120. Public examples/bar-reference-*.png.
-2. DONE: shell/bar/{main,behavior}.luau and nacre-shell --bar on CPU/native GL.
-   Reproduce privately: spikes/measure.py --bar-ui; Hypr adds --virtual120.
-   Set CARGO_TARGET_DIR,BEAD_RESEARCH_TOOLS,BEAD_RAW_DIR to canonical paths.
-   Build release nacre-shell and bead-services --example tray-fixture first.
-   Standalone --bar needs a private session and private DBUS_SYSTEM_BUS_ADDRESS /
-   PIPEWIRE_REMOTE: NEVER launch directly in the daily desktop for these proofs.
-3. PENDING: prove tray apps appearing/quitting,updates,actual menu/action calls and
-   repeated churn; real private PipeWire null sink/default metadata,volume/mute and
-   daemon restart; test bounded FDs/subscriptions/tasks/PSS and no busy loops.
-   Sensor lifecycle test still uses an ABSENT PW socket. Reuse services foundation
-   crates/bead-services/{runtime,bus,audio}.rs; new native SNI fixture example is
-   crates/bead-services/examples/tray-fixture.rs (explicit private-test env required).
-   Menu choices currently inline in title band; left activation/item-is-menu and
-   right-click prepare route natively; ensure actual fixture methods execute.
-   Whole-bus replacement still unproved. Do not infer leak safety from clean exits.
-4. PENDING: support different bar/panel scenes in shared-context surface handling.
-   Existing --surfaces duplicates ONE scene, insufficient for bar+one GL panel.
-   Measure CPU bar alone,GL bar alone,CPU bar+GL panel,GL bar+GL panel: PSS+DRM
-   aggregate at2880×1800/scale1.5 private outputs on BOTH compositors. Resize/configure
-   private niri parent/window; current default1278×692 is NOT a real-size matrix.
-   Capture matched50px QML bar-only fixture too.60s idle CPU/pacing,200+action
-   samples with p50/p95/p99. Trace Hypr's7ms tail at request/event/state boundaries
-   and CPU-vs-wait timing; compare BEAD_RECORD_IPC recording on/off before blaming
-   its synchronous append. Distinguish metadata arrival from frame presentation.
-
-Private evidence: canonical .research/feature6/capture (step1),bar-{niri,hyprland}
-(step2 screenshots/logs),bar-*.log (checks). Harness reuses spikes/measure.py;
-new bar-reference.py/bar-ui.py are fixture callbacks, not another isolation stack.
-Existing tools canonical .tools; Cargo target canonical target; nice10/Cargo-j2.
-Task worktree bead-feature6-bar, branchfeature6-reference-bar. Preserve prior tasks.
-Before EVERY push fetch and inspect FULL origin/main..HEAD; only own new commits,
-owner author+committer in AGENTS. Normal FF integration/push; no PR/force/old roots.
-Old-history tasks must replay ONLY own commits from EXACT old base via --onto or
-individual cherry-picks, normalizing author AND committer. Never merge new main
-into old roots; stop/ask for hundreds/unrelated commits in the publication range.
-Nacre/Orient read-only; shared packaging/pins/identity belong to attribution task.
-Finish3,push+STATUS;finish4,push+STATUS;STOP with short Feature6 summary.
-Context is large: start fresh with "Read ~/Projects/bead/docs/STATUS.md and continue."
+Run spikes/measure.py --bar-ui with BEAD_BAR_MATRIX=1, NACRE_REFERENCE and
+canonical CARGO_TARGET_DIR/BEAD_RESEARCH_TOOLS/BEAD_RAW_DIR. Hypr adds
+--compositor hyprland --virtual120. Eight native rows: CPU/GL bar alone and
+with distinct GL panel on both compositors; matched unchanged50px QML header.
+Final samples require60s idle,220 focus actions and separate pacing workload.
+Trace request/event/state wall vs thread CPU; compare BEAD_RECORD_IPC off/on.
+Early smoke results are not final numbers. Complete fullmatrix,inspect captures,
+record concerns in FEASIBILITY, push+STATUS, then short Feature6 summary/STOP.
+Private evidence .research/feature6/lifecycle-routes (step3), lifecycle (initial
+failure), matrix-check* (smoke only). Capture milestones/step1–2 history retained
+below and in FEASIBILITY. Existing task bead-feature6-bar/feature6-reference-bar.
+Before EVERY push fetch and inspect FULL origin/main..HEAD; only own commits,
+owner author+committer. Normal FF integration; never merge old history roots.
+Nacre/Orient read-only; shared packaging/pins/identity owned by attribution task.
 
 
 Feature5 code milestone af985ba published after concurrent attribution rewrite.

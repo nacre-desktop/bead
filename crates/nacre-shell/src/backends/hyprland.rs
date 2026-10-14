@@ -22,6 +22,7 @@ impl Transport {
         Self { directory }
     }
     pub fn request(&self, command: &str) -> Result<String, Error> {
+        super::trace("request_begin");
         let mut socket = UnixStream::connect(self.directory.join(".socket.sock"))
             .map_err(|e| Error::Disconnected(e.to_string()))?;
         socket
@@ -36,10 +37,12 @@ impl Transport {
             .take(4 * 1024 * 1024)
             .read_to_string(&mut result)
             .map_err(protocol)?;
+        super::trace("request_reply");
         super::record(
             "hyprland-reply",
             serde_json::json!({"command":command,"reply":result}),
         );
+        super::trace("request_recorded");
         Ok(result)
     }
     fn json(&self, name: &str) -> Result<Value, Error> {
@@ -302,6 +305,7 @@ pub fn spawn(transport: Transport, shared: Arc<Shared>) -> JoinHandle<()> {
                     if line.len() > 65536 {
                         return Err(protocol("event line too large"));
                     }
+                    super::trace("event_received");
                     super::record("hyprland-event", serde_json::json!(line.trim_end()));
                     let name = line.split_once(">>").map(|v| v.0).unwrap_or("");
                     if relevant(name) {

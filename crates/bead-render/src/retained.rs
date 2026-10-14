@@ -94,6 +94,11 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
     scale.to_bits().hash(&mut h);
     scene.resource_revision.hash(&mut h);
     scene.font_files.hash(&mut h);
+    // Native tray pixmaps can change while their stable path and bundle revision stay put.
+    for (path, bytes) in &scene.asset_data {
+        path.hash(&mut h);
+        bytes.hash(&mut h);
+    }
     for (index, rect) in &scene.clips {
         index.hash(&mut h);
         for value in [rect.x, rect.y, rect.w, rect.h] {
@@ -248,6 +253,32 @@ mod tests {
                 border: None,
             }],
         }
+    }
+    #[test]
+    fn same_path_new_asset_pixels_replace_the_retained_image() {
+        let mut scene = scene();
+        let path = std::path::PathBuf::from("tray.png");
+        scene.primitives.push(crate::Primitive::Image {
+            path: path.clone(),
+            rect: crate::Rect::new(0., 0., 10., 10.),
+        });
+        let mut icon = tiny_skia::Pixmap::new(10, 10).unwrap();
+        icon.fill(tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+        scene.asset_data.insert(
+            path.clone(),
+            std::sync::Arc::from(icon.encode_png().unwrap()),
+        );
+        let mut cache = LayerCache::default();
+        cache.prepare(&scene, 1.).unwrap();
+        let before = cache.layer.as_ref().unwrap().pixels.pixel(2, 2).unwrap();
+        icon.fill(tiny_skia::Color::from_rgba8(0, 255, 0, 255));
+        scene
+            .asset_data
+            .insert(path, std::sync::Arc::from(icon.encode_png().unwrap()));
+        cache.prepare(&scene, 1.).unwrap();
+        let after = cache.layer.as_ref().unwrap().pixels.pixel(2, 2).unwrap();
+        assert_eq!((before.red(), before.green()), (255, 0));
+        assert_eq!((after.red(), after.green()), (0, 255));
     }
     #[test]
     fn multiple_scales_reuse_their_own_cached_layer() {

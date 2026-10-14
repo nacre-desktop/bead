@@ -46,6 +46,7 @@ pub struct TrayItem {
     pub visible: bool,
     pub item_is_menu: bool,
     pub icon_name: String,
+    pub icon_theme_path: String,
     pub icon_pixmap: Vec<(i32, i32, Vec<u8>)>,
     pub attention: bool,
     pub menu: Vec<MenuEntry>,

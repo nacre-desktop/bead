@@ -34,7 +34,7 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         ("bead.desktop.battery.value".into(), Value::Text(s.battery.percentage.map_or("—".into(), |n| format!("{n:.0}")))),
         ("bead.desktop.network".into(), Value::Text(if s.network.connected { "wifi" } else { "wifi_off" }.into())),
         ("bead.desktop.bluetooth".into(), Value::Text(if s.bluetooth.powered { "bluetooth" } else { "bluetooth_disabled" }.into())),
-        ("bead.desktop.tray".into(), Value::List(s.tray.iter().filter(|t| t.visible).map(|t|serde_json::json!({"id":t.id,"title":t.title,"icon":if t.icon_pixmap.iter().any(valid_pixmap) {format!("tray:{}",t.id)} else {t.icon_name.clone()}})).collect())),
+        ("bead.desktop.tray".into(), Value::List(s.tray.iter().filter(|t| t.visible).map(|t|serde_json::json!({"id":t.id,"title":t.title,"icon":format!("tray:{}",t.id)})).collect())),
         ("bead.desktop.menu".into(), Value::List(menu)),
     ])
 }
@@ -42,6 +42,30 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
 fn valid_pixmap(p: &(i32, i32, Vec<u8>)) -> bool {
     let (w, h, bytes) = p;
     *w > 0 && *h > 0 && *w <= 512 && *h <= 512 && bytes.len() == (*w as usize) * (*h as usize) * 4
+}
+
+fn named_icon(item: &bead_services::TrayItem) -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if item.icon_name.is_empty() {
+        return None;
+    }
+    let direct = PathBuf::from(&item.icon_name);
+    if direct.is_absolute() && direct.is_file() {
+        return Some(direct);
+    }
+    // Some SNI applications ship icons outside the installed desktop theme.
+    if !item.icon_theme_path.is_empty() && !item.icon_name.contains('/') {
+        for suffix in ["", ".png", ".svg", ".xpm"] {
+            let path =
+                PathBuf::from(&item.icon_theme_path).join(format!("{}{suffix}", item.icon_name));
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
+    freedesktop_icons::lookup(&item.icon_name)
+        .with_size(24)
+        .find()
 }
 
 pub fn icons(
@@ -61,12 +85,35 @@ pub fn icons(
             .iter()
             .find(|item| item.id == id)
             .ok_or("tray icon disappeared")?;
-        let (w, h, bytes) = item
+        if let Some(named) = named_icon(item) {
+            scene
+                .asset_data
+                .insert(named.clone(), std::sync::Arc::from(std::fs::read(&named)?));
+            *path = named;
+            continue;
+        }
+        let Some((w, h, bytes)) = item
             .icon_pixmap
             .iter()
             .filter(|p| valid_pixmap(p))
-            .max_by_key(|(w, h, _)| w * h)
-            .ok_or("invalid tray pixmap")?;
+            .min_by_key(|(w, h, _)| {
+                (
+                    if *w >= 24 && *h >= 24 { 0 } else { 1 },
+                    (*w - 24).abs() + (*h - 24).abs(),
+                )
+            })
+        else {
+            let fallback = freedesktop_icons::lookup("application-x-executable")
+                .with_size(24)
+                .find()
+                .unwrap_or_else(|| "shell/sample.svg".into());
+            scene.asset_data.insert(
+                fallback.clone(),
+                std::sync::Arc::from(std::fs::read(&fallback)?),
+            );
+            *path = fallback;
+            continue;
+        };
         // SNI serializes network-order ARGB; PNG uses RGBA.
         let rgba: Vec<_> = bytes
             .as_chunks::<4>()
@@ -169,7 +216,61 @@ mod tests {
         let Value::List(tray) = &state["bead.desktop.tray"] else {
             panic!()
         };
-        assert_eq!(tray[0]["icon"], "application-x-executable");
+        assert_eq!(tray[0]["icon"], "tray:bad");
+    }
+    #[test]
+    fn named_tray_icon_precedes_pixmap_and_missing_name_falls_back_to_argb() {
+        let dir = std::env::temp_dir().join(format!("bead-icon-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let named = dir.join("fixture.png");
+        std::fs::write(&named, b"named icon fixture").unwrap();
+        let mut item = bead_services::TrayItem {
+            id: "fixture".into(),
+            icon_name: "fixture".into(),
+            icon_theme_path: dir.to_string_lossy().into(),
+            icon_pixmap: vec![(1, 1, vec![128, 20, 40, 60])],
+            ..Default::default()
+        };
+        let mut scene = bead_render::Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 0,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            font_files: vec![],
+            width: 24.,
+            slide: None,
+            primitives: vec![],
+            offset: (0., 0.),
+            bounds: bead_render::Rect::new(0., 0., 24., 24.),
+        };
+        scene.primitives.push(bead_render::Primitive::Image {
+            path: "@icon:tray:fixture".into(),
+            rect: bead_render::Rect::new(0., 0., 24., 24.),
+        });
+        let snapshot = Snapshot {
+            tray: vec![item.clone()],
+            ..Default::default()
+        };
+        icons(&mut scene, &snapshot).unwrap();
+        assert!(scene.asset_data.contains_key(&named));
+        item.icon_name = "bead-nonexistent-icon-7832".into();
+        scene.primitives[0] = bead_render::Primitive::Image {
+            path: "@icon:tray:fixture".into(),
+            rect: bead_render::Rect::new(0., 0., 24., 24.),
+        };
+        icons(
+            &mut scene,
+            &Snapshot {
+                tray: vec![item],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let png = &scene.asset_data[&std::path::PathBuf::from("@tray-pixmap/fixture.png")];
+        let decoded = image::load_from_memory(png).unwrap().to_rgba8();
+        assert_eq!(decoded.get_pixel(0, 0).0, [20, 40, 60, 128]);
+        std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn tray_menu_excludes_disabled_hidden_and_separator_entries() {

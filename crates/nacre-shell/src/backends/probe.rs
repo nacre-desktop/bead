@@ -32,6 +32,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         let action: Action = serde_json::from_str(&line)?;
         let start = Instant::now();
+        let action_ns = super::clock_ns(nix::libc::CLOCK_MONOTONIC);
+        let cpu_ns = super::clock_ns(nix::libc::CLOCK_THREAD_CPUTIME_ID);
         let result = backend.action(action.clone());
         let request_ms = start.elapsed().as_secs_f64() * 1000.;
         if let Err(error) = result {
@@ -53,7 +55,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let observed = observed(&backend.snapshot(), &action);
         println!(
             "BACKEND_RESULT {}",
-            serde_json::json!({"ok":true,"observed":observed,"request_ms":request_ms,"state_update_ms":if observed{Some(start.elapsed().as_secs_f64()*1000.)}else{None}})
+            serde_json::json!({"ok":true,"observed":observed,"request_ms":request_ms,"action_ns":action_ns,"thread_cpu_ms":(super::clock_ns(nix::libc::CLOCK_THREAD_CPUTIME_ID)-cpu_ns) as f64/1_000_000.,"state_update_ms":if observed{Some(start.elapsed().as_secs_f64()*1000.)}else{None}})
         );
     }
     drop(_subscription);

@@ -506,6 +506,8 @@ def main():
         parent_config = private / 'labwc'
         parent_config.mkdir()
         (parent_config/'autostart').write_text('')
+        if os.environ.get('BEAD_BAR_MATRIX') and args.compositor == 'niri':
+            (parent_config/'rc.xml').write_text('<labwc_config><windowRules><windowRule identifier="*"><decorations>no</decorations><action name="ResizeTo" width="2880" height="1800"/><action name="MoveTo" x="0" y="0"/></windowRule></windowRules></labwc_config>')
         parent_env = env.copy()
         parent_env.update({'XDG_RUNTIME_DIR':str(parent_runtime), 'WLR_BACKENDS':'headless', 'WLR_HEADLESS_OUTPUTS':'1', 'WLR_RENDERER':'gles2',
                            'LD_LIBRARY_PATH':str(tools/'native/usr/lib')})
@@ -578,6 +580,16 @@ def main():
             if args.compositor=='hyprland':
                 sockets=list(runtime.glob('hypr/*/.socket.sock'))
                 if sockets: env['HYPRLAND_INSTANCE_SIGNATURE']=sockets[0].parent.name
+            if os.environ.get('BEAD_BAR_MATRIX') and args.compositor=='niri':
+                name=next(iter(result['output_properties']))
+                subprocess.run(['niri','msg','output',name,'scale','1.5'],env=env,capture_output=True,check=True,timeout=5)
+                time.sleep(1)
+                outputs=json.loads(subprocess.check_output(['niri','msg','-j','outputs'],env=env,text=True,timeout=5))
+                print('BAR_MATRIX_OUTPUTS '+json.dumps(outputs),flush=True)
+                output=next(iter(outputs.values()))
+                mode=output['modes'][output['current_mode']]
+                assert (mode['width'],mode['height'])==(2880,1800), outputs
+                assert output['logical']['width']==1920,outputs
             if args.bar_ui:
                 import importlib.util
                 spec=importlib.util.spec_from_file_location("bar_ui",ROOT/"spikes/bar-ui.py")

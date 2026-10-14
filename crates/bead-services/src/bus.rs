@@ -46,6 +46,9 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
         while let Ok(command) = receiver.try_recv() {
             match command {
                 Command::Stop => return,
+                Command::Tasks(reply) => {
+                    let _ = reply.send(0);
+                }
                 Command::Action(_, reply) => {
                     let _ = reply.send(Err("D-Bus disconnected".into()));
                 }
@@ -100,6 +103,7 @@ async fn connect(
             _=tokio::time::sleep(Duration::from_secs(delay))=>shared.change(|s|s.clock=clock()),
             command=receiver.recv()=>match command {
                 Some(Command::Stop)|None=>return Ok(()),
+                Some(Command::Tasks(reply))=>{ let _=reply.send(tokio::runtime::Handle::current().metrics().num_alive_tasks()); },
                 Some(Command::Action(action,reply))=>{
                     let result=tokio::time::timeout(Duration::from_secs(2),tray_action(&tray, &tray_actions, action)).await.map_err(|_|"D-Bus action timeout".to_string()).and_then(|r|r);
                     let _=reply.send(result);
@@ -294,21 +298,35 @@ fn refresh_tray(shared: &Shared, client: &Client) {
             title: item.title.clone().unwrap_or_default(),
             visible: item.status != system_tray::item::Status::Passive,
             item_is_menu: item.item_is_menu,
-            icon_name: item.icon_name.clone().unwrap_or_default(),
-            icon_pixmap: item
-                .icon_pixmap
-                .as_ref()
-                .into_iter()
-                .flatten()
-                .filter(|p| {
-                    p.width > 0
-                        && p.height > 0
-                        && p.width <= 512
-                        && p.height <= 512
-                        && p.pixels.len() == (p.width * p.height * 4) as usize
-                })
-                .map(|p| (p.width, p.height, p.pixels.clone()))
-                .collect(),
+            icon_name: if matches!(item.status, system_tray::item::Status::NeedsAttention) {
+                item.attention_icon_name
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| item.icon_name.clone())
+            } else {
+                item.icon_name.clone()
+            }
+            .unwrap_or_default(),
+            icon_theme_path: item.icon_theme_path.clone().unwrap_or_default(),
+            icon_pixmap: (if matches!(item.status, system_tray::item::Status::NeedsAttention) {
+                item.attention_icon_pixmap
+                    .as_ref()
+                    .filter(|p| !p.is_empty())
+                    .or(item.icon_pixmap.as_ref())
+            } else {
+                item.icon_pixmap.as_ref()
+            })
+            .into_iter()
+            .flatten()
+            .filter(|p| {
+                p.width > 0
+                    && p.height > 0
+                    && p.width <= 512
+                    && p.height <= 512
+                    && p.pixels.len() == (p.width * p.height * 4) as usize
+            })
+            .map(|p| (p.width, p.height, p.pixels.clone()))
+            .collect(),
             attention: matches!(item.status, system_tray::item::Status::NeedsAttention),
             menu: layout
                 .as_ref()

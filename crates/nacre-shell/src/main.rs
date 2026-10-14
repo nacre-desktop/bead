@@ -14,11 +14,15 @@ fn main() {
     }
 }
 fn start() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|arg| arg == "--services-ui-probe") {
+        return reload::private_service_proof();
+    }
     if std::env::args().any(|arg| arg == "--backend-probe") {
         return backends::probe::run();
     }
     let started = std::time::Instant::now();
     let mut profile = false;
+    let mut bar_panel = false;
     let mut options = Options::default();
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
@@ -31,6 +35,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--bar-panel" => bar_panel = true,
             "--bar" => {
                 options.bar = true;
                 options.keyboard_focus = false;
@@ -91,7 +96,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto uses shared native GL, then CPU if unavailable. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--bar-panel]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto uses shared native GL, then CPU if unavailable. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
@@ -103,6 +108,16 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         options.content_size = false;
     }
     let colors = Palette::read(&palette)?;
+    if bar_panel {
+        if !options.bar {
+            return Err("--bar-panel requires --bar".into());
+        }
+        let mut companion = panel(&colors, Path::new("shell"))?;
+        companion.font_files = font_sources::select(&companion)?;
+        companion.offset = (32., 32.);
+        companion.slide = None;
+        options.companion = Some((companion, bead_render::RendererKind::FemtovgGl));
+    }
     let mut scene = if ui.is_some() {
         Scene {
             opacity: 1.,

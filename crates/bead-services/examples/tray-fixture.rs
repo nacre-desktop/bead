@@ -6,7 +6,9 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Structure, Value};
 type Pixmap = (i32, i32, Vec<u8>);
 type Tooltip = (&'static str, Vec<Pixmap>, &'static str, &'static str);
 
-struct Item;
+struct Item {
+    generation: u32,
+}
 #[zbus::interface(name = "org.kde.StatusNotifierItem")]
 impl Item {
     #[zbus(property)]
@@ -18,8 +20,8 @@ impl Item {
         "bead-fixture"
     }
     #[zbus(property)]
-    fn title(&self) -> &str {
-        "Private tray fixture"
+    fn title(&self) -> String {
+        format!("Private tray fixture {}", self.generation)
     }
     #[zbus(property)]
     fn status(&self) -> &str {
@@ -31,11 +33,33 @@ impl Item {
     }
     #[zbus(property)]
     fn icon_name(&self) -> &str {
+        if self.generation == 0 {
+            "bead-missing-theme-icon"
+        } else {
+            "folder"
+        }
+    }
+    #[zbus(property)]
+    fn icon_theme_path(&self) -> &str {
         ""
     }
     #[zbus(property)]
     fn icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
-        vec![(16, 16, [255, 235, 227, 177].repeat(256))]
+        // A transparent pearl with a dark inset: visibly different from a square.
+        let mut pixels = Vec::new();
+        for y in 0..24i32 {
+            for x in 0..24i32 {
+                let r = (x - 12).pow(2) + (y - 12).pow(2);
+                pixels.extend(if r > 100 {
+                    [0, 0, 0, 0]
+                } else if r < 25 {
+                    [255, 80, 65, 40]
+                } else {
+                    [255, 235, 227, 177]
+                });
+            }
+        }
+        vec![(24, 24, pixels)]
     }
     #[zbus(property)]
     fn overlay_icon_name(&self) -> &str {
@@ -63,8 +87,12 @@ impl Item {
     }
     #[zbus(property)]
     fn item_is_menu(&self) -> bool {
-        true
+        std::env::var_os("BEAD_FIXTURE_ITEM_IS_MENU").is_some()
     }
+    #[zbus(signal)]
+    async fn new_title(emitter: &zbus::object_server::SignalEmitter<'_>) -> zbus::Result<()>;
+    #[zbus(signal)]
+    async fn new_icon(emitter: &zbus::object_server::SignalEmitter<'_>) -> zbus::Result<()>;
     #[zbus(property)]
     fn menu(&self) -> OwnedObjectPath {
         OwnedObjectPath::try_from("/Menu").unwrap()
@@ -153,7 +181,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("requires explicit private proof bus".into());
     }
     let connection = zbus::connection::Builder::session()?
-        .serve_at("/StatusNotifierItem", Item)?
+        .serve_at("/StatusNotifierItem", Item { generation: 0 })?
         .serve_at("/Menu", Menu)?
         .build()
         .await?;
@@ -168,6 +196,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .call::<_, _, ()>("RegisterStatusNotifierItem", &("/StatusNotifierItem",))
         .await?;
     println!("TRAY_FIXTURE_READY");
+    if std::env::var_os("BEAD_FIXTURE_UPDATE").is_some() {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let item = connection
+            .object_server()
+            .interface::<_, Item>("/StatusNotifierItem")
+            .await?;
+        item.get_mut().await.generation = 1;
+        Item::new_title(item.signal_emitter()).await?;
+        Item::new_icon(item.signal_emitter()).await?;
+        println!("TRAY_UPDATED");
+    }
     std::future::pending::<()>().await;
     Ok(())
 }
