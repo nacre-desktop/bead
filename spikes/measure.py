@@ -438,6 +438,7 @@ def main():
     p.add_argument('--runs', type=int, default=3)
     p.add_argument('--compositor', choices=['niri','hyprland'], default='niri')
     p.add_argument('--parent', choices=['headless','desktop'], default='headless')
+    p.add_argument('--bar-ui', action='store_true')
     p.add_argument('--bar-reference', action='store_true')
     p.add_argument('--lifecycle', action='store_true')
     p.add_argument('--palette', type=pathlib.Path, default=None)
@@ -470,12 +471,12 @@ def main():
                 path.mkdir(mode=0o700)
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
-            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--bar-reference'] if args.bar_reference else []),*(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
+            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--bar-ui'] if args.bar_ui else []),*(['--bar-reference'] if args.bar_reference else []),*(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
     raw = pathlib.Path(os.environ.get('BEAD_RAW_DIR', str(ROOT / 'spikes/results/raw')))
     if args.retained:raw=raw/('retained-'+args.compositor)
     elif 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
     raw.mkdir(parents=True, exist_ok=True)
-    save_baseline = not args.bar_reference and 'bead' not in args.modes and not (args.retained or args.reload_test or args.qml_reload_test or args.demo_test)
+    save_baseline = not (args.bar_reference or args.bar_ui) and 'bead' not in args.modes and not (args.retained or args.reload_test or args.qml_reload_test or args.demo_test)
     tools = pathlib.Path(os.environ.get('BEAD_RESEARCH_TOOLS',str(ROOT/'.tools')))
     result = {'date': '2026-10-13', 'surface': {'width': 512, 'height': 32, 'scale': 1, 'outputs': 1, 'namespace': 'bead-dev-spike'},
               'method': 'client /proc smaps_rollup; CPU ticks over monotonic interval; READY is frame callback for Rust, QML component completion (not comparable first-frame); separate nested niri/private D-Bus/XDG', 'runs': []}
@@ -577,6 +578,12 @@ def main():
             if args.compositor=='hyprland':
                 sockets=list(runtime.glob('hypr/*/.socket.sock'))
                 if sockets: env['HYPRLAND_INSTANCE_SIGNATURE']=sockets[0].parent.name
+            if args.bar_ui:
+                import importlib.util
+                spec=importlib.util.spec_from_file_location("bar_ui",ROOT/"spikes/bar-ui.py")
+                module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+                module.sample(env,raw,args.compositor,stop)
+                return 0
             if args.bar_reference:
                 import importlib.util
                 spec=importlib.util.spec_from_file_location('bar_reference',ROOT/'spikes/bar-reference.py')

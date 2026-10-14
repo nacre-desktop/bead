@@ -84,6 +84,9 @@ impl Script {
     }
     pub fn validate_action(&self, name: &str) -> Result<(), Diagnostic> {
         if [
+            "services.audio",
+            "services.tray",
+            "services.menu",
             "backend.workspace.switch",
             "backend.window.focus",
             "backend.window.close",
@@ -222,7 +225,9 @@ fn evaluate(
         )));
     }
     let computed: Table = exports.get("computed")?;
-    let function: Function = computed.get(name)?;
+    let function: Function = computed
+        .get(name)
+        .map_err(|_| mlua::Error::runtime(format!("unknown binding {name}")))?;
     stack.borrow_mut().push(name.into());
     let proxy = lua.create_table()?;
     let meta = lua.create_table()?;

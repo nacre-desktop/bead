@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod backends;
 mod catalog;
+mod desktop;
 mod font_sources;
 mod reload;
 use bead_render::{Palette, Primitive, Rect, Scene, Slide};
@@ -30,6 +31,13 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--bar" => {
+                options.bar = true;
+                options.keyboard_focus = false;
+                options.interactive = true;
+                ui = Some("bar/main.luau".into());
+                backend_enabled = true;
+            }
             "--profile-scene" => {
                 profile = true;
                 options.panel = true;
@@ -89,6 +97,10 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             }
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
+    }
+    if options.bar {
+        options.panel = false;
+        options.content_size = false;
     }
     let colors = Palette::read(&palette)?;
     let mut scene = if ui.is_some() {
@@ -190,6 +202,11 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         let runtime = reload::Runtime::new(session);
         let runtime = if backend_enabled {
             runtime.with_backend(backends::Native::from_env()?)
+        } else {
+            runtime
+        };
+        let runtime = if options.bar {
+            runtime.with_desktop()
         } else {
             runtime
         };

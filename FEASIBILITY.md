@@ -354,3 +354,29 @@ Apache-2.0 WITH LLVM-exception; a version-scoped cargo-deny allowance records it
 40 default tests +1 private proof,fmt/clippy,both deny policies and CI38531712571 pass.
 No GPL allowance enters the framework graph. Private owner fixtures do not prove
 real hardware or installed system-daemon restart behavior. **Continue Feature6.**
+
+## Feature6 — reference and native bar milestones (2026-10-14)
+
+The actual Nacre QML header was captured without changing its drawn widgets.
+The native Luau bar now receives event-driven desktop/backend snapshots and
+renders the same capsule/margin/title/status structure, plus an SNI tray slot.
+Private unavailable audio/sensors remain explicit; these captures are not
+lifecycle, idle, leak or performance measurements. Those proofs remain pending.
+
+| Proof | niri | Hyprland |
+| --- | --- | --- |
+| QML header | unchanged widget capture,1278×692/1 | unchanged capture,2880×1800/1.5 |
+| Native CPU/GL | both inspected,1278×50 bar | both inspected,2880×75 physical bar |
+| Tray fixture | native SNI ARGB icon visible | native SNI ARGB icon visible |
+| Clean native exit | surfaces=0 both renderers | surfaces=0 both renderers |
+| Measurements/lifecycle | pending | pending |
+
+43default tests plus private UPower/NM/BlueZ proof,fmt/clippy,CPU-only compile,
+workspace/independent framework deny passed. A native bundle test checks actual
+markup/assets,full1920px layout and stable action IDs. Header has no QML tray;
+SNI slot is an extension; DBusMenu choices currently use the inline title band.
+Bar logo is a fixed palette-resolved fixture asset; runtime status colors use
+existing palette roles. No installs/live desktop tests/reference writes.
+Use spikes/measure.py --bar-reference / --bar-ui in the private harness;
+Hypr adds --virtual120. Public captures in examples/bar-*.png; ignored evidence
+in .research/feature6. Real private PW/tray churn and the full matrix remain.

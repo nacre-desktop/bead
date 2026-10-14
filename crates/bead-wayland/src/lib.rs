@@ -64,6 +64,7 @@ use wayland_protocols::wp::{
 #[derive(Clone, Debug)]
 pub enum UiEvent {
     Reload,
+    Desktop(std::sync::Arc<bead_services::Snapshot>),
     Backend(std::sync::Arc<bead_backends::Snapshot>),
     Relayout,
     Hover {
@@ -86,6 +87,10 @@ pub enum UiEvent {
         after: u32,
     },
     WatchError(String),
+    ContextMenu {
+        x: f32,
+        y: f32,
+    },
     Click {
         x: f32,
         y: f32,
@@ -113,11 +118,7 @@ impl std::fmt::Display for GpuUnavailable {
 #[cfg(feature = "gpu")]
 impl Error for GpuUnavailable {}
 pub trait SceneSource {
-    fn services(
-        &mut self,
-        _wakeup: Box<dyn Fn(std::sync::Arc<bead_backends::Snapshot>) + Send + Sync>,
-    ) {
-    }
+    fn services(&mut self, _wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {}
     fn accessibility_tree(&self) -> Option<accesskit::TreeUpdate> {
         None
     }
@@ -150,6 +151,7 @@ pub struct Options {
     pub damage: bool,
     pub force_argb: bool,
     pub seconds: Option<f64>,
+    pub bar: bool,
     pub panel: bool,
     pub content_size: bool,
     pub renderer: RendererKind,
@@ -172,6 +174,7 @@ impl Default for Options {
             damage: true,
             force_argb: false,
             seconds: None,
+            bar: false,
             panel: false,
             content_size: false,
             renderer: RendererKind::Cpu,
@@ -388,8 +391,8 @@ pub fn run_runtime(
         })?;
         if let Some(runtime) = &mut app.runtime {
             let service_sender = sender.clone();
-            runtime.services(Box::new(move |snapshot| {
-                let _ = service_sender.send(UiEvent::Backend(snapshot));
+            runtime.services(Box::new(move |event| {
+                let _ = service_sender.send(event);
             }));
         }
         app.accessibility = Some(accessibility::Bridge::new(sender));
@@ -746,9 +749,24 @@ impl App {
                     height.ceil().max(1.) as u32,
                 );
             } else {
-                layer.set_size(0, if self.options.panel { 0 } else { 32 });
+                layer.set_size(
+                    0,
+                    if self.options.bar {
+                        50
+                    } else if self.options.panel {
+                        0
+                    } else {
+                        32
+                    },
+                );
             }
-            layer.set_exclusive_zone(if self.options.panel { -1 } else { 0 });
+            layer.set_exclusive_zone(if self.options.bar {
+                50
+            } else if self.options.panel {
+                -1
+            } else {
+                0
+            });
             layer.set_keyboard_interactivity(if self.options.test_keyboard {
                 KeyboardInteractivity::Exclusive
             } else if self.options.interactive && self.options.keyboard_focus {
@@ -1603,6 +1621,9 @@ impl PointerHandler for App {
                 }
                 PointerEventKind::Leave { .. } => self.ui(UiEvent::Hover { x: -1., y: -1. }),
                 PointerEventKind::Press { button: 0x110, .. } => self.ui(UiEvent::Click { x, y }),
+                PointerEventKind::Press { button: 0x111, .. } => {
+                    self.ui(UiEvent::ContextMenu { x, y })
+                }
                 PointerEventKind::Axis { vertical, .. } => self.ui(UiEvent::Scroll {
                     x,
                     y,
