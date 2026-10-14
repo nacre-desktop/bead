@@ -42,7 +42,9 @@ clock_id=1 confirms CLOCK_MONOTONIC for pause/reload timestamp comparison.
 Private compositor feedback is not physical scanout/hardware acceptance.
 
 Steps2–5 CI passed: 38643279009 / 38644193181 / 38645580955 / 38647082113.
-Step6 CI is checked after publication and recorded in the private checkpoint.
+Step6 source 5c7be44 CI38650799162 PASSED, including the new CPU-only and
+all-feature configuration checks. Final status-only commit skips redundant CI;
+source is unchanged from that passing revision.
 Evidence: ignored .research/feature6b/epoch-*, takeover/step6-*.
 Existing worktrees, before binaries, failed probes and WIP preservation branch
 remain intact. Canonical checkout was not edited; this worktree's STATUS is
