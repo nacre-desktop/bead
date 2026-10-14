@@ -509,3 +509,36 @@ Retain these concerns for GateC; shared-surface scheduling/content baking remain
 future measured work. Reproduce privately with spikes/measure.py --bar-ui,
 BEAD_BAR_MATRIX=1 (Hypr adds --compositor hyprland --virtual120); canonical tool,
 Cargo target/raw directories required. Raw evidence .research/feature6/owned-*.
+
+## Feature6b step0a — non-blocking swaps, remaining pacing concern (2026-10-14)
+
+GL now requests swap interval zero; each surface retains its own frame-callback
+limiter. This removes the deliberate EGL vsync wait, but does **not** establish a
+niri pacing pass. Nested niri still alternates surfaces; Hyprland medians stay at
+120Hz with occasional tails. Idle samples vary, so unchanged idle CPU is not yet
+proven. No physical test performed; owner approval is required before one.
+
+| Pair/output | Bar presentation p50/p99 ms, before→after | Panel p50/p99 ms, before→after | Idle ticks/60s before→after | After frames/10s bar/panel |
+|---|---|---|---|---|
+| CPU+GL/niri60 |33.56/35.20→32.49/40.78|33.55/35.02→32.53/49.12|5→11|290/273|
+| GL+GL/niri60 |33.30/34.27→32.45/33.51|33.32/34.56→32.46/33.72|5→9|305/305|
+| CPU+GL/Hypr120 |8.33/9.39→8.33/9.68|8.33/9.42→8.34/10.33|7→5|1188/1171|
+| GL+GL/Hypr120 |8.34/9.35→8.34/9.62|8.34/9.42→8.34/15.68|6→5|1183/1172|
+
+Both private outputs2880×1800/1.5; baseline Feature6 executable preserved.
+Presentation receipt is synthetic compositor feedback, not scanout. Frames stay
+within output-rate×10s+3 startup grants. One CPU tick/60s=.0167% of one core;
+failed-audio retry work is included. After steady GL swap maxima .15–.63ms;
+niri activation p99 .053–.056ms in a separate traced diagnostic.
+Two CPU surfaces in niri reach16.14ms median, excluding a blanket nested-output
+30Hz limit. Callback batching/pre-commit did not improve GL cadence and introduced
+16.68ms Mesa waits; reverted. Initial refresh_ns=0 parser failure also retained.
+[Glutin](https://docs.rs/glutin/0.32.3/glutin/surface/enum.SwapInterval.html)
+recommends Wayland callbacks; [Mesa's source](https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/src/egl/drivers/dri2/platform_wayland.c)
+shows a sync-callback throttle remains even with interval zero. This is a mechanism,
+not proof that it explains all residual latency. Keep step0a open.
+Evidence ignored: .research/feature6b/pacing-before-*,pacing-after-*,pacing-diagnosis-*,
+pacing-control-cpu-niri,pacing-batch-check-niri. Reuse measure.py --bar-ui with
+BEAD_HARDENING=1/BEAD_BAR_MATRIX=1; BEAD_HARDENING_BINARY selects the preserved
+control. --panel-renderer supports CPU/GL diagnostic pairs; --test-passive creates
+click-through surfaces with no exclusive zone for a separately authorized test.

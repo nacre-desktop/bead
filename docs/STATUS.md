@@ -3,16 +3,20 @@
 2026-10-14: Feature6b ACTIVE, architecture hardening; STOP after6b before Feature7.
 New isolated bead-feature6b/feature6b-architecture at9a8b7c7. Six steps plus owner
 step0 are authorized; commit/push+CI per step, nice10/-j2, nested sessions only.
-0a mixed GL pacing ACTIVE;0b batched Hypr queries next;1layer tree/realGL damage;
-2script+bake worker/600ms stall;3lazy per-surface CPU/GL;4kit/tokens;
-5panic/errors/systemd unit/persistence/capability registry;6features/modules/trace.
-No physical niri test without asking after0a; no live configs/installs/releases.
-Nacre/Orient read-only. Canonical tools/target; private evidence .research/feature6b.
-Baseline9a8b7c7 preserved; capture matched before/after, raw tails and failures.
-Pleamar BSD-3-Clause read-only research; reimplementation preferred. No code copied.
-Gray square in bar-panel captures is intentional shell/sample.png raster fixture,
-not a missing-icon placeholder; code places it at96,422 at48×48 next to sample.svg.
-The actual missing named-icon fallback is separate (sample.svg/generic app icon).
+0a ACTIVE: swap interval0 + existing per-surface callbacks implemented; no full pass.
+Nested niri GL pairs remain≈32–33ms, though steady swaps<.4ms; CPU+CPU≈16ms.
+Hypr120 medians8.34ms; panel p99 up15.68ms. No excess frame counts; idle not proven
+unchanged (failed-audio retry samples5–11ticks/60s). Callback batching experiment
+failed and was reverted; Mesa interval0 still has a sync-callback throttle.
+Physical acceptance needs explicit owner permission; do not launch a live test.
+0b batched Hypr queries next;1layer tree/realGL damage;2script+bake worker/600ms stall;
+3lazy per-surface CPU/GL;4kit/tokens;5panic/errors/unit/persistence/capabilities;
+6features/modules/trace. See FEASIBILITY step0a for exact paired results/failures.
+No live configs/installs/releases. Nacre/Orient read-only. Canonical tools/target;
+private evidence .research/feature6b. Baseline9a8b7c7 native executable preserved.
+Pleamar953b1b4 BSD-3-Clause researched for independent logic/render loops and bounded
+rectangle damage; reimplementation preferred, no code copied. Gray square in
+bar-panel captures is intentional shell/sample.png fixture, not missing-icon fallback.
 
 ## Preserved Feature6 checkpoint
 

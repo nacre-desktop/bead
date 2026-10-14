@@ -166,6 +166,8 @@ pub struct Options {
     pub interactive: bool,
     pub keyboard_focus: bool,
     pub test_keyboard: bool,
+    /// Click-through proof surfaces that reserve no desktop space.
+    pub test_passive: bool,
     pub trace_state: bool,
 }
 impl Default for Options {
@@ -190,6 +192,7 @@ impl Default for Options {
             interactive: false,
             keyboard_focus: true,
             test_keyboard: false,
+            test_passive: false,
             trace_state: false,
         }
     }
@@ -231,6 +234,8 @@ struct Surface {
     frames: usize,
     render_ms: Vec<f64>,
     acquire_ms: Vec<f64>,
+    swap_ms: Vec<f64>,
+    activate_ms: Vec<f64>,
     callbacks_ms: Vec<f64>,
     last_callback: Option<Instant>,
     presented_ms: Vec<f64>,
@@ -449,7 +454,7 @@ pub fn run_runtime(
             percentile(&s.acquire_ms, 0.99)
         );
         println!(
-            "METRICS companion={} output={} frames={} allocations={} render_p50_ms={:.3} render_p99_ms={:.3} callback_p50_ms={:.3} callback_p99_ms={:.3} presented_p50_ms={:.3} presented_p99_ms={:.3} presented_samples={} refresh_ns={} kind={} discarded={}",
+            "METRICS companion={} output={} frames={} allocations={} render_p50_ms={:.3} render_p99_ms={:.3} callback_p50_ms={:.3} callback_p99_ms={:.3} presented_p50_ms={:.3} presented_p99_ms={:.3} presented_samples={} refresh_ns={} kind={} discarded={} swap_p50_ms={:.3} swap_p99_ms={:.3} swap_max_ms={:.3} activate_p99_ms={:.3}",
             s.companion,
             s.output.id().protocol_id(),
             s.frames,
@@ -463,7 +468,15 @@ pub fn run_runtime(
             s.presented_ms.len(),
             s.refresh_ns,
             s.presentation_kind,
-            s.discarded
+            s.discarded,
+            percentile(&s.swap_ms, 0.50),
+            percentile(&s.swap_ms, 0.99),
+            s.swap_ms
+                .iter()
+                .copied()
+                .reduce(f64::max)
+                .unwrap_or(f64::NAN),
+            percentile(&s.activate_ms, 0.99)
         );
     }
     // Destroy GPU-owned renderer objects while their context/surfaces are alive.
@@ -815,7 +828,9 @@ impl App {
             if companion {
                 layer.set_margin(70, 0, 0, 0);
             }
-            layer.set_exclusive_zone(if self.options.bar && !companion {
+            layer.set_exclusive_zone(if self.options.test_passive {
+                -1
+            } else if self.options.bar && !companion {
                 50
             } else if self.options.panel || companion {
                 -1
@@ -861,6 +876,8 @@ impl App {
                 frames: 0,
                 render_ms: Vec::new(),
                 acquire_ms: Vec::new(),
+                swap_ms: Vec::new(),
+                activate_ms: Vec::new(),
                 callbacks_ms: Vec::new(),
                 last_callback: None,
                 presented_ms: Vec::new(),
@@ -1013,7 +1030,12 @@ impl App {
                     );
                 }
                 let surface = s.gl.as_ref().unwrap();
+                let activate_started = Instant::now();
                 transport.activate(surface, w as u32, h as u32)?;
+                if self.started.elapsed().as_secs_f64() > 2. {
+                    s.activate_ms
+                        .push(activate_started.elapsed().as_secs_f64() * 1000.);
+                }
                 let start = Instant::now();
                 renderer.draw(
                     scene,
@@ -1043,7 +1065,11 @@ impl App {
                         },
                     );
                 }
+                let swap_started = Instant::now();
                 transport.present(surface)?;
+                if self.started.elapsed().as_secs_f64() > 2. {
+                    s.swap_ms.push(swap_started.elapsed().as_secs_f64() * 1000.);
+                }
                 s.frames += 1;
                 return Ok(());
             }

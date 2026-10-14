@@ -11,6 +11,11 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_HARDENING'):
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('hardening',ROOT/'spikes/hardening.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        return module.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_GL_UNAVAILABLE_PROOF'):
         target=pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'
         path=raw/(compositor+'-no-gl.log')

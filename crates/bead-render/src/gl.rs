@@ -91,9 +91,11 @@ impl Transport {
         {
             return Err("software GL adapter; use tiny-skia fallback".into());
         }
+        // Each wl_surface.frame callback grants that surface its next draw.
+        // Waiting here would serialize surfaces on the shared drawing thread.
         surface.set_swap_interval(
-            self.context.as_ref().unwrap(),
-            SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+            self.context.as_ref().ok_or("missing EGL context")?,
+            SwapInterval::DontWait,
         )?;
         println!("GPU_SHARED devices=1 device_id=0 api=OpenGL");
         Ok(Surface { surface })

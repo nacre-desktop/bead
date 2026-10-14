@@ -38,7 +38,7 @@ If CPU cannot keep up, explain before starting Feature 3.
 | 4. Layout/animation/input | Taffy integration for real scene, easing/springs, pointer/scroll/keyboard/focus; basic selection/clipboard, IME and AccessKit semantics; matched animated panel pacing | Does a toolkit replacement work beyond static rectangles? Input/IME/a11y move early |
 | 5. Backend state/actions | Same neutral output/workspace/window/event interface on Hyprland/niri; direct Hyprland socket + GPL niri-ipc adapter; IDs/capability errors/reconnect tested | Are backend semantics coherent rather than widget-specific hacks? |
 | 6. Bar v1 | Clock/workspaces, SNI+DBusMenu tray, PipeWire audio, UPower battery, network/Bluetooth display and helper actions; daemon/item restarts; per-output look | Can actual service-driven UI sleep and share contexts? SNI is new in audited QML snapshot |
-| 6b. Architecture hardening | Six ordered steps below; measured layer/damage, independent script/bake workers, lazy per-surface rendering, shared kit, restart recovery and feature/module hygiene | Can the framework remove the measured architectural costs before adding more shell features? |
+| 6b. Architecture hardening | Step0 plus six ordered steps below; measured layer/damage, independent script/bake workers, lazy per-surface rendering, shared kit, restart recovery and feature/module hygiene | Can the framework remove the measured architectural costs before adding more shell features? |
 | 7. Command/files/helpers | Private versioned command socket/client plus compatibility target/method catalog; all current CLI/keybinding routes tested in fixtures; bounded runner/watch/helper protocol | Can existing tools call Bead without changing live configs? Minimal helper transport may already support earlier proofs |
 | 8. Popouts/panels | One actual panel and animations, open/close/focus/dismiss across outputs; preserved state and pacing; output disappearance | **Gate C:** bar parity on both + panel; measured benefit versus cost; owner decision |
 | Optimization pass — immediately after Gate C | Measure each candidate on the bar + one panel scene on both compositors at real sizes; retain only measured improvements | Can fixed costs, caches, allocator behavior and reload work be improved without regressions? |
@@ -68,6 +68,8 @@ baselines and report before/after under matched output/workload conditions.
      Prove CPUbar+GLpanel and GLbar+GLpanel on niri/Hypr: both surface-period
      p50/p99 at output rate, no overdraw beyond that rate, idleCPU unchanged.
      Ask before any physical/non-nested niri test after this step.
+     Interval0 implemented; nested niri rate and idle invariance still unresolved.
+     Keep0a open; measured negative controls are preserved in FEASIBILITY.
    - 0b: one batched Hypr snapshot request, or event-directed partial refresh on
      its worker; title-latency p50/p95/p99 before/after. Report niri's ~30ms
      action-reply cost separately from UI/native state work.

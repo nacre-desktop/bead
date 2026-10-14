@@ -23,6 +23,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let started = std::time::Instant::now();
     let mut profile = false;
     let mut bar_panel = false;
+    let mut panel_renderer = bead_render::RendererKind::FemtovgGl;
     let mut options = Options::default();
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
@@ -36,6 +37,14 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bar-panel" => bar_panel = true,
+            "--panel-renderer" => {
+                let mut panel_options = Options::default();
+                select_renderer(
+                    &mut panel_options,
+                    &args.next().ok_or("--panel-renderer needs value")?,
+                )?;
+                panel_renderer = panel_options.renderer;
+            }
             "--bar" => {
                 options.bar = true;
                 options.keyboard_focus = false;
@@ -64,6 +73,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             }
             "--no-keyboard-focus" => options.keyboard_focus = false,
             "--test-keyboard" => options.test_keyboard = true,
+            "--test-passive" => options.test_passive = true,
             "--trace-state" => options.trace_state = true,
             "--memory-usage" => options.memory_usage = true,
             "--surfaces" => {
@@ -96,7 +106,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--bar [--bar-panel]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto uses shared native GL, then CPU if unavailable. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--bar-panel] [--panel-renderer cpu|femtovg-gl]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto uses shared native GL, then CPU if unavailable. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
@@ -107,6 +117,11 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         options.panel = false;
         options.content_size = false;
     }
+    if options.test_passive {
+        options.interactive = false;
+        options.keyboard_focus = false;
+        options.test_keyboard = false;
+    }
     let colors = Palette::read(&palette)?;
     if bar_panel {
         if !options.bar {
@@ -116,7 +131,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         companion.font_files = font_sources::select(&companion)?;
         companion.offset = (32., 32.);
         companion.slide = None;
-        options.companion = Some((companion, bead_render::RendererKind::FemtovgGl));
+        options.companion = Some((companion, panel_renderer));
     }
     let mut scene = if ui.is_some() {
         Scene {
