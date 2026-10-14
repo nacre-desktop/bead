@@ -351,6 +351,6 @@ CI adds libpipewire-0.3-dev/libclang-dev. Added zbus5.19.0,pipewire0.10.1 and
 system-tray0.8.9 are permissive. Native build helper target-lexicon0.13.5 uses
 Apache-2.0 WITH LLVM-exception; a version-scoped cargo-deny allowance records its
 [additional permissions](https://github.com/bytecodealliance/target-lexicon/blob/main/LICENSE).
-40 default tests +1 private proof,fmt/clippy and both deny policies pass.
+40 default tests +1 private proof,fmt/clippy,both deny policies and CI38531712571 pass.
 No GPL allowance enters the framework graph. Private owner fixtures do not prove
 real hardware or installed system-daemon restart behavior. **Continue Feature6.**
