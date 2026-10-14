@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, verified 2026-10-13
       - name: Native client build prerequisites
-        run: sudo apt-get update -qq && sudo apt-get install -y libwayland-dev libfontconfig1-dev libxkbcommon-dev pkg-config
+        run: sudo apt-get update -qq && sudo apt-get install -y libwayland-dev libfontconfig1-dev libxkbcommon-dev libpipewire-0.3-dev libclang-dev pkg-config
       - name: Rust toolchain
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
       - name: Formatting
@@ -20,6 +20,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
         run: cargo test --workspace --locked
+      - name: Private service owner lifecycle
+        run: python3 spikes/services-check.py
       - name: Install cargo-deny
         shell: bash
         run: |

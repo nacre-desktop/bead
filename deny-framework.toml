@@ -1,6 +1,8 @@
 # Check bead-* roots independently: GPL may never leak into their dependencies.
 [licenses]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "ISC", "Unicode-3.0", "Unicode-DFS-2016", "CC0-1.0", "0BSD", "Unlicense", "MIT-0"]
+# Native PipeWire build helper; LLVM exception grants additional Apache permissions.
+exceptions = [{ crate = "target-lexicon@0.13.5", allow = ["Apache-2.0 WITH LLVM-exception"] }]
 [bans]
 multiple-versions = "warn"
 [sources]

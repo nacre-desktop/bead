@@ -327,3 +327,30 @@ request/event sockets. Nacre's Rust migration (Wave 2) should reuse these module
 workspace/all permissive framework deny graphs and CI38526465164 pass. No system installs/live runs.
 **Verdict: Feature 5 complete with concerns: tail latency, Hypr small-panel memory,
 and unvalidated physical niri hotplug. STOP before Feature 6; owner acceptance next.**
+
+
+## Feature 6 milestone — native service foundation (2026-10-14)
+
+Typed clock/audio/battery/network/Bluetooth/tray snapshots now have a view-independent
+service owner. Native PipeWire watches default-sink metadata and Props; zbus watches
+D-Bus state/owner changes, with SNI+DBusMenu supplied by the MIT system-tray crate.
+The bar UI and final measurements are not yet implemented.
+
+| Check | Result |
+| --- | --- |
+| Private UPower/NM/BlueZ owner loss + NM/BlueZ return | Pass |
+| Subscription drop and callback snapshot reentry | Pass |
+| Actual private PipeWire and tray item/menu lifecycle | Pending |
+| QML screenshots, CPU/GL bar+panel,200+actions/pacing | Pending |
+
+Missing values stay optional. Sensor calls have1s deadlines; disconnected transports
+back off, and bus replacement cancels the old tray executor. Tray action calls use
+zbus directly because the library helper can suppress method/timeout failures.
+Existing PipeWire1.6.9 headers and Clang suffice locally; no machine installs.
+CI adds libpipewire-0.3-dev/libclang-dev. Added zbus5.19.0,pipewire0.10.1 and
+system-tray0.8.9 are permissive. Native build helper target-lexicon0.13.5 uses
+Apache-2.0 WITH LLVM-exception; a version-scoped cargo-deny allowance records its
+[additional permissions](https://github.com/bytecodealliance/target-lexicon/blob/main/LICENSE).
+40 default tests +1 private proof,fmt/clippy and both deny policies pass.
+No GPL allowance enters the framework graph. Private owner fixtures do not prove
+real hardware or installed system-daemon restart behavior. **Continue Feature6.**
