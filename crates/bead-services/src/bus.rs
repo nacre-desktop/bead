@@ -27,10 +27,16 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
     while !shared.stop.load(Ordering::SeqCst) {
         // A bus disconnect ends this executor, cancelling the tray client's owned
         // signal tasks before a replacement connection starts.
-        let runtime = tokio::runtime::Builder::new_current_thread()
+        let runtime = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("service runtime");
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                eprintln!("SERVICE_BUS runtime unavailable: {error}");
+                break;
+            }
+        };
         let result = runtime.block_on(connect(&shared, &mut receiver));
         drop(runtime);
         match result {
@@ -58,7 +64,11 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
             break;
         }
         retry = (retry + 1).min(3);
-        let guard = shared.audio_wait.0.lock().unwrap();
+        let guard = shared
+            .audio_wait
+            .0
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned);
         let _ = shared
             .audio_wait
             .1
@@ -290,7 +300,7 @@ fn menu(entry: &MenuItem) -> MenuEntry {
 }
 fn refresh_tray(shared: &Shared, client: &Client) {
     let items = client.items();
-    let items = items.lock().unwrap();
+    let items = items.lock().unwrap_or_else(crate::runtime::poisoned);
     let mut tray: Vec<_> = items
         .iter()
         .map(|(id, (item, layout))| TrayItem {
@@ -351,7 +361,7 @@ async fn tray_action(
     let menu_path = client
         .items()
         .lock()
-        .unwrap()
+        .map_err(|_| "tray lock poisoned")?
         .get(&id)
         .ok_or("unknown/stale tray item")?
         .0

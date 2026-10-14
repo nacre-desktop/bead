@@ -13,11 +13,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let signal = changed.clone();
     let _subscription = backend.subscribe(Box::new(move |event| match event {
         Event::Snapshot(snapshot) => {
-            println!(
-                "BACKEND_SNAPSHOT {}",
-                serde_json::to_string(&*snapshot).unwrap()
-            );
-            let mut n = signal.0.lock().unwrap();
+            match serde_json::to_string(&*snapshot) {
+                Ok(json) => println!("BACKEND_SNAPSHOT {json}"),
+                Err(error) => eprintln!("BACKEND_ERROR snapshot encode: {error}"),
+            }
+            let mut n = signal.0.lock().unwrap_or_else(crate::backends::poisoned);
             *n += 1;
             signal.1.notify_all();
         }
@@ -43,7 +43,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             );
             continue;
         }
-        let mut version = changed.0.lock().unwrap();
+        let mut version = changed.0.lock().unwrap_or_else(crate::backends::poisoned);
         let deadline = Instant::now() + Duration::from_secs(2);
         while !observed(&backend.snapshot(), &action) && Instant::now() < deadline {
             let (next, _) = changed

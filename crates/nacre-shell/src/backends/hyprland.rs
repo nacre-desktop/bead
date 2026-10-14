@@ -129,7 +129,7 @@ pub fn normalize(
         let output_name = string(w, "monitor");
         let monitor = monitors
             .as_array()
-            .unwrap()
+            .ok_or_else(|| protocol("monitors not array"))?
             .iter()
             .find(|m| string(m, "name") == output_name);
         let active_ws = monitor.is_some_and(|m| {
@@ -302,7 +302,11 @@ pub fn spawn(transport: Transport, shared: Arc<Shared>) -> JoinHandle<()> {
             let result = (|| -> Result<(), Error> {
                 let stream = UnixStream::connect(transport.directory.join(".socket2.sock"))
                     .map_err(|e| Error::Disconnected(e.to_string()))?;
-                *shared.event_socket.lock().unwrap() = Some(stream.try_clone().map_err(protocol)?);
+                *shared
+                    .event_socket
+                    .lock()
+                    .unwrap_or_else(crate::backends::poisoned) =
+                    Some(stream.try_clone().map_err(protocol)?);
                 shared.publish(transport.snapshot()?);
                 attempt = 0;
                 let mut reader = BufReader::new(stream);

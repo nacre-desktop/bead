@@ -1,5 +1,37 @@
 # Status
 
+## 2026-10-15 — 6b step 5 complete; step 6 next
+
+Panic logging is installed for all threads. A script-worker panic becomes
+an explicit fatal event, exits the application with failure and can trigger
+the source user unit's Restart=on-failure. The unit is not installed.
+Fallible service/backend/reload initialization, action locks, serialization
+and native socket paths propagate errors. Immutable snapshot/bookkeeping
+poison recovery logs an error while retaining the last intact value.
+
+Panel open/page state is written atomically (0600 file, 0700 state directory,
+file and directory fsync) only after validated worker commit. Unknown or
+incompatible saved IDs do not enter a candidate; malformed state is logged
+and left intact with persistence disabled for that run. Search text, titles,
+transport snapshots and other transient state are excluded. Other panel IDs
+are retained when a different view saves its own state.
+
+Private abrupt-kill/restart proofs pass on niri and Hyprland: closed panel
+and selected page restored, input disabled. Closing disables pointer and
+keyboard input when the validated close target commits: waiting for the final
+animation callback fails when an off-surface panel stops receiving callbacks.
+Capability registry denies unregistered actions and missing grants; native
+adapter unsupported-action checks remain authoritative. No permission UI.
+
+Workspace tests (59), fmt/clippy, CPU-only and private service-owner checks
+pass. Source unit syntax passes with a private executable substitution;
+its future installed executable path does not exist here. Evidence ignored
+.research/feature6b/restart-{niri,hypr-fixed}, takeover/step5-*.
+Step4 26dbbe9 CI38645580955 passed. Step5 CI recorded after push.
+Next: step6 CPU/native-GL defaults, opt-in wgpu/Vello, module split and trace.
+Keep step0a nested niri pacing and idle invariance open in final report.
+No Feature7, live tests, installation, reference writes or release.
+
 ## 2026-10-15 — 6b step 4 complete; step 5 next
 
 Framework-owned bead.kit exposes Button, IconButton, Slider, Switch, Tile,

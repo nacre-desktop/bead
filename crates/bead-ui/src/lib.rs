@@ -703,6 +703,7 @@ pub struct Session {
     error: Option<String>,
     attempts: u64,
     watcher: Option<notify::RecommendedWatcher>,
+    restore: Option<BTreeMap<String, Value>>,
 }
 impl Session {
     pub fn new(
@@ -729,7 +730,11 @@ impl Session {
             error: None,
             attempts: 0,
             watcher: None,
+            restore: None,
         }
+    }
+    pub fn restore_on_start(&mut self, values: BTreeMap<String, Value>) {
+        self.restore = Some(values);
     }
     pub fn watch(
         &mut self,
@@ -739,8 +744,16 @@ impl Session {
         let revision = self.watch_revision.clone();
         let root = self.root.canonicalize()?;
         let palette = std::path::absolute(&self.palette_path)?;
-        let external_parent =
-            (!palette.starts_with(&root)).then(|| palette.parent().unwrap().to_path_buf());
+        let external_parent = if !palette.starts_with(&root) {
+            Some(
+                palette
+                    .parent()
+                    .ok_or("palette parent unavailable")?
+                    .to_path_buf(),
+            )
+        } else {
+            None
+        };
         let watched_root = root.clone();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
@@ -791,6 +804,22 @@ impl Session {
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
         let (generation, mut stores) =
             Generation::load(&self.root, &self.entry, &self.stores, self.attempts)?;
+        if self.generation.is_none()
+            && let Some(saved) = &self.restore
+        {
+            let compatible: BTreeMap<_, _> = saved
+                .iter()
+                .filter(|(id, value)| {
+                    stores.get(id).is_some_and(|current| {
+                        std::mem::discriminant(current) == std::mem::discriminant(*value)
+                    })
+                })
+                .map(|(id, value)| (id.clone(), value.clone()))
+                .collect();
+            stores
+                .commit(compatible)
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
         let (mut scene, mut nodes) = generation.materialize(&stores, &palette, self.viewport)?;
         if let Some(Value::Text(focused)) = stores.get("bead.focused")
             && !focused.is_empty()

@@ -12,9 +12,24 @@ pub struct Runtime {
     desktop_subscription: Option<bead_services::Subscription>,
     menu_item: String,
     bar: bool,
+    state_file: Option<crate::state::File>,
+    actions: bead_core::capabilities::Registry,
 }
 impl Runtime {
-    pub fn new(session: bead_ui::Session) -> Self {
+    pub fn new(mut session: bead_ui::Session) -> Self {
+        let state_file = match crate::state::File::path()
+            .map_err(|e| -> Box<dyn Error> { e.into() })
+            .and_then(crate::state::File::open)
+        {
+            Ok((file, saved)) => {
+                session.restore_on_start(saved);
+                Some(file)
+            }
+            Err(error) => {
+                eprintln!("STATE_ERROR restore disabled: {error}");
+                None
+            }
+        };
         Self {
             session,
             pending: None,
@@ -24,18 +39,23 @@ impl Runtime {
             desktop_subscription: None,
             menu_item: String::new(),
             bar: false,
+            state_file,
+            actions: Default::default(),
         }
     }
-    pub fn with_desktop(mut self) -> Self {
+    pub fn with_desktop(mut self) -> Result<Self, Box<dyn Error>> {
         let desktop = bead_services::Desktop::start();
         self.session.stores = self
             .session
             .stores
-            .reconcile(&crate::desktop::values(&desktop.snapshot(), ""))
-            .expect("desktop store types");
+            .reconcile(&crate::desktop::values(&desktop.snapshot(), ""))?;
+        for name in ["services.audio", "services.tray", "services.menu"] {
+            self.actions.register(name, "desktop.services")?;
+        }
+        self.actions.grant("desktop.services");
         self.desktop = Some(desktop);
         self.bar = true;
-        self
+        Ok(self)
     }
     fn desktop_action(
         &mut self,
@@ -44,6 +64,7 @@ impl Runtime {
         delta: Option<f64>,
         context_menu: bool,
     ) -> Result<(), Box<dyn Error>> {
+        self.actions.authorize(name)?;
         use bead_services::Action;
         let desktop = self.desktop.as_ref().ok_or("desktop unavailable")?;
         let snapshot = desktop.snapshot();
@@ -95,17 +116,28 @@ impl Runtime {
             .action(action)
             .map_err(|e| -> Box<dyn Error> { e.into() })
     }
-    pub fn with_backend(mut self, backend: std::sync::Arc<crate::backends::Native>) -> Self {
-        let values = backend_values(&backend.snapshot());
-        self.session.stores = self
-            .session
-            .stores
-            .reconcile(&values)
-            .expect("valid native defaults");
+    pub fn with_backend(
+        mut self,
+        backend: std::sync::Arc<crate::backends::Native>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let values = backend_values(&backend.snapshot())?;
+        self.session.stores = self.session.stores.reconcile(&values)?;
+        for name in [
+            "backend.workspace.switch",
+            "backend.window.focus",
+            "backend.window.close",
+            "backend.windowTrash",
+            "backend.scratchpad",
+            "backend.windowCapture",
+        ] {
+            self.actions.register(name, "desktop.compositor")?;
+        }
+        self.actions.grant("desktop.compositor");
         self.backend = Some(backend);
-        self
+        Ok(self)
     }
     fn backend_action(&self, name: &str, arg: bead_core::Value) -> Result<(), Box<dyn Error>> {
+        self.actions.authorize(name)?;
         let backend = self.backend.as_ref().ok_or("backend unavailable")?;
         let bead_core::Value::Text(id) = arg else {
             return Err("backend action requires a stable ID".into());
@@ -218,7 +250,12 @@ impl SceneSource for Runtime {
                     matches!(event, UiEvent::ContextMenu { .. }),
                 )?;
             }
-            event = UiEvent::Desktop(self.desktop.as_ref().unwrap().snapshot());
+            event = UiEvent::Desktop(
+                self.desktop
+                    .as_ref()
+                    .ok_or("desktop unavailable after action")?
+                    .snapshot(),
+            );
         }
         if let Some((id, name, arg)) = host_action
             && name.starts_with("backend.")
@@ -245,8 +282,9 @@ impl SceneSource for Runtime {
                     snapshot.workspaces.len(),
                     snapshot.windows.len()
                 );
-                self.session.update(backend_values(&snapshot))?
+                self.session.update(backend_values(&snapshot)?)?
             }
+            UiEvent::Fatal(error) => return Err(error.into()),
             UiEvent::Worker(_) => return Err("worker packet cannot reach script executor".into()),
             UiEvent::DebugScriptStall(ms) => {
                 let clock = || crate::backends::clock_ns(nix::libc::CLOCK_MONOTONIC);
@@ -415,6 +453,11 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            if let Some(file) = &mut self.state_file
+                && let Err(error) = file.save(&self.session.stores)
+            {
+                eprintln!("STATE_ERROR save: {error}");
+            }
         }
         true
     }
@@ -432,7 +475,7 @@ impl SceneSource for Runtime {
 
 fn backend_values(
     snapshot: &bead_backends::Snapshot,
-) -> std::collections::BTreeMap<String, bead_core::Value> {
+) -> Result<std::collections::BTreeMap<String, bead_core::Value>, Box<dyn Error>> {
     use bead_core::Value;
     let mut values = std::collections::BTreeMap::from([
         ("bead.connected".into(), Value::Bool(snapshot.connected)),
@@ -451,8 +494,8 @@ fn backend_values(
                 snapshot
                     .outputs
                     .iter()
-                    .map(|o| serde_json::to_value(o).unwrap())
-                    .collect(),
+                    .map(serde_json::to_value)
+                    .collect::<Result<Vec<_>, _>>()?,
             ),
         ),
         (
@@ -461,8 +504,8 @@ fn backend_values(
                 snapshot
                     .workspaces
                     .iter()
-                    .map(|w| serde_json::to_value(w).unwrap())
-                    .collect(),
+                    .map(serde_json::to_value)
+                    .collect::<Result<Vec<_>, _>>()?,
             ),
         ),
         (
@@ -471,15 +514,15 @@ fn backend_values(
                 snapshot
                     .windows
                     .iter()
-                    .map(|w| serde_json::to_value(w).unwrap())
-                    .collect(),
+                    .map(serde_json::to_value)
+                    .collect::<Result<Vec<_>, _>>()?,
             ),
         ),
     ]);
     for (name, supported) in &snapshot.capabilities.features {
         values.insert(format!("bead.cap.{name}"), Value::Bool(*supported));
     }
-    values
+    Ok(values)
 }
 
 /// Exercises actual bar hit testing and native service routes on explicit proof buses.
@@ -520,8 +563,12 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
             ),
             ("bead.workspaces".into(), bead_core::Value::List(vec![])),
         ]))?;
-    let mut runtime = Runtime::new(session).with_desktop();
-    let desktop = runtime.desktop.as_ref().unwrap().clone();
+    let mut runtime = Runtime::new(session).with_desktop()?;
+    let desktop = runtime
+        .desktop
+        .as_ref()
+        .ok_or("proof desktop unavailable")?
+        .clone();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while desktop.snapshot().audio.volume.is_none()
         || desktop.snapshot().tray.iter().all(|t| t.menu.is_empty())
@@ -549,7 +596,11 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
         Ok((rect.x + rect.w / 2., rect.y + rect.h / 2.))
     }
     let (x, y) = position(&runtime, "services.audio")?;
-    let previous = desktop.snapshot().audio.muted.unwrap();
+    let previous = desktop
+        .snapshot()
+        .audio
+        .muted
+        .ok_or("proof mute unavailable")?;
     runtime.stage(UiEvent::Click { x, y })?;
     runtime.commit();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
@@ -559,11 +610,23 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    let before = desktop.snapshot().audio.volume.unwrap();
+    let before = desktop
+        .snapshot()
+        .audio
+        .volume
+        .ok_or("proof volume unavailable")?;
     runtime.stage(UiEvent::Scroll { x, y, delta: -1. })?;
     runtime.commit();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
-    while (desktop.snapshot().audio.volume.unwrap() - before).abs() < 0.01 {
+    while (desktop
+        .snapshot()
+        .audio
+        .volume
+        .ok_or("proof volume unavailable")?
+        - before)
+        .abs()
+        < 0.01
+    {
         if std::time::Instant::now() > deadline {
             return Err("scroll volume not observed".into());
         }

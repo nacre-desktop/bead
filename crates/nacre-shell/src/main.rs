@@ -4,10 +4,22 @@ mod catalog;
 mod desktop;
 mod font_sources;
 mod reload;
+mod state;
 use bead_render::{Palette, Primitive, Rect, Scene, Slide};
 use bead_wayland::{Options, run};
 use std::path::{Path, PathBuf};
 fn main() {
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!(
+            "PANIC thread={} {info}",
+            std::thread::current().name().unwrap_or("worker")
+        );
+    }));
+    if std::env::args().any(|a| a == "--panic-probe")
+        && std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() == Ok("1")
+    {
+        panic!("private panic hook proof");
+    }
     if let Err(e) = start() {
         eprintln!("nacre-shell: {e}");
         std::process::exit(1);
@@ -274,8 +286,9 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         let ui_entry_is_launcher = entry == Path::new("ui/main.luau");
         let fallback = scene.clone();
         let bar = options.bar;
-        let factory: bead_wayland::worker::Factory = Box::new(move || {
-            let result =
+        let factory: bead_wayland::worker::Factory =
+            Box::new(move || {
+                let result =
                 (|| -> Result<Box<dyn bead_wayland::SceneSource>, Box<dyn std::error::Error>> {
                     let mut session =
                         bead_ui::Session::new("shell".into(), entry, palette, colors, fallback);
@@ -290,15 +303,15 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     let runtime = reload::Runtime::new(session);
                     let runtime = if backend_enabled {
-                        runtime.with_backend(backends::Native::from_env()?)
+                        runtime.with_backend(backends::Native::from_env()?)?
                     } else {
                         runtime
                     };
-                    let runtime = if bar { runtime.with_desktop() } else { runtime };
+                    let runtime = if bar { runtime.with_desktop()? } else { runtime };
                     Ok(Box::new(runtime))
                 })();
-            result.map_err(|e| e.to_string())
-        });
+                result.map_err(|e| e.to_string())
+            });
         let renderer = bead_render::renderer(options.renderer)?;
         let runtime = bead_wayland::worker::Source::new(factory, scene.clone());
         bead_wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))

@@ -463,3 +463,29 @@ return kit.Bar{id="bar",edge="top",width=400,height=50,kit.Button{id="a",text="A
     assert!(b.x > a.x);
     assert_eq!(a.y, b.y);
 }
+
+#[test]
+fn restored_panel_state_is_staged_and_commits_only_after_validation() {
+    let f = fixture();
+    let fallback = f.session().current.clone();
+    let mut session = Session::new(
+        f.0.clone(),
+        "ui/main.luau".into(),
+        f.0.join("palette.json"),
+        Palette::read(&f.0.join("palette.json")).unwrap(),
+        fallback,
+    );
+    session.restore_on_start(BTreeMap::from([
+        ("selected".into(), Value::Text("c".into())),
+        ("obsolete.open".into(), Value::Bool(false)),
+    ]));
+    let scene = session.reload().unwrap();
+    assert!(session.stores.get("selected").is_none());
+    session.check_sources().unwrap();
+    session.commit(scene);
+    assert_eq!(
+        session.stores.get("selected"),
+        Some(&Value::Text("c".into()))
+    );
+    assert!(session.stores.get("obsolete.open").is_none());
+}

@@ -65,13 +65,20 @@ pub(crate) fn spawn(shared: Arc<Shared>) -> std::thread::JoinHandle<()> {
             if let Err(error) = connect(&shared) {
                 eprintln!("SERVICE_AUDIO disconnected: {error}");
             }
-            *shared.audio_sender.lock().unwrap() = None;
+            *shared
+                .audio_sender
+                .lock()
+                .unwrap_or_else(crate::runtime::poisoned) = None;
             shared.change(|s| s.audio = Audio::default());
             if shared.stop.load(Ordering::SeqCst) {
                 break;
             }
             retry = (retry + 1).min(3);
-            let guard = shared.audio_wait.0.lock().unwrap();
+            let guard = shared
+                .audio_wait
+                .0
+                .lock()
+                .unwrap_or_else(crate::runtime::poisoned);
             let _ = shared
                 .audio_wait
                 .1
@@ -206,7 +213,10 @@ fn connect(shared: &Arc<Shared>) -> Result<(), Box<dyn std::error::Error>> {
         })
         .register();
     let (sender, receiver) = pw::channel::channel();
-    *shared.audio_sender.lock().unwrap() = Some(sender);
+    *shared
+        .audio_sender
+        .lock()
+        .unwrap_or_else(crate::runtime::poisoned) = Some(sender);
     let graph_action = graph.clone();
     let weak_loop = mainloop.downgrade();
     let _receiver = receiver.attach(mainloop.loop_(), move |command| {

@@ -1616,6 +1616,7 @@ dependencies = [
  "image",
  "niri-ipc",
  "nix",
+ "serde",
  "serde_json",
  "skrifa 0.44.0",
 ]

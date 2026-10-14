@@ -14,6 +14,12 @@ use std::{
     },
     thread::JoinHandle,
 };
+/// Immutable snapshots are published atomically; poisoned read/bookkeeping locks
+/// can retain their last intact value, while action locks propagate an error.
+pub(crate) fn poisoned<T>(error: std::sync::PoisonError<T>) -> T {
+    eprintln!("LOCK_ERROR poisoned snapshot/bookkeeping; retaining last value");
+    error.into_inner()
+}
 type Callback = Arc<dyn Fn(Event) + Send + Sync>;
 pub(crate) struct Shared {
     pub snapshot: Mutex<Arc<Snapshot>>,
@@ -37,14 +43,23 @@ impl Shared {
         })
     }
     pub fn emit(&self, event: Event) {
-        let callbacks: Vec<_> = self.callbacks.lock().unwrap().values().cloned().collect();
+        let callbacks: Vec<_> = self
+            .callbacks
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned)
+            .values()
+            .cloned()
+            .collect();
         for callback in callbacks {
             callback(event.clone());
         }
     }
     pub fn publish(&self, snapshot: Snapshot) {
         let snapshot = Arc::new(snapshot);
-        let mut old = self.snapshot.lock().unwrap();
+        let mut old = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned);
         if **old == *snapshot {
             return;
         }
@@ -54,7 +69,11 @@ impl Shared {
         self.emit(Event::Snapshot(snapshot));
     }
     pub fn disconnected(&self, reason: String) {
-        let mut snapshot = (**self.snapshot.lock().unwrap()).clone();
+        let mut snapshot = (**self
+            .snapshot
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned))
+        .clone();
         snapshot.connected = false;
         self.publish(snapshot);
         self.emit(Event::Disconnected(reason));
@@ -62,13 +81,24 @@ impl Shared {
     pub fn subscribe(self: &Arc<Self>, callback: Box<dyn Fn(Event) + Send + Sync>) -> Subscription {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let callback: Callback = Arc::from(callback);
-        self.callbacks.lock().unwrap().insert(id, callback.clone());
-        let snapshot = self.snapshot.lock().unwrap().clone();
+        self.callbacks
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned)
+            .insert(id, callback.clone());
+        let snapshot = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned)
+            .clone();
         callback(Event::Snapshot(snapshot));
         let shared = Arc::downgrade(self);
         Subscription::new(move || {
             if let Some(shared) = shared.upgrade() {
-                shared.callbacks.lock().unwrap().remove(&id);
+                shared
+                    .callbacks
+                    .lock()
+                    .unwrap_or_else(crate::backends::poisoned)
+                    .remove(&id);
             }
         })
     }
@@ -96,14 +126,26 @@ pub(crate) fn record(kind: &str, data: serde_json::Value) {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     if let Some(path) = std::env::var_os("BEAD_RECORD_IPC") {
         use std::io::Write;
-        let _guard = LOCK.lock().unwrap();
+        let _guard = match LOCK.lock() {
+            Ok(guard) => guard,
+            Err(error) => {
+                eprintln!("BACKEND_RECORD_ERROR {error}");
+                return;
+            }
+        };
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
         {
-            let mut bytes =
-                serde_json::to_vec(&serde_json::json!({"kind":kind,"data":data})).unwrap();
+            let mut bytes = match serde_json::to_vec(&serde_json::json!({"kind":kind,"data":data}))
+            {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    eprintln!("BACKEND_RECORD_ERROR {error}");
+                    return;
+                }
+            };
             bytes.push(b'\n');
             let _ = file.write_all(&bytes);
         }
@@ -175,7 +217,11 @@ impl Native {
 }
 impl Backend for Native {
     fn snapshot(&self) -> Arc<Snapshot> {
-        self.shared.snapshot.lock().unwrap().clone()
+        self.shared
+            .snapshot
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned)
+            .clone()
     }
     fn action(&self, action: Action) -> Result<(), Error> {
         let snapshot = self.snapshot();
@@ -194,10 +240,21 @@ impl Backend for Native {
 impl Drop for Native {
     fn drop(&mut self) {
         self.shared.stop.store(true, Ordering::SeqCst);
-        if let Some(socket) = self.shared.event_socket.lock().unwrap().as_ref() {
+        if let Some(socket) = self
+            .shared
+            .event_socket
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned)
+            .as_ref()
+        {
             let _ = socket.shutdown(std::net::Shutdown::Both);
         }
-        if let Some(worker) = self.worker.lock().unwrap().take() {
+        if let Some(worker) = self
+            .worker
+            .lock()
+            .unwrap_or_else(crate::backends::poisoned)
+            .take()
+        {
             let _ = worker.join();
         }
     }

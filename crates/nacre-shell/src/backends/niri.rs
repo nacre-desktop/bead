@@ -30,15 +30,22 @@ impl Transport {
         }
     }
     pub fn request(&self, request: Request) -> Result<Response, Error> {
-        let mut socket = self.command.lock().unwrap();
+        let mut socket = self.command.lock().map_err(protocol)?;
         if socket.is_none() {
             *socket = Some(
                 Socket::connect_to(&self.path).map_err(|e| Error::Disconnected(e.to_string()))?,
             );
         }
-        match socket.as_mut().unwrap().send(request) {
+        match socket
+            .as_mut()
+            .ok_or_else(|| protocol("command socket missing"))?
+            .send(request)
+        {
             Ok(reply) => {
-                super::record("niri-reply", serde_json::to_value(&reply).unwrap());
+                super::record(
+                    "niri-reply",
+                    serde_json::to_value(&reply).map_err(protocol)?,
+                );
                 reply.map_err(protocol)
             }
             Err(error) => {
@@ -310,7 +317,11 @@ pub fn spawn(transport: Transport, shared: Arc<Shared>) -> JoinHandle<()> {
             let result = (|| -> Result<(), Error> {
                 let mut stream = UnixStream::connect(&transport.path)
                     .map_err(|e| Error::Disconnected(e.to_string()))?;
-                *shared.event_socket.lock().unwrap() = Some(stream.try_clone().map_err(protocol)?);
+                *shared
+                    .event_socket
+                    .lock()
+                    .unwrap_or_else(crate::backends::poisoned) =
+                    Some(stream.try_clone().map_err(protocol)?);
                 // Wire types/serialization are provided by niri-ipc; the cancellable reader uses std I/O.
                 stream
                     .write_all(
@@ -342,7 +353,10 @@ pub fn spawn(transport: Transport, shared: Arc<Shared>) -> JoinHandle<()> {
                         return Err(protocol("niri event too large"));
                     }
                     let event: Event = serde_json::from_str(&line).map_err(protocol)?;
-                    super::record("niri-event", serde_json::to_value(&event).unwrap());
+                    super::record(
+                        "niri-event",
+                        serde_json::to_value(&event).map_err(protocol)?,
+                    );
                     let topology = matches!(
                         event,
                         Event::WorkspacesChanged { .. } | Event::ConfigLoaded { .. }
@@ -362,7 +376,10 @@ pub fn spawn(transport: Transport, shared: Arc<Shared>) -> JoinHandle<()> {
             if let Err(error) = result {
                 shared.disconnected(error.to_string());
             }
-            *transport.command.lock().unwrap() = None;
+            *transport
+                .command
+                .lock()
+                .unwrap_or_else(crate::backends::poisoned) = None;
             attempt += 1;
             shared.emit(BackendEvent::Reconnecting { attempt });
             thread::sleep(Duration::from_millis((100u64 << attempt.min(4)).min(2000)));

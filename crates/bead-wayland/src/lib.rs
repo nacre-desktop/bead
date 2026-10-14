@@ -65,6 +65,7 @@ use wayland_protocols::wp::{
 };
 #[derive(Clone, Debug)]
 pub enum UiEvent {
+    Fatal(String),
     Drag {
         x: f32,
         y: f32,
@@ -255,6 +256,7 @@ struct Surface {
     configured: bool,
     ready: bool,
     frame_pending: bool,
+    input_visible: Option<bool>,
     redraw: bool,
     fractional: Option<WpFractionalScaleV1>,
     viewport: Option<WpViewport>,
@@ -592,6 +594,10 @@ fn percentile(samples: &[f64], p: f64) -> f64 {
 }
 impl App {
     fn ui(&mut self, event: UiEvent) {
+        if let UiEvent::Fatal(error) = event {
+            self.fail(error);
+            return;
+        }
         let Some(mut runtime) = self.runtime.take() else {
             return;
         };
@@ -1061,6 +1067,7 @@ impl App {
                 configured: false,
                 ready: false,
                 frame_pending: false,
+                input_visible: None,
                 redraw: false,
                 fractional,
                 viewport,
@@ -1200,6 +1207,30 @@ impl App {
             {
                 let phase = self.started.elapsed().as_secs_f32() % 2.;
                 rect.w = 1. + 299. * if phase < 1. { phase } else { 2. - phase };
+            }
+            if panel && self.options.interactive && !s.companion && scene.motion.is_some() {
+                let visible = scene.opacity > 0.001 && scene.motion.as_ref().is_none_or(|m| m.open);
+                if s.input_visible != Some(visible) {
+                    if visible {
+                        s.layer.wl_surface().set_input_region(None);
+                    } else {
+                        let empty = Region::new(&self.compositor)?;
+                        s.layer
+                            .wl_surface()
+                            .set_input_region(Some(empty.wl_region()));
+                    }
+                    s.layer.set_keyboard_interactivity(
+                        if !visible || !self.options.keyboard_focus {
+                            KeyboardInteractivity::None
+                        } else if self.options.test_keyboard {
+                            KeyboardInteractivity::Exclusive
+                        } else {
+                            KeyboardInteractivity::OnDemand
+                        },
+                    );
+                    s.input_visible = Some(visible);
+                    println!("PANEL_INPUT visible={visible}");
+                }
             }
             s.offset = scene.offset;
             renderer.prepare(scene, scale)?;

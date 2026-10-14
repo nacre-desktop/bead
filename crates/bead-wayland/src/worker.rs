@@ -131,144 +131,150 @@ impl SceneSource for Source {
         self.sender = Some(sender);
         self.thread = Some(std::thread::spawn(move || {
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
-            let mut source = match factory() {
-                Ok(source) => source,
-                Err(error) => {
-                    wakeup(UiEvent::Worker(Arc::new(Packet {
-                        phase: Phase::Failed,
-                        token: 0,
-                        scene: None,
-                        mirror: None,
-                        error: Some(error),
-                        reload: false,
-                    })));
-                    return;
-                }
-            };
-            let service_wakeup = wakeup.clone();
-            source.services(Box::new(move |event| service_wakeup(event)));
-            let mut cache = bead_render::tree::TreeCache::default();
-            let mut queue = VecDeque::new();
-            let mut token = 0;
-            'actor: loop {
-                let job = if let Some(job) = queue.pop_front() {
-                    job
-                } else {
-                    match receiver.recv() {
-                        Ok(job) => job,
-                        Err(_) => break,
+            let report = wakeup.clone();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut source = match factory() {
+                    Ok(source) => source,
+                    Err(error) => {
+                        wakeup(UiEvent::Worker(Arc::new(Packet {
+                            phase: Phase::Failed,
+                            token: 0,
+                            scene: None,
+                            mirror: None,
+                            error: Some(error),
+                            reload: false,
+                        })));
+                        return;
                     }
                 };
-                match job {
-                    Job::Stop => break,
-                    Job::Viewport(w, h) => {
-                        source.viewport(w, h);
-                    }
-                    Job::Watch(callback) => {
-                        if let Err(error) = source.watch(callback) {
-                            wakeup(UiEvent::WatchError(error.to_string()));
+                let service_wakeup = wakeup.clone();
+                source.services(Box::new(move |event| service_wakeup(event)));
+                let mut cache = bead_render::tree::TreeCache::default();
+                let mut queue = VecDeque::new();
+                let mut token = 0;
+                'actor: loop {
+                    let job = if let Some(job) = queue.pop_front() {
+                        job
+                    } else {
+                        match receiver.recv() {
+                            Ok(job) => job,
+                            Err(_) => break,
                         }
-                    }
-                    Job::Ack(_, _) => {}
-                    Job::Stage(event, scales) => {
-                        let reload = matches!(event, UiEvent::Reload);
-                        let started = std::time::Instant::now();
-                        token += 1;
-                        let (mut scene, fault) = match source.stage(event) {
-                            Ok(Some(scene)) => (scene, None),
-                            Ok(None) => {
+                    };
+                    match job {
+                        Job::Stop => break,
+                        Job::Viewport(w, h) => {
+                            source.viewport(w, h);
+                        }
+                        Job::Watch(callback) => {
+                            if let Err(error) = source.watch(callback) {
+                                wakeup(UiEvent::WatchError(error.to_string()));
+                            }
+                        }
+                        Job::Ack(_, _) => {}
+                        Job::Stage(event, scales) => {
+                            let reload = matches!(event, UiEvent::Reload);
+                            let started = std::time::Instant::now();
+                            token += 1;
+                            let (mut scene, fault) = match source.stage(event) {
+                                Ok(Some(scene)) => (scene, None),
+                                Ok(None) => {
+                                    wakeup(UiEvent::Worker(Arc::new(Packet {
+                                        phase: Phase::Settled,
+                                        token,
+                                        scene: None,
+                                        mirror: Some(Arc::new(Mirror::read(source.as_ref()))),
+                                        error: None,
+                                        reload,
+                                    })));
+                                    continue;
+                                }
+                                Err(error) => {
+                                    let error = error.to_string();
+                                    (source.error_scene(error.clone()), Some(error))
+                                }
+                            };
+                            if let Err(error) = bake(&mut cache, &mut scene, &scales) {
                                 wakeup(UiEvent::Worker(Arc::new(Packet {
-                                    phase: Phase::Settled,
+                                    phase: Phase::Failed,
                                     token,
                                     scene: None,
-                                    mirror: Some(Arc::new(Mirror::read(source.as_ref()))),
-                                    error: None,
+                                    mirror: None,
+                                    error: Some(error),
                                     reload,
                                 })));
                                 continue;
                             }
-                            Err(error) => {
-                                let error = error.to_string();
-                                (source.error_scene(error.clone()), Some(error))
-                            }
-                        };
-                        if let Err(error) = bake(&mut cache, &mut scene, &scales) {
+                            println!(
+                                "WORKER_PREPARE token={token} reload={reload} total_ms={:.3} builds={}",
+                                started.elapsed().as_secs_f64() * 1000.,
+                                cache.builds
+                            );
                             wakeup(UiEvent::Worker(Arc::new(Packet {
-                                phase: Phase::Failed,
+                                phase: Phase::Ready,
                                 token,
-                                scene: None,
+                                scene: Some(scene.clone()),
                                 mirror: None,
-                                error: Some(error),
+                                error: fault.clone(),
                                 reload,
                             })));
-                            continue;
-                        }
-                        println!(
-                            "WORKER_PREPARE token={token} reload={reload} total_ms={:.3} builds={}",
-                            started.elapsed().as_secs_f64() * 1000.,
-                            cache.builds
-                        );
-                        wakeup(UiEvent::Worker(Arc::new(Packet {
-                            phase: Phase::Ready,
-                            token,
-                            scene: Some(scene.clone()),
-                            mirror: None,
-                            error: fault.clone(),
-                            reload,
-                        })));
-                        // No later script event may overwrite this staged transaction before its GPU acknowledgement.
-                        loop {
-                            match receiver.recv() {
-                                Ok(Job::Stop) | Err(_) => break 'actor,
-                                Ok(Job::Ack(id, result)) if id == token => {
-                                    let validated = result.and_then(|()| {
-                                        if fault.is_some() {
-                                            Ok(())
-                                        } else {
-                                            source.validate().map_err(|e| e.to_string())
-                                        }
-                                    });
-                                    match validated {
-                                        Ok(()) => {
-                                            if fault.is_none() {
-                                                source.commit();
+                            // No later script event may overwrite this staged transaction before its GPU acknowledgement.
+                            loop {
+                                match receiver.recv() {
+                                    Ok(Job::Stop) | Err(_) => break 'actor,
+                                    Ok(Job::Ack(id, result)) if id == token => {
+                                        let validated = result.and_then(|()| {
+                                            if fault.is_some() {
+                                                Ok(())
+                                            } else {
+                                                source.validate().map_err(|e| e.to_string())
                                             }
-                                            wakeup(UiEvent::Worker(Arc::new(Packet {
-                                                phase: Phase::Accepted,
-                                                token,
-                                                scene: Some(scene),
-                                                mirror: Some(Arc::new(Mirror::read(
-                                                    source.as_ref(),
-                                                ))),
-                                                error: fault,
-                                                reload,
-                                            })));
-                                        }
-                                        Err(error) => {
-                                            let mut overlay = source.error_scene(error.clone());
-                                            if bake(&mut cache, &mut overlay, &scales).is_ok() {
+                                        });
+                                        match validated {
+                                            Ok(()) => {
+                                                if fault.is_none() {
+                                                    source.commit();
+                                                }
                                                 wakeup(UiEvent::Worker(Arc::new(Packet {
                                                     phase: Phase::Accepted,
                                                     token,
-                                                    scene: Some(overlay),
+                                                    scene: Some(scene),
                                                     mirror: Some(Arc::new(Mirror::read(
                                                         source.as_ref(),
                                                     ))),
-                                                    error: Some(error),
+                                                    error: fault,
                                                     reload,
                                                 })));
-                                            } else {
-                                                wakeup(UiEvent::WatchError(error));
+                                            }
+                                            Err(error) => {
+                                                let mut overlay = source.error_scene(error.clone());
+                                                if bake(&mut cache, &mut overlay, &scales).is_ok() {
+                                                    wakeup(UiEvent::Worker(Arc::new(Packet {
+                                                        phase: Phase::Accepted,
+                                                        token,
+                                                        scene: Some(overlay),
+                                                        mirror: Some(Arc::new(Mirror::read(
+                                                            source.as_ref(),
+                                                        ))),
+                                                        error: Some(error),
+                                                        reload,
+                                                    })));
+                                                } else {
+                                                    wakeup(UiEvent::WatchError(error));
+                                                }
                                             }
                                         }
+                                        break;
                                     }
-                                    break;
+                                    Ok(job) => queue.push_back(job),
                                 }
-                                Ok(job) => queue.push_back(job),
                             }
                         }
                     }
                 }
+            }));
+            if result.is_err() {
+                report(UiEvent::Fatal("script worker panicked".into()));
             }
         }));
     }
@@ -399,6 +405,7 @@ mod tests {
     }
     struct Mock {
         commits: Arc<AtomicUsize>,
+        panic: bool,
     }
     impl SceneSource for Mock {
         fn watch(
@@ -408,6 +415,9 @@ mod tests {
             Ok(())
         }
         fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+            if self.panic {
+                panic!("worker proof panic");
+            }
             Ok(Some(scene()))
         }
         fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -429,7 +439,12 @@ mod tests {
         let commits = Arc::new(AtomicUsize::new(0));
         let count = commits.clone();
         let mut source = Source::new(
-            Box::new(move || Ok(Box::new(Mock { commits: count }))),
+            Box::new(move || {
+                Ok(Box::new(Mock {
+                    commits: count,
+                    panic: false,
+                }))
+            }),
             scene(),
         );
         let (sender, receiver) = mpsc::channel();
@@ -448,5 +463,26 @@ mod tests {
         assert!(source.commit());
         assert_eq!(commits.load(Ordering::SeqCst), 1);
         assert_eq!(source.state_summary(), "accepted");
+    }
+    #[test]
+    fn worker_panic_becomes_fatal_event_instead_of_silent_frozen_ui() {
+        let mut source = Source::new(
+            Box::new(|| {
+                Ok(Box::new(Mock {
+                    commits: Arc::new(AtomicUsize::new(0)),
+                    panic: true,
+                }))
+            }),
+            scene(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        assert!(source.stage(UiEvent::Reload).unwrap().is_none());
+        assert!(matches!(
+            receiver.recv_timeout(Duration::from_secs(2)).unwrap(),
+            UiEvent::Fatal(_)
+        ));
     }
 }

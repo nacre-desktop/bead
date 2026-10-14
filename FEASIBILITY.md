@@ -713,3 +713,27 @@ Bottom bars/panels remain unvalidated. Image blur is not compositor backdrop
 blur. Corrected a real worker-startup anchor bug found in the first capture.
 Workspace tests/fmt/clippy/CPU-only pass. Private output2880×1800/1.5,
 niri nested60Hz/Hypr virtual120. Evidence .research/feature6b/kit-*-final.
+
+## Feature 6b step 5 — errors, durable panels and restart policy (2026-10-15)
+
+Panics log thread/location and worker panics reach the application as fatal
+errors. Action and transport failures propagate; poisoned immutable read
+snapshots retain their last value with an error log. A source-only user unit
+uses Restart=on-failure. Panel state commits atomically after validation.
+
+| Proof | Result |
+|---|---|
+| Private abrupt kill/restart, both compositors | Panel closed/page restored; no hidden input |
+| Panic hook / worker panic | Logged / fatal event forwarded |
+| Durable state file | 0600, atomic rename+fsync; transient text excluded |
+| Candidate restoration | No store mutation before validated commit |
+| Action capabilities | Unknown and ungranted actions fail closed |
+| User unit syntax | Pass with private executable substitution; not installed |
+
+State path is XDG_STATE_HOME/bead/panels.json. Bad schema disables persistence
+without overwriting the file; only compatible active IDs are restored. Other
+views' durable IDs are retained. Closed-target input release fixes a callback
+starvation case discovered in the first crash proof. No user-visible prompts.
+Workspace tests/fmt/clippy/CPU-only/private service owner checks pass. Source
+unit runtime restart is not claimed: the actual proof kills and relaunches
+only task-owned clients. Evidence .research/feature6b/restart-* and takeover.

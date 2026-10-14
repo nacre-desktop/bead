@@ -24,6 +24,12 @@ pub(crate) enum Command {
     Tasks(std::sync::mpsc::Sender<(usize, usize)>),
     Stop,
 }
+/// Immutable snapshots are published atomically; poisoned read/bookkeeping locks
+/// can retain their last intact value, while action locks propagate an error.
+pub(crate) fn poisoned<T>(error: std::sync::PoisonError<T>) -> T {
+    eprintln!("LOCK_ERROR poisoned snapshot/bookkeeping; retaining last value");
+    error.into_inner()
+}
 type Callback = Arc<dyn Fn(Arc<Snapshot>) + Send + Sync>;
 pub(crate) struct Shared {
     pub snapshot: Mutex<Arc<Snapshot>>,
@@ -35,7 +41,10 @@ pub(crate) struct Shared {
 }
 impl Shared {
     pub fn change(&self, mutate: impl FnOnce(&mut Snapshot)) {
-        let mut old = self.snapshot.lock().unwrap();
+        let mut old = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned);
         let mut next = (**old).clone();
         mutate(&mut next);
         if **old == next {
@@ -44,7 +53,13 @@ impl Shared {
         let next = Arc::new(next);
         *old = next.clone();
         drop(old);
-        let callbacks: Vec<_> = self.callbacks.lock().unwrap().values().cloned().collect();
+        let callbacks: Vec<_> = self
+            .callbacks
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned)
+            .values()
+            .cloned()
+            .collect();
         for callback in callbacks {
             callback(next.clone());
         }
@@ -57,7 +72,11 @@ pub struct Subscription {
 impl Drop for Subscription {
     fn drop(&mut self) {
         if let Some(shared) = self.shared.upgrade() {
-            shared.callbacks.lock().unwrap().remove(&self.id);
+            shared
+                .callbacks
+                .lock()
+                .unwrap_or_else(crate::runtime::poisoned)
+                .remove(&self.id);
         }
     }
 }
@@ -87,7 +106,11 @@ impl Desktop {
         })
     }
     pub fn snapshot(&self) -> Arc<Snapshot> {
-        self.shared.snapshot.lock().unwrap().clone()
+        self.shared
+            .snapshot
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned)
+            .clone()
     }
     pub fn subscribe(
         &self,
@@ -98,7 +121,7 @@ impl Desktop {
         self.shared
             .callbacks
             .lock()
-            .unwrap()
+            .unwrap_or_else(crate::runtime::poisoned)
             .insert(id, callback.clone());
         let snapshot = self.snapshot();
         callback(snapshot);
@@ -130,7 +153,7 @@ impl Desktop {
         self.shared
             .audio_sender
             .lock()
-            .unwrap()
+            .map_err(|_| "audio sender lock poisoned")?
             .as_ref()
             .ok_or("PipeWire unavailable")?
             .send(command)
@@ -149,18 +172,33 @@ impl Desktop {
             .unwrap_or_default()
     }
     pub fn subscription_count(&self) -> usize {
-        self.shared.callbacks.lock().unwrap().len()
+        self.shared
+            .callbacks
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned)
+            .len()
     }
 }
 impl Drop for Desktop {
     fn drop(&mut self) {
         self.shared.stop.store(true, Ordering::SeqCst);
         let _ = self.sender.try_send(Command::Stop);
-        if let Some(sender) = self.shared.audio_sender.lock().unwrap().take() {
+        if let Some(sender) = self
+            .shared
+            .audio_sender
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned)
+            .take()
+        {
             let _ = sender.send(super::audio::Command::Stop);
         }
         self.shared.audio_wait.1.notify_all();
-        for worker in self.workers.lock().unwrap().drain(..) {
+        for worker in self
+            .workers
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned)
+            .drain(..)
+        {
             let _ = worker.join();
         }
     }

@@ -97,6 +97,7 @@ baselines and report before/after under matched output/workload conditions.
 5. Robustness: logging panic hook; service/backend/reload unwrap/expect become
    errors; source systemd user unit Restart=on-failure; durable stores restore
    panel state after crash/restart. Introduce action capability registry now;
+   Step5 complete: error propagation, panel-state restart proofs and source unit;
    user-visible permission prompts remain deferred until theme sharing exists.
 6. Hygiene: CPU+native GL default, wgpu/Vello opt-in; split bead-wayland/lib.rs
    and bead-ui/lib.rs; gate mallinfo2/thread tracing behind trace feature.
