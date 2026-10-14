@@ -324,6 +324,6 @@ now pass both ([niri](examples/backend-niri.png), [Hyprland](examples/backend-hy
 GPL adapters use niri-ipc 26.4.0/persistent command+event sockets and direct Hyprland
 request/event sockets. Nacre's Rust migration (Wave 2) should reuse these modules.
 242 neutral-crate / 911 adapter / 443 test / 13 Luau lines; 38 tests, fmt, clippy, CPU-only and
-workspace/all permissive framework deny graphs pass. No system installs/live runs.
+workspace/all permissive framework deny graphs and CI38526465164 pass. No system installs/live runs.
 **Verdict: Feature 5 complete with concerns: tail latency, Hypr small-panel memory,
 and unvalidated physical niri hotplug. STOP before Feature 6; owner acceptance next.**
