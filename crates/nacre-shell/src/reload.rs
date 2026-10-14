@@ -350,7 +350,28 @@ impl SceneSource for Runtime {
         Ok(())
     }
     fn resource_counts(&self) -> String {
-        self.session.resource_counts()
+        let mut counts = self.session.resource_counts();
+        if std::env::var_os("BEAD_SERVICE_DIAGNOSTICS").is_some() {
+            if let Some(desktop) = &self.desktop {
+                let (tasks, retained) = desktop.bus_task_counts();
+                counts.push_str(&format!(
+                    " desktop_subscriptions={} desktop_tasks={} desktop_retained_tasks={}",
+                    desktop.subscription_count(),
+                    tasks,
+                    retained
+                ));
+            }
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            {
+                // SAFETY: glibc returns a by-value read-only snapshot of its allocator accounting.
+                let heap = unsafe { nix::libc::mallinfo2() };
+                counts.push_str(&format!(
+                    " heap_live={} heap_free={} heap_mapped={}",
+                    heap.uordblks, heap.fordblks, heap.hblkhd
+                ));
+            }
+        }
+        counts
     }
     fn state_summary(&self) -> String {
         self.session.state_summary()

@@ -35,7 +35,11 @@ retain them. Companion height omitted32px bottom shadow; corrected mixed rows
 will supersede those4original mixed rows. Repeat60s/220actions and add100rendered
 tray churn per corrected row. Named-icon indexed themes/Adwaita/undecodable
 fallback now covered. Original bar-only numbers remain valid atc3b2bb5.
-Complete corrected matrix,inspect captures,
+Rendered churn found retained completed watcher handles and an extra Fontconfig
+pattern reference. Both are now corrected. Diagnostic100cycle PSS64.07→64.09MiB;
+FD43/tasks7/retainedwatcher1/Luau518384B stable. Source validation +full final8rows
+will supersede earlier source/geometry rows; keep failed evidence.
+Complete final matrix,inspect captures,
 record concerns in FEASIBILITY, push+STATUS, then short Feature6 summary/STOP.
 Private evidence .research/feature6/lifecycle-routes (step3), lifecycle (initial
 failure), matrix-check* (smoke only). Capture milestones/step1–2 history retained

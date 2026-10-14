@@ -66,6 +66,9 @@ impl Script {
         self.deadline
             .set(Instant::now() + Duration::from_millis(50));
     }
+    pub fn memory_bytes(&self) -> usize {
+        self.lua.used_memory()
+    }
     pub fn binding_count(&self) -> usize {
         self.cache.borrow().len()
     }

@@ -50,6 +50,7 @@ def sample(env,raw,compositor,stop):
         pw=services.pipewire(env,raw)
         windows=subprocess.Popen(['quickshell','--path',str(ROOT/'spikes/backend-windows.qml')],cwd=ROOT,env=env,stdout=(raw/'windows.log').open('w'),stderr=subprocess.STDOUT,start_new_session=True)
         time.sleep(2)
+        if os.environ.get('BEAD_BAR_UI_CHURN'):env['BEAD_SERVICE_DIAGNOSTICS']='1'
         for renderer in ['cpu','femtovg-gl']:
             for companion in [False,True]:
                 case=renderer+'-'+('panel' if companion else 'alone')
@@ -111,17 +112,20 @@ def sample(env,raw,compositor,stop):
                         offset=len(path.read_text());stop(tray);tray=None
                         wait_log(path,lambda text:tray_state(text,0,offset))
                         churn=[]
-                        for cycle in range(100):
+                        cycles=int(os.environ.get('BEAD_CHURN_CYCLES','100'))
+                        for cycle in range(cycles):
                             offset=len(path.read_text())
                             tray=subprocess.Popen([str(target/'examples/tray-fixture')],env=env,stdout=(raw/(label+'-churn-tray.log')).open('a'),stderr=subprocess.STDOUT,start_new_session=True)
                             wait_log(path,lambda text:tray_state(text,1,offset))
                             offset=len(path.read_text());stop(tray);tray=None
                             wait_log(path,lambda text:tray_state(text,0,offset))
-                            if cycle in [9,49,99]:
+                            if cycle in [9,49,99,cycles-1]:
                                 time.sleep(.1)
-                                churn.append({'cycle':cycle+1,**services.resources(client.pid)})
+                                churn.append({'cycle':cycle+1,'resources':next(l for l in reversed(path.read_text().splitlines()) if l.startswith('UI_RESOURCES ')),**services.resources(client.pid)})
                         assert all(s['fds']==churn[0]['fds'] for s in churn),churn
-                        assert churn[-1]['pss_mib']-churn[0]['pss_mib']<2,churn
+                        if not os.environ.get('BEAD_CHURN_DIAGNOSTIC'):
+                            assert all('desktop_tasks=7 ' in s['resources'] and re.search(r'desktop_retained_tasks=[12] ',s['resources']) for s in churn),churn
+                            assert churn[-1]['pss_mib']-churn[0]['pss_mib']<2,churn
                         resource_lines=[l for l in path.read_text().splitlines() if l.startswith('UI_RESOURCES ')]
                         assert all('watchers=1 subscriptions=1' in l and 'layers=1' in l for l in resource_lines[-100:]),resource_lines[-3:]
                         row['rendered_tray_churn']=churn

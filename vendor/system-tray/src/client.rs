@@ -418,6 +418,12 @@ impl Client {
 
         let mut disconnect_stream = dbus_proxy.receive_name_owner_changed().await?;
         let mut props_changed = notifier_item_proxy.inner().receive_all_signals().await?;
+        // Subscribe before checking, so an already-exited owner cannot strand this task.
+        if !dbus_proxy.name_has_owner(destination.try_into().map_err(zbus::Error::from)?).await? {
+            items.remove_item(destination);
+            tx.send(Event::Remove(destination.to_string()))?;
+            return Ok(());
+        }
 
         loop {
             tokio::select! {
@@ -598,6 +604,14 @@ impl Client {
             .build()
             .await?;
 
+        // Bind menu lifetime to its owner, just like watch_item_properties.
+        // A signal stream does not end when its remote application quits.
+        let dbus_proxy = DBusProxy::new(connection).await?;
+        let mut disconnected = dbus_proxy.receive_name_owner_changed().await?;
+        let mut layout_updated = dbus_menu_proxy.receive_layout_updated().await?;
+        let mut properties_updated = dbus_menu_proxy.receive_items_properties_updated().await?;
+        if !dbus_proxy.name_has_owner(destination.as_str().try_into().map_err(zbus::Error::from)?).await? { return Ok(()); }
+
         debug!("[{destination}{menu_path}] getting initial menu");
         let menu = dbus_menu_proxy.get_layout(0, -1, &[]).await?;
         let menu = TrayMenu::try_from(menu)?;
@@ -605,13 +619,6 @@ impl Client {
         items.update_menu(&destination, &menu);
 
         tx.send(Event::Update(destination.clone(), UpdateEvent::Menu(menu)))?;
-
-        // Bind menu lifetime to its owner, just like watch_item_properties.
-        // A signal stream does not end when its remote application quits.
-        let dbus_proxy = DBusProxy::new(connection).await?;
-        let mut disconnected = dbus_proxy.receive_name_owner_changed().await?;
-        let mut layout_updated = dbus_menu_proxy.receive_layout_updated().await?;
-        let mut properties_updated = dbus_menu_proxy.receive_items_properties_updated().await?;
 
         let last_layout_update = Arc::new(Mutex::new(Instant::now()));
         let (layout_tx, mut layout_rx) = mpsc::channel(4);
@@ -746,6 +753,13 @@ impl Client {
     #[must_use]
     pub fn items(&self) -> std::sync::Arc<std::sync::Mutex<crate::data::BaseMap>> {
         self.items.get_map()
+    }
+
+    /// Owned watcher handles, including completed tasks awaiting reaping.
+    pub async fn retained_watcher_tasks(&self) -> Result<usize> {
+        let watcher=self.connection.object_server().interface::<_,StatusNotifierWatcher>(names::WATCHER_OBJECT).await?;
+        let count=watcher.get().await.owned_task_count();
+        Ok(count)
     }
 
     /// One should call this method with id=0 when opening the root menu.

@@ -120,7 +120,7 @@ def sample(env, raw, compositor, stop):
             assert not probe.command({'action':'activate','item':item})['ok']
             result=probe.command({'action':'subscriptions'});assert result['subscriptions']==1
             if cycle in [9,49,99]:
-                time.sleep(.2);samples.append({'cycle':cycle+1,'bus_tasks':result['bus_tasks'],**resources(probe.process.pid)})
+                time.sleep(.2);samples.append({'cycle':cycle+1,'bus_tasks':result['bus_tasks'],'retained_tasks':result['retained_tasks'],**resources(probe.process.pid)})
                 print('SERVICE_CHURN '+json.dumps(samples[-1]),flush=True)
         # A separate real bar runtime exercises its actual hit testing and action routes.
         probe.close();probe=None
@@ -157,7 +157,8 @@ def sample(env, raw, compositor, stop):
             probe.wait('SNAPSHOT',lambda s:not s['tray'],offset)
         time.sleep(2)
         result=probe.command({'action':'subscriptions'})
-        final={'bus_tasks':result['bus_tasks'],**resources(probe.process.pid)}
+        assert result['retained_tasks']<=2,result
+        final={'bus_tasks':result['bus_tasks'],'retained_tasks':result['retained_tasks'],**resources(probe.process.pid)}
         assert final['bus_tasks']<=max(samples[0]['bus_tasks'],reconnect_tasks),(samples,final)
         assert final['fds']<=samples[0]['fds']+2,(samples,final)
         assert final['threads']<=samples[0]['threads']+1,(samples,final)

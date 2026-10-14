@@ -40,9 +40,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => None,
         };
         let result = action.map(|a| desktop.action(a)).unwrap_or(Ok(()));
+        let (tasks, retained) = desktop.bus_task_counts();
         println!(
             "RESULT {}",
-            serde_json::json!({"ok":result.is_ok(),"error":result.err(),"subscriptions":desktop.subscription_count(),"bus_tasks":desktop.bus_task_count(),"snapshot":&*desktop.snapshot()})
+            serde_json::json!({"ok":result.is_ok(),"error":result.err(),"subscriptions":desktop.subscription_count(),"bus_tasks":tasks,"retained_tasks":retained,"snapshot":&*desktop.snapshot()})
         );
     }
     drop(subscription);

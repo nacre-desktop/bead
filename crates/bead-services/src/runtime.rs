@@ -21,7 +21,7 @@ pub enum Action {
 #[derive(Debug)]
 pub(crate) enum Command {
     Action(Action, std::sync::mpsc::Sender<Result<(), String>>),
-    Tasks(std::sync::mpsc::Sender<usize>),
+    Tasks(std::sync::mpsc::Sender<(usize, usize)>),
     Stop,
 }
 type Callback = Arc<dyn Fn(Arc<Snapshot>) + Send + Sync>;
@@ -137,13 +137,16 @@ impl Desktop {
             .map_err(|_| "PipeWire disconnected".to_string())
     }
     pub fn bus_task_count(&self) -> usize {
+        self.bus_task_counts().0
+    }
+    pub fn bus_task_counts(&self) -> (usize, usize) {
         let (sender, receiver) = std::sync::mpsc::channel();
         if self.sender.try_send(Command::Tasks(sender)).is_err() {
-            return 0;
+            return (0, 0);
         }
         receiver
             .recv_timeout(std::time::Duration::from_secs(3))
-            .unwrap_or(0)
+            .unwrap_or_default()
     }
     pub fn subscription_count(&self) -> usize {
         self.shared.callbacks.lock().unwrap().len()

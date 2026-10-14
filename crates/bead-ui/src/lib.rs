@@ -1454,7 +1454,7 @@ impl Session {
     }
     pub fn resource_counts(&self) -> String {
         format!(
-            "stores={} nodes={} watchers={} subscriptions={} bindings={} sources={}",
+            "stores={} nodes={} watchers={} subscriptions={} bindings={} sources={} luau_bytes={}",
             self.stores.values().len(),
             self.current_nodes.len(),
             usize::from(self.watcher.is_some()),
@@ -1462,7 +1462,10 @@ impl Session {
             self.generation
                 .as_ref()
                 .map_or(0, |g| g.script.binding_count()),
-            self.generation.as_ref().map_or(0, |g| g.sources.len())
+            self.generation.as_ref().map_or(0, |g| g.sources.len()),
+            self.generation
+                .as_ref()
+                .map_or(0, |g| g.script.memory_bytes())
         )
     }
     pub fn state_summary(&self) -> String {

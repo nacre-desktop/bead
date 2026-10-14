@@ -47,7 +47,7 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
             match command {
                 Command::Stop => return,
                 Command::Tasks(reply) => {
-                    let _ = reply.send(0);
+                    let _ = reply.send((0, 0));
                 }
                 Command::Action(_, reply) => {
                     let _ = reply.send(Err("D-Bus disconnected".into()));
@@ -103,7 +103,7 @@ async fn connect(
             _=tokio::time::sleep(Duration::from_secs(delay))=>shared.change(|s|s.clock=clock()),
             command=receiver.recv()=>match command {
                 Some(Command::Stop)|None=>return Ok(()),
-                Some(Command::Tasks(reply))=>{ let _=reply.send(tokio::runtime::Handle::current().metrics().num_alive_tasks()); },
+                Some(Command::Tasks(reply))=>{ let retained=tray.retained_watcher_tasks().await.unwrap_or(0); let _=reply.send((tokio::runtime::Handle::current().metrics().num_alive_tasks(),retained)); },
                 Some(Command::Action(action,reply))=>{
                     let result=tokio::time::timeout(Duration::from_secs(2),tray_action(&tray, &tray_actions, action)).await.map_err(|_|"D-Bus action timeout".to_string()).and_then(|r|r);
                     let _=reply.send(result);

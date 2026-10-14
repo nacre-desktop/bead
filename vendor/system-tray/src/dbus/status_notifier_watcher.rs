@@ -36,6 +36,10 @@ impl StatusNotifierWatcher {
         #[zbus(connection)] con: &Connection,
         #[zbus(signal_emitter)] signal_emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
+        // Completed JoinSet tasks retain their allocation until joined.
+        while let Some(result)=self.tasks.try_join_next() {
+            if let Err(error)=result { warn!("watcher task failed: {error}"); }
+        }
         // TODO: right now, we convert everything to the unique bus name (something like :1.234).
         //  However, it might make more sense to listen to the actual name they give us, so that if
         //  the connection dissociates itself from the org.kde.StatusNotifierHost-{pid}-{nr} name
@@ -125,6 +129,10 @@ impl StatusNotifierWatcher {
         #[zbus(connection)] con: &Connection,
         #[zbus(signal_emitter)] signal_emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
+        // Completed JoinSet tasks retain their allocation until joined.
+        while let Some(result)=self.tasks.try_join_next() {
+            if let Err(error)=result { warn!("watcher task failed: {error}"); }
+        }
         let (service, objpath) = parse_service(service, hdr, con).await?;
         let service = zbus::names::BusName::Unique(service);
 
@@ -189,6 +197,10 @@ impl StatusNotifierWatcher {
     ) -> zbus::fdo::Result<()> {
         debug!("received item unregister: {service}");
 
+        // Completed JoinSet tasks retain their allocation until joined.
+        while let Some(result)=self.tasks.try_join_next() {
+            if let Err(error)=result { warn!("watcher task failed: {error}"); }
+        }
         let (service, objpath) = parse_service(service, hdr, con).await?;
         let service = zbus::names::BusName::Unique(service);
 
@@ -242,6 +254,8 @@ impl StatusNotifierWatcher {
     }
 
     /// Attach and run the Watcher (in the background) on a connection.
+    pub(crate) fn owned_task_count(&self) -> usize { self.tasks.len() }
+
     pub async fn attach_to(self, con: &zbus::Connection) -> zbus::Result<()> {
         if !con.object_server().at(names::WATCHER_OBJECT, self).await? {
             return Err(zbus::Error::Failure(format!(
