@@ -38,6 +38,7 @@ If CPU cannot keep up, explain before starting Feature 3.
 | 6. Bar v1 | Clock/workspaces, SNI+DBusMenu tray, PipeWire audio, UPower battery, network/Bluetooth display and helper actions; daemon/item restarts; per-output look | Can actual service-driven UI sleep and share contexts? SNI is new in audited QML snapshot |
 | 7. Command/files/helpers | Private versioned command socket/client plus compatibility target/method catalog; all current CLI/keybinding routes tested in fixtures; bounded runner/watch/helper protocol | Can existing tools call Bead without changing live configs? Minimal helper transport may already support earlier proofs |
 | 8. Popouts/panels | One actual panel and animations, open/close/focus/dismiss across outputs; preserved state and pacing; output disappearance | **Gate C:** bar parity on both + panel; measured benefit versus cost; owner decision |
+| Optimization pass — immediately after Gate C | Measure each candidate on the bar + one panel scene on both compositors at real sizes; retain only measured improvements | Can fixed costs, caches, allocator behavior and reload work be improved without regressions? |
 | 9. Notifications/OSD | Server on private bus, replacement/actions/expiry/history/DND, inhibition and visual transitions; no takeover of live notification service | Is native notification behavior complete enough for parity? |
 | 10. Launcher | Same launcher-menu.json catalog/modes/ranking, populated-catalog grid/selection, cold/warm launch/idle reopen and preserved inputs | **Gate D:** estimate all remaining work from measured pace; owner decision on full parity |
 | 11. Dashboard | MPRIS/media, resource/calendar/system/weather cards, wallpaper/palette presentation; retained helpers and bounded artwork caches | Can rich data/views stay efficient and resilient? |
@@ -52,6 +53,25 @@ work rather than extrapolate the easier bar features at a uniform rate.
 Secure session lock, if included beyond the current lock-preview, is a separate
 fail-closed protocol/safety gate before any daily-session trial. It is not silently
 counted as done with a session menu or decorative lock widget.
+
+## Optimization pass — after Gate C
+
+Run this milestone immediately after Feature 8/Gate C, before Feature 9. It is
+scheduled work, not part of Feature 6. Measure every individual change against
+its baseline on the bar + one panel scene, both compositors, at real sizes.
+Record PSS + DRM, idle CPU and frame pacing under comparable conditions; retain
+only changes that measurably help. Record every result in FEASIBILITY.md,
+including candidates that do not improve the measurements and any tradeoffs.
+
+- GL fixed cost: no MSAA/depth/stencil; compare 2 versus 3 buffers; cap glyph and
+  texture atlases; lazy GPU initialization with a CPU-rendered bar until a GL
+  surface is needed.
+- Allocator: system versus mimalloc versus jemalloc, including MALLOC_ARENA_MAX;
+  measure memory after one hour of use as well as startup.
+- Release profile: LTO, codegen-units=1, panic=abort where safe, and stripping.
+- Inventory threads and stack sizes; test merging idle threads.
+- Decode images at display size and apply explicit cache budgets.
+- Move reload baking off the UI thread, preserving transactional reload guarantees.
 
 ## Measurement gates and reproducibility
 
