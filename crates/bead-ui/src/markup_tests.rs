@@ -334,3 +334,132 @@ fn overflowing_scroll_grid_keeps_rows_visible_beyond_its_assigned_container_box(
             .any(|p| matches!(p,Primitive::Text{text,..} if text.starts_with("Item ")))
     );
 }
+
+#[test]
+fn framework_kit_shared_scale_edges_and_independent_tile_actions() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.0.join("kit")).unwrap();
+    fs::write(
+        f.0.join("palette.json"),
+        include_str!("../../../shell/palette.json"),
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("sample.png"),
+        include_bytes!("../../../shell/sample.png"),
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("kit/behavior.luau"),
+        include_str!("../../../shell/kit/behavior.luau"),
+    )
+    .unwrap();
+    let source = include_str!("../../../shell/kit/main.luau");
+    for edge in ["left", "right"] {
+        fs::write(
+            f.0.join("kit/main.luau"),
+            source.replace("edge=\"left\"", &format!("edge=\"{edge}\"")),
+        )
+        .unwrap();
+        let mut session = f.session();
+        session.entry = "kit/main.luau".into();
+        let candidate = session.reload().unwrap();
+        assert_eq!(
+            candidate.motion.as_ref().unwrap().edge,
+            if edge == "left" {
+                bead_core::Edge::Left
+            } else {
+                bead_core::Edge::Right
+            }
+        );
+        session.commit(candidate);
+        for (suffix, store, expected) in [
+            ("tile.toggle", "enabled", Value::Bool(true)),
+            ("tile.detail", "details", Value::Number(1.)),
+            ("slider.hits.value-10", "volume", Value::Number(50.)),
+            ("segments.normal", "choice", Value::Text("normal".into())),
+        ] {
+            let node = session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.ends_with(suffix))
+                .unwrap();
+            let r = rect(&node.draw);
+            let scene = session
+                .click(r.x + r.w / 2., r.y + r.h / 2.)
+                .unwrap()
+                .unwrap();
+            session.commit(scene);
+            assert_eq!(session.stores.get(store), Some(&expected));
+        }
+        let r = rect(
+            &session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.ends_with("slider.hits.value-10"))
+                .unwrap()
+                .draw,
+        );
+        let scene = session
+            .click(r.x + r.w / 2., r.y + r.h / 2.)
+            .unwrap()
+            .unwrap();
+        session.commit(scene);
+        let r = rect(
+            &session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.ends_with("slider.hits.value-15"))
+                .unwrap()
+                .draw,
+        );
+        let scene = session
+            .drag(r.x + r.w / 2., r.y + r.h / 2.)
+            .unwrap()
+            .unwrap();
+        session.commit(scene);
+        assert_eq!(session.stores.get("volume"), Some(&Value::Number(75.)));
+        let scene = session.step_range(true).unwrap().unwrap();
+        session.commit(scene);
+        assert_eq!(session.stores.get("volume"), Some(&Value::Number(70.)));
+        assert!(
+            session
+                .current
+                .primitives
+                .iter()
+                .any(|p| matches!(p,Primitive::Image{blur,..} if *blur == 6.))
+        );
+    }
+    let scale: serde_json::Value =
+        serde_json::from_str(include_str!("../assets/size-scale.json")).unwrap();
+    assert_eq!(scale["spacing"]["md"], 12);
+    assert_eq!(scale["radii"]["medium"], 16);
+}
+#[test]
+fn edge_motion_opens_inward_and_top_bar_stays_horizontal() {
+    assert!(bead_core::Edge::Left.closed_offset(100., 200., 0.).0 < 0.);
+    assert!(bead_core::Edge::Right.closed_offset(100., 200., 0.).0 > 0.);
+    assert_eq!(
+        bead_core::Edge::Left.closed_offset(100., 200., 1.),
+        (0., 0.)
+    );
+    let f = fixture();
+    fs::write(
+        f.0.join("palette.json"),
+        include_str!("../../../shell/palette.json"),
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("palette.json"),
+        include_str!("../../../shell/palette.json"),
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui"); local kit=require("bead.kit")
+return kit.Bar{id="bar",edge="top",width=400,height=50,kit.Button{id="a",text="A",on_activate=ui.action("select","a")},kit.Button{id="b",text="B",on_activate=ui.action("select","b")}}"#).unwrap();
+    let session = session(&f);
+    let nodes = session.view_nodes();
+    let a = rect(&nodes.iter().find(|n| n.id.ends_with(".a")).unwrap().draw);
+    let b = rect(&nodes.iter().find(|n| n.id.ends_with(".b")).unwrap().draw);
+    assert!(b.x > a.x);
+    assert_eq!(a.y, b.y);
+}

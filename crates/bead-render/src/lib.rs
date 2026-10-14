@@ -108,6 +108,8 @@ pub enum Primitive {
         color: [u8; 4],
     },
     Image {
+        #[serde(default)]
+        blur: f32,
         rect: Rect,
         path: std::path::PathBuf,
     },
@@ -137,6 +139,7 @@ pub struct Motion {
     pub open: bool,
     pub duration: f64,
     pub spring: bool,
+    pub edge: bead_core::Edge,
 }
 /// Retained logical ownership; own primitives precede the ordered child layers.
 #[derive(Clone, Debug)]
@@ -304,8 +307,8 @@ fn key(p: &Primitive, scale: f32) -> String {
             "t:{scale}:{}:{}:{family}:{size}:{color:?}:{align:?}:{text}",
             rect.w, rect.h
         ),
-        Primitive::Image { rect, path } => {
-            format!("i:{scale}:{}:{}:{}", rect.w, rect.h, path.display())
+        Primitive::Image { rect, path, blur } => {
+            format!("i:{blur}:{scale}:{}:{}:{}", rect.w, rect.h, path.display())
         }
         Primitive::Shadow { rect, radius, blur } => {
             format!("s:{scale}:{}:{}:{radius}:{blur}", rect.w, rect.h)
@@ -443,12 +446,29 @@ impl Renderer for CpuRenderer {
                     );
                     pix
                 }
-                Primitive::Image { rect, path } => load_image(
-                    path,
-                    *rect,
-                    scale,
-                    scene.asset_data.get(path).map(|data| data.as_ref()),
-                )?,
+                Primitive::Image { rect, path, blur } => {
+                    let pix = load_image(
+                        path,
+                        *rect,
+                        scale,
+                        scene.asset_data.get(path).map(|data| data.as_ref()),
+                    )?;
+                    if *blur > 0. {
+                        let size = tiny_skia::IntSize::from_wh(pix.width(), pix.height())
+                            .ok_or("invalid blur dimensions")?;
+                        let image = image::RgbaImage::from_raw(
+                            pix.width(),
+                            pix.height(),
+                            pix.data().to_vec(),
+                        )
+                        .ok_or("invalid blur image")?;
+                        let blurred = image::imageops::blur(&image, blur * scale);
+                        Pixmap::from_vec(blurred.into_raw(), size)
+                            .ok_or("invalid blurred pixels")?
+                    } else {
+                        pix
+                    }
+                }
                 Primitive::Shadow { rect, radius, blur } => {
                     shadow_pixmap(*rect, *radius, *blur, scale)?
                 }
@@ -908,6 +928,7 @@ mod tests {
                             color: [20, 120, 210, 255],
                         },
                         Primitive::Image {
+                            blur: 0.,
                             rect: Rect::new(14., 8., 15., 15.),
                             path: Path::new(env!("CARGO_MANIFEST_DIR"))
                                 .join("../../shell/sample.png"),

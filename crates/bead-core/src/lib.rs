@@ -3,6 +3,34 @@
 pub mod animation;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+/// A surface's owning edge; inward vectors also place popouts away from bars.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Edge {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+impl Edge {
+    pub fn inward(self) -> (f32, f32) {
+        match self {
+            Self::Top => (0., 1.),
+            Self::Bottom => (0., -1.),
+            Self::Left => (1., 0.),
+            Self::Right => (-1., 0.),
+        }
+    }
+    pub fn closed_offset(self, width: f32, height: f32, progress: f32) -> (f32, f32) {
+        let (x, y) = self.inward();
+        let distance = if x == 0. { height } else { width };
+        (
+            -x * distance * (1. - progress),
+            -y * distance * (1. - progress),
+        )
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Value {

@@ -60,6 +60,8 @@ pub struct Node {
     pub scroll_store: Option<String>,
     #[serde(default)]
     pub focusable: bool,
+    #[serde(default)]
+    pub drag: bool,
     #[serde(skip)]
     pub clip: Option<Rect>,
     #[serde(default)]
@@ -292,7 +294,7 @@ impl Generation {
                         && *blur >= 0.
                         && *blur <= 64.
                 }
-                Primitive::Image { .. } => true,
+                Primitive::Image { blur, .. } => blur.is_finite() && (0.0..=32.0).contains(blur),
             };
             if !valid_shape || !valid_rect(rect(&node.draw)) {
                 return Err(node.diagnostic(format!("invalid geometry for {}", node.id)));
@@ -951,6 +953,62 @@ impl Session {
             return Ok(None);
         };
         self.stage_state(stores)
+    }
+    pub fn drag(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
+            return Ok(None);
+        };
+        let Some(current) = self
+            .current_nodes
+            .iter()
+            .find(|n| &n.id == focused && n.drag)
+        else {
+            return Ok(None);
+        };
+        let group = current.id.rsplit_once('.').map(|(parent, _)| parent);
+        if self
+            .hit(x, y, false)
+            .is_some_and(|n| n.drag && n.id.rsplit_once('.').map(|(parent, _)| parent) == group)
+        {
+            self.click(x, y)
+        } else {
+            Ok(None)
+        }
+    }
+    pub fn step_range(&mut self, back: bool) -> Result<Option<Scene>, Diagnostic> {
+        let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
+            return Ok(None);
+        };
+        let Some(current) = self
+            .current_nodes
+            .iter()
+            .find(|n| &n.id == focused && n.drag)
+        else {
+            return Ok(None);
+        };
+        let peers: Vec<_> = self
+            .current_nodes
+            .iter()
+            .filter(|n| {
+                n.drag
+                    && n.id.rsplit_once('.').map(|(p, _)| p)
+                        == current.id.rsplit_once('.').map(|(p, _)| p)
+            })
+            .collect();
+        let index = peers
+            .iter()
+            .position(|n| n.id == current.id)
+            .ok_or_else(|| Diagnostic::new(&self.entry, 1, 1, "missing range focus"))?;
+        let next = if back {
+            index.saturating_sub(1)
+        } else {
+            (index + 1).min(peers.len() - 1)
+        };
+        let r = rect(&peers[next].draw);
+        self.click(r.x + r.w / 2., r.y + r.h / 2.)
+    }
+    pub fn focused_range(&self) -> bool {
+        matches!(self.stores.get("bead.focused"),Some(Value::Text(id)) if self.current_nodes.iter().any(|n|n.drag && &n.id==id))
     }
     pub fn hover(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
         if self.stores.get("bead.hovered").is_none() {

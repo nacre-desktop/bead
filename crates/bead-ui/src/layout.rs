@@ -104,6 +104,10 @@ pub fn allowed_property(name: &str) -> bool {
         "open",
         "transition",
         "duration",
+        "edge",
+        "direction",
+        "drag",
+        "blur",
         "text_align",
         "position",
         "left",
@@ -132,6 +136,8 @@ pub struct ViewSpec {
     pub border_color: Option<Json>,
     pub border_width: f32,
     pub radius: f32,
+    pub blur: f32,
+    pub drag: bool,
     pub font_size: f32,
     pub family: String,
     pub icon: Option<String>,
@@ -282,6 +288,19 @@ impl ViewSpec {
                 },
                 ..Style::default()
             };
+            if let Some(direction) = p.get("direction") {
+                style.flex_direction = match direction.as_str() {
+                    Some("row") => FlexDirection::Row,
+                    Some("row-reverse") => FlexDirection::RowReverse,
+                    Some("column") => FlexDirection::Column,
+                    Some("column-reverse") => FlexDirection::ColumnReverse,
+                    _ => {
+                        return Err(
+                            source.error("direction needs row/row-reverse/column/column-reverse")
+                        );
+                    }
+                };
+            }
             let leaf_height = match raw.kind {
                 Widget::Text => font_size * 1.5,
                 Widget::Button | Widget::TextInput => 40.,
@@ -476,7 +495,9 @@ impl ViewSpec {
                 fill: p.get("fill").cloned(),
                 color: p.get("color").cloned(),
                 border_color: p.get("border_color").cloned(),
+                drag: boolean(p, "drag", false, source)?,
                 border_width: number(p, "border_width", 0., source)?,
+                blur: number(p, "blur", 0., source)?.clamp(0., 32.),
                 radius: number(
                     p,
                     "radius",
@@ -500,6 +521,12 @@ impl ViewSpec {
                         open: boolean(p, "open", true, source)?,
                         duration: f64::from(number(p, "duration", 0.2, source)?),
                         spring: text(p, "transition", "ease", source)? == "spring",
+                        edge: serde_json::from_value(
+                            p.get("edge")
+                                .cloned()
+                                .unwrap_or_else(|| Json::String("top".into())),
+                        )
+                        .map_err(|_| source.error("edge needs top/bottom/left/right"))?,
                     })
                 } else {
                     None
@@ -806,7 +833,11 @@ pub fn layout(
                     .clone()
                     .ok_or_else(|| source.error("Image requires icon or path"))?
             };
-            emit(Primitive::Image { rect: r, path });
+            emit(Primitive::Image {
+                blur: view.blur,
+                rect: r,
+                path,
+            });
         }
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);
@@ -829,6 +860,7 @@ pub fn layout(
                 action_arg: view.argument.clone(),
                 scroll_store: inherited_scroll.map(str::to_owned),
                 focusable: view.action.is_some() || view.input.is_some(),
+                drag: view.drag,
                 clip,
                 label: if !view.aria_label.is_empty() {
                     view.aria_label.clone()

@@ -281,6 +281,7 @@ mod tests {
             bounds: bead_render::Rect::new(0., 0., 24., 24.),
         };
         scene.primitives.push(bead_render::Primitive::Image {
+            blur: 0.,
             path: "@icon:tray:fixture".into(),
             rect: bead_render::Rect::new(0., 0., 24., 24.),
         });
@@ -302,6 +303,7 @@ mod tests {
         // A found but undecodable named icon also falls back to the real pixmap.
         std::fs::write(nested.join("fixture.png"), b"broken PNG").unwrap();
         scene.primitives[0] = bead_render::Primitive::Image {
+            blur: 0.,
             path: "@icon:tray:fixture".into(),
             rect: bead_render::Rect::new(0., 0., 24., 24.),
         };
@@ -319,6 +321,7 @@ mod tests {
         let mut missing = snapshot.tray[0].clone();
         missing.icon_name = "bead-nonexistent-icon-7832".into();
         scene.primitives[0] = bead_render::Primitive::Image {
+            blur: 0.,
             path: "@icon:tray:fixture".into(),
             rect: bead_render::Rect::new(0., 0., 24., 24.),
         };
@@ -331,7 +334,7 @@ mod tests {
         )
         .unwrap();
         assert!(
-            matches!(&scene.primitives[0],bead_render::Primitive::Image{path,..} if path.to_string_lossy().starts_with("@tray-pixmap/"))
+            matches!(&scene.primitives[0],bead_render::Primitive::Image {path,..} if path.to_string_lossy().starts_with("@tray-pixmap/"))
         );
         std::fs::remove_dir_all(dir).unwrap();
     }

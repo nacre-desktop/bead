@@ -263,6 +263,7 @@ impl SceneSource for Runtime {
                 value,
             } => self.session.accessibility_action(target, &action, value)?,
             UiEvent::Hover { x, y } => self.session.hover(x, y)?,
+            UiEvent::Drag { x, y } => self.session.drag(x, y)?,
             UiEvent::Ime {
                 preedit,
                 commit,
@@ -310,6 +311,9 @@ impl SceneSource for Runtime {
                 "tab" => self.session.focus_next(shift)?,
                 "enter" => self.session.activate_focused()?,
                 "up" | "down" => self.session.focus_next(command == "up")?,
+                "left" | "right" if self.session.focused_range() => {
+                    self.session.step_range(command == "left")?
+                }
                 "left" | "right" if self.session.surrounding_text().is_none() => {
                     self.session.focus_next(command == "left")?
                 }

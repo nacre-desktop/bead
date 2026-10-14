@@ -1,8 +1,9 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui = require("bead.ui")
+local kit = require("bead.kit")
 local Sidebar = require("./components/sidebar")
 local AppGrid = require("./components/app-grid")
-return ui.Panel {id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
+return kit.Panel {edge="left",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
     open=ui.bind("launcher.open"),transition="ease",duration=.2,
     radius=12,fill="surface",border_width=1,border_color="outlineVariant",
     padding_left=12,padding_right=20,padding_top=16,padding_bottom=18,gap=15,
@@ -18,6 +19,6 @@ return ui.Panel {id="launcher",width=1100,height=590,max_width="90%",max_height=
             ui.Box{height=10},
         },
     },
-    ui.TextInput{id="search",text=ui.bind("launcher.search.text"),placeholder="Search everything…",
+    kit.TextInput{id="search",text=ui.bind("launcher.search.text"),placeholder="Search everything…",
         height=49,padding=15,radius=10,font_size=16,width="fill"},
 }

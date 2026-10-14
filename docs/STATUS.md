@@ -1,5 +1,31 @@
 # Status
 
+## 2026-10-15 — 6b step 4 complete; step 5 next
+
+Framework-owned bead.kit exposes Button, IconButton, Slider, Switch, Tile,
+SegmentedControl, List/ListRow, Card, Popover/Peek, Tooltip and TextInput.
+The bar and launcher compose it. The factual scale mirror exactly matches
+Nacre size-scale.json; the sync/check helper detects later drift. Palette
+roles still come from Orient. Point sizes convert to logical pixels at 4/3;
+NacreTokens motion durations are 200/120/400 ms.
+
+Bar/Panel edge properties admit all four edges. Layout direction reverses
+for bottom/right bars; panel pose moves from its edge; popouts open away
+from the bar. A worker's committed panel now updates its layer anchor;
+initial fallback geometry had incorrectly left side panels centered.
+Only top bar and left/right panels are GUI-validated at this milestone.
+
+Slider click/drag/arrow-key tests, independent tile actions, segmented
+selection, token values and panel-edge poses pass. The kit composes retained
+blurred artwork, a direct-fill level meter and hidden peek/tooltip states.
+GUI captures on both private compositors were inspected; no UI errors,
+all generations presented and STOP surfaces=0. Fmt/clippy/workspace tests
+and CPU-only build pass. Evidence .research/feature6b/kit-*-final.
+Step3 c672af6 CI38644193181 passed; step4 CI recorded after push.
+Next: step5 robustness/persistence/capabilities, then step6 hygiene.
+Step0a nested niri pacing/idle invariance remains open. No Feature7,
+physical test, reference writes, installation or release.
+
 ## 2026-10-14 — 6b step 3 complete; step 4 next
 
 Automatic bars use CPU SHM. The companion has a CPU first frame, warms GL

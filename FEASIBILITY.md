@@ -690,3 +690,26 @@ Explicit GL bars keep their shared transport. Drop-only/unbind-only failures
 retained. Reinitialization and final STOP surfaces=0 pass both compositors.
 Workspace tests/fmt/clippy/CPU-only pass; policy lifecycle regression tested.
 Evidence .research/feature6b/policy-{niri,hypr}-cycle. Step0a still open.
+
+## Feature 6b step 4 — shared kit and edge geometry (2026-10-15)
+
+The permissive framework owns bead.kit; bar and launcher compose it. Named
+scale values exactly mirror Nacre size-scale.json, with an explicit drift
+check. Existing Orient roles supply color. Nacre motion timings are shared.
+Side panels move/anchor from their own edge; popouts open away from bars.
+
+| Proof | Result |
+|---|---|
+| Tile toggle/detail, slider click/drag/arrow keys | Separate actions / numeric values pass |
+| Segmented selection / left and right panel poses | Stable rebuild / inward geometry pass |
+| Shared spacing/radii/text/icon scale | Source mirror check passes |
+| Private niri and Hypr top bar + left/right kit panel | Six captures presented, inspected, clean stop |
+| Blurred artwork / level meter / peek-tooltip composition | Retained image blur / direct fills / composed states |
+
+Kit includes all twelve requested controls, plus Bar/Panel, LevelMeter and
+BlurredArtwork; see docs/COMPONENTS.md. Tooltip visibility uses a view hover
+binding; slider step count is bounded. No physical screen-reader acceptance.
+Bottom bars/panels remain unvalidated. Image blur is not compositor backdrop
+blur. Corrected a real worker-startup anchor bug found in the first capture.
+Workspace tests/fmt/clippy/CPU-only pass. Private output2880×1800/1.5,
+niri nested60Hz/Hypr virtual120. Evidence .research/feature6b/kit-*-final.

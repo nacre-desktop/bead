@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "units": {
+    "spacing": "logical pixels",
+    "radii": "logical pixels",
+    "text": "points",
+    "icons": "points; large/logo sizes may be used as logical pixels"
+  },
+  "spacing": {
+    "hairline": 2,
+    "xs": 4,
+    "sm": 8,
+    "compact": 10,
+    "md": 12,
+    "lg": 14,
+    "xl": 18,
+    "xxl": 24,
+    "huge": 32
+  },
+  "radii": {
+    "small": 8,
+    "medium": 16,
+    "large": 20,
+    "full": 9999
+  },
+  "text": {
+    "caption": 10,
+    "body": 12,
+    "title": 14,
+    "headline": 18
+  },
+  "icons": {
+    "small": 12,
+    "medium": 15,
+    "large": 18,
+    "xlarge": 24,
+    "hero": 32
+  }
+}

@@ -261,6 +261,7 @@ mod tests {
         let mut scene = scene();
         let path = std::path::PathBuf::from("tray.png");
         scene.primitives.push(crate::Primitive::Image {
+            blur: 0.,
             path: path.clone(),
             rect: crate::Rect::new(0., 0., 10., 10.),
         });

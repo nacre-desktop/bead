@@ -23,6 +23,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let started = std::time::Instant::now();
     let mut profile = false;
     let mut bar_panel = false;
+    let mut panel_edge = bead_core::Edge::Right;
     let mut panel_renderer = bead_render::RendererKind::FemtovgGl;
     let mut options = Options::default();
     select_renderer(&mut options, "auto")?;
@@ -37,6 +38,17 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bar-panel" => bar_panel = true,
+            "--edge" => {
+                options.edge = serde_json::from_value(serde_json::Value::String(
+                    args.next().ok_or("--edge needs top/bottom/left/right")?,
+                ))?
+            }
+            "--panel-edge" => {
+                panel_edge = serde_json::from_value(serde_json::Value::String(
+                    args.next()
+                        .ok_or("--panel-edge needs top/bottom/left/right")?,
+                ))?
+            }
             "--lazy-gl" => options.lazy_gl = true,
             "--debug-policy-cycle" => {
                 if std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() != Ok("1") {
@@ -159,6 +171,13 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         companion.font_files = font_sources::select(&companion)?;
         companion.offset = (32., 32.);
         companion.slide = None;
+        companion.motion = Some(bead_render::Motion {
+            id: "companion".into(),
+            open: true,
+            duration: 0.2,
+            spring: false,
+            edge: panel_edge,
+        });
         options.companion = Some((companion, panel_renderer));
     }
     let mut scene = if ui.is_some() {
@@ -389,10 +408,12 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         );
     }
     v.push(Primitive::Image {
+        blur: 0.,
         rect: Rect::new(28., 422., 48., 48.),
         path: assets.join("sample.svg"),
     });
     v.push(Primitive::Image {
+        blur: 0.,
         rect: Rect::new(96., 422., 48., 48.),
         path: assets.join("sample.png"),
     });
@@ -417,6 +438,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
     if let Some(path) = icon {
         println!("ICON folder resolved=true");
         v.push(Primitive::Image {
+            blur: 0.,
             rect: Rect::new(62., 490., 48., 48.),
             path,
         });

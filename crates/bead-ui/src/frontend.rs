@@ -148,7 +148,11 @@ end
                 let loading = RefCell::new(BTreeSet::<PathBuf>::new());
                 let entry_parent = entry.parent().unwrap_or(Path::new("")).to_path_buf();
                 let sdk_copy = sdk.clone();
+                let kit_factory: Function = lua.load(include_str!("../assets/kit.luau")).set_name("@bead.kit").eval()?;
+                let tokens: serde_json::Value = serde_json::from_str(include_str!("../assets/size-scale.json")).map_err(mlua::Error::external)?;
+                let kit: Table = kit_factory.call((sdk.clone(), lua.to_value(&tokens)?))?;
                 let require = scope.create_function(move |lua, name: String| {
+                    if name == "bead.kit" { return Ok(mlua::Value::Table(kit.clone())); }
                     if name == "bead.ui" {
                         return Ok(mlua::Value::Table(sdk_copy.clone()));
                     }

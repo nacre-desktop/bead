@@ -566,6 +566,7 @@ mod tests {
             slide: None,
             primitives: vec![
                 Primitive::Image {
+                    blur: 0.,
                     rect: Rect::new(2., 2., 8., 8.),
                     path: "proof.png".into(),
                 },

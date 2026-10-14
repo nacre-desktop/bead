@@ -83,14 +83,17 @@ baselines and report before/after under matched output/workload conditions.
    Step1 implemented/proven with retained preparation tails; see FEASIBILITY.
 2. Worker baking and script work: draw/animation must continue while handlers,
    binds and reload compilation run. Swap validated candidates only when ready;
-   re-bake only changed reload content. Compare reload pauses. Debug Luau stall
+   re-bake only changed reload content. Step2 complete; measured CPU regression
+   and reload/stall results are retained in FEASIBILITY. Debug Luau stall
    flag must prove panel-open animation during600ms stall: frames/longest frame,
    before/after at120Hz. Study pleamar (BSD-3-Clause), prefer reimplementation;
    copied code must preserve copyright in third-party notices.
 3. Per-surface renderer policy behind existing interface: static CPU SHM bar,
    lazy GL when animated surface opens, CPU first frame during GL startup, release
-   GL after idle. Measure bar-only and bar+panel PSS+DRM and lifecycle transitions.
-4. Extract the component kit/shared QML-matching tokens below into the framework.
+   GL after idle. Step3 complete; memory tradeoffs and two-cycle lifecycle
+   proofs on both compositors are retained in FEASIBILITY.
+4. Component kit/shared tokens extracted into bead.kit. Step4 complete; top bar
+   and left/right panel acceptance, other edges unvalidated. See COMPONENTS.
 5. Robustness: logging panic hook; service/backend/reload unwrap/expect become
    errors; source systemd user unit Restart=on-failure; durable stores restore
    panel state after crash/restart. Introduce action capability registry now;

@@ -65,6 +65,10 @@ use wayland_protocols::wp::{
 };
 #[derive(Clone, Debug)]
 pub enum UiEvent {
+    Drag {
+        x: f32,
+        y: f32,
+    },
     Reload,
     /// Deliberately block the script executor for a bounded diagnostic interval.
     DebugScriptStall(u64),
@@ -171,6 +175,7 @@ pub struct Options {
     pub force_argb: bool,
     pub seconds: Option<f64>,
     pub bar: bool,
+    pub edge: bead_core::Edge,
     pub panel: bool,
     pub content_size: bool,
     pub renderer: RendererKind,
@@ -203,6 +208,7 @@ impl Default for Options {
             force_argb: false,
             seconds: None,
             bar: false,
+            edge: Default::default(),
             panel: false,
             content_size: false,
             renderer: RendererKind::Cpu,
@@ -298,6 +304,7 @@ struct App {
     cursor_manager: Option<WpCursorShapeManagerV1>,
     cursor_device: Option<WpCursorShapeDeviceV1>,
     cursor_enter_serial: u32,
+    pointer_pressed: bool,
     text_input_manager: Option<ZwpTextInputManagerV3>,
     text_input: Option<ZwpTextInputV3>,
     ime_surface: Option<wl_surface::WlSurface>,
@@ -391,6 +398,7 @@ pub fn run_runtime(
         cursor_manager: globals.bind(&qh, 1..=1, ()).ok(),
         cursor_device: None,
         cursor_enter_serial: 0,
+        pointer_pressed: false,
         text_input_manager: globals.bind(&qh, 1..=1, ()).ok(),
         text_input: None,
         ime_surface: None,
@@ -685,6 +693,20 @@ impl App {
                 }
                 self.ui_serial += 1;
                 self.scene = scene;
+                if self.options.panel
+                    && let Some(motion) = &self.scene.motion
+                {
+                    let anchor = match motion.edge {
+                        bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP,
+                        bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP,
+                        bead_core::Edge::Top => Anchor::TOP,
+                        bead_core::Edge::Bottom => Anchor::BOTTOM,
+                    };
+                    for surface in self.surfaces.iter().filter(|s| !s.companion) {
+                        surface.layer.set_anchor(anchor);
+                        surface.layer.commit();
+                    }
+                }
                 if self.options.content_size {
                     let width = self.scene.bounds.w.ceil().max(1.) as u32;
                     let height = (self.scene.bounds.y
@@ -961,11 +983,26 @@ impl App {
                 &self.scene
             };
             layer.set_anchor(if content {
-                Anchor::TOP
+                match scene
+                    .motion
+                    .as_ref()
+                    .map(|m| m.edge)
+                    .unwrap_or(self.options.edge)
+                {
+                    bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP,
+                    bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP,
+                    bead_core::Edge::Bottom => Anchor::BOTTOM,
+                    bead_core::Edge::Top => Anchor::TOP,
+                }
             } else if self.options.panel {
                 Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT
             } else {
-                Anchor::TOP | Anchor::LEFT | Anchor::RIGHT
+                match self.options.edge {
+                    bead_core::Edge::Top => Anchor::TOP | Anchor::LEFT | Anchor::RIGHT,
+                    bead_core::Edge::Bottom => Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
+                    bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP | Anchor::BOTTOM,
+                    bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP | Anchor::BOTTOM,
+                }
             });
             if content {
                 let height = scene.bounds.y
@@ -1112,7 +1149,11 @@ impl App {
                 );
                 let progress = self.animations.value(&motion.id, now).unwrap().0;
                 scene.opacity = progress;
-                scene.offset.1 = 32. - (1. - progress) * scene.bounds.h;
+                let (dx, dy) = motion
+                    .edge
+                    .closed_offset(scene.bounds.w, scene.bounds.h, progress);
+                scene.offset.0 = 32. + dx;
+                scene.offset.1 = 32. + dy;
             }
 
             let scale = s.scale120 as f32 / 120.;
@@ -1123,7 +1164,11 @@ impl App {
                 scene.width = s.width as f32;
             }
             if panel {
-                scene.offset.0 = ((s.width as f32 - scene.width) / 2.).max(0.);
+                if scene.motion.as_ref().is_none_or(|m| {
+                    m.edge == bead_core::Edge::Top || m.edge == bead_core::Edge::Bottom
+                }) {
+                    scene.offset.0 = ((s.width as f32 - scene.width) / 2.).max(0.);
+                }
                 if let Some(slide) = scene.slide {
                     let progress = if self.options.animate {
                         let elapsed = self.started.elapsed().as_secs_f32();
@@ -1958,10 +2003,21 @@ impl PointerHandler for App {
             }
             match event.kind {
                 PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
-                    self.ui(UiEvent::Hover { x, y })
+                    if self.pointer_pressed {
+                        self.ui(UiEvent::Drag { x, y });
+                    } else {
+                        self.ui(UiEvent::Hover { x, y });
+                    }
                 }
-                PointerEventKind::Leave { .. } => self.ui(UiEvent::Hover { x: -1., y: -1. }),
-                PointerEventKind::Press { button: 0x110, .. } => self.ui(UiEvent::Click { x, y }),
+                PointerEventKind::Leave { .. } => {
+                    self.pointer_pressed = false;
+                    self.ui(UiEvent::Hover { x: -1., y: -1. });
+                }
+                PointerEventKind::Press { button: 0x110, .. } => {
+                    self.pointer_pressed = true;
+                    self.ui(UiEvent::Click { x, y });
+                }
+                PointerEventKind::Release { button: 0x110, .. } => self.pointer_pressed = false,
                 PointerEventKind::Press { button: 0x111, .. } => {
                     self.ui(UiEvent::ContextMenu { x, y })
                 }
