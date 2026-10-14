@@ -23,10 +23,14 @@ def percentiles(values):
     v=sorted(values)
     return {key:v[min(len(v)-1,math.ceil((len(v)-1)*p))] for key,p in [('p50',.5),('p95',.95),('p99',.99)]} if v else None
 
+def log_text(path):
+    data=path.read_bytes()
+    return data[:data.rfind(b'\n')+1].decode('utf-8')
+
 def wait_log(path,predicate,timeout=15):
     deadline=time.monotonic()+timeout
     while time.monotonic()<deadline:
-        text=path.read_text()
+        text=log_text(path)
         result=predicate(text)
         if result:return result
         time.sleep(.005)
@@ -67,7 +71,7 @@ def sample(env,raw,compositor,stop):
                     time.sleep(3)
                     assert client.poll() is None,path.read_text()
                     assert 'UI_ERROR' not in path.read_text(),path.read_text()
-                    text=path.read_text()
+                    text=log_text(path)
                     assert ('physical=2880x75' in text or ('physical=2880x75' in text.replace(' ',''))),text[-3000:]
                     if companion:
                         assert text.count('GPU_SHARED devices=1 device_id=0') >= (2 if renderer=='femtovg-gl' else 1),text[-3000:]
@@ -81,7 +85,7 @@ def sample(env,raw,compositor,stop):
                     focused=next((w['id'] for w in owned if w['focused']),None);owned.sort(key=lambda w:w['id']==focused)
                     samples=[]
                     for i in range(count):
-                        window=owned[i%2];offset=len(path.read_text())
+                        window=owned[i%2];offset=len(log_text(path))
                         result=probe.command({'action':'focus-window','window':window['id']},'BACKEND_RESULT')
                         assert result['ok'] and result['observed'],result
                         def presented(text):
@@ -109,24 +113,24 @@ def sample(env,raw,compositor,stop):
                         def tray_state(text,wanted,offset):
                             states=[json.loads(l[9:]) for l in text[offset:].splitlines() if l.startswith('UI_STATE ')]
                             return bool(states) and len(states[-1]['bead.desktop.tray'])==wanted
-                        offset=len(path.read_text());stop(tray);tray=None
+                        offset=len(log_text(path));stop(tray);tray=None
                         wait_log(path,lambda text:tray_state(text,0,offset))
                         churn=[]
                         cycles=int(os.environ.get('BEAD_CHURN_CYCLES','100'))
                         for cycle in range(cycles):
-                            offset=len(path.read_text())
+                            offset=len(log_text(path))
                             tray=subprocess.Popen([str(target/'examples/tray-fixture')],env=env,stdout=(raw/(label+'-churn-tray.log')).open('a'),stderr=subprocess.STDOUT,start_new_session=True)
                             wait_log(path,lambda text:tray_state(text,1,offset))
-                            offset=len(path.read_text());stop(tray);tray=None
+                            offset=len(log_text(path));stop(tray);tray=None
                             wait_log(path,lambda text:tray_state(text,0,offset))
                             if cycle in [9,49,99,cycles-1]:
                                 time.sleep(.1)
-                                churn.append({'cycle':cycle+1,'resources':next(l for l in reversed(path.read_text().splitlines()) if l.startswith('UI_RESOURCES ')),**services.resources(client.pid)})
+                                churn.append({'cycle':cycle+1,'resources':next(l for l in reversed(log_text(path).splitlines()) if l.startswith('UI_RESOURCES ')),**services.resources(client.pid)})
                         assert all(s['fds']==churn[0]['fds'] for s in churn),churn
                         if not os.environ.get('BEAD_CHURN_DIAGNOSTIC'):
                             assert all('desktop_tasks=7 ' in s['resources'] and re.search(r'desktop_retained_tasks=[12] ',s['resources']) for s in churn),churn
                             assert churn[-1]['pss_mib']-churn[0]['pss_mib']<2,churn
-                        resource_lines=[l for l in path.read_text().splitlines() if l.startswith('UI_RESOURCES ')]
+                        resource_lines=[l for l in log_text(path).splitlines() if l.startswith('UI_RESOURCES ')]
                         assert all('watchers=1 subscriptions=1' in l and 'layers=1' in l for l in resource_lines[-100:]),resource_lines[-3:]
                         row['rendered_tray_churn']=churn
                         print('BAR_UI_CHURN '+label+' '+json.dumps(churn),flush=True)
@@ -147,7 +151,7 @@ def sample(env,raw,compositor,stop):
                     if client:stop(client)
                 assert 'STOP surfaces=0' in path.read_text() and 'UI_ERROR' not in path.read_text(),path.read_text()[-1500:]
                 if smoke:return
-        if os.environ.get('BEAD_MATRIX_CASES'):return
+        if os.environ.get('BEAD_MATRIX_CASES') and not os.environ.get('BEAD_MATRIX_REFERENCES'):return
         # Matched 50px actual QML bar-only fixture, no generic/full-shell comparison.
         with tempfile.TemporaryDirectory(prefix='bead-qml-bar-') as directory:
             root=pathlib.Path(directory);reference.fixture(root)
