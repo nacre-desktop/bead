@@ -54,6 +54,23 @@ Secure session lock, if included beyond the current lock-preview, is a separate
 fail-closed protocol/safety gate before any daily-session trial. It is not silently
 counted as done with a session menu or decorative lock widget.
 
+## Reusable component kit — before or at Gate C
+
+Before or at Feature8/GateC, extract a reusable component kit into the framework
+layer. This is scheduled framework work; do not implement it during Feature6.
+The kit must include Button, IconButton, Slider, Switch, Tile with separate toggle
+and detail zones, SegmentedControl, List/ListRow, Card, Popover/Peek, Tooltip,
+and TextInput. Shell views should compose these shared components.
+
+Share design tokens for colors from Orient roles, spacing, radii, typography,
+and motion timings. Match Nacre's QML tokens (`NacreTokens`/`NacreAppearance`)
+so components preserve the same appearance and interaction behavior across views.
+
+Track QML redesign needs as framework requirements: blurred artwork backgrounds,
+level meters, peek cards, and segmented controls. Include these capabilities in
+the component/rendering proof and GateC review rather than leaving them as
+one-off shell widgets.
+
 ## Optimization pass — after Gate C
 
 Run this milestone immediately after Feature 8/Gate C, before Feature 9. It is
