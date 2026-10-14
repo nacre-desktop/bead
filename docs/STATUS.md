@@ -1,6 +1,7 @@
 # Status
 
 2026-10-14: Feature6 ACTIVE; steps1–2 complete; context handoff required.
+Step2 source7ac9242 published normally; CI38540251106 passed.
 Service foundation b9e1769 retained, not reimplemented. Step1 source734a4bc/CI
 38535278252 passed: actual unchanged Nacre QML header captured in private sessions.
 Step2 adds Luau bar, native snapshot wakeups/actions,50px/full-width/non-focusing
@@ -58,6 +59,9 @@ Existing tools canonical .tools; Cargo target canonical target; nice10/Cargo-j2.
 Task worktree bead-feature6-bar, branchfeature6-reference-bar. Preserve prior tasks.
 Before EVERY push fetch and inspect FULL origin/main..HEAD; only own new commits,
 owner author+committer in AGENTS. Normal FF integration/push; no PR/force/old roots.
+Old-history tasks must replay ONLY own commits from EXACT old base via --onto or
+individual cherry-picks, normalizing author AND committer. Never merge new main
+into old roots; stop/ask for hundreds/unrelated commits in the publication range.
 Nacre/Orient read-only; shared packaging/pins/identity belong to attribution task.
 Finish3,push+STATUS;finish4,push+STATUS;STOP with short Feature6 summary.
 Context is large: start fresh with "Read ~/Projects/bead/docs/STATUS.md and continue."
