@@ -458,8 +458,9 @@ impl App {
                 0
             });
             layer.set_keyboard_interactivity(
-                if (companion && self.options.panel_spec.is_some())
-                    || (self.options.test_keyboard && !companion)
+                if !self.options.test_passive
+                    && ((companion && self.options.panel_spec.is_some())
+                        || (self.options.test_keyboard && !companion))
                 {
                     KeyboardInteractivity::Exclusive
                 } else if self.options.interactive && self.options.keyboard_focus && !companion {

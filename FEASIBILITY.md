@@ -986,3 +986,26 @@ Real niri disappearance remains N/A; nested off retained its global. No live
 changes, installation, physical/IME/Orca/NVIDIA acceptance, optimization pass
 or Feature9. Stop at GateC. Evidence .research/feature8/idle-final-*,
 qml-final-*, reload-final-* and report-final-hypr; failures retained.
+
+## Gate C — supervised physical acceptance (2026-10-15)
+
+One immediately confirmed live niri test passed the owner's adjusted p99 gate.
+20 cold sound-panel cycles used presentation feedback, private services/state
+and a passive IPC-only overlay. Physical timing removes the nested niri tail.
+A single 58.33 ms opening gap remains; bounded hover preparation is next.
+
+| Physical 120 Hz, 2880×1800/1.5 | Opening | Closing |
+|---|---:|---:|
+| Presentation p50/p95/p99 ms |8.333/8.336/16.667|8.333/8.336/8.337|
+| Longest ms / sample periods |58.330 /466|8.338 /470|
+
+Refresh8.333313 ms, CLOCK_MONOTONIC; ready p50/p95 45.25/64.64 ms.
+Nested niri p99 41.34/47.27 ms was not reproduced. PSS+DRM bar/closed
+23.03/25.14 MiB (+2.11), no swap; 2s CPU~5% includes live backend updates,
+not comparable to 60s private idle. No screenshot/input injection/audio change,
+config/install/release. Both owned product/fixture PIDs exited, PID file removed;
+private bus teardown message followed successful feedback. Authorization consumed.
+Verdict: Gate C accepted; optimization authorized, stop before Feature9.
+Policy: CPU small panels, GL large animated surfaces; prior small GL retained
+~20 MiB Mesa/LLVM/heap floor after idle. Keep 0a nested niri/idle invariance
+and typing29.61→32.66% open. Evidence ignored: .research/optimization/physical-niri.

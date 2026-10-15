@@ -177,3 +177,23 @@ facade import changes), 1942 generated lines (catalog1862 + SDK80), and
 process idle intervals are measured 60 s, not a one-hour endurance result.
 The Feature 7 source checkpoint was 06:36 UTC; final source was 10:18 UTC
 (about 3 h 42 m between source checkpoints, including rebuilds/failed probes).
+
+## Owner decision and supervised physical check — 2026-10-15
+
+Gate C **accepted** under the owner's adjusted ≤16.7 ms opening/closing p99
+criterion. One explicitly confirmed live niri run: 20 IPC-driven cold cycles,
+2880×1800, scale 1.5, 120 Hz; CLOCK_MONOTONIC presentation feedback,
+refresh 8.333313 ms. Opening p50/p95/p99 8.333/8.336/16.667 ms (466 periods),
+closing 8.333/8.336/8.337 ms (470). Longest opening/closing 58.330/8.338 ms.
+Nested niri's 41.34/47.27 ms p99 is not reproduced on physical scanout;
+no universal uninterrupted-120-Hz claim. Cold ready p50/p95 45.25/64.64 ms.
+
+Passive mode now covers dynamic-panel focus and dismissal input regions.
+Private D-Bus/XDG/PipeWire, no real input injection, capture, control changes
+or installation. Exact owned client/PipeWire PIDs exited; supervisor PID file
+removed. Private activation's failed GVfs FUSE mount did not prevent all
+presentation/state checks; bus-disconnect message followed normal cleanup.
+PSS+DRM bar/closed 23.03/25.14 MiB, no swap. Short 2 s CPU samples ~5%
+include live-backend updates; do not compare them with 60 s nested idle CPU.
+The single physical authorization is consumed. Optimization is now authorized;
+Feature 9 remains outside scope. Raw evidence: .research/optimization/physical-niri.

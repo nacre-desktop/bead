@@ -260,7 +260,7 @@ impl App {
                         scene.motion.as_ref().is_none_or(|m| m.open)
                     };
                 if s.input_visible != Some(visible) {
-                    if visible {
+                    if visible && !self.options.test_passive {
                         s.layer.wl_surface().set_input_region(None);
                     } else {
                         let empty = Region::new(&self.compositor)?;
@@ -269,7 +269,10 @@ impl App {
                             .set_input_region(Some(empty.wl_region()));
                     }
                     s.layer.set_keyboard_interactivity(
-                        if !visible || (!self.options.keyboard_focus && !s.companion) {
+                        if self.options.test_passive
+                            || !visible
+                            || (!self.options.keyboard_focus && !s.companion)
+                        {
                             KeyboardInteractivity::None
                         } else if self.options.test_keyboard || s.companion {
                             KeyboardInteractivity::Exclusive

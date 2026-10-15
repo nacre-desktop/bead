@@ -1,9 +1,10 @@
 # Roadmap and gates
 
 Updated 2026-10-15. Feature 6b accepted with measured concerns.
-Features 7–8 are implemented through Gate C; owner decision pending.
-See [Gate C report](research/feature8-gate-c.md). Stop here: do not start
-optimization or Feature 9 without the next owner instruction.
+Features 7–8 are accepted through Gate C after the supervised physical check.
+See [Gate C report](research/feature8-gate-c.md) and the
+[optimization measurements](research/optimization-pass.md). Optimization is
+authorized; stop after that pass, before Feature 9.
 Step 0a nested pacing/idle acceptance remains open. The new close-idle
 memory limit passes; niri presentation tails remain a concern.
 Automatic bars and the small sound-output panel use CPU retained rasters;

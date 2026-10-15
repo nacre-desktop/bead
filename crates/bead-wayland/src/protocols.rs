@@ -249,12 +249,14 @@ impl LayerShellHandler for App {
                     return;
                 }
             };
-            region.add(
-                0,
-                0,
-                config.new_size.0.max(1) as i32,
-                config.new_size.1.max(1) as i32,
-            );
+            if !self.options.test_passive {
+                region.add(
+                    0,
+                    0,
+                    config.new_size.0.max(1) as i32,
+                    config.new_size.1.max(1) as i32,
+                );
+            }
             layer
                 .wl_surface()
                 .set_input_region(Some(region.wl_region()));

@@ -347,6 +347,10 @@ impl App {
         layer.set_size(0, 0);
         layer.set_exclusive_zone(-1);
         layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        if self.options.test_passive {
+            let empty = Region::new(&self.compositor).map_err(|e| e.to_string())?;
+            layer.wl_surface().set_input_region(Some(empty.wl_region()));
+        }
         let mut pool = SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?;
         let (buffer, bytes) = pool
             .create_buffer(1, 1, 4, wl_shm::Format::Argb8888)

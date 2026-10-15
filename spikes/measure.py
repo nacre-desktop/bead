@@ -525,6 +525,14 @@ def main():
                 raise RuntimeError('Expected exactly one active 2880x1800/1.5 physical output')
             name, hz = selected[0]
             print('AUTHORIZED_PASSIVE_PACING size=2880x1800 scale=1.5 hz='+str(hz), flush=True)
+            import importlib.util
+            if os.environ.get('BEAD_HARDENING') == 'panel-pacing':
+                os.environ['BEAD_PROOF_OUTPUT'] = name
+                spec = importlib.util.spec_from_file_location('panel_pacing', ROOT/'spikes/panel-pacing.py')
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                module.sample(env, raw, 'niri', stop)
+                return 0
             os.environ.update({'BEAD_PROOF_OUTPUT': name, 'BEAD_PROOF_HZ': str(hz), 'BEAD_TEST_PASSIVE': '1', 'BEAD_PACING_ONLY': '1', 'BEAD_PACING_CASES': 'cpu,femtovg-gl'})
             import importlib.util
             spec = importlib.util.spec_from_file_location('hardening', ROOT/'spikes/hardening.py')
