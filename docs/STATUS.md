@@ -2,7 +2,7 @@
 
 ## 2026-10-16 — Source launcher fixture checkpoint; Gate D pending
 
-Previous c74ed6c / CI38812700281 green. Source adapter/F9 comparisons are landed.
+Main684b922 / CI38823402035 green. Source adapter/F9/framework fixes are landed.
 Launcher now uses Source calls/exact fixtures; local catalog/filter removed.
 Nacre owns engine/schema/ranking/providers. Engine follows F2; real typing waits.
 [Methods, measurements and limits](research/feature9-gate-d.md#feature-10-source-fixture-checkpoint--2026-10-16).
@@ -22,8 +22,13 @@ all closes/lifecycles within bar+5. Published-Rust control is larger on both.
 No allocator policy change. New paint benchmark selects direct opaque motion;
 alpha groups remain cached.134 tests/fmt/clippy/CPU+release and policy checks pass.
 
-Next: canonical menu schemas/engine, matched real QML launcher comparison,
-first-transition/pacing work and remaining-parity forecast. STOP at Gate D.
+Matched fixture UI comparison complete: Bead/QML warm MiB H37.80/253.52,
+N41.81/208.51; CPU mean5.27/5.69 and5.72/5.55ms/key. Presented p99
+15.09/15.74 and15.83/12.70ms. QML extra details/controls retained; no parity claim.
+[Comparison and provisional forecast](research/feature9-gate-d.md#matched-launcher-view-comparison--2026-10-16).
+Reference checkpoint:135 workspace tests/fmt/clippy plus C++ input/reload proofs
+pass. Next: canonical menu schemas/engine, real prefixes/activation and end-to-end,
+then finalize Gate D forecast/owner decision. First transition remains open.
 Backends frozen; no live desktop, installation or release permission.
 
 ## Accepted Gate C and optimization baseline

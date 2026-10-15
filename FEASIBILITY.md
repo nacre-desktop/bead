@@ -1,5 +1,30 @@
 # Feasibility
 
+## 2026-10-16 — unchanged QML launcher view versus Source fixtures
+
+Both views receive320 ordered app rows, icons, labels and a/ap queries.
+No catalog, provider or ranking engine runs in either fixture process.
+Real key receipt/query commit/compositor feedback match200 generations each.
+Memory differs greatly; warm CPU is close and cold/engine gates remain open.
+
+|Nested UI-only fixture | Bead H /N | QML H /N |
+| --- | ---: | ---: |
+|UI CPU mean ms/key |5.270 /5.723|5.689 /5.548|
+|Presented p99 ms,200 keys |15.091 /15.828|15.743 /12.697|
+|Typed-list PSS+DRM MiB after60s |37.804 /41.812|253.516 /208.511|
+|Observed idle CPU % |0 /0|0.467 /0.467|
+|Helper CPU /real engine |unmeasured|unmeasured|
+
+H virtual120/N nested60,2880×1800/scale1.5; one edit in flight. Source clock1,
+whole UI-process CPU, injector excluded; persistent private virtual keyboard.
+QML retains details/quick controls/filter/hints; Bead subset lacks that polish.
+Both show real populated rows; no blank-surface/full-parity comparison claimed.
+QML normal focused input/extra controls affect idle;0ticks limited by10ms timer.
+No own build overlap, unrelated load/frequency uncontrolled; no SwapPss.
+Native noDRM; QML includes81.12/49.83MiB actual DRM. First-transition maximums
+remain recorded separately; physical120Hz and real engine targets unaccepted.
+[Method and scope](docs/research/feature9-gate-d.md#matched-launcher-view-comparison--2026-10-16).
+
 ## 2026-10-16 — Source launcher fixtures and measured framework fixes
 
 The view forwards queries to a Source; Nacre owns catalog/ranking/providers.

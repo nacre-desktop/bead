@@ -246,3 +246,117 @@ SHM pools now shrink on geometry changes and unused opacity rasters are released
 Evidence: ignored .research/gate-d/foundation-checkpoint-*; previous failures kept.
 No further launcher work: nacre-daemon owns catalog/ranking/providers/menu.query.
 The binary/control-script name collision is deferred to GateD as instructed.
+
+
+
+## Matched launcher view comparison — 2026-10-16
+
+The reference runs unchanged NacreAppBrowser and its visual dependencies, with a
+thin exact-query menu.content fixture and passive service shims. No QML catalog,
+ranking/provider execution or live configuration is used. Both sides receive
+320 ordered app rows and the same names, icon SVG, breadcrumb/description fields
+and a/ap query sequence. Bead's row subtitle now follows QML's breadcrumb fallback.
+The full QML details/quick-controls pane, filter/back controls, hints and richer
+input remain present; Bead currently has a core grid/list/search/sidebar subset.
+This is a populated common-core comparison, not a full visual-parity claim.
+
+Persistent idle virtual keyboards maintain seat capability on both sides. Without
+one, destroying wtype's per-key virtual device made Qt lose search focus after the
+first key. The unchanged-component six-key smoke proved the setup fix. No focus
+reset, component rewrite or presentation assertion relaxation was used.
+The injector is task-owned and stopped in finally; no live input is touched.
+
+The optional QML probe records numeric QQuickWindow key receipt/process CPU,
+queryChanged commit and wp_presentation feedback after scene synchronization.
+One edit in flight; receipt/commit/presentation generation must match and clock
+must be CLOCK_MONOTONIC. First key included, then a/ap;200 keys on each side.
+Native uses the same input/presentation endpoints and process CPU clocks. All
+threads count, injector CPU does not. Async QML images retain normal behavior;
+readiness/count and screenshots were verified, not substituted for presentation.
+No own build overlaps these sequential fresh-session captures; H native→QML,
+N QML→native, unrelated activity/frequency uncontrolled. H virtual120/N nested60,
+2880×1800/scale1.5. Helper CPU/end-to-end remain unmeasured on both fixture views.
+
+|200 keys, fixture UI | Bead H /N | QML H /N |
+| --- | ---: | ---: |
+|UI CPU mean ms/key |5.270 /5.723|5.689 /5.548|
+|Presented p99 ms |15.091 /15.828|15.743 /12.697|
+|Steady presented p99, excluding first |14.289 /10.280|9.760 /12.499|
+|Warm typed-list PSS+DRM MiB, after60s |37.804 /41.812|253.516 /208.511|
+|Observed idle CPU %,60s |0 /0|0.467 /0.467|
+
+Observed0 means no process ticks within10ms tick resolution; no zero-cost claim.
+QML includes actual DRM81.12/49.83MiB; Bead has no DRM client. No SwapPss observed.
+Idle behavior differs: QML retains normal focused text-input/extra controls;
+Bead's input polish is limited, so do not attribute the idle difference solely
+to renderer or engine. The results show a large memory difference and similar
+warm CPU, with compositor-dependent tails. They do not accept physical120Hz,
+real prefixes/actions/ranking, changed-result workloads or full Nacre parity.
+Cold first transitions remain separately recorded and can exceed one frame.
+
+Initial broken fixtures (missing singleton/formatting fields, duplicate signal,
+missing marker log level, transient keyboard focus) were rejected. Final logs have
+no runtime ReferenceError/TypeError, exact200-generation presentation proofs pass,
+and screenshots show populated rows and query ap. Corrected native captures
+replace the earlier differing breadcrumb-label trial. Raw artifacts remain ignored.
+Validation:135 workspace tests, fmt and all-features clippy pass; C++ probe
+build, private smoke/200-key proofs and unchanged-mode reload guard pass. The
+reload guard retains properties, keeps the prior UI on syntax error and recovers.
+Predecessor684b922 CI38823402035 green.
+Canonical daemon menu schemas/engine are still pending after upstream F2; no
+second engine was built to turn missing measurements into zeros.
+
+## Remaining-parity forecast — provisional until the engine comparison
+
+Gate D is not accepted by this forecast. The engine/prefix/activation comparison
+and final matched QML measurements must be attached first. Estimates are focused
+agent-days including implementation, fixtures, nested validation and CI, assuming
+stable daemon contracts. They are not calendar promises or an extrapolation of
+bar throughput. Recent small-panel, foundation and Source checkpoints took hours
+to about a day each; the first launcher exposed a geometry loop, allocation
+residency and multi-stage typing cost that several simple components did not.
+
+Read-only QML inventory has10 popout files,41 dashboard components including
+Today/Focus/Media/System/Weather,40 Settings components and the managed pearl
+window. File counts are scope pointers, not equal units of work. Services owned
+by the migration agent are dependencies, not a second implementation budget.
+
+| Remaining area | Focused agent-days | Hard unproved part |
+| --- | ---: | --- |
+| Finish engine/typing/pacing/idle rails and shell integration |4–8|Changed-result queries, cold first key, N tail, reconnect badge/UI provider, three-hour lifecycle/chaos|
+| Remaining bar/popouts and service views |6–12|Audio devices/mic, network/Bluetooth/tray/power/calendar; real service errors and multi-output dismissal|
+| Dashboard pages |8–15|MPRIS/artwork/resource/calendar/weather, bounded decode/fetch workers, event/state consistency|
+| Settings/Colors/Welcome/control/session windows |12–24|Schema-driven edits across65 stores, revision errors, forms, shortcuts, previews and restart recovery|
+| Pearls/managed windows |10–20|xdg-toplevel lifetime, detach/dock, geometry/focus/output restoration and compositor placement limits|
+| Static wallpaper/video/effects |10–22|libmpv GPL boundary, decode/GPU copies, frame synchronization, transparency/effects and multi-output cost|
+| AI/sidebar/Brain rich views |15–30|Streaming markdown/code/selection, attachments, cancellation, credentials/capabilities and large histories|
+| Input/IME/accessibility |10–20|Composition/candidate windows, complex scripts/font fallback, selections, clipboard and real screen-reader flow|
+| Software/themes/extensions/dev environments/AUR review |15–30|Catalog/detail/install/review/progress/error flows, root operations and existing permission policy parity|
+| Hyprlock integration and session policy |2–4|Keep hyprlock; daemon handoff, failure/resume behavior, no native lock implementation|
+| Hardware/long-duration validation |5–12|Physical120Hz/mixed outputs/hotplug/suspend, NVIDIA/driver variants, idle wakeups/energy and memory slopes|
+| Repository/deployment/name integration |2–4|Owner-approved shell move, pinned dependencies, control-script/binary name clash, rollback and packaging|
+
+Total roughly99–201 focused agent-days (about20–40 single-worker weeks), with
+large uncertainty concentrated in pearls, media, AI, input and hardware. Parallel
+work can shorten independent views; shared daemon/window/input dependencies and
+owner-supervised hardware gates prevent simply dividing the total by agent count.
+The physical/hardware portion also depends on access and owner availability.
+
+Recommended order: close the engine/typing and reconnect/idle rails; validate
+input and basic hardware before multiplying pages; complete shared service panels
+and dashboard; then Settings/Colors/Welcome/session views. Prove managed windows
+before pearls/AI-heavy workflows. Add static wallpaper before video/effects, then
+AI rich views, then the software/theme/extension/dev/AUR surfaces. Integrate
+hyprlock when session policy needs it. Keep the working QML daily shell while
+these gates remain open; move touched features to the daemon instead of a blanket
+QML rewrite. Stop for the owner's Gate D decision before any Feature11 work.
+
+Open carry-forwards: historical typing29.61→32.66% workload, first-key/overall N
+latency,6b0a nested/shared-GL pacing and strict idle invariance; physical120Hz
+launcher/IME/screen-reader/NVIDIA validation; daemon UI-provider/reconnect mark
+integration; dependency-internal font caches bounded by teardown rather than exact
+byte reports; richer notice/OSD polish; large-catalog paging beyond current virtual
+extent limits; binary/control-script name collision. The permissive framework/GPL
+product boundary and CPU-small-panel/GL-large-animation policy remain. Mesa's
+roughly20MiB post-EGL residue remains a reason to measure GL lifecycle, not to
+unmap driver memory or silently waive the closed bar+5MiB condition.

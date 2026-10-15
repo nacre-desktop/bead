@@ -17,15 +17,24 @@
 #include <mutex>
 #include <vector>
 #include <time.h>
+#include <QKeyEvent>
 struct Samples { std::vector<double> intervals; uint64_t first=0,last=0; uint32_t refresh=0,kind=0; unsigned discarded=0; };
 static std::map<wl_surface*, Samples> samples;
 static std::atomic<unsigned> generation=0;
+static std::atomic<unsigned> input_generation=0;
+static uint64_t stamp(clockid_t id) {timespec t{};if(clock_gettime(id,&t)!=0)return 0;return uint64_t(t.tv_sec)*1000000000+uint64_t(t.tv_nsec);}
 static std::map<wl_surface*,unsigned> last_generation;
 struct Feedback {wl_surface *surface;unsigned generation;bool panel;};
 class TimingProbe:public QObject {
     Q_OBJECT
 public:
     Q_INVOKABLE void commit(unsigned value) {generation.store(value);}
+    Q_INVOKABLE void inputCommitted() {
+        if(!std::getenv("BEAD_QML_TRACE_INPUT"))return;
+        const auto value=input_generation.load();if(!value)return;
+        generation.store(value);
+        std::fprintf(stderr,"QML_INPUT_COMMIT generation=%u monotonic_ns=%llu cpu_ns=%llu\n",value,static_cast<unsigned long long>(stamp(CLOCK_MONOTONIC)),static_cast<unsigned long long>(stamp(CLOCK_PROCESS_CPUTIME_ID)));
+    }
 };
 static std::mutex lock;
 static wp_presentation *presentation=nullptr;
@@ -46,7 +55,7 @@ static void presented(void *data, struct wp_presentation_feedback *feedback,uint
     if(s.last && time>s.last && time>s.first+2000000000) s.intervals.push_back(double(time-s.last)/1000000);
     if(!s.last) std::fprintf(stderr,"QML_READY presentation=true\n");
     if(!last_generation.count(tag->surface) || last_generation[tag->surface]!=tag->generation) {
-        std::fprintf(stderr,"QML_UI_PRESENTED generation=%u monotonic_ns=%llu\n",tag->generation,static_cast<unsigned long long>(time));
+        std::fprintf(stderr,"QML_UI_PRESENTED generation=%u monotonic_ns=%llu cpu_ns=%llu\n",tag->generation,static_cast<unsigned long long>(time),static_cast<unsigned long long>(stamp(CLOCK_PROCESS_CPUTIME_ID)));
         last_generation[tag->surface]=tag->generation;
     }
     delete tag;
@@ -87,7 +96,8 @@ static void attach(QQuickWindow *quick) {
     QObject::connect(quick,&QObject::destroyed,QCoreApplication::instance(),[quick] {
         tracked.erase(std::remove(tracked.begin(),tracked.end(),quick),tracked.end());
     });
-    QObject::connect(quick,&QQuickWindow::beforeFrameBegin,quick,[native,quick] {
+    const auto hook=std::getenv("BEAD_QML_TRACE_INPUT")?&QQuickWindow::afterSynchronizing:&QQuickWindow::beforeFrameBegin;
+    QObject::connect(quick,hook,quick,[native,quick] {
         if(!presentation) return;
         auto *surface=static_cast<wl_surface*>(native->nativeResourceForWindow("surface",quick));
         if(!surface) return;
@@ -99,6 +109,13 @@ class ProbeFilter:public QObject {
 public:explicit ProbeFilter(QObject *parent):QObject(parent) {}
     bool eventFilter(QObject *object,QEvent *event) override {
         if(event->type()==QEvent::Expose || event->type()==QEvent::PlatformSurface) attach(qobject_cast<QQuickWindow*>(object));
+        if(std::getenv("BEAD_QML_TRACE_INPUT")&&event->type()==QEvent::KeyPress&&qobject_cast<QQuickWindow*>(object)) {
+            auto *key=static_cast<QKeyEvent*>(event);
+            if(key->key()==Qt::Key_Backspace||(!key->text().isEmpty()&&!(key->modifiers()&(Qt::ControlModifier|Qt::AltModifier|Qt::MetaModifier)))) {
+                const auto value=input_generation.fetch_add(1)+1;
+                std::fprintf(stderr,"QML_INPUT_RECEIVED generation=%u monotonic_ns=%llu cpu_ns=%llu\n",value,static_cast<unsigned long long>(stamp(CLOCK_MONOTONIC)),static_cast<unsigned long long>(stamp(CLOCK_PROCESS_CPUTIME_ID)));
+            }
+        }
         return false;
     }
 };

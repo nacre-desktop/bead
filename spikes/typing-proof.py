@@ -16,13 +16,17 @@ def sample(env,raw,compositor,stop):
     with tempfile.TemporaryDirectory(prefix='bead-type-') as directory:
         bundle=pathlib.Path(directory);shutil.copytree(pathlib.Path(os.environ.get('BEAD_TYPING_BUNDLE',str(ROOT/'shell'))),bundle/'shell')
         env['BEAD_ICON_PATH']=str(bundle/'shell/sample.svg')
-        rows_fixture=[{'id':f'proof-{i:04}','name':f'Application {i:04}','label':f'Application {i:04}','icon':'fixture','kind':'app','description':'Application fixture'} for i in range(320)]
+        rows_fixture=[{'id':f'proof-{i:04}','name':f'Application {i:04}','label':f'Application {i:04}','icon':str(ROOT/'shell/sample.svg'),'kind':'app','description':'Application fixture','breadcrumb':'All apps','operation':'app','disabled':False} for i in range(320)]
         legacy=os.environ.get('BEAD_TYPING_LEGACY')=='1'
         catalog=bundle/'menu-fixture.json';catalog.write_text(json.dumps(rows_fixture if legacy else {'queries':{'':{'rows':rows_fixture},'a':{'rows':rows_fixture},'ap':{'rows':rows_fixture}}}))
-        path=raw/'typing.log';pointer=None;client=None
+        path=raw/'typing.log';pointer=None;client=None;keeper=None
         command=[binary,'--renderer',os.environ.get('BEAD_TYPING_RENDERER','cpu'),'--namespace','bead-typing','--ui','ui/main.luau','--catalog' if legacy else '--menu-fixture',str(catalog),'--backend','none','--test-keyboard']
         if compositor=='hyprland':command+=['--output','bead-bench']
         try:
+            if os.environ.get('BEAD_KEYBOARD_KEEPER')=='1':
+                keeper=subprocess.Popen(['wtype','-s','600000',''],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+                time.sleep(.1)
+                assert keeper.poll() is None,'private keyboard keeper exited'
             with path.open('w') as log:
                 client=subprocess.Popen(command,cwd=bundle,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
                 matrix.wait_log(path,lambda t:'UI_PRESENTED generation=1' in t,timeout=30)
@@ -55,11 +59,16 @@ def sample(env,raw,compositor,stop):
                     rows.append({'index':index,'input_ns':start,'presented_ns':int(ns),'latency_ms':(int(ns)-start)/1e6,'cpu_ms':(int(endcpu)-cpu)/1e6,'update':int(update),'refresh_ns':int(refresh),'profiles':profiles})
                     time.sleep(.04)
                 assert 'PRESENTATION clock_id=1' in matrix.log_text(path)
-                result={'compositor':compositor,'catalog_size':320,'source':'legacy catalog fixture' if legacy else 'exact menu.query fixtures; no engine','workload':'first grid-to-list key, then a/ap populated list'if steady else'alternating empty/a grid-list transitions','helper_cpu_ms':None,'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
+                idle=None
+                if os.environ.get('BEAD_TYPING_IDLE_SECONDS'):
+                    idle=matrix.idle(client.pid,float(os.environ['BEAD_TYPING_IDLE_SECONDS']))
+                    subprocess.run(['grim',str(raw/'typing-native.png')],env=env,capture_output=True,check=True,timeout=8)
+                result={'compositor':compositor,'catalog_size':320,'idle':idle,'source':'legacy catalog fixture' if legacy else 'exact menu.query fixtures; no engine','workload':'first grid-to-list key, then a/ap populated list'if steady else'alternating empty/a grid-list transitions','helper_cpu_ms':None,'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
 
         finally:
             if pointer:pointer.close()
             if client:stop(client)
+            if keeper:stop(keeper)
         assert 'UI_ERROR' not in path.read_text()
     for key in ['cpu_ms','latency_ms']:
         values=[r[key] for r in rows];result[key]['mean']=sum(values)/len(values);result[key]['max']=max(values)

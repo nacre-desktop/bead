@@ -89,7 +89,14 @@ pub fn rows(mut reply: Json) -> source::Result<Vec<Json>> {
             .and_then(Json::as_str)
             .ok_or_else(|| source::Error::new("validation", "menu result label missing", false))?;
         let name = name.to_owned();
-        if !row.get("description").is_some_and(Json::is_string) {
+        if let Some(breadcrumb) = row
+            .get("breadcrumb")
+            .and_then(Json::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            let breadcrumb = breadcrumb.to_owned();
+            row["description"] = Json::String(breadcrumb);
+        } else if !row.get("description").is_some_and(Json::is_string) {
             row["description"] = json!("");
         }
         row["name"] = json!(name);
@@ -353,6 +360,12 @@ mod tests {
         assert_eq!(remembered.len(), 5);
         assert!(!remembered.contains_key("launcher.apps"));
         assert!(serde_json::to_vec(&remembered).unwrap().len() < 70 * 1024);
+    }
+    #[test]
+    fn breadcrumb_and_description_follow_qml_result_labels() {
+        let rows=rows(json!({"rows":[{"id":"a","label":"A","breadcrumb":"All apps","description":"Other"},{"id":"b","label":"B","description":"Fallback"}]})).unwrap();
+        assert_eq!(rows[0]["description"], "All apps");
+        assert_eq!(rows[1]["description"], "Fallback");
     }
     #[test]
     fn engine_order_survives_and_invalid_replies_fail() {
