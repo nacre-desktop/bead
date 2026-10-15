@@ -153,16 +153,22 @@ pub struct Desktop {
 }
 impl Desktop {
     pub fn attach(service: Arc<bead_services::Desktop>) -> Result<Self> {
-        let publisher = Publisher::new(
+        let initial = service.snapshot();
+        let publisher = Publisher::at(
             format!("desktop-{}", EPOCH.fetch_add(1, Ordering::Relaxed)),
-            json!({}),
+            initial.revision,
+            serde_json::to_value(&*initial)
+                .map_err(|_| Error::new("validation", "desktop snapshot unavailable", false))?,
         )?;
         let changed = publisher.clone();
         let subscription = service.subscribe(move |snapshot| {
             match serde_json::to_value(&*snapshot)
                 .map_err(|_| ())
-                .and_then(|value| changed.publish(value).map_err(|_| ()))
-            {
+                .and_then(|value| {
+                    changed
+                        .publish_revision(snapshot.revision, value)
+                        .map_err(|_| ())
+                }) {
                 Ok(()) => {}
                 Err(()) => {
                     let _ = changed.disconnect();

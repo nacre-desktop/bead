@@ -59,6 +59,9 @@ pub struct TrayItem {
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
+    /// Origin order survives concurrent audio/bus callback delivery.
+    #[serde(default)]
+    pub revision: u64,
     pub clock: String,
     pub audio: Audio,
     pub battery: Battery,

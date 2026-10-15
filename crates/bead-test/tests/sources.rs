@@ -258,3 +258,13 @@ fn bounded_publication_subscription_lifetimes_and_rfc7396_cases() -> Result<()> 
     assert_eq!(retry.delay(), Duration::from_millis(50));
     Ok(())
 }
+#[test]
+fn origin_revisions_prevent_concurrent_callback_rollback() -> Result<()> {
+    let publisher = Publisher::at("native".into(), 0, json!({"value":0}))?;
+    publisher.publish_revision(2, json!({"value":2}))?;
+    publisher.publish_revision(1, json!({"value":1}))?;
+    assert_eq!(publisher.snapshot().revision, 2);
+    assert_eq!(publisher.snapshot().data["value"], 2);
+    assert!(publisher.publish_revision(2, json!({"value":0})).is_err());
+    Ok(())
+}

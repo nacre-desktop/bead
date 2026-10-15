@@ -9,6 +9,8 @@ Publisher retains one Arc payload, capped at8MiB encoded JSON,64 levels and65536
 values. Disconnect shares the last payload. There are at most64 scoped listeners;
 dropping a Subscription unregisters it. Callbacks run unlocked and may reenter.
 With concurrent publishers, a mirror rejects obsolete callback revisions.
+Adapters use origin revisions (including Desktop audio/bus publications), so a
+late callback cannot relabel older data as a new update.
 
 Mirror accepts object snapshots and RFC7396 merge patches. A patch names its base
 and new revision: coalescing may skip revisions, but a wrong base requests resync

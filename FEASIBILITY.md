@@ -1409,3 +1409,33 @@ cap failures retain the old UI. Relative files only; no view/store payload saved
 Crash history atomic/locked; dead restore directories reaped, live owners kept.
 Unit already Restart=on-failure; repo LimitCORE=0 added, nothing installed.
 ~1100 added code/test/proof lines; artifacts .research/foundation/f5c-*.
+
+## Foundation F5d — Sources (2026-10-15)
+
+Views can project the same Source data into stable stores, independent of transport.
+Snapshots and RFC7396 patches retain the last good picture on gaps/disconnection.
+The local notification view uses this path; fake and host APIs pass headless.
+Protocol v1 was unpublished at entry, so the permitted fake fallback is used.
+
+| Private nested Source bridge smoke | Hypr120 | niri60 |
+| --- | ---: | ---: |
+| Notice protocol / buttons / hover / restart / bus cleanup |pass|pass|
+| Bar / first warm / closed5s PSS+DRM MiB |21.09/27.14/22.00|22.86/30.16/22.83|
+| Final lifecycle delta from bar MiB |+1.77|−.04|
+
+Three closes/lifecycle pass bar+5; no DRM fds.5s idle/contended, no new QML,
+CPU or pacing acceptance. Native smoke sourcee3134fd; final origin-order fix
+is additive metadata/guard logic with a deterministic out-of-order test.
+103 tests/fmt/clippy pass; CPU-only check/independent core cargo-deny pass.
+Headless source tests cover coalesced base, gap/resync, new boot/old reader,
+atomic rejected projections, retained UI +2s reconnect mark,50ms→2s backoff,
+call deadlines/no mutation replay and identical Luau bindings.8MiB/64depth/
+65536-value payload cap,64 scoped listeners; disconnect shares Arc data.
+Injected handle Source runs the same private-bus wire suite without a UI.
+Stop closes admission and flushes accepted state; failed start cannot write.
+Repeated stale-socket fixture failure reproduced with inherited fork descriptors:
+strict active-socket refusal kept; fixture requires confirmed ECONNREFUSED.
+No pinned adapter/upstream transcript replay yet; no GPL dependency in framework.
+~1700 added lines including tests/docs; no catalog/ranking/providers or new typing.
+Wire authentication/reconnect and daemon30-day history/chaos acceptance remain
+later migration/F6/F7 work. Current history is bounded256 records/3MiB.

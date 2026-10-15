@@ -50,6 +50,7 @@ impl Shared {
         if **old == next {
             return;
         }
+        next.revision = old.revision.saturating_add(1);
         let next = Arc::new(next);
         *old = next.clone();
         drop(old);

@@ -98,13 +98,16 @@ impl Drop for Subscription {
 }
 impl Publisher {
     pub fn new(epoch: String, data: Json) -> Result<Self> {
+        Self::at(epoch, 0, data)
+    }
+    pub fn at(epoch: String, revision: u64, data: Json) -> Result<Self> {
         validate_epoch(&epoch)?;
         object(&data)?;
         Ok(Self {
             state: Arc::new(Mutex::new(State {
                 snapshot: Arc::new(Snapshot {
                     epoch,
-                    revision: 0,
+                    revision,
                     data: Arc::new(data),
                     connected: true,
                 }),
@@ -145,24 +148,41 @@ impl Publisher {
     }
     pub fn publish(&self, data: Json) -> Result<()> {
         object(&data)?;
-        self.change(Some(data), true)
+        self.change(Some(data), true, None)
     }
     pub fn disconnect(&self) -> Result<()> {
-        self.change(None, false)
+        self.change(None, false, None)
     }
-    fn change(&self, data: Option<Json>, connected: bool) -> Result<()> {
+    pub fn publish_revision(&self, revision: u64, data: Json) -> Result<()> {
+        object(&data)?;
+        self.change(Some(data), true, Some(revision))
+    }
+    fn change(&self, data: Option<Json>, connected: bool, origin: Option<u64>) -> Result<()> {
         let (snapshot, callbacks) = {
             let mut state = self
                 .state
                 .lock()
                 .map_err(|_| Error::new("internal", "source state poisoned", false))?;
+            if let Some(revision) = origin {
+                if revision < state.snapshot.revision {
+                    return Ok(());
+                }
+                if revision == state.snapshot.revision
+                    && data.as_ref().is_some_and(|d| *d != *state.snapshot.data)
+                {
+                    return Err(Error::new("validation", "origin revision reused", false));
+                }
+            }
             if data.as_ref().is_none_or(|d| *d == *state.snapshot.data)
                 && connected == state.snapshot.connected
+                && origin.is_none_or(|r| r == state.snapshot.revision)
             {
                 return Ok(());
             }
             let changed = data.as_ref().is_some_and(|d| *d != *state.snapshot.data);
-            let revision = if changed {
+            let revision = if let Some(revision) = origin {
+                revision
+            } else if changed {
                 state
                     .snapshot
                     .revision

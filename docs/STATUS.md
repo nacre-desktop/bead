@@ -8,21 +8,23 @@ ranking or providers. Existing compositor backends are frozen except bug fixes.
 The migration agent owns nacre-daemon / nacre-protocol and Nacre F0–F4.
 [Checkpoint evidence and limits](research/feature9-gate-d.md).
 
-F5c source checkpointf49217c: main-loop watchdog, first-frame last-good startup
-fallback and crash-loop safe bar.94 tests/fmt/clippy/CPU-only check pass.
-Nested H120/N60: watchdog abort5.078/5.071s after actual UI-stall start;
-first-frame save, bad source/palette boot, fixed-source reload and safe bar pass.
-Bar/first-warm/closed5s PSS+DRM MiB: H21.67/27.11/22.30,N23.19/30.50/23.18.
-Three closes + lifecycle within bar+5; no DRM. Short contended regression smoke.
-Pending validated bundles capped8MiB/32 generations; no old-feedback rollback.
-Next F5d Sources / published protocol adapter or fake fallback, then F5e; STOP.
+F5d sourcee3134fd + origin-order fix: neutral snapshots/merge patches, atomic
+store projections, bounded shared payloads/listeners, deadlines and reconnect hooks.
+Notification UI uses Source with unchanged Luau bindings; Desktop adapter tested,
+accepted bar keeps its typed path.103 tests/fmt/clippy pass; CPU check/deny pass.
+Protocol v1 unpublished at F5d start: allowed fake-source fallback, adapter skipped.
+No draft GPL types/transcripts entered framework; resume adapter after publication.
+Nested Source notification protocol/real buttons/hover/restart/cleanup pass H/N.
+Bar/first-warm/closed5s PSS+DRM MiB: H21.09/27.14/22.00,N22.86/30.16/22.83;
+three closes + lifecycle pass bar+5. Short contended smoke, not new pacing/CPU gate.
+Next F5e capability-gated background effect + cache/font audit, then STOP.
 
-F5b39b4270 CI38767973872 green: MIT headless CPU/font/scale harness, PNG diffs,
-input/AccessKit/replay;120 pose frames0 Taffy/0 rasters after initial composite.
-OSD scale1 golden exposes text beyond its pill; no Feature9 parity acceptance.
-F5a40a979c CI38766103118 green: injected headless notification host API,
-bounded calls/latest-one subscription, private wire parity and nested use pass.
-F0/pause CI green. Renderer/typing baseline acceptance remains unchanged.
+F5c9dfc295 CI38772441876 green: startup last-good, watchdog and safe bar.
+Nested watchdog actual busy5.078/5.071s; corrupt source/palette and fixed reload pass.
+F5b39b4270 CI38767973872 green: deterministic MIT CPU/Luau/golden/input/a11y harness;
+120 transform/opacity frames0 Taffy/0 rasters after initial composite.
+F5a40a979c CI38766103118 green: hostable headless notification API/private parity.
+OSD scale1 golden has text outside its pill; Feature9 parity/typing not accepted.
 No installation, live-session action or release is authorized.
 
 ## Accepted Gate C and optimization baseline
