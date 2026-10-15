@@ -2,7 +2,8 @@
 //! Nacre projection of a private native notification server.
 use bead::{
     core::Value,
-    services::notification_bus::{Control, Server},
+    core::source::{Applied, Mirror, Source},
+    services::notification_bus::Control,
     wayland::UiEvent,
 };
 use std::{
@@ -13,6 +14,7 @@ use std::{
 type Wakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
 struct Shared {
     last: serde_json::Value,
+    mirror: Mirror,
     wakeups: BTreeMap<u64, (Wakeup, bool)>,
     next: u64,
     audio: Option<bead::services::Audio>,
@@ -31,43 +33,65 @@ impl Drop for Subscription {
     }
 }
 pub struct Owner {
-    server: Server,
+    server: bead::source::Notifications,
+    _source_subscription: bead::core::source::Subscription,
     shared: Arc<Mutex<Shared>>,
 }
 impl Owner {
     pub fn start(socket: PathBuf, history: PathBuf) -> Result<Self, String> {
         let shared = Arc::new(Mutex::new(Shared {
+            mirror: Mirror::new(std::time::Instant::now()),
             last: serde_json::json!({"rows":[],"popup_count":0,"history_count":0,"history_ready":false,"error":"","timers":[],"dnd":false,"osd":null}),
             wakeups: BTreeMap::new(),
             next: 0,
             audio: None,
         }));
         let state = shared.clone();
-        let server = Server::start(socket, history, move |snapshot| {
-            let wakeups = if let Ok(mut state) = state.lock() {
-                state.last = snapshot.clone();
-                state.wakeups.values().cloned().collect::<Vec<_>>()
-            } else {
-                vec![]
-            };
-            for (wakeup, primary) in wakeups {
-                if primary {
-                    wakeup(UiEvent::CompanionVisibility(snapshot["osd"].is_object()));
+        let server =
+            bead::source::Notifications::private(socket, history).map_err(|e| e.to_string())?;
+        let subscription = server
+            .subscribe(Arc::new(move |source_snapshot| {
+                let snapshot = &*source_snapshot.data;
+                let wakeups = if let Ok(mut state) = state.lock() {
+                    if !matches!(
+                        state
+                            .mirror
+                            .accept(source_snapshot.clone(), std::time::Instant::now()),
+                        Ok(Applied::Updated)
+                    ) {
+                        return;
+                    }
+                    state.last = snapshot.clone();
+                    state.wakeups.values().cloned().collect::<Vec<_>>()
+                } else {
+                    vec![]
+                };
+                for (wakeup, primary) in wakeups {
+                    if primary {
+                        wakeup(UiEvent::CompanionVisibility(snapshot["osd"].is_object()));
+                    }
+                    let mut models = values(snapshot);
+                    if !snapshot["osd"].is_object() {
+                        models.retain(|key, _| {
+                            !matches!(
+                                key.as_str(),
+                                "osd.label" | "osd.status" | "osd.level" | "osd.muted"
+                            )
+                        });
+                    }
+                    wakeup(UiEvent::Model(models));
                 }
-                let mut models = values(&snapshot);
-                if !snapshot["osd"].is_object() {
-                    models.retain(|key, _| {
-                        !matches!(
-                            key.as_str(),
-                            "osd.label" | "osd.status" | "osd.level" | "osd.muted"
-                        )
-                    });
-                }
-                wakeup(UiEvent::Model(models));
-            }
-        })?;
-        println!("NOTIFICATIONS_PRIVATE address={}", server.address);
-        Ok(Self { server, shared })
+            }))
+            .map_err(|e| e.to_string())?;
+        println!(
+            "NOTIFICATIONS_PRIVATE address={}",
+            server.address().map_err(|e| e.to_string())?
+        );
+        Ok(Self {
+            server,
+            shared,
+            _source_subscription: subscription,
+        })
     }
     pub fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Subscription {
         let (last, id) = if let Ok(mut state) = self.shared.lock() {
@@ -265,4 +289,25 @@ pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
             }),
         ),
     ])
+}
+#[cfg(test)]
+mod source_tests {
+    use super::*;
+    #[test]
+    fn local_and_fake_sources_project_identical_luau_bindings()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let now = std::time::Instant::now();
+        let data = serde_json::json!({"rows":[{"id":"1","app":"Example","summary":"Hello","body":"Fixture","actions":[],"expanded":false}],"popup_count":1,"history_count":1,"dnd":true,"osd":{"channel":"volume","value":0.5,"muted":false}});
+        let local = bead::core::source::Publisher::new("local".into(), data.clone())?;
+        let fake = bead_test::source::FakeSource::new(data)?;
+        let mut left = Mirror::new(now);
+        let mut right = Mirror::new(now);
+        left.accept(local.snapshot(), now)?;
+        right.accept(fake.snapshot(), now)?;
+        assert_eq!(
+            values(&left.snapshot().ok_or("local")?.data),
+            values(&right.snapshot().ok_or("fake")?.data)
+        );
+        Ok(())
+    }
 }

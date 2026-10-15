@@ -316,6 +316,10 @@ dependencies = [
  "bead-services",
  "bead-ui",
  "bead-wayland",
+ "futures-util",
+ "serde_json",
+ "tokio",
+ "zbus",
 ]
 
 [[package]]
@@ -332,6 +336,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -382,6 +387,7 @@ dependencies = [
  "image",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

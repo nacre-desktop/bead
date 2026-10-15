@@ -374,11 +374,81 @@ mod tests {
         let dead = UnixListener::bind(&path).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         drop(dead);
+        // Parallel Command::spawn may have forked while this listener was open.
+        // CLOEXEC closes the child's copy only at exec, not at fork. Confirm the
+        // fixture is actually stale; production must still reject a live copy.
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            match connect(&path) {
+                Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => break,
+                Ok(_) => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "fixture listener is still inherited"
+                    );
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => panic!("stale fixture probe: {}", error.kind()),
+            }
+        }
         let server = Server::bind(path.clone(), |c| Reply::ok(c.id, Value::Null)).unwrap();
         drop(server);
         std::fs::write(&path, "preserve").unwrap();
         assert!(Server::bind(path.clone(), |c| Reply::ok(c.id, Value::Null)).is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "preserve");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn inherited_listener_is_active_until_the_child_closes_its_copy() {
+        use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+        let dir = std::env::temp_dir().join(format!("bead-inherited-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let path = dir.join("command.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let mut pipe = [0; 2];
+        // SAFETY: initialized descriptor array; child performs only async-signal-safe
+        // close/read/_exit and never executes Rust destructors after multithreaded fork.
+        assert_eq!(
+            unsafe { libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC) },
+            0
+        );
+        let read = unsafe { OwnedFd::from_raw_fd(pipe[0]) };
+        let release = unsafe { OwnedFd::from_raw_fd(pipe[1]) };
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0);
+        if pid == 0 {
+            unsafe {
+                libc::close(release.as_raw_fd());
+                let mut byte = 0u8;
+                libc::read(read.as_raw_fd(), (&mut byte as *mut u8).cast(), 1);
+                libc::_exit(0);
+            }
+        }
+        drop(read);
+        drop(listener);
+        let inherited = connect(&path).is_ok();
+        let refused = Server::bind(path.clone(), |c| Reply::ok(c.id, Value::Null)).is_err();
+        drop(release);
+        let mut status = 0;
+        while unsafe { libc::waitpid(pid, &mut status, 0) } < 0 {
+            assert_eq!(
+                std::io::Error::last_os_error().kind(),
+                std::io::ErrorKind::Interrupted
+            );
+        }
+        assert!(
+            inherited,
+            "fork must retain the listener before child exec/close"
+        );
+        assert!(refused, "a live inherited listener must never be replaced");
+        assert_eq!(
+            connect(&path).unwrap_err().kind(),
+            std::io::ErrorKind::ConnectionRefused
+        );
+        let server = Server::bind(path, |c| Reply::ok(c.id, Value::Null)).unwrap();
+        drop(server);
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]

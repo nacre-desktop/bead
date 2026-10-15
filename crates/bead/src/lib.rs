@@ -6,3 +6,5 @@ pub use bead_render as render;
 pub use bead_services as services;
 pub use bead_ui as ui;
 pub use bead_wayland as wayland;
+
+pub mod source;

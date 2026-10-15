@@ -12,7 +12,10 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     process::{Child, Stdio},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::{Notify, mpsc, oneshot, watch};
@@ -42,6 +45,7 @@ pub enum Control {
     Stop,
 }
 struct Shared {
+    closing: AtomicBool,
     center: Mutex<Center>,
     changed: Notify,
 }
@@ -51,6 +55,11 @@ impl Shared {
             .center
             .lock()
             .map_err(|_| zbus::fdo::Error::Failed("notification state poisoned".into()))?;
+        if self.closing.load(Ordering::Acquire) {
+            return Err(zbus::fdo::Error::Failed(
+                "notification service stopped".into(),
+            ));
+        }
         f(&mut center).map_err(zbus::fdo::Error::InvalidArgs)
     }
 }
@@ -489,6 +498,20 @@ pub struct Server {
     pub address: String,
 }
 impl Server {
+    /// Host API processing acknowledgement on the caller's existing Tokio runtime.
+    pub async fn call(&self, action: Control) -> Result<(), String> {
+        let (reply, receive) = oneshot::channel();
+        self.sender
+            .try_send(Request {
+                action,
+                reply: Some(reply),
+            })
+            .map_err(|_| "notification service busy or stopped")?;
+        tokio::time::timeout(Duration::from_secs(3), receive)
+            .await
+            .map_err(|_| "notification call timed out")?
+            .map_err(|_| "notification service stopped")?
+    }
     pub fn control(&self, command: Control) -> Result<(), String> {
         self.sender
             .try_send(Request::new(command))
@@ -498,6 +521,14 @@ impl Server {
         socket: PathBuf,
         history: PathBuf,
         callback: impl Fn(Value) + Send + Sync + 'static,
+    ) -> Result<Self, String> {
+        Self::start_with_lifecycle(socket, history, callback, || {})
+    }
+    pub fn start_with_lifecycle(
+        socket: PathBuf,
+        history: PathBuf,
+        callback: impl Fn(Value) + Send + Sync + 'static,
+        on_stop: impl Fn() + Send + 'static,
     ) -> Result<Self, String> {
         let (ready, answer) = std::sync::mpsc::sync_channel(1);
         let thread = std::thread::Builder::new()
@@ -531,6 +562,7 @@ impl Server {
                         service.stop().await
                     })
                 })();
+                on_stop();
                 if let Err(error) = result {
                     let _ = ready.send(Err(error.clone()));
                     eprintln!("NOTIFICATION_ERROR {error}");
@@ -587,6 +619,7 @@ async fn serve(
         }
     }
     let shared = Arc::new(Shared {
+        closing: AtomicBool::new(false),
         center: Mutex::new(center),
         changed: Notify::new(),
     });
@@ -689,6 +722,7 @@ async fn serve(
             }
         };
         tokio::select! {
+            _=connection.closed()=>return Err("notification bus disconnected".into()),
             _=stop.notified()=>break,
             _=shared.changed.notified()=>{},
             _=sleep=>{
@@ -709,6 +743,18 @@ async fn serve(
     }
     Ok(())
     }.await;
+    // A Notify can race a stop request after the previous persistence pass.
+    // Close admission under the same lock, then flush every accepted notice.
+    shared.closing.store(true, Ordering::Release);
+    let final_state = match shared.center.lock() {
+        Ok(center) => center.persisted(),
+        Err(_) => Err("notification state poisoned".into()),
+    };
+    let flushed = if history_writable && owned {
+        final_state.and_then(|value| crate::files::write_json(history, &value, 4 * 1024 * 1024))
+    } else {
+        Ok(())
+    };
     if installed {
         let _ = connection
             .object_server()
@@ -721,7 +767,7 @@ async fn serve(
     if owned {
         let _ = connection.release_name(INTERFACE).await;
     }
-    result
+    result.and(flushed)
 }
 async fn apply(
     shared: &Shared,
@@ -823,4 +869,69 @@ async fn apply(
         }
     }
     Ok(())
+}
+#[cfg(test)]
+mod shutdown_tests {
+    use super::*;
+    #[test]
+    fn stop_flushes_mutation_after_last_publish_and_failed_start_cannot_write()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = std::env::temp_dir().join(format!("bead-final-flush-{}", std::process::id()));
+        std::fs::create_dir(&root)?;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let bus = PrivateBus::start(root.join("bus"))?;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(2)
+            .build()?;
+        runtime.block_on(async {
+            let connection = bus.connect().await?;
+            let history = root.join("history.json");
+            let service = start(Config {
+                connection: connection.clone(),
+                history: history.clone(),
+            })
+            .await?;
+            // Simulate an accepted mutation after the last publish, with Stop next in queue.
+            let interface = connection
+                .object_server()
+                .interface::<_, Interface>(PATH)
+                .await?;
+            interface.get().await.0.with(|c| {
+                c.set_dnd(true);
+                Ok(())
+            })?;
+            let prior = std::fs::read(&history)?;
+            let inode = std::fs::metadata(&history)?.ino();
+            assert!(
+                start(Config {
+                    connection: connection.clone(),
+                    history: history.clone()
+                })
+                .await
+                .is_err()
+            );
+            assert!(
+                std::fs::read(&history)? == prior,
+                "failed competing start overwrote owner history"
+            );
+            assert_eq!(
+                std::fs::metadata(&history)?.ino(),
+                inode,
+                "failed start replaced owner file"
+            );
+            service.stop().await?;
+            let saved: Value = serde_json::from_slice(&std::fs::read(history)?)?;
+            assert_eq!(saved["dnd"], true);
+            assert!(interface.get().await.0.with(|_| Ok(())).is_err());
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+    }
 }
