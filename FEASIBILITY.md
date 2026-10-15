@@ -1,5 +1,30 @@
 # Feasibility
 
+## 2026-10-15 — opaque motion chooses a cached layer, releases it at rest
+
+The opaque comparison uses actual opacity1 and native content-sized surfaces.
+Correcting the generic headless bar inset changed its winner; preliminary data
+was rejected. Cached motion is cheaper for both populated scenes.
+Stable frames stay direct and release the group; no persistent idle cache added.
+
+| Release CPU ms/frame | Direct | Cached |
+| --- | ---: | ---: |
+| Bar median trial mean |2.100|1.776|
+| Sound median trial mean |6.098|3.535|
+| Median trial CPU p99, bar /sound |2.474 /6.212|2.085 /3.667|
+| Mean CPU reduction, bar /sound |N/A|15.4% /42.0%|
+| Native H bar/warm/closed5s PSS+DRM MiB |N/A|20.214/27.139/21.549|
+| Native N bar/warm/closed5s PSS+DRM MiB |N/A|21.834/29.202/22.139|
+
+2880×1800/1.5 output; targets2880×75 and696×525. Five alternating trials,
+32 warm+240 measured poses each; reused buffers, process CPU around paint only.
+Headless CPU, not physical/presentation/typing acceptance. Native smoke contended.
+Scale1.5 counter:120 vertical+120 horizontal poses0 layout/new rasters after
+priming; pixels≤2 channel delta; idle release and resumed group rebuild proven.
+112 tests/fmt/all-features clippy/CPU+release builds pass; all closes<=bar+5.
+Verdict: retain cached motion with direct idle policy; proceed to notifications.
+[Full method and ranges](docs/research/foundation-f5.md#opaque-composition-follow-up).
+
 ## 2026-10-15 — cache accepted; five alternating pairs classify first-open noise
 
 The owner accepted the cache checkpoint and bounded diagnosis to about one hour.

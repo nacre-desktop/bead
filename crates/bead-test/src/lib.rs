@@ -267,6 +267,12 @@ impl Harness {
             Err(format!("missing accessible {role:?}: {label}").into())
         }
     }
+    pub fn presentation_motion(&mut self, active: bool) {
+        self.renderer.presentation_motion(active);
+    }
+    pub fn opaque_composition(&mut self, mode: bead_render::tree::OpaqueComposition) {
+        self.renderer.opaque_composition = mode;
+    }
     pub fn render(&mut self) -> Result<Frame> {
         self.pose(self.scene.offset, self.scene.opacity)
     }

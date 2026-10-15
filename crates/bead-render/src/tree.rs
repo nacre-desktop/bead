@@ -523,8 +523,19 @@ pub fn paint(
     }
     Ok(())
 }
+/// Opaque composition can be compared without changing scene preparation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OpaqueComposition {
+    /// Direct stable frames; cached layers during presentation motion.
+    #[default]
+    Auto,
+    Direct,
+    Cached,
+}
 #[derive(Default)]
 pub struct TreeCpuRenderer {
+    pub opaque_composition: OpaqueComposition,
+    opaque_motion: bool,
     pub cache: TreeCache,
     /// Number of content-group composites; pose/opacity changes reuse each group.
     pub opacity_builds: usize,
@@ -534,7 +545,18 @@ pub struct TreeCpuRenderer {
     group_budget: Option<bead_core::cache::Budget>,
     group_charge: Option<bead_core::cache::Charge>,
 }
+impl TreeCpuRenderer {
+    pub fn with_opaque_composition(mode: OpaqueComposition) -> Self {
+        Self {
+            opaque_composition: mode,
+            ..Self::default()
+        }
+    }
+}
 impl Renderer for TreeCpuRenderer {
+    fn presentation_motion(&mut self, active: bool) {
+        self.opaque_motion = active;
+    }
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
         self.cache.frame.clone()
     }
@@ -557,7 +579,12 @@ impl Renderer for TreeCpuRenderer {
             return Err("damage outside SHM".into());
         }
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
-        if scene.opacity >= 1. {
+        let cached_opaque = match self.opaque_composition {
+            OpaqueComposition::Auto => self.opaque_motion,
+            OpaqueComposition::Direct => false,
+            OpaqueComposition::Cached => true,
+        };
+        if scene.opacity >= 1. && !cached_opaque {
             self.direct_composites += 1;
             self.flattened = None;
             self.group_charge = None;
@@ -632,7 +659,7 @@ impl Renderer for TreeCpuRenderer {
             ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
             pixels.as_ref(),
             &PixmapPaint {
-                opacity: scene.opacity,
+                opacity: scene.opacity.clamp(0., 1.),
                 ..Default::default()
             },
             Transform::identity(),

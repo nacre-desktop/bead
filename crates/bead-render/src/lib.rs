@@ -234,6 +234,8 @@ pub enum ResourceTarget<'a> {
     },
 }
 pub trait Renderer {
+    /// Per-surface presentation hint, not global activity on another surface.
+    fn presentation_motion(&mut self, _active: bool) {}
     fn prepared_frame(&self) -> Option<std::sync::Arc<tree::Frame>> {
         None
     }

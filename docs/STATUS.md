@@ -1,27 +1,24 @@
 # Status
 
-## 2026-10-15 — cache accepted/CI green; five-pair follow-up complete
+## 2026-10-15 — cache follow-up green; opaque composition completed
 
-Main e82c3c8 includes215ea35; CI38797186208 green.
-[Cache report and bounded investigation](research/cache-budget.md).
-Five alternating samples per variant/compositor completed in about14 minutes.
-First-open medians MiB: H27.451→27.421,N29.855→30.065; deltas−0.030/+0.210
-inside spreads1.259/1.518: noise under the owner's criterion.
-Third-open medians improved1.182/1.071 MiB. All20 client runs pass close/lifecycle
-bar+5. Bar/closed changes lie within measured spread; strict invariance unproven.
-No large eager allocation found; no speculative fix. Known small code/metadata
-footprint and buffer/allocator variation recorded; move on.
+Main9f933a4 / CI38799006208 green. [Cache five-pair report](research/cache-budget.md).
+First-open deltas−0.030/+0.210 MiB lie inside spread; no speculative fix.
+Third-open savings1.182/1.071 MiB; all20 clients pass close/lifecycle bar+5.
 
-Next: opaque composition CPU/counter measurement, Feature9 Source UI+QML,
-Feature10 from Nacre's engine, protocol adapter, STOP at GateD.
-Nacre protocol v1 published10e86036; awaiting its CI before pinning.
-Migration confirmed existing helper lane lacks ranked app/action/prefix queries;
-F6 engine extraction is required for full Feature10; owner question pending.
+[Opaque composition follow-up](research/foundation-f5.md#opaque-composition-follow-up):
+release CPU ms/frame direct→cached: bar2.100→1.776, sound6.098→3.535.
+Native bar geometry applied; cached only during motion, direct/release at rest.
+Scale1.5 pixels/counter/idle-release pass;112 tests/fmt/all-features clippy/CPU+
+release builds pass. Native H/N close/lifecycle bar+5 pass; contended smoke.
+This checkpoint's CI is checked after push. No new physical/typing acceptance.
 
-111 tests/fmt/all-features clippy/CPU+release/deny/Luau pass for cache checkpoint.
-First-open<1 MiB may proceed if bar+5 passes and no real steady/closed regression;
-larger first-open or steady/closed regression still stops.
-Backends frozen; no helper edits/catalog duplication. No live/install/release.
+Next: Feature9 Source UI/controls/hover/legacy + matched QML and protocol adapter.
+F1 protocol10e86036/goldens published; upstream CI checked before consumption.
+Owner authorized Nacre engine afterF2/beforeF3. Feature10 UI uses fake menu.query
+and published schema (QML result shape until available); UI typing with fixtures,
+end-to-end waits real engine. No ranking/providers/catalog engine in Bead.
+STOP at GateD. Backends frozen; no live/install/release permission.
 
 ## Accepted Gate C and optimization baseline
 

@@ -6,6 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 fn test() -> Result<Harness> {
+    test_at_scale(1.)
+}
+fn test_at_scale(scale: f32) -> Result<Harness> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     Harness::load(
         &root,
@@ -15,7 +18,7 @@ fn test() -> Result<Harness> {
         Config {
             width: 384,
             height: 244,
-            scale: 1.,
+            scale,
         },
     )
 }
@@ -171,6 +174,53 @@ fn opaque_transform_audit_reports_direct_composition_without_new_content_bakes()
     assert_eq!(after.direct_composites - before.direct_composites, 120);
     println!(
         "OPAQUE_TRANSFORM_AUDIT frames=120 layout_delta=0 content_bakes=0 direct_composites=120"
+    );
+    Ok(())
+}
+
+#[test]
+fn opaque_motion_uses_measured_paths_and_releases_panel_group() -> Result<()> {
+    let mut test = test_at_scale(1.5)?;
+    let offset = test.scene().offset;
+    let direct = test.pose(offset, 1.)?;
+    test.presentation_motion(true); // measured cached path for opaque motion
+    let cached = test.pose(offset, 1.)?;
+    let max = direct
+        .pixels
+        .iter()
+        .zip(&cached.pixels)
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap_or(0);
+    assert!(max <= 2, "opaque group pixel difference {max}");
+    let warm = test.counters();
+    for horizontal in [false, true] {
+        for i in 0..120 {
+            let delta = (i % 8) as f32 / 1.5;
+            let pose = if horizontal {
+                (offset.0 + delta, offset.1)
+            } else {
+                (offset.0, offset.1 + delta)
+            };
+            test.pose(pose, 1.)?;
+        }
+        assert_eq!(
+            test.counters(),
+            warm,
+            "opaque poses must reuse the group without layout/content baking"
+        );
+    }
+    test.presentation_motion(false);
+    test.pose(offset, 1.)?; // resting frame releases the temporary group
+    let resting = test.counters();
+    assert_eq!(resting.rasters, warm.rasters);
+    assert_eq!(resting.direct_composites, warm.direct_composites + 1);
+    test.presentation_motion(true);
+    test.pose(offset, 1.)?;
+    assert_eq!(
+        test.counters().rasters,
+        resting.rasters + 1,
+        "idle group must have been released"
     );
     Ok(())
 }

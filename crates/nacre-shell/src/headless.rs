@@ -155,4 +155,114 @@ mod tests {
         }
         Ok(())
     }
+    /// Manual renderer CPU comparison; excluded from CI timing assertions.
+    #[test]
+    #[ignore = "manual release CPU benchmark; no compositor needed"]
+    fn opaque_composition_measurement() -> Result<(), Box<dyn std::error::Error>> {
+        use bead::render::{
+            PixelFormat, Renderer, ShmTarget,
+            tree::{OpaqueComposition, TreeCpuRenderer},
+        };
+        for entry in ["bar/main.luau", "sound/main.luau"] {
+            let mut fixture = initial_models()?;
+            fixture.insert("panel.open".into(), Value::Bool(true));
+            fixture.insert("bead.workspaces".into(),Value::List((1..=6).map(|i|serde_json::json!({"id":i.to_string(),"name":i.to_string(),"index":i,"active":i==1,"urgent":false,"mru":false})).collect()));
+            fixture.insert(
+                "bead.desktop.audio.device".into(),
+                Value::Text("Private sound output".into()),
+            );
+            fixture.insert("bead.desktop.audio.label".into(), Value::Text("75%".into()));
+            fixture.insert("bead.desktop.audio.percent".into(), Value::Number(75.));
+            // Contents-sized surfaces on a 2880×1800 output at scale1.5.
+            let (logical_w, logical_h) = if entry.starts_with("bar/") {
+                (1920, 50)
+            } else {
+                (464, 350)
+            };
+            let (width, height) = (logical_w * 3 / 2, logical_h * 3 / 2);
+            let harness = bead_test::Harness::load(
+                &root(),
+                Path::new(entry),
+                &root().join("palette.json"),
+                fixture,
+                bead_test::Config {
+                    width: logical_w,
+                    height: logical_h,
+                    scale: 1.5,
+                },
+            )?;
+            let mut scene = harness.scene().clone();
+            scene.opacity = 1.;
+            if entry.starts_with("bar/") {
+                // Match Runtime::propose: bars have no generic panel shadow inset.
+                scene.offset = (0., 0.);
+                scene.width = logical_w as f32;
+                scene.bounds = bead::render::Rect::new(0., 0., logical_w as f32, logical_h as f32);
+            }
+            let origin = scene.offset;
+            let mut pixels = vec![0u8; width as usize * height as usize * 4];
+            for repeat in 0..5 {
+                let modes = if repeat % 2 == 0 {
+                    [OpaqueComposition::Direct, OpaqueComposition::Cached]
+                } else {
+                    [OpaqueComposition::Cached, OpaqueComposition::Direct]
+                };
+                for mode in modes {
+                    let mut renderer = TreeCpuRenderer::with_opaque_composition(mode);
+                    renderer.prepare(&scene, 1.5)?;
+                    let mut samples = Vec::with_capacity(240);
+                    for i in 0..272 {
+                        let previous = scene.bounds();
+                        let delta = (i % 24) as f32 / 1.5;
+                        scene.offset = if entry.starts_with("bar/") {
+                            (origin.0, origin.1 - delta)
+                        } else {
+                            (origin.0 + delta, origin.1)
+                        };
+                        let damage = previous.union(scene.bounds()).pixels(1.5, width, height);
+                        let began = bead::core::profile::process_cpu_ns();
+                        renderer.render(
+                            &scene,
+                            ShmTarget {
+                                bytes: &mut pixels,
+                                width,
+                                height,
+                                scale: 1.5,
+                                format: PixelFormat::Rgba,
+                            },
+                            damage,
+                        )?;
+                        if i >= 32 {
+                            samples
+                                .push((bead::core::profile::process_cpu_ns() - began) as f64 / 1e6);
+                        }
+                    }
+                    samples.sort_by(f64::total_cmp);
+                    let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+                    println!(
+                        "OPAQUE_COMPOSITION entry={entry} repeat={repeat} mode={mode:?} cpu_mean_ms={mean:.6} cpu_p50_ms={:.6} cpu_p99_ms={:.6} direct={} groups={} bounds={}x{} target={width}x{height} monitor=2880x1800 scale=1.5",
+                        samples[samples.len() / 2],
+                        samples[(samples.len() * 99 / 100).min(samples.len() - 1)],
+                        renderer.direct_composites,
+                        renderer.opacity_builds,
+                        scene.bounds.w,
+                        scene.bounds.h
+                    );
+                    assert_eq!(
+                        renderer.opacity_builds,
+                        usize::from(mode == OpaqueComposition::Cached)
+                    );
+                    assert_eq!(
+                        renderer.direct_composites,
+                        if mode == OpaqueComposition::Direct {
+                            272
+                        } else {
+                            0
+                        }
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }

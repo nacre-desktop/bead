@@ -170,6 +170,7 @@ impl App {
                 return Ok(());
             }
             s.redraw = false;
+            let mut opaque_motion = self.options.animate;
             if let Some(motion) = &scene.motion {
                 let now = self.started.elapsed().as_secs_f64();
                 let open = if self.options.animate {
@@ -194,13 +195,14 @@ impl App {
                         bead_core::animation::Curve::EaseOut
                     },
                 );
-                let progress = self.animations.value(&motion.id, now).unwrap().0;
+                let (progress, active) = self.animations.value(&motion.id, now).unwrap();
                 scene.opacity = progress;
                 let (dx, dy) = motion.edge.closed_offset(
                     motion.slide_distance.unwrap_or(scene.bounds.w),
                     motion.slide_distance.unwrap_or(scene.bounds.h),
                     progress,
                 );
+                opaque_motion = active && (dx != 0. || dy != 0.);
                 scene.offset.0 = 32. + dx;
                 scene.offset.1 = 32. + dy;
             }
@@ -305,6 +307,7 @@ impl App {
                 }
             }
             s.offset = scene.offset;
+            renderer.presentation_motion(opaque_motion);
             renderer.prepare(scene, scale)?;
             let mut regions = if self.options.damage {
                 if let Some(frame) = renderer.prepared_frame() {

@@ -135,3 +135,49 @@ The paused OSD scale1 golden exposes text outside its pill. Typing29.6→32.7%,
 
 Extra: a later measured pass can byte-account glyph/materialized caches and
 compare the opaque direct-composition path; no such rewrite was included here.
+
+
+## Opaque composition follow-up — 2026-10-15
+
+Owner resumed F5 gaps before Features9–10. Compare actual opaque composition,
+not opacity0.999 as a proxy. Release CPU benchmark uses the real Luau bar with
+six workspaces/status content and the sound panel, bundled fonts/fixed fixtures,
+2880×1800 output geometry/scale1.5. Targets are native content-sized surfaces:
+bar2880×75, panel696×525. Runtime's bar origin/bounds override is applied;
+a preliminary generic-shadow-inset bar trial was rejected and retained as such.
+
+Five alternating Direct/Cached trials per scene,32 warm frames then240 samples
+each. CLOCK_PROCESS_CPUTIME_ID brackets only render calls: reuse target storage,
+exclude source preparation/layout/shaping, PNG conversion and process startup.
+No own build overlapped timing; migration held local work. Other desktop load
+and CPU frequency were uncontrolled. This is headless paint CPU, not compositor
+presentation timing or typing acceptance. Raw trials remain ignored.
+
+| CPU ms/frame, median of five trial means [min,max] | Direct | Cached |
+| --- | ---: | ---: |
+| Bar |2.100 [1.903,2.231]|1.776 [1.523,1.780]|
+| Sound |6.098 [5.649,6.101]|3.535 [3.448,3.539]|
+| Median trial CPU p99, bar /sound |2.474 /6.212|2.085 /3.667|
+
+Cached opaque motion is cheaper by15.4%/42.0% in these scenes. Auto uses it
+only during per-surface presentation motion; stable updates remain direct and
+release the temporary group. This avoids an idle full-surface cache and avoids
+rebuilding a group for an ordinary one-shot text update. Host hints follow that
+surface's motion, not a global animation on another surface. Existing fades
+already used opacity groups; no native open-latency improvement is claimed.
+Other framework hosts can pass the same presentation hint; default is stable.
+
+bead-test at scale1.5 checks opaque direct/cached pixels (max channel delta2),
+120 vertical plus120 horizontal poses with0 actual Taffy/content/group builds
+after priming, then rest/restart proving release and exactly one new group.
+Direct-at-rest composition remains counted explicitly. General layout animation
+and untested/custom surface workloads remain outside this benchmark.
+
+Native H120/N60 three-cycle/five-second-idle lifecycle smoke: bar/first-warm/
+closed PSS+DRM MiB20.214/27.139/21.549 and21.834/29.202/22.139. Every close/
+lifecycle stays within its own bar+5; no DRM clients and no surviving composite
+cache owner after release. Short contended samples; initial H overlapped a
+headless test, so these are lifecycle/memory guards, not new idle CPU acceptance.
+112 workspace tests, fmt/all-features clippy, CPU-only/release builds pass.
+No live/install/release work. Per-surface renderer and CPU-small-panel policy
+remain; GL-large-animation/Mesa residue and 6b pacing/idle items stay open.

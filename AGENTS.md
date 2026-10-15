@@ -69,3 +69,9 @@
   not regress. Report the change; increases over 1 MiB or steady/closed regressions
   still stop. Cache checkpoint215ea35 accepted with a roughly one-hour diagnostic
   time-box and five alternating before/candidate samples per compositor.
+
+- Owner update2026-10-15: migration builds the shared launcher engine after F2,
+  before F3. Bead builds its launcher UI against fake menu.query meanwhile,
+  using published nacre-protocol schema (current QML result shape until then).
+  Fixture UI typing is measured separately; end-to-end typing waits real engine.
+  Pin published protocol v1/goldens; never implement ranking in Bead.
