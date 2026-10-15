@@ -124,6 +124,33 @@ impl Dispatch<WpPresentation, ()> for App {
         }
     }
 }
+impl App {
+    fn record_first_frame(&mut self, surface: &wl_surface::WlSurface, revision: u64, epoch: u64) {
+        let Some(index) = self
+            .surfaces
+            .iter()
+            .position(|s| s.layer.wl_surface() == surface)
+        else {
+            return;
+        };
+        let companion = self.surfaces[index].companion;
+        if (companion && epoch != self.panel_epoch)
+            || self.surfaces[index].recovered_generation == Some((epoch, revision))
+        {
+            return;
+        }
+        let source = if companion {
+            &mut self.panel_runtime
+        } else {
+            &mut self.runtime
+        };
+        if let Some(source) = source {
+            source.presented(revision);
+            self.surfaces[index].recovered_generation = Some((epoch, revision));
+        }
+    }
+}
+
 impl Dispatch<WpPresentationFeedback, PresentationData> for App {
     fn event(
         state: &mut Self,
@@ -187,6 +214,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                 wp_presentation_feedback::Event::Discarded => s.discarded += 1,
                 _ => {}
             }
+        }
+        if matches!(event, wp_presentation_feedback::Event::Presented { .. }) {
+            state.record_first_frame(&data.surface, data.generation, data.source_epoch);
         }
     }
 }
@@ -762,6 +792,11 @@ impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for 
                 .find(|s| s.layer.wl_surface() == &data.surface)
             && surface.callbacks.accept(data.epoch)
         {
+            if state.presentation.is_none() {
+                // Callback acknowledgement is only the persistence fallback; never a
+                // substitute for wp_presentation timestamps in performance proofs.
+                state.record_first_frame(&data.surface, data.generation, data.source_epoch);
+            }
             CompositorHandler::frame(state, conn, qh, &data.surface, callback_data);
         }
     }

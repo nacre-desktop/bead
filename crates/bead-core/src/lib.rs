@@ -3,6 +3,7 @@
 pub mod animation;
 pub mod capabilities;
 pub mod profile;
+pub mod recovery;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 /// A surface's owning edge; inward vectors also place popouts away from bars.

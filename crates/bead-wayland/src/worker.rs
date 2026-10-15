@@ -63,6 +63,7 @@ impl Packet {
     }
 }
 enum Job {
+    Presented(u64),
     Idle(bool),
     Stage(UiEvent, Vec<f32>),
     Viewport(u32, u32),
@@ -188,6 +189,7 @@ impl SceneSource for Source {
                     };
                     match job {
                         Job::Stop => break,
+                        Job::Presented(revision) => source.presented(revision),
                         Job::Idle(value) => {
                             idle = value;
                             source.set_idle(value);
@@ -369,6 +371,9 @@ impl SceneSource for Source {
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         Ok(())
+    }
+    fn presented(&mut self, revision: u64) {
+        let _ = self.send(Job::Presented(revision));
     }
     fn commit(&mut self) -> bool {
         if self.accepted {

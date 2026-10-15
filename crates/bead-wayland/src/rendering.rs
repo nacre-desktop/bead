@@ -391,6 +391,8 @@ impl App {
                         FrameData {
                             surface: s.layer.wl_surface().clone(),
                             epoch: s.callbacks.request(),
+                            generation: scene.resource_revision,
+                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
                         },
                     );
                     s.callbacks.pending = true;
@@ -424,6 +426,8 @@ impl App {
                     FrameData {
                         surface: s.layer.wl_surface().clone(),
                         epoch: s.callbacks.request(),
+                        generation: scene.resource_revision,
+                        source_epoch: if s.companion { self.panel_epoch } else { 0 },
                     },
                 );
                 s.callbacks.pending = true;
@@ -432,6 +436,7 @@ impl App {
                         s.layer.wl_surface(),
                         qh,
                         PresentationData {
+                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
                             update: s.ui_serial,
                             surface: s.layer.wl_surface().clone(),
                             generation: scene.resource_revision,
@@ -542,6 +547,8 @@ impl App {
                         FrameData {
                             surface: s.layer.wl_surface().clone(),
                             epoch: s.callbacks.request(),
+                            generation: scene.resource_revision,
+                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
                         },
                     );
                     s.callbacks.pending = true;
@@ -550,6 +557,7 @@ impl App {
                             s.layer.wl_surface(),
                             qh,
                             PresentationData {
+                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
                                 update: s.ui_serial,
                                 surface: s.layer.wl_surface().clone(),
                                 generation: scene.resource_revision,
@@ -659,6 +667,8 @@ impl App {
                 FrameData {
                     surface: s.layer.wl_surface().clone(),
                     epoch: s.callbacks.request(),
+                    generation: scene.resource_revision,
+                    source_epoch: if s.companion { self.panel_epoch } else { 0 },
                 },
             );
             s.callbacks.pending = true;
@@ -667,6 +677,7 @@ impl App {
                     s.layer.wl_surface(),
                     qh,
                     PresentationData {
+                        source_epoch: if s.companion { self.panel_epoch } else { 0 },
                         update: s.ui_serial,
                         surface: s.layer.wl_surface().clone(),
                         generation: scene.resource_revision,

@@ -14,23 +14,35 @@ use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
 use std::path::{Path, PathBuf};
 fn main() {
-    std::panic::set_hook(Box::new(|info| {
-        eprintln!(
-            "PANIC thread={} {info}",
-            std::thread::current().name().unwrap_or("worker")
-        );
+    std::panic::set_hook(Box::new(|_| {
+        eprintln!("PANIC code=ui_panic");
     }));
     if std::env::args().any(|a| a == "--panic-probe")
         && std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() == Ok("1")
     {
+        eprintln!("PANIC thread=main private panic hook proof");
         panic!("private panic hook proof");
     }
-    if let Err(e) = start() {
-        eprintln!("nacre-shell: {e}");
+    let mut health = None;
+    let mut ui_started = false;
+    if let Err(e) = start(&mut health, &mut ui_started) {
+        if ui_started {
+            eprintln!("nacre-shell: fatal code=runtime_error");
+        } else {
+            eprintln!("nacre-shell: {e}");
+        }
         std::process::exit(1);
     }
+    if let Some(health) = &mut health
+        && health.finish().is_err()
+    {
+        eprintln!("RECOVERY_ERROR code=clean_shutdown");
+    }
 }
-fn start() -> Result<(), Box<dyn std::error::Error>> {
+fn start(
+    health: &mut Option<bead::core::recovery::Run>,
+    ui_started: &mut bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let cli: Vec<String> = std::env::args().skip(1).collect();
     if cli.first().is_some_and(|a| a == "--check") {
         return headless::check(Path::new(cli.get(1).ok_or("--check needs FILE")?));
@@ -247,7 +259,10 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         options.renderer = bead::render::RendererKind::Cpu;
         options.lazy_gl = true;
     }
-    let colors = Palette::read(&palette)?;
+    let colors = Palette::read(&palette).or_else(|_| {
+        eprintln!("RECOVERY code=palette_fallback");
+        Palette::parse(include_bytes!("../../../shell/palette.json"))
+    })?;
     if bar_panel {
         if !options.bar {
             return Err("--bar-panel requires --bar".into());
@@ -361,6 +376,39 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     }
     if audio_panel && !options.bar {
         return Err("--audio-panel requires --bar".into());
+    }
+    *ui_started = true;
+    let mut forced_safe_mode = false;
+    if let Ok(path) = state::File::path()
+        && let Some(parent) = path.parent()
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_millis()
+            .min(u64::MAX as u128) as u64;
+        match bead::core::recovery::Run::begin(parent.join("ui-health.json"), now) {
+            Ok(run_health) => *health = Some(run_health),
+            Err(_) => {
+                forced_safe_mode = true;
+                eprintln!("RECOVERY_ERROR code=crash_history");
+            }
+        }
+    }
+    if forced_safe_mode || health.as_ref().is_some_and(|h| h.safe_mode) {
+        eprintln!("RECOVERY code=safe_mode");
+        options.bar = true;
+        options.panel = false;
+        options.interactive = false;
+        options.keyboard_focus = false;
+        options.panel_spec = None;
+        options.companion = None;
+        options.command_socket = None;
+        options.command_map = None;
+        options.renderer = bead::render::RendererKind::Cpu;
+        options.lazy_gl = false;
+        let mut scene = bead::ui::recovery::safe_bar(&colors);
+        scene.font_files = font_sources::select(&scene)?;
+        return run(options, scene);
     }
     let desktop_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     let panel_trace = options.trace_state;

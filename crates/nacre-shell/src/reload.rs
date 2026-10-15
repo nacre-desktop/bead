@@ -25,6 +25,11 @@ pub struct Runtime {
 }
 impl Runtime {
     pub fn new(mut session: bead::ui::Session) -> Self {
+        if let Ok(path) = crate::state::File::path()
+            && let Some(parent) = path.parent()
+        {
+            session.enable_recovery(parent.join("ui").join(session.recovery_key()));
+        }
         let state_file = match crate::state::File::path()
             .map_err(|e| -> Box<dyn Error> { e.into() })
             .and_then(crate::state::File::open)
@@ -721,6 +726,11 @@ impl SceneSource for Runtime {
                 .session
                 .focused_action()
                 .is_some_and(|(_, name, _)| name == "close")
+    }
+    fn presented(&mut self, revision: u64) {
+        if self.session.presented(revision).is_err() {
+            eprintln!("RECOVERY_ERROR code=save_bundle");
+        }
     }
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {

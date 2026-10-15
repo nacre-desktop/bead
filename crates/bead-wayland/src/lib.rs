@@ -210,6 +210,8 @@ pub trait SceneSource {
         String::new()
     }
     fn commit(&mut self) -> bool;
+    /// Delivered once per generation after successful presentation, off-thread for worker sources.
+    fn presented(&mut self, _revision: u64) {}
     fn error_scene(&mut self, error: String) -> Scene;
 }
 pub type CommandMap = std::sync::Arc<
@@ -305,8 +307,11 @@ impl Default for Options {
 struct FrameData {
     surface: wl_surface::WlSurface,
     epoch: u64,
+    generation: u64,
+    source_epoch: u64,
 }
 struct PresentationData {
+    source_epoch: u64,
     update: u64,
     surface: wl_surface::WlSurface,
     generation: u64,
@@ -355,6 +360,7 @@ struct Surface {
     presentation_kind: u32,
     discarded: usize,
     presented_generation: Option<u64>,
+    recovered_generation: Option<(u64, u64)>,
     ui_serial: u64,
 }
 impl Drop for Surface {

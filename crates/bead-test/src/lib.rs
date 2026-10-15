@@ -81,6 +81,35 @@ impl Harness {
         config: Config,
         icons: BTreeMap<String, PathBuf>,
     ) -> Result<Self> {
+        Self::load_resources(root, entry, palette, fixture, config, icons, None)
+    }
+    pub fn load_with_recovery(
+        root: &Path,
+        entry: &Path,
+        palette: &Path,
+        fixture: BTreeMap<String, Value>,
+        config: Config,
+        recovery: PathBuf,
+    ) -> Result<Self> {
+        Self::load_resources(
+            root,
+            entry,
+            palette,
+            fixture,
+            config,
+            BTreeMap::new(),
+            Some(recovery),
+        )
+    }
+    fn load_resources(
+        root: &Path,
+        entry: &Path,
+        palette: &Path,
+        fixture: BTreeMap<String, Value>,
+        config: Config,
+        icons: BTreeMap<String, PathBuf>,
+        recovery: Option<PathBuf>,
+    ) -> Result<Self> {
         let layout_baseline = bead_ui::layout::layout_passes();
         if config.width == 0
             || config.height == 0
@@ -111,10 +140,19 @@ impl Harness {
         let mut session = Session::new(
             root.canonicalize()?,
             entry.into(),
-            palette.canonicalize()?,
-            Palette::read(palette)?,
+            std::path::absolute(palette)?,
+            Palette::read(palette).or_else(|error| {
+                if recovery.is_some() {
+                    Ok(Palette(Default::default()))
+                } else {
+                    Err(error)
+                }
+            })?,
             fallback.clone(),
         );
+        if let Some(path) = recovery {
+            session.enable_recovery(path);
+        }
         session.stores = session.stores.reconcile(&fixture)?;
         session.set_viewport(config.width, config.height);
         let scene = session.reload()?;
@@ -166,6 +204,17 @@ impl Harness {
         self.session.commit(scene.clone());
         self.scene = scene;
 
+        Ok(())
+    }
+    pub fn reload(&mut self) -> Result<()> {
+        let scene = self.session.reload()?;
+        self.session.check_sources()?;
+        self.commit(scene)
+    }
+    /// Simulates the host presentation acknowledgement after a successful CPU frame.
+    pub fn presented(&mut self) -> Result<()> {
+        self.render()?;
+        self.session.presented(self.scene.resource_revision)?;
         Ok(())
     }
     pub fn update(&mut self, values: BTreeMap<String, Value>) -> Result<()> {

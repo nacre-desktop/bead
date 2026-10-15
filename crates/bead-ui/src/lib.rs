@@ -7,6 +7,7 @@ pub mod input;
 mod interaction;
 pub mod layout;
 mod materialized;
+pub mod recovery;
 pub mod schema;
 pub mod script;
 mod session;

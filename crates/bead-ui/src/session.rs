@@ -6,6 +6,8 @@ pub(super) struct Pending {
     pub(super) stores: Stores,
     pub(super) palette: Palette,
     pub(super) palette_bytes: Option<Vec<u8>>,
+    source_root: PathBuf,
+    palette_source: PathBuf,
     pub(super) watch_revision: u64,
     pub(super) nodes: Vec<Node>,
 }
@@ -13,6 +15,10 @@ pub type Projector = Box<dyn Fn(&Stores) -> Result<BTreeMap<String, Value>, Diag
 /// The state owner survives every view/script replacement.
 pub struct Session {
     projector: Option<Projector>,
+    recovery_path: Option<PathBuf>,
+    recovered: Option<bead_core::recovery::Restored>,
+    recorded_revision: Option<u64>,
+    recovery_pending: std::collections::VecDeque<(u64, bead_core::recovery::Bundle)>,
     pub(crate) root: PathBuf,
     pub(crate) entry: PathBuf,
     pub(super) palette_path: PathBuf,
@@ -44,8 +50,15 @@ impl Session {
     ) -> Self {
         Self {
             projector: None,
+            recovery_path: None,
+            recovered: None,
+            recorded_revision: None,
+            recovery_pending: Default::default(),
             root,
-            entry,
+            entry: entry
+                .components()
+                .filter(|c| *c != std::path::Component::CurDir)
+                .collect(),
             palette_path,
             palette,
             stores: Stores::default(),
@@ -83,7 +96,121 @@ impl Session {
         )?);
         Ok(())
     }
+    pub fn recovery_key(&self) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        self.root
+            .canonicalize()
+            .unwrap_or_else(|_| self.root.clone())
+            .hash(&mut hash);
+        self.entry.hash(&mut hash);
+        format!("ui-{:016x}.json", hash.finish())
+    }
+    pub fn enable_recovery(&mut self, path: PathBuf) {
+        self.recovery_path = Some(path);
+    }
+    pub fn recovered_on_start(&self) -> bool {
+        self.recovered.is_some()
+    }
+    /// The host calls this only after a successful first-frame presentation.
+    pub fn presented(&mut self, revision: u64) -> Result<(), Diagnostic> {
+        let Some(path) = &self.recovery_path else {
+            return Ok(());
+        };
+        if self
+            .recorded_revision
+            .is_some_and(|saved| saved >= revision)
+        {
+            return Ok(());
+        }
+        let Some((_, bundle)) = self.recovery_pending.iter().find(|(id, _)| *id == revision) else {
+            return Ok(());
+        };
+        bundle.save(path).map_err(|_| {
+            Diagnostic::new(&self.entry, 1, 1, "last-good bundle could not be saved")
+        })?;
+        self.recorded_revision = Some(revision);
+        self.recovery_pending.retain(|(id, _)| *id > revision);
+        eprintln!("RECOVERY_BUNDLE_RECORDED generation={revision}");
+        Ok(())
+    }
+    fn capture_bundle(
+        &self,
+        generation: &Generation,
+        palette: &[u8],
+    ) -> Result<bead_core::recovery::Bundle, Diagnostic> {
+        let size = generation.sources.values().map(Vec::len).sum::<usize>()
+            + generation.assets.values().map(|b| b.len()).sum::<usize>()
+            + palette.len();
+        let pending = self
+            .recovery_pending
+            .iter()
+            .map(|(_, b)| b.palette.len() + b.files.values().map(Vec::len).sum::<usize>())
+            .sum::<usize>();
+        if size > 8 * 1024 * 1024
+            || pending + size > 8 * 1024 * 1024
+            || self.recovery_pending.len() >= 32
+        {
+            return Err(Diagnostic::new(
+                &self.entry,
+                1,
+                1,
+                "recovery budget awaiting presentation",
+            ));
+        }
+        let mut files = generation.sources.clone();
+        for (path, bytes) in &generation.assets {
+            let name = path
+                .strip_prefix(&generation.root)
+                .map_err(|_| Diagnostic::new(&self.entry, 1, 1, "recovery asset outside bundle"))?;
+            files.insert(name.into(), bytes.to_vec());
+        }
+        let bundle = bead_core::recovery::Bundle {
+            version: 1,
+            entry: self.entry.clone(),
+            palette: palette.to_vec(),
+            files,
+        };
+        bundle
+            .validate()
+            .map_err(|_| Diagnostic::new(&self.entry, 1, 1, "invalid recovery snapshot"))?;
+        Ok(bundle)
+    }
     pub fn reload(&mut self) -> Result<Scene, Diagnostic> {
+        let result = self.reload_current();
+        if result.is_ok() || self.generation.is_some() || self.recovered.is_some() {
+            return result;
+        }
+        let Some(path) = &self.recovery_path else {
+            return result;
+        };
+        let restore = (|| -> Result<_, Box<dyn std::error::Error>> {
+            let bundle = bead_core::recovery::Bundle::load(path)?;
+            if bundle.entry != self.entry {
+                return Err("last-good entry mismatch".into());
+            }
+            bundle.restore(path.parent().ok_or("recovery parent missing")?)
+        })();
+        let Ok(restored) = restore else {
+            return result;
+        };
+        let original_root = std::mem::replace(&mut self.root, restored.path.clone());
+        let original_palette = std::mem::replace(
+            &mut self.palette_path,
+            restored.path.join(".bead-recovery-palette.json"),
+        );
+        let recovered = self.reload_current();
+        self.root = original_root;
+        self.palette_path = original_palette;
+        if recovered.is_ok() {
+            eprintln!("RECOVERY code=startup_bundle");
+            self.recovered = Some(restored);
+            recovered
+        } else {
+            result
+        }
+    }
+    fn reload_current(&mut self) -> Result<Scene, Diagnostic> {
         self.attempts += 1;
         self.pending = None;
         let watch_revision = self
@@ -138,12 +265,31 @@ impl Session {
             stores,
             palette,
             palette_bytes: Some(palette_bytes),
+            source_root: self.root.clone(),
+            palette_source: self.palette_path.clone(),
             watch_revision,
             nodes,
         });
         Ok(scene)
     }
     pub fn commit(&mut self, scene: Scene) {
+        let capture = self
+            .pending
+            .as_ref()
+            .and_then(|p| p.generation.as_ref().map(|g| (p, g)))
+            .filter(|(_, g)| {
+                self.recovery_path.is_some()
+                    && self.recovered.as_ref().is_none_or(|r| r.path != g.root)
+            })
+            .and_then(|(p, g)| {
+                p.palette_bytes
+                    .as_ref()
+                    .and_then(|palette| self.capture_bundle(g, palette).ok())
+                    .map(|bundle| (g.revision, bundle))
+            });
+        if let Some(capture) = capture {
+            self.recovery_pending.push_back(capture);
+        }
         if let Some(Pending {
             generation,
             stores,
@@ -153,6 +299,13 @@ impl Session {
         }) = self.pending.take()
         {
             if let Some(generation) = generation {
+                if self
+                    .recovered
+                    .as_ref()
+                    .is_some_and(|r| r.path != generation.root)
+                {
+                    self.recovered = None;
+                }
                 self.generation = Some(generation);
                 self.error = None;
             }
@@ -247,6 +400,8 @@ impl Session {
             stores,
             palette: Palette(self.palette.0.clone()),
             palette_bytes: None,
+            source_root: self.root.clone(),
+            palette_source: self.palette_path.clone(),
             watch_revision: 0,
             nodes,
         });
@@ -304,6 +459,8 @@ impl Session {
             stores: self.stores.clone(),
             palette: Palette(self.palette.0.clone()),
             palette_bytes: None,
+            source_root: self.root.clone(),
+            palette_source: self.palette_path.clone(),
             watch_revision: 0,
             nodes,
         });
@@ -316,7 +473,16 @@ impl Session {
         if let Some(pending) = &self.pending
             && let Some(generation) = &pending.generation
         {
-            generation.check_sources(&self.root)?;
+            if self.recovery_path.is_some()
+                && self
+                    .recovered
+                    .as_ref()
+                    .is_none_or(|r| r.path != generation.root)
+                && let Some(palette) = &pending.palette_bytes
+            {
+                self.capture_bundle(generation, palette)?;
+            }
+            generation.check_sources(&pending.source_root)?;
             if pending.watch_revision
                 != self
                     .watch_revision
@@ -330,7 +496,7 @@ impl Session {
                 ));
             }
             if let Some(bytes) = &pending.palette_bytes
-                && fs::read(&self.palette_path).ok().as_ref() != Some(bytes)
+                && fs::read(&pending.palette_source).ok().as_ref() != Some(bytes)
             {
                 return Err(Diagnostic::new(
                     Path::new("palette.json"),
