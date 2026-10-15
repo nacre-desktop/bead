@@ -349,6 +349,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "libc",
+ "notify",
  "pipewire",
  "serde",
  "serde_json",
@@ -385,6 +386,7 @@ dependencies = [
  "calloop",
  "libc",
  "raw-window-handle",
+ "serde_json",
  "smithay-client-toolkit",
  "wayland-client",
  "wayland-protocols",

@@ -15,3 +15,5 @@ futures-util = "0.3"
 pipewire = "=0.10.1"
 system-tray = "=0.8.9"
 libc = "0.2"
+
+notify = {version="=8.2.0",default-features=false}

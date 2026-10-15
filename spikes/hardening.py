@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_HARDENING') == 'commands':
+        spec=importlib.util.spec_from_file_location('command_proof',ROOT/'spikes/command-proof.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_HARDENING') == 'restart':
         spec=importlib.util.spec_from_file_location('restart_proof',ROOT/'spikes/restart-proof.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)

@@ -188,6 +188,39 @@ pub fn run_runtime(
             }
         })?;
     }
+    let _commands = if let Some(path) = &app.options.command_socket {
+        let (sender, receiver) = calloop::channel::channel::<UiEvent>();
+        loop_.handle().insert_source(receiver, |event, _, app| {
+            if let calloop::channel::Event::Msg(event) = event {
+                app.ui(event);
+            }
+        })?;
+        Some(bead_services::ipc::Server::bind(
+            path.clone(),
+            move |call| {
+                let id = call.id;
+                let (tx, rx) = std::sync::mpsc::sync_channel(1);
+                if sender
+                    .send(UiEvent::Remote(std::sync::Arc::new(Remote {
+                        call,
+                        reply: tx,
+                    })))
+                    .is_err()
+                {
+                    return bead_services::ipc::Reply::error(id, "closed", "UI stopped");
+                }
+                rx.recv_timeout(Duration::from_secs(1)).unwrap_or_else(|_| {
+                    bead_services::ipc::Reply::error(
+                        id,
+                        "timeout",
+                        "command execution deadline exceeded",
+                    )
+                })
+            },
+        )?)
+    } else {
+        None
+    };
     for output in app.output.outputs() {
         app.add_output(&qh, output);
     }

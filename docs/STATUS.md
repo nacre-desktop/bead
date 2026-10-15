@@ -1,264 +1,43 @@
 # Status
 
-## 2026-10-15 — 6b implementation complete with pacing concerns
+## 2026-10-15 — Feature 7 complete; Gate C foundation next
 
-STOP before Feature 7. The six numbered hardening steps and step 0b are
-implemented and published in order. Step 0a performance acceptance remains
-OPEN: nested niri GL-pair pacing and matched idle invariance are unresolved.
-No new physical test, installation, release or Nacre/Orient write occurred.
+Owner accepted6b and authorized7–8 throughGateC. Stop atGateC.
+Feature7: owner-only private versioned socket/client,120 audited methods
+across43 targets,30 CLI-source locations and12 shortcut declarations indexed.
+Typed decoding/selector fixtures cover their contracts. Native bar/state
+handlers work; later-feature routes return explicit unavailable errors.
+Existing Python helper JSON-lines protocol remains external, via bounded
+argv/input/output/deadline transport. Regular-file snapshots/watch/replacement
+retain last-good validated JSON; no live config/binding changes.
 
-Final step 6: normal build is CPU + native EGL/femtovg; wgpu/Vello require
-explicit features. The historical blank-layer benchmark remains intact as
-an opt-in standalone manifest. Default dependency graph excludes wgpu/Vello.
-Allocator/thread diagnostics require trace. Public UI exports are retained;
-loading, state and interaction are split, as are Wayland lifecycle,
-transactions, rendering and protocol dispatch.
+66 workspace tests and fmt/clippy pass. Real CLI/socket/state/error/cleanup
+proofs pass on nested niri and virtual120 Hypr. New source checkpoint CI
+checked after publication. Evidence: .research/feature7/commands-*.
 
-Frame requests now carry per-surface generations. Reopening a closed panel
-and returning from idle GPU rendering invalidate parked callbacks; late
-replies cannot grant duplicate frames. Regression tests cover this case.
-Launcher keeps its original top-edge pose; kit demo covers side edges.
+Next: facade/example, Rust-generated Luau types+analyzerCI, native clipboard,
+headless --check and30s --report; then real sound-output panel and GateC proof.
 
-Final private evidence (2880×1800/1.5; Hypr virtual120, niri nested60):
-- CPU bar PSS+DRM: niri 23.28 / Hypr 23.24 MiB; no DRM client.
-- Bar+panel warm → idle: niri 143.23 → 76.47 MiB;
-  Hypr 152.55 → 77.46 MiB. Driver allocation returns to zero on both;
-  warm memory remains above Feature6 (~105 MiB). CPU pools are not trimmed.
-- Strict five-edit state/error/recovery reload proof passes; final isolated
-  file-write→presentation samples 63.91–67.03 ms, including 50 ms debounce.
-- Final injected 600.27 ms script-worker pause: 67 commits/presentations,
-  longest interval 16.82 ms; whole-run presentation p50/p99 8.37/17.00 ms.
-  Earlier matched step2 run: 71 frames, longest 9.34 ms. Both retained.
-  Script isolation works; strict uninterrupted 120 Hz is NOT proven.
-- Step2 typing CPU regression 29.61 → 32.66% remains; full scroll worker
-  tail is unmeasured. Commit preparation is not total script latency.
+New Gate C limit: after panel closes and idles, process PSS + deduplicated
+DRM must return within 5 MiB of matched bar-only (~23 MiB). Release panel
+rasters, SHM buffers, CPU pools and worker caches. Report warm bar+panel
+against Feature6 (~105 MiB), including the cause of any increase. Retain
+typing CPU 29.6→32.7% on the later optimization list.
 
-Validation: 60 workspace tests, fmt, clippy (default/all-features/CPU),
-CPU-only build, native release build, wgpu-only and all-feature checks,
-private service owners, workspace and six framework license graphs pass.
-Two GPU activation/release cycles pass on both compositors. Final reload
-and callback-generation/panic/state/capability regressions pass. Feedback
-clock_id=1 confirms CLOCK_MONOTONIC for pause/reload timestamp comparison.
-Private compositor feedback is not physical scanout/hardware acceptance.
+Worktree: feature7-gate-c, forked from accepted beed15c. Prior worktree,
+WIP snapshot, measurements and failed probes remain untouched. Canonical
+checkout stays read-only. Tool/target directories remain canonical.
 
-Steps2–5 CI passed: 38643279009 / 38644193181 / 38645580955 / 38647082113.
-Step6 source 5c7be44 CI38650799162 PASSED, including the new CPU-only and
-all-feature configuration checks. Final status-only commit skips redundant CI;
-source is unchanged from that passing revision.
-Evidence: ignored .research/feature6b/epoch-*, takeover/step6-*.
-Existing worktrees, before binaries, failed probes and WIP preservation branch
-remain intact. Canonical checkout was not edited; this worktree's STATUS is
-newer. Next work requires an owner instruction; do not start Feature7 here.
+Plan/checkpoints:
+1. Private versioned command socket/client and audited compatibility catalog;
+   bounded subprocess, files/watch and existing helper JSON-lines transport.
+2. Feature7 integration/fixture proofs, commit/push/CI and concise results.
+3. GateC foundation: facade/example, generated Luau types+analyzer, native
+   clipboard, headless --check and private --report.
+4. Real audio-control panel with command open/close/focus/dismiss/output
+   lifecycle; aggressive closed-idle release with preserved small state.
+5. Matched GateC bar+panel/QML, warm/idle PSS+DRM, CPU/pacing/action timings,
+   repeat close/reopen/output removal and honest gate recommendation.
 
-## 2026-10-15 — 6b step 5 complete; step 6 next
-
-Panic logging is installed for all threads. A script-worker panic becomes
-an explicit fatal event, exits the application with failure and can trigger
-the source user unit's Restart=on-failure. The unit is not installed.
-Fallible service/backend/reload initialization, action locks, serialization
-and native socket paths propagate errors. Immutable snapshot/bookkeeping
-poison recovery logs an error while retaining the last intact value.
-
-Panel open/page state is written atomically (0600 file, 0700 state directory,
-file and directory fsync) only after validated worker commit. Unknown or
-incompatible saved IDs do not enter a candidate; malformed state is logged
-and left intact with persistence disabled for that run. Search text, titles,
-transport snapshots and other transient state are excluded. Other panel IDs
-are retained when a different view saves its own state.
-
-Private abrupt-kill/restart proofs pass on niri and Hyprland: closed panel
-and selected page restored, input disabled. Closing disables pointer and
-keyboard input when the validated close target commits: waiting for the final
-animation callback fails when an off-surface panel stops receiving callbacks.
-Capability registry denies unregistered actions and missing grants; native
-adapter unsupported-action checks remain authoritative. No permission UI.
-
-Workspace tests (59), fmt/clippy, CPU-only and private service-owner checks
-pass. Source unit syntax passes with a private executable substitution;
-its future installed executable path does not exist here. Evidence ignored
-.research/feature6b/restart-{niri,hypr-fixed}, takeover/step5-*.
-Step4 26dbbe9 CI38645580955 passed. Step5 CI recorded after push.
-Next: step6 CPU/native-GL defaults, opt-in wgpu/Vello, module split and trace.
-Keep step0a nested niri pacing and idle invariance open in final report.
-No Feature7, live tests, installation, reference writes or release.
-
-## 2026-10-15 — 6b step 4 complete; step 5 next
-
-Framework-owned bead.kit exposes Button, IconButton, Slider, Switch, Tile,
-SegmentedControl, List/ListRow, Card, Popover/Peek, Tooltip and TextInput.
-The bar and launcher compose it. The factual scale mirror exactly matches
-Nacre size-scale.json; the sync/check helper detects later drift. Palette
-roles still come from Orient. Point sizes convert to logical pixels at 4/3;
-NacreTokens motion durations are 200/120/400 ms.
-
-Bar/Panel edge properties admit all four edges. Layout direction reverses
-for bottom/right bars; panel pose moves from its edge; popouts open away
-from the bar. A worker's committed panel now updates its layer anchor;
-initial fallback geometry had incorrectly left side panels centered.
-Only top bar and left/right panels are GUI-validated at this milestone.
-
-Slider click/drag/arrow-key tests, independent tile actions, segmented
-selection, token values and panel-edge poses pass. The kit composes retained
-blurred artwork, a direct-fill level meter and hidden peek/tooltip states.
-GUI captures on both private compositors were inspected; no UI errors,
-all generations presented and STOP surfaces=0. Fmt/clippy/workspace tests
-and CPU-only build pass. Evidence .research/feature6b/kit-*-final.
-Step3 c672af6 CI38644193181 passed; step4 CI recorded after push.
-Next: step5 robustness/persistence/capabilities, then step6 hygiene.
-Step0a nested niri pacing/idle invariance remains open. No Feature7,
-physical test, reference writes, installation or release.
-
-## 2026-10-14 — 6b step 3 complete; step 4 next
-
-Automatic bars use CPU SHM. The companion has a CPU first frame, warms GL
-on a later frame callback, and returns to CPU after two idle seconds.
-The idle timer stops when released. Animated reopening warms it again.
-A current EGL context must be unbound before destruction. glutin keeps
-non-reference-counted EGL displays initialized; Bead explicitly terminates
-its exclusively owned display only after every GL renderer/surface is gone.
-Private two-cycle activate/release proofs pass on niri and Hyprland.
-
-PSS + deduplicated DRM, MiB (2880×1800/1.5; niri 60, Hypr virtual120):
-- CPU bar: niri 22.44, Hypr 21.33; neither opens a DRM client.
-- Bar + panel warm → idle: niri 143.21 → 76.27; Hypr 150.49 → 75.63.
-- DRM warm → idle: niri 66.96 → 0, Hypr 74.95 → 0 MiB.
-Warm totals regress against Feature6 CPUbar+GLpanel 104.90/105.53 MiB;
-CPU-first raster/allocator retention remains a measured tradeoff.
-No trim/forced GC, tolerance changes or live-desktop modifications.
-Lifecycle test/fmt/clippy/workspace tests and CPU-only build pass.
-Step2 source 1f548b4 CI38643279009 passed. Step3 CI recorded after push.
-Evidence: ignored .research/feature6b/policy-{niri,hypr}-cycle.
-Step0a pacing/idle invariance remains open. Steps4–6 next, in order.
-
-### Preserved step 2 result
-
-Architecture hardening 6b is active. Stop after 6b; do not start Feature 7.
-Steps 0b, 1 and 2 are implemented. Step 0a remains open for nested niri
-pacing and idle invariance. Steps 3–6 remain pending.
-
-Step 2 moves Luau handlers, binds, reload compilation and CPU raster baking
-onto one worker. The draw thread stages resources before acknowledging the
-candidate; only a validated acknowledgement commits stores and the scene.
-Retained content survives reloads (61 initial raster builds, unchanged by
-five edits to filtered rows). A pixel-identical accepted generation now
-requests one-pixel damage and actual presentation feedback; previously its
-callback-only commit caused the strict reload proof to time out.
-
-Private Hyprland 2880×1800 / scale 1.5 / virtual 120 Hz results:
-- Reload draw-thread preparation median/max: 41.81/234.98 → 0.098/0.153 ms.
-- Five file-write-to-presentation samples: 66.46–75.08 ms, including the
-  existing 50 ms file-event debounce; state/error/recovery proof passes.
-- 600.07 ms Luau stall: 71 commits and 71 presentations; longest interval
-  around the stall 9.34 ms, versus zero new commits and 610.15 ms before.
-  Whole-run presentation p50/p99 8.37/16.85 ms; jitter is still a concern.
-- Typing CPU 29.61 → 32.66% of one core (regression); draw-thread preparation
-  p50/p99 0.091/0.457 ms versus 3.70/16.84 ms. Scroll worker cost remains
-  unmeasured; the prior 224.55 ms UI tail is not claimed resolved end-to-end.
-
-Workspace tests, fmt, clippy with warnings denied and CPU-only build pass.
-The private reload and typing/stall harnesses shut down cleanly. The GVfs
-bus diagnostic occurs after the passing proof when dbus-run-session ends;
-its exact string exists in gvfsd, not Bead, and the private bus successfully
-activated services during the proof. No live desktop or reference changes.
-Inherited work is also preserved on local wip/6b-step2-inherited-20261014.
-Evidence: ignored .research/feature6b/takeover-{reload,stall,typing}.
-
-Next: implement lazy per-surface rendering, prove CPU first frame and GL
-idle release, and compare bar-only/bar+panel PSS plus DRM. Then shared kit
-and edge tokens, robustness, feature/module hygiene in roadmap order.
-Use the existing bead-feature6b worktree and canonical tools/target.
-Nested sessions only; no installation, release or further physical test.
-
-## Preserved Feature6 checkpoint
-
-2026-10-14: Feature6 COMPLETE with concerns; steps1–4 finished. STOP here.
-Source def7255, measurement-reader ab5bf02; CI38551709096/38552860857 passed.
-Matched actual QML header source9e39583 (visuals unchanged in fixture); reference
-734a4bc and native7ac9242 milestones retained. Service foundation b9e1769 reused.
-Window title now uses canonical JetBrainsMono Nerd Font, same file as QML alias;
-late title text refreshes font selection. Tray resolves named/absolute/app indexed
-icons plus Adwaita, then valid network-ARGB pixmaps (also when named decoding fails).
-Transparent real fixture icon replaces square; same-path asset changes invalidate
-retained layers. Package_2/count0 precedes status; updates helper remains future.
-
-## Feature6 proof and verdict
-
-Real private PW null/default sink, volume/mute and3daemon restarts; native SNI
-add/update/quit100cycles, actual Activate/AboutToShow/DBusMenu Event; ordinary and
-menu-only bar hit testing, right-click/menu and click-mute/scroll-volume routes;
-3whole-bus replacements and stale item rejection after quit pass.
-Final owner FD20/live tasks7/retained watcher1/subscriptions1 stable; PSS6.48→6.58MiB
-late100cycles,0CPUticks60s, subscription drop0/worker joins. Hardware not tested.
-Rendered100cycle churn passes on all8CPU/GL/alone/panel rows: FD37–43 per mode stable,
-PSS growth.004–.65MiB after warmup, bus tasks7/retained1/subscriptions1/layer1 stable.
-Three real ownership issues repaired: menu listeners after owner exit, completed
-JoinSet task allocations, extra owned FcFontMatch reference in fontconfig0.11.0.
-Small MIT vendor patches preserve attribution. Initial failures retained; no
-forced GC, allocator trim or enlarged tolerance. No indefinite leak-free claim.
-
-Private2880×1800/scale1.5 outputs: niri nested60Hz, Hypr virtual120Hz. Distinct
-1164×654 GL panel, full shadow geometry and one shared native GL context proven.
-PSS+DRM MiB CPUbar /GLbar /CPUbar+GLpanel /GLbar+GLpanel /matched QMLbar:
-niri23.00 /65.03 /104.90 /109.24 /118.01; Hypr21.95 /65.70 /105.53 /111.67 /123.82.
-Eight60s intervals,220focus actions each, separate8s pacing. Native idle1–2ticks
-(~.017–.033% one core). Metadata/state and per-update presentation measured
-separately; presentation is private compositor feedback, not physical scanout.
-Concerns: niri mixed-surface period≈33ms; title p99 reaches152.34ms. Hypr title
-p99 18.54–23.94ms. Final off/on trace statep99 1.89/9.60ms; worst356.58ms sits in
-snapshot-reply waiting (.046ms worker CPU), append-window p99<.1ms. Keep failure,
-not an append-only diagnosis. Detailed bounds/p50/p95/p99/pacing in FEASIBILITY.
-CPU bar has lowest measured standalone cost; GL fixed cost and UI-thread baking
-remain concerns for GateC. No optimization/Feature7 work and no next gate started.
-
-45tests/fmt/clippy/CPU-only/private sensors/workspace+all6framework deny pass.
-Final CPU/GL and panel captures inspected in examples/bar-*.png. GL unavailable
-companion exits bounded, surfaces0. All task processes stopped; references clean.
-No live desktop tests, machine installs or Nacre/Orient writes.
-Menus inline; logo fixed fixture palette; fixture states differ from QML shims,
-which exclude real helpers/tray. Results are component measurements, not full shell.
-Roadmap now requires framework component kit/shared QML-matching tokens and
-blurred-artwork/level-meter/peek/segmented capabilities before/at GateC; docs only.
-
-## Evidence and reproduction
-
-Final ignored evidence .research/feature6/owned-niri (CPUalone),owned-niri-remaining
-(other3rows/QML/traces),owned-hyprland (allrows/QML/traces),owned-lifecycle;
-final-matrix-combined.json plus trace analysis/worst intervals. Earlier lifecycle,
-churn-diagnosis/corrected/matrix-check/final-* failures are superseded, preserved.
-Private reproduction: spikes/measure.py --bar-ui with BEAD_BAR_MATRIX=1,
-NACRE_REFERENCE and canonical CARGO_TARGET_DIR/BEAD_RESEARCH_TOOLS/BEAD_RAW_DIR;
-Hypr adds --compositor hyprland --virtual120. Build release shell +service examples.
-BEAD_SERVICES_LIFECYCLE=1 with --bar-ui runs the private native service proof.
-NEVER launch standalone --bar directly on daily desktop for these proofs.
-Task worktree/branch preserved: bead-feature6-bar/feature6-reference-bar.
-STOP after Feature6 summary. Future changes require the owner's next instruction.
-
-
-Feature5 code milestone af985ba published after concurrent attribution rewrite.
-Equivalent code at earlier5687bea passed CI38524233362; final CI checked separately.
-Final proof/publication includes non-focusing indicator mode and asserted live title,
-reference comparison harness, restart/stale-action verifier and nested demo configs.
-Source revision 8481e4b CI passed; the final docs checkpoint intentionally skips CI.
-Features1–4 remain published. Luau ADR0002 chosen; owner may veto.
-Feature5 accepted and Luau kept; Feature6 active. No live tests authorized or performed.
-Real IME-engine composition and screen-reader end-to-end remain unvalidated;
-GateB allocator/driver memory tolerance is2MiB, while owned counts/FDs stay stable.
-Off-thread baking/shader-cache startup improvements remain deferred.
-
-Nested demonstration: `./scripts/dev.sh niri --backend` or
-`./scripts/dev.sh hyprland --backend`. Two test fixture windows supply live titles;
-focus a window and click workspace buttons. Close nested window/Ctrl+C to stop.
-The fixture clients use Quickshell only for testing; native shell has no Qt dependency.
-Scripts use nice10/Cargo-j2. Never install these test configs as a session.
-Recorded events are reduced in one shared backend; views/reload own no transports.
-Socket replacement at a known endpoint reconnects. A new real-session socket path
-requires reinitializing with the new environment, never guessing another session.
-Niri IPC-only output geometry changes have no dedicated event; topology/config
-reloads refresh outputs. Physical niri output unplug/replug still needs acceptance.
-GPL adapters should be reused for Nacre's Rust migration (Wave2).
-
-Canonical ignored evidence: `.research/feature5` (recovered-raw, final raw/logs,
-check logs and final niri stale-ID restart proof). Preserve it; no raw logs in Git.
-Public screenshots: `examples/backend-niri.png`, `examples/backend-hyprland.png`.
-Measurement boundaries/sample limits and earlier failures are in FEASIBILITY.md.
-Reload demonstration remains `./scripts/dev.sh niri --demo` (nested only).
+Keep 6b's nested niri pacing/idle-invariance concerns separate. Nested only,
+nice10/Cargo-j2; no desktop/session installation, physical test or release.

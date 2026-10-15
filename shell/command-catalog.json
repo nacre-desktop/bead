@@ -1,0 +1,1862 @@
+{
+  "version": 1,
+  "source_revision": "68df8dd3b25cbf202d3859d0178a50cceffbea0d",
+  "routes": [
+    {
+      "target_expression": "\"leftDrawer\"",
+      "patterns": [
+        {
+          "prefix": "leftDrawer",
+          "dynamic": false
+        }
+      ],
+      "method": "section",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:119"
+    },
+    {
+      "target_expression": "\"leftDrawer\"",
+      "patterns": [
+        {
+          "prefix": "leftDrawer",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:124"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:135"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "restoreViews",
+      "parameters": [
+        {
+          "name": "data",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:138"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "preview",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:141"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "previewDashboard",
+      "parameters": [
+        {
+          "name": "index",
+          "type": "int"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:144"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "controls",
+      "parameters": [
+        {
+          "name": "section",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:147"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "previewFeedback",
+      "parameters": [
+        {
+          "name": "channel",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:150"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "previewSliders",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:154"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "previewLeft",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:157"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "mode",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:160"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "menu",
+      "parameters": [
+        {
+          "name": "route",
+          "type": "string"
+        },
+        {
+          "name": "query",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:163"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "settings",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:166"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "left",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:169"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "hide",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:172"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "launcher",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:175"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "session",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:178"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "popout",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "center",
+          "type": "real"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:181"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "close",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:184"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "popupState",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:187"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "galleryStep",
+      "parameters": [
+        {
+          "name": "delta",
+          "type": "int"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:190"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "galleryState",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:194"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "workspace",
+      "parameters": [
+        {
+          "name": "id",
+          "type": "int"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:197"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
+      "method": "tab",
+      "parameters": [
+        {
+          "name": "index",
+          "type": "int"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:200"
+    },
+    {
+      "target_expression": "\"drawers\"",
+      "patterns": [
+        {
+          "prefix": "drawers",
+          "dynamic": false
+        }
+      ],
+      "method": "toggle",
+      "parameters": [
+        {
+          "name": "drawer",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellShortcuts.qml:88"
+    },
+    {
+      "target_expression": "\"drawers\"",
+      "patterns": [
+        {
+          "prefix": "drawers",
+          "dynamic": false
+        }
+      ],
+      "method": "list",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/NacreShellShortcuts.qml:91"
+    },
+    {
+      "target_expression": "\"wallpaperMotion-\" + root.screenName",
+      "patterns": [
+        {
+          "prefix": "wallpaperMotion-",
+          "dynamic": true
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/background/NacreDesktopVideo.qml:63"
+    },
+    {
+      "target_expression": "\"wallpaperFrame-\" + root.screenName",
+      "patterns": [
+        {
+          "prefix": "wallpaperFrame-",
+          "dynamic": true
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/background/NacreWallpaperScene.qml:193"
+    },
+    {
+      "target_expression": "\"windowTitle-\" + (root.monitor?.name || \"default\")",
+      "patterns": [
+        {
+          "prefix": "windowTitle-",
+          "dynamic": true
+        },
+        {
+          "prefix": "default",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/bar/components/NacreActiveTitle.qml:26"
+    },
+    {
+      "target_expression": "\"barStatus-\" + root.screenName",
+      "patterns": [
+        {
+          "prefix": "barStatus-",
+          "dynamic": true
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/bar/components/NacreStatusIcons.qml:71"
+    },
+    {
+      "target_expression": "\"leftEdge\"",
+      "patterns": [
+        {
+          "prefix": "leftEdge",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/drawers/NacreDesktop.qml:17"
+    },
+    {
+      "target_expression": "\"frame\"",
+      "patterns": [
+        {
+          "prefix": "frame",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/drawers/NacreDesktop.qml:30"
+    },
+    {
+      "target_expression": "root.detached ? \"leftDrawerWindow\" + root.visibilities.windowKey : \"leftDrawer-\" + root.screen.name",
+      "patterns": [
+        {
+          "prefix": "leftDrawerWindow",
+          "dynamic": true
+        },
+        {
+          "prefix": "leftDrawer-",
+          "dynamic": true
+        }
+      ],
+      "method": "section",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/extras/LeftDrawer.qml:460"
+    },
+    {
+      "target_expression": "root.detached ? \"leftDrawerWindow\" + root.visibilities.windowKey : \"leftDrawer-\" + root.screen.name",
+      "patterns": [
+        {
+          "prefix": "leftDrawerWindow",
+          "dynamic": true
+        },
+        {
+          "prefix": "leftDrawer-",
+          "dynamic": true
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/extras/LeftDrawer.qml:464"
+    },
+    {
+      "target_expression": "\"overview\"",
+      "patterns": [
+        {
+          "prefix": "overview",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/extras/Overview.qml:225"
+    },
+    {
+      "target_expression": "\"overview\"",
+      "patterns": [
+        {
+          "prefix": "overview",
+          "dynamic": false
+        }
+      ],
+      "method": "move",
+      "parameters": [
+        {
+          "name": "address",
+          "type": "string"
+        },
+        {
+          "name": "workspace",
+          "type": "int"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/extras/Overview.qml:234"
+    },
+    {
+      "target_expression": "root.detached ? \"featureSearchWindow\" + root.visibilities.windowKey : \"featureSearch\"",
+      "patterns": [
+        {
+          "prefix": "featureSearchWindow",
+          "dynamic": true
+        },
+        {
+          "prefix": "featureSearch",
+          "dynamic": false
+        }
+      ],
+      "method": "query",
+      "parameters": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/extras/SearchSurface.qml:28"
+    },
+    {
+      "target_expression": "root.detached ? \"featureSearchWindow\" + root.visibilities.windowKey : \"featureSearch\"",
+      "patterns": [
+        {
+          "prefix": "featureSearchWindow",
+          "dynamic": true
+        },
+        {
+          "prefix": "featureSearch",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/extras/SearchSurface.qml:31"
+    },
+    {
+      "target_expression": "root.detached ? \"appBrowserWindow\" + root.visibilities.windowKey : \"appBrowser\"",
+      "patterns": [
+        {
+          "prefix": "appBrowserWindow",
+          "dynamic": true
+        },
+        {
+          "prefix": "appBrowser",
+          "dynamic": false
+        }
+      ],
+      "method": "selectCategory",
+      "parameters": [
+        {
+          "name": "id",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/launcher/NacreAppBrowser.qml:1278"
+    },
+    {
+      "target_expression": "root.detached ? \"appBrowserWindow\" + root.visibilities.windowKey : \"appBrowser\"",
+      "patterns": [
+        {
+          "prefix": "appBrowserWindow",
+          "dynamic": true
+        },
+        {
+          "prefix": "appBrowser",
+          "dynamic": false
+        }
+      ],
+      "method": "openRoute",
+      "parameters": [
+        {
+          "name": "id",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/modules/launcher/NacreAppBrowser.qml:1281"
+    },
+    {
+      "target_expression": "root.detached ? \"appBrowserWindow\" + root.visibilities.windowKey : \"appBrowser\"",
+      "patterns": [
+        {
+          "prefix": "appBrowserWindow",
+          "dynamic": true
+        },
+        {
+          "prefix": "appBrowser",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/launcher/NacreAppBrowser.qml:1284"
+    },
+    {
+      "target_expression": "\"header-\" + root.screen.name",
+      "patterns": [
+        {
+          "prefix": "header-",
+          "dynamic": true
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/modules/topbar/NacreHeader.qml:295"
+    },
+    {
+      "target_expression": "\"chatTitle\"",
+      "patterns": [
+        {
+          "prefix": "chatTitle",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/ChatWindowTitle.qml:15"
+    },
+    {
+      "target_expression": "\"desktopActions\"",
+      "patterns": [
+        {
+          "prefix": "desktopActions",
+          "dynamic": false
+        }
+      ],
+      "method": "run",
+      "parameters": [
+        {
+          "name": "action",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/DesktopActions.qml:251"
+    },
+    {
+      "target_expression": "\"extras\"",
+      "patterns": [
+        {
+          "prefix": "extras",
+          "dynamic": false
+        }
+      ],
+      "method": "counts",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/DesktopExtras.qml:99"
+    },
+    {
+      "target_expression": "\"extras\"",
+      "patterns": [
+        {
+          "prefix": "extras",
+          "dynamic": false
+        }
+      ],
+      "method": "refresh",
+      "parameters": [
+        {
+          "name": "kind",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/DesktopExtras.qml:109"
+    },
+    {
+      "target_expression": "\"extras\"",
+      "patterns": [
+        {
+          "prefix": "extras",
+          "dynamic": false
+        }
+      ],
+      "method": "search",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/DesktopExtras.qml:112"
+    },
+    {
+      "target_expression": "\"desktopSettings\"",
+      "patterns": [
+        {
+          "prefix": "desktopSettings",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/DesktopSettings.qml:122"
+    },
+    {
+      "target_expression": "\"desktopSettings\"",
+      "patterns": [
+        {
+          "prefix": "desktopSettings",
+          "dynamic": false
+        }
+      ],
+      "method": "set",
+      "parameters": [
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/DesktopSettings.qml:131"
+    },
+    {
+      "target_expression": "\"displayRecovery\"",
+      "patterns": [
+        {
+          "prefix": "displayRecovery",
+          "dynamic": false
+        }
+      ],
+      "method": "refresh",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "bool",
+      "source": "nacre/shell/services/DisplayRecovery.qml:145"
+    },
+    {
+      "target_expression": "\"displayRecovery\"",
+      "patterns": [
+        {
+          "prefix": "displayRecovery",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/DisplayRecovery.qml:148"
+    },
+    {
+      "target_expression": "\"lockWidgets\"",
+      "patterns": [
+        {
+          "prefix": "lockWidgets",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/LockWidgets.qml:94"
+    },
+    {
+      "target_expression": "\"batteryAlerts\"",
+      "patterns": [
+        {
+          "prefix": "batteryAlerts",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreBatteryAlerts.qml:156"
+    },
+    {
+      "target_expression": "\"brightness\"",
+      "patterns": [
+        {
+          "prefix": "brightness",
+          "dynamic": false
+        }
+      ],
+      "method": "step",
+      "parameters": [
+        {
+          "name": "direction",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreBrightness.qml:149"
+    },
+    {
+      "target_expression": "\"brightness\"",
+      "patterns": [
+        {
+          "prefix": "brightness",
+          "dynamic": false
+        }
+      ],
+      "method": "set",
+      "parameters": [
+        {
+          "name": "value",
+          "type": "real"
+        }
+      ],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreBrightness.qml:152"
+    },
+    {
+      "target_expression": "\"brightness\"",
+      "patterns": [
+        {
+          "prefix": "brightness",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreBrightness.qml:156"
+    },
+    {
+      "target_expression": "\"colorsApp\"",
+      "patterns": [
+        {
+          "prefix": "colorsApp",
+          "dynamic": false
+        }
+      ],
+      "method": "open",
+      "parameters": [
+        {
+          "name": "image",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreColorsApp.qml:369"
+    },
+    {
+      "target_expression": "\"colorsApp\"",
+      "patterns": [
+        {
+          "prefix": "colorsApp",
+          "dynamic": false
+        }
+      ],
+      "method": "preview",
+      "parameters": [
+        {
+          "name": "value",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreColorsApp.qml:372"
+    },
+    {
+      "target_expression": "\"colorsApp\"",
+      "patterns": [
+        {
+          "prefix": "colorsApp",
+          "dynamic": false
+        }
+      ],
+      "method": "close",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreColorsApp.qml:382"
+    },
+    {
+      "target_expression": "\"colorsApp\"",
+      "patterns": [
+        {
+          "prefix": "colorsApp",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreColorsApp.qml:385"
+    },
+    {
+      "target_expression": "\"paletteState\"",
+      "patterns": [
+        {
+          "prefix": "paletteState",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreColours.qml:89"
+    },
+    {
+      "target_expression": "\"dashboardState\"",
+      "patterns": [
+        {
+          "prefix": "dashboardState",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreDashboardState.qml:216"
+    },
+    {
+      "target_expression": "\"keyboardLight\"",
+      "patterns": [
+        {
+          "prefix": "keyboardLight",
+          "dynamic": false
+        }
+      ],
+      "method": "step",
+      "parameters": [
+        {
+          "name": "direction",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreKeyboardLight.qml:47"
+    },
+    {
+      "target_expression": "\"keyboardLight\"",
+      "patterns": [
+        {
+          "prefix": "keyboardLight",
+          "dynamic": false
+        }
+      ],
+      "method": "set",
+      "parameters": [
+        {
+          "name": "value",
+          "type": "real"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreKeyboardLight.qml:50"
+    },
+    {
+      "target_expression": "\"keyboardLight\"",
+      "patterns": [
+        {
+          "prefix": "keyboardLight",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreKeyboardLight.qml:53"
+    },
+    {
+      "target_expression": "\"menuPrompt\"",
+      "patterns": [
+        {
+          "prefix": "menuPrompt",
+          "dynamic": false
+        }
+      ],
+      "method": "open",
+      "parameters": [
+        {
+          "name": "ident",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreMenuPrompt.qml:120"
+    },
+    {
+      "target_expression": "\"menuPrompt\"",
+      "patterns": [
+        {
+          "prefix": "menuPrompt",
+          "dynamic": false
+        }
+      ],
+      "method": "cancel",
+      "parameters": [
+        {
+          "name": "ident",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreMenuPrompt.qml:123"
+    },
+    {
+      "target_expression": "\"menuPrompt\"",
+      "patterns": [
+        {
+          "prefix": "menuPrompt",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreMenuPrompt.qml:126"
+    },
+    {
+      "target_expression": "\"networkStatus\"",
+      "patterns": [
+        {
+          "prefix": "networkStatus",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreNetwork.qml:131"
+    },
+    {
+      "target_expression": "\"networkStatus\"",
+      "patterns": [
+        {
+          "prefix": "networkStatus",
+          "dynamic": false
+        }
+      ],
+      "method": "refresh",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreNetwork.qml:145"
+    },
+    {
+      "target_expression": "\"notifs\"",
+      "patterns": [
+        {
+          "prefix": "notifs",
+          "dynamic": false
+        }
+      ],
+      "method": "counts",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreNotifs.qml:244"
+    },
+    {
+      "target_expression": "\"notifs\"",
+      "patterns": [
+        {
+          "prefix": "notifs",
+          "dynamic": false
+        }
+      ],
+      "method": "clear",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreNotifs.qml:258"
+    },
+    {
+      "target_expression": "\"notifs\"",
+      "patterns": [
+        {
+          "prefix": "notifs",
+          "dynamic": false
+        }
+      ],
+      "method": "dismissKey",
+      "parameters": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreNotifs.qml:261"
+    },
+    {
+      "target_expression": "\"notifs\"",
+      "patterns": [
+        {
+          "prefix": "notifs",
+          "dynamic": false
+        }
+      ],
+      "method": "clearHistory",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreNotifs.qml:272"
+    },
+    {
+      "target_expression": "\"pearls\"",
+      "patterns": [
+        {
+          "prefix": "pearls",
+          "dynamic": false
+        }
+      ],
+      "method": "open",
+      "parameters": [
+        {
+          "name": "kind",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePearls.qml:572"
+    },
+    {
+      "target_expression": "\"pearls\"",
+      "patterns": [
+        {
+          "prefix": "pearls",
+          "dynamic": false
+        }
+      ],
+      "method": "detach",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePearls.qml:580"
+    },
+    {
+      "target_expression": "\"pearls\"",
+      "patterns": [
+        {
+          "prefix": "pearls",
+          "dynamic": false
+        }
+      ],
+      "method": "dock",
+      "parameters": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePearls.qml:583"
+    },
+    {
+      "target_expression": "\"pearls\"",
+      "patterns": [
+        {
+          "prefix": "pearls",
+          "dynamic": false
+        }
+      ],
+      "method": "close",
+      "parameters": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePearls.qml:588"
+    },
+    {
+      "target_expression": "\"pearls\"",
+      "patterns": [
+        {
+          "prefix": "pearls",
+          "dynamic": false
+        }
+      ],
+      "method": "gesture",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacrePearls.qml:593"
+    },
+    {
+      "target_expression": "\"pearls\"",
+      "patterns": [
+        {
+          "prefix": "pearls",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacrePearls.qml:598"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "getActive",
+      "parameters": [
+        {
+          "name": "prop",
+          "type": "string"
+        }
+      ],
+      "returns": "string",
+      "source": "nacre/shell/services/NacrePlayers.qml:39"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "list",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacrePlayers.qml:43"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "play",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePlayers.qml:46"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "pause",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePlayers.qml:49"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "playPause",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePlayers.qml:52"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "previous",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePlayers.qml:55"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "next",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePlayers.qml:58"
+    },
+    {
+      "target_expression": "\"mpris\"",
+      "patterns": [
+        {
+          "prefix": "mpris",
+          "dynamic": false
+        }
+      ],
+      "method": "stop",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacrePlayers.qml:61"
+    },
+    {
+      "target_expression": "\"presentationState\"",
+      "patterns": [
+        {
+          "prefix": "presentationState",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacrePresentation.qml:108"
+    },
+    {
+      "target_expression": "\"settingsApp\"",
+      "patterns": [
+        {
+          "prefix": "settingsApp",
+          "dynamic": false
+        }
+      ],
+      "method": "open",
+      "parameters": [
+        {
+          "name": "page",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreSettingsApp.qml:100"
+    },
+    {
+      "target_expression": "\"settingsApp\"",
+      "patterns": [
+        {
+          "prefix": "settingsApp",
+          "dynamic": false
+        }
+      ],
+      "method": "close",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreSettingsApp.qml:103"
+    },
+    {
+      "target_expression": "\"settingsApp\"",
+      "patterns": [
+        {
+          "prefix": "settingsApp",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreSettingsApp.qml:106"
+    },
+    {
+      "target_expression": "\"settingsView\"",
+      "patterns": [
+        {
+          "prefix": "settingsView",
+          "dynamic": false
+        }
+      ],
+      "method": "open",
+      "parameters": [
+        {
+          "name": "page",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreSettingsApp.qml:121"
+    },
+    {
+      "target_expression": "\"settingsView\"",
+      "patterns": [
+        {
+          "prefix": "settingsView",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreSettingsApp.qml:124"
+    },
+    {
+      "target_expression": "\"resources\"",
+      "patterns": [
+        {
+          "prefix": "resources",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreSystemUsage.qml:160"
+    },
+    {
+      "target_expression": "\"clock\"",
+      "patterns": [
+        {
+          "prefix": "clock",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreTime.qml:25"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "get",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreWallpapers.qml:540"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "set",
+      "parameters": [
+        {
+          "name": "path",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWallpapers.qml:543"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "configure",
+      "parameters": [
+        {
+          "name": "value",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWallpapers.qml:546"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "next",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWallpapers.qml:553"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "previous",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWallpapers.qml:556"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "toggleMotion",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWallpapers.qml:559"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "list",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreWallpapers.qml:562"
+    },
+    {
+      "target_expression": "\"wallpaper\"",
+      "patterns": [
+        {
+          "prefix": "wallpaper",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreWallpapers.qml:565"
+    },
+    {
+      "target_expression": "\"weatherStatus\"",
+      "patterns": [
+        {
+          "prefix": "weatherStatus",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreWeather.qml:125"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "open",
+      "parameters": [
+        {
+          "name": "page",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:286"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "close",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:289"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "refresh",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:292"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "setStartup",
+      "parameters": [
+        {
+          "name": "value",
+          "type": "bool"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:295"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "route",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:298"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "selectDemo",
+      "parameters": [
+        {
+          "name": "path",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:301"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "restoreDemo",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:304"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "themeDemo",
+      "parameters": [
+        {
+          "name": "mode",
+          "type": "string"
+        },
+        {
+          "name": "personality",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:307"
+    },
+    {
+      "target_expression": "\"welcomeApp\"",
+      "patterns": [
+        {
+          "prefix": "welcomeApp",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/NacreWelcomeApp.qml:310"
+    },
+    {
+      "target_expression": "\"sidebarChat\"",
+      "patterns": [
+        {
+          "prefix": "sidebarChat",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/SidebarChat.qml:8"
+    },
+    {
+      "target_expression": "\"sidebarChat\"",
+      "patterns": [
+        {
+          "prefix": "sidebarChat",
+          "dynamic": false
+        }
+      ],
+      "method": "send",
+      "parameters": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "returns": "void",
+      "source": "nacre/shell/services/SidebarChat.qml:24"
+    },
+    {
+      "target_expression": "\"sidebarChat\"",
+      "patterns": [
+        {
+          "prefix": "sidebarChat",
+          "dynamic": false
+        }
+      ],
+      "method": "stop",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/services/SidebarChat.qml:27"
+    },
+    {
+      "target_expression": "\"wallpaperPlayback\"",
+      "patterns": [
+        {
+          "prefix": "wallpaperPlayback",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/WallpaperPlayback.qml:21"
+    },
+    {
+      "target_expression": "\"compositorState\"",
+      "patterns": [
+        {
+          "prefix": "compositorState",
+          "dynamic": false
+        }
+      ],
+      "method": "state",
+      "parameters": [],
+      "returns": "string",
+      "source": "nacre/shell/services/compositor/HyprlandBackend.qml:351"
+    },
+    {
+      "target_expression": "\"nacreCompositor\"",
+      "patterns": [
+        {
+          "prefix": "nacreCompositor",
+          "dynamic": false
+        }
+      ],
+      "method": "shortcut",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "bool",
+      "source": "nacre/shell/services/compositor/NiriBackend.qml:162"
+    }
+  ]
+}

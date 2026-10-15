@@ -63,6 +63,9 @@ pub struct Snapshot {
 
 mod audio;
 mod bus;
+pub mod files;
+pub mod ipc;
+pub mod process;
 mod runtime;
 pub use runtime::{Action, Desktop, Subscription};
 

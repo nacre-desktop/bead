@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod backends;
 mod catalog;
+mod commands;
 mod desktop;
 mod font_sources;
 mod reload;
@@ -26,6 +27,18 @@ fn main() {
     }
 }
 fn start() -> Result<(), Box<dyn std::error::Error>> {
+    let cli: Vec<String> = std::env::args().skip(1).collect();
+    if cli.first().is_some_and(|a| a == "helper") {
+        return commands::helper_client(&cli[1..]);
+    }
+    if cli.first().is_some_and(|a| a == "ipc") {
+        return commands::client(&cli[1..]);
+    }
+    if cli.first().is_some_and(|a| a == "command-catalog") {
+        println!("{}", include_str!("../../../shell/command-catalog.json"));
+        return Ok(());
+    }
+
     if std::env::args().any(|arg| arg == "--services-ui-probe") {
         return reload::private_service_proof();
     }
@@ -54,6 +67,13 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bar-panel" => bar_panel = true,
+            "--command-socket" => {
+                options.command_socket = Some(
+                    args.next()
+                        .ok_or("--command-socket needs private path")?
+                        .into(),
+                )
+            }
             "--edge" => {
                 options.edge = serde_json::from_value(serde_json::Value::String(
                     args.next().ok_or("--edge needs top/bottom/left/right")?,

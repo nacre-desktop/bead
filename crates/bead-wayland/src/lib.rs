@@ -69,8 +69,14 @@ use wayland_protocols::wp::{
     },
     viewporter::client::{wp_viewport::WpViewport, wp_viewporter::WpViewporter},
 };
+#[derive(Debug)]
+pub struct Remote {
+    pub call: bead_services::ipc::Call,
+    pub reply: std::sync::mpsc::SyncSender<bead_services::ipc::Reply>,
+}
 #[derive(Clone, Debug)]
 pub enum UiEvent {
+    Remote(std::sync::Arc<Remote>),
     Fatal(String),
     Drag {
         x: f32,
@@ -174,6 +180,7 @@ pub trait SceneSource {
 #[derive(Clone)]
 pub struct Options {
     pub namespace: String,
+    pub command_socket: Option<std::path::PathBuf>,
     pub animate: bool,
     pub debug_continuous: bool,
     pub debug_progress: bool,
@@ -207,6 +214,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             namespace: "bead-dev".into(),
+            command_socket: None,
             animate: false,
             debug_continuous: false,
             debug_progress: false,

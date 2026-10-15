@@ -3,6 +3,27 @@
 use super::*;
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
+        if let UiEvent::Remote(request) = &event
+            && request.call.target == "bead"
+        {
+            let reply = match request.call.method.as_str() {
+                "ping" => {
+                    bead_services::ipc::Reply::ok(request.call.id, serde_json::json!({"version":1}))
+                }
+                "state" => bead_services::ipc::Reply::ok(
+                    request.call.id,
+                    serde_json::json!({"surfaces":self.surfaces.len(),"panel":self.companion.is_some()}),
+                ),
+                _ => bead_services::ipc::Reply::error(
+                    request.call.id,
+                    "unavailable",
+                    "native command not implemented",
+                ),
+            };
+            let _ = request.reply.send(reply);
+            return;
+        }
+
         if let UiEvent::Fatal(error) = event {
             self.fail(error);
             return;

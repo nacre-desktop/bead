@@ -293,6 +293,53 @@ impl SceneSource for Runtime {
                 println!("DEBUG_SCRIPT_STALL end_ns={}", clock());
                 None
             }
+            UiEvent::Remote(request) => {
+                let call = &request.call;
+                let reply = match crate::commands::validate(call) {
+                    Err(reply) => reply,
+                    Ok(()) => match (call.target.as_str(), call.method.as_str()) {
+                        ("nacre", "state") => {
+                            let snapshot = self.backend.as_ref().map(|b| b.snapshot());
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":"","clickEdgeMenus":false,"tab":0,"launcher":false,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":"","launcherMode":"apps","launcherRoute":"home","reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":["bar"]}});
+                            bead_services::ipc::Reply::ok(
+                                call.id,
+                                serde_json::Value::String(state.to_string()),
+                            )
+                        }
+                        ("compositorState", "state") => {
+                            if let Some(backend) = &self.backend {
+                                bead_services::ipc::Reply::ok(
+                                    call.id,
+                                    serde_json::Value::String(serde_json::to_string(
+                                        &*backend.snapshot(),
+                                    )?),
+                                )
+                            } else {
+                                bead_services::ipc::Reply::error(
+                                    call.id,
+                                    "unavailable",
+                                    "compositor not configured",
+                                )
+                            }
+                        }
+                        (_, "state") if call.target.starts_with("windowTitle-") => {
+                            bead_services::ipc::Reply::ok(
+                                call.id,
+                                serde_json::Value::String(serde_json::to_string(
+                                    &serde_json::json!({"title":self.backend.as_ref().map(|b|b.snapshot()).and_then(|s|s.focused_window().map(|w|w.title.clone())).unwrap_or_default(),"retained":false}),
+                                )?),
+                            )
+                        }
+                        _ => bead_services::ipc::Reply::error(
+                            call.id,
+                            "unavailable",
+                            "compatibility route belongs to a later native feature",
+                        ),
+                    },
+                };
+                let _ = request.reply.send(reply);
+                None
+            }
             UiEvent::Reload => Some(self.session.reload()?),
             UiEvent::Relayout => self.session.relayout()?,
             UiEvent::Accessibility {

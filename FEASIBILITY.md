@@ -764,3 +764,26 @@ tails94–401ms retained separately; isolated repeat is labeled, not substituted
 Source user unit remains uninstalled; no deployment, physical test or Feature7.
 Evidence .research/feature6b/epoch-* and takeover/step6-*; failed probes retained.
 STOP. Nested niri pacing, idle invariance and physical acceptance remain open.
+
+## Feature 7 — commands, files and bounded helpers (2026-10-15)
+
+A private versioned command socket accepts only the owning UID; its path is
+explicit and never discovered from the live session. Typed CLI ingress keeps
+audited target/method selectors and return contracts. Future feature handlers
+return unavailable errors. Existing helpers stay external Python JSON-lines.
+
+| Proof | Result |
+|---|---|
+| Audited compatibility catalog |43 targets/120 methods;30 CLI locations/12 shortcut declarations|
+| Fixture typed routing / real native CLI |Pass / nested niri and Hypr bar state, errors, cleanup pass|
+| Socket bounds |64KiB frames; version/ID correlation;0600 socket;0700 parent; owner credentials|
+| Runner/helper |Argv only, finite deadline and stream bounds, own process-group cleanup, helper ID checks|
+| Files/watch |Regular-file byte bounds, atomic replacement, coalescing and last-good validation pass|
+| Workspace tests / fmt / clippy |66 pass / pass / pass|
+
+One-shot helper invocations close stdin and collect the existing service's
+response; no helper code was ported. GUI helper-free idle remains unchanged.
+Source catalog availability is explicit; notifications/dashboard/etc. are not
+implemented early. Source/shared protocol tests use private fixtures, and GUI
+proofs use private buses/outputs only. Evidence .research/feature7/commands-*.
+No installed command, live binding, Nacre/Orient write or release.

@@ -1,8 +1,8 @@
 # Roadmap and gates
 
-Updated 2026-10-14. Features1–6 built; Feature6 complete with concerns.
-Feature6b numbered implementation steps are complete with measured concerns.
-Step0a pacing/idle acceptance remains open. Stop before Feature7.
+Updated 2026-10-15. Feature6b accepted with measured concerns.
+Features7–8 authorized through GateC; stop at GateC.
+Step0a pacing/idle acceptance remains open.
 Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
 One authorized live niri comparison matched QML physical120Hz timing; cold startup
 and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
@@ -125,6 +125,14 @@ level meters, peek cards, and segmented controls. Include these capabilities in
 the component/rendering proof and GateC review rather than leaving them as
 one-off shell widgets.
 
+## Gate C close/idle memory acceptance (owner update 2026-10-15)
+
+After the actual panel closes and idles, process PSS plus deduplicated DRM
+must return within 5 MiB of the matched bar-only figure (~23 MiB). Release
+panel rasters, CPU/SHM pools and worker caches; retaining ~77 MiB is a failure.
+Report warm bar+panel against Feature6's ~105 MiB and explain any increase.
+Use repeated comparable conditions and include helper/child costs.
+
 ## Additional requirements before Gate C
 
 - Generate Luau type definitions from the Rust schema; run luau-analyze in CI.
@@ -160,6 +168,7 @@ including candidates that do not improve the measurements and any tradeoffs.
 - Inventory threads and stack sizes; test merging idle threads.
 - Decode images at display size and apply explicit cache budgets.
 - Off-thread baking is built in6b; profile further scheduling/bake improvements.
+- Typing CPU regression 29.6→32.7%: retain as a measured optimization candidate.
 
 ## Measurement gates and reproducibility
 

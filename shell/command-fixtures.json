@@ -1,0 +1,443 @@
+{
+  "audited_cli_locations": [
+    "nacre/shell-tools/compositor_backends/niri_config.py:124",
+    "nacre/shell-tools/compositor_backends/niri_config.py:126",
+    "nacre/shell-tools/control.sh:10",
+    "nacre/shell-tools/control.sh:14",
+    "nacre/shell-tools/control.sh:19",
+    "nacre/shell-tools/control.sh:22",
+    "nacre/shell-tools/control.sh:23",
+    "nacre/shell-tools/control.sh:24",
+    "nacre/shell-tools/control.sh:25",
+    "nacre/shell-tools/control.sh:26",
+    "nacre/shell-tools/control.sh:28",
+    "nacre/shell-tools/control.sh:31",
+    "nacre/shell-tools/control.sh:33",
+    "nacre/shell-tools/control.sh:34",
+    "nacre/shell-tools/control.sh:35",
+    "nacre/shell-tools/control.sh:36",
+    "nacre/shell-tools/desktop-actions.py:141",
+    "nacre/shell-tools/install.py:422",
+    "nacre/shell-tools/lock-info.py:25",
+    "nacre/shell-tools/lock-info.py:60",
+    "nacre/shell-tools/lock-info.py:295",
+    "nacre/shell-tools/lock-info.py:26",
+    "nacre/shell-tools/menu-cli.py:194",
+    "nacre/shell-tools/menu-cli.py:241",
+    "nacre/shell-tools/menu-cli.py:259",
+    "nacre/shell-tools/menu-cli.py:313",
+    "nacre/shell-tools/menu-cli.py:195",
+    "nacre/shell-tools/session-watch.py:32",
+    "nacre/shell-tools/session-watch.py:32",
+    "nacre/shell-tools/shell-supervisor.py:55"
+  ],
+  "shortcuts": [
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/modules/NacreShellShortcuts.qml:65",
+      "properties": {
+        "name": [
+          "\"dismissHoverEdges\""
+        ],
+        "onPressed": [
+          "root.dismissPassive()"
+        ]
+      },
+      "block_end": "nacre/shell/modules/NacreShellShortcuts.qml:69"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/modules/NacreShellShortcuts.qml:70",
+      "properties": {
+        "name": [
+          "\"session\""
+        ],
+        "onPressed": [
+          "NacrePanelState.toggleSession()"
+        ]
+      },
+      "block_end": "nacre/shell/modules/NacreShellShortcuts.qml:74"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/modules/NacreShellShortcuts.qml:75",
+      "properties": {
+        "name": [
+          "\"launcher\""
+        ],
+        "onPressed": [
+          "root.launcherPress()"
+        ],
+        "onReleased": [
+          "root.launcherRelease()"
+        ]
+      },
+      "block_end": "nacre/shell/modules/NacreShellShortcuts.qml:80"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/modules/NacreShellShortcuts.qml:81",
+      "properties": {
+        "name": [
+          "\"launcherInterrupt\""
+        ],
+        "onPressed": [
+          "root.launcherInterrupt()"
+        ]
+      },
+      "block_end": "nacre/shell/modules/NacreShellShortcuts.qml:85"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/services/NacreBrightness.qml:137",
+      "properties": {
+        "name": [
+          "\"brightnessUp\""
+        ],
+        "onPressed": [
+          "root.increaseBrightness()"
+        ]
+      },
+      "block_end": "nacre/shell/services/NacreBrightness.qml:141"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/services/NacreBrightness.qml:142",
+      "properties": {
+        "name": [
+          "\"brightnessDown\""
+        ],
+        "onPressed": [
+          "root.decreaseBrightness()"
+        ]
+      },
+      "block_end": "nacre/shell/services/NacreBrightness.qml:146"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/services/NacreNotifs.qml:237",
+      "properties": {
+        "name": [
+          "\"clearNotifs\""
+        ],
+        "onPressed": [
+          "root.hidePopups()"
+        ]
+      },
+      "block_end": "nacre/shell/services/NacreNotifs.qml:241"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/services/NacrePlayers.qml:65",
+      "properties": {
+        "name": [
+          "\"mediaToggle\""
+        ],
+        "onPressed": [
+          "root.control(\"playPause\")"
+        ]
+      },
+      "block_end": "nacre/shell/services/NacrePlayers.qml:69"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/services/NacrePlayers.qml:70",
+      "properties": {
+        "name": [
+          "\"mediaNext\""
+        ],
+        "onPressed": [
+          "root.control(\"next\")"
+        ]
+      },
+      "block_end": "nacre/shell/services/NacrePlayers.qml:74"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/services/NacrePlayers.qml:75",
+      "properties": {
+        "name": [
+          "\"mediaPrev\""
+        ],
+        "onPressed": [
+          "root.control(\"previous\")"
+        ]
+      },
+      "block_end": "nacre/shell/services/NacrePlayers.qml:79"
+    },
+    {
+      "type": "NacreShortcut",
+      "location": "nacre/shell/services/NacrePlayers.qml:80",
+      "properties": {
+        "name": [
+          "\"mediaStop\""
+        ],
+        "onPressed": [
+          "root.control(\"stop\")"
+        ]
+      },
+      "block_end": "nacre/shell/services/NacrePlayers.qml:84"
+    },
+    {
+      "type": "GlobalShortcut",
+      "location": "nacre/shell/services/compositor/HyprlandShortcut.qml:59",
+      "properties": {
+        "onPressed": [
+          "if (!root.replacing && root.alive) {"
+        ],
+        "onReleased": [
+          "if (!root.replacing && root.alive) {"
+        ]
+      },
+      "block_end": "nacre/shell/services/compositor/HyprlandShortcut.qml:70"
+    }
+  ],
+  "calls": [
+    {
+      "target": "brightness",
+      "method": "step",
+      "args": [
+        "up"
+      ]
+    },
+    {
+      "target": "keyboardLight",
+      "method": "step",
+      "args": [
+        "up"
+      ]
+    },
+    {
+      "target": "nacre",
+      "method": "close",
+      "args": []
+    },
+    {
+      "target": "nacre",
+      "method": "launcher",
+      "args": [
+        ">wallpaper "
+      ]
+    },
+    {
+      "target": "nacre",
+      "method": "controls",
+      "args": [
+        "home"
+      ]
+    },
+    {
+      "target": "nacre",
+      "method": "settings",
+      "args": []
+    },
+    {
+      "target": "nacre",
+      "method": "left",
+      "args": []
+    },
+    {
+      "target": "nacre",
+      "method": "mode",
+      "args": [
+        "palette"
+      ]
+    },
+    {
+      "target": "nacre",
+      "method": "mode",
+      "args": [
+        "overview"
+      ]
+    },
+    {
+      "target": "nacre",
+      "method": "mode",
+      "args": [
+        "clipboard"
+      ]
+    },
+    {
+      "target": "nacre",
+      "method": "session",
+      "args": []
+    },
+    {
+      "target": "nacre",
+      "method": "hide",
+      "args": []
+    },
+    {
+      "target": "nacre",
+      "method": "launcher",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "target": "nacre",
+      "method": "state",
+      "args": []
+    },
+    {
+      "target": "nacre",
+      "method": "menu",
+      "args": [
+        "home",
+        "fixture"
+      ]
+    },
+    {
+      "target": "pearls",
+      "method": "detach",
+      "args": []
+    },
+    {
+      "target": "pearls",
+      "method": "open",
+      "args": [
+        "launcher"
+      ]
+    },
+    {
+      "target": "drawers",
+      "method": "toggle",
+      "args": [
+        "dashboard"
+      ]
+    },
+    {
+      "target": "brightness",
+      "method": "set",
+      "args": [
+        0.5
+      ]
+    },
+    {
+      "target": "lockWidgets",
+      "method": "state",
+      "args": []
+    },
+    {
+      "target": "mpris",
+      "method": "playPause",
+      "args": []
+    },
+    {
+      "target": "mpris",
+      "method": "play",
+      "args": []
+    },
+    {
+      "target": "mpris",
+      "method": "pause",
+      "args": []
+    },
+    {
+      "target": "mpris",
+      "method": "previous",
+      "args": []
+    },
+    {
+      "target": "mpris",
+      "method": "next",
+      "args": []
+    },
+    {
+      "target": "mpris",
+      "method": "stop",
+      "args": []
+    },
+    {
+      "target": "menuPrompt",
+      "method": "open",
+      "args": [
+        "fixture-request"
+      ]
+    },
+    {
+      "target": "menuPrompt",
+      "method": "cancel",
+      "args": [
+        "fixture-request"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "dismissHoverEdges"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "session"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "launcher"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "launcherInterrupt"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "brightnessUp"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "brightnessDown"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "clearNotifs"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "mediaToggle"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "mediaNext"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "mediaPrev"
+      ]
+    },
+    {
+      "target": "nacreCompositor",
+      "method": "shortcut",
+      "args": [
+        "mediaStop"
+      ]
+    }
+  ]
+}
