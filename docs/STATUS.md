@@ -1,25 +1,26 @@
 # Status
 
-## 2026-10-15 — protocol Source validated; Feature 9 comparison running
+## 2026-10-15 — Source adapter green; Feature 9 comparison complete
 
-Opaque checkpoint 663a192 / CI38802165888 green. Cache and opaque follow-ups
-are complete; [results](research/foundation-f5.md#opaque-composition-follow-up).
-Protocol adapter pins Nacre SDK 6bdc22e; upstream full CI is still running.
-Seven committed transcript families, nine adapter tests and shared-payload test
-pass. All 123 workspace tests, fmt, all-features clippy, CPU-only/release builds,
-Luau analysis and framework/service/license checks pass.
+Main f154f47 / CI38810904821 green: pinned SDK6bdc22e, seven transcript families,
+nine adapter tests, real private standalone daemon proof on H120/N60, cleanup.
+All123 tests, fmt/clippy/CPU+release/Luau/framework/service/license checks pass.
+[Adapter method](research/foundation-f5.md#nacre-source-adapter--2026-10-15).
 
-Private standalone F1 daemon proof passes nested H120 and N60: two incarnations,
-fresh Source to Luau pixels/AccessKit, status boot match, new boot and cleanup.
-Cold Source/UI probe 38–49 ms includes startup/rendering; no latency acceptance.
-[Adapter method and limits](research/foundation-f5.md#nacre-source-adapter--2026-10-15).
-Notification controls match default-action/expand visibility; Source-only matched
-Bead/QML notification and OSD 60-second UI samples are running, not accepted yet.
+[Feature 9 measurements and limits](research/feature9-gate-d.md#feature-9-source-ui-comparison--2026-10-15):
+60-second PSS+DRM MiB, Bead/QML H and N: notice20.78/161.22,21.59/151.21;
+volume OSD22.37/125.09,23.80/121.98. Same populated content; corrected same-SVG
+notice captures replace rejected missing-icon samples. No heavy local builds.
+Bead idle0.20–0.25% versus QML0 observed ticks; transitional private desktop
+bus/audio tasks included. No notification server in these static fixtures.
+Real private-bus actions/hover/history/DND/legacy/four OSDs/crash cleanup pass
+on both; no ambient service takeover. Semibold/rich images/swipe/row-height
+polish and matched QML presentation timing remain open, not full pixel parity.
 
-Next: finish Feature 9 comparison, then fake menu.query launcher UI/typing.
-Owner authorized Nacre engine after F2/before F3; end-to-end waits that engine.
-No ranking/providers/catalog engine in Bead. STOP at Gate D. Backends frozen;
-no live desktop, installation or release permission.
+Cache and opaque follow-ups complete; cached motion saves15.4%/42.0% paint CPU.
+Next: Source menu.query fixture launcher UI and typing, then real Nacre engine
+(after F2/before F3). End-to-end typing waits engine; no Bead ranking/providers.
+STOP at Gate D. Backends frozen; no live/install/release permission.
 
 ## Accepted Gate C and optimization baseline
 

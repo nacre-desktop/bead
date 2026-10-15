@@ -50,6 +50,7 @@ def sample(env,raw,compositor,stop):
             }'''
         else:
             content='''NacreLevelNotice {output:Quickshell.screens[0];shown:true;channel:"volume"}'''
+        content=content.replace('Quickshell.iconPath("dialog-information")',json.dumps((ROOT/'shell/tests/icon.svg').as_uri()))
         (root/'shell.qml').write_text('''import QtQuick
 import Quickshell
 import Quickshell.Wayland

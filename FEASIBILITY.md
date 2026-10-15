@@ -1,5 +1,29 @@
 # Feasibility
 
+## 2026-10-15 — populated notification and OSD comparison
+
+The view reads notifications through a Source; service behavior stays outside it.
+Matched visual fixtures avoid taking any live notification name or audio action.
+Corrected same-SVG notice captures replace rejected missing-icon trials.
+Bead uses much less memory here, but its observed idle CPU is higher.
+
+| 60 s PSS+DRM MiB | Bead H /N | QML H /N |
+| --- | ---: | ---: |
+| Expanded notice |20.779 /21.588|161.223 /151.207|
+| Volume75 OSD |22.371 /23.797|125.090 /121.978|
+| Observed CPU % notice |0.217 /0.200|0 ticks /0 ticks|
+| Observed CPU % OSD |0.250 /0.217|0 ticks /0 ticks|
+| Real private-bus behavior/hover/legacy/four OSDs/cleanup |pass both|not server-compared|
+
+H virtual120/N nested60,2880×1800/scale1.5; one sequential sample/cell after3 s
+settling, no own/migration heavy local build overlap; unrelated load uncontrolled.
+No SwapPss; Bead no DRM client. QML includes actual DRM. Zero ticks is limited by
+10 ms process-tick resolution. Bead includes transitional private bus/audio tasks;
+static fixtures host no notification server. Source/controls123tests and CI green.
+History remains256 records/3MiB; daemon30-day history stays upstream. Regular
+summary weight, rich images/swipe/row-height polish and matched QML presentation
+timing remain open. [Method](docs/research/feature9-gate-d.md#feature-9-source-ui-comparison--2026-10-15).
+
 ## 2026-10-15 — daemon Source reaches a headless Luau view
 
 The adapter consumes the published protocol; framework Sources stay neutral.

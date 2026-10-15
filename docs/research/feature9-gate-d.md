@@ -1,11 +1,66 @@
-# Features 9–10: paused for foundation
+# Features 9–10: foundation integration
 
 Owner authorized notifications/OSD, then the core launcher, stopping at Gate D.
 No live-session test, notification-name takeover, installation or release is
 allowed. The earlier single physical Gate C authorization was consumed.
 Nacre and Orient remain read-only except additive nacre-protocol work through
-Nacre CONTRIBUTING. Owner paused Features9–10 on2026-10-15 for Foundation F5.
+Nacre CONTRIBUTING. Owner resumed Features9–10 after Foundation F5.
 Typing targets are not accepted; this is an interim checkpoint, not Gate D.
+
+
+## Feature 9 Source UI comparison — 2026-10-15
+
+The notification view consumes a neutral Source; the hosted private service and
+bounded fake fixtures produce identical Luau bindings. Controls follow current
+NacreNotice visibility: omit the implicit default action from the footer, show
+expand only when details exist, retain whole-card hover for expiry pause, and
+route dismiss/actions/DND/history/legacy commands through the service boundary.
+The existing 256-record/3 MiB history limit remains. Daemon-owned 30-day history
+and daemon notification topics are upstream work, not a second Bead store.
+
+Unchanged NacreNotice and NacreLevelNotice visual components run with deterministic
+transport shims. Bead uses a fixed Source snapshot, with no notification server;
+its current transitional desktop bus/audio tasks still run against unavailable
+private endpoints, and their cost is included. QML starts no such service lanes.
+The notification shows the same app/summary/body/time/Open action and bundled
+MIT SVG; OSD shows volume75. QML's notice container is464×350; Bead fits content.
+Both show the same400-wide card and340×80 OSD at2880×1800/scale1.5.
+
+Each cell is one60-second idle sample after3 seconds settling, fresh private
+session per cell, sequential CPU-small-surface release runs. No own or migration
+heavy local build overlapped; unrelated desktop activity/frequency uncontrolled.
+Hyprland virtual120 Hz; niri nested Winit60 Hz. No physical timing acceptance.
+Memory is process PSS plus deduplicated DRM, no SwapPss in any cell. CPU uses
+/proc process tick deltas (10 ms resolution);0 ticks is below that observation
+resolution, not a zero-cost claim. Raw JSON/screenshots remain ignored.
+
+| Populated component | Bead H /N MiB | QML H /N MiB | Bead H /N CPU % |
+| --- | ---: | ---: | ---: |
+| Expanded notice |20.779 /21.588|161.223 /151.207|0.217 /0.200|
+| Volume OSD |22.371 /23.797|125.090 /121.978|0.250 /0.217|
+
+Bead has no DRM client; QML totals include its actual driver allocations. QML
+recorded0 CPU ticks in all four cells. Bead's nonzero idle cost remains visible;
+transitional service retry/watchdog work is included, not attributed by sampling.
+Initial notice captures with a missing-icon placeholder were rejected; corrected
+same-SVG repeats replace them. Earlier two-second smokes are not acceptance data.
+
+Controls/OSD populated headless goldens and visibility tests pass; all123 workspace
+tests, fmt/clippy/CPU+release/Luau/license boundaries pass at f154f47, CI38810904821
+green. Real private-bus proofs pass on both after the Source-host refactor:
+replacement/expiry/actions/inhibition, real pointer action/hover/replacement,
+legacy counts/clear, history/DND restart, all four OSDs, killed-parent bus cleanup
+and unchanged ambient notification ownership. Functional runs may overlap
+migration builds; their two-second idle numbers are not idle CPU acceptance.
+Empty/warm/closed PSS+DRM MiB H17.34/27.38/23.73, N17.65/28.57/24.31;
+owned bus separately0.93/0.95 MiB. This standalone notification workload differs
+from the accepted bar+sound Gate C guard. Presentation timing for matched QML
+notices is unmeasured; no server-cost delta inferred from the static fixtures.
+
+Visual limits retained for Gate D: regular-weight Bead summary versus QML's
+semibold, per-row stack-height/swipe polish, rich image-hint presentation and
+full history-browser styling. The implemented stack fade is160 ms; this does not
+claim QML's per-row230 ms height transition. No feature beyond Gate D is started.
 
 ## Typing foundation
 
