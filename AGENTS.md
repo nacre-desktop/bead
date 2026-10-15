@@ -54,7 +54,10 @@
   Defer off-thread baking and shader-cache startup work. Stop after Feature5;
   morning summary at top of STATUS, blocked owner decisions recorded.
 
-- Foundation F5 supersedes active Features9–10: implement F5a–F5e, then stop.
+- Owner resumption 2026-10-15: close F5 gaps, then Features9–10; STOP at GateD.
+  Use Nacre's existing helper serve menu-backend lane until menu.query is ready;
+  transport stays in GPL nacre-shell, shaped as a Source call. No engine copy.
+  Byte-account caches and measure opaque composition before resuming UI work.
   Services run outside views (ADR0003); nacre-daemon owns Nacre state and menu.query.
   Freeze nacre-shell/src/backends except bug fixes; do not build a second launcher
   catalog, ranking or providers. Existing in-process services are transitional.

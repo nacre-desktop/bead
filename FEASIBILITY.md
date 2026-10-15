@@ -1,5 +1,20 @@
 # Feasibility
 
+## 2026-10-15 — F5 gap: OSD text bounds
+
+The scale1 OSD label claimed the entire row width and pushed its status outside.
+Giving the growing label a zero basis leaves room for the fixed-width status.
+The populated golden is reviewed; a bounds/non-overlap assertion guards the cause.
+This headless layout fix is not a new native memory or presentation measurement.
+
+| Check | Result |
+| --- | --- |
+| Populated notice/OSD goldens and pose counter | pass |
+| OSD text within panel / label before status | pass |
+| Native timing or PSS change | N/A: no renderer/service change |
+
+Verdict: keep the scoped layout correction; cache accounting is next.
+
 ## Phase 0 — research (2026-10-13)
 
 Research recommended a bounded CPU-first experiment, not a full-parity promise.

@@ -85,7 +85,8 @@ Commit/push each step, check CI and update STATUS; nice10/Cargo-j2; no live test
    Nested/headless tests. Check mapped fonts/cache byte caps and prove transform/
    opacity animation avoids layout/raster each frame; report gaps, do not rebuild.
 
-STOP after F5e. Features9–10 on daemon topics/menu.query need the owner's OK.
+F5e completed. Owner approved closing the recorded F5 gaps, then Features9–10
+on Sources and the existing helper serve menu-backend lane until menu.query.
 GateD remains after Feature10. Do not move nacre-shell mid-feature; its installed
 control-script binary-name collision is deferred to GateD. Stop early for a
 GateC regression, a required GPL framework dependency or a live-desktop need.

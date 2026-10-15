@@ -98,6 +98,32 @@ mod tests {
                 )]),
             )?;
             let frame = harness.render()?;
+            if name == "osd" {
+                let scene = harness.scene();
+                let mut label_right = None;
+                let mut status_left = None;
+                for primitive in &scene.primitives {
+                    if let bead::render::Primitive::Text { rect, text, .. } = primitive {
+                        assert!(
+                            rect.x >= scene.bounds.x
+                                && rect.x + rect.w <= scene.bounds.x + scene.bounds.w,
+                            "OSD text must fit within its panel"
+                        );
+                        if text == "Volume" {
+                            label_right = Some(rect.x + rect.w);
+                        }
+                        if text == "75%" {
+                            status_left = Some(rect.x);
+                        }
+                    }
+                }
+                assert!(
+                    label_right
+                        .zip(status_left)
+                        .is_some_and(|(right, left)| right <= left),
+                    "OSD label and status must occupy separate space"
+                );
+            }
             assert!(
                 frame
                     .pixels
