@@ -4,7 +4,8 @@ Updated 2026-10-15. Feature 6b accepted with measured concerns.
 Features 7–8 are accepted through Gate C after the supervised physical check.
 See [Gate C report](research/feature8-gate-c.md) and the
 [optimization measurements](research/optimization-pass.md). Optimization is
-complete. Owner authorized Features9–10 through Gate D; work is active.
+complete. Features9–10 are paused for Foundation F5 (owner2026-10-15).
+Typing targets are not accepted; resume only after owner approval and migration.
 Step 0a nested pacing/idle acceptance remains open. The new close-idle
 memory limit passes; niri presentation tails remain a concern.
 Automatic bars and the small sound-output panel use CPU retained rasters;
@@ -46,8 +47,9 @@ If CPU cannot keep up, explain before starting Feature 3.
 | 7. Command/files/helpers | Private versioned command socket/client plus compatibility target/method catalog; all current CLI/keybinding routes tested in fixtures; bounded runner/watch/helper protocol | Can existing tools call Bead without changing live configs? Minimal helper transport may already support earlier proofs |
 | 8. Popouts/panels | One actual panel and animations, open/close/focus/dismiss across outputs; preserved state and pacing; output disappearance | **Gate C:** bar parity on both + panel; measured benefit versus cost; owner decision |
 | Optimization pass — immediately after Gate C | Measure each candidate on the bar + one panel scene on both compositors at real sizes; retain only measured improvements | Can fixed costs, caches, allocator behavior and reload work be improved without regressions? |
+| Foundation F5 | Hostable services, bead-test, crash safety, neutral Source/Nacre adapter, capability-gated background effect; ordered steps below | STOP after F5e; owner approval before Features9–10 resume |
 | 9. Notifications/OSD | Server on private bus, replacement/actions/expiry/history/DND, inhibition and visual transitions; no takeover of live notification service | Is native notification behavior complete enough for parity? |
-| 10. Launcher | Same launcher-menu.json catalog/modes/ranking, populated-catalog grid/selection, cold/warm launch/idle reopen and preserved inputs | **Gate D:** estimate all remaining work from measured pace; owner decision on full parity |
+| 10. Launcher | Daemon menu.query with the same launcher-menu.json catalog/modes/ranking, populated-catalog grid/selection, cold/warm launch/idle reopen and preserved inputs | **Gate D:** estimate all remaining work from measured pace; owner decision on full parity |
 | 11. Dashboard | MPRIS/media, resource/calendar/system/weather cards, wallpaper/palette presentation; retained helpers and bounded artwork caches | Can rich data/views stay efficient and resilient? |
 | 12. Pearls | xdg detachable managed windows, geometry/docking, ownership/focus/output mapping, backend-specific placement | Is native managed-window behavior possible without unauthorized rules/config changes? |
 | 13. Wallpaper/video/effects | Static/video comparison with GPL shell-side playback boundary, GPU/copy/decode/frame sync accounting, Canvas/MultiEffect-style parity | Do media/effects erase gains or require an incompatible renderer? |
@@ -60,6 +62,33 @@ work rather than extrapolate the easier bar features at a uniform rate.
 Secure session lock, if included beyond the current lock-preview, is a separate
 fail-closed protocol/safety gate before any daily-session trial. It is not silently
 counted as done with a session menu or decorative lock widget.
+
+## Foundation F5 — before resuming Features9–10
+
+Approved2026-10-15; [ADR0003](decisions/0003-services-outside-view.md).
+Canonical charter: Nacre docs/architecture/foundation.md. Migration owns F0–F4.
+Commit/push each step, check CI and update STATUS; nice10/Cargo-j2; no live tests.
+
+1. F5a: host-agnostic bead-services; no UI/store/render/Wayland dependencies,
+   enforced by CI cargo tree. start(config)→handle: serde snapshot, subscribe,
+   call(action)→Result, stop. Notification bus/history injected; private-bus
+   parity without UI. Existing in-process shells continue working.
+2. F5b: MIT bead-test deterministic CPU/Luau/store→PNG goldens with bundled
+   permissive fonts, tolerance/diffs, input scripts, AccessKit assertions,
+   raster counter and frame replay budgets. Move headless checks; CI no compositor.
+3. F5c: UI watchdog >5s abort/report, startup last-known-good bundle recorded
+   after first successful frame, crash-loop minimal safe bar; bead-test coverage.
+4. F5d: neutral Source snapshots/RFC7396 patches/stale/calls/timeouts/reconnect,
+   in-process service Source. GPL shell adapter pinned to published protocol v1,
+   fake-daemon golden transcript tests; if unpublished, fake source and report skip.
+5. F5e: ext-background-effect-v1 only if advertised; Hyprland uses owner rules.
+   Nested/headless tests. Check mapped fonts/cache byte caps and prove transform/
+   opacity animation avoids layout/raster each frame; report gaps, do not rebuild.
+
+STOP after F5e. Features9–10 on daemon topics/menu.query need the owner's OK.
+GateD remains after Feature10. Do not move nacre-shell mid-feature; its installed
+control-script binary-name collision is deferred to GateD. Stop early for a
+GateC regression, a required GPL framework dependency or a live-desktop need.
 
 ## 6b — architecture hardening (before Feature7)
 

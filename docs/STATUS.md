@@ -14,7 +14,8 @@ hover replacement, DND/history restart, passive OSD and owned-bus crash cleanup.
 Empty/warm/closed PSS MiB: Hypr16.01/26.16/22.26; niri16.58/26.92/23.23.
 No DRM;2-second idle samples are smoke only. No QML comparison or GateD verdict.
 The child signal-mask fix prevents a private bus surviving the UI's SIGKILL.
-Next: ADR0003 / roadmap, then host-agnostic notification API and headless tests.
+F0: ADR0003 and Foundation F5 roadmap recorded; next F5a host-agnostic service API.
+Checkpoint32f741d CI pending; no foundation code accepted yet.
 No installation, live-session action or release is authorized.
 
 ## Accepted Gate C and optimization baseline

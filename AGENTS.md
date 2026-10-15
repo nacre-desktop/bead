@@ -2,7 +2,10 @@
 
 - Public repository by owner request. Integrate into main and push each feature.
 - ADR 0001 approved 2026-10-13; Retained CPU/femtovg/Vello comparison authorized before Feature 3. Stop after each feature.
-- Nacre and Orient are read-only references. Do not duplicate Orient or port
+- Foundation exception (2026-10-15): additive nacre-protocol changes are allowed
+  through Nacre CONTRIBUTING (optional fields/new methods plus transcripts).
+  Breaking changes require the owner. Otherwise Nacre and Orient are read-only.
+- Do not duplicate Orient or port
   Python helpers. Use the existing palette JSON and helper JSON-lines protocol.
 - Framework crates: MIT OR Apache-2.0, permissive dependencies only. Never copy
   GPL/LGPL code into framework crates. Shell code/assets retain GPL-3.0 terms.
@@ -50,3 +53,10 @@
   format ADR, layout/lists, launcher port, Gate B tests, input/focus, backends.
   Defer off-thread baking and shader-cache startup work. Stop after Feature5;
   morning summary at top of STATUS, blocked owner decisions recorded.
+
+- Foundation F5 supersedes active Features9–10: implement F5a–F5e, then stop.
+  Services run outside views (ADR0003); nacre-daemon owns Nacre state and menu.query.
+  Freeze nacre-shell/src/backends except bug fixes; do not build a second launcher
+  catalog, ranking or providers. Existing in-process services are transitional.
+  The migration agent owns nacre-daemon / nacre-protocol; coordinate additive needs.
+  No live desktop permission carries over. Local commands nice10, Cargo-j2.
