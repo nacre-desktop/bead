@@ -54,6 +54,9 @@ impl std::fmt::Debug for Packet {
     }
 }
 impl Packet {
+    pub fn has_error(&self) -> bool {
+        self.error.is_some()
+    }
     pub fn is_reload(&self) -> bool {
         self.reload
     }

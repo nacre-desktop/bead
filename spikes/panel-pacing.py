@@ -29,14 +29,20 @@ def sample(env, raw, compositor, stop):
     output = os.environ.get('BEAD_PROOF_OUTPUT') or ('bead-bench' if compositor == 'hyprland' else None)
     command = [binary, '--bar', '--audio-panel', '--command-socket', str(sock),
                '--namespace', 'bead-panel-pacing', '--trace-state']
+    if os.environ.get('BEAD_PANEL_RENDERER'): command += ['--panel-renderer',os.environ['BEAD_PANEL_RENDERER']]
+    if os.environ.get('BEAD_PACING_EXPERIMENT') == '1': env['BEAD_PRIVATE_INPUT_PROOF']='1'; client_env['BEAD_PRIVATE_INPUT_PROOF']='1'
     if output: command += ['--output', output]
     if os.environ.get('BEAD_PHYSICAL_NIRI_APPROVED') == '1' or os.environ.get('BEAD_PACING_PASSIVE') == '1': command += ['--test-passive']
+    aging = os.environ.get('BEAD_PACING_AGING_ONLY') == '1'
+    if aging: assert os.environ.get('BEAD_PHYSICAL_NIRI_APPROVED') != '1', 'aging is nested only'
     prefetch = os.environ.get('BEAD_PACING_PREPARE') == '1'
+    capture = os.environ.get('BEAD_PACING_CAPTURE') == '1'
+    if capture: assert os.environ.get('BEAD_PHYSICAL_NIRI_APPROVED') != '1', 'capture is nested only'
     if prefetch:
         assert os.environ.get('BEAD_PHYSICAL_NIRI_APPROVED') != '1', 'prefetch proof is nested only'
         env['BEAD_PRIVATE_INPUT_PROOF'] = '1'
     client = pw = pointer = None
-    result = {'compositor': compositor, 'cycles': []}
+    result = {'compositor': compositor, 'memory_aging_only':aging, 'cycles': []}
 
     def call(method):
         args = ['sound'] if method == 'open' else []
@@ -106,10 +112,10 @@ def sample(env, raw, compositor, stop):
                 ready = re.search(r'UI_PRESENTED generation=1 monotonic_ns=(\d+) refresh_ns=(\d+) companion=true',segment())
                 time.sleep(.4)
                 opening = stamps()
-                assert len(opening) >= 3, 'missing opening presentation feedback'
+                if not aging: assert len(opening) >= 3, 'missing opening presentation feedback'
                 warm = matrix.idle(client.pid, .01)
                 bright = None
-                if prefetch:
+                if prefetch or capture:
                     from PIL import Image
                     capture = raw/f'prepared-{i}.png'
                     subprocess.run(['grim', str(capture)],env=env,check=True,capture_output=True,timeout=8)
@@ -118,12 +124,14 @@ def sample(env, raw, compositor, stop):
                     bright=sum(r>140 and g>140 and b>90 for r,g,b in area.get_flattened_data())
                     assert bright>1000*scale*scale, 'prepared panel has no visible volume track'
 
+                if i == 0 and os.environ.get('BEAD_PACING_WARM_SECONDS'):
+                    result['warm_idle'] = matrix.idle(client.pid, float(os.environ['BEAD_PACING_WARM_SECONDS']))
                 offset = len(matrix.log_text(log))
                 call('close'); time.sleep(.4)
                 closing = stamps()
-                assert len(closing) >= 3, 'missing closing presentation feedback'
+                if not aging: assert len(closing) >= 3, 'missing closing presentation feedback'
                 matrix.wait_log(log, lambda _: not call('state')['resident'], timeout=8)
-                row = {'slider_bright_pixels':bright, 'elapsed_seconds':time.monotonic()-soak_started, 'closed_memory':matrix.measure.memory(client.pid), 'cycle':i, 'ready_ms':(int(ready[1])-started)/1e6,
+                row = {'opening_feedback_count':len(opening),'closing_feedback_count':len(closing),'slider_bright_pixels':bright, 'elapsed_seconds':time.monotonic()-soak_started, 'closed_memory':matrix.measure.memory(client.pid), 'cycle':i, 'ready_ms':(int(ready[1])-started)/1e6,
                        'refresh_ns':int(ready[2]), 'opening_ms':intervals(opening),
                        'closing_ms':intervals(closing), 'warm':warm}
                 result['cycles'].append(row)
@@ -139,9 +147,9 @@ def sample(env, raw, compositor, stop):
                 values = [v for row in result['cycles'] for v in row[phase+'_ms']]
                 result[phase] = {**matrix.percentiles(values), 'longest':max(values), 'n':len(values)}
             result['ready'] = matrix.percentiles([r['ready_ms'] for r in result['cycles']])
-            result['gate_c_physical_pacing'] = all(result[p]['p99'] <= 16.7 for p in ['opening','closing'])
+            result['pacing_within_16_7_ms'] = None if aging else all(result[p]['p99'] <= 16.7 for p in ['opening','closing'])
             (raw/'panel-pacing.json').write_text(json.dumps(result,indent=2)+'\n')
-            print('PANEL_TEST_RESULT '+json.dumps({k:result[k] for k in ['opening','closing','ready','gate_c_physical_pacing']}),flush=True)
+            print('PANEL_TEST_RESULT '+json.dumps({k:result[k] for k in ['opening','closing','ready','pacing_within_16_7_ms']}),flush=True)
     finally:
         if pointer: pointer.close()
         if client: stop(client)

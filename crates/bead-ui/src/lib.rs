@@ -9,6 +9,7 @@ pub mod layout;
 pub mod schema;
 pub mod script;
 mod session;
+mod watcher;
 use bead_core::{Stores, Value};
 use bead_render::{Palette, Primitive, Rect, Scene};
 pub use generation::Generation;

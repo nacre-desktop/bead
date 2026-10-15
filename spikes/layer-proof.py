@@ -72,6 +72,7 @@ def sample(env, raw, compositor, stop):
                             pointer.command('move 1000 300', 'POINTER_DONE')
                             time.sleep(.3)
                             if case == 'typing':
+                                op_offset = len(matrix.log_text(path))
                                 subprocess.run(['wtype', '-s', '300', '-M', 'shift', '-k', 'Tab', '-m', 'shift', '-s', '300'], env=env, check=True, timeout=5)
                         if case == 'typing':
                             matrix.wait_log(path, lambda t: any(json.loads(l[9:]).get('bead.focused', '').endswith('.search') for l in t.splitlines() if l.startswith('UI_STATE ')))
@@ -80,17 +81,26 @@ def sample(env, raw, compositor, stop):
                         offset = len(matrix.log_text(path))
                         started = time.monotonic(); before = matrix.measure.ticks(client.pid)
                         operations = 0
-                        while time.monotonic()-started < 8:
+                        rate = float(os.environ.get('BEAD_LAYER_RATE','0'))
+                        misses = 0
+                        while (operations < round(8*rate)) if rate else (time.monotonic()-started < 8):
                             if case == 'typing':
                                 subprocess.run(['wtype', '-M', 'ctrl', '-k', 'a', '-m', 'ctrl', '-k', 'BackSpace', 'App'], env=env, check=True, timeout=5)
                             elif case == 'hover':
                                 pointer.command('move '+('20 20' if operations%2 else '1000 300'), 'POINTER_DONE')
                             elif case == 'scroll':
                                 pointer.command('scroll '+('40' if operations % 80 < 40 else '-40'), 'POINTER_DONE')
-                            time.sleep(.15 if case == 'scroll' else .03 if case != 'progress' else .1)
                             operations += 1
+                            if rate:
+                                if case == 'typing':
+                                    matrix.wait_log(path, lambda text: any(json.loads(l[9:]).get('launcher.search.text') == 'App' for l in text[op_offset:].splitlines() if l.startswith('UI_STATE ')))
+                                delay = started + operations/rate - time.monotonic()
+                                misses += delay < 0
+                                time.sleep(max(0,delay))
+                            else:
+                                time.sleep(.15 if case == 'scroll' else .03 if case != 'progress' else .1)
                         elapsed = time.monotonic()-started
-                        row = {'case': case, 'workload_log_offset': offset, 'operations': operations, 'seconds': elapsed,
+                        row = {'target_operations_per_second':rate, 'deadline_misses':misses, 'case': case, 'workload_log_offset': offset, 'operations': operations, 'seconds': elapsed,
                                'cpu_one_core_percent': 100*(matrix.measure.ticks(client.pid)-before)/os.sysconf('SC_CLK_TCK')/elapsed,
                                'memory': matrix.measure.memory(client.pid), 'drm_mib': matrix.measure.drm_memory(client.pid)}
             finally:

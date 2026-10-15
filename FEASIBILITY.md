@@ -1057,3 +1057,92 @@ These are current matched baselines, not direct equivalence to historical
 tests pass; fmt/clippy pass. Existing50ms/8MiB Lua limits remain unchanged.
 Verdict: retain bytecode reuse; continue the measured typing investigation.
 1ade037 CI38724435974 passed. Evidence: .research/optimization/typing-paired-*.
+
+## Optimization — reducing scene copies (2026-10-15)
+
+Tested moving uniquely owned worker packets and cloning only the one primitive
+being baked instead of the full scene. Fewer copies did not yield a useful
+end-to-end typing improvement. Keep the simpler existing ownership path.
+The experimental patch is preserved in ignored evidence and reverted.
+
+| A/B/B/A, two8s samples | Baseline | Copy-reduced |
+|---|---:|---:|
+| Hypr CPU ms/operation, mean |24.08|24.99|
+| Hypr operations per trial |108/126|125/102|
+| niri operations per trial |24/61|25/25|
+
+Niri's changing workload rate makes its CPU-percent comparison inconclusive.
+No claimed improvement; final quiet trials will add a fixed-rate workload
+with every text result acknowledged. Existing maximum-rate proof remains.
+Evidence: .research/optimization/copies-paired-* and copies-candidate.patch.
+Bytecode source00a2686 CI38725224294 passed. No physical test repeated.
+
+## Optimization — buffers, stacks and cache limits (2026-10-15)
+
+Tested two versus three direct SHM buffers on the actual sound panel.
+Two buffers exhausted all reusable slots under nested niri; retain three.
+Smaller stacks and a lower raster/texture cap showed no consistent useful
+resident-memory benefit in this scene. Keep the defaults and idle release.
+
+| Four cycles, warm PSS+DRM+SwapPss MiB | Hypr | niri |
+|---|---:|---:|
+| Shared-watcher control |27.59|27.48|
+| Two SHM buffers |27.58|FAIL: buffers owned|
+| Rust512KiB minimum stacks |27.39|28.52|
+| Raster cap16 versus64MiB |27.30|28.64; feedback FAIL|
+
+Completed cycles have visible-track checks; the niri cap run did not finish
+the strict closing-feedback proof. Smaller stacks reduce virtual
+reservation but are not a demonstrated PSS win; retain normal recursion headroom.
+The active scene does not reach the existing64MiB CPU/GL raster/image budgets.
+SVGs already rasterize at display size; this matched scene has no JPEG/PNG
+decode bottleneck. No new decoder dependency or unrelated image stress claim.
+Negative product hooks reverted; patches/binaries retained only in ignored
+evidence. CPU/GL idle caches continue to drop through the existing lifecycle.
+Evidence: .research/optimization/{shm2,stack512,budget16}-*.
+
+## Optimization — shared scoped file notification (2026-10-15)
+
+Bar and sound view watched the same bundle/palette with separate threads.
+Share that notification thread while keeping independent revision counters
+and scoped subscriptions. Last owner drops the watcher; registry holds weak
+references only. Both surfaces still validate their own source snapshots.
+
+| Four cycles, warm scene | Hypr before→after | niri before→after |
+|---|---:|---:|
+| PSS+DRM+SwapPss MiB |29.97→27.59|29.85→27.48|
+| Threads / FDs |12/46→11/43|12/47→11/44|
+
+All cycles have visible-slider checks. Full controls/native clipboard/dismissal,
+rapid intent, close/reopen and Hypr output lifecycle pass both private sessions.
+Reload proof exposed an old recovery-wait race: a bar commit plus stale panel
+feedback could satisfy generic waits. Commit markers now include surface/error;
+proof requires successful panel commit→presentation of the exact update.
+Both compositors pass all five reloads, two invalid stages, recovery, reopen
+and SIGKILL restoration. Failed old proof retained. Dedicated quiet pacing/
+60s idle and final memory acceptance remain pending.
+Evidence: .research/optimization/watch-{base,shared,panel,reload-strict}-*.
+
+## Optimization — GL attachments (2026-10-15)
+
+The existing Mesa configuration already has zero MSAA samples. Removing
+stencil reduced memory but changed the slider thumb from round to square.
+Full-content pixel comparison caught the regression that track-presence alone
+missed. Keep stencil; request zero depth alone selected the same driver config.
+
+| Requested config | Actual depth/stencil/samples | Verdict |
+|---|---|---|
+| Existing |24/8/0|retain|
+| No attachments |0/0/0|reject: incorrect slider pixels|
+| No depth, stencil retained |24/8/0|identical pixels; no config saving|
+
+Depth-only result is identical on both compositors. Some small-GL cold runs
+failed strict closing-feedback counts; surviving runs had large startup gaps.
+None is passing small-panel pacing evidence. GL texture-cap16MiB gave no
+useful result; incomplete cases are retained, not rerolled into success.
+CPU stays policy for small panels; GL for large animated surfaces. Prior
+~20MiB Mesa/LLVM residue remains the idle-policy reason. Concurrent-aging
+code/driver PSS sharing makes these memory samples unsuitable replacements
+for the earlier single-client residue measurement. All experimental GL/SHM/
+cache knobs removed from product source. Evidence: .research/optimization/gl-*
+and depthless-*; negative patches remain ignored, no image/driver workaround.

@@ -26,7 +26,7 @@ pub struct Session {
     pub(super) viewport: (f32, f32),
     pub(super) error: Option<String>,
     pub(super) attempts: u64,
-    pub(super) watcher: Option<notify::RecommendedWatcher>,
+    pub(super) watcher: Option<super::watcher::Subscription>,
     pub(super) restore: Option<BTreeMap<String, Value>>,
 }
 impl Session {
@@ -64,56 +64,17 @@ impl Session {
         &mut self,
         wakeup: Box<dyn Fn(Result<(), String>) + Send>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use notify::Watcher;
         let revision = self.watch_revision.clone();
-        let root = self.root.canonicalize()?;
-        let palette = std::path::absolute(&self.palette_path)?;
-        let external_parent = if !palette.starts_with(&root) {
-            Some(
-                palette
-                    .parent()
-                    .ok_or("palette parent unavailable")?
-                    .to_path_buf(),
-            )
-        } else {
-            None
-        };
-        let watched_root = root.clone();
-        let mut watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
-                Ok(event)
-                    if !event.kind.is_access()
-                        && (event.need_rescan()
-                            || event.paths.is_empty()
-                            || event.paths.iter().any(|path| {
-                                if path == &palette {
-                                    return true;
-                                }
-                                if !path.starts_with(&watched_root) {
-                                    return false;
-                                }
-                                if path.is_dir() || path.extension().is_none() {
-                                    return true;
-                                }
-                                path.extension().is_some_and(|ext| {
-                                    ["json", "luau", "svg", "png", "jpg", "jpeg", "webp"]
-                                        .iter()
-                                        .any(|suffix| ext == *suffix)
-                                })
-                            })) =>
-                {
+        self.watcher = Some(super::watcher::subscribe(
+            self.root.canonicalize()?,
+            std::path::absolute(&self.palette_path)?,
+            Box::new(move |event| {
+                if event.is_ok() {
                     revision.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    wakeup(Ok(()));
                 }
-                Err(error) => wakeup(Err(error.to_string())),
-                _ => {}
-            })?;
-        watcher.watch(&root, notify::RecursiveMode::Recursive)?;
-        if let Some(parent) = external_parent {
-            // Watch the directory: atomic replacement would detach a file-only watch.
-            watcher.watch(&parent, notify::RecursiveMode::NonRecursive)?;
-        }
-        self.watcher = Some(watcher);
+                wakeup(event);
+            }),
+        )?);
         Ok(())
     }
     pub fn reload(&mut self) -> Result<Scene, Diagnostic> {

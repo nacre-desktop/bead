@@ -2,33 +2,34 @@
 
 ## 2026-10-15 — Gate C accepted; optimization active
 
-The one supervised live niri test passed the owner's ≤16.7 ms gate:
-20 cold open/close cycles, opening p99 16.667 ms, closing p99 8.337 ms.
-Feedback refresh 8.333313 ms on 2880×1800/1.5/120 Hz. Opening longest
-58.330 ms; command→ready p50/p95 45.25/64.64 ms remains a cold-start cost.
-Private state/bus/audio; passive overlay, IPC only. Test processes exited,
-PID file removed; authorization consumed. No install/config/audio change.
+One supervised physical niri test passed: 20 cold sound-panel cycles,
+opening/closing p99 16.667/8.337 ms, refresh 8.333313 ms at 120 Hz.
+Longest opening 58.330 ms; cold ready p50/p95 45.25/64.64 ms.
+Private services, passive IPC only; processes stopped and PID file removed.
+The physical authorization is consumed. No install/config/audio changes.
 
-[Gate C report](research/feature8-gate-c.md) and
-[optimization evidence](research/optimization-pass.md).
-Physical bar/closed PSS+DRM 23.03/25.14 MiB (+2.11), no swap.
-Two-second CPU samples ~5% are short live-backend observations, not the
-nested 60-second idle comparison. Nested memory acceptance remains valid.
+On main: bounded audio-hover preparation (2 s expiry, no surface/focus,
+closed journal) and generation bytecode reuse. CI 38724435974 and
+38725224294 passed. Bytecode checkpoint: 71 tests, fmt/clippy pass.
+Three pixel-checked hover trials: ready p50 9.99/7.39 ms Hypr/niri;
+unused timeout and closed memory pass +5 MiB. Paired typing CPU
+35.26→32.05% /36.89→36.26%; final quiet comparison still pending.
 
-Bounded hover preparation implemented: 2s unopened expiry, no surface/focus,
-closed journal, selected output/scale. Three pixel-checked cycles each:
-ready p50 9.99/7.39 ms (Hypr/niri); timeout and closed memory pass +5 MiB.
-Local fmt/clippy/workspace tests pass; acceptance CI38723361044 passed.
+Shared watcher: warm 29.97→27.59 /29.85→27.48 MiB, one thread and three
+FDs fewer. 72 tests/fmt/clippy and controls/clipboard/dismissal pass.
+Stronger reload proof matches successful panel commit to exact presented
+update; invalid recovery/reopen/SIGKILL pass both. Quiet checks pending.
 
-Typing bytecode reuse retained: paired CPU35.26→32.05% Hypr,
-36.89→36.26% niri, unchanged matched PSS+DRM; fresh VM per evaluation.
-71 workspace tests/fmt/clippy pass; hover CI38724435974 passed.
+Rejected scene-copy reduction, two SHM buffers (niri exhausted slots),
+smaller stacks/cache cap, zero-stencil GL (wrong pixels). Depth-only still
+selects 24/8/0. CPU for small panels, GL for large animated surfaces;
+prior ~20 MiB Mesa residue remains the policy reason.
 
-Next: matched longer validation and remaining ROADMAP optimization
-candidates, each measured on both nested compositors. CPU for small
-panels; GL for large animated surfaces (~20 MiB idle Mesa residue).
-Keep 6b step 0a nested niri/shared-GL pacing and idle invariance open.
+Allocator aging restarted separately from strict pacing after early
+feedback failures. Aging runs active; release profiles next. Keep typing
+29.61→32.66%, 6b 0a nested niri/shared-GL pacing and idle invariance open.
 Stop after optimization, before Feature 9. No further live test authorized.
 
-Worktree: bead-optimization-pass; keep the existing shared Cargo target.
-Evidence: canonical .research/optimization. nice10/Cargo-j2.
+[Report](research/optimization-pass.md). Worktree: bead-optimization-pass;
+existing shared Cargo target. Evidence: canonical .research/optimization.
+Nested nice10/Cargo-j2; no installation or release.

@@ -168,6 +168,7 @@ impl App {
             scales.push(1.);
         }
         runtime.scales(scales);
+        let source_error = matches!(&event, UiEvent::Worker(packet) if packet.has_error());
         let reload = matches!(event, UiEvent::Reload)
             || matches!(&event,UiEvent::Worker(packet) if packet.is_reload());
         let started = Instant::now();
@@ -338,12 +339,14 @@ impl App {
                     self.surfaces.len()
                 );
                 println!(
-                    "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={}",
+                    "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={} companion={} source_error={}",
                     self.scene.resource_revision,
                     reload,
                     started.elapsed().as_secs_f64() * 1000.,
                     monotonic_ns(),
-                    self.ui_serial
+                    self.ui_serial,
+                    self.processing_panel,
+                    source_error
                 );
             }
             Ok(None) => {

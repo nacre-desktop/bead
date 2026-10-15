@@ -47,3 +47,37 @@ The generation owns compiled markup/kit/SDK bytecode (8MiB budget), not a VM.
 Each evaluation still creates a fresh sandbox with the existing50ms/8MiB limits.
 A test verifies module-local state resets and edited imports replace bytecode
 without losing text stores. All71 workspace tests and fmt/clippy pass.
+
+## Retained: share one scoped file watcher
+
+Identical bundle/palette subscriptions share one notification thread. Revisions
+and source validation remain per view; the last subscriber drops all ownership.
+Warm PSS+DRM+SwapPss29.97→27.59MiB (Hyprland),29.85→27.48(niri), one
+thread and three FDs fewer on both. Initial full controls/clipboard/dismissal/
+reopen/crash/reload proofs pass. Recovery now matches a non-error companion
+commit to its exact presentation update; generic bar commits cannot pass it.
+
+## Rejected exploratory changes
+
+- Fewer scene copies: no typing improvement; patch reverted.
+- Two SHM buffers: nested niri exhausted both compositor-owned slots; retain3.
+- 512 KiB stacks and16MiB raster cap: no consistent warm-memory improvement.
+  Keep default stack headroom and64MiB raster/GL-image limits; idle drops them.
+- GL0/0/0 attachments: renders a square slider thumb; reject despite lower memory.
+  Zero depth with required stencil selected24/8/0 on both; no saving. Existing
+  config is already non-MSAA. Several cold small-GL runs also failed the
+  strict feedback proof. Keep CPU-small/GL-large policy and the prior~20MiB
+  driver-residue finding. Full panel pixels matched for the depth-only trial.
+- Display-size decoding: SVG path already does this; actual matched sound
+  scene has no large raster-image decode bottleneck. No decoder dependency added.
+
+## Allocator aging methodology
+
+Initial concurrent soaks terminated early on animation-feedback assertions and
+are not one-hour evidence. Restarted memory-only aging still requires each
+opening to present and each close to release the actor; timing failures are
+recorded without stopping the memory workload. Its pacing field is N/A.
+Dedicated sequential pacing acceptance retains the strict feedback requirement.
+All variants use the same baseline executable, private compositor/services,
+one hour of open/release cycles, and60s endpoint idle. Shared executable/driver
+PSS differs from a single-client desktop measurement; include SwapPss.

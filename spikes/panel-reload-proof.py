@@ -18,6 +18,20 @@ def sample(env,raw,compositor,stop):
         def wait(marker,offset=0,companion=False):return matrix.wait_log(log,lambda t:any(marker in l and (not companion or 'companion=true' in l) for l in t[offset:].splitlines()))
         def state(offset):
             return next(json.loads(l[9:]) for l in matrix.log_text(log)[offset:].splitlines() if l.startswith('UI_STATE ') and 'panel.page' in l)
+        def presented_reload(offset, error, generation=None):
+            def find(text):
+                tail=text[offset:]
+                pattern=r'UI_COMMIT generation=(\d+) reload=true .*update=(\d+) companion=true source_error='+str(error).lower()+r'(?:\s|$)'
+                for commit in re.finditer(pattern,tail):
+                    gen,update=map(int,commit.groups())
+                    if generation is not None and gen != generation: continue
+                    feedback=re.search(r'UI_PRESENTED generation='+str(gen)+r' monotonic_ns=(\d+).*companion=true update='+str(update)+r'(?:\s|$)',tail[commit.end():])
+                    if feedback:
+                        states=[json.loads(l[9:]) for l in tail[:commit.start()].splitlines() if l.startswith('UI_STATE ') and 'panel.page' in l]
+                        assert states, 'presented panel reload lacks its state snapshot'
+                        return int(feedback[1]),states[-1]
+                return None
+            return matrix.wait_log(log,find)
         with log.open('w') as f:
             client=subprocess.Popen(command,cwd=bundle,env=env,stdout=f,stderr=subprocess.STDOUT,start_new_session=True)
             try:
@@ -26,16 +40,16 @@ def sample(env,raw,compositor,stop):
                 for i in range(5):
                     offset=len(matrix.log_text(log));written=time.monotonic_ns();source.write_text(original.replace('Sound output',f'Sound output {i}'))
                     generation=i+2
-                    wait(f'UI_PRESENTED generation={generation}',offset,True)
-                    line=next(l for l in matrix.log_text(log)[offset:].splitlines() if l.startswith(f'UI_PRESENTED generation={generation}') and 'companion=true' in l)
-                    latencies.append((int(re.search(r'monotonic_ns=(\d+)',line)[1])-written)/1e6)
-                    assert state(offset)['panel.page']=='output'
+                    shown,snapshot=presented_reload(offset,False,generation)
+                    latencies.append((shown-written)/1e6)
+                    assert snapshot['panel.page']=='output'
                 offset=len(matrix.log_text(log));source.write_text('return { broken =')
-                wait('UI_ERROR',offset);wait('companion=true',offset);assert client.poll() is None
-                behavior.write_text(behavior.read_text().replace('"output"','"new-default"'))
-                time.sleep(.2);offset=len(matrix.log_text(log));source.write_text(original)
-                wait('UI_COMMIT',offset);wait('companion=true',offset)
-                assert state(offset)['panel.page']=='output'
+                presented_reload(offset,True);assert client.poll() is None
+                offset=len(matrix.log_text(log));behavior.write_text(behavior.read_text().replace('"output"','"new-default"'))
+                presented_reload(offset,True)
+                offset=len(matrix.log_text(log));source.write_text(original)
+                _,snapshot=presented_reload(offset,False)
+                assert snapshot['panel.page']=='output'
                 call('close');deadline=time.monotonic()+12
                 while call('state')['resident']:
                     if time.monotonic()>deadline:raise RuntimeError('reload panel release deadline')
