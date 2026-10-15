@@ -116,3 +116,46 @@ will inspect registry/LRU metadata, eager capacity and new structures; only a
 simple demonstrated improvement will be retained. Opaque composition, Feature9
 matched QML, real-engine Feature10, protocol adapter and GateD follow. Published
 Nacre5995d171 still lacks implemented protocol v1/goldens at this checkpoint.
+
+
+## Bounded follow-up — five alternating pairs per compositor
+
+Completed in about14 minutes including the source audit, below the one-hour cap.
+Five baseline and five candidate clients alternated in each private compositor,
+using the same three-cycle/five-second-idle proof and identical runtime options.
+H order ABABABABAB; N order BABABABABA. No local build overlapped these samples.
+Other desktop/migration work was active; these remain contended nested results.
+
+| First-open PSS+DRM MiB | Baseline median [min,max] | Candidate median [min,max] | Median delta |
+| --- | ---: | ---: | ---: |
+| Hypr120 |27.451 [26.900,27.719]|27.421 [26.791,28.050]|−0.030|
+| niri60 |29.855 [28.462,29.979]|30.065 [28.888,30.138]|+0.210|
+
+Spread is the larger within-variant max−min range:1.259/1.518 MiB. Both deltas
+lie inside that spread: **noise under the owner's requested criterion**, not a
+formal statistical-equivalence claim. No simple eager allocation was found;
+no speculative production change was retained.
+
+| Median PSS+DRM MiB | Hypr before→after | niri before→after |
+| --- | ---: | ---: |
+| Bar |20.820→21.003|22.456→22.708|
+| Third warm open |27.688→26.506|29.446→28.375|
+| Closed5s |22.111→22.304|22.723→22.928|
+
+Bar and closed median deltas are also within their observed spreads: bar0.702/
+0.495 MiB, closed0.993/0.257 MiB. All20 client runs pass every close/lifecycle
+within own bar+5. Closed paired deltas remain visible: H−0.465..+0.933 MiB,
+N+0.092..+0.312 MiB; this is not proof of strict idle invariance. Later-open
+savings are1.182/1.071 MiB. No new CPU/QML/physical/pacing acceptance.
+
+Audit: registry/LRU/glyph-use maps start empty; limits are counters, not reserved
+192/64/8 MiB allocations. Charge objects and owner records are small; the closed
+report has12 owners. ELF text increased92336 bytes, rodata448 bytes. First-open
+anonymous PSS medians fell8 KiB on each compositor; shared-buffer medians matched.
+Executable-backed PSS medians rose148/156 KiB. This supports a small code/
+bookkeeping footprint plus variable buffer/allocator residency as the likely
+origin, rather than a large eager map. Attribution is not an allocation trace.
+
+Verdict: record the bounded cost/variation and move on. The next checkpoint
+compares direct versus cached opaque composition. Raw runs use per-case atomic
+summaries so an interrupted measurement cannot masquerade as complete.

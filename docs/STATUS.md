@@ -1,22 +1,26 @@
 # Status
 
-## 2026-10-15 — cache checkpoint accepted; bounded investigation, then Gate D
+## 2026-10-15 — cache accepted/CI green; five-pair follow-up complete
 
-Owner accepted215ea35: all close/lifecycle checks pass bar+5 MiB and later
-opens became smaller. Integrating the tested cache checkpoint; CI checked per push.
-[Cache implementation, measurements and limits](research/cache-budget.md).
+Main e82c3c8 includes215ea35; CI38797186208 green.
+[Cache report and bounded investigation](research/cache-budget.md).
+Five alternating samples per variant/compositor completed in about14 minutes.
+First-open medians MiB: H27.451→27.421,N29.855→30.065; deltas−0.030/+0.210
+inside spreads1.259/1.518: noise under the owner's criterion.
+Third-open medians improved1.182/1.071 MiB. All20 client runs pass close/lifecycle
+bar+5. Bar/closed changes lie within measured spread; strict invariance unproven.
+No large eager allocation found; no speculative fix. Known small code/metadata
+footprint and buffer/allocator variation recorded; move on.
 
-Next: at most about one hour investigating first-open allocation, including
-five alternating before/candidate samples per compositor with median/spread.
-Fix only a simple demonstrated cause; otherwise record it and move on.
-Then opaque composition measurement, Feature9 Source UI + matched QML,
-Feature10 via Nacre's existing helper lane, protocol adapter when published,
-and STOP at GateD. Nacre main5995d171 still lacks implemented protocol v1.
+Next: opaque composition CPU/counter measurement, Feature9 Source UI+QML,
+Feature10 from Nacre's engine, protocol adapter, STOP at GateD.
+Nacre protocol v1 published10e86036; awaiting its CI before pinning.
+Migration confirmed existing helper lane lacks ranked app/action/prefix queries;
+F6 engine extraction is required for full Feature10; owner question pending.
 
-Nested H120/N60 first-warm delta+0.634/+0.405 MiB; third-open−1.294/−0.719.
-111 tests/fmt/all-features clippy/CPU+release builds/deny/Luau pass.
-First-open increase<1 MiB may continue if bar+5 passes and steady/closed memory
-is not regressed. Greater first-open or steady/closed regressions still stop.
+111 tests/fmt/all-features clippy/CPU+release/deny/Luau pass for cache checkpoint.
+First-open<1 MiB may proceed if bar+5 passes and no real steady/closed regression;
+larger first-open or steady/closed regression still stops.
 Backends frozen; no helper edits/catalog duplication. No live/install/release.
 
 ## Accepted Gate C and optimization baseline

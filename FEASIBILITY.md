@@ -1,5 +1,29 @@
 # Feasibility
 
+## 2026-10-15 — cache accepted; five alternating pairs classify first-open noise
+
+The owner accepted the cache checkpoint and bounded diagnosis to about one hour.
+Five samples per variant/compositor plus source audit took about14 minutes.
+No large eager allocation was found; logical cache limits do not reserve memory.
+Both first-open median deltas lie inside spread; no speculative fix was kept.
+
+| Nested PSS+DRM MiB | Hypr120 baseline→candidate | niri60 baseline→candidate |
+| --- | ---: | ---: |
+| First-open median |27.451→27.421|29.855→30.065|
+| First-open larger within-group range |1.259|1.518|
+| Third-open median |27.688→26.506|29.446→28.375|
+| Closed5s median |22.111→22.304|22.723→22.928|
+| Closed larger within-group range |0.993|0.257|
+| All close/lifecycle within own bar+5 |10/10 clients|10/10 clients|
+
+Same compositor, fresh state/cache, AB alternation (reversed N), nice≥10.
+Contended, three cycles/five-second idle; not physical, QML or CPU acceptance.
+Anonymous first-open medians−8 KiB each; executable-backed+148/+156 KiB.
+ELFtext+92336 bytes/rodata+448; registry/LRU maps start empty, no cap-sized reserve.
+Small code/metadata and variable buffer/allocator residency remain known costs.
+Verdict: noise under owner's spread criterion; move to opaque CPU measurement.
+[Full method/ranges and accepted policy](docs/research/cache-budget.md).
+
 ## 2026-10-15 — F5 cache candidate held for a memory decision
 
 Recovered the interrupted cache work and verified it before continuing.
