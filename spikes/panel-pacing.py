@@ -51,11 +51,19 @@ def sample(env, raw, compositor, stop):
                            capture_output=True, text=True, check=True, timeout=5)
         return json.loads(p.stdout)['result']
 
-    def feedback(text, companion=True):
+    def feedback(text, companion=True, history=None):
         pattern = r'UI_PRESENTED generation=1 monotonic_ns=(\d+) refresh_ns=(\d+) companion='+str(companion).lower()+r' update=(\d+)(?:\s|$)'
         for shown in re.finditer(pattern,text):
+            if history is None:
+                prior = text[:shown.start()]
+            else:
+                position = history.find(shown[0])
+                if position < 0: continue
+                # Preparation can commit before open. The first new presentation
+                # must still match that exact earlier validated update.
+                prior = history[:position]
             if os.environ.get('BEAD_PACING_REQUIRE_VALID') != '1' or re.search(
-                r'UI_COMMIT generation=1 .*update='+shown[3]+r' companion='+str(companion).lower()+r' source_error=false(?:\s|$)',text[:shown.start()]):
+                r'UI_COMMIT generation=1 .*update='+shown[3]+r' companion='+str(companion).lower()+r' source_error=false(?:\s|$)',prior):
                 return shown
         return None
 
@@ -116,8 +124,8 @@ def sample(env, raw, compositor, stop):
 
                 offset = len(matrix.log_text(log)); started = time.monotonic_ns()
                 call('open')
-                matrix.wait_log(log, lambda _: feedback(segment()))
-                ready = feedback(segment())
+                matrix.wait_log(log, lambda _: feedback(segment(), history=matrix.log_text(log)))
+                ready = feedback(segment(), history=matrix.log_text(log))
                 time.sleep(.4)
                 opening = stamps()
                 if not aging: assert len(opening) >= 3, 'missing opening presentation feedback'
@@ -139,7 +147,7 @@ def sample(env, raw, compositor, stop):
                 closing = stamps()
                 if not aging: assert len(closing) >= 3, 'missing closing presentation feedback'
                 matrix.wait_log(log, lambda _: not call('state')['resident'], timeout=8)
-                row = {'opening_feedback_count':len(opening),'closing_feedback_count':len(closing),'slider_bright_pixels':bright, 'elapsed_seconds':time.monotonic()-soak_started, 'closed_memory':matrix.measure.memory(client.pid), 'cycle':i, 'ready_ms':(int(ready[1])-started)/1e6,
+                row = {'command_started_ns':started,'ready_present_ns':int(ready[1]),'ready_update':int(ready[3]),'opening_feedback_count':len(opening),'closing_feedback_count':len(closing),'slider_bright_pixels':bright, 'elapsed_seconds':time.monotonic()-soak_started, 'closed_memory':matrix.measure.memory(client.pid), 'cycle':i, 'ready_ms':(int(ready[1])-started)/1e6,
                        'refresh_ns':int(ready[2]), 'opening_ms':intervals(opening),
                        'closing_ms':intervals(closing), 'warm':warm}
                 result['cycles'].append(row)
