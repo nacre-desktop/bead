@@ -8,14 +8,16 @@ ranking or providers. Existing compositor backends are frozen except bug fixes.
 The migration agent owns nacre-daemon / nacre-protocol and Nacre F0–F4.
 [Checkpoint evidence and limits](research/feature9-gate-d.md).
 
-81 workspace tests, fmt, clippy (-D warnings) and22-module Luau analysis pass.
-Private Hyprland120 / nested niri60 proofs pass protocol, actual action clicks,
-hover replacement, DND/history restart, passive OSD and owned-bus crash cleanup.
-Empty/warm/closed PSS MiB: Hypr16.01/26.16/22.26; niri16.58/26.92/23.23.
-No DRM;2-second idle samples are smoke only. No QML comparison or GateD verdict.
-The child signal-mask fix prevents a private bus surviving the UI's SIGKILL.
-F0: ADR0003 and Foundation F5 roadmap recorded; next F5a host-agnostic service API.
-Checkpoint32f741d CI pending; no foundation code accepted yet.
+F0 ADR0003 main311a2f0 CI38764800206 green; pause32f741d CI38764519973 green.
+F5a: injected notification connection/history API, serde snapshot, latest-wins
+subscribe, bounded processed calls and async stop on the host's Tokio runtime.
+Private-bus wrapper preserves shell use; CI enforces headless dependency graph.
+83 tests, fmt, clippy pass; API parity has no UI/compositor. Nested H120/N60
+notification interaction/restart/passive OSD/owned-bus cleanup pass.
+Bar/first-warm/closed5s PSS+DRM MiB: H20.49/26.70/21.84,N22.32/28.34/22.62.
+Three closes each and final lifecycle satisfy bar+5; no DRM. Other nested tests
+were active: short regression smoke, not new CPU/pacing or GateC acceptance.
+Next F5b: deterministic bead-test; then crash safety, Sources and background effect.
 No installation, live-session action or release is authorized.
 
 ## Accepted Gate C and optimization baseline

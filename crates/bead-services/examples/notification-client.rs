@@ -52,12 +52,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let address = std::env::args()
         .nth(1)
         .ok_or("explicit private bus address required")?;
-    let connection = zbus::connection::Builder::address(address.as_str())?
-        .build()
-        .await?;
     if std::env::args().nth(2).as_deref() == Some("interactive") {
+        let connection = zbus::connection::Builder::address(address.as_str())?
+            .build()
+            .await?;
         return interactive(&connection).await;
     }
+    parity(&address).await
+}
+pub async fn parity(address: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let connection = zbus::connection::Builder::address(address)?.build().await?;
     let proxy = Proxy::new(
         &connection,
         "org.freedesktop.Notifications",
@@ -121,9 +125,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .call::<_, _, ()>("SetDoNotDisturb", &(false,))
         .await?;
     let cookie: u32 = policy.call("Inhibit", &("screen sharing",)).await?;
-    let other = zbus::connection::Builder::address(address.as_str())?
-        .build()
-        .await?;
+    let other = zbus::connection::Builder::address(address)?.build().await?;
     let foreign = Proxy::new(
         &other,
         "org.freedesktop.Notifications",

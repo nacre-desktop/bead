@@ -1326,3 +1326,29 @@ No new typing, catalog, ranking or provider work was started after the redirect.
 Idle only2seconds; QML comparison and GateD acceptance remain pending.
 Checkpoint ~540 added lines plus docs; prior typing evidence remains unchanged.
 Next: F0 ADR and F5a–F5e; STOP before resuming Features9–10.
+
+## Foundation F5a — hostable services (2026-10-15)
+
+Notification ownership is now supplied by its host, independent of a UI process.
+The core uses the host's current-thread Tokio runtime and injected bus/history.
+Existing private shell operation remains a wrapper; no live bus was touched.
+The same protocol suite passes headless and through both nested shells.
+
+| Regression smoke, CPU retained | Hypr120 | niri60 |
+| --- | ---: | ---: |
+| Bar / first warm / closed5s PSS+DRM MiB |20.49/26.70/21.84|22.32/28.34/22.62|
+| Final lifecycle delta from bar MiB |+2.11|+.30|
+| Three closes + lifecycle within bar+5 |pass|pass|
+| Notification protocol / real action / hover / restart / bus cleanup |pass|pass|
+
+No DRM allocation. Short5s samples, concurrent nested tests elsewhere; no new
+CPU/pacing acceptance or matched QML claim. Accepted GateC baseline unchanged.
+83 tests/fmt/clippy pass. New API fixture covers competing/same-connection
+starts, errors, history/DND restore, slow subscriber, stop/drop and reuse.
+64-call queue,3s deadline, latest-one watch snapshot; no unbounded update queue.
+CI cargo-tree default/all-features guard excludes store/UI/render/Wayland deps.
+Desktop composite adds config/call/stop while default bar behavior is unchanged.
+Individual audio/tray task hosting remains transitional for later daemon adoption.
+One initial full run hit the existing stale-socket fixture; focused and full
+reruns passed without changing its proof. Evidence .research/foundation/f5a-*.
+~470 added lines + fixtures/docs, ~30min including builds and nested checks.

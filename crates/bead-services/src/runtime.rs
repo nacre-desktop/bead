@@ -80,6 +80,20 @@ impl Drop for Subscription {
         }
     }
 }
+/// Transitional composite service configuration; hosts can disable outside lanes.
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub audio: bool,
+    pub bus: bool,
+}
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            audio: true,
+            bus: true,
+        }
+    }
+}
 pub struct Desktop {
     shared: Arc<Shared>,
     sender: mpsc::Sender<Command>,
@@ -87,6 +101,9 @@ pub struct Desktop {
 }
 impl Desktop {
     pub fn start() -> Arc<Self> {
+        Self::start_config(Config::default())
+    }
+    pub fn start_config(config: Config) -> Arc<Self> {
         let shared = Arc::new(Shared {
             snapshot: Mutex::new(Arc::new(Snapshot::default())),
             callbacks: Mutex::new(BTreeMap::new()),
@@ -97,12 +114,19 @@ impl Desktop {
         });
         let (sender, receiver) = mpsc::channel(64);
         let bus_shared = shared.clone();
-        let bus = std::thread::spawn(move || super::bus::run(bus_shared, receiver));
-        let audio = super::audio::spawn(shared.clone());
+        let mut workers = Vec::new();
+        if config.bus {
+            workers.push(std::thread::spawn(move || {
+                super::bus::run(bus_shared, receiver)
+            }));
+        }
+        if config.audio {
+            workers.push(super::audio::spawn(shared.clone()));
+        }
         Arc::new(Self {
             shared,
             sender,
-            workers: Mutex::new(vec![bus, audio]),
+            workers: Mutex::new(workers),
         })
     }
     pub fn snapshot(&self) -> Arc<Snapshot> {
@@ -129,6 +153,9 @@ impl Desktop {
             shared: Arc::downgrade(&self.shared),
             id,
         }
+    }
+    pub fn call(&self, action: Action) -> Result<(), String> {
+        self.action(action)
     }
     pub fn action(&self, action: Action) -> Result<(), String> {
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -178,9 +205,7 @@ impl Desktop {
             .unwrap_or_else(crate::runtime::poisoned)
             .len()
     }
-}
-impl Drop for Desktop {
-    fn drop(&mut self) {
+    pub fn stop(&self) {
         self.shared.stop.store(true, Ordering::SeqCst);
         let _ = self.sender.try_send(Command::Stop);
         if let Some(sender) = self
@@ -201,6 +226,12 @@ impl Drop for Desktop {
         {
             let _ = worker.join();
         }
+    }
+}
+
+impl Drop for Desktop {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 

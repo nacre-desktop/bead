@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! A server on a bus we create and own. Never connects to the desktop session bus.
+//! Hostable notification service. The host injects its connection and history path.
+//! `Server` is the compatibility wrapper that creates a private bus and runtime.
 use crate::notifications::{Center, Notice};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
@@ -14,7 +15,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, mpsc, oneshot, watch};
 const PATH: &str = "/org/freedesktop/Notifications";
 const INTERFACE: &str = "org.freedesktop.Notifications";
 struct Bus(Child);
@@ -151,7 +152,7 @@ impl Interface {
         action_key: &str,
     ) -> zbus::Result<()>;
 }
-struct Policy(Arc<Shared>, mpsc::UnboundedSender<Control>);
+struct Policy(Arc<Shared>, mpsc::Sender<Request>);
 #[zbus::interface(name = "org.nacre.Bead.Notifications")]
 impl Policy {
     fn set_do_not_disturb(&self, value: bool) -> zbus::fdo::Result<()> {
@@ -195,17 +196,17 @@ impl Policy {
     fn invoke_action(&self, id: u32, key: String) -> zbus::fdo::Result<()> {
         self.0.with(|c| c.action(id, &key).map(|_| ()))?;
         self.1
-            .send(Control::Action(id, key))
+            .try_send(Request::new(Control::Action(id, key)))
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
     fn dismiss(&self, id: u32) -> zbus::fdo::Result<()> {
         self.1
-            .send(Control::Dismiss(id))
+            .try_send(Request::new(Control::Dismiss(id)))
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
     fn clear_history(&self) -> zbus::fdo::Result<()> {
         self.1
-            .send(Control::ClearHistory)
+            .try_send(Request::new(Control::ClearHistory))
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
     fn show_osd(&self, channel: String, value: f64, muted: bool) -> zbus::fdo::Result<()> {
@@ -218,11 +219,11 @@ impl Policy {
             ));
         }
         self.1
-            .send(Control::Osd {
+            .try_send(Request::new(Control::Osd {
                 channel,
                 value,
                 muted,
-            })
+            }))
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
     #[zbus(property)]
@@ -257,20 +258,119 @@ fn time_label(time: u64) -> String {
         format!("{}d", seconds / 86400)
     }
 }
-pub struct Server {
-    sender: mpsc::UnboundedSender<Control>,
-    thread: Option<std::thread::JoinHandle<()>>,
+/// No connection discovery, bus spawning, runtime or thread creation occurs here.
+/// Call from the host's existing Tokio runtime (including current-thread).
+pub struct Config {
+    pub connection: zbus::Connection,
+    pub history: PathBuf,
+}
+struct Request {
+    action: Control,
+    reply: Option<oneshot::Sender<Result<(), String>>>,
+}
+impl Request {
+    fn new(action: Control) -> Self {
+        Self {
+            action,
+            reply: None,
+        }
+    }
+}
+/// Latest-wins subscriptions retain one bounded snapshot, never a queue of updates.
+pub struct Handle {
+    sender: mpsc::Sender<Request>,
+    snapshots: watch::Receiver<Value>,
+    task: Option<tokio::task::JoinHandle<Result<(), String>>>,
+    stop: Arc<Notify>,
+}
+impl Handle {
+    pub fn snapshot(&self) -> Value {
+        self.snapshots.borrow().clone()
+    }
+    pub fn subscribe(&self) -> watch::Receiver<Value> {
+        self.snapshots.clone()
+    }
+    /// A successful result means the action was processed, not merely enqueued.
+    pub async fn call(&self, action: Control) -> Result<(), String> {
+        let (reply, receive) = oneshot::channel();
+        self.sender
+            .try_send(Request {
+                action,
+                reply: Some(reply),
+            })
+            .map_err(|_| "notification service busy or stopped")?;
+        tokio::time::timeout(Duration::from_secs(3), receive)
+            .await
+            .map_err(|_| "notification call timed out")?
+            .map_err(|_| "notification service stopped")?
+    }
+    pub async fn stop(mut self) -> Result<(), String> {
+        self.stop.notify_one();
+        if let Some(task) = self.task.take() {
+            task.await.map_err(|e| e.to_string())??;
+        }
+        Ok(())
+    }
+}
+impl Drop for Handle {
+    fn drop(&mut self) {
+        // Nonblocking drop also works when a host cancels the owning service task.
+        self.stop.notify_one();
+    }
+}
+pub async fn start(config: Config) -> Result<Handle, String> {
+    let (sender, receiver) = mpsc::channel(64);
+    let (publish, snapshots) = watch::channel(Value::Null);
+    let (ready, answer) = oneshot::channel();
+    let tx = sender.clone();
+    let stop = Arc::new(Notify::new());
+    let stopped = stop.clone();
+    let task = tokio::spawn(async move {
+        serve(
+            config.connection,
+            &config.history,
+            move |value| {
+                publish.send_replace(value);
+            },
+            tx,
+            receiver,
+            ready,
+            stopped,
+        )
+        .await
+    });
+    let mut handle = Handle {
+        sender,
+        snapshots,
+        task: Some(task),
+        stop,
+    };
+    match answer.await {
+        Ok(Ok(())) => Ok(handle),
+        result => {
+            handle.stop.notify_one();
+            let task = handle
+                .task
+                .take()
+                .ok_or("notification startup task missing")?;
+            match task.await {
+                Ok(Err(error)) => Err(error),
+                Err(error) => Err(error.to_string()),
+                _ => Err(format!("notification startup: {result:?}")),
+            }
+        }
+    }
+}
+
+/// Explicit private bus used by fixtures and the transitional in-process shell.
+/// Never discovers or connects to the user's session bus.
+pub struct PrivateBus {
+    bus: Bus,
+    socket: PathBuf,
     pub address: String,
 }
-impl Server {
-    pub fn control(&self, command: Control) -> Result<(), String> {
-        self.sender.send(command).map_err(|e| e.to_string())
-    }
-    pub fn start(
-        socket: PathBuf,
-        history: PathBuf,
-        callback: impl Fn(Value) + Send + Sync + 'static,
-    ) -> Result<Self, String> {
+impl PrivateBus {
+    pub fn start(socket: PathBuf) -> Result<Self, String> {
         let parent = socket.parent().ok_or("bus socket needs parent")?;
         let meta = std::fs::symlink_metadata(parent).map_err(|e| e.to_string())?;
         if !meta.is_dir()
@@ -303,8 +403,102 @@ impl Server {
         if socket.as_os_str().as_encoded_bytes().len() > 90 {
             return Err("private bus socket path too long".into());
         }
-        let (sender, receiver) = mpsc::unbounded_channel();
-        let tx = sender.clone();
+
+        let parent_pid = std::process::id() as libc::pid_t;
+        // The owned bus must also die if this process/thread is killed.
+        let mut bus = Bus(unsafe {
+            crate::process::command("dbus-daemon")
+                .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
+                .arg(format!("--address=unix:path={}", socket.display()))
+                .pre_exec(move || {
+                    if libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGTERM as libc::c_ulong,
+                        0 as libc::c_ulong,
+                        0 as libc::c_ulong,
+                        0 as libc::c_ulong,
+                    ) != 0
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    if libc::getppid() != parent_pid {
+                        libc::_exit(127);
+                    }
+                    Ok(())
+                })
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| e.to_string())?
+        });
+        let stdout = bus.0.stdout.take().ok_or("private bus stdout missing")?;
+        let fd = stdout.as_raw_fd();
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+        let mut reader = BufReader::new(stdout);
+        let mut address = String::new();
+        let started = Instant::now();
+        while !address.ends_with('\n') {
+            if started.elapsed() > Duration::from_secs(4) || address.len() > 1024 {
+                return Err("private bus address deadline/size limit".into());
+            }
+            match reader.read_line(&mut address) {
+                Ok(0) => return Err("private bus exited before its address".into()),
+                Ok(_) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    let mut poll = libc::pollfd {
+                        fd,
+                        events: libc::POLLIN,
+                        revents: 0,
+                    };
+                    unsafe {
+                        libc::poll(&mut poll, 1, 50);
+                    }
+                }
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        let address = address.trim().to_owned();
+        Ok(PrivateBus {
+            bus,
+            socket: socket.to_owned(),
+            address,
+        })
+    }
+    pub async fn connect(&self) -> Result<zbus::Connection, String> {
+        zbus::connection::Builder::address(self.address.as_str())
+            .map_err(|e| e.to_string())?
+            .build()
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+impl Drop for PrivateBus {
+    fn drop(&mut self) {
+        let _ = self.bus.0.kill();
+        let _ = self.bus.0.wait();
+        let _ = std::fs::remove_file(&self.socket);
+    }
+}
+pub struct Server {
+    sender: mpsc::Sender<Request>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    stop: Arc<Notify>,
+    pub address: String,
+}
+impl Server {
+    pub fn control(&self, command: Control) -> Result<(), String> {
+        self.sender
+            .try_send(Request::new(command))
+            .map_err(|e| e.to_string())
+    }
+    pub fn start(
+        socket: PathBuf,
+        history: PathBuf,
+        callback: impl Fn(Value) + Send + Sync + 'static,
+    ) -> Result<Self, String> {
         let (ready, answer) = std::sync::mpsc::sync_channel(1);
         let thread = std::thread::Builder::new()
             .name("bead-notifications".into())
@@ -312,32 +506,45 @@ impl Server {
                 let result = (|| -> Result<(), String> {
                     let runtime = tokio::runtime::Builder::new_current_thread()
                         .enable_all()
+                        .max_blocking_threads(2)
                         .build()
                         .map_err(|e| e.to_string())?;
-                    runtime.block_on(serve(
-                        &socket,
-                        &history,
-                        callback,
-                        tx,
-                        receiver,
-                        ready.clone(),
-                    ))
+                    let bus = PrivateBus::start(socket)?;
+                    runtime.block_on(async {
+                        let service = start(Config {
+                            connection: bus.connect().await?,
+                            history,
+                        })
+                        .await?;
+                        let mut updates = service.subscribe();
+                        callback(service.snapshot());
+                        ready
+                            .send(Ok((
+                                bus.address.clone(),
+                                service.sender.clone(),
+                                service.stop.clone(),
+                            )))
+                            .map_err(|_| "notification host cancelled startup")?;
+                        while updates.changed().await.is_ok() {
+                            callback(updates.borrow_and_update().clone());
+                        }
+                        service.stop().await
+                    })
                 })();
                 if let Err(error) = result {
                     let _ = ready.send(Err(error.clone()));
                     eprintln!("NOTIFICATION_ERROR {error}");
                 }
-                let _ = std::fs::remove_file(socket);
             })
             .map_err(|e| e.to_string())?;
         match answer.recv_timeout(Duration::from_secs(5)) {
-            Ok(Ok(address)) => Ok(Self {
+            Ok(Ok((address, sender, stop))) => Ok(Self {
                 sender,
                 thread: Some(thread),
+                stop,
                 address,
             }),
             result => {
-                let _ = sender.send(Control::Stop);
                 let _ = thread.join();
                 Err(format!("notification bus startup: {result:?}"))
             }
@@ -346,77 +553,22 @@ impl Server {
 }
 impl Drop for Server {
     fn drop(&mut self) {
-        let _ = self.sender.send(Control::Stop);
+        // Ensure stop is delivered even if the bounded command queue is full.
+        self.stop.notify_one();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
     }
 }
 async fn serve(
-    socket: &Path,
+    connection: zbus::Connection,
     history: &Path,
     callback: impl Fn(Value) + Send + Sync + 'static,
-    sender: mpsc::UnboundedSender<Control>,
-    mut receiver: mpsc::UnboundedReceiver<Control>,
-    ready: std::sync::mpsc::SyncSender<Result<String, String>>,
+    sender: mpsc::Sender<Request>,
+    mut receiver: mpsc::Receiver<Request>,
+    ready: oneshot::Sender<Result<(), String>>,
+    stop: Arc<Notify>,
 ) -> Result<(), String> {
-    let parent_pid = std::process::id() as libc::pid_t;
-    // The owned bus must also die if this process/thread is killed.
-    let mut bus = Bus(unsafe {
-        crate::process::command("dbus-daemon")
-            .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
-            .arg(format!("--address=unix:path={}", socket.display()))
-            .pre_exec(move || {
-                if libc::prctl(
-                    libc::PR_SET_PDEATHSIG,
-                    libc::SIGTERM as libc::c_ulong,
-                    0 as libc::c_ulong,
-                    0 as libc::c_ulong,
-                    0 as libc::c_ulong,
-                ) != 0
-                {
-                    return Err(std::io::Error::last_os_error());
-                }
-                if libc::getppid() != parent_pid {
-                    libc::_exit(127);
-                }
-                Ok(())
-            })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| e.to_string())?
-    });
-    let stdout = bus.0.stdout.take().ok_or("private bus stdout missing")?;
-    let fd = stdout.as_raw_fd();
-    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-        return Err(std::io::Error::last_os_error().to_string());
-    }
-    let mut reader = BufReader::new(stdout);
-    let mut address = String::new();
-    let started = Instant::now();
-    while !address.ends_with('\n') {
-        if started.elapsed() > Duration::from_secs(4) || address.len() > 1024 {
-            return Err("private bus address deadline/size limit".into());
-        }
-        match reader.read_line(&mut address) {
-            Ok(0) => return Err("private bus exited before its address".into()),
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                let mut poll = libc::pollfd {
-                    fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                };
-                unsafe {
-                    libc::poll(&mut poll, 1, 50);
-                }
-            }
-            Err(e) => return Err(e.to_string()),
-        }
-    }
-    let address = address.trim().to_owned();
     let mut center = Center::default();
     let mut history_writable = true;
     let mut history_error = String::new();
@@ -438,17 +590,20 @@ async fn serve(
         center: Mutex::new(center),
         changed: Notify::new(),
     });
-    let connection = zbus::connection::Builder::address(address.as_str())
-        .map_err(|e| e.to_string())?
-        .serve_at(PATH, Interface(shared.clone()))
-        .map_err(|e| e.to_string())?
-        .serve_at(PATH, Policy(shared.clone(), sender))
-        .map_err(|e| e.to_string())?
-        .name(INTERFACE)
-        .map_err(|e| e.to_string())?
-        .build()
-        .await
-        .map_err(|e| e.to_string())?;
+    let (mut installed, mut policy_installed, mut owned) = (false, false, false);
+    let result = async {
+    if !connection.object_server().at(PATH, Interface(shared.clone())).await.map_err(|e| e.to_string())? {
+        return Err("notification interface already installed".into());
+    }
+    installed = true;
+    if !connection.object_server().at(PATH, Policy(shared.clone(), sender)).await.map_err(|e| e.to_string())? {
+        return Err("notification policy already installed".into());
+    }
+    policy_installed = true;
+    // Never replace an existing server, even if that server permits replacement.
+    let ownership = connection.request_name_with_flags(INTERFACE, zbus::fdo::RequestNameFlags::DoNotQueue.into()).await.map_err(|e| e.to_string())?;
+    if ownership != zbus::fdo::RequestNameReply::PrimaryOwner { return Err("notification name already owned".into()); }
+    owned = true;
     let dbus = zbus::fdo::DBusProxy::new(&connection)
         .await
         .map_err(|e| e.to_string())?;
@@ -460,7 +615,7 @@ async fn serve(
     let mut osd_deadline = None;
     let mut persisted = String::new();
     let mut last_inhibited = None;
-    let _ = ready.send(Ok(address));
+    let mut ready = Some(ready);
     loop {
         let (snapshot, deadline, history_json) = {
             let c = shared
@@ -511,6 +666,7 @@ async fn serve(
             last_inhibited = Some(inhibited);
         }
         callback(snapshot);
+        if let Some(ready) = ready.take() { let _ = ready.send(Ok(())); }
         let encoded = history_json.to_string();
         if history_writable && encoded != persisted {
             if let Err(e) = crate::files::write_json(history, &history_json, 4 * 1024 * 1024) {
@@ -533,6 +689,7 @@ async fn serve(
             }
         };
         tokio::select! {
+            _=stop.notified()=>break,
             _=shared.changed.notified()=>{},
             _=sleep=>{
                 let expired=shared.with(|c|Ok(c.expire(Instant::now()))).map_err(|e|e.to_string())?;
@@ -540,24 +697,129 @@ async fn serve(
                 if osd_deadline.is_some_and(|d|d<=Instant::now()){osd=Value::Null;osd_deadline=None;}
             },
             Some(change)=owners.next()=>{if let Ok(args)=change.args() && args.new_owner().as_ref().is_none(){let _=shared.with(|c|{c.owner_left(args.name().as_str());Ok(())});}},
-            command=receiver.recv()=>match command {
-                None|Some(Control::Stop)=>break,
-                Some(Control::Action(id,key))=>{
-                    let close=match shared.with(|c|c.action(id,&key)){Ok(close)=>close,Err(e)=>{eprintln!("NOTIFICATION_ACTION_ERROR {e}");continue;}};
-                    signal(&connection,"ActionInvoked",&(id,key)).await.map_err(|e|e.to_string())?;
-                    if close {shared.with(|c|c.close(id).map(|_|())).map_err(|e|e.to_string())?;signal(&connection,"NotificationClosed",&(id,2u32)).await.map_err(|e|e.to_string())?;}
-                },
-                Some(Control::Dismiss(id))=>{if shared.with(|c|c.close(id)).is_ok(){signal(&connection,"NotificationClosed",&(id,2u32)).await.map_err(|e|e.to_string())?;}},
-                Some(Control::Hover(id,value))=>{let _=shared.with(|c|c.hover(id,value,Instant::now()));},
-                Some(Control::Dnd(value))=>{let _=shared.with(|c|{c.set_dnd(value);Ok(())});},
-                Some(Control::HidePopups)=>{let _=shared.with(|c|{c.hide_popups();Ok(())});},
-                Some(Control::Details(id))=>{let _=shared.with(|c|{if let Some(n)=c.active.get_mut(&id){n.expanded = !n.expanded;}Ok(())});},
-                Some(Control::ClearHistory)=>{
-                    let ids=shared.with(|c|{let ids:Vec<_>=c.active.values().filter(|n|!n.transient).map(|n|n.id).collect();for id in &ids{c.active.remove(id);}c.history.clear();c.exiting.clear();Ok(ids)}).map_err(|e|e.to_string())?;
-                    for id in ids{signal(&connection,"NotificationClosed",&(id,2u32)).await.map_err(|e|e.to_string())?;}
-                },
-                Some(Control::Osd{channel,value,muted})=>{osd=json!({"channel":channel,"value":value,"muted":muted});osd_deadline=Some(Instant::now()+Duration::from_secs(2));}
+            request=receiver.recv()=> {
+                let Some(request) = request else { break; };
+                let stop = matches!(request.action, Control::Stop);
+                let result = apply(&shared, &connection, request.action, &mut osd, &mut osd_deadline).await;
+                if let Some(reply) = request.reply { let _ = reply.send(result); }
+                if stop { break; }
             }
+
+        }
+    }
+    Ok(())
+    }.await;
+    if installed {
+        let _ = connection
+            .object_server()
+            .remove::<Interface, _>(PATH)
+            .await;
+    }
+    if policy_installed {
+        let _ = connection.object_server().remove::<Policy, _>(PATH).await;
+    }
+    if owned {
+        let _ = connection.release_name(INTERFACE).await;
+    }
+    result
+}
+async fn apply(
+    shared: &Shared,
+    connection: &zbus::Connection,
+    action: Control,
+    osd: &mut Value,
+    osd_deadline: &mut Option<Instant>,
+) -> Result<(), String> {
+    match action {
+        Control::Stop => {}
+        Control::Action(id, key) => {
+            let close = shared
+                .with(|c| c.action(id, &key))
+                .map_err(|e| e.to_string())?;
+            signal(connection, "ActionInvoked", &(id, key))
+                .await
+                .map_err(|e| e.to_string())?;
+            if close {
+                shared
+                    .with(|c| c.close(id).map(|_| ()))
+                    .map_err(|e| e.to_string())?;
+                signal(connection, "NotificationClosed", &(id, 2u32))
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        Control::Dismiss(id) => {
+            shared.with(|c| c.close(id)).map_err(|e| e.to_string())?;
+            signal(connection, "NotificationClosed", &(id, 2u32))
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        Control::Hover(id, value) => {
+            shared
+                .with(|c| c.hover(id, value, Instant::now()))
+                .map_err(|e| e.to_string())?;
+        }
+        Control::Dnd(value) => {
+            shared
+                .with(|c| {
+                    c.set_dnd(value);
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+        }
+        Control::HidePopups => {
+            shared
+                .with(|c| {
+                    c.hide_popups();
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+        }
+        Control::Details(id) => {
+            shared
+                .with(|c| {
+                    let n = c.active.get_mut(&id).ok_or("unknown notification")?;
+                    n.expanded = !n.expanded;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+        }
+        Control::ClearHistory => {
+            let ids = shared
+                .with(|c| {
+                    let ids: Vec<_> = c
+                        .active
+                        .values()
+                        .filter(|n| !n.transient)
+                        .map(|n| n.id)
+                        .collect();
+                    for id in &ids {
+                        c.active.remove(id);
+                    }
+                    c.history.clear();
+                    c.exiting.clear();
+                    Ok(ids)
+                })
+                .map_err(|e| e.to_string())?;
+            for id in ids {
+                signal(connection, "NotificationClosed", &(id, 2u32))
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        Control::Osd {
+            channel,
+            value,
+            muted,
+        } => {
+            if !["volume", "brightness", "microphone", "capslock"].contains(&channel.as_str())
+                || !value.is_finite()
+                || !(0. ..=1.).contains(&value)
+            {
+                return Err("invalid OSD channel/level".into());
+            }
+            *osd = json!({"channel":channel,"value":value,"muted":muted});
+            *osd_deadline = Some(Instant::now() + Duration::from_secs(2));
         }
     }
     Ok(())

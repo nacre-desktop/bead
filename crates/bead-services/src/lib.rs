@@ -73,7 +73,7 @@ pub mod files;
 pub mod ipc;
 pub mod process;
 mod runtime;
-pub use runtime::{Action, Desktop, Subscription};
+pub use runtime::{Action, Config, Desktop, Subscription};
 
 #[cfg(test)]
 mod tests;
