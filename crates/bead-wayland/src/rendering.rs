@@ -301,7 +301,7 @@ impl App {
             // An accepted generation can be pixel-identical (including edits to
             // filtered rows). Request actual compositor feedback for that new
             // transaction too; a callback-only commit has no presentation event.
-            if regions.is_empty() && s.presented_generation != Some(self.ui_serial) {
+            if regions.is_empty() && s.presented_generation != Some(s.ui_serial) {
                 regions.push(Damage {
                     x: 0,
                     y: 0,
@@ -420,7 +420,7 @@ impl App {
                         s.layer.wl_surface(),
                         qh,
                         PresentationData {
-                            update: self.ui_serial,
+                            update: s.ui_serial,
                             surface: s.layer.wl_surface().clone(),
                             generation: scene.resource_revision,
                         },
@@ -538,7 +538,7 @@ impl App {
                             s.layer.wl_surface(),
                             qh,
                             PresentationData {
-                                update: self.ui_serial,
+                                update: s.ui_serial,
                                 surface: s.layer.wl_surface().clone(),
                                 generation: scene.resource_revision,
                             },
@@ -649,7 +649,7 @@ impl App {
                     s.layer.wl_surface(),
                     qh,
                     PresentationData {
-                        update: self.ui_serial,
+                        update: s.ui_serial,
                         surface: s.layer.wl_surface().clone(),
                         generation: scene.resource_revision,
                     },

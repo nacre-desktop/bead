@@ -21,7 +21,7 @@ struct Samples { std::vector<double> intervals; uint64_t first=0,last=0; uint32_
 static std::map<wl_surface*, Samples> samples;
 static std::atomic<unsigned> generation=0;
 static std::map<wl_surface*,unsigned> last_generation;
-struct Feedback {wl_surface *surface;unsigned generation;};
+struct Feedback {wl_surface *surface;unsigned generation;bool panel;};
 class TimingProbe:public QObject {
     Q_OBJECT
 public:
@@ -40,6 +40,8 @@ static void presented(void *data, struct wp_presentation_feedback *feedback,uint
     auto *tag=static_cast<Feedback*>(data);
     auto &s=samples[tag->surface];
     uint64_t time=((uint64_t(hi)<<32)|lo)*1000000000+ns;
+    if(std::getenv("BEAD_QML_TRACE_PRESENT"))
+        std::fprintf(stderr,"QML_FRAME generation=%u monotonic_ns=%llu panel=%s\n",tag->generation,static_cast<unsigned long long>(time),tag->panel?"true":"false");
     if(!s.first) s.first=time;
     if(s.last && time>s.last && time>s.first+2000000000) s.intervals.push_back(double(time-s.last)/1000000);
     if(!s.last) std::fprintf(stderr,"QML_READY presentation=true\n");
@@ -90,7 +92,7 @@ static void attach(QQuickWindow *quick) {
         auto *surface=static_cast<wl_surface*>(native->nativeResourceForWindow("surface",quick));
         if(!surface) return;
         auto *feedback=wp_presentation_feedback(presentation,surface);
-        wp_presentation_feedback_add_listener(feedback,&feedback_listener,new Feedback {surface,generation.load()});
+        wp_presentation_feedback_add_listener(feedback,&feedback_listener,new Feedback {surface,generation.load(),quick->height()>100});
     },Qt::DirectConnection);
 }
 class ProbeFilter:public QObject {
@@ -107,7 +109,7 @@ static void start_probe() {
     QTimer::singleShot(0,app,[] {
         for(auto *window:QGuiApplication::allWindows()) attach(qobject_cast<QQuickWindow*>(window));
         auto *reporter=new QTimer(QCoreApplication::instance());
-        QObject::connect(reporter,&QTimer::timeout,QCoreApplication::instance(),report);reporter->start(1000);
+        QObject::connect(reporter,&QTimer::timeout,QCoreApplication::instance(),report);if(!std::getenv("BEAD_QML_QUIET_IDLE")) reporter->start(1000);
         std::atexit(report);
     });
 }

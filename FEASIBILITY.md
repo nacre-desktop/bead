@@ -899,3 +899,31 @@ and post-output/rapid cleanup to the strict memory check. Those plus matched
 QML subset timings are pending. Earlier100.32ms niri p99 and failed+5.13MiB
 sample remain evidence, not superseded by a favorable run. Sources/evidence:
 .research/feature8/rapid-hypr*, reversal-checks.log and final-*-seat.
+
+## Gate C visible content and idle worker ownership (2026-10-15)
+
+Screenshot review caught a blank body despite valid input/feedback. Width was
+a false lead: both variants emitted identical draw commands. Full repaint
+passed; panel preparation/no-change events unnecessarily drew the old scene.
+Draw only changed/geometry/visibility frames; bar updates stay on bar surfaces;
+accepted update IDs are per view. Damage remains enabled. Every reopen now
+requires actual bright track pixels; marker-only success is insufficient.
+
+| Check | Result |
+|---|---|
+| Ten pixel checks, niri / Hypr |pass; real controls/rapid/keyboard close pass|
+| Latest Hypr post-output/rapid closed delta |+4.38 MiB; <=5 pass|
+| Earlier expanded lifecycle |+5.03 MiB: FAIL retained|
+| Idle bar baker |drop font/glyph scratch and offscreen entries; retain visible rasters|
+| Trim regression test |pixels identical; changed asset lazily rebuilds correctly|
+| Local validation |70 tests, fmt/clippy/CPU-only pass|
+| QML subset smoke |20 real 200ms slide/fade phases; clock_id=1 verified|
+| Source c72fbde CI |38710897960 passed|
+
+Temporary client SHM/static scene dumps removed. Explicit header text widths
+fix close overflow (x348 vs x380); earlier row widths alone did not. Current
+QML probe avoids idle reporting timers, then tags each animation phase with
+actual compositor presentation feedback. No full microphone/device-list claim.
+Final 60s paired runs pending; earlier blank-body experiments are not final
+pacing/visual evidence. Evidence visual-*, scope-trim-hypr, trim-final-checks,
+qml-hypr-smoke. GL floor/CPU tradeoff, typing and inherited 6b concerns remain.

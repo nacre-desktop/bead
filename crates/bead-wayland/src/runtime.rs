@@ -32,6 +32,8 @@ pub(super) struct App {
     pub(super) reload_pending: bool,
     pub(super) ui_initialized: bool,
     pub(super) ui_serial: u64,
+    pub(super) primary_ui_serial: u64,
+    pub(super) panel_ui_serial: u64,
     pub(super) qh: QueueHandle<App>,
     pub(super) loop_handle: LoopHandle<'static, App>,
     pub(super) release_timer: bool,
@@ -126,6 +128,8 @@ pub fn run_runtime(
         reload_pending: false,
         ui_initialized: false,
         ui_serial: 0,
+        primary_ui_serial: 0,
+        panel_ui_serial: 0,
         qh: qh.clone(),
         loop_handle: loop_.handle(),
         release_timer: false,
@@ -509,6 +513,11 @@ impl App {
                 presentation_kind: 0,
                 discarded: 0,
                 presented_generation: None,
+                ui_serial: if companion {
+                    self.panel_ui_serial
+                } else {
+                    self.primary_ui_serial
+                },
             })
         })();
         match result {

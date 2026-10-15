@@ -1,47 +1,42 @@
 # Status
 
-## 2026-10-15 — Gate C final measurements in progress
+## 2026-10-15 — Gate C final measurements
 
-Features 7–8 only; stop at Gate C. No optimization pass or Feature 9.
-Feature 7 4d74cba CI 38693436696 passed. Framework/panel 7117954 CI
-38704774853 and recovery 60a537c CI 38705774910 passed.
+Features 7–8 only. Stop at Gate C; no optimization pass or Feature 9.
+Latest published source c72fbde; CI 38710897960 passed. Isolated task
+worktree: ~/.local/share/nacre/ai/worktrees/bead-feature7-gate-c.
 
-Real sound-output panel: shared native audio service, per-view worker,
-CPU renderer; explicit native GL stays available. Slider click/drag/keys,
-mute, Escape/outside/button dismissal pass both private compositors.
-Hypr output move/removal passes; nested niri output-off retains its global,
-so real niri hotplug remains unverified. Actual panel reload/reopen/invalid
-recovery/SIGKILL restore pass both; page and open state preserved.
+Current checkpoint fixes independent view drawing: worker preparation and
+no-change events do not repaint; bar commits draw bar surfaces only; each
+surface tracks its accepted update for presentation feedback. Pixel checks
+now verify the visible volume track on every reopen, beyond markers/actions.
+Ten default niri and Hypr pixel checks pass, including rapid reversal and
+keyboard close. Temporary scene/SHM dump hooks have been removed.
 
-Core and extension clipboard both transfer UTF-8/plain text with private
-peer clients. Extension works before keyboard input. Fallback now matches
-kit geometry, avoiding duplicate SHM allocation. View close drops worker,
-VM, rasters, renderer and SHM; a second trim follows retired packet drainage.
-66588ad CI 38708160203 passed. Initial zero-capability seats are bound
-explicitly too; pre-keyboard Hypr extension transfer now passes.
+Close drops the view worker/VM/rasters/SHM/renderer, then trims allocator
+pages. The remaining bar baker drops font/glyph scratch and offscreen cache
+entries while retaining its visible rasters. Test proves unchanged pixels
+and lazy rebuilding after trim. Latest Hypr ten-cycle/post-output/rapid
+cleanup delta +4.38 MiB; earlier niri before final trim +4.99. Final 60s
+samples pending. Preserve +5.13 and expanded-lifecycle +5.03 FAIL samples.
+Do not use earlier blank-body runs as final visual/pacing evidence.
 
-Latest core Hypr three-cycle max idle delta +2.70 MiB (before deferred trim:
-+5.13 FAIL). Earlier long runs: Hypr +4.99 MiB after60s; niri +2.11 MiB,
-plus2.60 SwapPss. Preserve failures; final repeated60s default-mode runs next.
-CPU policy avoids GL's ~20 MiB closed driver/anonymous overhead. Full native
-pacing is NOT established: opening p99 Hypr16.65ms / niri100.32ms in those runs.
+70 tests, fmt/clippy and CPU-only check pass. Facade/example, generated
+80-line SDK + 18-module analyzer, native core/ext clipboard UTF8/plain
+peer transfer (ext before input), headless check, numeric-only 0600 30s
+report, real controls, all dismissals, state/reload/SIGKILL and legacy
+visibility query proofs are implemented. Hypr output move/removal passes;
+nested niri off retains its global, real niri hotplug remains unverified.
 
-69 tests, fmt/clippy/CPU-only pass; two wall-clock50ms Luau test failures
-under host load are retained, isolated rerun passed without budget changes.
-Earlier all-features/facade/analyzer pass. --report proved30.001s,0600,
-numeric-only with closed/current surface history. Final QML subset comparison
-uses audited Nacre68df8dd archive, read-only. No microphone/device-list parity claim.
+QML reference smoke passes all 20 real presentation phases. It uses the
+audited read-only Nacre 68df8dd archive, unchanged widgets and output-control
+subset with static transport shims. Full 60s reference samples pending.
+Native CPU policy avoids GL's ~20 MiB closed driver/anonymous floor; GL
+remains explicit. Explain warm scene/renderer differences versus ~105 MiB
+Feature 6 control. Keep typing 29.6→32.7% and inherited 6b niri pacing/idle
+invariance concerns. No live/physical test, installation or release.
 
-09b4722 CI 38708841380 passed. Long default runs met <=5 MiB: Hypr
-21.27→25.75 (+4.48), niri22.24→23.77 (+1.54), with2.63 SwapPss on niri.
-Rapid close/reopen then exposed a stale-candidate visibility race: fixed with
-controller-owned motion/input and explicit dismissal metadata. Rapid Hypr
-repeat, actual legacy open/closed state,69 tests/clippy/CPU-only/analyzer pass.
-Final lifecycle sample now also checks post-output/rapid cleanup.
-
-Next: final lifecycle repeats and matched QML
-output-controls subset; final report/CI/brain, then STOP at Gate C.
-Keep typing29.6→32.7% and inherited6b niri pacing/idle invariance concerns.
-Worktree: ~/.local/share/nacre/ai/worktrees/bead-feature7-gate-c.
-Canonical target: /home/siverteh/Projects/bead/target; TMPDIR=/var/tmp.
-Nested only, nice10/Cargo-j2; no physical/live test, install or release.
+Next: commit/push/CI checkpoint; final 60s native + QML on both, report,
+STATUS/CI/brain, then STOP at Gate C. No concurrent local builds in samples.
+CARGO_TARGET_DIR=/home/siverteh/Projects/bead/target; TMPDIR=/var/tmp.
+Evidence: canonical .research/feature8. Nested nice10/Cargo-j2 only.

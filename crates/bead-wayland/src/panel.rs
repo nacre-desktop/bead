@@ -137,6 +137,7 @@ impl App {
                 let _ = sender.send(UiEvent::Panel(epoch, Box::new(event)));
             }))
             .map_err(|e| e.to_string())?;
+        self.panel_ui_serial = 0;
         self.panel_runtime = Some(source);
         let qh = self.qh.clone();
         self.add_output(&qh, output);
@@ -185,12 +186,13 @@ impl App {
             std::mem::swap(&mut self.renderer, renderer);
             self.options.renderer = *effective;
         }
+        let force_draw = matches!(&event, UiEvent::Relayout | UiEvent::PanelVisibility(_));
         self.processing_panel = true;
         self.options.bar = false;
         self.options.panel = true;
         self.options.content_size = true;
         self.options.keyboard_focus = true;
-        self.ui_inner(event);
+        let changed = self.ui_inner(event);
         self.options.bar = bar;
         self.options.panel = panel;
         self.options.content_size = content;
@@ -202,6 +204,9 @@ impl App {
             let (scene, renderer, _) = self.companion.as_mut().unwrap();
             std::mem::swap(&mut self.scene, scene);
             std::mem::swap(&mut self.renderer, renderer);
+        }
+        if !changed && !force_draw {
+            return;
         }
         let qh = self.qh.clone();
         let indices: Vec<_> = self
@@ -275,6 +280,9 @@ impl App {
         #[cfg(feature = "wgpu")]
         if self.surfaces.iter().all(|s| s.gpu.is_none()) {
             self.gpu = None;
+        }
+        if let Some(source) = &mut self.runtime {
+            source.trim_idle();
         }
         // Functional closed-idle reclamation, explicitly requested for Gate C; not a diagnostic.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]

@@ -123,6 +123,12 @@ fn pixel_difference(before: &Pixmap, after: &Pixmap) -> Damage {
     }
 }
 impl TreeCache {
+    /// Keep finished active rasters, release scratch and offscreen cache entries.
+    pub fn trim_idle(&mut self) {
+        self.raster = CpuRenderer::default();
+        self.entries.retain(|_, entry| entry.touched == self.serial);
+        self.nodes.retain(|_, (_, touched)| *touched == self.serial);
+    }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if let Some(frame) = scene.prepared.get(&scale.to_bits()) {
             self.frame = Some(frame.clone());
@@ -637,6 +643,43 @@ mod tests {
                 h: 1
             }
         );
+    }
+    #[test]
+    fn idle_trim_keeps_visible_pixels_and_rebuilds_changed_assets() {
+        let mut scene = scene();
+        let mut renderer = TreeCpuRenderer::default();
+        let mut pixels = vec![0; 36 * 30 * 4];
+        let draw = |renderer: &mut TreeCpuRenderer, scene: &Scene, pixels: &mut Vec<u8>| {
+            renderer.prepare(scene, 1.5).unwrap();
+            renderer
+                .render(
+                    scene,
+                    ShmTarget {
+                        bytes: pixels,
+                        width: 36,
+                        height: 30,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(36, 30),
+                )
+                .unwrap();
+        };
+        draw(&mut renderer, &scene, &mut pixels);
+        let before = pixels.clone();
+        renderer.cache.trim_idle();
+        draw(&mut renderer, &scene, &mut pixels);
+        assert_eq!(pixels, before);
+        let mut image = Pixmap::new(8, 8).unwrap();
+        image.fill(tiny_skia::Color::from_rgba8(200, 10, 30, 255));
+        scene
+            .asset_data
+            .insert("proof.png".into(), Arc::from(image.encode_png().unwrap()));
+        draw(&mut renderer, &scene, &mut pixels);
+        assert_ne!(pixels, before);
+        let mut fresh = vec![0; pixels.len()];
+        draw(&mut TreeCpuRenderer::default(), &scene, &mut fresh);
+        assert_eq!(pixels, fresh);
     }
     #[test]
     fn partial_shm_and_group_opacity_match_full_and_previous_composition() {

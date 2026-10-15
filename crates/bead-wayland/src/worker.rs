@@ -59,6 +59,7 @@ impl Packet {
     }
 }
 enum Job {
+    TrimIdle,
     Stage(UiEvent, Vec<f32>),
     Viewport(u32, u32),
     Watch(Box<dyn Fn(Result<(), String>) + Send>),
@@ -165,6 +166,14 @@ impl SceneSource for Source {
                     };
                     match job {
                         Job::Stop => break,
+                        Job::TrimIdle => {
+                            cache.trim_idle();
+                            source.trim_idle();
+                            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                            unsafe {
+                                libc::malloc_trim(0);
+                            }
+                        }
                         Job::Viewport(w, h) => {
                             source.viewport(w, h);
                         }
@@ -279,6 +288,9 @@ impl SceneSource for Source {
                 report(UiEvent::Fatal("script worker panicked".into()));
             }
         }));
+    }
+    fn trim_idle(&mut self) {
+        let _ = self.send(Job::TrimIdle);
     }
     fn scales(&mut self, scales: Vec<f32>) {
         self.scales = scales;

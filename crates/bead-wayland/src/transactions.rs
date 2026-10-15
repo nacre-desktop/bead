@@ -44,7 +44,7 @@ impl App {
         }
         self.ui_inner(event);
     }
-    pub(super) fn ui_inner(&mut self, event: UiEvent) {
+    pub(super) fn ui_inner(&mut self, event: UiEvent) -> bool {
         match &event {
             UiEvent::ClipboardSet(text) => {
                 if let Err(error) =
@@ -53,7 +53,7 @@ impl App {
                 {
                     eprintln!("CLIPBOARD_ERROR {error}");
                 }
-                return;
+                return false;
             }
             UiEvent::ClipboardRead => {
                 let panel = self.processing_panel;
@@ -73,7 +73,7 @@ impl App {
                 {
                     eprintln!("CLIPBOARD_ERROR {error}");
                 }
-                return;
+                return false;
             }
             _ => {}
         }
@@ -100,7 +100,7 @@ impl App {
                     Err(e) => bead_services::ipc::Reply::error(request.call.id, "clipboard", e),
                 };
                 let _ = request.reply.send(reply);
-                return;
+                return false;
             }
             if request.call.method == "clipboard-get" {
                 let copy = request.clone();
@@ -121,7 +121,7 @@ impl App {
                         e,
                     ));
                 }
-                return;
+                return false;
             }
             let reply = match request.call.method.as_str() {
                 "ping" => {
@@ -138,15 +138,15 @@ impl App {
                 ),
             };
             let _ = request.reply.send(reply);
-            return;
+            return false;
         }
 
         if let UiEvent::Fatal(error) = event {
             self.fail(error);
-            return;
+            return false;
         }
         let Some(mut runtime) = self.runtime.take() else {
-            return;
+            return false;
         };
         let mut scales: Vec<_> = self
             .surfaces
@@ -244,7 +244,7 @@ impl App {
             Ok(Some(scene)) => {
                 if !runtime.commit() {
                     self.runtime = Some(runtime);
-                    return;
+                    return false;
                 }
                 if let (Some(bridge), Some(tree)) =
                     (&mut self.accessibility, runtime.accessibility_tree())
@@ -255,6 +255,18 @@ impl App {
                     println!("UI_STATE {}", runtime.state_summary());
                 }
                 self.ui_serial += 1;
+                if self.processing_panel {
+                    self.panel_ui_serial = self.ui_serial;
+                } else {
+                    self.primary_ui_serial = self.ui_serial;
+                }
+                for surface in self
+                    .surfaces
+                    .iter_mut()
+                    .filter(|s| s.companion == self.processing_panel)
+                {
+                    surface.ui_serial = self.ui_serial;
+                }
                 let reopening = self.scene.motion.as_ref().is_some_and(|m| !m.open)
                     && scene.motion.as_ref().is_some_and(|m| m.open);
                 if reopening {
@@ -328,7 +340,7 @@ impl App {
             }
             Ok(None) => {
                 self.runtime = Some(runtime);
-                return;
+                return false;
             }
             Err(error) => {
                 eprintln!("UI_ERROR {error}");
@@ -355,9 +367,12 @@ impl App {
         let qh = self.qh.clone();
         if !self.processing_panel {
             for i in 0..self.surfaces.len() {
-                self.draw(i, &qh);
+                if !self.surfaces[i].companion || self.options.panel_spec.is_none() {
+                    self.draw(i, &qh);
+                }
             }
         }
+        true
     }
 
     pub(super) fn sync_ime(&mut self) {

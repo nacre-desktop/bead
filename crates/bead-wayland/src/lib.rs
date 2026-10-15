@@ -161,6 +161,7 @@ pub struct InputRegion {
     pub dismiss: bool,
 }
 pub trait SceneSource {
+    fn trim_idle(&mut self) {}
     fn focused_dismiss(&self) -> bool {
         false
     }
@@ -345,6 +346,7 @@ struct Surface {
     presentation_kind: u32,
     discarded: usize,
     presented_generation: Option<u64>,
+    ui_serial: u64,
 }
 impl Drop for Surface {
     fn drop(&mut self) {

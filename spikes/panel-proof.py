@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import subprocess
+from PIL import Image
 import socket as unix_socket
 import time
 
@@ -27,6 +28,7 @@ def sample(env, raw, compositor, stop):
     client = pointer = None
     command = [str(target/'nacre-shell'), '--bar', '--audio-panel', '--command-socket',
                str(socket), '--namespace', 'bead-gate-c', '--trace-state']
+    if os.environ.get('BEAD_PANEL_NO_DAMAGE'):command+=['--no-damage']
     if os.environ.get('BEAD_PANEL_RENDERER'):
         command += ['--panel-renderer', os.environ['BEAD_PANEL_RENDERER']]
     if compositor == 'hyprland':
@@ -113,11 +115,18 @@ def sample(env, raw, compositor, stop):
                        'animation_window_ms': 220,
                        'opening_animation_intervals_ms': [(b-a)/1e6 for a,b in zip(timestamps,timestamps[1:]) if b<=started+220_000_000],
                        'opening_draw_ms': [float(n) for n in re.findall(r'PANEL_FRAME processing_ms=([\d.]+)', segment)]}
+                capture=raw/('sound.png' if i==0 else f'sound-{i}.png')
+                run('grim',str(capture))
+                picture=Image.open(capture).convert('RGB');scale=picture.width/1920
+                area=picture.crop((round((1920-464+32+20)*scale),round((70+32+160)*scale),round((1920-464+32+372)*scale),round((70+32+190)*scale)))
+                bright=sum(r>140 and g>140 and b>90 for r,g,b in list(area.get_flattened_data()))
+                row['slider_bright_pixels']=bright
+                assert bright>1000*scale*scale, 'presented panel has no visible volume track'
+
                 if i == 0:
                     if compositor == 'hyprland':
                         run('hyprctl', 'dismissnotify', '-1')
                         run('hyprctl','eval','hl.dispatch(hl.dsp.focus({monitor="bead-bench"}))')
-                    run('grim', str(raw/'sound.png'))
                     if seconds:
                         print('PANEL_IDLE_SAMPLE warm', flush=True)
                         result['warm_idle'] = matrix.idle(client.pid, seconds)
