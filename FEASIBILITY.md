@@ -804,7 +804,8 @@ state survives separately. CPU selected for this small view; GL remains explicit
 | Retained GL mappings observed in smaps |Mesa+LLVM ~11.5 MiB, plus anonymous/heap|
 | Actions/lifetime |click50%, drag75%, key70%, mute, Escape/outside/button, move/remove pass|
 
-Core clipboard protocol transfer passes with private keyboard serial. Exclusive
+Automatic clipboard transfer passes after seat binding; transport labeling is
+corrected by the later explicit core/extension proof. Exclusive
 Hypr layers receive outside presses on the panel itself; handle those bounds too
 ([versioned source](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/managers/input/InputManager.cpp#L413)).
 Facade-only shell imports, non-Nacre example, headless validation, Rust-generated
@@ -839,3 +840,29 @@ Early pre-fix failures and build-overlap attempt are not timing baselines.
 Evidence .research/feature8/reload-hypr-isolated, diagnostics-hypr,
 recovery-checks.log and panel-niri-controls. Final isolated comparable CPU/
 pacing/QML and memory acceptance still pending. No physical or live changes.
+
+## Gate C clipboard interoperability and delayed reclamation (2026-10-15)
+
+Correction to early clipboard labeling: both private compositors advertise ext
+data-control. Initial binding waited for keyboard capability, not a missing
+protocol. Bind on seat discovery too. Automatic ext transfer now works before
+keyboard input; forced core mode uses a real keyboard serial/focus. Both native
+send/receive UTF-8 and plain-MIME text with independent private wl-clipboard peers;
+no clipboard subprocess is used by the product. Unwanted offers are destroyed.
+
+| Private proof | Result |
+|---|---|
+| Core Hypr / ext niri peer and controls |pass; data never touches live selection|
+| Core Hypr closed delta before deferred trim |+0.80,+3.43,+5.13 MiB: FAIL|
+| Same three-cycle proof, trim100ms after release |max+2.70 MiB: pass|
+| Identical fallback/final464×350 geometry |SHM allocations3 instead of6|
+| Source60a537c CI |38705774910 passed|
+
+The delayed trim lets pending retired view packets be dropped before allocator
+reclamation. Allocation ownership is a hypothesis; reduced residency is measured.
+Final repeated default-mode60s runs and QML comparison still pending. GL remains
+explicit; CPU chosen for this400×286 content view. No unsafe map eviction or
+raised memory tolerance.69 tests/fmt/clippy/CPU-only pass after clipboard changes;
+parallel and one serial wall-clock50ms failures under host CPU/I/O pressure remain
+in logs; isolated repeat passed with unchanged limits. Evidence core-hypr,
+core-hypr-trim, ext-niri-final, clipboard-*-checks and idle-trim-build.

@@ -48,7 +48,7 @@ def sample(env, raw, compositor, stop):
         (raw/(label+'.smaps')).write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
         p = matrix.measure.memory(client.pid)
         d = matrix.measure.drm_memory(client.pid) or {}
-        return {'pss_mib': p['pss_mib'], 'drm_mib': sum(d.values()),
+        return {'pss_mib': p['pss_mib'], 'drm_mib': sum(d.values()), 'swap_pss_mib':p['swap_pss_mib'],
                 'total_mib': p['pss_mib']+sum(d.values()),
                 'fds': len(list(pathlib.Path(f'/proc/{client.pid}/fd').iterdir())),
                 'threads': len(list(pathlib.Path(f'/proc/{client.pid}/task').iterdir()))}
@@ -73,13 +73,18 @@ def sample(env, raw, compositor, stop):
     result = {'compositor': compositor, 'renderer': os.environ.get('BEAD_PANEL_RENDERER', 'default'),
               'idle_seconds': seconds, 'cycles': []}
     protocols=run('wayland-info').stdout
-    result['clipboard_transport']='ext-data-control-v1' if 'ext_data_control_manager_v1' in protocols else 'wl_data_device'
+    result['clipboard_transport']='ext-data-control-v1' if 'ext_data_control_manager_v1' in protocols and os.environ.get('BEAD_PRIVATE_CLIPBOARD_CORE')!='1' else 'wl_data_device'
     result['private_pipewire_fixture']=matrix.measure.memory(pw.pid)
     try:
         with log.open('w') as f:
             client = subprocess.Popen(command, cwd=ROOT, env=env, stdout=f,
                                       stderr=subprocess.STDOUT, start_new_session=True)
             matrix.wait_log(log, lambda t: 'UI_PRESENTED generation=1' in t)
+            if result['clipboard_transport']=='ext-data-control-v1':
+                call('clipboard-set','private before keyboard',target_name='bead')
+                time.sleep(.1)
+                assert call('clipboard-get',target_name='bead')['result']=='private before keyboard'
+                result['clipboard_without_keyboard']=True
             time.sleep(2)
             if seconds:
                 print('PANEL_IDLE_SAMPLE bar', flush=True)
@@ -113,12 +118,26 @@ def sample(env, raw, compositor, stop):
                     if seconds:
                         print('PANEL_IDLE_SAMPLE warm', flush=True)
                         result['warm_idle'] = matrix.idle(client.pid, seconds)
-                    run('wtype', '-s', '200', '-k', 'Tab', '-s', '200')
+                        result['warm_after_idle'] = memory()
+                    keyboard=subprocess.Popen(['wtype','-s','200','-k','Tab','-s','2500'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                    matrix.wait_log(log,lambda t:'INPUT_KEY sym=XK_Tab' in t)
+                    time.sleep(.1)
                     # Synthetic selection, inside the private compositor only.
-                    call('clipboard-set', 'private clipboard fixture', target_name='bead')
+                    call('clipboard-set', 'private clipboard fixture Ω', target_name='bead')
                     time.sleep(.2)
-                    assert call('clipboard-get', target_name='bead')['result'] == 'private clipboard fixture'
+                    assert call('clipboard-get', target_name='bead')['result'] == 'private clipboard fixture Ω'
+                    assert run('wl-paste','--no-newline').stdout=='private clipboard fixture Ω'
+                    peer=subprocess.Popen(['wl-copy','--foreground','--type','text/plain'],env=env,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+                    try:
+                        peer.stdin.write(b'plain text peer');peer.stdin.close()
+                        deadline=time.monotonic()+3
+                        while call('clipboard-get',target_name='bead')['result']!='plain text peer':
+                            if time.monotonic()>deadline:raise RuntimeError('plain MIME peer transfer failed')
+                            time.sleep(.05)
+                    finally:stop(peer)
+                    result['clipboard_peer_utf8_and_plain'] = True
                     result['clipboard'] = True
+                    keyboard.wait(timeout=5)
                     pointer = matrix.services.Probe([str(target/'examples/private-pointer')], env, raw/'pointer.log')
                     pointer.wait('POINTER_READY')
                     state = call('state')['result']
@@ -189,7 +208,7 @@ def sample(env, raw, compositor, stop):
             text = matrix.log_text(log)
             assert 'PRESENTATION clock_id=1' in text
             assert 'UI_ERROR' not in text and 'PANIC ' not in text
-            result['memory_acceptance'] = all(r['delta_from_bar_mib'] <= 5 for r in result['cycles'])
+            result['memory_acceptance'] = all(r['delta_from_bar_mib'] <= 5 for r in result['cycles']) and (not seconds or result['closed_idle']['pss_plus_drm_mib']-baseline['total_mib']<=5)
             (raw/'panel-proof.json').write_text(json.dumps(result, indent=2)+'\n')
             print('PANEL_PROOF '+json.dumps({k:v for k,v in result.items() if k!='cycles'}), flush=True)
             assert result['memory_acceptance'], 'closed-idle exceeds bar + 5MiB'

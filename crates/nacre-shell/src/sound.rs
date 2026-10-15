@@ -23,7 +23,9 @@ pub fn fallback(fill: [u8; 4]) -> Scene {
         width: 400.,
         slide: None,
         offset: (32., 32.),
-        bounds: Rect::new(-30., -30., 460., 346.),
+        // Match the kit's 32px shadow inset so CPU startup does not allocate
+        // a second SHM geometry as soon as the script becomes ready.
+        bounds: Rect::new(-32., -32., 464., 350.),
         primitives: vec![Primitive::Rounded {
             rect: Rect::new(0., 0., 400., 286.),
             radius: 16.,

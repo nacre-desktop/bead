@@ -290,6 +290,27 @@ impl App {
         unsafe {
             libc::malloc_trim(0);
         }
+        // Accepted worker packets already queued on the UI channel may still
+        // own retired rasters. Let that queue drain before the final trim.
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        {
+            let epoch = self.panel_epoch;
+            if let Err(error) = self.loop_handle.insert_source(
+                Timer::from_duration(Duration::from_millis(100)),
+                move |_, _, app| {
+                    if app.panel_epoch == epoch && app.panel_runtime.is_none() && !app.panel_target
+                    {
+                        unsafe {
+                            libc::malloc_trim(0);
+                        }
+                        println!("PANEL_IDLE_TRIM scheduled_delay_ms=100");
+                    }
+                    TimeoutAction::Drop
+                },
+            ) {
+                self.fail(error);
+            }
+        }
         println!("PANEL_IDLE_RELEASED workers=0 rasters=0 shm=0");
     }
 }

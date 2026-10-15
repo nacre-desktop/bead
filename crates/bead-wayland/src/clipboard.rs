@@ -15,6 +15,31 @@ use wayland_protocols::ext::data_control::v1::client::{
     ext_data_control_offer_v1 as eo, ext_data_control_source_v1 as es,
 };
 const MIME: &str = "text/plain;charset=utf-8";
+#[derive(Default)]
+struct OfferMime(std::sync::atomic::AtomicU8);
+impl OfferMime {
+    fn offer(&self, name: &str) {
+        let rank = match name {
+            MIME => 2,
+            "text/plain" => 1,
+            _ => 0,
+        };
+        self.0.fetch_max(rank, std::sync::atomic::Ordering::Relaxed);
+    }
+    fn mime(&self) -> Result<&'static str, String> {
+        match self.0.load(std::sync::atomic::Ordering::Relaxed) {
+            2 => Ok(MIME),
+            1 => Ok("text/plain"),
+            _ => Err("clipboard has no supported text MIME".into()),
+        }
+    }
+}
+fn offered_mime<P: Proxy>(offer: &P) -> Result<&'static str, String> {
+    offer
+        .data::<OfferMime>()
+        .ok_or("clipboard offer metadata missing")?
+        .mime()
+}
 pub(super) struct Clipboard {
     manager: Option<manager::WlDataDeviceManager>,
     device: Option<device::WlDataDevice>,
@@ -32,7 +57,13 @@ impl Clipboard {
             device: None,
             selected: None,
             sources: vec![],
-            ext: globals.bind(qh, 1..=1, ()).ok(),
+            ext: if std::env::var("BEAD_PRIVATE_CLIPBOARD_CORE").as_deref() == Ok("1")
+                && std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() == Ok("1")
+            {
+                None
+            } else {
+                globals.bind(qh, 1..=1, ()).ok()
+            },
             ext_device: None,
             ext_selected: None,
             ext_sources: vec![],
@@ -86,9 +117,9 @@ impl Clipboard {
         let reader = unsafe { std::fs::File::from_raw_fd(fds[0]) };
         let writer = unsafe { std::fs::File::from_raw_fd(fds[1]) };
         if let Some(offer) = &self.ext_selected {
-            offer.receive(MIME.into(), writer.as_fd());
+            offer.receive(offered_mime(offer)?.into(), writer.as_fd());
         } else if let Some(offer) = &self.selected {
-            offer.receive(MIME.into(), writer.as_fd());
+            offer.receive(offered_mime(offer)?.into(), writer.as_fd());
         } else {
             return Err("clipboard text unavailable".into());
         }
@@ -195,14 +226,26 @@ impl Dispatch<device::WlDataDevice, ()> for App {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let device::Event::Selection { id } = event {
-            if let Some(old) = state.clipboard.selected.take() {
-                old.destroy();
+        match event {
+            device::Event::Selection { id } => {
+                if let Some(old) = state.clipboard.selected.take() {
+                    old.destroy();
+                }
+                state.clipboard.selected = id;
             }
-            state.clipboard.selected = id;
+            device::Event::Enter {
+                id: Some(offer),
+                serial,
+                ..
+            } => {
+                // Clipboard-only client: decline an unrelated drag offer.
+                offer.accept(serial, None);
+                offer.destroy();
+            }
+            _ => {}
         }
     }
-    wayland_client::event_created_child!(App,device::WlDataDevice,[0=>(offer::WlDataOffer,())]);
+    wayland_client::event_created_child!(App,device::WlDataDevice,[0=>(offer::WlDataOffer,OfferMime::default())]);
 }
 impl Dispatch<ed::ExtDataControlDeviceV1, ()> for App {
     fn event(
@@ -213,35 +256,45 @@ impl Dispatch<ed::ExtDataControlDeviceV1, ()> for App {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let ed::Event::Selection { id } = event {
-            if let Some(old) = state.clipboard.ext_selected.take() {
-                old.destroy();
+        match event {
+            ed::Event::Selection { id } => {
+                if let Some(old) = state.clipboard.ext_selected.take() {
+                    old.destroy();
+                }
+                state.clipboard.ext_selected = id;
             }
-            state.clipboard.ext_selected = id;
+            ed::Event::PrimarySelection { id: Some(offer) } => offer.destroy(),
+            _ => {}
         }
     }
-    wayland_client::event_created_child!(App,ed::ExtDataControlDeviceV1,[0=>(eo::ExtDataControlOfferV1,())]);
+    wayland_client::event_created_child!(App,ed::ExtDataControlDeviceV1,[0=>(eo::ExtDataControlOfferV1,OfferMime::default())]);
 }
-impl Dispatch<offer::WlDataOffer, ()> for App {
+impl Dispatch<offer::WlDataOffer, OfferMime> for App {
     fn event(
         _: &mut Self,
         _: &offer::WlDataOffer,
-        _: offer::Event,
-        _: &(),
+        event: offer::Event,
+        data: &OfferMime,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if let offer::Event::Offer { mime_type } = event {
+            data.offer(&mime_type);
+        }
     }
 }
-impl Dispatch<eo::ExtDataControlOfferV1, ()> for App {
+impl Dispatch<eo::ExtDataControlOfferV1, OfferMime> for App {
     fn event(
         _: &mut Self,
         _: &eo::ExtDataControlOfferV1,
-        _: eo::Event,
-        _: &(),
+        event: eo::Event,
+        data: &OfferMime,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if let eo::Event::Offer { mime_type } = event {
+            data.offer(&mime_type);
+        }
     }
 }
 impl Dispatch<source::WlDataSource, Arc<String>> for App {

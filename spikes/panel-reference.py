@@ -28,10 +28,10 @@ def sample(env,raw,compositor,stop):
         id: panel
         anchors {top:true;right:true}
         margins.top:70
-        implicitWidth:400;implicitHeight:286;exclusiveZone:-1;color:"transparent"
+        implicitWidth:464;implicitHeight:350;exclusiveZone:-1;color:"transparent"
         WlrLayershell.namespace:"bead-reference-sound-output"
         NacreSurface {
-            anchors.fill:parent;radius:20;color:NacreTokens.body
+            anchors.fill:parent;anchors.margins:32;radius:16;color:NacreTokens.body
             Column {
                 anchors.fill:parent;anchors.margins:20;spacing:14
                 Row {
@@ -62,7 +62,7 @@ def sample(env,raw,compositor,stop):
                 if compositor=='hyprland':subprocess.run(['hyprctl','dismissnotify','-1'],env=env,capture_output=True,timeout=5)
                 subprocess.run(['grim',str(raw/'qml-sound.png')],env=env,check=True,capture_output=True,timeout=8)
                 result=matrix.idle(client.pid,float(os.environ.get('BEAD_PANEL_IDLE_SECONDS','60')))
-                result['source_revision']=subprocess.check_output(['git','-C',str(reference),'rev-parse','HEAD'],text=True).strip()
+                result['source_revision']=os.environ.get('NACRE_REFERENCE_REVISION') or subprocess.check_output(['git','-C',str(reference),'rev-parse','HEAD'],text=True).strip()
                 result['scope']='unchanged NacreHeader/widgets/NacreQuickSlider; output-controls subset, deterministic transport shims; no microphone/device list'
                 (raw/'qml-panel-proof.json').write_text(json.dumps(result,indent=2)+'\n')
                 print('QML_PANEL_PROOF '+json.dumps(result),flush=True)

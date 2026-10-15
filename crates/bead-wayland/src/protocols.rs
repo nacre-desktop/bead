@@ -335,7 +335,11 @@ impl SeatHandler for App {
     fn seat_state(&mut self) -> &mut SeatState {
         &mut self.seat
     }
-    fn new_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+    fn new_seat(&mut self, _: &Connection, qh: &QueueHandle<Self>, seat: wl_seat::WlSeat) {
+        if self.options.interactive {
+            self.clipboard.seat(&seat, qh);
+        }
+    }
     fn new_capability(
         &mut self,
         _: &Connection,
@@ -346,6 +350,7 @@ impl SeatHandler for App {
         if !self.options.interactive {
             return;
         }
+        self.clipboard.seat(&seat, qh);
         match capability {
             Capability::Keyboard if self.keyboard.is_none() => {
                 self.clipboard.seat(&seat, qh);
