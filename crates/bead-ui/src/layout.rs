@@ -103,6 +103,7 @@ pub const PROPERTIES: &[&str] = &[
     "open",
     "transition",
     "duration",
+    "slide_distance",
     "edge",
     "direction",
     "drag",
@@ -518,6 +519,17 @@ impl ViewSpec {
                 aria_label: text(p, "aria_label", "", source)?,
                 motion: if p.contains_key("open") {
                     Some(bead_render::Motion {
+                        slide_distance: if p.contains_key("slide_distance") {
+                            let value = number(p, "slide_distance", 0., source)?;
+                            if !(0. ..=4000.).contains(&value) {
+                                return Err(
+                                    source.error("slide_distance needs0..4000 logical pixels")
+                                );
+                            }
+                            Some(value)
+                        } else {
+                            None
+                        },
                         id: id.clone(),
                         open: boolean(p, "open", true, source)?,
                         duration: f64::from(number(p, "duration", 0.2, source)?),

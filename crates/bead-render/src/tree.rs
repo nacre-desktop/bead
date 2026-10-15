@@ -467,9 +467,11 @@ impl Renderer for TreeCpuRenderer {
         }
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         if scene.opacity >= 1. {
+            self.flattened = None;
             return paint(frame, scene.offset, target, damage);
         }
         if scene.opacity <= 0. {
+            self.flattened = None;
             let ShmTarget { bytes, width, .. } = target;
             for y in damage.y..damage.y + damage.h {
                 let i = (y * width + damage.x) as usize * 4;

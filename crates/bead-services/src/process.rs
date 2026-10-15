@@ -79,6 +79,24 @@ fn capture(
     })
 }
 /// No shell is inserted. The caller selects the program, arguments and environment.
+/// Spawn configuration for event-loop actors. Clear inherited blocked signals
+/// in the child only; the parent's signal handling and mask stay unchanged.
+pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    // SAFETY: only async-signal-safe signal operations execute after fork.
+    unsafe {
+        command.pre_exec(|| {
+            let mut empty = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+            if libc::sigemptyset(empty.as_mut_ptr()) != 0
+                || libc::sigprocmask(libc::SIG_SETMASK, empty.as_ptr(), std::ptr::null_mut()) != 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    command
+}
 pub fn run(command: &mut Command, input: &[u8], limits: Limits) -> Result<Output, String> {
     if limits.input > 4 * 1024 * 1024
         || input.len() > limits.input
@@ -314,5 +332,47 @@ mod tests {
             )
             .is_err()
         );
+    }
+    #[test]
+    fn child_clears_event_loop_mask_without_changing_parent() {
+        struct Restore(libc::sigset_t);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                unsafe {
+                    libc::pthread_sigmask(libc::SIG_SETMASK, &self.0, std::ptr::null_mut());
+                }
+            }
+        }
+        let mut blocked = unsafe { std::mem::zeroed::<libc::sigset_t>() };
+        let mut old = unsafe { std::mem::zeroed::<libc::sigset_t>() };
+        unsafe {
+            libc::sigemptyset(&mut blocked);
+            libc::sigaddset(&mut blocked, libc::SIGTERM);
+            assert_eq!(
+                libc::pthread_sigmask(libc::SIG_BLOCK, &blocked, &mut old),
+                0
+            );
+        }
+        let _restore = Restore(old);
+        let output = run(
+            command("cat").arg("/proc/self/status"),
+            b"",
+            Limits::default(),
+        )
+        .unwrap();
+        let text = String::from_utf8(output.stdout).unwrap();
+        let mask = text
+            .lines()
+            .find_map(|l| l.strip_prefix("SigBlk:\t"))
+            .unwrap();
+        assert_eq!(
+            u64::from_str_radix(mask.trim(), 16).unwrap() & (1 << (libc::SIGTERM - 1)),
+            0
+        );
+        let mut current = unsafe { std::mem::zeroed::<libc::sigset_t>() };
+        unsafe {
+            libc::pthread_sigmask(libc::SIG_SETMASK, std::ptr::null(), &mut current);
+            assert_eq!(libc::sigismember(&current, libc::SIGTERM), 1);
+        }
     }
 }

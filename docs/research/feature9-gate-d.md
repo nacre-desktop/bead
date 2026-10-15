@@ -1,9 +1,11 @@
-# Features 9–10: active research
+# Features 9–10: paused for foundation
 
 Owner authorized notifications/OSD, then the core launcher, stopping at Gate D.
 No live-session test, notification-name takeover, installation or release is
 allowed. The earlier single physical Gate C authorization was consumed.
-Nacre and Orient remain read-only. This is an interim checkpoint, not Gate D.
+Nacre and Orient remain read-only except additive nacre-protocol work through
+Nacre CONTRIBUTING. Owner paused Features9–10 on2026-10-15 for Foundation F5.
+Typing targets are not accepted; this is an interim checkpoint, not Gate D.
 
 ## Typing foundation
 
@@ -69,4 +71,25 @@ exit lifetimes are separate; DND/inhibition suppress immediately.
 Standalone notification mode currently owns the primary notice surface and one
 passive OSD companion; it cannot be combined with bar/audio mode flags. Full
 shell composition is not implied by this proof. Feature9 final controls,
-matched QML comparison and Feature10 catalog/ranking/providers remain active.
+matched QML comparison and Feature10 catalog/ranking/providers are paused for Foundation F5.
+
+## Foundation pause checkpoint (2026-10-15)
+
+81 workspace tests, fmt, clippy and22-module Luau analysis pass.
+Private proofs now include real action clicks, replacement while hovered,
+DND/history persistence, passive OSD (no keyboard enter), legacy clear/counts,
+SIGKILL and same-socket restart. Both compositors pass. An inherited blocked
+SIGTERM mask prevented parent-death cleanup of dbus-daemon; clearing the mask
+in the child before exec fixes it without altering the parent's mask.
+
+| Nested CPU smoke | Hyprland120 | niri60 |
+| --- | ---: | ---: |
+| Empty / warm / closed PSS MiB |16.01 /26.16 /22.26|16.58 /26.92 /23.23|
+| DRM allocation |none|none|
+
+Two-second idle samples do not establish steady-state idle CPU. Closed memory
+includes newly loaded fonts and is not the accepted bar+sound GateC workload.
+SHM pools now shrink on geometry changes and unused opacity rasters are released.
+Evidence: ignored .research/gate-d/foundation-checkpoint-*; previous failures kept.
+No further launcher work: nacre-daemon owns catalog/ranking/providers/menu.query.
+The binary/control-script name collision is deferred to GateD as instructed.

@@ -196,9 +196,11 @@ impl App {
                 );
                 let progress = self.animations.value(&motion.id, now).unwrap().0;
                 scene.opacity = progress;
-                let (dx, dy) = motion
-                    .edge
-                    .closed_offset(scene.bounds.w, scene.bounds.h, progress);
+                let (dx, dy) = motion.edge.closed_offset(
+                    motion.slide_distance.unwrap_or(scene.bounds.w),
+                    motion.slide_distance.unwrap_or(scene.bounds.h),
+                    progress,
+                );
                 scene.offset.0 = 32. + dx;
                 scene.offset.1 = 32. + dy;
             }
@@ -253,6 +255,12 @@ impl App {
                 && (!s.companion || self.options.panel_spec.is_some())
                 && scene.motion.is_some()
             {
+                let passive = s.companion
+                    && self
+                        .options
+                        .panel_spec
+                        .as_ref()
+                        .is_some_and(|spec| spec.passive);
                 let visible = scene.opacity > 0.001
                     && if s.companion && self.options.panel_spec.is_some() {
                         self.panel_target
@@ -260,7 +268,7 @@ impl App {
                         scene.motion.as_ref().is_none_or(|m| m.open)
                     };
                 if s.input_visible != Some(visible) {
-                    if visible && !self.options.test_passive {
+                    if visible && !self.options.test_passive && !passive {
                         s.layer.wl_surface().set_input_region(None);
                     } else {
                         let empty = Region::new(&self.compositor)?;
@@ -270,6 +278,7 @@ impl App {
                     }
                     s.layer.set_keyboard_interactivity(
                         if self.options.test_passive
+                            || passive
                             || !visible
                             || (!self.options.keyboard_focus && !s.companion)
                         {
@@ -571,7 +580,13 @@ impl App {
                 s.geometry = (w, h);
                 s.format = format;
                 s.previous = None;
-                s.pool.resize(size * 3)?;
+                // SCTK defers active-buffer destruction until release. A fresh pool
+                // can drop our large mapping without reusing compositor-owned bytes.
+                if s.pool.len() > size * 6 {
+                    s.pool = SlotPool::new(size * 3, &self.shm)?;
+                } else {
+                    s.pool.resize(size * 3)?;
+                }
                 for _ in 0..3 {
                     let (buffer, _) = s.pool.create_buffer(
                         w,

@@ -140,6 +140,7 @@ pub struct Motion {
     pub duration: f64,
     pub spring: bool,
     pub edge: bead_core::Edge,
+    pub slide_distance: Option<f32>,
 }
 /// Retained logical ownership; own primitives precede the ordered child layers.
 #[derive(Clone, Debug)]

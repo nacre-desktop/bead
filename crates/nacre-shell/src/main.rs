@@ -262,6 +262,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             duration: 0.2,
             spring: false,
             edge: panel_edge,
+            slide_distance: None,
         });
         options.companion = Some((companion, panel_renderer.unwrap_or(default_panel_renderer)));
     }

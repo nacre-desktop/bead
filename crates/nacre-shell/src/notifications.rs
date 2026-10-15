@@ -37,7 +37,7 @@ pub struct Owner {
 impl Owner {
     pub fn start(socket: PathBuf, history: PathBuf) -> Result<Self, String> {
         let shared = Arc::new(Mutex::new(Shared {
-            last: serde_json::Value::Null,
+            last: serde_json::json!({"rows":[],"popup_count":0,"history_count":0,"history_ready":false,"error":"","timers":[],"dnd":false,"osd":null}),
             wakeups: BTreeMap::new(),
             next: 0,
             audio: None,
@@ -57,7 +57,10 @@ impl Owner {
                 let mut models = values(&snapshot);
                 if !snapshot["osd"].is_object() {
                     models.retain(|key, _| {
-                        !matches!(key.as_str(), "osd.label" | "osd.status" | "osd.level")
+                        !matches!(
+                            key.as_str(),
+                            "osd.label" | "osd.status" | "osd.level" | "osd.muted"
+                        )
                     });
                 }
                 wakeup(UiEvent::Model(models));
@@ -156,7 +159,7 @@ impl Owner {
                     .shared
                     .lock()
                     .map_err(|_| "notification state unavailable")?;
-                Ok(serde_json::Value::String(serde_json::json!({"popups":state.last["popup_count"],"retained":state.last["history_count"],"timers":[],"historyReady":true,"error":""}).to_string()))
+                Ok(serde_json::Value::String(serde_json::json!({"popups":state.last["popup_count"],"retained":state.last["history_count"],"timers":state.last["timers"],"historyReady":state.last["history_ready"],"error":state.last["error"]}).to_string()))
             }
             "clear" => self
                 .server
@@ -237,6 +240,7 @@ pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
             Value::Number(snapshot["history_count"].as_u64().unwrap_or(0) as f64),
         ),
         ("osd.open".into(), Value::Bool(osd.is_object())),
+        ("osd.muted".into(), Value::Bool(muted)),
         ("osd.label".into(), Value::Text(label.into())),
         (
             "osd.level".into(),

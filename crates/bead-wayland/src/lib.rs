@@ -157,6 +157,7 @@ impl std::fmt::Display for GpuUnavailable {
 impl Error for GpuUnavailable {}
 #[derive(Clone)]
 pub struct InputRegion {
+    pub id: String,
     pub rect: Rect,
     pub clip: Option<Rect>,
     pub cursor: &'static str,

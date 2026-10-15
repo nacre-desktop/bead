@@ -3,12 +3,14 @@
 use crate::notifications::{Center, Notice};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
+use std::os::fd::AsRawFd;
+use std::os::unix::process::CommandExt;
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
-    os::unix::fs::{MetadataExt, PermissionsExt},
+    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Stdio},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -110,8 +112,11 @@ impl Interface {
                     resident,
                     popup: false,
                     expanded: false,
+                    timeout_ms: 0,
+                    time_unix_ms: 0,
                     deadline: None,
                     remaining: None,
+                    hovered: false,
                 },
                 replaces_id,
                 expire_timeout,
@@ -185,7 +190,7 @@ impl Policy {
     }
     fn get_history(&self) -> zbus::fdo::Result<String> {
         self.0
-            .with(|c| serde_json::to_string(&c.history).map_err(|e| e.to_string()))
+            .with(|c| serde_json::to_string(&c.retained()).map_err(|e| e.to_string()))
     }
     fn invoke_action(&self, id: u32, key: String) -> zbus::fdo::Result<()> {
         self.0.with(|c| c.action(id, &key).map(|_| ()))?;
@@ -234,6 +239,24 @@ async fn signal<T: serde::Serialize + zbus::zvariant::DynamicType>(
         .emit_signal(None::<&str>, PATH, INTERFACE, name, value)
         .await
 }
+fn wall_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis().min(u64::MAX as u128) as u64)
+        .unwrap_or(0)
+}
+fn time_label(time: u64) -> String {
+    let seconds = wall_ms().saturating_sub(time) / 1000;
+    if seconds < 60 {
+        "now".into()
+    } else if seconds < 3600 {
+        format!("{}m", seconds / 60)
+    } else if seconds < 86400 {
+        format!("{}h", seconds / 3600)
+    } else {
+        format!("{}d", seconds / 86400)
+    }
+}
 pub struct Server {
     sender: mpsc::UnboundedSender<Control>,
     thread: Option<std::thread::JoinHandle<()>>,
@@ -253,9 +276,29 @@ impl Server {
         if !meta.is_dir()
             || meta.uid() != unsafe { libc::geteuid() }
             || meta.permissions().mode() & 0o077 != 0
-            || socket.exists()
         {
             return Err("private bus needs an owned mode0700 directory and unused socket".into());
+        }
+        let daily = PathBuf::from(format!("/run/user/{}/bus", unsafe { libc::geteuid() }));
+        if socket == daily
+            || std::env::var_os("XDG_RUNTIME_DIR")
+                .is_some_and(|d| socket == PathBuf::from(d).join("bus"))
+        {
+            return Err("the session bus path is forbidden".into());
+        }
+        if let Ok(old) = std::fs::symlink_metadata(&socket) {
+            if !old.file_type().is_socket() || old.uid() != unsafe { libc::geteuid() } {
+                return Err("private bus path is occupied".into());
+            }
+            match crate::ipc::connect(&socket) {
+                Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {}
+                _ => return Err("private bus already active or unavailable".into()),
+            }
+            let current = std::fs::symlink_metadata(&socket).map_err(|e| e.to_string())?;
+            if old.dev() != current.dev() || old.ino() != current.ino() {
+                return Err("private bus path changed during recovery".into());
+            }
+            std::fs::remove_file(&socket).map_err(|e| e.to_string())?;
         }
         if socket.as_os_str().as_encoded_bytes().len() > 90 {
             return Err("private bus socket path too long".into());
@@ -317,29 +360,76 @@ async fn serve(
     mut receiver: mpsc::UnboundedReceiver<Control>,
     ready: std::sync::mpsc::SyncSender<Result<String, String>>,
 ) -> Result<(), String> {
-    let mut bus = Bus(Command::new("dbus-daemon")
-        .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
-        .arg(format!("--address=unix:path={}", socket.display()))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())?);
+    let parent_pid = std::process::id() as libc::pid_t;
+    // The owned bus must also die if this process/thread is killed.
+    let mut bus = Bus(unsafe {
+        crate::process::command("dbus-daemon")
+            .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
+            .arg(format!("--address=unix:path={}", socket.display()))
+            .pre_exec(move || {
+                if libc::prctl(
+                    libc::PR_SET_PDEATHSIG,
+                    libc::SIGTERM as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                ) != 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::getppid() != parent_pid {
+                    libc::_exit(127);
+                }
+                Ok(())
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| e.to_string())?
+    });
     let stdout = bus.0.stdout.take().ok_or("private bus stdout missing")?;
+    let fd = stdout.as_raw_fd();
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    let mut reader = BufReader::new(stdout);
     let mut address = String::new();
-    BufReader::new(stdout)
-        .read_line(&mut address)
-        .map_err(|e| e.to_string())?;
+    let started = Instant::now();
+    while !address.ends_with('\n') {
+        if started.elapsed() > Duration::from_secs(4) || address.len() > 1024 {
+            return Err("private bus address deadline/size limit".into());
+        }
+        match reader.read_line(&mut address) {
+            Ok(0) => return Err("private bus exited before its address".into()),
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                let mut poll = libc::pollfd {
+                    fd,
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+                unsafe {
+                    libc::poll(&mut poll, 1, 50);
+                }
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
     let address = address.trim().to_owned();
     let mut center = Center::default();
     let mut history_writable = true;
+    let mut history_error = String::new();
     if history.exists() {
         match crate::files::read(history, 4 * 1024 * 1024)
             .and_then(|b| serde_json::from_slice(&b).map_err(|e| e.to_string()))
-            .and_then(|rows| center.restore(rows))
+            .and_then(|value| center.restore_state(value))
         {
             Ok(()) => {}
             Err(e) => {
                 history_writable = false;
+                history_error =
+                    "Notification history could not be read; protected from overwrite".into();
                 eprintln!("NOTIFICATION_HISTORY_ERROR preserving unreadable file: {e}");
             }
         }
@@ -384,12 +474,20 @@ async fn serve(
                 .chain(c.exiting.values().map(|(n, _)| n))
                 .collect();
             visible.sort_by_key(|n| n.id);
-            let mut rows:Vec<_>=visible.into_iter().rev().take(5).map(|n|json!({"id":n.id.to_string(),"app":n.app,"summary":n.summary,"body":n.body,"icon":n.icon,"urgency":n.urgency,"expanded":n.expanded,"actions":n.actions.iter().map(|(key,label)|json!({"id":format!("{}|{}",n.id,key),"label":label})).collect::<Vec<_>>()})).collect();
+            let mut rows:Vec<_>=visible.into_iter().rev().take(5).map(|n|json!({"id":n.id.to_string(),"app":n.app,"summary":n.summary,"body":n.body,"icon":n.icon,"urgency":n.urgency,"expanded":n.expanded,"time_str":time_label(n.time_unix_ms),"actions":n.actions.iter().filter(|(key,_)|key!="default").map(|(key,label)|json!({"id":format!("{}|{}",n.id,key),"label":label})).collect::<Vec<_>>()})).collect();
             rows.reverse();
             (
-                json!({"rows":rows,"dnd":c.dnd,"inhibited":c.suppressed(),"history_count":c.history.len()+c.active.values().filter(|n|!n.transient).count(),"popup_count":c.active.values().filter(|n|n.popup).count(),"osd":osd}),
-                c.deadline(),
-                serde_json::to_value(&c.history).map_err(|e| e.to_string())?,
+                json!({"rows":rows,"dnd":c.dnd,"inhibited":c.suppressed(),"history_ready":history_writable,"error":history_error,"history_count":c.history.len()+c.active.values().filter(|n|!n.transient).count(),"popup_count":c.active.values().filter(|n|n.popup).count(),"timers":c.active.values().filter(|n|n.popup).map(|n|json!({"hovered":n.hovered,"timeoutMs":n.timeout_ms,"intervalMs":n.timeout_ms,"running":n.deadline.is_some()})).collect::<Vec<_>>(),"osd":osd}),
+                c.deadline()
+                    .into_iter()
+                    .chain(c.active.values().filter(|n| n.popup).map(|n| {
+                        Instant::now()
+                            + Duration::from_millis(
+                                60_000 - wall_ms().saturating_sub(n.time_unix_ms) % 60_000,
+                            )
+                    }))
+                    .min(),
+                c.persisted()?,
             )
         };
         let inhibited = snapshot["inhibited"].as_bool().unwrap_or(false);
@@ -417,6 +515,13 @@ async fn serve(
         if history_writable && encoded != persisted {
             if let Err(e) = crate::files::write_json(history, &history_json, 4 * 1024 * 1024) {
                 eprintln!("NOTIFICATION_HISTORY_ERROR {e}");
+                if history_error != e {
+                    history_error = e;
+                    shared.changed.notify_one();
+                }
+            } else if !history_error.is_empty() {
+                history_error.clear();
+                shared.changed.notify_one();
             }
             persisted = encoded;
         }
@@ -447,7 +552,10 @@ async fn serve(
                 Some(Control::Dnd(value))=>{let _=shared.with(|c|{c.set_dnd(value);Ok(())});},
                 Some(Control::HidePopups)=>{let _=shared.with(|c|{c.hide_popups();Ok(())});},
                 Some(Control::Details(id))=>{let _=shared.with(|c|{if let Some(n)=c.active.get_mut(&id){n.expanded = !n.expanded;}Ok(())});},
-                Some(Control::ClearHistory)=>{let _=shared.with(|c|{c.history.clear();Ok(())});},
+                Some(Control::ClearHistory)=>{
+                    let ids=shared.with(|c|{let ids:Vec<_>=c.active.values().filter(|n|!n.transient).map(|n|n.id).collect();for id in &ids{c.active.remove(id);}c.history.clear();c.exiting.clear();Ok(ids)}).map_err(|e|e.to_string())?;
+                    for id in ids{signal(&connection,"NotificationClosed",&(id,2u32)).await.map_err(|e|e.to_string())?;}
+                },
                 Some(Control::Osd{channel,value,muted})=>{osd=json!({"channel":channel,"value":value,"muted":muted});osd_deadline=Some(Instant::now()+Duration::from_secs(2));}
             }
         }

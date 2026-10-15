@@ -20,6 +20,34 @@ async fn notify(proxy: &Proxy<'_>, replaces: u32, timeout: i32) -> zbus::Result<
         )
         .await
 }
+async fn interactive(connection: &zbus::Connection) -> Result<(), Box<dyn std::error::Error>> {
+    let proxy = Proxy::new(
+        connection,
+        "org.freedesktop.Notifications",
+        "/org/freedesktop/Notifications",
+        "org.freedesktop.Notifications",
+    )
+    .await?;
+    let mut actions = proxy.receive_signal("ActionInvoked").await?;
+    let mut closed = proxy.receive_signal("NotificationClosed").await?;
+    let id = notify(&proxy, 0, 1500).await?;
+    println!("UI_NOTICE {}", serde_json::json!({"id":id}));
+    tokio::select! {
+        biased;
+        action=actions.next()=>{
+            let action=action.ok_or("missing action signal")?;
+            assert_eq!(action.body().deserialize::<(u32,String)>()?,(id,"open".into()));
+        },
+        _=closed.next()=>return Err("interactive notification expired before UI action".into()),
+        _=tokio::time::sleep(Duration::from_secs(12))=>return Err("missing UI action".into()),
+    }
+    let close = tokio::time::timeout(Duration::from_secs(2), closed.next())
+        .await?
+        .ok_or("missing action close signal")?;
+    assert_eq!(close.body().deserialize::<(u32, u32)>()?, (id, 2));
+    println!("UI_ACTION_PASS {}", serde_json::json!({"id":id}));
+    Ok(())
+}
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let address = std::env::args()
         .nth(1)
@@ -27,6 +55,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let connection = zbus::connection::Builder::address(address.as_str())?
         .build()
         .await?;
+    if std::env::args().nth(2).as_deref() == Some("interactive") {
+        return interactive(&connection).await;
+    }
     let proxy = Proxy::new(
         &connection,
         "org.freedesktop.Notifications",
@@ -116,7 +147,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     assert!(!inhibited);
     let history: String = policy.call("GetHistory", &()).await?;
     let history: serde_json::Value = serde_json::from_str(&history)?;
-    assert_eq!(history.as_array().ok_or("history not array")?.len(), 3);
+    assert_eq!(history.as_array().ok_or("history not array")?.len(), 4);
     for channel in ["volume", "brightness", "microphone", "capslock"] {
         policy
             .call::<_, _, ()>("ShowOsd", &(channel, 0.75f64, false))

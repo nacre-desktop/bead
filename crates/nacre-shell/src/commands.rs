@@ -152,7 +152,7 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     if args.len() < 3 {
         return Err("helper needs PROGRAM SCRIPT TOOL [ARG ...]".into());
     }
-    let mut command = std::process::Command::new(&args[0]);
+    let mut command = bead::services::process::command(&args[0]);
     command.arg(&args[1]);
     let request = bead::services::process::HelperRequest {
         id: 1,

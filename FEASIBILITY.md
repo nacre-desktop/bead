@@ -1308,3 +1308,21 @@ Foundation checkpoint ~1.3 h elapsed, ~2.4k added lines including proofs/docs.
 A missing PropertiesChanged signal caused stale inhibition state and was fixed.
 No live notification bus, physical desktop or reference repo was changed.
 See docs/research/feature9-gate-d.md; ignored evidence .research/gate-d.
+
+## Foundation pause checkpoint (2026-10-15)
+
+Features9–10 pause for the approved daemon foundation; typing is not accepted.
+Private notification interaction and crash cleanup pass on both compositors.
+A child inherited the UI's blocked SIGTERM mask; child-only reset fixes cleanup.
+No new typing, catalog, ranking or provider work was started after the redirect.
+
+| CPU-only nested smoke | Hypr120 | niri60 |
+| --- | ---: | ---: |
+| Empty / warm / closed PSS MiB |16.01 /26.16 /22.26|16.58 /26.92 /23.23|
+| DRM |none|none|
+| Protocol / hover-replace / action / restart / cleanup |pass|pass|
+
+81 tests, fmt, clippy warnings denied,22-module Luau analysis pass.
+Idle only2seconds; QML comparison and GateD acceptance remain pending.
+Checkpoint ~540 added lines plus docs; prior typing evidence remains unchanged.
+Next: F0 ADR and F5a–F5e; STOP before resuming Features9–10.

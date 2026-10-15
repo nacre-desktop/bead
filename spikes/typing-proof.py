@@ -39,9 +39,10 @@ def sample(env,raw,compositor,stop):
                         return re.search(r'UI_PRESENTED .*update=(\d+) cpu_ns=(\d+)',segment) is not None
                     matrix.wait_log(path,ready,timeout=6)
                     segment=matrix.log_text(path)[offset:]
+                    assert 'UI_ERROR' not in segment,'failed candidate during typing'
                     received=re.findall(r'INPUT_RECEIVED monotonic_ns=(\d+) cpu_ns=(\d+)',segment)
                     assert len(received)==1,('not exactly one key',received)
-                    start,cpu=map(int,received[0]);commits=re.findall(r'UI_COMMIT .*update=(\d+).*',segment)
+                    start,cpu=map(int,received[0]);commits=re.findall(r'UI_COMMIT .*update=(\d+).*source_error=false',segment)
                     presentations=re.findall(r'UI_PRESENTED generation=(\d+) monotonic_ns=(\d+) refresh_ns=(\d+) companion=(\w+) update=(\d+) cpu_ns=(\d+)',segment)
                     assert commits,'edit did not commit'
                     found=[p for p in presentations if p[4] in commits and int(p[1])>=start]
@@ -52,10 +53,14 @@ def sample(env,raw,compositor,stop):
                     time.sleep(.04)
                 assert 'PRESENTATION clock_id=1' in matrix.log_text(path)
                 result={'compositor':compositor,'catalog_size':320,'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
-                (raw/'typing-proof.json').write_text(json.dumps(result,indent=2)+'\n')
-                print('TYPING_PROOF '+json.dumps({k:v for k,v in result.items() if k!='rows'}),flush=True)
+
         finally:
             if pointer:pointer.close()
             if client:stop(client)
         assert 'UI_ERROR' not in path.read_text()
+    for key in ['cpu_ms','latency_ms']:
+        values=[r[key] for r in rows];result[key]['mean']=sum(values)/len(values);result[key]['max']=max(values)
+    result['valid']=True
+    (raw/'typing-proof.json').write_text(json.dumps(result,indent=2)+'\n')
+    print('TYPING_PROOF '+json.dumps({k:v for k,v in result.items() if k!='rows'}),flush=True)
     return result

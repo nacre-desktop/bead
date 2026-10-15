@@ -292,7 +292,7 @@ impl Drop for Server {
         }
     }
 }
-fn connect(path: &Path) -> std::io::Result<UnixStream> {
+pub(crate) fn connect(path: &Path) -> std::io::Result<UnixStream> {
     use std::os::{fd::FromRawFd, unix::ffi::OsStrExt};
     let bytes = path.as_os_str().as_bytes();
     let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };

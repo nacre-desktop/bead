@@ -311,6 +311,7 @@ impl SceneSource for Runtime {
                     | bead::render::Primitive::Shadow { rect, .. } => *rect,
                 };
                 bead::wayland::InputRegion {
+                    id: node.id.clone(),
                     prepare_panel: self.bar && node.action.as_deref() == Some("services.audio"),
                     dismiss: node.action.as_deref() == Some("close")
                         && self.session.stores.get("panel.open").is_some(),

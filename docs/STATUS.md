@@ -1,28 +1,21 @@
 # Status
 
-## 2026-10-15 — Features 9–10 active; STOP at Gate D
+## 2026-10-15 — Paused for foundation; typing targets not accepted
 
-Owner authorized notifications/OSD, then the core launcher. No installation,
-release, live notification ownership or new physical test is authorized.
-Worktree bead-feature9-gate-d; existing shared Cargo target; nice10/Cargo-j2.
-[Active measurements and limits](research/feature9-gate-d.md).
+Owner redirected Features 9–10 to Foundation F0 / F5a–F5e, then STOP.
+Current launcher/notification work is checkpointed; no new typing, catalog,
+ranking or providers. Existing compositor backends are frozen except bug fixes.
+The migration agent owns nacre-daemon / nacre-protocol and Nacre F0–F4.
+[Checkpoint evidence and limits](research/feature9-gate-d.md).
 
-Typing first: new320-app proof joins input receipt→validated presentation;
-separate CPU profiles cover filtering/markup/layout/shaping/bake/fonts.
-Initial traced p99 Hypr55.49 /nested niri60 49.59 ms; CPU median41.35/42.76.
-Latest grid candidate: Hypr p99 17.29 ms; CPU median/mean7.32/7.32 ms per key,
-CPU p99 11.12. Quiet matched repeats, varied queries and niri remain pending.
-Candidates: windowed rows, native projection, immutable markup, fixed-box text
-patches and bounded font-path cache. Targets are not yet accepted.
-
-Private-owned bus proofs pass both compositors: replacement/actions/expiry,
-history restart/DND/inhibition disconnect, four exact OSD presentations,
-CPU rendering and owned-daemon cleanup. Empty/warm PSS Hypr15.60/27.49 MiB,
-niri16.17/29.91; bus adds0.66/0.69; no DRM. Idle samples only2 s.
-Visual controls/hover, legacy commands and QML comparisons remain active.
-Feature10 catalog/ranking/providers and GateD QML comparison/estimate pending.
-78 workspace tests, clippy, headless notice/OSD, and22-module official Luau
-analysis pass. This is a foundation checkpoint, not completed Feature9.
+81 workspace tests, fmt, clippy (-D warnings) and22-module Luau analysis pass.
+Private Hyprland120 / nested niri60 proofs pass protocol, actual action clicks,
+hover replacement, DND/history restart, passive OSD and owned-bus crash cleanup.
+Empty/warm/closed PSS MiB: Hypr16.01/26.16/22.26; niri16.58/26.92/23.23.
+No DRM;2-second idle samples are smoke only. No QML comparison or GateD verdict.
+The child signal-mask fix prevents a private bus surviving the UI's SIGKILL.
+Next: ADR0003 / roadmap, then host-agnostic notification API and headless tests.
+No installation, live-session action or release is authorized.
 
 ## Accepted Gate C and optimization baseline
 
