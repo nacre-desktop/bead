@@ -52,6 +52,10 @@ def sample(env, raw, compositor, stop):
         spec=importlib.util.spec_from_file_location('panel_reference',ROOT/'spikes/panel-reference.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
         return proof.sample(env,raw,compositor,stop)
+    if os.environ.get('BEAD_HARDENING') == 'cache-memory':
+        spec=importlib.util.spec_from_file_location('cache_memory_proof',ROOT/'spikes/cache-memory-proof.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_HARDENING') == 'panel':
         spec=importlib.util.spec_from_file_location('panel_proof',ROOT/'spikes/panel-proof.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)

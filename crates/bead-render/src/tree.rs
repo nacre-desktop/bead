@@ -16,6 +16,7 @@ pub struct Raster {
     pub key: u64,
     pub base_key: Option<u64>,
     pub changed: Damage,
+    pub(crate) _charge: bead_core::cache::Charge,
 }
 #[derive(Clone)]
 pub struct Item {
@@ -24,13 +25,14 @@ pub struct Item {
     pub clip: Option<Rect>,
     pub raster: Option<Arc<Raster>>,
 }
-#[derive(Clone)]
+// Prepared frames are shared through Arc; metadata has one allocation owner.
 pub struct Frame {
     pub items: Vec<Item>,
     pub scale: f32,
     pub key: u64,
     pub layer_count: usize,
     pub layers: Vec<LayerPose>,
+    pub(crate) _accounting: Option<bead_core::cache::Charge>,
 }
 /// A retained subtree packet; unchanged row content reuses this allocation.
 pub struct RetainedLayer {
@@ -39,6 +41,7 @@ pub struct RetainedLayer {
     pub own: Vec<String>,
     pub children: Vec<String>,
     pub key: u64,
+    _charge: bead_core::cache::Charge,
 }
 #[derive(Clone)]
 pub struct LayerPose {
@@ -59,6 +62,9 @@ pub struct TreeCache {
     serial: u64,
     nodes: BTreeMap<(String, u32), (Arc<RetainedLayer>, u64)>,
     pub node_updates: usize,
+    raster_budget: Option<bead_core::cache::Budget>,
+    node_budget: Option<bead_core::cache::Budget>,
+    frame_budget: Option<bead_core::cache::Budget>,
 }
 pub fn rect(primitive: &Primitive) -> Rect {
     match primitive {
@@ -210,7 +216,34 @@ impl TreeCache {
                         || Damage::full(pixels.width(), pixels.height()),
                         |old| pixel_difference(&old.raster.pixels, &pixels),
                     );
+                    let bytes = pixels.data().len() + id.capacity() + 192;
+                    let budget = self.raster_budget.get_or_insert_with(|| {
+                        bead_core::cache::Budget::new(
+                            "retained-cpu-rasters",
+                            64 * bead_core::cache::MIB,
+                        )
+                    });
+                    let charge = loop {
+                        match budget.reserve(bytes) {
+                            Ok(c) => break c,
+                            Err(e) => {
+                                let victim = self
+                                    .entries
+                                    .iter()
+                                    .filter(|(_, e)| e.touched != self.serial)
+                                    .min_by_key(|(_, e)| e.touched)
+                                    .map(|(k, _)| k.clone());
+                                if let Some(victim) = victim {
+                                    self.entries.remove(&victim);
+                                } else {
+                                    return Err(e.into());
+                                }
+                            }
+                        }
+                    };
+                    let previous = self.entries.get(&slot);
                     let raster = Arc::new(Raster {
+                        _charge: charge,
                         pixels,
                         key,
                         base_key: previous.map(|old| old.raster.key),
@@ -270,10 +303,44 @@ impl TreeCache {
             let key = key.finish();
             let slot = (layer.id.clone(), scale.to_bits());
             if self.nodes.get(&slot).is_none_or(|(old, _)| old.key != key) {
+                let bytes = 192
+                    + 2 * layer.id.capacity()
+                    + layer.parent.as_ref().map_or(0, String::capacity)
+                    + (own.capacity() + child_ids.capacity()) * std::mem::size_of::<String>()
+                    + own
+                        .iter()
+                        .chain(&child_ids)
+                        .map(String::capacity)
+                        .sum::<usize>();
+                let budget = self.node_budget.get_or_insert_with(|| {
+                    bead_core::cache::Budget::new(
+                        "retained-node-metadata",
+                        8 * bead_core::cache::MIB,
+                    )
+                });
+                let charge = loop {
+                    match budget.reserve(bytes) {
+                        Ok(c) => break c,
+                        Err(e) => {
+                            let victim = self
+                                .nodes
+                                .iter()
+                                .filter(|(_, (_, age))| *age != self.serial)
+                                .min_by_key(|(_, (_, age))| *age)
+                                .map(|(k, _)| k.clone());
+                            if let Some(k) = victim {
+                                self.nodes.remove(&k);
+                            } else {
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                };
                 self.nodes.insert(
                     slot.clone(),
                     (
                         Arc::new(RetainedLayer {
+                            _charge: charge,
                             id: layer.id.clone(),
                             parent: layer.parent.clone(),
                             own,
@@ -304,7 +371,25 @@ impl TreeCache {
             };
             self.nodes.remove(&victim);
         }
+        let bytes = items
+            .iter()
+            .map(|i| {
+                i.id.capacity() + crate::primitive_bytes(&i.primitive) + std::mem::size_of::<Item>()
+            })
+            .sum::<usize>()
+            + layers.capacity() * std::mem::size_of::<LayerPose>();
+        let accounting = Some(
+            self.frame_budget
+                .get_or_insert_with(|| {
+                    bead_core::cache::Budget::new(
+                        "prepared-frame-metadata",
+                        8 * bead_core::cache::MIB,
+                    )
+                })
+                .reserve(bytes)?,
+        );
         self.frame = Some(Arc::new(Frame {
+            _accounting: accounting,
             items,
             scale,
             key: frame_hash.finish(),
@@ -446,6 +531,8 @@ pub struct TreeCpuRenderer {
     /// Opaque frames compose primitives directly rather than reuse an opacity group.
     pub direct_composites: usize,
     flattened: Option<(u64, f32, Pixmap)>,
+    group_budget: Option<bead_core::cache::Budget>,
+    group_charge: Option<bead_core::cache::Charge>,
 }
 impl Renderer for TreeCpuRenderer {
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
@@ -473,10 +560,12 @@ impl Renderer for TreeCpuRenderer {
         if scene.opacity >= 1. {
             self.direct_composites += 1;
             self.flattened = None;
+            self.group_charge = None;
             return paint(frame, scene.offset, target, damage);
         }
         if scene.opacity <= 0. {
             self.flattened = None;
+            self.group_charge = None;
             let ShmTarget { bytes, width, .. } = target;
             for y in damage.y..damage.y + damage.h {
                 let i = (y * width + damage.x) as usize * 4;
@@ -498,6 +587,15 @@ impl Renderer for TreeCpuRenderer {
             if u64::from(w) * u64::from(h) * 4 > 64 * 1024 * 1024 {
                 return Err("opacity group exceeds budget".into());
             }
+            self.flattened = None;
+            self.group_charge = None;
+            self.group_charge = Some(
+                self.group_budget
+                    .get_or_insert_with(|| {
+                        bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+                    })
+                    .reserve(w as usize * h as usize * 4 + 64)?,
+            );
             let mut pixels = Pixmap::new(w, h).ok_or("opacity group")?;
             paint(
                 frame,
@@ -555,6 +653,19 @@ impl Renderer for TreeCpuRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn prepared_frame_keeps_raster_charge_after_lookup_drop() {
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene(), 1.).unwrap();
+        let budget = cache.raster_budget.as_ref().unwrap().clone();
+        let held = cache.frame.as_ref().unwrap().clone();
+        let bytes = budget.used();
+        assert!(bytes > 0);
+        drop(cache);
+        assert_eq!(budget.used(), bytes);
+        drop(held);
+        assert_eq!(budget.used(), 0);
+    }
     fn scene() -> Scene {
         let mut image = Pixmap::new(8, 8).unwrap();
         image.fill(tiny_skia::Color::from_rgba8(20, 40, 80, 255));

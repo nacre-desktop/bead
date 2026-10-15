@@ -123,7 +123,6 @@ fn start(
             "--audio-panel" => audio_panel = true,
             "--report" => {
                 options.report = Some(args.next().ok_or("--report needs FILE")?.into());
-                options.seconds = Some(30.);
             }
             "--command-socket" => {
                 options.command_socket = Some(
@@ -244,7 +243,7 @@ fn start(
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
-    if options.report.is_some() {
+    if options.report.is_some() && options.seconds.is_none() {
         options.seconds = Some(30.);
     }
     if options.bar {

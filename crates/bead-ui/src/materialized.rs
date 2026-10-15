@@ -29,6 +29,7 @@ pub(super) struct Cached {
     values: BTreeMap<String, Value>,
     structural: BTreeSet<String>,
     text: Vec<Text>,
+    _charge: Option<bead_core::cache::Charge>,
 }
 fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
     if let Some(name) = value.get("__bind").and_then(|v| v.as_str()) {
@@ -58,8 +59,9 @@ impl Cached {
         resolve: &Resolve<'_>,
         palette: &Palette,
         viewport: (f32, f32),
-    ) -> Result<Self, Diagnostic> {
+    ) -> Result<Option<Self>, Diagnostic> {
         let mut cached = Self {
+            _charge: None,
             raw: raw.clone(),
             scene: scene.clone(),
             nodes: nodes.to_vec(),
@@ -140,7 +142,66 @@ impl Cached {
         {
             cached.values.insert(name.clone(), resolve(name)?);
         }
-        Ok(cached)
+        let bytes = layout::raw_bytes(&raw)
+            + cached
+                .scene
+                .primitives
+                .iter()
+                .map(bead_render::primitive_bytes)
+                .sum::<usize>()
+            + cached
+                .nodes
+                .iter()
+                .map(|n| {
+                    n.id.capacity()
+                        + n.label.capacity()
+                        + bead_render::primitive_bytes(&n.draw)
+                        + 256
+                        + n.bind
+                            .iter()
+                            .map(|(k, v)| k.capacity() + v.capacity() + 64)
+                            .sum::<usize>()
+                        + [
+                            &n.visible,
+                            &n.action,
+                            &n.icon,
+                            &n.input,
+                            &n.scroll,
+                            &n.scroll_store,
+                        ]
+                        .into_iter()
+                        .map(|s| s.as_ref().map_or(0, String::capacity))
+                        .sum::<usize>()
+                        + n.action_arg
+                            .as_ref()
+                            .map_or(0, bead_core::cache::value_bytes)
+                })
+                .sum::<usize>()
+            + cached
+                .values
+                .iter()
+                .map(|(k, v)| k.capacity() + 64 + bead_core::cache::value_bytes(v))
+                .sum::<usize>()
+            + cached
+                .structural
+                .iter()
+                .map(|s| s.capacity() + 64)
+                .sum::<usize>()
+            + cached
+                .text
+                .iter()
+                .map(|t| {
+                    t.binding.capacity() + t.placeholder.as_ref().map_or(0, String::capacity) + 128
+                })
+                .sum::<usize>();
+        let budget = bead_core::cache::Budget::new("materialized-view", 8 * bead_core::cache::MIB);
+        match budget.reserve(bytes) {
+            Ok(c) => {
+                cached._charge = Some(c);
+                Ok(Some(cached))
+            }
+            Err(_) => Ok(None),
+        }
     }
     pub fn patch(
         &self,

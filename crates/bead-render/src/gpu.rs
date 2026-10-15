@@ -214,10 +214,13 @@ pub struct GpuTarget<'a> {
     pub width: u32,
     pub height: u32,
 }
-struct LayerBytes(Arc<tiny_skia::Pixmap>);
+struct LayerBytes {
+    pixels: Arc<tiny_skia::Pixmap>,
+    _charge: bead_core::cache::Charge,
+}
 impl AsRef<[u8]> for LayerBytes {
     fn as_ref(&self) -> &[u8] {
-        self.0.data()
+        self.pixels.data()
     }
 }
 pub struct GpuRenderer {
@@ -225,7 +228,10 @@ pub struct GpuRenderer {
     cache: LayerCache,
     femto: Option<femtovg::Canvas<femtovg::renderer::WGPURenderer>>,
     femto_image: Option<femtovg::ImageId>,
-    femto_images: std::collections::BTreeMap<u32, (u64, femtovg::ImageId)>,
+    femto_images:
+        std::collections::BTreeMap<u32, (u64, femtovg::ImageId, bead_core::cache::Charge, u64)>,
+    image_budget: bead_core::cache::Budget,
+    image_clock: u64,
     vello: Option<vello::Renderer>,
     image: Option<vello::peniko::ImageData>,
     uploaded_key: Option<u64>,
@@ -238,6 +244,11 @@ impl GpuRenderer {
             femto: None,
             femto_image: None,
             femto_images: Default::default(),
+            image_budget: bead_core::cache::Budget::new(
+                "wgpu-femtovg-images",
+                64 * bead_core::cache::MIB,
+            ),
+            image_clock: 0,
             vello: None,
             image: None,
             uploaded_key: None,
@@ -267,8 +278,28 @@ impl GpuRenderer {
         if self
             .femto_images
             .get(&layer.scale.to_bits())
-            .is_none_or(|(key, _)| *key != layer.key)
+            .is_none_or(|(key, _, _, _)| *key != layer.key)
         {
+            let charge = loop {
+                match self.image_budget.reserve(w as usize * h as usize * 4 + 128) {
+                    Ok(c) => break c,
+                    Err(e) => {
+                        let key = self
+                            .femto_images
+                            .iter()
+                            .filter(|(scale, _)| **scale != layer.scale.to_bits())
+                            .min_by_key(|(_, (_, _, _, age))| age)
+                            .map(|(k, _)| *k);
+                        if let Some(key) = key {
+                            if let Some((_, old, _, _)) = self.femto_images.remove(&key) {
+                                canvas.delete_image(old);
+                            }
+                        } else {
+                            return Err(e.into());
+                        }
+                    }
+                }
+            };
             let start = Instant::now();
             let next_image = canvas.create_image(
                 femtovg::ImageSource::Rgba(imgref::Img::new(
@@ -278,13 +309,18 @@ impl GpuRenderer {
                 )),
                 femtovg::ImageFlags::PREMULTIPLIED,
             )?;
-            if let Some((_, image)) = self.femto_images.remove(&layer.scale.to_bits()) {
+            if let Some((_, image, _, _)) = self.femto_images.remove(&layer.scale.to_bits()) {
                 canvas.delete_image(image);
             }
             self.femto_image = Some(next_image);
             self.femto_images.insert(
                 layer.scale.to_bits(),
-                (layer.key, self.femto_image.unwrap()),
+                (
+                    layer.key,
+                    self.femto_image.unwrap(),
+                    charge,
+                    self.image_clock,
+                ),
             );
             println!(
                 "PROFILE stage=layer_upload ms={:.3} uploads={}",
@@ -292,14 +328,19 @@ impl GpuRenderer {
                 self.cache.builds
             );
         }
+        self.image_clock += 1;
+        if let Some((_, _, _, age)) = self.femto_images.get_mut(&layer.scale.to_bits()) {
+            *age = self.image_clock;
+        }
         self.femto_image = Some(self.femto_images[&layer.scale.to_bits()].1);
         while self.femto_images.len() > 8 {
             let scale = *self
                 .femto_images
-                .keys()
-                .find(|&&s| s != layer.scale.to_bits())
+                .iter()
+                .min_by_key(|(_, (_, _, _, age))| age)
+                .map(|(scale, _)| scale)
                 .unwrap();
-            if let Some((_, image)) = self.femto_images.remove(&scale) {
+            if let Some((_, image, _, _)) = self.femto_images.remove(&scale) {
                 canvas.delete_image(image);
             }
         }
@@ -393,7 +434,10 @@ impl Renderer for GpuRenderer {
                 }
                 if self.uploaded_key != Some(layer.key) {
                     self.image = Some(vello::peniko::ImageData {
-                        data: vello::peniko::Blob::new(Arc::new(LayerBytes(layer.pixels.clone()))),
+                        data: vello::peniko::Blob::new(Arc::new(LayerBytes {
+                            pixels: layer.pixels.clone(),
+                            _charge: layer._charge.clone(),
+                        })),
                         format: vello::peniko::ImageFormat::Rgba8,
                         alpha_type: vello::peniko::ImageAlphaType::AlphaPremultiplied,
                         width: w,

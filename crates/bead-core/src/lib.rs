@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Durable, typed state keyed independently from any view generation.
 pub mod animation;
+pub mod cache;
 pub mod capabilities;
 pub mod profile;
 pub mod recovery;

@@ -126,6 +126,15 @@ pub enum TextAlign {
     Center,
     Right,
 }
+/// Conservative retained primitive heap and metadata bytes, without raster payloads.
+pub fn primitive_bytes(p: &Primitive) -> usize {
+    std::mem::size_of::<Primitive>()
+        + match p {
+            Primitive::Text { text, family, .. } => text.capacity() + family.capacity(),
+            Primitive::Image { path, .. } => path.as_os_str().len(),
+            _ => 0,
+        }
+}
 /// Positions are logical pixels. Resources stay independent of surface buffers.
 #[derive(Clone, Copy)]
 pub struct Slide {
@@ -253,9 +262,14 @@ pub trait Renderer {
 pub struct CpuRenderer {
     fonts: Option<FontSystem>,
     glyphs: SwashCache,
-    textures: HashMap<String, Pixmap>,
+    textures: bead_core::cache::Lru<String, Pixmap>,
+    glyph_budget: bead_core::cache::Budget,
+    glyph_charge: Option<bead_core::cache::Charge>,
+    glyph_uses: HashMap<cosmic_text::CacheKey, u64>,
+    glyph_clock: u64,
     mask: Option<Mask>,
     old_mask: Option<Damage>,
+    mask_charge: Option<bead_core::cache::Charge>,
     used_fonts: BTreeSet<String>,
     color_glyphs: usize,
 }
@@ -264,12 +278,54 @@ impl Default for CpuRenderer {
         Self {
             fonts: None,
             glyphs: SwashCache::new(),
-            textures: HashMap::new(),
+            textures: bead_core::cache::Lru::new("legacy-cpu-textures", 64 * bead_core::cache::MIB),
+            glyph_budget: bead_core::cache::Budget::new("swash-images", 8 * bead_core::cache::MIB),
+            glyph_charge: None,
+            glyph_uses: HashMap::new(),
+            glyph_clock: 0,
             mask: None,
             old_mask: None,
+            mask_charge: None,
             used_fonts: BTreeSet::new(),
             color_glyphs: 0,
         }
+    }
+}
+impl CpuRenderer {
+    fn cap_glyphs(&mut self) -> Result<()> {
+        self.glyph_charge = None;
+        // This renderer never requests outlines. Avoid retaining dependency-only data.
+        self.glyphs.outline_command_cache.clear();
+        loop {
+            let bytes = self
+                .glyphs
+                .image_cache
+                .values()
+                .map(|v| v.as_ref().map_or(0, |i| i.data.capacity()))
+                .sum::<usize>()
+                + self.glyphs.image_cache.capacity() * 192
+                + self.glyph_uses.capacity() * 64;
+            if let Ok(charge) = self.glyph_budget.reserve(bytes) {
+                self.glyph_charge = Some(charge);
+                break;
+            }
+            let Some(key) = self
+                .glyph_uses
+                .iter()
+                .min_by_key(|(_, age)| **age)
+                .map(|(key, _)| *key)
+            else {
+                self.glyphs = SwashCache::new();
+                self.glyph_uses = HashMap::new();
+                break;
+            };
+            self.glyph_uses.remove(&key);
+            self.glyphs.image_cache.remove(&key);
+            if self.glyph_uses.is_empty() {
+                self.glyph_uses.shrink_to_fit();
+            }
+        }
+        Ok(())
     }
 }
 fn scene_fonts(scene: &Scene) -> Result<FontSystem> {
@@ -407,6 +463,8 @@ impl Renderer for CpuRenderer {
                                 }
                             }
                             let physical = glyph.physical((0., run.line_y), 1.);
+                            self.glyph_clock += 1;
+                            self.glyph_uses.insert(physical.cache_key, self.glyph_clock);
                             if self
                                 .glyphs
                                 .get_image(fonts, physical.cache_key)
@@ -482,7 +540,17 @@ impl Renderer for CpuRenderer {
                 _ => 2,
             };
             stages[stage] += resource_start.elapsed().as_secs_f64() * 1000.;
-            self.textures.insert(k, pixmap);
+            let bytes = pixmap.data().len() + k.capacity() + 128;
+            self.textures.insert(k, pixmap, bytes)?;
+            self.cap_glyphs()?;
+        }
+        if scene
+            .primitives
+            .iter()
+            .filter(|p| !matches!(p, Primitive::Rounded { .. }))
+            .any(|p| !self.textures.contains_key(&key(p, scale)))
+        {
+            return Err("active CPU textures exceed cache budget".into());
         }
         if self.textures.len() != before {
             println!(
@@ -523,6 +591,12 @@ impl Renderer for CpuRenderer {
             .as_ref()
             .is_none_or(|m| m.width() != width || m.height() != height)
         {
+            self.mask = None;
+            self.mask_charge = None;
+            self.mask_charge = Some(
+                bead_core::cache::Budget::new("legacy-cpu-mask", 64 * bead_core::cache::MIB)
+                    .reserve(width as usize * height as usize + 64)?,
+            );
             self.mask = Some(Mask::new(width, height).ok_or("clip allocation")?);
             self.old_mask = None;
         }

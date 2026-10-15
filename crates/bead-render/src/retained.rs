@@ -14,12 +14,23 @@ pub struct Layer {
     pub scale: f32,
     pub key: u64,
     pub origin: (f32, f32),
+    pub(crate) _charge: bead_core::cache::Charge,
 }
-#[derive(Default)]
 pub struct LayerCache {
     pub layer: Option<Layer>,
     pub builds: usize,
-    scales: std::collections::BTreeMap<u32, Layer>,
+    scales: bead_core::cache::Lru<u32, Layer>,
+    budget: bead_core::cache::Budget,
+}
+impl Default for LayerCache {
+    fn default() -> Self {
+        Self {
+            layer: None,
+            builds: 0,
+            scales: bead_core::cache::Lru::new("per-scale-metadata", 64 * 1024),
+            budget: bead_core::cache::Budget::new("per-scale-rasters", 64 * bead_core::cache::MIB),
+        }
+    }
 }
 impl LayerCache {
     pub fn layer_count(&self) -> usize {
@@ -44,6 +55,17 @@ impl LayerCache {
         if u64::from(w) * u64::from(h) * 4 > 64 * 1024 * 1024 {
             return Err("retained layer exceeds 64 MiB".into());
         }
+        self.scales.remove(&scale.to_bits());
+        let charge = loop {
+            match self.budget.reserve(w as usize * h as usize * 4 + 64) {
+                Ok(c) => break c,
+                Err(e) => {
+                    if self.scales.pop_lru().is_none() {
+                        return Err(e.into());
+                    }
+                }
+            }
+        };
         let mut pixels = Pixmap::new(w, h).ok_or("layer allocation")?;
         let mut raster = CpuRenderer::default();
         raster.prepare(&content, scale)?;
@@ -69,19 +91,15 @@ impl LayerCache {
             self.builds
         );
         let layer = Layer {
+            _charge: charge,
             pixels: Arc::new(pixels),
             scale,
             key,
             origin: (scene.bounds.x, scene.bounds.y),
         };
-        self.scales.insert(scale.to_bits(), layer.clone());
+        self.scales.insert(scale.to_bits(), layer.clone(), 128)?;
         while self.scales.len() > 8 {
-            let key = *self
-                .scales
-                .keys()
-                .find(|&&key| key != scale.to_bits())
-                .unwrap();
-            self.scales.remove(&key);
+            self.scales.pop_lru();
         }
         self.layer = Some(layer);
         Ok(())

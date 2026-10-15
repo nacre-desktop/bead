@@ -433,6 +433,8 @@ def sample_qml_reload(env,raw):
         finally:stop(client);reader.join(timeout=5)
 
 def main():
+    # Absolute floor: the invoking task may itself have elevated priority.
+    os.setpriority(os.PRIO_PROCESS, 0, max(10, os.getpriority(os.PRIO_PROCESS, 0)))
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--seconds', type=float, default=60)
     p.add_argument('--runs', type=int, default=3)
@@ -465,6 +467,7 @@ def main():
         # starting the bus, not just before launching its clients.
         with tempfile.TemporaryDirectory(prefix='bead-bus-') as directory:
             env=os.environ.copy()
+            env.update({'GIO_USE_VFS':'local', 'GVFS_DISABLE_FUSE':'1'})
             display=env.get('WAYLAND_DISPLAY','')
             if display and not display.startswith('/'): display=str(pathlib.Path(env['XDG_RUNTIME_DIR'])/display)
             env['BEAD_PARENT_WAYLAND']=display

@@ -26,8 +26,11 @@ def sample(env, raw, compositor, stop):
     log = raw/'panel.log'
     pw = matrix.services.pipewire(env, raw)
     client = pointer = None
-    command = [str(target/'nacre-shell'), '--bar', '--audio-panel', '--command-socket',
+    shell_binary = os.environ.get('BEAD_NATIVE_BINARY', str(target/'nacre-shell'))
+    command = [shell_binary, '--bar', '--audio-panel', '--command-socket',
                str(socket), '--namespace', 'bead-gate-c', '--trace-state']
+    if os.environ.get('BEAD_CACHE_REPORT'):
+        command += ['--report', str(raw/'cache-report.json'), '--seconds', '180']
     if os.environ.get('BEAD_BACKGROUND_BLUR'):command+=['--background-blur']
     if os.environ.get('BEAD_PANEL_NO_DAMAGE'):command+=['--no-damage']
     if os.environ.get('BEAD_PANEL_RENDERER'):
@@ -40,7 +43,7 @@ def sample(env, raw, compositor, stop):
         return subprocess.run(args, env=env, check=True, capture_output=True, text=True, timeout=8)
 
     def call(method, *args, target_name='bead.panel', ok=True):
-        r = subprocess.run([str(target/'nacre-shell'), 'ipc', '--socket', str(socket),
+        r = subprocess.run([shell_binary, 'ipc', '--socket', str(socket),
                             '--json', target_name, method, *args], cwd=ROOT, env=env,
                            capture_output=True, text=True, timeout=5)
         if (r.returncode == 0) != ok:
@@ -93,6 +96,8 @@ def sample(env, raw, compositor, stop):
             if seconds:
                 print('PANEL_IDLE_SAMPLE bar', flush=True)
                 result['bar_idle'] = matrix.idle(client.pid, seconds)
+            initial = call('state')['result']
+            assert not initial['target_open'] and not initial['resident'], 'bar-only fixture must start closed and released'
             baseline = memory()
             result['bar'] = baseline
             for i in range(int(os.environ.get('BEAD_PANEL_CYCLES', '10'))):
@@ -254,3 +259,10 @@ def sample(env, raw, compositor, stop):
             stop(client)
         stop(pw)
     assert 'STOP surfaces=0' in log.read_text()
+
+    if os.environ.get('BEAD_CACHE_REPORT'):
+        report = json.loads((raw/'cache-report.json').read_text())['cache_bytes']
+        assert report['used_bytes'] <= report['limit_bytes']
+        assert sum(c['used_bytes'] for c in report['caches']) == report['used_bytes']
+        assert all(c['used_bytes'] <= c['limit_bytes'] for c in report['caches'])
+        print('CACHE_REPORT bytes='+str(report['used_bytes'])+' limit='+str(report['limit_bytes']), flush=True)

@@ -259,6 +259,8 @@ struct Texture {
     image: femtovg::ImageId,
     pixels: std::sync::Arc<tiny_skia::Pixmap>,
     touched: u64,
+    _charge: bead_core::cache::Charge,
+    source_charge: bead_core::cache::Charge,
 }
 #[derive(Default)]
 pub struct GlRenderer {
@@ -266,6 +268,9 @@ pub struct GlRenderer {
     canvas: Option<femtovg::Canvas<femtovg::renderer::OpenGl>>,
     images: std::collections::BTreeMap<(String, u32), Texture>,
     serial: u64,
+    image_budget: Option<bead_core::cache::Budget>,
+    group_budget: Option<bead_core::cache::Budget>,
+    group_charge: Option<bead_core::cache::Charge>,
     group: Option<(femtovg::ImageId, u32, u32, u64)>,
 }
 impl GlRenderer {
@@ -293,6 +298,29 @@ impl GlRenderer {
                 .get(&slot)
                 .is_none_or(|old| old.pixels.width() != w || old.pixels.height() != h)
             {
+                let budget = self.image_budget.get_or_insert_with(|| {
+                    bead_core::cache::Budget::new("native-gl-images", 64 * bead_core::cache::MIB)
+                });
+                let charge = loop {
+                    match budget.reserve(w as usize * h as usize * 4 + slot.0.capacity() + 192) {
+                        Ok(c) => break c,
+                        Err(e) => {
+                            let victim = self
+                                .images
+                                .iter()
+                                .filter(|(key, t)| *key != &slot && t.touched != self.serial)
+                                .min_by_key(|(_, t)| t.touched)
+                                .map(|(k, _)| k.clone());
+                            if let Some(victim) = victim {
+                                if let Some(old) = self.images.remove(&victim) {
+                                    canvas.delete_image(old.image);
+                                }
+                            } else {
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                };
                 let image = canvas.create_image(
                     femtovg::ImageSource::Rgba(imgref::Img::new(
                         raster.pixels.data().as_rgba(),
@@ -307,6 +335,8 @@ impl GlRenderer {
                 self.images.insert(
                     slot.clone(),
                     Texture {
+                        _charge: charge,
+                        source_charge: raster._charge.clone(),
                         key: raster.key,
                         image,
                         pixels: raster.pixels.clone(),
@@ -356,6 +386,7 @@ impl GlRenderer {
                     }
                     old.key = raster.key;
                     old.pixels = raster.pixels.clone();
+                    old.source_charge = raster._charge.clone();
                 }
                 old.touched = self.serial;
             }
@@ -517,6 +548,17 @@ impl Renderer for GlRenderer {
                 if let Some((old, _, _, _)) = self.group.take() {
                     canvas.delete_image(old);
                 }
+                self.group_charge = None;
+                self.group_charge = Some(
+                    self.group_budget
+                        .get_or_insert_with(|| {
+                            bead_core::cache::Budget::new(
+                                "native-gl-composite",
+                                64 * bead_core::cache::MIB,
+                            )
+                        })
+                        .reserve(w as usize * h as usize * 4 + 64)?,
+                );
                 self.group = Some((
                     canvas.create_image_empty(
                         w as usize,

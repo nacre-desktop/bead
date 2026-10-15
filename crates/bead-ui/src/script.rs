@@ -19,7 +19,7 @@ pub struct Script {
     exports: Table,
     path: PathBuf,
     deadline: Rc<Cell<Instant>>,
-    cache: RefCell<BTreeMap<String, Cached>>,
+    cache: RefCell<bead_core::cache::Lru<String, Cached>>,
 }
 impl Script {
     pub fn validate_source(bytes: &[u8], path: &Path) -> Result<(), Diagnostic> {
@@ -59,7 +59,10 @@ impl Script {
             exports,
             path: path.to_path_buf(),
             deadline,
-            cache: RefCell::new(BTreeMap::new()),
+            cache: RefCell::new(bead_core::cache::Lru::new(
+                "computed-values",
+                8 * bead_core::cache::MIB,
+            )),
         })
     }
     pub fn begin(&self) {
@@ -214,12 +217,21 @@ impl Script {
             reads.clone(),
         )
         .map_err(|e| lua_error(&self.path, e))?;
-        self.cache.borrow_mut().insert(
+        let bytes = name.len()
+            + 128
+            + bead_core::cache::value_bytes(&value)
+            + reads
+                .borrow()
+                .iter()
+                .map(|(k, (_, v))| k.capacity() + 64 + bead_core::cache::value_bytes(v))
+                .sum::<usize>();
+        let _ = self.cache.borrow_mut().insert(
             name.into(),
             Cached {
                 value: value.clone(),
                 reads: reads.borrow().clone(),
             },
+            bytes,
         );
         Ok(value)
     }

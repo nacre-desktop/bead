@@ -175,6 +175,7 @@ mod tests {
             border: None,
         };
         let mut frame = Frame {
+            _accounting: None,
             items: vec![crate::tree::Item {
                 id: "button".into(),
                 primitive,

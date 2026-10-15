@@ -3,10 +3,16 @@
 use bead::render::{Primitive, Result, Scene};
 use skrifa::MetadataProvider;
 use std::{collections::BTreeSet, ffi::CString, path::PathBuf, time::Instant};
-type Selection = (BTreeSet<String>, BTreeSet<char>, Vec<PathBuf>);
-#[derive(Default)]
+type Selection = (BTreeSet<String>, BTreeSet<char>);
 pub struct Selector {
-    entries: std::collections::VecDeque<Selection>,
+    entries: bead::core::cache::Lru<Selection, Vec<PathBuf>>,
+}
+impl Default for Selector {
+    fn default() -> Self {
+        Self {
+            entries: bead::core::cache::Lru::new("font-selector", 512 * 1024),
+        }
+    }
 }
 impl Selector {
     pub fn clear(&mut self) {
@@ -22,18 +28,31 @@ impl Selector {
                 chars.extend(text.chars().filter(|c| !c.is_control()));
             }
         }
-        if let Some((_, _, paths)) = self
+        let matched = self
             .entries
-            .iter()
-            .find(|(f, c, _)| *f == families && c.is_superset(&chars))
-        {
-            return Ok(paths.clone());
+            .keys()
+            .find(|(f, c)| *f == families && c.is_superset(&chars))
+            .cloned();
+        if let Some(key) = matched {
+            return Ok(self
+                .entries
+                .get(&key)
+                .ok_or("font selection evicted")?
+                .clone());
         }
         let paths = select(scene)?;
         if families.len() <= 32 && chars.len() <= 4096 {
-            self.entries.push_back((families, chars, paths.clone()));
+            let bytes = families.iter().map(|f| f.capacity() + 64).sum::<usize>()
+                + chars.len() * 40
+                + paths
+                    .iter()
+                    .map(|p| p.as_os_str().len() + 32)
+                    .sum::<usize>()
+                + 128;
+            // Admission failure merely disables this optional acceleration.
+            let _ = self.entries.insert((families, chars), paths.clone(), bytes);
             if self.entries.len() > 8 {
-                self.entries.pop_front();
+                self.entries.pop_lru();
             }
         } else {
             self.entries.clear();

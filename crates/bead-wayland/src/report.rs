@@ -14,7 +14,7 @@ pub(super) fn save(app: &App, path: &std::path::Path) -> Result<(), Box<dyn Erro
         .cloned()
         .chain(app.surfaces.iter().map(surface))
         .collect();
-    let value = serde_json::json!({"version":1,"duration_seconds":app.started.elapsed().as_secs_f64(),"cpu_seconds":seconds(usage.ru_utime)+seconds(usage.ru_stime),"surfaces":surfaces});
+    let value = serde_json::json!({"version":1,"duration_seconds":app.started.elapsed().as_secs_f64(),"cpu_seconds":seconds(usage.ru_utime)+seconds(usage.ru_stime),"surfaces":surfaces,"cache_bytes":bead_core::cache::report()});
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
     let mut file = std::fs::OpenOptions::new()

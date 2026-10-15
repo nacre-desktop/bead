@@ -61,6 +61,18 @@ pub struct RawNode {
     pub source: Source,
     pub scope: Option<String>,
 }
+pub(crate) fn raw_bytes(raw: &RawNode) -> usize {
+    std::mem::size_of::<RawNode>()
+        + raw.source.file.capacity()
+        + raw.scope.as_ref().map_or(0, String::capacity)
+        + raw
+            .props
+            .iter()
+            .map(|(k, v)| k.capacity() + 64 + bead_core::cache::json_bytes(v))
+            .sum::<usize>()
+        + raw.children.capacity() * std::mem::size_of::<RawNode>()
+        + raw.children.iter().map(raw_bytes).sum::<usize>()
+}
 pub const PROPERTIES: &[&str] = &[
     "id",
     "width",

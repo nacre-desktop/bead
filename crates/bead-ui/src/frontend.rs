@@ -42,12 +42,18 @@ return function(ui)
 end
 "#;
 /// Immutable generation-owned bytecode; evaluation always uses a fresh sandbox.
-type Materialized = (std::rc::Rc<RawNode>, BTreeMap<String, Value>);
+type Materialized = (
+    std::rc::Rc<RawNode>,
+    BTreeMap<String, Value>,
+    bead_core::cache::Charge,
+);
 pub struct LuauFrontEnd {
     compiled: Sources,
     materialized: RefCell<Option<Materialized>>,
     kit: Vec<u8>,
     install: Vec<u8>,
+    _compiled_charge: bead_core::cache::Charge,
+    values_budget: bead_core::cache::Budget,
 }
 impl LuauFrontEnd {
     pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
@@ -69,15 +75,32 @@ impl LuauFrontEnd {
                 compiled.insert(path.clone(), code);
             }
         }
+        let kit = compiler
+            .compile(include_str!("../assets/kit.luau"))
+            .map_err(|e| diagnostic(entry, e))?;
+        let install = compiler
+            .compile(INSTALL)
+            .map_err(|e| diagnostic(entry, e))?;
+        let bytes = compiled
+            .iter()
+            .map(|(p, b)| p.as_os_str().len() + b.capacity() + 96)
+            .sum::<usize>()
+            + kit.capacity()
+            + install.capacity();
+        let budget = bead_core::cache::Budget::new("compiled-markup", 8 * bead_core::cache::MIB);
+        let charge = budget
+            .reserve(bytes)
+            .map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
         Ok(Self {
+            _compiled_charge: charge,
+            values_budget: bead_core::cache::Budget::new(
+                "markup-values",
+                8 * bead_core::cache::MIB,
+            ),
             compiled,
             materialized: RefCell::new(None),
-            kit: compiler
-                .compile(include_str!("../assets/kit.luau"))
-                .map_err(|e| diagnostic(entry, e))?,
-            install: compiler
-                .compile(INSTALL)
-                .map_err(|e| diagnostic(entry, e))?,
+            kit,
+            install,
         })
     }
 }
@@ -87,7 +110,7 @@ impl FrontEnd for LuauFrontEnd {
         entry: &Path,
         resolve: &Resolve<'_>,
     ) -> Result<std::rc::Rc<RawNode>, Diagnostic> {
-        if let Some((raw, reads)) = &*self.materialized.borrow()
+        if let Some((raw, reads, _)) = &*self.materialized.borrow()
             && reads
                 .iter()
                 .all(|(name, value)| resolve(name).is_ok_and(|next| next == *value))
@@ -295,7 +318,16 @@ impl FrontEnd for LuauFrontEnd {
             .map(std::rc::Rc::new)
             .map_err(|error| diagnostic(entry, error));
         if let Ok(raw) = &result {
-            *self.materialized.borrow_mut() = Some((raw.clone(), reads.into_inner()));
+            let reads = reads.into_inner();
+            let bytes = crate::layout::raw_bytes(raw)
+                + reads
+                    .iter()
+                    .map(|(k, v)| k.capacity() + 64 + bead_core::cache::value_bytes(v))
+                    .sum::<usize>();
+            *self.materialized.borrow_mut() = None;
+            if let Ok(charge) = self.values_budget.reserve(bytes) {
+                *self.materialized.borrow_mut() = Some((raw.clone(), reads, charge));
+            }
         }
         result
     }

@@ -503,7 +503,8 @@ impl Generation {
                 }
             }
             result.scene.asset_data = self.assets.clone();
-            *self.materialized.borrow_mut() = Some(crate::materialized::Cached::new(
+            *self.materialized.borrow_mut() = None;
+            *self.materialized.borrow_mut() = crate::materialized::Cached::new(
                 raw,
                 &view,
                 &result.scene,
@@ -511,7 +512,7 @@ impl Generation {
                 &resolve,
                 palette,
                 viewport,
-            )?);
+            )?;
             return Ok((result.scene, result.nodes));
         }
         Ok((self.scene(stores, palette, true)?, self.nodes.clone()))

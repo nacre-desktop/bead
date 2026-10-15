@@ -1,5 +1,28 @@
 # Feasibility
 
+## 2026-10-15 — F5 cache candidate held for a memory decision
+
+Recovered the interrupted cache work and verified it before continuing.
+One process ceiling and per-owner limits now account retained cache bytes.
+First-open memory rose in both final matched pairs; later opens became smaller.
+The owner's regression stop rule applies: keep this candidate unintegrated.
+
+| Nested CPU bar + sound, PSS+DRM MiB | Hypr120 before→after | niri60 before→after |
+| --- | ---: | ---: |
+| Bar |21.834→21.902|23.509→23.629|
+| First warm |27.848→28.482|30.854→31.259|
+| Third warm |28.035→26.741|30.101→29.382|
+| Closed5s |22.602→22.986|23.077→23.761|
+| Every close/lifecycle within own bar+5 |pass|pass|
+| Native report total / ceiling bytes |188897 /201326592|N/A: separate report proof on H|
+
+Same compositor per pair, fresh private state/cache, three cycles, nice≥10.
+Contended short samples; not physical, QML, CPU or idle-invariance acceptance.
+111 tests, fmt, all-features clippy, CPU/release builds, deny and Luau pass.
+Dependency-private font/driver caches are reset on idle/close, not measured zero.
+See [the full accounting and recovery report](docs/research/cache-budget.md).
+Verdict: STOP pending first-open memory tradeoff decision; opaque/9/10 remain.
+
 ## 2026-10-15 — F5 gap: OSD text bounds
 
 The scale1 OSD label claimed the entire row width and pushed its status outside.
