@@ -156,6 +156,14 @@ impl App {
             .collect();
         scales.sort_by(f32::total_cmp);
         scales.dedup();
+        if scales.is_empty() && self.processing_panel {
+            scales.extend(
+                self.surfaces
+                    .iter()
+                    .filter(|s| !s.companion && self.panel_output.as_ref() == Some(&s.output))
+                    .map(|s| s.scale120 as f32 / 120.),
+            );
+        }
         if scales.is_empty() {
             scales.push(1.);
         }

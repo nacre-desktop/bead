@@ -47,13 +47,13 @@ impl Runtime {
             wakeup: None,
         }
     }
-    pub fn panel_session(session: bead::ui::Session) -> Self {
+    pub fn panel_session(session: bead::ui::Session, open: bool) -> Self {
         let mut runtime = Self::new(session);
         if let Ok((_, mut saved)) = crate::state::File::path()
             .map_err(|e| -> Box<dyn Error> { e.into() })
             .and_then(crate::state::File::open)
         {
-            saved.insert("panel.open".into(), bead::core::Value::Bool(true));
+            saved.insert("panel.open".into(), bead::core::Value::Bool(open));
             runtime.session.restore_on_start(saved);
         }
         runtime
@@ -232,6 +232,7 @@ impl SceneSource for Runtime {
                     | bead::render::Primitive::Shadow { rect, .. } => *rect,
                 };
                 bead::wayland::InputRegion {
+                    prepare_panel: self.bar && node.action.as_deref() == Some("services.audio"),
                     dismiss: node.action.as_deref() == Some("close")
                         && self.session.stores.get("panel.open").is_some(),
                     rect,

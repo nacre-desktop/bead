@@ -22,6 +22,9 @@ def sample(env, raw, compositor, stop):
     if os.environ.get('BEAD_POINTER_TRACE'): env['WAYLAND_DEBUG'] = '1'
     target = pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release'
     binary = pathlib.Path(os.environ.get('BEAD_HARDENING_BINARY', str(target/'nacre-shell')))
+    client_env = env.copy()
+    if os.environ.get("BEAD_ALLOCATOR_ARENAS"): client_env["MALLOC_ARENA_MAX"] = os.environ["BEAD_ALLOCATOR_ARENAS"]
+    if os.environ.get("BEAD_STACK_BYTES"): client_env["RUST_MIN_STACK"] = os.environ["BEAD_STACK_BYTES"]
     rows = []
     cases = ['stall'] if os.environ.get('BEAD_HARDENING') == 'stall' else os.environ.get('BEAD_LAYER_CASES', 'typing,scroll,progress').split(',')
     with tempfile.TemporaryDirectory(prefix='bead-layers-') as directory:
@@ -41,7 +44,7 @@ def sample(env, raw, compositor, stop):
             if case == 'stall': command += ['--animate', '--debug-luau-stall-ms', '600', '--seconds', '9']
             try:
                 with path.open('w') as log:
-                    client = subprocess.Popen(command, cwd=bundle, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                    client = subprocess.Popen(command, cwd=bundle, env=client_env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                     matrix.wait_log(path, lambda t: 'READY output=' in t and (case == 'progress' or 'UI_PRESENTED generation=1' in t), timeout=30)
                     if case == 'stall':
                         client.wait(timeout=20)

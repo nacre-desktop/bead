@@ -352,7 +352,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             fallback,
             // This modest transient view does not amortize the native driver residency.
             renderer: panel_renderer.unwrap_or(bead::render::RendererKind::Cpu),
-            factory: std::sync::Arc::new(move || {
+            factory: std::sync::Arc::new(move |open| {
                 let session = bead::ui::Session::new(
                     "shell".into(),
                     "sound/main.luau".into(),
@@ -361,7 +361,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                     cold.clone(),
                 );
                 let desktop = owner.get().cloned().ok_or("bar services not ready")?;
-                reload::Runtime::panel_session(session)
+                reload::Runtime::panel_session(session, open)
                     .with_shared_desktop(desktop, false)
                     .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
                     .map_err(|e| e.to_string())

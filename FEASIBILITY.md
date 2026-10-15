@@ -1009,3 +1009,28 @@ Verdict: Gate C accepted; optimization authorized, stop before Feature9.
 Policy: CPU small panels, GL large animated surfaces; prior small GL retained
 ~20 MiB Mesa/LLVM/heap floor after idle. Keep 0a nested niri/idle invariance
 and typing29.61→32.66% open. Evidence ignored: .research/optimization/physical-niri.
+
+## Optimization — bounded hover preparation (2026-10-15)
+
+Audio-icon entry starts the panel's script/bake worker with no Wayland surface.
+The selected output's scale is prepared up front; unused work expires in2s.
+An unopened hover saves closed state and never maps/focuses a panel.
+Initial nested trials show a substantial command→ready benefit; long paired
+measurements and final lifecycle validation remain part of this pass.
+
+| Three cycles, 150ms hover lead | Hypr virtual120 | niri nested60 |
+|---|---:|---:|
+| Command→ready p50/p95 ms |9.99/10.73|7.39/7.72|
+| Unused timeout delta from bar MiB |-.49|-.80|
+| Closed delta from bar MiB |+2.07|+.10|
+| Minimum visible-slider pixels |4674|4674|
+
+GateC cold-ready p50 was48.63/74.88ms; these are exploratory, not a matched
+final A/B. All three reopens have pixel checks; actor is closed/no surface
+before opening, restored journal remains closed on unused hover. Memory
+passes+5MiB in these trials. Source factory receives initial visibility;
+prepared scene uses selected output scale, no persistent worker/cache.
+Local fmt/clippy/workspace tests pass; a8eb43e CI38723361044 passed.
+Allocator hour-soaks (system/arena2/mimalloc3.5.3/jemalloc) now run privately
+on both compositors; no adoption before matched timing/idle measurements.
+Evidence: .research/optimization/prepared-pixels-{hyprland,niri}.

@@ -159,6 +159,8 @@ pub struct InputRegion {
     pub clip: Option<Rect>,
     pub cursor: &'static str,
     pub dismiss: bool,
+    /// Start bounded preparation when the pointer enters this host-selected region.
+    pub prepare_panel: bool,
 }
 pub trait SceneSource {
     fn set_idle(&mut self, _idle: bool) {}
@@ -212,10 +214,12 @@ pub type CommandMap = std::sync::Arc<
         + Send
         + Sync,
 >;
+pub type PanelFactory =
+    std::sync::Arc<dyn Fn(bool) -> Result<Box<dyn SceneSource>, String> + Send + Sync>;
 #[derive(Clone)]
 pub struct PanelSpec {
     pub initial_open: bool,
-    pub factory: std::sync::Arc<dyn Fn() -> Result<Box<dyn SceneSource>, String> + Send + Sync>,
+    pub factory: PanelFactory,
     pub fallback: Scene,
     pub renderer: RendererKind,
 }

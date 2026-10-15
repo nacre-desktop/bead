@@ -20,3 +20,17 @@ larger GL stress panel, not this 400×286 content panel.
 Typing 29.61→32.66% remains an optimization candidate. Nested niri/shared-GL
 pacing and strict idle invariance from 6b step 0a remain open; the physical
 small-CPU-panel result does not close those distinct experiments.
+
+## Bounded hover preparation — initial checkpoint
+
+Entering the bar's audio icon starts the existing script/bake worker with
+closed initial state, the hovered output and its scale. It creates no panel
+or dismissal surface. Opening consumes this preparation; otherwise the
+worker/VM/rasters expire after two seconds, with idle trimming. Moving within
+the icon does not renew the deadline; leave/re-entry can start a new attempt.
+No persistent warm actor or cache is introduced.
+
+Three pixel-verified cycles after 150 ms hover lead: command→ready p50/p95
+9.99/10.73 ms (Hyprland), 7.39/7.72 ms (niri). Unused expiry PSS+DRM delta
+−0.49/−0.80 MiB; closed +2.07/+0.10 MiB. These are exploratory trials during
+the pass; matched longer A/B and final lifecycle checks are still pending.

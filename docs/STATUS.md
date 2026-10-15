@@ -15,12 +15,16 @@ Physical bar/closed PSS+DRM 23.03/25.14 MiB (+2.11), no swap.
 Two-second CPU samples ~5% are short live-backend observations, not the
 nested 60-second idle comparison. Nested memory acceptance remains valid.
 
-Next: bounded hover preparation, typing CPU, and ROADMAP optimization
+Bounded hover preparation implemented: 2s unopened expiry, no surface/focus,
+closed journal, selected output/scale. Three pixel-checked cycles each:
+ready p50 9.99/7.39 ms (Hypr/niri); timeout and closed memory pass +5 MiB.
+Local fmt/clippy/workspace tests pass; acceptance CI38723361044 passed.
+
+Next: matched longer validation, typing CPU, and ROADMAP optimization
 candidates, each measured on both nested compositors. CPU for small
 panels; GL for large animated surfaces (~20 MiB idle Mesa residue).
 Keep 6b step 0a nested niri/shared-GL pacing and idle invariance open.
 Stop after optimization, before Feature 9. No further live test authorized.
 
-Worktree: ~/.local/share/nacre/ai/worktrees/bead-optimization-pass.
-Shared target: /home/siverteh/Projects/bead/target.
+Worktree: bead-optimization-pass; keep the existing shared Cargo target.
 Evidence: canonical .research/optimization. nice10/Cargo-j2.

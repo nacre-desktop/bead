@@ -16,8 +16,19 @@ impl App {
         }
         let result = match call.method.as_str() {
             "state" => {
-                let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"surfaces":self.surfaces.iter().filter(|s|s.companion).count()});
+                let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count()});
                 if self.options.trace_state {
+                    value["prepare_regions"] = serde_json::json!(
+                        self.runtime
+                            .as_ref()
+                            .map(|r| r
+                                .input_regions()
+                                .into_iter()
+                                .filter(|r| r.prepare_panel)
+                                .map(|r| [r.rect.x, r.rect.y, r.rect.w, r.rect.h])
+                                .collect::<Vec<_>>())
+                            .unwrap_or_default()
+                    );
                     value["regions"] = serde_json::json!(
                         self.panel_runtime
                             .as_ref()
@@ -64,6 +75,18 @@ impl App {
         true
     }
     pub(super) fn open_panel(&mut self, output: Option<&str>) -> Result<(), String> {
+        self.start_panel(output, true)
+    }
+    pub(super) fn prepare_panel(&mut self, output: Option<&str>) {
+        if self.options.panel_spec.is_none() || self.panel_runtime.is_some() {
+            return;
+        }
+        if let Err(error) = self.start_panel(output, false) {
+            eprintln!("PANEL_PREPARE_ERROR {error}");
+            self.release_panel();
+        }
+    }
+    fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         let spec = self
             .options
             .panel_spec
@@ -80,8 +103,8 @@ impl App {
             })
             .ok_or("panel output not available")?;
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
-        self.panel_target = true;
-        if let Some(source) = &mut self.runtime {
+        self.panel_target = open;
+        if open && let Some(source) = &mut self.runtime {
             source.set_idle(false);
         }
         if self.panel_runtime.is_some() {
@@ -109,7 +132,9 @@ impl App {
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_output = Some(output.clone());
-        self.create_dismiss(&output)?;
+        if open {
+            self.create_dismiss(&output)?;
+        }
         self.companion_policy = Default::default();
         self.options.companion = Some((spec.fallback.clone(), spec.renderer));
         self.options.lazy_gl = true;
@@ -120,8 +145,8 @@ impl App {
         ));
         let factory = spec.factory.clone();
         let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
-            Box::new(move || factory()),
-            spec.fallback,
+            Box::new(move || factory(open)),
+            spec.fallback.clone(),
         ));
         let sender = self
             .event_sender
@@ -140,11 +165,39 @@ impl App {
                 let _ = sender.send(UiEvent::Panel(epoch, Box::new(event)));
             }))
             .map_err(|e| e.to_string())?;
+        // Match the eventual content-sized surface before any Wayland allocation.
+        let height = spec.fallback.bounds.y
+            + spec.fallback.bounds.h
+            + spec
+                .fallback
+                .slide
+                .map_or(spec.fallback.offset.1, |s| s.open_y);
+        source.viewport(
+            spec.fallback.bounds.w.ceil() as u32,
+            height.ceil().max(1.) as u32,
+        );
         self.panel_ui_serial = 0;
         self.panel_runtime = Some(source);
         let qh = self.qh.clone();
-        self.add_output(&qh, output);
+        if open {
+            self.add_output(&qh, output);
+        }
         self.panel_ui(UiEvent::Reload);
+        if !open {
+            self.loop_handle
+                .insert_source(
+                    Timer::from_duration(Duration::from_secs(2)),
+                    move |_, _, app| {
+                        if app.panel_epoch == epoch && !app.panel_target {
+                            app.release_panel();
+                        }
+                        TimeoutAction::Drop
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            println!("PANEL_PREPARE epoch={epoch} timeout_ms=2000");
+            return Ok(());
+        }
         let frame_epoch = self.panel_epoch;
         let kick = self.qh.clone();
         self.loop_handle

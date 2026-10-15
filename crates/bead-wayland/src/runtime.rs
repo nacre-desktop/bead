@@ -11,6 +11,7 @@ pub(super) struct App {
     pub(super) panel_close_epoch: u64,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
+    pub(super) panel_hovered: bool,
     pub(super) panel_output: Option<wl_output::WlOutput>,
     pub(super) processing_panel: bool,
     pub(super) runtime: Option<Box<dyn SceneSource>>,
@@ -107,6 +108,7 @@ pub fn run_runtime(
         panel_close_epoch: 0,
         panel_reload_pending: false,
         panel_target: false,
+        panel_hovered: false,
         panel_output: None,
         processing_panel: false,
         runtime,
@@ -357,8 +359,8 @@ impl App {
         let primary = self.options.output.as_ref().is_none_or(|name| {
             self.output.info(&output).and_then(|i| i.name).as_ref() == Some(name)
         });
-        let selected =
-            self.options.panel_spec.is_none() || self.panel_output.as_ref() == Some(&output);
+        let selected = self.options.panel_spec.is_none()
+            || (self.panel_target && self.panel_output.as_ref() == Some(&output));
         if !primary && !(selected && self.companion.is_some()) {
             return;
         }

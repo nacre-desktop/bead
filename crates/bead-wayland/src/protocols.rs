@@ -435,22 +435,49 @@ impl PointerHandler for App {
                 continue;
             };
             let panel = surface.companion;
+            let surface_size = (surface.width, surface.height);
+            let offset = surface.offset;
+            let configured = surface.configured;
+            let hovered_output = self.output.info(&surface.output).and_then(|i| i.name);
+            if !panel {
+                let hovering = !matches!(event.kind, PointerEventKind::Leave { .. })
+                    && self.runtime.as_ref().is_some_and(|r| {
+                        r.input_regions().iter().any(|r| {
+                            r.prepare_panel
+                                && event.position.0 >= f64::from(r.rect.x)
+                                && event.position.1 >= f64::from(r.rect.y)
+                                && event.position.0 < f64::from(r.rect.x + r.rect.w)
+                                && event.position.1 < f64::from(r.rect.y + r.rect.h)
+                                && r.clip.is_none_or(|c| {
+                                    event.position.0 >= f64::from(c.x)
+                                        && event.position.1 >= f64::from(c.y)
+                                        && event.position.0 < f64::from(c.x + c.w)
+                                        && event.position.1 < f64::from(c.y + c.h)
+                                })
+                        })
+                    });
+                let entered = hovering && !self.panel_hovered;
+                self.panel_hovered = hovering;
+                if entered {
+                    self.prepare_panel(hovered_output.as_deref());
+                }
+            }
             // Some compositors route all pointer events to an exclusive keyboard
             // layer, even outside its bounds. Treat that path like the backdrop.
             if panel
                 && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
                 && (event.position.0 < 0.
                     || event.position.1 < 0.
-                    || event.position.0 >= surface.width as f64
-                    || event.position.1 >= surface.height as f64)
+                    || event.position.0 >= surface_size.0 as f64
+                    || event.position.1 >= surface_size.1 as f64)
             {
                 self.pointer_pressed = false;
                 self.close_panel();
                 continue;
             }
-            let x = event.position.0 as f32 - surface.offset.0;
-            let y = event.position.1 as f32 - surface.offset.1;
-            if !surface.configured {
+            let x = event.position.0 as f32 - offset.0;
+            let y = event.position.1 as f32 - offset.1;
+            if !configured {
                 continue;
             }
             if panel
