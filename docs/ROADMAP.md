@@ -1,16 +1,18 @@
 # Roadmap and gates
 
-Updated 2026-10-15. Feature6b accepted with measured concerns.
-Features7–8 authorized through GateC; stop at GateC.
-Step0a pacing/idle acceptance remains open.
-Native GL/femtovg + content-sized retained layers and tiny-skia fallback selected.
-One authorized live niri comparison matched QML physical120Hz timing; cold startup
-and reload-time UI-thread baking remain concerns. See FEASIBILITY/STATUS.
-Authoring/layout/launcher/GateB/input/basicIME/a11y/native backends completed.
-Physical niri hotplug, real IME and screen-reader acceptance remain unvalidated.
-Feature6 concerns: GL fixed cost, niri shared-surface pacing and latency tails.
-Owner may veto ADR0002; next feature requires a new instruction.
-Baking/shader-cache work deferred.
+Updated 2026-10-15. Feature 6b accepted with measured concerns.
+Features 7–8 are implemented through Gate C; owner decision pending.
+See [Gate C report](research/feature8-gate-c.md). Stop here: do not start
+optimization or Feature 9 without the next owner instruction.
+Step 0a nested pacing/idle acceptance remains open. The new close-idle
+memory limit passes; niri presentation tails remain a concern.
+Automatic bars and the small sound-output panel use CPU retained rasters;
+native GL remains available for larger views. Script/baking is off-thread.
+The earlier authorized live niri comparison is historical evidence only;
+no new physical/live test or installation was performed for Features 7–8.
+Physical niri hotplug, real IME/screen-reader and NVIDIA acceptance remain
+unvalidated. Owner may veto ADR0002. General shader/allocator work remains
+in the post-Gate-C optimization pass; typing 29.6→32.7% stays on that list.
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
 current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;

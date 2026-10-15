@@ -951,3 +951,38 @@ swap included, closed figures are below the initial bar-only warmup.70 tests,
 fmt/clippy/CPU-only pass. Paired niri and60s QML references still pending.
 Source364dad1 CI38717169807 passed. Evidence idle-final-hypr and
 persistent-idle-final-checks.log. Prior failures/near-limit runs retained.
+
+## Features 7–8 / Gate C measured stop (2026-10-15)
+
+Feature7 transport/catalog/files/helper work and one real default-output panel
+are done through GateC. **Recommendation: adjust** pacing acceptance; memory
+passes, owner decision pending. Full [report](docs/research/feature8-gate-c.md)
+records scope, methods, versions, LOC, failed probes and unmatched boundaries.
+
+| Final metric | Hypr virtual120 | nested niri60 |
+|---|---|---|
+| Bar PSS+DRM MiB |21.35|22.64|
+| Warm PSS+DRM / SwapPss MiB |22.00 /7.30|32.75 /0|
+| Closed60s PSS+DRM / SwapPss MiB |11.13 /4.79|26.13 /0|
+| Post-output/rapid/keyboard PSS+DRM / SwapPss |16.05 /2.67|24.56 /0|
+| Strict <=bar+5 at all checkpoints |pass, even adding swap|pass|
+| Idle CPU bar/open/closed %,60s each |.0167/.0167/.0167|.0167/.0333/.0000|
+| Native open/close presentation p99 ms |8.56/8.74|41.34/47.27|
+| Matched-scope QML PSS+DRM MiB (swap0) |163.09|159.07|
+| QML open/close presentation p99 ms |86.11/24.74|43.70/32.99|
+| Native command→ready p50/p95 ms |48.63/54.39|74.88/87.65|
+| Final five reload file→presentation range ms |56.48–66.97|56.22–60.77|
+
+Host reclaim/swap affects Hypr: resident11.13 is not total allocation. The
+small CPU panel's warm resident+swap29.31/32.75 differs from Feature6's larger
+GL stress control~105; 6b143–153 retained CPU+GL data together. No full-shell
+saving claim. Real controls, all dismissals, two clipboard protocols/peer MIME,
+rapid reversal, visible pixels on every reopen, reload/reopen/crash state pass.
+70 tests/fmt/clippy/CPU-only pass; sourcefdc99cd CI38719326494 passed. Final
+report30.001s/numeric-only0600 passes. Private PW fixture2.14/2.15MiB excluded;
+no persistent helper child. Native and QML use actual clock_id=1 feedback.
+Keep 0a niri/idle and typing29.6→32.7% concerns; no strict physical120 claim.
+Real niri disappearance remains N/A; nested off retained its global. No live
+changes, installation, physical/IME/Orca/NVIDIA acceptance, optimization pass
+or Feature9. Stop at GateC. Evidence .research/feature8/idle-final-*,
+qml-final-*, reload-final-* and report-final-hypr; failures retained.
