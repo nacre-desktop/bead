@@ -372,6 +372,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bead-test"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bead-core",
+ "bead-render",
+ "bead-ui",
+ "image",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bead-ui"
 version = "0.1.0"
 dependencies = [
@@ -1605,6 +1618,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bead",
+ "bead-test",
  "fontconfig",
  "fontdb",
  "freedesktop-desktop-entry",

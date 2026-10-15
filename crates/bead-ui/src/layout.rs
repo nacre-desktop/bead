@@ -632,6 +632,13 @@ fn intersect(a: Rect, b: Rect) -> Option<Rect> {
     let bottom = (a.y + a.h).min(b.y + b.h);
     (right > x && bottom > y).then(|| Rect::new(x, y, right - x, bottom - y))
 }
+#[cfg(feature = "test-counters")]
+std::thread_local! { static LAYOUT_PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+/// Thread-local actual Taffy passes; independent tests do not race on a global count.
+#[cfg(feature = "test-counters")]
+pub fn layout_passes() -> usize {
+    LAYOUT_PASSES.get()
+}
 pub fn layout(
     view: &ViewSpec,
     resolve: &Resolve<'_>,
@@ -639,6 +646,8 @@ pub fn layout(
     revision: u64,
     viewport: (f32, f32),
 ) -> Result<LaidOut, Diagnostic> {
+    #[cfg(feature = "test-counters")]
+    LAYOUT_PASSES.set(LAYOUT_PASSES.get().wrapping_add(1));
     let mut tree = TaffyTree::<()>::new();
     let mut ids = BTreeMap::new();
     fn add(

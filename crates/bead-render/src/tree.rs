@@ -441,6 +441,8 @@ pub fn paint(
 #[derive(Default)]
 pub struct TreeCpuRenderer {
     pub cache: TreeCache,
+    /// Number of content-group composites; pose/opacity changes reuse each group.
+    pub opacity_builds: usize,
     flattened: Option<(u64, f32, Pixmap)>,
 }
 impl Renderer for TreeCpuRenderer {
@@ -506,6 +508,7 @@ impl Renderer for TreeCpuRenderer {
                 },
                 Damage::full(w, h),
             )?;
+            self.opacity_builds += 1;
             self.flattened = Some((frame.key, frame.scale, pixels));
         }
         let (_, _, pixels) = self.flattened.as_ref().ok_or("opacity group missing")?;

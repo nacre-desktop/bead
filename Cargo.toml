@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 exclude = ["spikes/blank-layer"]
-members = ["crates/bead", "crates/bead-services", "crates/bead-backends", "crates/bead-core", "crates/bead-ui", "crates/bead-wayland", "crates/bead-render", "crates/nacre-shell"]
+members = ["crates/bead-test", "crates/bead", "crates/bead-services", "crates/bead-backends", "crates/bead-core", "crates/bead-ui", "crates/bead-wayland", "crates/bead-render", "crates/nacre-shell"]
 default-members = ["crates/bead", "crates/bead-services", "crates/nacre-shell"]
 
 [workspace.package]

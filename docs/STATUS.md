@@ -8,16 +8,21 @@ ranking or providers. Existing compositor backends are frozen except bug fixes.
 The migration agent owns nacre-daemon / nacre-protocol and Nacre F0–F4.
 [Checkpoint evidence and limits](research/feature9-gate-d.md).
 
-F0 ADR0003 main311a2f0 CI38764800206 green; pause32f741d CI38764519973 green.
-F5a: injected notification connection/history API, serde snapshot, latest-wins
-subscribe, bounded processed calls and async stop on the host's Tokio runtime.
-Private-bus wrapper preserves shell use; CI enforces headless dependency graph.
-83 tests, fmt, clippy pass; API parity has no UI/compositor. Nested H120/N60
-notification interaction/restart/passive OSD/owned-bus cleanup pass.
+F5b: MIT bead-test renders real Luau/store fixtures with fixed CPU/font/scale;
+PNG goldens/diffs, input scripts, AccessKit assertions and replay budgets.
+120 pose/opacity frames:0 actual Taffy passes,0 raster builds after one group
+composite. Changed text triggers the counter. Shell --check now uses the harness.
+88 tests/fmt/clippy, CPU-only check and independent framework cargo-deny pass.
+Static symbol fixture matches full upstream font PNG exactly; test fonts only.
+OSD scale1 golden exposes text beyond its pill; no Feature9 parity claim.
+Next F5c crash safety, then Sources and background effect; STOP after F5e.
+
+F5a40a979c CI38766103118 green: injected notification connection/history,
+latest-one subscriptions, bounded processed calls and async host-runtime stop.
+83 tests plus headless private-bus parity and nested wrapper interaction pass.
 Bar/first-warm/closed5s PSS+DRM MiB: H20.49/26.70/21.84,N22.32/28.34/22.62.
-Three closes each and final lifecycle satisfy bar+5; no DRM. Other nested tests
-were active: short regression smoke, not new CPU/pacing or GateC acceptance.
-Next F5b: deterministic bead-test; then crash safety, Sources and background effect.
+Three closes + lifecycle pass bar+5; no DRM. Concurrent nested tests elsewhere;
+short smoke, no renewed CPU/pacing acceptance. F0/pause CI also green.
 No installation, live-session action or release is authorized.
 
 ## Accepted Gate C and optimization baseline

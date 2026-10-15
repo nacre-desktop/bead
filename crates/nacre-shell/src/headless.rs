@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-use bead::render::{Palette, Rect, Scene};
 use std::path::Path;
 pub fn check(file: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let file = file.canonicalize()?;
@@ -9,48 +8,125 @@ pub fn check(file: &Path) -> Result<(), Box<dyn std::error::Error>> {
         .find(|p| p.join("palette.json").is_file())
         .ok_or("UI bundle needs ancestor palette.json")?;
     let palette_path = root.join("palette.json");
-    let palette = Palette::read(&palette_path)?;
-    let fallback = Scene {
-        opacity: 1.,
-        motion: None,
-        resource_revision: 0,
-        asset_data: Default::default(),
-        clips: Default::default(),
-        layers: vec![],
-        prepared: Default::default(),
-        font_files: vec![],
-        width: 1.,
-        slide: None,
-        offset: (0., 0.),
-        bounds: Rect::new(0., 0., 1., 1.),
-        primitives: vec![],
-    };
-    let mut session = bead::ui::Session::new(
-        root.into(),
-        file.strip_prefix(root)?.into(),
-        palette_path,
-        palette,
-        fallback,
-    );
-    session.stores = session
-        .stores
-        .reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
-    session.stores = session
-        .stores
-        .reconcile(&crate::desktop::values(&Default::default(), ""))?;
-    session.stores = session
-        .stores
-        .reconcile(&std::collections::BTreeMap::from([
-            ("launcher.catalog".into(), bead::core::Value::List(vec![])),
-            ("bead.workspaces".into(), bead::core::Value::List(vec![])),
-            (
-                "bead.focused_title".into(),
-                bead::core::Value::Text(String::new()),
-            ),
-        ]))?;
-    let scene = session.reload()?;
-    session.check_sources()?;
-    session.commit(scene);
-    println!("CHECK_OK {}", session.resource_counts());
+    let fixture = initial_models()?;
+    let mut harness = bead_test::Harness::load(
+        root,
+        file.strip_prefix(root)?,
+        &palette_path,
+        fixture,
+        bead_test::Config {
+            width: 1280,
+            height: 900,
+            scale: 1.,
+        },
+    )?;
+    harness.render()?;
+    println!("CHECK_OK {}", harness.session.resource_counts());
     Ok(())
+}
+fn initial_models()
+-> Result<std::collections::BTreeMap<String, bead::core::Value>, Box<dyn std::error::Error>> {
+    let mut session = bead::core::Stores::default();
+    session = session.reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
+    session = session.reconcile(&crate::desktop::values(&Default::default(), ""))?;
+    session = session.reconcile(&std::collections::BTreeMap::from([
+        ("launcher.catalog".into(), bead::core::Value::List(vec![])),
+        ("bead.workspaces".into(), bead::core::Value::List(vec![])),
+        (
+            "bead.focused_title".into(),
+            bead::core::Value::Text(String::new()),
+        ),
+    ]))?;
+    Ok(session.values().clone())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bead::core::Value;
+    use std::path::PathBuf;
+    fn root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell")
+    }
+    #[test]
+    fn shell_views_use_headless_harness() -> Result<(), Box<dyn std::error::Error>> {
+        for entry in [
+            "ui/main.luau",
+            "bar/main.luau",
+            "notifications/main.luau",
+            "osd/main.luau",
+        ] {
+            check(&root().join(entry))?;
+        }
+        Ok(())
+    }
+    #[test]
+    fn notification_osd_populated_goldens_and_pose_counter()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state = serde_json::json!({"rows":[{"id":"1","app":"Example","summary":"Foundation ready","body":"Private fixture","time_str":"now","expanded":true,"urgency":1,"actions":[{"id":"1|open","label":"Open"}]}],"popup_count":1,"history_count":1,"history_ready":true,"dnd":false,"inhibited":false,"error":"","timers":[],"osd":{"channel":"volume","value":0.75,"muted":false}});
+        for (name, entry, config) in [
+            (
+                "notification",
+                "notifications/main.luau",
+                bead_test::Config {
+                    width: 464,
+                    height: 400,
+                    scale: 1.,
+                },
+            ),
+            (
+                "osd",
+                "osd/main.luau",
+                bead_test::Config {
+                    width: 404,
+                    height: 144,
+                    scale: 1.,
+                },
+            ),
+        ] {
+            let mut fixture = initial_models()?;
+            fixture.extend(crate::notifications::values(&state));
+            fixture.insert("panel.open".into(), Value::Bool(true));
+            let mut harness = bead_test::Harness::load_with_icons(
+                &root(),
+                Path::new(entry),
+                &root().join("palette.json"),
+                fixture,
+                config,
+                std::collections::BTreeMap::from([(
+                    "dialog-information".into(),
+                    root().join("tests/icon.svg"),
+                )]),
+            )?;
+            let frame = harness.render()?;
+            assert!(
+                frame
+                    .pixels
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .filter(|p| p[3] > 0)
+                    .count()
+                    > 4000,
+                "populated golden must not be blank"
+            );
+            let golden = root().join("tests/goldens").join(format!("{name}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                std::fs::create_dir_all(golden.parent().ok_or("golden parent")?)?;
+                frame.save(&golden)?;
+            }
+            let artifacts = std::env::var_os("BEAD_TEST_ARTIFACTS")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::temp_dir().join("bead-shell-goldens"))
+                .join(name);
+            frame.compare(&golden, bead_test::Tolerance::default(), &artifacts)?;
+            let offset = harness.scene().offset;
+            harness.pose(offset, 0.99)?;
+            let before = harness.counters();
+            for i in 0..30 {
+                harness.pose((offset.0, offset.1 + i as f32 * 0.2), 0.5)?;
+            }
+            assert_eq!(harness.counters(), before);
+        }
+        Ok(())
+    }
 }

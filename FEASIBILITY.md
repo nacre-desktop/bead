@@ -1352,3 +1352,30 @@ Individual audio/tray task hosting remains transitional for later daemon adoptio
 One initial full run hit the existing stale-socket fixture; focused and full
 reruns passed without changing its proof. Evidence .research/foundation/f5a-*.
 ~470 added lines + fixtures/docs, ~30min including builds and nested checks.
+
+## Foundation F5b — deterministic headless harness (2026-10-15)
+
+bead-test exercises real Luau, stores, Taffy, AccessKit and CPU retained drawing.
+Bundled permissive fonts and explicit icon fixtures remove host discovery.
+Goldens are reviewed regression fixtures, not a claim of completed QML parity.
+The paused OSD fixture shows text outside its pill at scale1; recorded gap.
+
+| Headless check | Result |
+| --- | ---: |
+| Transform/opacity frames after initial composite |120|
+| Actual Taffy passes / raster builds during those frames |0 /0|
+| Initial warm rasters including opacity composite |6|
+| Static symbol fixture versus full pinned font, differing pixels |0|
+| Workspace tests |88 pass,1 opt-in ignored|
+
+Pointer/text/Tab/editing scripts and AccessKit focus/value/actions are checked.
+Goldens cover controls, populated notifications and OSD; empty main/bar checks
+also render through the harness. Real content changes increment raster count.
+Replay rejects CPU/p99 budget misses and reversed/empty timestamps; synthetic
+replay is not a measured typing acceptance. Failure writes actual/diff PNGs to
+CI artifacts. Tolerance2 channel levels/.1% changed pixels, never auto-updated.
+Fmt/clippy-Dwarnings/CPU-only check/independent cargo-deny pass. No compositor.
+The reused variable symbol fixture was wrong; full font isolated it. A static
+subset matches exactly. Capture used isolated fonttools4.60.1 (not runtime/CI).
+~700 authored code/test lines plus licenses/assets; ~20min including capture.
+No production font or Feature9 UI changed; no new QML/runtime benchmark needed.

@@ -7,6 +7,7 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+bead-test = { path = "../bead-test" }
 bead={path="../bead",default-features=false}
 image = { version = "0.25", default-features = false, features = ["png"] }
 niri-ipc = "=26.4.0"
