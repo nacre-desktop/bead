@@ -11,6 +11,7 @@ publish = false
 
 [profile.release]
 opt-level = 3
+codegen-units = 1
 
 # Upstream 0.8.9 leaves DBusMenu signal tasks alive after an item exits.
 [patch.crates-io]

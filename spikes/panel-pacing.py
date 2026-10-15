@@ -51,6 +51,14 @@ def sample(env, raw, compositor, stop):
                            capture_output=True, text=True, check=True, timeout=5)
         return json.loads(p.stdout)['result']
 
+    def feedback(text, companion=True):
+        pattern = r'UI_PRESENTED generation=1 monotonic_ns=(\d+) refresh_ns=(\d+) companion='+str(companion).lower()+r' update=(\d+)(?:\s|$)'
+        for shown in re.finditer(pattern,text):
+            if os.environ.get('BEAD_PACING_REQUIRE_VALID') != '1' or re.search(
+                r'UI_COMMIT generation=1 .*update='+shown[3]+r' companion='+str(companion).lower()+r' source_error=false(?:\s|$)',text[:shown.start()]):
+                return shown
+        return None
+
     def segment():
         return matrix.log_text(log)[offset:]
 
@@ -74,7 +82,7 @@ def sample(env, raw, compositor, stop):
                                       stderr=subprocess.STDOUT, start_new_session=True)
             (raw/'owned-pids.json').write_text(json.dumps({'client':client.pid, 'pipewire':pw.pid}))
             print(f'PANEL_TEST_OWNED client={client.pid} pipewire={pw.pid}', flush=True)
-            matrix.wait_log(log, lambda t: 'UI_PRESENTED generation=1' in t)
+            matrix.wait_log(log, lambda t: feedback(t,False))
             assert 'PRESENTATION clock_id=1' in matrix.log_text(log), 'CLOCK_MONOTONIC required'
             time.sleep(2)
             result['bar'] = matrix.idle(client.pid, float(os.environ.get('BEAD_PACING_IDLE_SECONDS', '2')))
@@ -108,8 +116,8 @@ def sample(env, raw, compositor, stop):
 
                 offset = len(matrix.log_text(log)); started = time.monotonic_ns()
                 call('open')
-                matrix.wait_log(log, lambda _: re.search(r'UI_PRESENTED generation=1 monotonic_ns=(\d+) refresh_ns=(\d+) companion=true',segment()))
-                ready = re.search(r'UI_PRESENTED generation=1 monotonic_ns=(\d+) refresh_ns=(\d+) companion=true',segment())
+                matrix.wait_log(log, lambda _: feedback(segment()))
+                ready = feedback(segment())
                 time.sleep(.4)
                 opening = stamps()
                 if not aging: assert len(opening) >= 3, 'missing opening presentation feedback'

@@ -81,3 +81,19 @@ Dedicated sequential pacing acceptance retains the strict feedback requirement.
 All variants use the same baseline executable, private compositor/services,
 one hour of open/release cycles, and60s endpoint idle. Shared executable/driver
 PSS differs from a single-client desktop measurement; include SwapPss.
+
+## Release profile and error-scene validation
+
+Selected codegen-units=1: executable25.98→20.02MiB; matched bar/warm
+PSS+DRM22.02/28.30→20.11/26.53MiB Hypr and22.83/30.14→21.21/29.01niri.
+File-backed PSS accounts for the reduction, not a reduced scene. Three
+validated/pixel-checked cycles each; fixed2ops/s typing6.00→6.37% Hypr,
+27.00→24.62%niri. One Hypr injection deadline missed; quiet confirmation
+still pending. Background aging is shared by all exploratory samples.
+Thin LTO did not lower memory; stripping only reduced file size and removes
+symbols. Keep unwinding because worker panic containment is tested.
+
+Stress also found a real closed-error-scene bug: removed primitives retained
+old layer ranges/prepared frame. Regression first failed with invalid layer
+range; correction makes a valid two-item error banner while retaining the
+last-good body/state separately.50ms script limit remains unchanged.

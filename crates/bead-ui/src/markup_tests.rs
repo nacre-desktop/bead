@@ -551,3 +551,42 @@ return function(p) count+=1; return ui.Button{id="tile",text=p.item.name..count}
         Some(&Value::Text("typed".into()))
     );
 }
+
+#[test]
+fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
+    for prepared in [false, true] {
+        let f = fixture();
+        let mut session = session(&f);
+        assert!(!session.current.layers.is_empty());
+        session.current.motion = Some(bead_render::Motion {
+            id: "panel".into(),
+            open: false,
+            duration: 0.2,
+            spring: false,
+            edge: bead_core::Edge::Right,
+        });
+        let mut cache = bead_render::tree::TreeCache::default();
+        if prepared {
+            cache.prepare(&session.current, 1.).unwrap();
+            session
+                .current
+                .prepared
+                .insert(1_f32.to_bits(), cache.frame.clone().unwrap());
+        }
+        let count = session.current.primitives.len();
+        let state = session.state_summary();
+        let overlay = session.reject("reload deadline".into());
+        cache.prepare(&overlay, 1.).unwrap();
+        assert_eq!(
+            cache.frame.as_ref().unwrap().items.len(),
+            2,
+            "only error background and text remain"
+        );
+        assert_eq!(
+            session.current.primitives.len(),
+            count,
+            "last good body is retained separately"
+        );
+        assert_eq!(session.state_summary(), state);
+    }
+}

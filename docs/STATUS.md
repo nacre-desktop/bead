@@ -26,7 +26,8 @@ selects 24/8/0. CPU for small panels, GL for large animated surfaces;
 prior ~20 MiB Mesa residue remains the policy reason.
 
 Allocator aging restarted separately from strict pacing after early
-feedback failures. Aging runs active; release profiles next. Keep typing
+feedback failures. Aging runs active; release profiles measured: CGU1 saves 1.6–1.9 MiB mapped code; retain
+for quiet validation. Closed error-scene layer/cache regression fixed. Keep typing
 29.61→32.66%, 6b 0a nested niri/shared-GL pacing and idle invariance open.
 Stop after optimization, before Feature 9. No further live test authorized.
 

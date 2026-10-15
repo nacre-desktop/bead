@@ -161,8 +161,10 @@ impl Session {
     pub fn error_scene(&self) -> Scene {
         let mut scene = self.current.clone();
         if let Some(error) = &self.error {
+            scene.prepared.clear();
             if scene.motion.as_ref().is_some_and(|m| !m.open) {
                 scene.primitives.clear();
+                scene.layers.clear();
                 scene.clips.clear();
             }
             scene.motion = None;

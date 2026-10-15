@@ -1146,3 +1146,44 @@ code/driver PSS sharing makes these memory samples unsuitable replacements
 for the earlier single-client residue measurement. All experimental GL/SHM/
 cache knobs removed from product source. Evidence: .research/optimization/gl-*
 and depthless-*; negative patches remain ignored, no image/driver workaround.
+
+## Optimization — release profile (2026-10-15)
+
+Compared identical-source baseline, Thin LTO, one codegen unit and stripping
+on the bar+CPU sound panel and fixed-rate launcher typing, both compositors.
+One codegen unit saves mapped-code memory; retain it for final validation.
+Thin LTO offers no memory benefit; stripping saves disk rather than mappings.
+
+| Three panel cycles /16 typing operations | Baseline | Thin LTO | CGU1 | Stripped |
+|---|---:|---:|---:|---:|
+| Executable MiB |25.98|25.53|20.02|19.39|
+| Hypr bar/warm PSS+DRM MiB |22.02/28.30|22.33/28.55|20.11/26.53|21.59/28.15|
+| niri bar/warm PSS+DRM MiB |22.83/30.14|23.36/30.29|21.21/29.01|22.92/30.59|
+| Hypr typing CPU %, fixed2ops/s |6.00|6.00|6.37|6.12|
+| niri typing CPU %, fixed2ops/s |27.00|23.75|24.62|25.12|
+
+No swap in panel samples. All panel reopens pixel-checked; initial/current
+UI feedback must match a non-error commit. CGU1 file-PSS saves1.93/1.58MiB
+with essentially unchanged anonymous/shmem pages. One CGU1 Hypr typing
+operation missed its500ms injection deadline; do not claim latency success.
+These exploratory samples share background aging load; quiet validation follows.
+Thin/CGU1 profile rebuilds326.91/178.97s (not matched cold-build timings).
+Strip-all loses symbols without a demonstrated mapping benefit; keep symbols.
+Panic=abort not benchmarked: it disables the tested worker-panic→Fatal contract;
+retain unwinding. No extra combined-profile build without a measured need.
+Evidence: .research/optimization/profile-* and profile-builds.json.
+
+## Optimization stress — closed error-scene invariants (2026-10-15)
+
+Concurrent aging/build load triggered existing50ms Lua deadline failures.
+The limit stays unchanged; those stress counts will accompany aging results.
+A closed failed view cleared primitives but retained invalid layer ranges.
+Fix both layer ownership and prepared-frame invalidation for error overlays.
+
+| Regression proof | Before | After |
+|---|---|---|
+| Closed retained body, with/without prepared frame |invalid layer range|two-item error banner, valid bake|
+
+The test preserves last-good body and stores separately; both paths pass.
+No deadline raised or failure marker suppressed. Final quiet controls/reload
+proofs remain required. Evidence: optimization-error-overlay-{before,after}.log.
