@@ -22,6 +22,18 @@ def sample(env,raw,compositor,stop):
     with tempfile.TemporaryDirectory(prefix='bead-sound-reference-') as directory:
         root=pathlib.Path(directory)
         reference=matrix.reference.fixture(root)
+        # Match the private native bar: one workspace, no focused title, audio100,
+        # unavailable network/Bluetooth. Keep visual widgets unchanged.
+        for name,replacements in {
+            'NacreProfile': [('workspaceCount:5','workspaceCount:1')],
+            'NacreCompositor': [('title:"Bead fixture · reference"','title:""'),('property var windows:[activeWindow]','property var windows:[]')],
+            'NacreAudio': [('volume:0.5','volume:1')],
+            'NacreNetwork': [('active:({strength:80})','active:null'),('wifiAvailable:true','wifiAvailable:false')],
+            'NacreBluetooth': [('available:true','available:false'),('powered:true','powered:false')],
+        }.items():
+            shim=root/'services'/(name+'.qml');body=shim.read_text()
+            for old,new in replacements:body=body.replace(old,new)
+            shim.write_text(body)
         popup=root/'modules/bar/popouts';popup.mkdir(parents=True,exist_ok=True)
         shutil.copyfile(reference/'modules/bar/popouts/NacreQuickSlider.qml',popup/'NacreQuickSlider.qml')
         path=root/'shell.qml'

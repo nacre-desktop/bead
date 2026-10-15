@@ -59,7 +59,7 @@ impl Packet {
     }
 }
 enum Job {
-    TrimIdle,
+    Idle(bool),
     Stage(UiEvent, Vec<f32>),
     Viewport(u32, u32),
     Watch(Box<dyn Fn(Result<(), String>) + Send>),
@@ -155,20 +155,43 @@ impl SceneSource for Source {
                 let mut cache = bead_render::tree::TreeCache::default();
                 let mut queue = VecDeque::new();
                 let mut token = 0;
+                let mut idle = false;
+                let mut needs_trim = false;
                 'actor: loop {
                     let job = if let Some(job) = queue.pop_front() {
                         job
                     } else {
-                        match receiver.recv() {
-                            Ok(job) => job,
-                            Err(_) => break,
+                        if idle && needs_trim {
+                            match receiver.recv_timeout(std::time::Duration::from_millis(250)) {
+                                Ok(job) => job,
+                                Err(mpsc::RecvTimeoutError::Timeout) => {
+                                    cache.trim_idle();
+                                    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                                    unsafe {
+                                        libc::malloc_trim(0);
+                                    }
+                                    needs_trim = false;
+                                    continue;
+                                }
+                                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                            }
+                        } else {
+                            match receiver.recv() {
+                                Ok(job) => job,
+                                Err(_) => break,
+                            }
                         }
                     };
                     match job {
                         Job::Stop => break,
-                        Job::TrimIdle => {
+                        Job::Idle(value) => {
+                            idle = value;
+                            source.set_idle(value);
+                            if !idle {
+                                continue;
+                            }
+                            needs_trim = false;
                             cache.trim_idle();
-                            source.trim_idle();
                             #[cfg(all(target_os = "linux", target_env = "gnu"))]
                             unsafe {
                                 libc::malloc_trim(0);
@@ -205,6 +228,7 @@ impl SceneSource for Source {
                                     (source.error_scene(error.clone()), Some(error))
                                 }
                             };
+                            needs_trim = true;
                             if let Err(error) = bake(&mut cache, &mut scene, &scales) {
                                 wakeup(UiEvent::Worker(Arc::new(Packet {
                                     phase: Phase::Failed,
@@ -289,8 +313,8 @@ impl SceneSource for Source {
             }
         }));
     }
-    fn trim_idle(&mut self) {
-        let _ = self.send(Job::TrimIdle);
+    fn set_idle(&mut self, idle: bool) {
+        let _ = self.send(Job::Idle(idle));
     }
     fn scales(&mut self, scales: Vec<f32>) {
         self.scales = scales;

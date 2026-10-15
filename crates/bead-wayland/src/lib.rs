@@ -161,7 +161,7 @@ pub struct InputRegion {
     pub dismiss: bool,
 }
 pub trait SceneSource {
-    fn trim_idle(&mut self) {}
+    fn set_idle(&mut self, _idle: bool) {}
     fn focused_dismiss(&self) -> bool {
         false
     }

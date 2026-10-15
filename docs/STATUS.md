@@ -3,7 +3,7 @@
 ## 2026-10-15 — Gate C final measurements
 
 Features 7–8 only. Stop at Gate C; no optimization pass or Feature 9.
-Latest published source c72fbde; CI 38710897960 passed. Isolated task
+Latest published source 364dad1; CI 38717169807 passed. Isolated task
 worktree: ~/.local/share/nacre/ai/worktrees/bead-feature7-gate-c.
 
 Current checkpoint fixes independent view drawing: worker preparation and
@@ -17,8 +17,10 @@ Close drops the view worker/VM/rasters/SHM/renderer, then trims allocator
 pages. The remaining bar baker drops font/glyph scratch and offscreen cache
 entries while retaining its visible rasters. Test proves unchanged pixels
 and lazy rebuilding after trim. Latest Hypr ten-cycle/post-output/rapid
-cleanup delta +4.38 MiB; earlier niri before final trim +4.99. Final 60s
-samples pending. Preserve +5.13 and expanded-lifecycle +5.03 FAIL samples.
+cleanup delta +4.38 MiB; earlier niri before final trim +4.99. Persistent idle hint now trims once after each later bake, then blocks;
+clock updates cannot leave unused scratch resident. Hypr full repeat passes:
+21.35 bar, closed11.13 +4.79 SwapPss; post-lifecycle16.05 +2.67 SwapPss.
+Niri paired repeat is running. Preserve +5.13/+5.03 FAIL samples.
 Do not use earlier blank-body runs as final visual/pacing evidence.
 
 70 tests, fmt/clippy and CPU-only check pass. Facade/example, generated
@@ -36,7 +38,7 @@ remains explicit. Explain warm scene/renderer differences versus ~105 MiB
 Feature 6 control. Keep typing 29.6→32.7% and inherited 6b niri pacing/idle
 invariance concerns. No live/physical test, installation or release.
 
-Next: commit/push/CI checkpoint; final 60s native + QML on both, report,
+Next: commit persistent idle checkpoint; finish paired native +60s QML, report,
 STATUS/CI/brain, then STOP at Gate C. No concurrent local builds in samples.
 CARGO_TARGET_DIR=/home/siverteh/Projects/bead/target; TMPDIR=/var/tmp.
 Evidence: canonical .research/feature8. Nested nice10/Cargo-j2 only.

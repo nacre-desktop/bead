@@ -81,6 +81,9 @@ impl App {
             .ok_or("panel output not available")?;
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = true;
+        if let Some(source) = &mut self.runtime {
+            source.set_idle(false);
+        }
         if self.panel_runtime.is_some() {
             if self.panel_output.as_ref() != Some(&output) || self.dismiss.is_none() {
                 drop(self.dismiss.take());
@@ -282,7 +285,7 @@ impl App {
             self.gpu = None;
         }
         if let Some(source) = &mut self.runtime {
-            source.trim_idle();
+            source.set_idle(true);
         }
         // Functional closed-idle reclamation, explicitly requested for Gate C; not a diagnostic.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]

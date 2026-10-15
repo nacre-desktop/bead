@@ -927,3 +927,27 @@ actual compositor presentation feedback. No full microphone/device-list claim.
 Final 60s paired runs pending; earlier blank-body experiments are not final
 pacing/visual evidence. Evidence visual-*, scope-trim-hypr, trim-final-checks,
 qml-hypr-smoke. GL floor/CPU tradeoff, typing and inherited 6b concerns remain.
+
+## Gate C persistent idle hint (2026-10-15)
+
+One-shot scratch eviction could be undone by a later clock bake: a prior long
+Hypr sample reached+4.997 MiB. Keep the bar baker in idle mode after close;
+after any new bake, one250ms quiescence timeout drops scratch, then the actor
+blocks again. Opening resumes active caching. No polling timer or allocator
+switch. Finished rasters and last-good source snapshots remain available.
+
+| New full Hypr run, MiB | PSS+DRM | SwapPss | Combined |
+|---|---|---|---|
+| Bar baseline |21.35|0|21.35|
+| Warm after60s |22.00|7.30|29.31|
+| Closed60s |11.13|4.79|15.92|
+| Post-output/rapid/keyboard close |16.05|2.67|18.72|
+
+Ten pixel checks, actions/legacy state, rapid reversal and keyboard close pass;
+strict memory predicate includes every cycle, closed60s and final lifecycle.
+All three60s CPU rows0.0167% of one core (one tick). Host reclaimed/swapped
+pages; resident11.13 is not an11MiB total allocation claim. Even proportional
+swap included, closed figures are below the initial bar-only warmup.70 tests,
+fmt/clippy/CPU-only pass. Paired niri and60s QML references still pending.
+Source364dad1 CI38717169807 passed. Evidence idle-final-hypr and
+persistent-idle-final-checks.log. Prior failures/near-limit runs retained.
