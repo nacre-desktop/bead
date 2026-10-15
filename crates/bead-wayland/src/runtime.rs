@@ -155,6 +155,11 @@ pub fn run_runtime(
         companion,
         animations: Default::default(),
     };
+    if app.options.interactive {
+        for seat in app.seat.seats() {
+            app.clipboard.seat(&seat, &qh);
+        }
+    }
     println!(
         "START pid={} namespace={} damage={} direct_shm=true buffers_max=3",
         std::process::id(),

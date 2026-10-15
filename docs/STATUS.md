@@ -17,6 +17,8 @@ Core and extension clipboard both transfer UTF-8/plain text with private
 peer clients. Extension works before keyboard input. Fallback now matches
 kit geometry, avoiding duplicate SHM allocation. View close drops worker,
 VM, rasters, renderer and SHM; a second trim follows retired packet drainage.
+66588ad CI 38708160203 passed. Initial zero-capability seats are bound
+explicitly too; pre-keyboard Hypr extension transfer now passes.
 
 Latest core Hypr three-cycle max idle delta +2.70 MiB (before deferred trim:
 +5.13 FAIL). Earlier long runs: Hypr +4.99 MiB after60s; niri +2.11 MiB,

@@ -866,3 +866,12 @@ raised memory tolerance.69 tests/fmt/clippy/CPU-only pass after clipboard change
 parallel and one serial wall-clock50ms failures under host CPU/I/O pressure remain
 in logs; isolated repeat passed with unchanged limits. Evidence core-hypr,
 core-hypr-trim, ext-niri-final, clipboard-*-checks and idle-trim-build.
+
+## Initial-seat clipboard correction (2026-10-15)
+
+Headless Hypr exposes an existing seat with zero input capabilities; neither a
+future-seat callback nor a keyboard-capability callback covers that initial
+object. Bind existing seats immediately after App construction as well. The
+strict pre-keyboard extension transfer now passes on Hypr, as it did on niri.
+Source66588ad CI38708160203 passed. Final long measurements continue with
+this small correction; QML frame probe is being reused for matched animations.
