@@ -97,3 +97,19 @@ Stress also found a real closed-error-scene bug: removed primitives retained
 old layer ranges/prepared frame. Regression first failed with invalid layer
 range; correction makes a valid two-item error banner while retaining the
 last-good body/state separately.50ms script limit remains unchanged.
+
+## Retained: avoid view work for unread backend models
+
+Recorded physical field differences show599 unfocused title changes driving
+600 window-list changes without a focused-title change. Replayed10Hz titles
+privately with a passive bar+sound panel: CPU3.70→.45% Hypr,3.43→.25%niri
+(two20s trials/version, A/B/B/A). Each trial delivered200 backend updates;
+bar commits200–202→0, except one real clock update. Genuine focus change
+then commits and presents correctly. Model data remains current for future
+actions/reload; used and computed dependencies retain staged validation.
+Rejected branch reads cannot erase committed dependencies. Cache is bounded;
+overflow uses the original staging path. JSON also stays conservative.
+
+Arena2 interaction with the selected code does not improve closed memory:
+Hypr19.73→20.95MiB, niri20.27→21.17; warm changes are mixed. Keep the
+system allocator without hardcoded arena tuning; hour endpoints still pending.

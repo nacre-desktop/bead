@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_HARDENING') == 'models':
+        spec=importlib.util.spec_from_file_location('model_proof',ROOT/'spikes/model-proof.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_HARDENING') == 'panel-pacing':
         spec=importlib.util.spec_from_file_location('panel_pacing',ROOT/'spikes/panel-pacing.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)

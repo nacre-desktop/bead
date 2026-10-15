@@ -590,3 +590,110 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
         assert_eq!(session.state_summary(), state);
     }
 }
+
+#[test]
+fn unread_host_model_stays_current_and_becomes_live_when_a_view_binds_it() {
+    let f = fixture();
+    let behavior = f.0.join("ui/behavior.luau");
+    fs::write(
+        &behavior,
+        fs::read_to_string(&behavior)
+            .unwrap()
+            .replace("stores={ query=", "stores={ background=\"old\", query="),
+    )
+    .unwrap();
+    let mut session = session(&f);
+    assert!(
+        session
+            .update_model(BTreeMap::from([(
+                "background".into(),
+                Value::Text("latest".into())
+            )]))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        session.stores.get("background"),
+        Some(&Value::Text("latest".into()))
+    );
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=400,height=240,ui.Text{id="host",text=ui.bind("background")}}"#,
+    )
+    .unwrap();
+    let scene = session.reload().unwrap();
+    session.check_sources().unwrap();
+    session.commit(scene);
+    assert!(
+        session
+            .current
+            .primitives
+            .iter()
+            .any(|p| matches!(p,Primitive::Text{text,..} if text=="latest"))
+    );
+    let scene = session
+        .update_model(BTreeMap::from([(
+            "background".into(),
+            Value::Text("newer".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        session.stores.get("background"),
+        Some(&Value::Text("latest".into())),
+        "visible model change must wait for commit"
+    );
+    session.commit(scene);
+    assert!(
+        session
+            .current
+            .primitives
+            .iter()
+            .any(|p| matches!(p,Primitive::Text{text,..} if text=="newer"))
+    );
+}
+#[test]
+fn indirect_model_reads_survive_rejected_visibility_branches() {
+    let f = fixture();
+    let behavior = f.0.join("ui/behavior.luau");
+    let source=fs::read_to_string(&behavior).unwrap().replace("stores={ query=", "stores={ background=\"old\", query=").replace("computed={}",r#"computed={shown=function(s) if s.query=="" then return s.background end return "hidden" end}"#);
+    fs::write(&behavior, source).unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=400,height=240,ui.Text{id="host",text=ui.bind("shown")}}"#,
+    )
+    .unwrap();
+    let mut session = session(&f);
+    let scene = session
+        .update_model(BTreeMap::from([(
+            "background".into(),
+            Value::Text("new".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    session
+        .update(BTreeMap::from([(
+            "query".into(),
+            Value::Text("hide".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    session.reject("candidate rejected".into());
+    let scene = session
+        .update_model(BTreeMap::from([(
+            "background".into(),
+            Value::Text("last".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    assert!(
+        scene
+            .primitives
+            .iter()
+            .any(|p| matches!(p,Primitive::Text{text,..} if text=="last")),
+        "committed dependency must survive rejected candidate"
+    );
+}

@@ -61,6 +61,8 @@ pub struct Generation {
     pub(super) assets: BTreeMap<PathBuf, std::sync::Arc<[u8]>>,
     pub(super) markup_entry: Option<PathBuf>,
     markup_frontend: Option<frontend::LuauFrontEnd>,
+    view_reads: std::cell::RefCell<BTreeSet<String>>,
+    view_reads_overflow: std::cell::Cell<bool>,
     pub(super) root: PathBuf,
 }
 struct Loader {
@@ -260,6 +262,8 @@ impl Generation {
             assets,
             markup_entry: None,
             markup_frontend: None,
+            view_reads: Default::default(),
+            view_reads_overflow: Default::default(),
             root: loader.root.clone(),
         };
         // Validate properties even when a node is currently hidden.
@@ -387,10 +391,19 @@ impl Generation {
             assets,
             markup_entry: Some(entry.to_path_buf()),
             markup_frontend,
+            view_reads: Default::default(),
+            view_reads_overflow: Default::default(),
             root: loader.root,
         };
         generation.check_sources(root)?;
         Ok((generation, stores))
+    }
+    pub(super) fn model_affects_view<'a>(&self, mut names: impl Iterator<Item = &'a str>) -> bool {
+        if self.markup_entry.is_none() || self.view_reads_overflow.get() {
+            return true;
+        }
+        let reads = self.view_reads.borrow();
+        names.any(|name| reads.contains(name))
     }
     pub fn materialize(
         &self,
@@ -401,7 +414,22 @@ impl Generation {
         if let Some(entry) = &self.markup_entry {
             use frontend::FrontEnd;
             self.script.begin();
-            let resolve = |name: &str| self.script.resolve(name, stores);
+            let resolve = |name: &str| {
+                let value = self.script.resolve(name, stores)?;
+                // Union within a generation: a rejected branch must not erase
+                // dependencies still used by the committed view.
+                if !self.view_reads_overflow.get() {
+                    let mut reads = self.view_reads.borrow_mut();
+                    reads.extend(self.script.store_reads(name, stores));
+                    // A host can reconcile its schema during a generation's life.
+                    // On overflow use ordinary staging instead of growing this cache.
+                    if reads.len() > 4096 {
+                        reads.clear();
+                        self.view_reads_overflow.set(true);
+                    }
+                }
+                Ok(value)
+            };
             let raw = self
                 .markup_frontend
                 .as_ref()

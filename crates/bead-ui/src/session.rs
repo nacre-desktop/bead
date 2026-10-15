@@ -251,6 +251,25 @@ impl Session {
         }
         self.stage_state(stores)
     }
+    /// Host-owned models stay current without painting when no binding reads them.
+    /// Behavior/input updates continue through the ordinary staged transaction.
+    pub fn update_model(
+        &mut self,
+        changes: BTreeMap<String, Value>,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        if self.pending.is_none()
+            && let Some(generation) = &self.generation
+            && !generation.model_affects_view(changes.iter().filter_map(|(id, value)| {
+                (self.stores.get(id) != Some(value)).then_some(id.as_str())
+            }))
+        {
+            self.stores
+                .commit(changes)
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+            return Ok(None);
+        }
+        self.update(changes)
+    }
     pub fn set_viewport(&mut self, width: u32, height: u32) -> bool {
         let next = (width.max(1) as f32, height.max(1) as f32);
         let changed = self.viewport != next;

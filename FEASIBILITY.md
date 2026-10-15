@@ -1187,3 +1187,44 @@ Fix both layer ownership and prepared-frame invalidation for error overlays.
 The test preserves last-good body and stores separately; both paths pass.
 No deadline raised or failure marker suppressed. Final quiet controls/reload
 proofs remain required. Evidence: optimization-error-overlay-{before,after}.log.
+
+## Optimization — skip unread backend models (2026-10-15)
+
+The recorded physical log had599 title changes on unfocused windows and
+603 bar updates; focused title stayed unchanged. Window-list churn was
+materializing the bar despite no binding reading that model. Track actual
+store reads, including computed inputs; update unread host data without paint.
+
+| A/B/B/A, two20s samples each | Hypr before→after | niri before→after |
+|---|---:|---:|
+| Native CPU %, background title10Hz |3.70→.45|3.43→.25|
+| Bar commits per200 backend updates |201/200→0/1|200/202→0/0|
+| PSS+DRM+SwapPss MiB, mean |26.44→26.08|27.56→27.11|
+
+Bar+actual sound panel, fixed separate probe executable, private services.
+One extra candidate commit was the legitimate clock. No private title values
+printed. All8trials keep genuine focus changes working; an additional strict
+proof matches focused-title change to its exact bar presentation on both.
+Model state stays current for actions/reload. Used/indirect dependencies still
+stage atomically; rejected branches retain prior dependencies. JSON stays
+conservative. Dependency cache caps4096names then falls back to ordinary staging.
+75workspace tests/fmt/clippy pass. This addresses one idle-noise source, not
+all6b0a invariance. Evidence: .research/optimization/model-churn-* and
+model-focus-presented-*. Profile/error checkpointcb1ac45 CI38731207553 passed.
+
+## Optimization — allocator interaction checkpoint (2026-10-15)
+
+Arena2 improved early aging on the older baseline, but that gain does not
+carry through the selected shared-watcher/CGU1 combination. Test interaction
+before adopting another global policy. Keep the ordinary system allocator
+pending the one-hour endpoints; no new allocator dependency is introduced.
+
+| Three selected-scene cycles, MiB | System | Arena2 |
+|---|---:|---:|
+| Hypr warm /closed |26.56/19.73|27.38/20.95|
+| niri warm /closed |28.66/20.27|28.25/21.17|
+
+No inherited arena/preload override. All cases passed strict valid-presentation
+and pixel checks. Results do not show a useful incremental memory benefit;
+no mallopt or environment override added. Long aging remains pending.
+Evidence: .research/optimization/arena-interaction-*.

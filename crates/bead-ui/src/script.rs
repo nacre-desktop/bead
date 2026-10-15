@@ -177,6 +177,16 @@ impl Script {
         }
         Ok(())
     }
+    pub(super) fn store_reads(&self, name: &str, stores: &Stores) -> Vec<String> {
+        if stores.get(name).is_some() {
+            return vec![name.into()];
+        }
+        self.cache
+            .borrow()
+            .get(name)
+            .map(|cached| cached.reads.keys().cloned().collect())
+            .unwrap_or_default()
+    }
     pub fn resolve(&self, name: &str, stores: &Stores) -> Result<Value, Diagnostic> {
         if let Some(value) = stores.get(name) {
             return Ok(value.clone());

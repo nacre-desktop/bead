@@ -332,7 +332,7 @@ impl SceneSource for Runtime {
                     snapshot.workspaces.len(),
                     snapshot.windows.len()
                 );
-                self.session.update(backend_values(&snapshot)?)?
+                self.session.update_model(backend_values(&snapshot)?)?
             }
             UiEvent::Panel(_, _) => return Err("panel envelope reached script".into()),
             UiEvent::PanelVisibility(open) => {
