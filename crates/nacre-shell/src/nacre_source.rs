@@ -1,0 +1,724 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! Nacre v1 transport stays in the product. One link multiplexes topic Sources.
+use bead::core::source::{
+    self, Applied, Callback, Error, Mirror, Publisher, Snapshot, Source, Subscription,
+};
+use nacre_protocol::{Id, Message, Reply, framing};
+use serde_json::Value;
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
+use tokio::{
+    io::BufReader,
+    net::UnixStream,
+    sync::{Notify, mpsc, oneshot},
+    task::JoinSet,
+};
+
+type Action = Arc<dyn Fn(String, Value) -> source::Reply<'static> + Send + Sync>;
+type Event = Arc<dyn Fn(&Message) + Send + Sync>;
+#[derive(Clone)]
+pub struct Config {
+    pub socket: PathBuf,
+    pub topics: Vec<String>,
+    pub client: String,
+    pub provider: Option<(String, BTreeMap<String, u16>, Action)>,
+    pub event: Option<Event>,
+}
+impl Config {
+    pub fn new(socket: PathBuf, topics: Vec<String>) -> Self {
+        Self {
+            socket,
+            topics,
+            client: "nacre-shell".into(),
+            provider: None,
+            event: None,
+        }
+    }
+}
+#[derive(Default, Clone)]
+pub struct Status {
+    pub boot: Option<String>,
+    pub methods: BTreeMap<String, nacre_protocol::Method>,
+}
+struct Shared {
+    topics: BTreeMap<String, Publisher>,
+    status: Mutex<Status>,
+    stop: AtomicBool,
+    notify: Notify,
+    ended: AtomicBool,
+    closed: Notify,
+}
+struct OnExit(Arc<Shared>);
+impl Drop for OnExit {
+    fn drop(&mut self) {
+        if let Ok(mut status) = self.0.status.lock() {
+            *status = Status::default();
+        }
+        for publisher in self.0.topics.values() {
+            let _ =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| publisher.disconnect()));
+        }
+        self.0.ended.store(true, Ordering::Release);
+        self.0.closed.notify_waiters();
+    }
+}
+struct Owner {
+    shared: Arc<Shared>,
+    tx: mpsc::Sender<Command>,
+    thread: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+impl Drop for Owner {
+    fn drop(&mut self) {
+        self.shared.stop.store(true, Ordering::Release);
+        self.shared.notify.notify_one();
+        if let Ok(slot) = self.thread.get_mut()
+            && let Some(thread) = slot.take()
+            && thread.thread().id() != std::thread::current().id()
+        {
+            let _ = thread.join();
+        }
+    }
+}
+#[derive(Clone)]
+pub struct Client(Arc<Owner>);
+pub struct Topic {
+    client: Client,
+    publisher: Publisher,
+}
+struct Pending {
+    reply: oneshot::Sender<source::Result<Value>>,
+    deadline: Instant,
+}
+enum Command {
+    Call {
+        id: Option<Id>,
+        method: String,
+        params: Value,
+        deadline: Instant,
+        reply: oneshot::Sender<source::Result<Value>>,
+    },
+    Reconnect(oneshot::Sender<source::Result<Value>>),
+    Stop(oneshot::Sender<source::Result<Value>>),
+    #[cfg(test)]
+    Wire(Message, oneshot::Sender<source::Result<Value>>),
+}
+fn unavailable() -> Error {
+    Error::new(
+        "unavailable",
+        "daemon disconnected; calls are not replayed",
+        true,
+    )
+}
+fn timeout() -> Error {
+    Error::new(
+        "timeout",
+        "call deadline reached; re-read before retry",
+        true,
+    )
+}
+fn failure(err: nacre_protocol::Failure) -> Error {
+    let code = serde_json::to_value(err.code)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "protocol".into());
+    Error::new(&code, &err.message, err.retry)
+}
+fn check_socket(path: &std::path::Path) -> source::Result<()> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    if !path.is_absolute() {
+        return Err(Error::new(
+            "permission_denied",
+            "daemon socket must be absolute",
+            false,
+        ));
+    }
+    let parent = path.parent().ok_or_else(unavailable)?;
+    let uid = nix::unistd::geteuid().as_raw();
+    for (p, directory) in [(parent, true), (path, false)] {
+        let meta = std::fs::symlink_metadata(p).map_err(|_| unavailable())?;
+        if meta.uid() != uid
+            || meta.mode() & 0o777 != if directory { 0o700 } else { 0o600 }
+            || if directory {
+                !meta.is_dir()
+            } else {
+                !meta.file_type().is_socket()
+            }
+        {
+            return Err(Error::new(
+                "permission_denied",
+                "unsafe daemon socket ownership/type/mode",
+                false,
+            ));
+        }
+    }
+    Ok(())
+}
+fn check_peer(uid: u32) -> source::Result<()> {
+    if uid != nix::unistd::geteuid().as_raw() {
+        return Err(Error::new(
+            "permission_denied",
+            "daemon peer UID differs",
+            false,
+        ));
+    }
+    Ok(())
+}
+impl Client {
+    pub fn start(mut config: Config) -> source::Result<Self> {
+        if !config.socket.is_absolute() || config.topics.len() > nacre_protocol::MAX_SUBSCRIPTIONS {
+            return Err(Error::new(
+                "validation",
+                "invalid daemon source configuration",
+                false,
+            ));
+        }
+        config.topics.sort();
+        config.topics.dedup();
+        framing::encode(&Message::Hello {
+            proto: 1,
+            min: Some(1),
+            client: config.client.clone(),
+        })
+        .map_err(failure)?;
+        framing::encode(&Message::Sub {
+            topics: config.topics.clone(),
+        })
+        .map_err(failure)?;
+        if let Some((provider, methods, _)) = &config.provider {
+            if methods.keys().any(|m| !m.starts_with("ui.")) {
+                return Err(Error::new(
+                    "validation",
+                    "only UI provider methods may be registered",
+                    false,
+                ));
+            }
+            framing::encode(&Message::Register {
+                provider: provider.clone(),
+                methods: methods.clone(),
+            })
+            .map_err(failure)?;
+        }
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let epoch = format!("nacre-link-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+        let mut topics = BTreeMap::new();
+        for topic in &config.topics {
+            let p = Publisher::new(epoch.clone(), serde_json::json!({}))?;
+            p.disconnect()?;
+            topics.insert(topic.clone(), p);
+        }
+        let shared = Arc::new(Shared {
+            topics,
+            status: Mutex::new(Status::default()),
+            stop: AtomicBool::new(false),
+            notify: Notify::new(),
+            ended: AtomicBool::new(false),
+            closed: Notify::new(),
+        });
+        let (tx, rx) = mpsc::channel(nacre_protocol::MAX_CALLS);
+        let state = shared.clone();
+        let thread = std::thread::Builder::new()
+            .name("nacre-link".into())
+            .stack_size(512 * 1024)
+            .spawn(move || {
+                let _exit = OnExit(state.clone());
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .max_blocking_threads(2)
+                    .build();
+                if let Ok(runtime) = runtime {
+                    runtime.block_on(run(config, state.clone(), rx));
+                }
+                disconnect(&state);
+            })
+            .map_err(|_| Error::new("io", "daemon source thread unavailable", true))?;
+        Ok(Self(Arc::new(Owner {
+            shared,
+            tx,
+            thread: Mutex::new(Some(thread)),
+        })))
+    }
+    pub fn topic(&self, name: &str) -> source::Result<Topic> {
+        Ok(Topic {
+            client: self.clone(),
+            publisher: self
+                .0
+                .shared
+                .topics
+                .get(name)
+                .ok_or_else(|| Error::new("unknown_topic", "topic was not requested", false))?
+                .clone(),
+        })
+    }
+    pub fn status(&self) -> Status {
+        self.0
+            .shared
+            .status
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+    pub async fn call(
+        &self,
+        method: String,
+        params: Value,
+        duration: Duration,
+    ) -> source::Result<Value> {
+        self.call_id(None, method, params, duration).await
+    }
+    async fn call_id(
+        &self,
+        id: Option<Id>,
+        method: String,
+        params: Value,
+        duration: Duration,
+    ) -> source::Result<Value> {
+        if duration.is_zero()
+            || duration > Duration::from_secs(120)
+            || method.is_empty()
+            || method.len() > 128
+        {
+            return Err(Error::new("validation", "invalid call/deadline", false));
+        }
+        if self.0.shared.stop.load(Ordering::Acquire) {
+            return Err(unavailable());
+        }
+        let (reply, rx) = oneshot::channel();
+        self.0
+            .tx
+            .try_send(Command::Call {
+                id,
+                method,
+                params,
+                deadline: Instant::now() + duration,
+                reply,
+            })
+            .map_err(|_| Error::new("busy", "daemon call queue full or stopped", true))?;
+        rx.await.map_err(|_| unavailable())?
+    }
+    async fn control(&self, stop: bool) -> source::Result<Value> {
+        if stop {
+            self.0.shared.stop.store(true, Ordering::Release);
+            self.0.shared.notify.notify_one();
+            loop {
+                let closed = self.0.shared.closed.notified();
+                if self.0.shared.ended.load(Ordering::Acquire) {
+                    return Ok(Value::Null);
+                }
+                closed.await;
+            }
+        }
+        let (reply, rx) = oneshot::channel();
+        self.0
+            .tx
+            .try_send(if stop {
+                Command::Stop(reply)
+            } else {
+                Command::Reconnect(reply)
+            })
+            .map_err(|_| unavailable())?;
+        rx.await.map_err(|_| unavailable())?
+    }
+}
+impl Source for Topic {
+    fn snapshot(&self) -> Arc<Snapshot> {
+        self.publisher.snapshot()
+    }
+    fn subscribe(&self, cb: Callback) -> source::Result<Subscription> {
+        self.publisher.subscribe(cb)
+    }
+    fn invoke(&self, m: String, p: Value) -> source::Reply<'_> {
+        Box::pin(self.client.call(m, p, Duration::from_secs(3)))
+    }
+    fn call(&self, m: String, p: Value, d: Duration) -> source::Reply<'_> {
+        Box::pin(self.client.call(m, p, d))
+    }
+    fn reconnect(&self) -> source::Reply<'_> {
+        Box::pin(self.client.control(false))
+    }
+    fn stop(&self) -> source::Reply<'_> {
+        Box::pin(self.client.control(true))
+    }
+}
+fn disconnect(shared: &Shared) {
+    if let Ok(mut status) = shared.status.lock() {
+        *status = Status::default();
+    }
+    for publisher in shared.topics.values() {
+        let _ = publisher.disconnect();
+    }
+}
+struct Session {
+    reader: framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>,
+    writer: tokio::net::unix::OwnedWriteHalf,
+    boot: String,
+    methods: BTreeMap<String, nacre_protocol::Method>,
+    available: Vec<String>,
+}
+async fn connect(config: &Config) -> source::Result<Session> {
+    check_socket(&config.socket)?;
+    let stream = UnixStream::connect(&config.socket)
+        .await
+        .map_err(|_| unavailable())?;
+    check_peer(stream.peer_cred().map_err(|_| unavailable())?.uid())?;
+    let (r, mut writer) = stream.into_split();
+    let mut reader = framing::Reader::new(BufReader::new(r));
+    framing::write(
+        &mut writer,
+        &Message::Hello {
+            proto: 1,
+            min: Some(1),
+            client: config.client.clone(),
+        },
+    )
+    .await
+    .map_err(failure)?;
+    let Some(Message::Welcome {
+        proto,
+        min,
+        boot,
+        methods,
+        topics,
+        ..
+    }) = reader.next().await.map_err(failure)?
+    else {
+        return Err(Error::new("protocol", "welcome required", false));
+    };
+    if proto != nacre_protocol::VERSION || min > proto {
+        return Err(Error::new(
+            "unsupported_version",
+            "daemon protocol overlap missing",
+            false,
+        ));
+    }
+    let available = config
+        .topics
+        .iter()
+        .filter(|t| topics.get(*t) == Some(&1))
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Some((provider, methods, _)) = &config.provider {
+        framing::write(
+            &mut writer,
+            &Message::Register {
+                provider: provider.clone(),
+                methods: methods.clone(),
+            },
+        )
+        .await
+        .map_err(failure)?;
+    }
+    if !available.is_empty() {
+        framing::write(
+            &mut writer,
+            &Message::Sub {
+                topics: available.clone(),
+            },
+        )
+        .await
+        .map_err(failure)?;
+    }
+    Ok(Session {
+        reader,
+        writer,
+        boot,
+        methods,
+        available,
+    })
+}
+async fn send(
+    shared: &Shared,
+    writer: &mut tokio::net::unix::OwnedWriteHalf,
+    message: &Message,
+) -> source::Result<()> {
+    tokio::select! {
+        _=shared.notify.notified()=>Err(unavailable()),
+        result=tokio::time::timeout(Duration::from_secs(10),framing::write(writer,message))=>result.map_err(|_|timeout())?.map_err(failure),
+    }
+}
+fn apply_snapshot(
+    shared: &Shared,
+    mirrors: &mut BTreeMap<String, Mirror>,
+    boot: &str,
+    topic: &str,
+    seq: u64,
+    data: Value,
+) -> source::Result<()> {
+    if let Some(mirror) = mirrors.get_mut(topic) {
+        let snapshot = Arc::new(Snapshot {
+            epoch: boot.into(),
+            revision: seq,
+            data: Arc::new(data),
+            connected: true,
+        });
+        if mirror.accept(snapshot, Instant::now())? == Applied::Updated
+            && let Some(snapshot) = mirror.snapshot()
+        {
+            shared.topics[topic].publish_shared(snapshot.data.clone())?;
+        }
+    }
+    Ok(())
+}
+fn apply_patch(
+    shared: &Shared,
+    mirrors: &mut BTreeMap<String, Mirror>,
+    boot: &str,
+    topic: &str,
+    base: u64,
+    seq: u64,
+    data: &Value,
+) -> source::Result<Applied> {
+    let Some(mirror) = mirrors.get_mut(topic) else {
+        return Ok(Applied::Ignored);
+    };
+    let applied = mirror.patch(boot, base, seq, data, Instant::now())?;
+    if applied == Applied::Updated
+        && let Some(snapshot) = mirror.snapshot()
+    {
+        shared.topics[topic].publish_shared(snapshot.data.clone())?;
+    }
+    if applied == Applied::Resync {
+        shared.topics[topic].disconnect()?;
+    }
+    Ok(applied)
+}
+fn expire(pending: &mut BTreeMap<Id, Pending>) {
+    let now = Instant::now();
+    let ids = pending
+        .iter()
+        .filter(|(_, p)| p.deadline <= now)
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+    for id in ids {
+        if let Some(call) = pending.remove(&id) {
+            let _ = call.reply.send(Err(timeout()));
+        }
+    }
+}
+fn resolve(pending: &mut BTreeMap<Id, Pending>, id: &Id, reply: Reply) {
+    if let Some(call) = pending.remove(id) {
+        let result = if call.deadline <= Instant::now() {
+            Err(timeout())
+        } else {
+            match reply {
+                Reply::Ok { ok } => Ok(ok),
+                Reply::Err { err } => Err(failure(err)),
+            }
+        };
+        let _ = call.reply.send(result);
+    }
+}
+async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<Command>) {
+    let mut backoff = source::Reconnect::default();
+    let mut next = 0i64;
+    'outer: while !shared.stop.load(Ordering::Acquire) {
+        let handshake = tokio::time::timeout(Duration::from_secs(5), connect(&config));
+        tokio::pin!(handshake);
+        let mut session = loop {
+            tokio::select! {
+                _=shared.notify.notified()=>break 'outer,
+                result=&mut handshake=>match result {Ok(Ok(s))=>break Some(s),_=>break None},
+                command=commands.recv()=>match command {
+                    Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);let _=reply.send(Ok(Value::Null));break 'outer;},
+                    Some(Command::Reconnect(reply))=>{let _=reply.send(Ok(Value::Null));},
+                    Some(Command::Call{reply,..})=>{let _=reply.send(Err(unavailable()));},
+                    #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
+                    None=>break 'outer,
+                }
+            }
+        };
+        if let Some(ref mut session) = session {
+            backoff.reset();
+            if let Ok(mut status) = shared.status.lock() {
+                *status = Status {
+                    boot: Some(session.boot.clone()),
+                    methods: session.methods.clone(),
+                };
+            }
+            let mut mirrors = config
+                .topics
+                .iter()
+                .map(|t| (t.clone(), Mirror::new(Instant::now())))
+                .collect::<BTreeMap<_, _>>();
+            for mirror in mirrors.values_mut() {
+                let _ = mirror.reconnected(&session.boot, Instant::now());
+            }
+            let mut pending = BTreeMap::<Id, Pending>::new();
+            let mut handlers: JoinSet<(Id, source::Result<Value>)> = JoinSet::new();
+            loop {
+                if shared.stop.load(Ordering::Acquire) {
+                    break;
+                }
+                let deadline = pending.values().map(|p| p.deadline).min();
+                let alarm = async {
+                    match deadline {
+                        Some(d) => tokio::time::sleep_until(d.into()).await,
+                        None => std::future::pending::<()>().await,
+                    }
+                };
+                tokio::pin!(alarm);
+                tokio::select! {
+                    _=shared.notify.notified()=>break,
+                    _=&mut alarm=>expire(&mut pending),
+                    command=commands.recv()=>match command {
+                        Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
+                        Some(Command::Reconnect(reply))=>{disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
+                        Some(Command::Call{id,method,params,deadline,reply})=>{
+                            if deadline<=Instant::now(){let _=reply.send(Err(timeout()));continue;}
+                            if pending.len()>=nacre_protocol::MAX_CALLS{let _=reply.send(Err(Error::new("busy","daemon outstanding-call limit",true)));continue;}
+                            next+=1;if next as u64>nacre_protocol::MAX_SAFE_INTEGER{let _=reply.send(Err(Error::new("internal","call id exhausted",false)));break;}
+                            let id=id.unwrap_or(Id::Integer(next));
+                            if pending.contains_key(&id){let _=reply.send(Err(Error::new("validation","duplicate call id",false)));continue;}
+                            let remaining=deadline.saturating_duration_since(Instant::now());
+                            let message=Message::Call{id:id.clone(),m:method,p:params,timeout:Some(remaining.as_millis().clamp(1,120000) as u32)};
+                            if let Err(e)=framing::encode(&message){let _=reply.send(Err(failure(e)));continue;}
+                            pending.insert(id.clone(),Pending{reply,deadline});
+                            if !tokio::time::timeout(remaining.min(Duration::from_secs(10)),send(&shared,&mut session.writer,&message)).await.is_ok_and(|r|r.is_ok()){break;}
+                        },
+                        #[cfg(test)] Some(Command::Wire(message,reply))=>{let result=send(&shared,&mut session.writer,&message).await.map(|_|Value::Null);let _=reply.send(result);},
+                        None=>break,
+                    },
+                    complete=handlers.join_next(),if !handlers.is_empty()=>{if let Some(Ok((id,result)))=complete {let reply=match result {Ok(ok)=>Reply::Ok{ok},Err(e)=>Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Unavailable,e.message,e.retry).dispatch_state(true)}};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}}},
+                    message=session.reader.next()=>{
+                        let Ok(Some(message))=message else{break;};
+                        match message {
+                            Message::Snap{topic,seq,data}=>{
+                                if !session.available.contains(&topic){continue;}
+                                if apply_snapshot(&shared,&mut mirrors,&session.boot,&topic,seq,data).is_err(){break;}
+                            },
+                            Message::Patch{topic,base,seq,data}=>{
+                                if !session.available.contains(&topic){continue;}
+                                match apply_patch(&shared,&mut mirrors,&session.boot,&topic,base,seq,&data) {
+                                    Ok(Applied::Resync)=>{
+                                        if send(&shared,&mut session.writer,&Message::Resync{topics:vec![topic]}).await.is_err(){break;}
+                                    },
+                                    Err(_)=>break,
+                                    _=>{},
+                                }
+                            },
+                            Message::Ret{id,reply}=>resolve(&mut pending,&id,reply),
+                            Message::Ping{id}=>{if send(&shared,&mut session.writer,&Message::Pong{id}).await.is_err(){break;}},
+                            Message::Call{id,m,p,timeout:limit}=>{if let Some((_,methods,handler))=&config.provider && methods.contains_key(&m)&&handlers.len()<nacre_protocol::MAX_CALLS {let future=handler(m,p);handlers.spawn(async move{(id,tokio::time::timeout(Duration::from_millis(limit.unwrap_or(1000) as u64),future).await.unwrap_or_else(|_|Err(timeout())))});continue;}
+                                let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::UnknownMethod,"UI method unavailable",false).dispatch_state(true)};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}},
+                            Message::Ev{..}|Message::Lost{..}|Message::Pong{..}=>{if let Some(event)=&config.event {event(&message);}},
+                            Message::Error{..}=>break,
+                            _=>break,
+                        }
+                    }
+                }
+            }
+            handlers.abort_all();
+            for (_, p) in pending {
+                let _ = p.reply.send(Err(if p.deadline <= Instant::now() {
+                    timeout()
+                } else {
+                    unavailable()
+                }));
+            }
+        }
+        drop(session);
+        disconnect(&shared);
+        if shared.stop.load(Ordering::Acquire) {
+            break;
+        }
+        let sleep = tokio::time::sleep(backoff.delay());
+        tokio::pin!(sleep);
+        loop {
+            tokio::select! {
+                _=shared.notify.notified()=>break 'outer,
+                _=&mut sleep=>break,
+                command=commands.recv()=>match command {
+                    Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);let _=reply.send(Ok(Value::Null));break 'outer;},
+                    Some(Command::Reconnect(reply))=>{let _=reply.send(Ok(Value::Null));break;},
+                    Some(Command::Call{reply,..})=>{let _=reply.send(Err(unavailable()));},
+                    #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
+                    None=>break 'outer,
+                }
+            }
+        }
+    }
+    disconnect(&shared);
+}
+
+/// Explicit socket only: used by the nested integration proof, never discovers a bus.
+pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::start(Config::new(path, vec!["compositor".into()]))?;
+    let topic = client.topic("compositor")?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !topic.snapshot().connected
+        || topic
+            .snapshot()
+            .data
+            .get("available")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        if Instant::now() >= deadline {
+            return Err("daemon source did not become fresh".into());
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(2)
+        .build()?;
+    let status = client.status();
+    let result = runtime.block_on(topic.call(
+        "daemon.status".into(),
+        serde_json::json!({}),
+        Duration::from_secs(1),
+    ))?;
+    let snapshot = topic.snapshot();
+    let count = snapshot
+        .data
+        .get("workspaces")
+        .and_then(Value::as_object)
+        .ok_or("workspace map missing")?
+        .len();
+    let label = format!("Workspaces: {count}");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bead-test/tests/fixtures");
+    let mut ui = bead_test::Harness::load(
+        &root,
+        std::path::Path::new("main.luau"),
+        &root.join("palette.json"),
+        BTreeMap::from([("query".into(), bead::core::Value::Text(label.clone()))]),
+        bead_test::Config {
+            width: 384,
+            height: 244,
+            scale: 1.5,
+        },
+    )?;
+    if !ui
+        .accessibility()
+        .nodes
+        .iter()
+        .any(|(_, n)| n.value() == Some(label.as_str()))
+    {
+        return Err("source value did not reach UI".into());
+    }
+    let rendered = ui
+        .render()?
+        .pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[3] > 0)
+        .count();
+    if rendered == 0 {
+        return Err("source UI render empty".into());
+    }
+    println!(
+        "{}",
+        serde_json::json!({"connected":snapshot.connected,"boot":status.boot,"method_count":status.methods.len(),"rendered_pixels":rendered,"daemon_boot":result.get("boot"),"available":snapshot.data.get("available"),"output_count":snapshot.data.get("outputs").and_then(Value::as_object).map(|v|v.len()),"workspace_count":snapshot.data.get("workspaces").and_then(Value::as_object).map(|v|v.len())})
+    );
+    runtime.block_on(topic.stop())?;
+    Ok(())
+}
+#[cfg(test)]
+mod tests;

@@ -6,6 +6,7 @@ mod desktop;
 mod font_sources;
 mod headless;
 mod launcher;
+mod nacre_source;
 mod notifications;
 mod reload;
 mod sound;
@@ -44,6 +45,13 @@ fn start(
     ui_started: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cli: Vec<String> = std::env::args().skip(1).collect();
+    if cli.first().is_some_and(|a| a == "--check-daemon") {
+        return nacre_source::check(
+            cli.get(1)
+                .ok_or("--check-daemon needs an explicit private socket")?
+                .into(),
+        );
+    }
     if cli.first().is_some_and(|a| a == "--check") {
         return headless::check(Path::new(cli.get(1).ok_or("--check needs FILE")?));
     }

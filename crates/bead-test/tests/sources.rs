@@ -268,3 +268,19 @@ fn origin_revisions_prevent_concurrent_callback_rollback() -> Result<()> {
     assert!(publisher.publish_revision(2, json!({"value":0})).is_err());
     Ok(())
 }
+
+#[test]
+fn publisher_shares_admitted_immutable_payload() {
+    use std::sync::Arc;
+    let publisher =
+        bead_core::source::Publisher::new("bridge".into(), serde_json::json!({})).unwrap();
+    let data = Arc::new(serde_json::json!({"items":{"one":{"label":"one"}},"order":["one"]}));
+    publisher.publish_shared(data.clone()).unwrap();
+    assert!(Arc::ptr_eq(&publisher.snapshot().data, &data));
+    assert!(
+        publisher
+            .publish_shared(Arc::new(serde_json::json!([])))
+            .is_err()
+    );
+    assert!(Arc::ptr_eq(&publisher.snapshot().data, &data));
+}

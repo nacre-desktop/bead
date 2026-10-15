@@ -1,0 +1,540 @@
+// SPDX-License-Identifier: GPL-3.0-only
+use super::*;
+use std::os::unix::fs::PermissionsExt;
+use tokio::net::UnixListener;
+struct Lab(PathBuf);
+impl Lab {
+    fn new() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let p = std::env::temp_dir().join(format!(
+            "nc-source-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir(&p).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o700)).unwrap();
+        Self(p)
+    }
+    fn socket(&self) -> PathBuf {
+        self.0.join("daemon.sock")
+    }
+    fn bind(&self) -> UnixListener {
+        let listener = UnixListener::bind(self.socket()).unwrap();
+        std::fs::set_permissions(self.socket(), std::fs::Permissions::from_mode(0o600)).unwrap();
+        listener
+    }
+}
+impl Drop for Lab {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+fn text(name: &str) -> &'static str {
+    match name {
+        "handshake" => include_str!("../../tests/protocol-v1/handshake.jsonl"),
+        "state" => include_str!("../../tests/protocol-v1/state.jsonl"),
+        "null-snapshot" => include_str!("../../tests/protocol-v1/null-snapshot.jsonl"),
+        "calls" => include_str!("../../tests/protocol-v1/calls.jsonl"),
+        "events" => include_str!("../../tests/protocol-v1/events.jsonl"),
+        "restart" => include_str!("../../tests/protocol-v1/restart.jsonl"),
+        "ui" => include_str!("../../tests/protocol-v1/ui.jsonl"),
+        _ => panic!("unknown fixture"),
+    }
+}
+fn fixture(name: &str) -> Vec<Message> {
+    text(name)
+        .lines()
+        .map(|s| framing::decode(s.as_bytes()).unwrap())
+        .collect()
+}
+#[test]
+fn committed_transcripts_match_the_pinned_rust_exports() {
+    let mut count = 0;
+    for (path, generated) in nacre_protocol::artifacts::transcripts() {
+        let name = path.rsplit('/').next().unwrap().trim_end_matches(".jsonl");
+        let actual = text(name)
+            .lines()
+            .map(|s| serde_json::from_str::<Value>(s).unwrap())
+            .collect::<Vec<_>>();
+        let expected = generated
+            .lines()
+            .map(|s| serde_json::from_str::<Value>(s).unwrap())
+            .collect::<Vec<_>>();
+        assert!(actual == expected, "pinned transcript differs: {name}");
+        for message in fixture(name) {
+            let encoded = framing::encode(&message).unwrap();
+            assert!(
+                framing::decode(&encoded).unwrap() == message,
+                "typed roundtrip: {name}"
+            );
+            count += 1;
+        }
+    }
+    assert_eq!(count, 31);
+}
+
+fn welcome() -> Message {
+    fixture("handshake")[1].clone()
+}
+async fn next(reader: &mut framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>) -> Message {
+    tokio::time::timeout(Duration::from_secs(5), reader.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+}
+async fn accepted(
+    listener: &UnixListener,
+) -> (
+    framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>,
+    tokio::net::unix::OwnedWriteHalf,
+) {
+    let (stream, _) = listener.accept().await.unwrap();
+    let (r, mut w) = stream.into_split();
+    let mut r = framing::Reader::new(BufReader::new(r));
+    assert!(matches!(
+        next(&mut r).await,
+        Message::Hello { proto: 1, .. }
+    ));
+    framing::write(&mut w, &welcome()).await.unwrap();
+    (r, w)
+}
+async fn fresh(topic: &Topic, predicate: impl Fn(&Value) -> bool) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let s = topic.snapshot();
+            if s.connected && predicate(&s.data) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+#[tokio::test(flavor = "current_thread")]
+async fn permissions_and_peer_identity_are_required() {
+    let lab = Lab::new();
+    let _listener = lab.bind();
+    check_socket(&lab.socket()).unwrap();
+    std::fs::set_permissions(&lab.0, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(check_socket(&lab.socket()).is_err());
+    std::fs::set_permissions(&lab.0, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::set_permissions(lab.socket(), std::fs::Permissions::from_mode(0o666)).unwrap();
+    assert!(check_socket(&lab.socket()).is_err());
+    assert!(check_peer(nix::unistd::geteuid().as_raw().wrapping_add(1)).is_err());
+    assert!(check_socket(std::path::Path::new("relative.sock")).is_err());
+}
+#[tokio::test(flavor = "current_thread")]
+async fn published_state_transcript_keeps_wrong_base_then_resyncs() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let resync = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let server_resync = resync.clone();
+    let server_release = release.clone();
+    let server = tokio::spawn(async move {
+        let (mut r, mut w) = accepted(&listener).await;
+        assert_eq!(
+            next(&mut r).await,
+            Message::Sub {
+                topics: vec!["compositor".into()]
+            }
+        );
+        let f = fixture("state");
+        for m in &f[1..4] {
+            framing::write(&mut w, m).await.unwrap();
+        }
+        assert_eq!(next(&mut r).await, f[4]);
+        server_resync.notify_one();
+        server_release.notified().await;
+        framing::write(&mut w, &f[5]).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+    let topic = client.topic("compositor").unwrap();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let capture = seen.clone();
+    let _sub = topic
+        .subscribe(Arc::new(move |s| {
+            if s.connected {
+                capture.lock().unwrap().push(s.data.clone());
+            }
+        }))
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), resync.notified())
+        .await
+        .unwrap();
+    assert!(
+        topic.snapshot().data["windows"]["w1"]["focused"] == true,
+        "wrong-base patch must not mutate old data"
+    );
+    assert!(
+        !topic.snapshot().connected,
+        "gap stays stale until resync snapshot"
+    );
+    release.notify_one();
+    fresh(&topic, |v| v["windows"]["w1"]["focused"] == false).await;
+    {
+        let values = seen.lock().unwrap();
+        assert!(values.iter().any(|v| v["windows"]["w1"]["focused"] == true));
+        assert!(values.len() >= 3);
+    }
+    topic.stop().await.unwrap();
+    server.await.unwrap();
+}
+#[tokio::test(flavor = "current_thread")]
+async fn restart_reconnect_resubscribes_before_accepting_sequence_zero() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let f = fixture("restart");
+    let second = f[2].clone();
+    let initial = f[1].clone();
+    let replacement = f[4].clone();
+    let server = tokio::spawn(async move {
+        let (mut r, mut w) = accepted(&listener).await;
+        let sub = next(&mut r).await;
+        framing::write(&mut w, &initial).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        drop(w);
+        drop(r);
+        let (s, _) = listener.accept().await.unwrap();
+        let (r, mut w) = s.into_split();
+        let mut r = framing::Reader::new(BufReader::new(r));
+        assert!(matches!(next(&mut r).await, Message::Hello { .. }));
+        framing::write(&mut w, &second).await.unwrap();
+        assert_eq!(next(&mut r).await, sub);
+        framing::write(&mut w, &replacement).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+    let topic = client.topic("compositor").unwrap();
+    fresh(&topic, |v| v["windows"].is_object()).await;
+    let started = Instant::now();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while client.status().boot.as_deref() != Some("00000000-0000-4000-8000-000000000002") {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    fresh(&topic, |v| v["windows"].is_object()).await;
+    assert!(started.elapsed() < Duration::from_secs(1));
+    topic.stop().await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn published_rpc_events_and_deadlines_use_the_same_client_link() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let f = fixture("calls");
+    let events = fixture("events");
+    let server = tokio::spawn(async move {
+        let (mut r, mut w) = accepted(&listener).await;
+        let call = next(&mut r).await;
+        assert!(matches!(call,Message::Call{id:Id::Integer(7),ref m,..}if m=="daemon.ping"));
+        framing::write(&mut w, &f[1]).await.unwrap();
+        let call = next(&mut r).await;
+        assert!(
+            matches!(call,Message::Call{id:Id::Text(ref id),ref m,..}if id=="missing"&&m=="example.missing")
+        );
+        framing::write(&mut w, &f[3]).await.unwrap();
+        let call = next(&mut r).await;
+        assert!(
+            matches!(call,Message::Call{id:Id::Text(ref id),ref m,..}if id=="deadline"&&m=="ui.dispatch")
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        framing::write(&mut w, &f[5]).await.unwrap();
+        for message in &events[..3] {
+            framing::write(&mut w, message).await.unwrap();
+        }
+        assert_eq!(next(&mut r).await, events[3]);
+        framing::write(&mut w, &events[4]).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), r.next())
+                .await
+                .is_err(),
+            "expired calls must not replay"
+        );
+    });
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let capture = seen.clone();
+    let mut config = Config::new(lab.socket(), vec![]);
+    config.event = Some(Arc::new(move |m| capture.lock().unwrap().push(m.clone())));
+    let client = Client::start(config).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        client
+            .call_id(
+                Some(Id::Integer(7)),
+                "daemon.ping".into(),
+                serde_json::json!({}),
+                Duration::from_secs(1)
+            )
+            .await
+            .unwrap(),
+        Value::Null
+    );
+    // Match the no-explicit-deadline golden semantically; the adapter always sends
+    // its remaining caller deadline, which the old transcript permits optionally.
+    let error = client
+        .call_id(
+            Some(Id::Text("missing".into())),
+            "example.missing".into(),
+            serde_json::json!({}),
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "unknown_method");
+    let error = client
+        .call_id(
+            Some(Id::Text("deadline".into())),
+            "ui.dispatch".into(),
+            serde_json::json!({}),
+            Duration::from_millis(5),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "timeout");
+    let (reply, rx) = oneshot::channel();
+    client
+        .0
+        .tx
+        .try_send(Command::Wire(fixture("events")[3].clone(), reply))
+        .unwrap();
+    rx.await.unwrap().unwrap();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while seen.lock().unwrap().len() < 4 {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    {
+        let seen = seen.lock().unwrap();
+        let expected = fixture("events");
+        assert!(seen[..3] == expected[..3]);
+        assert_eq!(seen[3], expected[4]);
+    }
+    server.await.unwrap();
+    client.control(true).await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn published_ui_transcript_forwards_calls_to_an_injected_provider() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let f = fixture("ui");
+    let server = tokio::spawn(async move {
+        let (mut provider, mut pw) = accepted(&listener).await;
+        assert_eq!(next(&mut provider).await, f[0]);
+        let (mut caller, mut cw) = accepted(&listener).await;
+        let request = next(&mut caller).await;
+        if let Message::Call { id, m, p, .. } = &request {
+            if let Message::Call {
+                id: expected,
+                m: em,
+                p: ep,
+                ..
+            } = &f[1]
+            {
+                assert!(id == expected && m == em && p == ep);
+            }
+        } else {
+            panic!("call expected");
+        }
+        framing::write(&mut pw, &f[2]).await.unwrap();
+        assert_eq!(next(&mut provider).await, f[3]);
+        framing::write(&mut cw, &f[4]).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    });
+    let mut config = Config::new(lab.socket(), vec![]);
+    config.provider = Some((
+        "ui".into(),
+        BTreeMap::from([("ui.dispatch".into(), 1)]),
+        Arc::new(|method, params| {
+            assert_eq!(method, "ui.dispatch");
+            assert_eq!(params["method"], "launcher");
+            Box::pin(async { Ok(Value::Null) })
+        }),
+    ));
+    let provider = Client::start(config).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while provider.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let caller = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while caller.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let Message::Call { id, m, p, .. } = fixture("ui")[1].clone() else {
+        panic!("fixture call")
+    };
+    assert_eq!(
+        caller
+            .call_id(Some(id), m, p, Duration::from_secs(1))
+            .await
+            .unwrap(),
+        Value::Null
+    );
+    provider.control(true).await.unwrap();
+    caller.control(true).await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn partial_frame_survives_an_intervening_outbound_call() {
+    use tokio::io::AsyncWriteExt;
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let server = tokio::spawn(async move {
+        let (mut r, mut w) = accepted(&listener).await;
+        assert!(matches!(next(&mut r).await, Message::Sub { .. }));
+        let line = framing::encode(&Message::Snap {
+            topic: "compositor".into(),
+            seq: 0,
+            data: serde_json::json!({"text":"café"}),
+        })
+        .unwrap();
+        let split = line.iter().position(|b| *b == 0xc3).unwrap() + 1;
+        w.write_all(&line[..split]).await.unwrap();
+        let Message::Call { id, .. } = next(&mut r).await else {
+            panic!("interleaved call")
+        };
+        w.write_all(&line[split..]).await.unwrap();
+        framing::write(
+            &mut w,
+            &Message::Ret {
+                id,
+                reply: Reply::Ok { ok: Value::Null },
+            },
+        )
+        .await
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+    let topic = client.topic("compositor").unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await; // reader has a partial UTF-8 frame
+    client
+        .call(
+            "daemon.ping".into(),
+            serde_json::json!({}),
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
+    fresh(&topic, |v| v["text"] == "café").await;
+    topic.stop().await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn full_snapshots_preserve_new_null_members() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let f = fixture("null-snapshot");
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (r, mut w) = stream.into_split();
+        let mut r = framing::Reader::new(BufReader::new(r));
+        assert!(matches!(next(&mut r).await, Message::Hello { .. }));
+        let Message::Welcome {
+            proto,
+            min,
+            boot,
+            methods,
+            frame_ms,
+            ..
+        } = welcome()
+        else {
+            panic!("welcome")
+        };
+        let welcome = Message::Welcome {
+            proto,
+            min,
+            boot,
+            methods,
+            frame_ms,
+            topics: BTreeMap::from([("settings.desktop".into(), 1)]),
+        };
+        framing::write(&mut w, &welcome).await.unwrap();
+        assert_eq!(
+            next(&mut r).await,
+            Message::Sub {
+                topics: vec!["settings.desktop".into()]
+            }
+        );
+        for message in f {
+            framing::write(&mut w, &message).await.unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec!["settings.desktop".into()])).unwrap();
+    let topic = client.topic("settings.desktop").unwrap();
+    fresh(&topic, |v| {
+        v.as_object().is_some_and(|o| o.contains_key("optional"))
+    })
+    .await;
+    assert!(topic.snapshot().data["optional"].is_null());
+    topic.stop().await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn stop_interrupts_a_peer_that_does_not_read_a_large_call() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let server = tokio::spawn(async move {
+        let (_r, _w) = accepted(&listener).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let caller = client.clone();
+    let call = tokio::spawn(async move {
+        caller
+            .call(
+                "daemon.ping".into(),
+                serde_json::json!({"large":"x".repeat(900_000)}),
+                Duration::from_secs(3),
+            )
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    tokio::time::timeout(Duration::from_secs(1), client.control(true))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(call.await.unwrap().is_err());
+    server.abort();
+    let _ = server.await;
+}

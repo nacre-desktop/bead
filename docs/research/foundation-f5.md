@@ -1,6 +1,7 @@
 # Foundation F5 close-out — 2026-10-15
 
-F0 and F5a–F5e implemented. **STOP: Features9–10 remain paused.** Typing targets
+Historical F5 close-out; owner later approved resumption (see follow-ups below).
+F0 and F5a–F5e implemented. Features9–10 were paused here. Typing targets
 are not accepted. Resuming notifications/launcher on the daemon requires the
 owner's OK and the migration agent's next phase. No live desktop, installed
 Nacre, configuration, keybinding, autostart or user unit was changed. No release.
@@ -181,3 +182,47 @@ headless test, so these are lifecycle/memory guards, not new idle CPU acceptance
 112 workspace tests, fmt/all-features clippy, CPU-only/release builds pass.
 No live/install/release work. Per-surface renderer and CPU-small-panel policy
 remain; GL-large-animation/Mesa residue and 6b pacing/idle items stay open.
+
+
+## Nacre Source adapter — 2026-10-15
+
+GPL nacre-shell pins nacre-protocol v1 at `6bdc22eae0d44661632eaa671a479acd4808616e`.
+Framework Sources remain protocol-neutral; no GPL dependency enters bead-* graphs.
+Seven unchanged upstream transcripts are committed under the GPL application's
+tests, checked against generated exports as JSON objects (key order is immaterial).
+The upstream SDK pin removes production ordered-map/Tokio runtime feature leakage;
+its wire schema, exports and transcripts are unchanged from F1.
+
+One current-thread transport multiplexes topic Sources over one explicit Unix
+socket. It checks directory/socket ownership and modes plus SO_PEERCRED, uses
+the upstream bounded/cancellation-safe decoder, and validates advertised versions.
+Per-topic mirrors apply snapshots and RFC 7396 patches against the last base; a
+gap retains the last good state, marks it disconnected and requests resync.
+Reconnect backs off 50 ms to 2 s and resubscribes on every handshake/new boot.
+Shared immutable snapshot payloads avoid a second deep copy during publication.
+Calls carry queue-inclusive deadlines, are bounded to 64, and are never replayed
+after disconnect. Optional UI-provider calls run separately to avoid deadlocking
+a nested daemon call. Explicit stop interrupts blocked writes; idle has no timer.
+The host owns reconnect-mark presentation and calls stop only when closing the
+shared connection, not when an individual panel drops a topic handle.
+
+Nine adapter tests cover seven transcript families, unsafe modes/peer UID,
+wrong-base resync with retained data, restart/boot resubscribe, null snapshots,
+call replies/errors/timeouts/no replay, event/lost/ping, UI forwarding, fragmented
+UTF-8 reads interrupted by calls, and stop during a blocked 900 KiB write.
+A framework Source test verifies shared payload identity and invalid-data rollback.
+`--check-daemon SOCKET` is an explicit private probe: read compositor Source,
+call daemon.status, project counts into a headless Luau UI and assert pixels plus
+AccessKit. It never discovers the owner's socket. Native bar backend migration
+and daemon notification/menu topics wait for their upstream service contracts.
+
+Private standalone F1 smoke passes nested Hyprland120 and niri60, two daemon
+incarnations each: same-UID link, fresh output/workspace counts into Luau
+pixels/AccessKit, status boot match, changed boot after restart, socket/process
+cleanup. Cold Source/UI probe H40.30/37.88 ms, N48.57/42.47 ms includes startup
+and headless rendering, not RPC/presentation latency. The earlier Hyprland
+harness inherited desktop=niri; explicit private backend selection fixes setup.
+The strict freshness assertion was retained. No live endpoint was reached.
+123 workspace tests, fmt/all-features clippy, CPU-only/release builds, Luau and
+all framework/service/license boundaries pass. Feature9 fixture/control scaffolds
+are present; matched visual measurements remain pending at this checkpoint.

@@ -1,5 +1,26 @@
 # Feasibility
 
+## 2026-10-15 — daemon Source reaches a headless Luau view
+
+The adapter consumes the published protocol; framework Sources stay neutral.
+It retains the last good snapshot across gaps/restarts and resubscribes.
+A private standalone daemon supplies real compositor state on both compositors.
+These cold probes include startup and rendering, not RPC or typing acceptance.
+
+| Check | Result |
+| --- | --- |
+| Pinned SDK |6bdc22e; unchanged v1 wire contract|
+| Golden families / adapter tests |7 /9|
+| Cold Source/UI probe ms, H120 /N60 |40.30,37.88 /48.57,42.47|
+| Fresh pixels/AccessKit, two boot IDs, cleanup |pass on both|
+| Workspace tests / fmt / clippy / CPU+release |123 /pass /pass /pass|
+| Framework license and headless-service graphs |pass|
+
+Explicit private backend selection corrects the inherited desktop-selector setup
+failure; strict freshness remains. No live endpoint, installation or release.
+Feature9 Source fixtures/controls are prepared; matched QML samples pending.
+See [adapter method](docs/research/foundation-f5.md#nacre-source-adapter--2026-10-15).
+
 ## 2026-10-15 — opaque motion chooses a cached layer, releases it at rest
 
 The opaque comparison uses actual opacity1 and native content-sized surfaces.

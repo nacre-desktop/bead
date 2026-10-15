@@ -1,0 +1,2 @@
+{"t":"hello","proto":1,"min":1,"client":"fixture","futureOptional":true}
+{"t":"welcome","proto":1,"min":1,"boot":"00000000-0000-4000-8000-000000000001","topics":{"compositor":1},"methods":{"daemon.ping":{"v":1,"class":"desktop","timeout":1000,"params":{"type":"object"},"result":{}},"daemon.status":{"v":1,"class":"desktop","timeout":1000,"params":{"type":"object"},"result":{}},"ui.dispatch":{"v":1,"class":"ui","timeout":1000,"params":{"type":"object"},"result":{}}},"frame_ms":16}

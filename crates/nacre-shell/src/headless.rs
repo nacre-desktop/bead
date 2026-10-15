@@ -265,4 +265,59 @@ mod tests {
         }
         Ok(())
     }
+    #[test]
+    fn notification_controls_follow_current_qml_visibility()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for (body, actions, details) in [
+            (
+                "",
+                serde_json::json!([{"id":"1|default","label":"Implicit default"}]),
+                false,
+            ),
+            (
+                "Details",
+                serde_json::json!([{"id":"1|default","label":"Implicit default"},{"id":"1|open","label":"Open"}]),
+                true,
+            ),
+        ] {
+            let snapshot = serde_json::json!({"rows":[{"id":"1","app":"Example","summary":"Controls","body":body,"time_str":"now","expanded":true,"urgency":1,"actions":actions}],"popup_count":1,"history_count":1,"dnd":false,"inhibited":false,"timers":[]});
+            let mut fixture = initial_models()?;
+            fixture.extend(crate::notifications::values(&snapshot));
+            let mut h = bead_test::Harness::load_with_icons(
+                &root(),
+                Path::new("notifications/main.luau"),
+                &root().join("palette.json"),
+                fixture,
+                bead_test::Config {
+                    width: 464,
+                    height: 400,
+                    scale: 1.,
+                },
+                std::collections::BTreeMap::from([(
+                    "dialog-information".into(),
+                    root().join("tests/icon.svg"),
+                )]),
+            )?;
+            h.render()?;
+            h.assert_accessible("Dismiss notification", accesskit::Role::Button)?;
+            let tree = h.accessibility();
+            assert!(
+                !tree
+                    .nodes
+                    .iter()
+                    .any(|(_, n)| n.label() == Some("Implicit default")),
+                "default action is not a footer button"
+            );
+            assert_eq!(
+                tree.nodes
+                    .iter()
+                    .any(|(_, n)| n.label() == Some("Collapse notification")),
+                details
+            );
+            if details {
+                h.assert_accessible("Open", accesskit::Role::Button)?;
+            }
+        }
+        Ok(())
+    }
 }

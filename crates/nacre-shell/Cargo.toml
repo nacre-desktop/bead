@@ -11,7 +11,7 @@ bead-test = { path = "../bead-test" }
 bead={path="../bead",default-features=false}
 image = { version = "0.25", default-features = false, features = ["png"] }
 niri-ipc = "=26.4.0"
-nix = {version="0.31",features=["signal"]}
+nix = {version="0.31",features=["signal","user"]}
 serde_json = "1"
 serde = {version="1",features=["derive"]}
 accesskit = "=0.25.1"
@@ -21,6 +21,9 @@ freedesktop-icons = "0.4"
 fontconfig = "=0.11.0"
 fontdb = "=0.23.0"
 skrifa = "=0.44.0"
+
+nacre-protocol = { git = "https://github.com/nacre-desktop/nacre", rev = "6bdc22eae0d44661632eaa671a479acd4808616e" }
+tokio = { version = "1", features = ["rt", "sync", "net", "io-util", "time", "macros"] }
 
 [features]
 default=["native-gl"]

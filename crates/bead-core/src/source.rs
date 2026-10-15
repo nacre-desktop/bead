@@ -148,6 +148,11 @@ impl Publisher {
     }
     pub fn publish(&self, data: Json) -> Result<()> {
         object(&data)?;
+        self.change(Some(Arc::new(data)), true, None)
+    }
+    /// Share an immutable transport snapshot without duplicating its payload.
+    pub fn publish_shared(&self, data: Arc<Json>) -> Result<()> {
+        object(&data)?;
         self.change(Some(data), true, None)
     }
     pub fn disconnect(&self) -> Result<()> {
@@ -155,9 +160,9 @@ impl Publisher {
     }
     pub fn publish_revision(&self, revision: u64, data: Json) -> Result<()> {
         object(&data)?;
-        self.change(Some(data), true, Some(revision))
+        self.change(Some(Arc::new(data)), true, Some(revision))
     }
-    fn change(&self, data: Option<Json>, connected: bool, origin: Option<u64>) -> Result<()> {
+    fn change(&self, data: Option<Arc<Json>>, connected: bool, origin: Option<u64>) -> Result<()> {
         let (snapshot, callbacks) = {
             let mut state = self
                 .state
@@ -168,18 +173,18 @@ impl Publisher {
                     return Ok(());
                 }
                 if revision == state.snapshot.revision
-                    && data.as_ref().is_some_and(|d| *d != *state.snapshot.data)
+                    && data.as_ref().is_some_and(|d| **d != *state.snapshot.data)
                 {
                     return Err(Error::new("validation", "origin revision reused", false));
                 }
             }
-            if data.as_ref().is_none_or(|d| *d == *state.snapshot.data)
+            if data.as_ref().is_none_or(|d| **d == *state.snapshot.data)
                 && connected == state.snapshot.connected
                 && origin.is_none_or(|r| r == state.snapshot.revision)
             {
                 return Ok(());
             }
-            let changed = data.as_ref().is_some_and(|d| *d != *state.snapshot.data);
+            let changed = data.as_ref().is_some_and(|d| **d != *state.snapshot.data);
             let revision = if let Some(revision) = origin {
                 revision
             } else if changed {
@@ -194,9 +199,7 @@ impl Publisher {
             let snapshot = Arc::new(Snapshot {
                 epoch: state.snapshot.epoch.clone(),
                 revision,
-                data: data
-                    .map(Arc::new)
-                    .unwrap_or_else(|| state.snapshot.data.clone()),
+                data: data.unwrap_or_else(|| state.snapshot.data.clone()),
                 connected,
             });
             state.snapshot = snapshot.clone();

@@ -7,6 +7,7 @@ multiple-versions = "warn"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = ["https://github.com/nacre-desktop/nacre"] # GPL protocol: nacre-shell only; framework policy does not allow this.
 
 [advisories]
 ignore = [{ id = "RUSTSEC-2026-0192", reason = "Informational unmaintained ttf-parser via fontdb/cosmic-text and usvg; no patched release. Feature 2 uses installed fonts only. Track replacement before loading untrusted font files; other advisories remain errors." }]

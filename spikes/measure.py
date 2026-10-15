@@ -467,7 +467,7 @@ def main():
         # starting the bus, not just before launching its clients.
         with tempfile.TemporaryDirectory(prefix='bead-bus-') as directory:
             env=os.environ.copy()
-            env.update({'GIO_USE_VFS':'local', 'GVFS_DISABLE_FUSE':'1'})
+            env.update({'GIO_USE_VFS':'local', 'GVFS_DISABLE_FUSE':'1', 'QT_NO_XDG_DESKTOP_PORTAL':'1', 'GTK_USE_PORTAL':'0'})
             display=env.get('WAYLAND_DISPLAY','')
             if display and not display.startswith('/'): display=str(pathlib.Path(env['XDG_RUNTIME_DIR'])/display)
             env['BEAD_PARENT_WAYLAND']=display

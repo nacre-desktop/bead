@@ -11,6 +11,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+type ControlFn = Arc<dyn Fn(Control) -> Result<(), String> + Send + Sync>;
 type Wakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
 struct Shared {
     last: serde_json::Value,
@@ -33,7 +34,8 @@ impl Drop for Subscription {
     }
 }
 pub struct Owner {
-    server: bead::source::Notifications,
+    _source: Arc<dyn Source>,
+    control: ControlFn,
     _source_subscription: bead::core::source::Subscription,
     shared: Arc<Mutex<Shared>>,
 }
@@ -47,8 +49,35 @@ impl Owner {
             audio: None,
         }));
         let state = shared.clone();
-        let server =
-            bead::source::Notifications::private(socket, history).map_err(|e| e.to_string())?;
+        let (server, control, address): (Arc<dyn Source>, ControlFn, Option<String>) =
+            if let Some(path) = std::env::var_os("BEAD_PRIVATE_NOTIFICATION_FIXTURE") {
+                if std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() != Ok("1") {
+                    return Err("fixture requires private proof environment".into());
+                }
+                let bytes = std::fs::read(path).map_err(|_| "fixture read failed")?;
+                if bytes.len() > 1_048_576 {
+                    return Err("fixture exceeds protocol-sized bound".into());
+                }
+                let data = serde_json::from_slice(&bytes).map_err(|_| "fixture JSON invalid")?;
+                let source = bead_test::source::FakeSource::new(data).map_err(|e| e.to_string())?;
+                (
+                    Arc::new(source),
+                    Arc::new(|_| Err("fixture actions disabled".into())),
+                    None,
+                )
+            } else {
+                let server = Arc::new(
+                    bead::source::Notifications::private(socket, history)
+                        .map_err(|e| e.to_string())?,
+                );
+                let address = server.address().map_err(|e| e.to_string())?;
+                let controller = server.clone();
+                (
+                    server,
+                    Arc::new(move |action| controller.control(action)),
+                    Some(address),
+                )
+            };
         let subscription = server
             .subscribe(Arc::new(move |source_snapshot| {
                 let snapshot = &*source_snapshot.data;
@@ -83,15 +112,20 @@ impl Owner {
                 }
             }))
             .map_err(|e| e.to_string())?;
-        println!(
-            "NOTIFICATIONS_PRIVATE address={}",
-            server.address().map_err(|e| e.to_string())?
-        );
+        if let Some(address) = address {
+            println!("NOTIFICATIONS_PRIVATE address={address}");
+        } else {
+            println!("NOTIFICATIONS_FIXTURE source=true");
+        }
         Ok(Self {
-            server,
+            _source: server,
+            control,
             shared,
             _source_subscription: subscription,
         })
+    }
+    fn control(&self, action: Control) -> Result<(), String> {
+        (self.control)(action)
     }
     pub fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Subscription {
         let (last, id) = if let Ok(mut state) = self.shared.lock() {
@@ -135,7 +169,7 @@ impl Owner {
                 ),
             ] {
                 if old.is_some() && new.is_some() && (old != new || old_mute != muted) {
-                    let _ = self.server.control(Control::Osd {
+                    let _ = self.control(Control::Osd {
                         channel: channel.into(),
                         value: new.unwrap_or(0.).clamp(0., 1.),
                         muted: muted.unwrap_or(false),
@@ -145,7 +179,7 @@ impl Owner {
         }
     }
     pub fn hover(&self, id: u32, value: bool) {
-        let _ = self.server.control(Control::Hover(id, value));
+        let _ = self.control(Control::Hover(id, value));
     }
     pub fn feedback(&self, args: &[serde_json::Value]) -> Result<serde_json::Value, &'static str> {
         if args.len() != 3 {
@@ -164,13 +198,12 @@ impl Owner {
             .as_bool()
             .or_else(|| args[2].as_str().and_then(|s| s.parse().ok()))
             .ok_or("OSD muted must be boolean")?;
-        self.server
-            .control(Control::Osd {
-                channel: channel.into(),
-                value,
-                muted,
-            })
-            .map_err(|_| "notification server stopped")?;
+        self.control(Control::Osd {
+            channel: channel.into(),
+            value,
+            muted,
+        })
+        .map_err(|_| "notification server stopped")?;
         Ok(serde_json::Value::Null)
     }
     pub fn command(
@@ -186,12 +219,10 @@ impl Owner {
                 Ok(serde_json::Value::String(serde_json::json!({"popups":state.last["popup_count"],"retained":state.last["history_count"],"timers":state.last["timers"],"historyReady":state.last["history_ready"],"error":state.last["error"]}).to_string()))
             }
             "clear" => self
-                .server
                 .control(Control::HidePopups)
                 .map(|_| serde_json::Value::Null)
                 .map_err(|_| "notification server stopped"),
             "clearHistory" => self
-                .server
                 .control(Control::ClearHistory)
                 .map(|_| serde_json::Value::Null)
                 .map_err(|_| "notification server stopped"),
@@ -202,8 +233,7 @@ impl Owner {
                     .and_then(|a| a.as_str())
                     .and_then(|s| s.parse().ok())
                     .ok_or("invalid notification key")?;
-                self.server
-                    .control(Control::Dismiss(id))
+                self.control(Control::Dismiss(id))
                     .map(|_| serde_json::Value::Null)
                     .map_err(|_| "notification server stopped")
             }
@@ -234,7 +264,7 @@ impl Owner {
             "notifications.clear" => Control::ClearHistory,
             _ => return Err("unknown notification action".into()),
         };
-        self.server.control(command)
+        self.control(command)
     }
 }
 pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {

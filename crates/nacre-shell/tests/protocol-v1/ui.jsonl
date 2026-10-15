@@ -1,0 +1,5 @@
+{"t":"register","provider":"ui","methods":{"ui.dispatch":1}}
+{"t":"call","id":1,"m":"ui.dispatch","p":{"target":"nacre","method":"launcher","args":[""]}}
+{"t":"call","id":"provider-1","m":"ui.dispatch","p":{"target":"nacre","method":"launcher","args":[""]}}
+{"t":"ret","id":"provider-1","ok":null}
+{"t":"ret","id":1,"ok":null}

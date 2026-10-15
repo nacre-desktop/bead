@@ -52,6 +52,18 @@ def sample(env, raw, compositor, stop):
         spec=importlib.util.spec_from_file_location('panel_reference',ROOT/'spikes/panel-reference.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
         return proof.sample(env,raw,compositor,stop)
+    if os.environ.get('BEAD_HARDENING') == 'notification-native-reference':
+        spec=importlib.util.spec_from_file_location('notification_native_reference',ROOT/'spikes/notification-native-reference.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
+    if os.environ.get('BEAD_HARDENING') == 'notification-reference':
+        spec=importlib.util.spec_from_file_location('notification_reference',ROOT/'spikes/notification-reference.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
+    if os.environ.get('BEAD_HARDENING') == 'nacre-source':
+        spec=importlib.util.spec_from_file_location('nacre_source_proof',ROOT/'spikes/nacre-source-proof.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_HARDENING') == 'cache-memory':
         spec=importlib.util.spec_from_file_location('cache_memory_proof',ROOT/'spikes/cache-memory-proof.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)

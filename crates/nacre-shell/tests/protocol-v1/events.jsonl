@@ -1,0 +1,5 @@
+{"t":"ev","topic":"notifications","name":"shown","seq":1,"data":{"id":"n1"}}
+{"t":"lost","topic":"notifications","from":2,"to":5}
+{"t":"ev","topic":"notifications","name":"shown","seq":6,"data":{"id":"n6"}}
+{"t":"ping","id":"health"}
+{"t":"pong","id":"health"}
