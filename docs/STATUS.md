@@ -8,21 +8,21 @@ ranking or providers. Existing compositor backends are frozen except bug fixes.
 The migration agent owns nacre-daemon / nacre-protocol and Nacre F0–F4.
 [Checkpoint evidence and limits](research/feature9-gate-d.md).
 
-F5b: MIT bead-test renders real Luau/store fixtures with fixed CPU/font/scale;
-PNG goldens/diffs, input scripts, AccessKit assertions and replay budgets.
-120 pose/opacity frames:0 actual Taffy passes,0 raster builds after one group
-composite. Changed text triggers the counter. Shell --check now uses the harness.
-88 tests/fmt/clippy, CPU-only check and independent framework cargo-deny pass.
-Static symbol fixture matches full upstream font PNG exactly; test fonts only.
-OSD scale1 golden exposes text beyond its pill; no Feature9 parity claim.
-Next F5c crash safety, then Sources and background effect; STOP after F5e.
+F5c source checkpointf49217c: main-loop watchdog, first-frame last-good startup
+fallback and crash-loop safe bar.94 tests/fmt/clippy/CPU-only check pass.
+Nested H120/N60: watchdog abort5.078/5.071s after actual UI-stall start;
+first-frame save, bad source/palette boot, fixed-source reload and safe bar pass.
+Bar/first-warm/closed5s PSS+DRM MiB: H21.67/27.11/22.30,N23.19/30.50/23.18.
+Three closes + lifecycle within bar+5; no DRM. Short contended regression smoke.
+Pending validated bundles capped8MiB/32 generations; no old-feedback rollback.
+Next F5d Sources / published protocol adapter or fake fallback, then F5e; STOP.
 
-F5a40a979c CI38766103118 green: injected notification connection/history,
-latest-one subscriptions, bounded processed calls and async host-runtime stop.
-83 tests plus headless private-bus parity and nested wrapper interaction pass.
-Bar/first-warm/closed5s PSS+DRM MiB: H20.49/26.70/21.84,N22.32/28.34/22.62.
-Three closes + lifecycle pass bar+5; no DRM. Concurrent nested tests elsewhere;
-short smoke, no renewed CPU/pacing acceptance. F0/pause CI also green.
+F5b39b4270 CI38767973872 green: MIT headless CPU/font/scale harness, PNG diffs,
+input/AccessKit/replay;120 pose frames0 Taffy/0 rasters after initial composite.
+OSD scale1 golden exposes text beyond its pill; no Feature9 parity acceptance.
+F5a40a979c CI38766103118 green: injected headless notification host API,
+bounded calls/latest-one subscription, private wire parity and nested use pass.
+F0/pause CI green. Renderer/typing baseline acceptance remains unchanged.
 No installation, live-session action or release is authorized.
 
 ## Accepted Gate C and optimization baseline

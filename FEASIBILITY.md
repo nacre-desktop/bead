@@ -1379,3 +1379,33 @@ The reused variable symbol fixture was wrong; full font isolated it. A static
 subset matches exactly. Capture used isolated fonttools4.60.1 (not runtime/CI).
 ~700 authored code/test lines plus licenses/assets; ~20min including capture.
 No production font or Feature9 UI changed; no new QML/runtime benchmark needed.
+
+## Foundation F5c — crash safety (2026-10-15)
+
+The UI loop now aborts a stall, with fixed-code reports and core dumps disabled.
+Only a successfully acknowledged frame promotes its validated UI bundle.
+Startup can use that bundle while original source files are repaired and watched.
+Three unclean starts in120seconds select a trusted CPU bar without services.
+
+| Private nested proof | Hypr120 | niri60 |
+| --- | ---: | ---: |
+| Actual UI-stall start→watchdog abort ms |5077.76|5071.18|
+| First-frame / broken source+palette boot / fixed reload / safe mode |pass|pass|
+| Bar / first warm / closed5s PSS+DRM MiB |21.67/27.11/22.30|23.19/30.50/23.18|
+| Final lifecycle delta from bar MiB |+1.47|−.005|
+
+Three closes and lifecycle within bar+5; no DRM. Short5s idle with other nested
+QA/builds active; no new pacing/idle invariance or matched QML acceptance.
+94 tests/fmt/clippy/CPU-only check pass; one opt-in service test and one explicit
+watchdog-child entry ignored normally (the parent executes the child).
+Headless tests cover real abort, clean heartbeat stop, exclusive crash counter,
+path escape, safe-bar PNG, first-frame gating, source/palette recovery, original
+reload, pending budget and out-of-order feedback versus newer generations.
+UI heartbeat dispatch1s; watchdog6s includes one dispatch interval of grace so
+an actual busy stall exceeds5s. Persistence uses wp_presentation when present;
+otherwise exact-generation frame callback acknowledgement, never timing metrics.
+Pending source snapshots8MiB/32 generations, raw bundle8MiB/encoded32MiB;
+cap failures retain the old UI. Relative files only; no view/store payload saved.
+Crash history atomic/locked; dead restore directories reaped, live owners kept.
+Unit already Restart=on-failure; repo LimitCORE=0 added, nothing installed.
+~1100 added code/test/proof lines; artifacts .research/foundation/f5c-*.
