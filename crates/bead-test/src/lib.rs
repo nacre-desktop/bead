@@ -29,7 +29,9 @@ impl Default for Config {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Counters {
     pub layouts: usize,
+    /// Retained content/group builds; pixel compositing itself is separate.
     pub rasters: usize,
+    pub direct_composites: usize,
 }
 pub enum Input {
     Pointer {
@@ -244,6 +246,7 @@ impl Harness {
         Counters {
             layouts: bead_ui::layout::layout_passes().wrapping_sub(self.layout_baseline),
             rasters: self.renderer.cache.builds + self.renderer.opacity_builds,
+            direct_composites: self.renderer.direct_composites,
         }
     }
     pub fn scene(&self) -> &Scene {

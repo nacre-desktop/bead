@@ -28,6 +28,7 @@ def sample(env, raw, compositor, stop):
     client = pointer = None
     command = [str(target/'nacre-shell'), '--bar', '--audio-panel', '--command-socket',
                str(socket), '--namespace', 'bead-gate-c', '--trace-state']
+    if os.environ.get('BEAD_BACKGROUND_BLUR'):command+=['--background-blur']
     if os.environ.get('BEAD_PANEL_NO_DAMAGE'):command+=['--no-damage']
     if os.environ.get('BEAD_PANEL_RENDERER'):
         command += ['--panel-renderer', os.environ['BEAD_PANEL_RENDERER']]

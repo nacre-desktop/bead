@@ -157,3 +157,20 @@ fn golden_diff_and_frame_replay_fail_for_real_regressions() -> Result<()> {
     assert!(bead_test::replay(&[], budget).is_err());
     Ok(())
 }
+#[test]
+fn opaque_transform_audit_reports_direct_composition_without_new_content_bakes() -> Result<()> {
+    let mut test = test()?;
+    let offset = test.scene().offset;
+    let before = test.counters();
+    for i in 0..120 {
+        test.pose((offset.0 + i as f32 * 0.05, offset.1), 1.)?;
+    }
+    let after = test.counters();
+    assert_eq!(after.layouts, before.layouts);
+    assert_eq!(after.rasters, before.rasters);
+    assert_eq!(after.direct_composites - before.direct_composites, 120);
+    println!(
+        "OPAQUE_TRANSFORM_AUDIT frames=120 layout_delta=0 content_bakes=0 direct_composites=120"
+    );
+    Ok(())
+}

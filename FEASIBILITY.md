@@ -1439,3 +1439,33 @@ No pinned adapter/upstream transcript replay yet; no GPL dependency in framework
 ~1700 added lines including tests/docs; no catalog/ranking/providers or new typing.
 Wire authentication/reconnect and daemon30-day history/chaos acceptance remain
 later migration/F6/F7 work. Current history is bounded256 records/3MiB.
+
+## Foundation F5e — background protocol and audit (2026-10-15, STOP)
+
+Standard compositor blur is opt-in and requires an advertised global +Blur flag.
+Both private builds advertised it; no vendor shader/rule or dependency was added.
+Lifecycle checks pass; this does not accept material/rounded/visual blur parity.
+The requested font/cache/animation audit reports gaps without rebuilding caches.
+
+| Nested bar+sound proof | Hypr120 | niri60 |
+| --- | ---: | ---: |
+| Standard Blur advertised /objects created /destroyed |yes /7 /7|yes /4 /4|
+| Bar /first warm /closed5s PSS+DRM MiB |21.51/27.51/21.80|22.74/28.05/22.78|
+| Final lifecycle delta from bar MiB |−.84|+.04|
+| Selected active mapped-font PSS KiB |1196|1196|
+
+All closes/lifecycle<=bar+5; no DRM client fds. Short contended5s samples;
+no new QML/pacing/CPU acceptance. Hyprland's tested build advertised the standard
+contrary to plan assumptions; defaults off, owner layer rules unchanged.
+106tests/fmt/clippy/CPU-only build/deny checks. Guard tests: opt-out/no global/
+no Blur/unknown flags/zero-invalid sizes. Exact object lifetimes tested nested.
+120 combined fade+transform frames:0 Taffy/0 content builds after one composite.
+Opaque transform-only:0 layout/content builds but120 direct composites with
+procedural fills; universal no-raster invariant not established. Fonts mapped
+with shared file data. Pixel/GL/opacity64MiB; bytecode/Source/recovery8MiB caps.
+Gaps: glyph/font internals, legacy raw texture map, selector/materialized caches,
+metadata and optional per-scale GPU accounting. Checked, not rebuilt.
+CPU small panels/GL large animated views; earlier ~20MiB Mesa residue unchanged.
+~200 protocol/proof/audit lines plus report. Raw .research/foundation/f5e-*.
+STOP after F5e. Adapter deferred under allowed unpublished-v1 fallback; Features
+9–10/typing remain paused until owner OK and migration phase. See F5 report.

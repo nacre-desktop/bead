@@ -2,6 +2,7 @@
 //! Actor state, worker transactions and per-surface drawing lifecycle.
 use super::*;
 pub(super) struct App {
+    pub(super) background: smithay_client_toolkit::background_effect::BackgroundEffectState,
     pub(super) clipboard: clipboard::Clipboard,
     pub(super) last_input_serial: u32,
     pub(super) event_sender: Option<calloop::channel::Sender<UiEvent>>,
@@ -98,7 +99,15 @@ pub fn run_runtime(
             bead_render::renderer(effective).map(|r| (s.clone(), r, effective))
         })
         .transpose()?;
+    let background =
+        smithay_client_toolkit::background_effect::BackgroundEffectState::new(&globals, &qh);
+    println!(
+        "BACKGROUND_EFFECT requested={} advertised={}",
+        options.background_blur,
+        background.ext_background_effect_manager_v1().is_ok()
+    );
     let mut app = App {
+        background,
         clipboard: clipboard::Clipboard::new(&globals, &qh),
         last_input_serial: 0,
         event_sender: None,
@@ -502,6 +511,10 @@ impl App {
                 .info(&output)
                 .map_or(120, |i| i.scale_factor.max(1) as u32 * 120);
             Ok(Surface {
+                background: None,
+                background_size: None,
+                logical_size: (0, 0),
+                background_visible: false,
                 companion,
                 output: output.clone(),
                 layer,

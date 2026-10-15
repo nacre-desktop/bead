@@ -19,7 +19,10 @@ PNGs; default tolerance is2 channel levels and0.1% changed pixels. Failure write
 actual.png and diff.png. CI uploads them. Counters use actual thread-local Taffy
 passes and content raster builds, including the opacity-group composite. The
 first translucent frame prepares one composite; later transform/opacity frames
-reuse it. Counters on one thread include other harnesses used on that thread.
+reuse it. An opaque frame instead directly composites the retained primitives;
+its procedural rounded fills are still painted. direct_composites counts that
+path separately; a zero content-build count is not a universal no-raster claim.
+Counters on one thread include other harnesses used on that thread.
 
 replay() validates recorded numeric input/presentation/CPU boundaries against
 presentation p99 and maximum per-frame CPU budgets. It rejects empty/reversed

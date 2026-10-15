@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
 mod accessibility;
+mod background;
 mod clipboard;
 mod panel;
 mod policy;
@@ -232,6 +233,8 @@ pub struct PanelSpec {
 }
 #[derive(Clone)]
 pub struct Options {
+    /// Standard compositor blur, only if advertised with the blur capability.
+    pub background_blur: bool,
     pub namespace: String,
     pub panel_spec: Option<PanelSpec>,
     pub command_map: Option<CommandMap>,
@@ -269,6 +272,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            background_blur: false,
             namespace: "bead-dev".into(),
             panel_spec: None,
             command_map: None,
@@ -321,6 +325,10 @@ struct Reusable {
     pending: Damage,
 }
 struct Surface {
+    background:Option<wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1>,
+    background_size:Option<(i32,i32)>,
+    logical_size:(u32,u32),
+    background_visible:bool,
     companion: bool,
     output: wl_output::WlOutput,
     layer: LayerSurface,
@@ -365,6 +373,10 @@ struct Surface {
 }
 impl Drop for Surface {
     fn drop(&mut self) {
+        if let Some(effect) = self.background.take() {
+            println!("BACKGROUND_EFFECT destroyed={}", effect.id().protocol_id());
+            effect.destroy();
+        }
         #[cfg(feature = "wgpu")]
         drop(self.gpu.take());
         #[cfg(feature = "native-gl")]

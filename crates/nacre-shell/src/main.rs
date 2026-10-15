@@ -224,6 +224,7 @@ fn start(
                 options.animate = true;
                 options.panel = true;
             }
+            "--background-blur" => options.background_blur = true,
             "--no-damage" => options.damage = false,
             "--argb" => options.force_argb = true,
             "--seconds" => {
@@ -236,7 +237,7 @@ fn start(
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--bar [--bar-panel] [--panel-renderer cpu|femtovg-gl]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--bar-panel] [--panel-renderer cpu|femtovg-gl]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
@@ -406,6 +407,7 @@ fn start(
         options.command_map = None;
         options.renderer = bead::render::RendererKind::Cpu;
         options.lazy_gl = false;
+        options.background_blur = false;
         let mut scene = bead::ui::recovery::safe_bar(&colors);
         scene.font_files = font_sources::select(&scene)?;
         return run(options, scene);

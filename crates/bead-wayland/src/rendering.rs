@@ -207,6 +207,17 @@ impl App {
 
             let scale = s.scale120 as f32 / 120.;
             let (w, h, stride, size) = buffer_dimensions(s.width, s.height, s.scale120)?;
+            s.background_visible = scene.opacity > 0.001;
+            let background_requested = self.options.background_blur && s.background_visible;
+            let logical_size = (s.width, s.height);
+            background::update(
+                &self.background,
+                &self.compositor,
+                s,
+                qh,
+                background_requested,
+                logical_size,
+            );
             if !panel {
                 scene.bounds.w = s.width as f32;
                 scene.bounds.h = s.height as f32;

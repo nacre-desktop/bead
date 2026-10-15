@@ -443,6 +443,8 @@ pub struct TreeCpuRenderer {
     pub cache: TreeCache,
     /// Number of content-group composites; pose/opacity changes reuse each group.
     pub opacity_builds: usize,
+    /// Opaque frames compose primitives directly rather than reuse an opacity group.
+    pub direct_composites: usize,
     flattened: Option<(u64, f32, Pixmap)>,
 }
 impl Renderer for TreeCpuRenderer {
@@ -469,6 +471,7 @@ impl Renderer for TreeCpuRenderer {
         }
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         if scene.opacity >= 1. {
+            self.direct_composites += 1;
             self.flattened = None;
             return paint(frame, scene.offset, target, damage);
         }
