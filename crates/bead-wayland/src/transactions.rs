@@ -5,7 +5,25 @@ impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
         if let UiEvent::Panel(epoch, event) = event {
             if epoch == self.panel_epoch && self.panel_runtime.is_some() {
-                self.panel_ui(*event);
+                if matches!(&*event, UiEvent::Reload) {
+                    if !self.panel_reload_pending {
+                        self.panel_reload_pending = true;
+                        if let Err(error) = self.loop_handle.insert_source(
+                            Timer::from_duration(Duration::from_millis(50)),
+                            move |_, _, app| {
+                                if app.panel_epoch == epoch && app.panel_runtime.is_some() {
+                                    app.panel_reload_pending = false;
+                                    app.panel_ui(UiEvent::Reload);
+                                }
+                                TimeoutAction::Drop
+                            },
+                        ) {
+                            self.fail(error);
+                        }
+                    }
+                } else {
+                    self.panel_ui(*event);
+                }
             }
             return;
         }
@@ -308,6 +326,21 @@ impl App {
             }
         }
         self.runtime = Some(runtime);
+        if !self.processing_panel
+            && self.scene.resource_revision > 0
+            && self
+                .options
+                .panel_spec
+                .as_ref()
+                .is_some_and(|s| s.initial_open)
+        {
+            if let Some(spec) = &mut self.options.panel_spec {
+                spec.initial_open = false;
+            }
+            if let Err(error) = self.open_panel(None) {
+                eprintln!("PANEL_RESTORE_ERROR {error}");
+            }
+        }
         self.sync_ime();
         let qh = self.qh.clone();
         if !self.processing_panel {

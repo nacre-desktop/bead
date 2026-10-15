@@ -192,6 +192,7 @@ pub type CommandMap = std::sync::Arc<
 >;
 #[derive(Clone)]
 pub struct PanelSpec {
+    pub initial_open: bool,
     pub factory: std::sync::Arc<dyn Fn() -> Result<Box<dyn SceneSource>, String> + Send + Sync>,
     pub fallback: Scene,
     pub renderer: RendererKind,

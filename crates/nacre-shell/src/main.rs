@@ -343,6 +343,12 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         let fallback = sound::fallback(colors.get("surface")?);
         let cold = fallback.clone();
         options.panel_spec = Some(bead::wayland::PanelSpec {
+            initial_open: state::File::path()
+                .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
+                .and_then(state::File::open)
+                .is_ok_and(|(_, saved)| {
+                    saved.get("panel.open") == Some(&bead::core::Value::Bool(true))
+                }),
             fallback,
             // This modest transient view does not amortize the native driver residency.
             renderer: panel_renderer.unwrap_or(bead::render::RendererKind::Cpu),

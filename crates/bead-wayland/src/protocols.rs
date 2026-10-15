@@ -268,6 +268,12 @@ impl LayerShellHandler for App {
         }
         if let Some(i) = self.surfaces.iter().position(|s| s.layer == *layer) {
             let s = &mut self.surfaces[i];
+            if (s.width, s.height) != config.new_size {
+                // A compositor may park the old-size callback until a buffer
+                // satisfying this configure arrives. Do not wait on that epoch.
+                s.callbacks.invalidate();
+                s.redraw = true;
+            }
             s.width = config.new_size.0;
             s.height = config.new_size.1;
             s.configured = true;

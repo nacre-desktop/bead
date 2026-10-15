@@ -7,7 +7,7 @@ use std::{
     os::{
         fd::AsRawFd,
         unix::{
-            fs::{MetadataExt, PermissionsExt},
+            fs::{FileTypeExt, MetadataExt, PermissionsExt},
             net::{UnixListener, UnixStream},
         },
     },
@@ -195,7 +195,29 @@ impl Server {
         if meta.uid() != unsafe { libc::geteuid() } || meta.permissions().mode() & 0o077 != 0 {
             return Err("socket parent must be owner-only".into());
         }
-        let listener = UnixListener::bind(&path).map_err(|e| e.to_string())?;
+        let listener = match UnixListener::bind(&path) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+                let stale = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+                if !stale.file_type().is_socket()
+                    || stale.uid() != unsafe { libc::geteuid() }
+                    || stale.permissions().mode() & 0o077 != 0
+                {
+                    return Err("command path is not an owner-only socket".into());
+                }
+                match connect(&path) {
+                    Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {}
+                    _ => return Err("command socket already active or unavailable".into()),
+                }
+                let current = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+                if (current.dev(), current.ino()) != (stale.dev(), stale.ino()) {
+                    return Err("command socket changed during recovery".into());
+                }
+                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+                UnixListener::bind(&path).map_err(|e| e.to_string())?
+            }
+            Err(error) => return Err(error.to_string()),
+        };
         listener.set_nonblocking(true).map_err(|e| e.to_string())?;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
             .map_err(|e| e.to_string())?;
@@ -270,17 +292,16 @@ impl Drop for Server {
         }
     }
 }
-pub fn call(path: &Path, request: &Call, timeout: Duration) -> Result<Reply, String> {
-    request.validate()?;
-    if timeout > Duration::from_secs(10) {
-        return Err("invalid command timeout".into());
-    }
+fn connect(path: &Path) -> std::io::Result<UnixStream> {
     use std::os::{fd::FromRawFd, unix::ffi::OsStrExt};
     let bytes = path.as_os_str().as_bytes();
     let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
     address.sun_family = libc::AF_UNIX as _;
     if bytes.len() >= address.sun_path.len() || bytes.contains(&0) {
-        return Err("invalid command socket path".into());
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid command socket path",
+        ));
     }
     for (dst, src) in address.sun_path.iter_mut().zip(bytes) {
         *dst = *src as _;
@@ -293,9 +314,9 @@ pub fn call(path: &Path, request: &Call, timeout: Duration) -> Result<Reply, Str
         )
     };
     if fd < 0 {
-        return Err(std::io::Error::last_os_error().to_string());
+        return Err(std::io::Error::last_os_error());
     }
-    let mut stream = unsafe { UnixStream::from_raw_fd(fd) };
+    let stream = unsafe { UnixStream::from_raw_fd(fd) };
     let connected = unsafe {
         libc::connect(
             fd,
@@ -304,8 +325,16 @@ pub fn call(path: &Path, request: &Call, timeout: Duration) -> Result<Reply, Str
         )
     };
     if connected != 0 {
-        return Err(std::io::Error::last_os_error().to_string());
+        return Err(std::io::Error::last_os_error());
     }
+    Ok(stream)
+}
+pub fn call(path: &Path, request: &Call, timeout: Duration) -> Result<Reply, String> {
+    request.validate()?;
+    if timeout > Duration::from_secs(10) {
+        return Err("invalid command timeout".into());
+    }
+    let mut stream = connect(path).map_err(|e| e.to_string())?;
     owner(&stream)?;
     stream.set_nonblocking(true).map_err(|e| e.to_string())?;
     let deadline = Instant::now() + timeout;
@@ -336,6 +365,22 @@ mod tests {
         assert!(decoded.error.is_some());
     }
     use super::*;
+    #[test]
+    fn recovers_owned_dead_listener_without_replacing_regular_file() {
+        let dir = std::env::temp_dir().join(format!("bead-stale-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let path = dir.join("command.sock");
+        let dead = UnixListener::bind(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        drop(dead);
+        let server = Server::bind(path.clone(), |c| Reply::ok(c.id, Value::Null)).unwrap();
+        drop(server);
+        std::fs::write(&path, "preserve").unwrap();
+        assert!(Server::bind(path.clone(), |c| Reply::ok(c.id, Value::Null)).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "preserve");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     fn owner_socket_version_errors_and_cleanup() {
         let dir = std::env::temp_dir().join(format!("bead-ipc-{}", std::process::id()));

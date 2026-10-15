@@ -814,3 +814,28 @@ all-features checks pass. Not a Gate C verdict: niri,60s CPU, matched QML,
 reload/state and longer pacing still pending. Evidence .research/feature8/.
 Failed probes retained; no unsafe driver-map eviction. Do not infer full-shell
 savings from this smaller panel. Typing29.6→32.7% remains optimization work.
+
+## Gate C recovery and diagnostics — checkpoint (2026-10-15)
+
+Real-view reload discovered two integration bugs: panel watches lacked the bar's
+50ms debounce; resizing could wait forever on a parked old-size frame callback.
+Both are fixed without relaxing generation-specific presentation checks. A
+crashed lazy view now restores saved open/page state after the bar is ready.
+Command restart recovers only an owner-only refused Unix socket, rechecking its
+inode; active listeners, symlinks and regular files are preserved.
+
+| Check | Result |
+|---|---|
+| Source7117954 CI |38704774853 passed|
+| Latest local validation |69 tests, fmt/clippy/CPU-only pass|
+| Niri ten close-idle cycles (before recovery fixes) |+0.24–3.93 MiB; <=5 pass|
+| Hypr real-view five reload file→presentation |64.92,189.45,65.38,65.11,64.73ms|
+| Invalid dependent edit/recovery, closed reopen, SIGKILL relaunch |page preserved; open restored; pass|
+| Actual --report duration / CPU total |30.001s /0.299 CPU seconds; includes startup|
+| Report privacy/lifetime |numeric/boolean only,0600, closed+current view samples|
+
+Reload includes50ms debounce;189ms tail is retained, not hidden by median.
+Early pre-fix failures and build-overlap attempt are not timing baselines.
+Evidence .research/feature8/reload-hypr-isolated, diagnostics-hypr,
+recovery-checks.log and panel-niri-controls. Final isolated comparable CPU/
+pacing/QML and memory acceptance still pending. No physical or live changes.

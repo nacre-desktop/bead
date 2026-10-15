@@ -104,6 +104,7 @@ impl App {
         }
         self.panel_epoch = self.panel_epoch.wrapping_add(1);
         let epoch = self.panel_epoch;
+        self.panel_reload_pending = false;
         self.panel_output = Some(output.clone());
         self.create_dismiss(&output)?;
         self.companion_policy = Default::default();

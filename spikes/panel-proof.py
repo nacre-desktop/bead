@@ -72,6 +72,9 @@ def sample(env, raw, compositor, stop):
 
     result = {'compositor': compositor, 'renderer': os.environ.get('BEAD_PANEL_RENDERER', 'default'),
               'idle_seconds': seconds, 'cycles': []}
+    protocols=run('wayland-info').stdout
+    result['clipboard_transport']='ext-data-control-v1' if 'ext_data_control_manager_v1' in protocols else 'wl_data_device'
+    result['private_pipewire_fixture']=matrix.measure.memory(pw.pid)
     try:
         with log.open('w') as f:
             client = subprocess.Popen(command, cwd=ROOT, env=env, stdout=f,
@@ -99,6 +102,8 @@ def sample(env, raw, compositor, stop):
                 intervals = [(b-a)/1e6 for a,b in zip(timestamps,timestamps[1:])]
                 row = {'warm': warm, 'command_to_ready_present_ms': (ready-started)/1e6,
                        'opening_present_intervals_ms': intervals,
+                       'animation_window_ms': 220,
+                       'opening_animation_intervals_ms': [(b-a)/1e6 for a,b in zip(timestamps,timestamps[1:]) if b<=started+220_000_000],
                        'opening_draw_ms': [float(n) for n in re.findall(r'PANEL_FRAME processing_ms=([\d.]+)', segment)]}
                 if i == 0:
                     if compositor == 'hyprland':
@@ -173,6 +178,14 @@ def sample(env, raw, compositor, stop):
                 assert not call('state')['result']['resident']
                 assert call('state', target_name='bead')['result']['surfaces'] == 1
                 result['move_and_output_removal'] = True
+            if compositor == 'niri' and os.environ.get('BEAD_PANEL_OUTPUT_OFF'):
+                name=next(iter(json.loads(run('niri','msg','-j','outputs').stdout).values()))['name']
+                call('open','sound');time.sleep(.4)
+                try:
+                    response=run('niri','msg','output',name,'off')
+                    time.sleep(1)
+                    result['nested_output_off']={'response':response.stdout.strip(),'released':not call('state')['result']['resident']}
+                finally:run('niri','msg','output',name,'on')
             text = matrix.log_text(log)
             assert 'PRESENTATION clock_id=1' in text
             assert 'UI_ERROR' not in text and 'PANIC ' not in text

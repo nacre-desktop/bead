@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_HARDENING') == 'panel-reload':
+        spec=importlib.util.spec_from_file_location('panel_reload_proof',ROOT/'spikes/panel-reload-proof.py')
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_HARDENING') == 'diagnostics':
         spec=importlib.util.spec_from_file_location('diagnostics_proof',ROOT/'spikes/diagnostics-proof.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
