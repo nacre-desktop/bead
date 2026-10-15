@@ -226,3 +226,25 @@ The strict freshness assertion was retained. No live endpoint was reached.
 123 workspace tests, fmt/all-features clippy, CPU-only/release builds, Luau and
 all framework/service/license boundaries pass. Feature9 fixture/control scaffolds
 are present; matched visual measurements remain pending at this checkpoint.
+
+
+## Paint-policy recheck — 2026-10-16
+
+The Source launcher profile exposed large CPU composition cost. Clipped paint
+now avoids redundant masking, copies the first raster exactly onto cleared damage,
+and fills provably opaque interiors directly. Alpha/clip/partial-damage/border
+pixel checks pass. The same release five-alternating-trial bar/sound benchmark
+was repeated at the original native geometries and scale1.5.
+
+| Median trial mean CPU ms/frame [min,max] | Direct | Cached |
+| --- | ---: | ---: |
+| Bar |1.623 [0.844,1.627]|1.778 [0.843,1.783]|
+| Sound |0.586 [0.466,0.973]|1.683 [1.680,1.909]|
+
+Direct now wins, so Auto uses direct opaque composition during motion too.
+Alpha fades retain their cached group. The counter test exercises opaque motion
+with no layout/content/group baking; an explicit Cached comparison still checks
+pixel equivalence, pose reuse and group release/rebuild. The earlier663a192
+cached-motion choice is superseded by these measurements. Benchmark is headless
+paint CPU, not physical pacing or typing. First-trial frequency variation is
+visible in the ranges; no cross-revision absolute speedup inferred from it.

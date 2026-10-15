@@ -11,13 +11,16 @@ matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
 def sample(env,raw,compositor,stop):
     binary=os.environ.get('BEAD_HARDENING_BINARY',str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'))
     env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_PROFILE_INPUT':'1','BEAD_MATCHED_ICONS':'1','DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
+    steady=os.environ.get('BEAD_TYPING_STEADY_LIST')=='1'
     rows=[]
     with tempfile.TemporaryDirectory(prefix='bead-type-') as directory:
         bundle=pathlib.Path(directory);shutil.copytree(pathlib.Path(os.environ.get('BEAD_TYPING_BUNDLE',str(ROOT/'shell'))),bundle/'shell')
         env['BEAD_ICON_PATH']=str(bundle/'shell/sample.svg')
-        catalog=bundle/'catalog.json';catalog.write_text(json.dumps([{'id':f'proof-{i:04}','name':f'Application {i:04}','icon':'fixture'} for i in range(320)]))
+        rows_fixture=[{'id':f'proof-{i:04}','name':f'Application {i:04}','label':f'Application {i:04}','icon':'fixture','kind':'app','description':'Application fixture'} for i in range(320)]
+        legacy=os.environ.get('BEAD_TYPING_LEGACY')=='1'
+        catalog=bundle/'menu-fixture.json';catalog.write_text(json.dumps(rows_fixture if legacy else {'queries':{'':{'rows':rows_fixture},'a':{'rows':rows_fixture},'ap':{'rows':rows_fixture}}}))
         path=raw/'typing.log';pointer=None;client=None
-        command=[binary,'--renderer',os.environ.get('BEAD_TYPING_RENDERER','femtovg-gl'),'--namespace','bead-typing','--ui','ui/main.luau','--catalog',str(catalog),'--backend','none','--test-keyboard']
+        command=[binary,'--renderer',os.environ.get('BEAD_TYPING_RENDERER','cpu'),'--namespace','bead-typing','--ui','ui/main.luau','--catalog' if legacy else '--menu-fixture',str(catalog),'--backend','none','--test-keyboard']
         if compositor=='hyprland':command+=['--output','bead-bench']
         try:
             with path.open('w') as log:
@@ -27,12 +30,12 @@ def sample(env,raw,compositor,stop):
                 if compositor=='hyprland':subprocess.run(['hyprctl','eval','hl.dispatch(hl.dsp.focus({monitor="bead-bench"}))'],env=env,check=True,capture_output=True,timeout=5)
                 pointer=matrix.services.Probe([str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/examples/private-pointer')],env,raw/'pointer.log')
                 pointer.wait('POINTER_READY');time.sleep(.3);pointer.command('move 1000 300','POINTER_DONE');time.sleep(.2)
-                subprocess.run(['wtype','-s','300','-M','shift','-k','Tab','-m','shift','-s','300'],env=env,check=True,timeout=5)
+                if legacy:subprocess.run(['wtype','-s','300','-M','shift','-k','Tab','-m','shift','-s','300'],env=env,check=True,timeout=5)
                 time.sleep(.2)
                 time.sleep(.3)
                 # Repeated edits preserve a populated result set; never time no-match rows.
                 for index in range(int(os.environ.get('BEAD_TYPING_KEYS','80'))):
-                    offset=len(matrix.log_text(path));key=['-k','BackSpace'] if index%2 else ['a']
+                    offset=len(matrix.log_text(path));key=(['a']if index==0 else ['p']if index%2 else ['-k','BackSpace'])if steady else (['-k','BackSpace']if index%2 else['a'])
                     subprocess.run(['wtype','-s','20',*key],env=env,check=True,timeout=5)
                     def ready(text):
                         segment=text[offset:]
@@ -52,7 +55,7 @@ def sample(env,raw,compositor,stop):
                     rows.append({'index':index,'input_ns':start,'presented_ns':int(ns),'latency_ms':(int(ns)-start)/1e6,'cpu_ms':(int(endcpu)-cpu)/1e6,'update':int(update),'refresh_ns':int(refresh),'profiles':profiles})
                     time.sleep(.04)
                 assert 'PRESENTATION clock_id=1' in matrix.log_text(path)
-                result={'compositor':compositor,'catalog_size':320,'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
+                result={'compositor':compositor,'catalog_size':320,'source':'legacy catalog fixture' if legacy else 'exact menu.query fixtures; no engine','workload':'first grid-to-list key, then a/ap populated list'if steady else'alternating empty/a grid-list transitions','helper_cpu_ms':None,'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
 
         finally:
             if pointer:pointer.close()

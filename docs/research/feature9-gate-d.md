@@ -8,6 +8,104 @@ Nacre CONTRIBUTING. Owner resumed Features9–10 after Foundation F5.
 Typing targets are not accepted; this is an interim checkpoint, not Gate D.
 
 
+
+## Feature 10 Source fixture checkpoint — 2026-10-16
+
+The view consumes ordered menu.query results through the neutral Source call API.
+The local XDG catalog reader and native substring filter are removed. Explicit
+--menu-fixture uses exact request→reply data; unknown queries fail, and fixtures
+never activate external actions. --daemon-socket selects an authenticated private
+link; no ambient endpoint is discovered. Current row normalization follows QML's
+result shape until the migration agent publishes canonical menu schemas/goldens.
+No catalog, ranking, provider or calculator engine is implemented in Bead.
+
+Apps use the grid; search/actions use windowed rows. Calculator/emoji/clipboard/
+files/Brain-shaped fixture results exercise display and raw query forwarding;
+this is not acceptance of their real providers. Selection/scroll/query are view
+state. A bounded scalar RAM snapshot survives worker release; typed text never
+enters the durable panel file. Search receives focus immediately on open.
+The existing two-second hover/keybind preparation lifecycle hosts the launcher;
+explicit bead.panel.prepare is available, unused preparation maps no surface,
+and idle drops worker/rasters/SHM. Legacy nacre.launcher(query) forwards the query.
+A launcher host rejects sound commands instead of opening the wrong panel.
+
+Content-sized layout now uses output logical dimensions, not its last surface
+size. The old90% maximum recursively shrank1164→1112→1065→1023… and allocated
+three SHM buffers at every step. Both prepare/configure paths now stabilize at
+1164×654 with three buffers per lifecycle. Default-allocator H/N three-cycle
+proofs pass hover timeout, explicit preparation, RAM query restore/disk exclusion,
+presentation feedback, unavailable-route checks and complete cleanup.
+
+| PSS+DRM MiB, default CPU | H120 | N60 |
+| --- | ---: | ---: |
+| Bar with launcher configured |22.168|23.526|
+| First /third launcher warm |53.073 /52.951|51.253 /51.051|
+| First /third closed |23.559 /23.449|24.658 /24.393|
+| Accepted sound guard bar /first warm /third warm /closed5s |22.073 /28.890 /26.972 /22.775|23.617 /30.924 /29.339 /23.675|
+| Published-Rust control, sound bar /first /third /closed5s |22.973 /29.020 /27.596 /23.382|24.412 /31.820 /30.063 /24.407|
+
+Every close/lifecycle remains within its own bar+5, including swap. No DRM client.
+The control is the recovered default/native-gl artifact from the published F154
+build (Rust unchanged in c74), with its original Cargo fingerprint and checksum
+saved privately. Sequential guard samples, not five-pair strict idle invariance.
+Current sound values are lower than that control; no new memory regression shown.
+Historical Gate C/code revisions had different baseline file residency; do not
+infer a same-revision delta from those separate runs.
+
+A warm launcher is larger than the accepted sound panel: its three1746×981 RGBA
+buffers cost19.60MiB versus4.18MiB for sound, and its full shadow raster is about
+6.53 versus1.39MiB. Models, glyphs and transient allocator residency add the rest.
+It remains below Feature6's roughly105MiB bar+panel figure, with different content
+and renderer/code revision. This is context, not a matched optimization claim.
+No allocator policy changed: child-only mmap-threshold diagnosis passed, while
+tcache-off and fixed-view-buffer trials failed and were discarded. Geometry
+churn explained the new failure; live heap/cache bytes alone did not predict PSS.
+
+### Typing method and results
+
+Private2880×1800/scale1.5 release CPU renderer,320 populated exact fixture rows,
+real virtual-keyboard input, one edit in flight. CLOCK_MONOTONIC input receipt to
+exact committed generation's compositor feedback; process CPU clock includes
+all UI threads, excludes injector. H is virtual120Hz; niri Winit is nested60Hz.
+No own heavy build overlapped; unrelated desktop activity/frequency uncontrolled.
+Migration quiet was confirmed for the original80-key baseline, not every later
+diagnostic. Missing helper/real-engine measurements remain unmeasured.
+
+| Fixture workload | H UI CPU mean ms/key | N UI CPU mean ms/key | H /N presented p99 ms |
+| --- | ---: | ---: | ---: |
+| Before,80 keys empty/a grid↔list |54.313|54.592|66.965 /103.747|
+|200 keys: first grid→list, then a/ap list |5.093|5.010|13.959 /19.057|
+| Steady199 keys only |4.961|4.912|13.884 /16.485|
+| First key CPU /presented |31.307 /39.059|24.572 /28.931|included above|
+| All-key CPU p99 /max |6.238 /31.307|17.153 /24.572|N/A|
+| Helper CPU /end-to-end engine |unmeasured|unmeasured|unmeasured|
+
+The workloads differ:54→5 is not a paired same-workload speedup. Same40-key
+steady diagnostics before/after immutable models were8.30→4.15ms H and
+10.62→5.49ms N; final200-key means above confirm the lower warm cost. Structural
+layout switching is still substantially slower. The first transition and old
+SHM-buffer damage history cause large early frames; overall N p99 remains above
+16.7ms. Targets are not accepted end-to-end or on physical120Hz scanout.
+
+Profiling isolated~30ms composition plus~21ms worker preparation in the initial
+transition case. Exact first-raster copies onto cleared damage, safe opaque
+interior fills and unnecessary-mask avoidance reduce paint work. Pixel tests
+cover premultiplied alpha, alternating clips, partial damage and rounded borders.
+Keeping both layouts in the cached template avoids repeated Lua evaluation.
+Owned reply normalization and unchanged-model deltas avoid redundant copies.
+Immutable list payloads now share storage across store/candidate snapshots;
+replacement remains transactional and JSON is unchanged (Rust uses Value::list).
+Shared cache references use conservative byte admissions, under the same caps.
+
+A guard-accounting bug also surfaced: the behaviour VM's50ms deadline expired
+while the separate markup VM/native layout ran. The same cumulative50ms allowance
+now counts active behaviour calls, including nested work, and excludes time
+between calls. Tests prove native pauses do not consume it and many small calls
+still exhaust it; the limit was not raised. Current workspace validation134tests,
+fmt/all-features clippy/CPU-only/default release pass before final policy recheck.
+Matched real QML launcher/engine comparison, real prefixes/activation contracts,
+restart badge/UI-provider integration and Gate D forecast remain next work.
+
 ## Feature 9 Source UI comparison — 2026-10-15
 
 The notification view consumes a neutral Source; the hosted private service and

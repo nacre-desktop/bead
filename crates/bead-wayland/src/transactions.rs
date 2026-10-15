@@ -3,6 +3,13 @@
 use super::*;
 impl App {
     pub(super) fn ui(&mut self, mut event: UiEvent) {
+        if let UiEvent::CompanionModel(values) = event {
+            if self.panel_runtime.is_some() {
+                self.panel_ui(UiEvent::Model(values));
+            }
+            return;
+        }
+
         if let UiEvent::CompanionVisibility(open) = event {
             if open {
                 if !self.panel_target

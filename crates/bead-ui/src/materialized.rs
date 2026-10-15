@@ -200,7 +200,12 @@ impl Cached {
                 cached._charge = Some(c);
                 Ok(Some(cached))
             }
-            Err(_) => Ok(None),
+            Err(_) => {
+                if bead_core::profile::enabled() {
+                    println!("INPUT_PATCH_MISS kind=budget bytes={bytes}");
+                }
+                Ok(None)
+            }
         }
     }
     pub fn patch(
@@ -210,6 +215,16 @@ impl Cached {
         viewport: (f32, f32),
     ) -> Result<Option<(Scene, Vec<Node>)>, Diagnostic> {
         if !Rc::ptr_eq(raw, &self.raw) || viewport != self.viewport {
+            if bead_core::profile::enabled() {
+                println!(
+                    "INPUT_PATCH_MISS kind={}",
+                    if viewport != self.viewport {
+                        "viewport"
+                    } else {
+                        "markup"
+                    }
+                );
+            }
             return Ok(None);
         }
         let mut changed = BTreeMap::new();
@@ -217,6 +232,9 @@ impl Cached {
             let value = resolve(name)?;
             if value != *old {
                 if self.structural.contains(name) || !matches!(value, Value::Text(_)) {
+                    if bead_core::profile::enabled() {
+                        println!("INPUT_PATCH_MISS kind=structural binding={name}");
+                    }
                     return Ok(None);
                 }
                 changed.insert(name.clone(), value);

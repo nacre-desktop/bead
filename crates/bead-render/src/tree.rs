@@ -460,7 +460,15 @@ pub fn paint(
     let mut target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
         .ok_or("invalid SHM strip")?;
     let mut mask = Mask::new(width, damage.h).ok_or("damage mask")?;
+    let mut mask_clip = None;
+    let mut painted = false;
     for item in &frame.items {
+        if item.raster.is_none()
+            && matches!(&item.primitive,Primitive::Rounded{fill,border,..} if fill[3]==0 && border.as_ref().is_none_or(|(color,_)|color[3]==0))
+        {
+            continue;
+        }
+
         let clip = item.clip.map_or(damage, |r| {
             intersection(
                 damage,
@@ -471,20 +479,118 @@ pub fn paint(
         if clip.w == 0 || clip.h == 0 {
             continue;
         }
-        mask.data_mut().fill(0);
-        for y in clip.y..clip.y + clip.h {
-            let i = ((y - damage.y) * width + clip.x) as usize;
-            mask.data_mut()[i..i + clip.w as usize].fill(255);
+        // Most consecutive items share the same viewport/scissor. The mask is
+        // immutable during painting; rebuild it only when that scissor changes.
+        if item.raster.is_none()
+            && let Primitive::Rounded {
+                rect: r,
+                radius,
+                fill,
+                border,
+            } = &item.primitive
+            && fill[3] == 255
+        {
+            let left = (r.x + offset.0) * scale;
+            let top = (r.y + offset.1) * scale;
+            let right = left + r.w * scale;
+            let bottom = top + r.h * scale;
+            let inset = border.as_ref().map_or(0., |(_, w)| *w * scale * 0.5) + 2.;
+            let radius = radius.max(0.).min(r.w.min(r.h) * 0.5) * scale;
+            let x = clip.x as f32;
+            let y = clip.y as f32;
+            let x1 = (clip.x + clip.w) as f32;
+            let y1 = (clip.y + clip.h) as f32;
+            // These central stripes exclude every antialiased corner and stroke.
+            if x >= left + inset
+                && x1 <= right - inset
+                && y >= top + inset
+                && y1 <= bottom - inset
+                && ((y >= top + radius + inset && y1 <= bottom - radius - inset)
+                    || (x >= left + radius + inset && x1 <= right - radius - inset))
+            {
+                for row in clip.y..clip.y + clip.h {
+                    let start = ((row - damage.y) * width + clip.x) as usize * 4;
+                    for pixel in target.data_mut()[start..start + clip.w as usize * 4]
+                        .as_chunks_mut::<4>()
+                        .0
+                    {
+                        pixel.copy_from_slice(fill);
+                    }
+                }
+                painted = true;
+                continue;
+            }
+        }
+        if !painted && let Some(raster) = &item.raster {
+            // Damage was cleared above. Source-over onto zero is an exact copy,
+            // including partial alpha; avoid blending a full shadow-sized image.
+            let r = rect(&item.primitive);
+            let dx = ((r.x + offset.0) * scale).round() as i32;
+            let dy = ((r.y + offset.1) * scale).round() as i32;
+            let x = clip.x.max(dx.max(0) as u32);
+            let y = clip.y.max(dy.max(0) as u32);
+            let right = (clip.x + clip.w)
+                .min((i64::from(dx) + i64::from(raster.pixels.width())).max(0) as u32);
+            let bottom = (clip.y + clip.h)
+                .min((i64::from(dy) + i64::from(raster.pixels.height())).max(0) as u32);
+            if right > x && bottom > y {
+                for row in y..bottom {
+                    let src = (((i64::from(row) - i64::from(dy)) as usize)
+                        * raster.pixels.width() as usize
+                        + (i64::from(x) - i64::from(dx)) as usize)
+                        * 4;
+                    let dst = ((row - damage.y) * width + x) as usize * 4;
+                    let len = (right - x) as usize * 4;
+                    target.data_mut()[dst..dst + len]
+                        .copy_from_slice(&raster.pixels.data()[src..src + len]);
+                }
+                painted = true;
+            }
+            continue;
+        }
+        let r = rect(&item.primitive);
+        let mask_needed = if let Some(raster) = &item.raster {
+            let x = ((r.x + offset.0) * scale).round() as i64;
+            let y = ((r.y + offset.1) * scale).round() as i64;
+            !(x >= i64::from(clip.x)
+                && y >= i64::from(clip.y)
+                && x + i64::from(raster.pixels.width()) <= i64::from(clip.x + clip.w)
+                && y + i64::from(raster.pixels.height()) <= i64::from(clip.y + clip.h))
+        } else {
+            let pad = match &item.primitive {
+                Primitive::Rounded { border, .. } => {
+                    border.as_ref().map_or(2., |(_, w)| *w * scale * 0.5 + 2.)
+                }
+                _ => 2.,
+            };
+            !((r.x + offset.0) * scale - pad >= clip.x as f32
+                && (r.y + offset.1) * scale - pad >= clip.y as f32
+                && (r.x + r.w + offset.0) * scale + pad <= (clip.x + clip.w) as f32
+                && (r.y + r.h + offset.1) * scale + pad <= (clip.y + clip.h) as f32)
+        };
+        if mask_needed && mask_clip != Some(clip) {
+            if let Some(previous) = mask_clip {
+                for y in previous.y..previous.y + previous.h {
+                    let i = ((y - damage.y) * width + previous.x) as usize;
+                    mask.data_mut()[i..i + previous.w as usize].fill(0);
+                }
+            }
+            for y in clip.y..clip.y + clip.h {
+                let i = ((y - damage.y) * width + clip.x) as usize;
+                mask.data_mut()[i..i + clip.w as usize].fill(255);
+            }
+            mask_clip = Some(clip);
         }
         let r = rect(&item.primitive);
         if let Some(raster) = &item.raster {
+            painted = true;
             target.draw_pixmap(
                 ((r.x + offset.0) * scale).round() as i32,
                 ((r.y + offset.1) * scale).round() as i32 - damage.y as i32,
                 raster.pixels.as_ref().as_ref(),
                 &PixmapPaint::default(),
                 Transform::identity(),
-                Some(&mask),
+                mask_needed.then_some(&mask),
             );
         } else if let Primitive::Rounded {
             radius,
@@ -494,11 +600,18 @@ pub fn paint(
         } = &item.primitive
             && let Some(path) = crate::rounded(r, *radius)
         {
+            painted = true;
             let transform = Transform::from_scale(scale, scale)
                 .post_translate(offset.0 * scale, offset.1 * scale - damage.y as f32);
             let mut color = Paint::default();
             color.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
-            target.fill_path(&path, &color, FillRule::Winding, transform, Some(&mask));
+            target.fill_path(
+                &path,
+                &color,
+                FillRule::Winding,
+                transform,
+                mask_needed.then_some(&mask),
+            );
             if let Some((rgba, line)) = border {
                 color.set_color_rgba8(rgba[0], rgba[1], rgba[2], rgba[3]);
                 target.stroke_path(
@@ -509,7 +622,7 @@ pub fn paint(
                         ..Stroke::default()
                     },
                     transform,
-                    Some(&mask),
+                    mask_needed.then_some(&mask),
                 );
             }
         }
@@ -526,7 +639,7 @@ pub fn paint(
 /// Opaque composition can be compared without changing scene preparation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OpaqueComposition {
-    /// Direct stable frames; cached layers during presentation motion.
+    /// Measured direct opaque composition; alpha fades still reuse a group.
     #[default]
     Auto,
     Direct,
@@ -535,7 +648,6 @@ pub enum OpaqueComposition {
 #[derive(Default)]
 pub struct TreeCpuRenderer {
     pub opaque_composition: OpaqueComposition,
-    opaque_motion: bool,
     pub cache: TreeCache,
     /// Number of content-group composites; pose/opacity changes reuse each group.
     pub opacity_builds: usize,
@@ -554,9 +666,6 @@ impl TreeCpuRenderer {
     }
 }
 impl Renderer for TreeCpuRenderer {
-    fn presentation_motion(&mut self, active: bool) {
-        self.opaque_motion = active;
-    }
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
         self.cache.frame.clone()
     }
@@ -580,7 +689,7 @@ impl Renderer for TreeCpuRenderer {
         }
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         let cached_opaque = match self.opaque_composition {
-            OpaqueComposition::Auto => self.opaque_motion,
+            OpaqueComposition::Auto => false,
             OpaqueComposition::Direct => false,
             OpaqueComposition::Cached => true,
         };
@@ -680,6 +789,200 @@ impl Renderer for TreeCpuRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn opaque_interior_partial_damage_preserves_edges_and_border() {
+        let scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 0,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 20.,
+            slide: None,
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 20., 20.),
+            primitives: vec![Primitive::Rounded {
+                rect: Rect::new(0., 0., 20., 20.),
+                radius: 6.,
+                fill: [70, 80, 90, 255],
+                border: Some(([200, 30, 40, 255], 2.)),
+            }],
+        };
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene, 1.).unwrap();
+        let frame = cache.frame.as_ref().unwrap();
+        let mut full = vec![0; 1600];
+        paint(
+            frame,
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut full,
+                width: 20,
+                height: 20,
+                scale: 1.,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(20, 20),
+        )
+        .unwrap();
+        for d in [
+            Damage {
+                x: 8,
+                y: 8,
+                w: 4,
+                h: 4,
+            },
+            Damage {
+                x: 1,
+                y: 1,
+                w: 5,
+                h: 5,
+            },
+        ] {
+            let mut partial = full.clone();
+            for y in d.y..d.y + d.h {
+                for x in d.x..d.x + d.w {
+                    partial[((y * 20 + x) * 4) as usize..((y * 20 + x) * 4 + 4) as usize]
+                        .copy_from_slice(&[1, 2, 3, 255]);
+                }
+            }
+            paint(
+                frame,
+                (0., 0.),
+                ShmTarget {
+                    bytes: &mut partial,
+                    width: 20,
+                    height: 20,
+                    scale: 1.,
+                    format: PixelFormat::Rgba,
+                },
+                d,
+            )
+            .unwrap();
+            assert_eq!(partial, full, "damage {d:?}");
+        }
+    }
+    #[test]
+    fn reused_scissors_preserve_alternating_clips_and_partial_damage() {
+        let mut scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 0,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 10.,
+            slide: None,
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 10., 6.),
+            primitives: vec![],
+        };
+        for (color, clip) in [
+            ([220, 30, 40, 255], Rect::new(0., 0., 5., 6.)),
+            ([250, 250, 250, 128], Rect::new(0., 0., 5., 6.)),
+            ([0, 255, 0, 255], Rect::new(0., 0., 10., 3.)),
+            ([0, 0, 255, 255], Rect::new(0., 0., 5., 6.)),
+            ([255, 255, 0, 0], Rect::new(5., 0., 5., 6.)),
+        ] {
+            scene.clips.insert(scene.primitives.len(), clip);
+            scene.primitives.push(Primitive::Rounded {
+                rect: Rect::new(0., 0., 10., 6.),
+                radius: 0.,
+                fill: color,
+                border: None,
+            });
+        }
+        scene
+            .clips
+            .insert(scene.primitives.len(), Rect::new(5., 0., 5., 6.));
+        scene.primitives.push(Primitive::Rounded {
+            rect: Rect::new(8., 4., 2., 2.),
+            radius: 0.,
+            fill: [0, 255, 255, 255],
+            border: None,
+        });
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene, 1.).unwrap();
+        let frame = Arc::get_mut(cache.frame.as_mut().unwrap()).unwrap();
+        let mut image = Pixmap::new(10, 6).unwrap();
+        image.fill(tiny_skia::Color::from_rgba8(200, 40, 60, 128));
+        let charge = bead_core::cache::Budget::new("test-first-raster", 1024)
+            .reserve(240)
+            .unwrap();
+        frame.items.insert(
+            0,
+            Item {
+                id: "seed".into(),
+                primitive: Primitive::Rounded {
+                    rect: Rect::new(0., 0., 10., 6.),
+                    radius: 0.,
+                    fill: [0; 4],
+                    border: None,
+                },
+                clip: None,
+                raster: Some(Arc::new(Raster {
+                    pixels: Arc::new(image),
+                    key: 0,
+                    base_key: None,
+                    changed: Damage::full(10, 6),
+                    _charge: charge,
+                })),
+            },
+        );
+        for damage in [
+            Damage::full(10, 6),
+            Damage {
+                x: 2,
+                y: 1,
+                w: 7,
+                h: 4,
+            },
+        ] {
+            let mut bytes = [77, 66, 55, 255].repeat(60);
+            paint(
+                frame,
+                (0., 0.),
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: 10,
+                    height: 6,
+                    scale: 1.,
+                    format: PixelFormat::Rgba,
+                },
+                damage,
+            )
+            .unwrap();
+            for y in 0..6 {
+                for x in 0..10 {
+                    let expected = if x < damage.x
+                        || x >= damage.x + damage.w
+                        || y < damage.y
+                        || y >= damage.y + damage.h
+                    {
+                        [77, 66, 55, 255]
+                    } else if x < 5 {
+                        [0, 0, 255, 255]
+                    } else if y < 3 {
+                        [0, 255, 0, 255]
+                    } else if x >= 8 && y >= 4 {
+                        [0, 255, 255, 255]
+                    } else {
+                        [100, 20, 30, 128]
+                    };
+                    assert_eq!(
+                        &bytes[((y * 10 + x) * 4) as usize..((y * 10 + x) * 4 + 4) as usize],
+                        &expected,
+                        "pixel {x},{y} damage {damage:?}"
+                    );
+                }
+            }
+        }
+    }
     #[test]
     fn prepared_frame_keeps_raster_charge_after_lookup_drop() {
         let mut cache = TreeCache::default();

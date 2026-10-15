@@ -78,7 +78,7 @@ fn keyed_models_reject_duplicates_atomically_and_deliver_action_arguments() {
     let initial = session.state_summary();
     let changes = BTreeMap::from([(
         "rows".into(),
-        Value::List(vec![
+        Value::list(vec![
             serde_json::json!({"id":"a","name":"A"}),
             serde_json::json!({"id":"a","name":"Again"}),
         ]),
@@ -129,7 +129,7 @@ fn keyed_reorder_insert_delete_keep_focus_selection_scroll_and_input() {
         .map(|i| serde_json::json!({"id":format!("{i}"),"name":format!("Item{i}")}))
         .collect();
     let scene = session
-        .update(BTreeMap::from([("rows".into(), Value::List(rows.clone()))]))
+        .update(BTreeMap::from([("rows".into(), Value::list(rows.clone()))]))
         .unwrap()
         .unwrap();
     session.commit(scene);
@@ -155,7 +155,7 @@ fn keyed_reorder_insert_delete_keep_focus_selection_scroll_and_input() {
     moved.insert(1, serde_json::json!({"id":"new","name":"New"}));
     moved.retain(|row| row["id"] != "5");
     let scene = session
-        .update(BTreeMap::from([("rows".into(), Value::List(moved))]))
+        .update(BTreeMap::from([("rows".into(), Value::list(moved))]))
         .unwrap()
         .unwrap();
     session.commit(scene);
@@ -293,7 +293,7 @@ fn removing_focused_key_picks_a_visible_fallback_without_changing_search_scroll(
     let scene = session
         .update(BTreeMap::from([(
             "rows".into(),
-            Value::List(vec![serde_json::json!({"id":"b","name":"B"})]),
+            Value::list(vec![serde_json::json!({"id":"b","name":"B"})]),
         )]))
         .unwrap()
         .unwrap();
@@ -313,7 +313,7 @@ fn overflowing_scroll_grid_keeps_rows_visible_beyond_its_assigned_container_box(
         .map(|i| serde_json::json!({"id":format!("row-{i}"),"name":format!("Item {i}")}))
         .collect();
     let scene = session
-        .update(BTreeMap::from([("rows".into(), Value::List(rows))]))
+        .update(BTreeMap::from([("rows".into(), Value::list(rows))]))
         .unwrap()
         .unwrap();
     session.commit(scene);
@@ -728,13 +728,13 @@ return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=
     assert!(!s.view_nodes().iter().any(|n| n.id == first));
     // Invalid keys outside the viewport still reject the candidate.
     let mut rows = if let Some(Value::List(rows)) = s.stores.get("rows") {
-        rows.clone()
+        rows.as_ref().clone()
     } else {
         panic!()
     };
     rows[319]["id"] = rows[318]["id"].clone();
     assert!(
-        s.update(BTreeMap::from([("rows".into(), Value::List(rows))]))
+        s.update(BTreeMap::from([("rows".into(), Value::list(rows))]))
             .is_err()
     );
 }

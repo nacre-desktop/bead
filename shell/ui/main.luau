@@ -3,8 +3,9 @@ local ui = require("bead.ui")
 local kit = require("bead.kit")
 local Sidebar = require("./components/sidebar")
 local AppGrid = require("./components/app-grid")
+local Results = require("./components/results")
 return kit.Panel {edge="top",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
-    open=ui.bind("launcher.open"),transition="ease",duration=.2,
+    open=ui.bind("panel.open"),transition="ease",duration=.2,
     radius=12,fill="surface",border_width=1,border_color="outlineVariant",
     padding_left=12,padding_right=20,padding_top=16,padding_bottom=18,gap=15,
     ui.Row{grow=1,
@@ -14,8 +15,11 @@ return kit.Panel {edge="top",id="launcher",width=1100,height=590,max_width="90%"
         },
         ui.Column{grow=1,gap=8,
             ui.Text{text=ui.bind("launcher.route_title"),font_size=16,height=32},
-            ui.Text{text="Applications",color="onSurfaceVariant",font_size=13.333,height=20},
-            AppGrid{},
+            ui.Text{text=ui.bind("launcher.subtitle"),color="onSurfaceVariant",font_size=13.333,height=20},
+            ui.Text{id="source-error",text=ui.bind("launcher.error"),visible=ui.bind("launcher.failed"),color="error",font_size=13.333,height=20},
+            ui.Text{id="no-results",text="No results",visible=ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
+            ui.Box{id="grid-host",grow=1,visible=ui.bind("launcher.grid"),AppGrid{}},
+            ui.Box{id="results-host",grow=1,visible=ui.bind("launcher.results"),Results{}},
             ui.Box{height=10},
         },
     },

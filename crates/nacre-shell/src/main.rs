@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod backends;
-mod catalog;
 mod commands;
 mod desktop;
 mod font_sources;
 mod headless;
 mod launcher;
+mod launcher_panel;
 mod nacre_source;
 mod notifications;
 mod reload;
@@ -84,6 +84,7 @@ fn start(
     let mut profile = false;
     let mut bar_panel = false;
     let mut audio_panel = false;
+    let mut launcher_panel = false;
     let mut notification_bus = None;
     let mut notification_history = None;
     let mut panel_edge = bead::core::Edge::Right;
@@ -99,7 +100,8 @@ fn start(
     };
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
-    let mut catalog: Option<PathBuf> = None;
+    let mut menu_fixture: Option<PathBuf> = None;
+    let mut daemon_socket: Option<PathBuf> = None;
     let mut backend_enabled = false;
     if let Ok(name) = std::env::var("BEAD_RENDERER") {
         select_renderer(&mut options, &name)?;
@@ -129,6 +131,7 @@ fn start(
                 ))
             }
             "--audio-panel" => audio_panel = true,
+            "--launcher-panel" => launcher_panel = true,
             "--report" => {
                 options.report = Some(args.next().ok_or("--report needs FILE")?.into());
             }
@@ -176,7 +179,12 @@ fn start(
                 profile = true;
                 options.panel = true;
             }
-            "--catalog" => catalog = Some(args.next().ok_or("--catalog needs path")?.into()),
+            "--menu-fixture" => {
+                menu_fixture = Some(args.next().ok_or("--menu-fixture needs path")?.into())
+            }
+            "--daemon-socket" => {
+                daemon_socket = Some(args.next().ok_or("--daemon-socket needs path")?.into())
+            }
             "--ui" => {
                 ui = Some(args.next().ok_or("--ui needs bundle-relative path")?.into());
                 options.panel = true;
@@ -244,13 +252,17 @@ fn start(
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--bar [--bar-panel] [--panel-renderer cpu|femtovg-gl]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--audio-panel|--launcher-panel] [--panel-renderer cpu|femtovg-gl]] [--menu-fixture FILE|--daemon-socket SOCKET] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
+    if launcher_panel {
+        options.command_map = Some(std::sync::Arc::new(commands::map_launcher));
+    }
+    let launcher_memory = launcher_panel.then(launcher::Memory::default);
     if options.report.is_some() && options.seconds.is_none() {
         options.seconds = Some(30.);
     }
@@ -382,6 +394,9 @@ fn start(
     if notification_bus.is_some() && (audio_panel || options.bar) {
         return Err("notification service mode uses independent private notice/OSD surfaces; combine no bar/audio mode flags".into());
     }
+    if launcher_panel && (!options.bar || audio_panel || notification_bus.is_some()) {
+        return Err("--launcher-panel requires a bar and no other panel family".into());
+    }
     if audio_panel && !options.bar {
         return Err("--audio-panel requires --bar".into());
     }
@@ -455,6 +470,17 @@ fn start(
             }),
         });
     }
+    if launcher_panel {
+        options.panel_spec = Some(launcher_panel::spec(
+            colors.get("surface")?,
+            palette.clone(),
+            colors.clone(),
+            menu_fixture.clone(),
+            daemon_socket.clone(),
+            panel_trace,
+            launcher_memory.clone().ok_or("launcher state missing")?,
+        ));
+    }
     let notification_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     if notification_bus.is_some() {
         let owner = notification_owner.clone();
@@ -503,21 +529,23 @@ fn start(
         let factory: bead::wayland::worker::Factory = Box::new(move || {
             let result =
                 (|| -> Result<Box<dyn bead::wayland::SceneSource>, Box<dyn std::error::Error>> {
-                    let mut session =
+                    let session =
                         bead::ui::Session::new("shell".into(), entry, palette, colors, fallback);
-                    if ui_entry_is_launcher {
-                        session.stores =
-                            session
-                                .stores
-                                .reconcile(&std::collections::BTreeMap::from([(
-                                    "launcher.catalog".into(),
-                                    bead::core::Value::List(catalog::load(catalog.as_deref())?),
-                                )]))?;
-                    }
-                    if ui_entry_is_launcher {
-                        session.set_projector(Box::new(launcher::project));
-                    }
                     let runtime = reload::Runtime::new(session).with_trace(trace);
+                    let runtime = if launcher_panel && bar {
+                        runtime.with_launcher_trigger(
+                            launcher_memory.clone().ok_or("launcher state missing")?,
+                        )?
+                    } else {
+                        runtime
+                    };
+                    let runtime = if ui_entry_is_launcher {
+                        let source =
+                            launcher::source(menu_fixture.as_deref(), daemon_socket.as_deref())?;
+                        runtime.with_launcher(source)?
+                    } else {
+                        runtime
+                    };
                     let runtime = if let Some(socket) = notification_bus {
                         let history = notification_history.ok_or(
                             "--notification-bus requires --notification-history (private state)",
@@ -769,7 +797,23 @@ mod tests {
             session.error_scene(),
         );
         let scene = session.reload().unwrap();
-        assert!(scene.primitives.len() > 20);
+        // Core navigation replaces the old six-entry placeholder sidebar. Check
+        // its actual content and input contract rather than a primitive count.
+        for label in ["Nacre", "Applications", "Search", "Actions"] {
+            assert!(
+                scene
+                    .primitives
+                    .iter()
+                    .any(|p| matches!(p,Primitive::Text{text,..} if text==label))
+            );
+        }
+        assert!(!scene.asset_data.is_empty());
         session.commit(scene);
+        assert!(
+            session
+                .view_nodes()
+                .iter()
+                .any(|n| n.input.as_deref() == Some("launcher.search.text"))
+        );
     }
 }

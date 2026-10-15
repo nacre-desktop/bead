@@ -284,7 +284,7 @@ pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
             "notifications.open".into(),
             Value::Bool(snapshot["popup_count"].as_u64().unwrap_or(0) > 0),
         ),
-        ("notifications.rows".into(), Value::List(rows)),
+        ("notifications.rows".into(), Value::list(rows)),
         (
             "notifications.dnd".into(),
             Value::Bool(snapshot["dnd"].as_bool().unwrap_or(false)),

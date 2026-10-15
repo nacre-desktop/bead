@@ -168,6 +168,20 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
+pub fn map_launcher(call: Call) -> Result<Call, Reply> {
+    let call = map(call)?;
+    if call.target == "bead.panel"
+        && call.method != "close"
+        && call.args.first().and_then(Value::as_str) == Some("sound")
+    {
+        return Err(Reply::error(
+            call.id,
+            "unavailable",
+            "sound panel is not configured",
+        ));
+    }
+    Ok(call)
+}
 pub fn map(mut call: Call) -> Result<Call, Reply> {
     if call.target == "bead" || call.target == "bead.panel" || call.target == "bead.osd" {
         return Ok(call);
@@ -204,6 +218,30 @@ fn fixture_catalog() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_launcher_host_never_routes_sound_commands_into_its_panel() {
+        let call = Call {
+            version: 1,
+            id: 1,
+            target: "nacre".into(),
+            method: "controls".into(),
+            args: vec![Value::String("sound".into())],
+            output: None,
+        };
+        assert_eq!(map(call.clone()).unwrap().target, "bead.panel");
+        assert!(map_launcher(call).is_err());
+        let call = Call {
+            version: 1,
+            id: 2,
+            target: "nacre".into(),
+            method: "launcher".into(),
+            args: vec![Value::String("a".into())],
+            output: None,
+        };
+        let result = map_launcher(call).unwrap();
+        assert_eq!(result.target, "nacre");
+        assert_eq!(result.args[0], "a");
+    }
     #[test]
     fn every_audited_route_and_selector_is_typed_and_dispatchable() {
         let c = catalog().unwrap();

@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get("BEAD_HARDENING") == "launcher":
+        spec=importlib.util.spec_from_file_location('launcher_proof',ROOT/'spikes/launcher-proof.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        return module.sample(env,raw,compositor,stop)
     if os.environ.get("BEAD_HARDENING") == "background":
         spec=importlib.util.spec_from_file_location('background_proof',ROOT/'spikes/background-proof.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)

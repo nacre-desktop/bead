@@ -19,6 +19,7 @@ pub struct Script {
     exports: Table,
     path: PathBuf,
     deadline: Rc<Cell<Instant>>,
+    remaining: Cell<Duration>,
     cache: RefCell<bead_core::cache::Lru<String, Cached>>,
 }
 impl Script {
@@ -59,6 +60,7 @@ impl Script {
             exports,
             path: path.to_path_buf(),
             deadline,
+            remaining: Cell::new(Duration::from_millis(50)),
             cache: RefCell::new(bead_core::cache::Lru::new(
                 "computed-values",
                 8 * bead_core::cache::MIB,
@@ -66,8 +68,30 @@ impl Script {
         })
     }
     pub fn begin(&self) {
-        self.deadline
-            .set(Instant::now() + Duration::from_millis(50));
+        self.remaining.set(Duration::from_millis(50));
+        self.deadline.set(Instant::now() + self.remaining.get());
+    }
+    /// One cumulative behaviour-VM allowance per transaction. Native layout and
+    /// the separate markup VM cannot spend this VM's allowance while it is idle.
+    fn bounded<T>(&self, call: impl FnOnce() -> mlua::Result<T>) -> mlua::Result<T> {
+        let remaining = self.remaining.get();
+        if remaining.is_zero() {
+            return Err(mlua::Error::runtime(
+                "script exceeded 50 ms execution limit",
+            ));
+        }
+        let began = Instant::now();
+        self.deadline.set(began + remaining);
+        let result = call();
+        let spent = began.elapsed();
+        self.remaining.set(remaining.saturating_sub(spent));
+        if result.is_ok() && spent >= remaining {
+            Err(mlua::Error::runtime(
+                "script exceeded 50 ms execution limit",
+            ))
+        } else {
+            result
+        }
     }
     pub fn memory_bytes(&self) -> usize {
         self.lua.used_memory()
@@ -116,8 +140,7 @@ impl Script {
             .exports
             .get("actions")
             .map_err(|e| lua_error(&self.path, e))?;
-        actions
-            .get::<Function>(name)
+        self.bounded(|| actions.get::<Function>(name))
             .map(|_| ())
             .map_err(|e| lua_error(&self.path, e))
     }
@@ -146,13 +169,7 @@ impl Script {
             mlua::Value::Table(table) => table,
             _ => return Err(self.error("invalid state table")),
         };
-        action
-            .call::<()>((
-                table.clone(),
-                self.lua
-                    .to_value(&arg)
-                    .map_err(|e| lua_error(&self.path, e))?,
-            ))
+        self.bounded(|| action.call::<()>((table.clone(), self.lua.to_value(&arg)?)))
             .map_err(|e| lua_error(&self.path, e))?;
         let changes: BTreeMap<String, Value> = self
             .lua
@@ -208,15 +225,18 @@ impl Script {
         }
         let _profile = bead_core::profile::Span::new("computed");
         let reads = Rc::new(RefCell::new(BTreeMap::new()));
-        let value = evaluate(
-            &self.lua,
-            &self.exports,
-            stores,
-            name,
-            Rc::new(RefCell::new(Vec::new())),
-            reads.clone(),
-        )
-        .map_err(|e| lua_error(&self.path, e))?;
+        let value = self
+            .bounded(|| {
+                evaluate(
+                    &self.lua,
+                    &self.exports,
+                    stores,
+                    name,
+                    Rc::new(RefCell::new(Vec::new())),
+                    reads.clone(),
+                )
+            })
+            .map_err(|e| lua_error(&self.path, e))?;
         let bytes = name.len()
             + 128
             + bead_core::cache::value_bytes(&value)
@@ -311,4 +331,46 @@ fn lua_error(path: &Path, error: mlua::Error) -> Diagnostic {
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
     Diagnostic::new(path, line, 1, message)
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+    #[test]
+    fn native_work_between_bindings_does_not_consume_luau_allowance() {
+        let script = Script::load(
+            b"return {stores={},actions={},computed={answer=function(_) return 42 end}}",
+            Path::new("budget.luau"),
+        )
+        .unwrap();
+        script.begin();
+        std::thread::sleep(Duration::from_millis(70));
+        assert_eq!(
+            script.resolve("answer", &Stores::default()).unwrap(),
+            Value::Number(42.)
+        );
+    }
+    #[test]
+    fn separate_small_evaluations_share_the_same_fifty_millisecond_allowance() {
+        let script=Script::load(b"return {stores={},actions={},computed={answer=function(s) local n=s.n; for i=1,10000 do n+=i end; return n end}}",Path::new("budget.luau")).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&BTreeMap::from([("n".into(), Value::Number(0.))]))
+            .unwrap();
+        script.begin();
+        let mut exhausted = false;
+        for i in 1..10000 {
+            stores
+                .commit(BTreeMap::from([("n".into(), Value::Number(f64::from(i)))]))
+                .unwrap();
+            if let Err(e) = script.resolve("answer", &stores) {
+                assert!(e.message.contains("50 ms"));
+                exhausted = true;
+                break;
+            }
+        }
+        assert!(
+            exhausted,
+            "per-call deadline resets must not evade the cumulative budget"
+        );
+    }
 }

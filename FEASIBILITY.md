@@ -1,5 +1,34 @@
 # Feasibility
 
+## 2026-10-16 — Source launcher fixtures and measured framework fixes
+
+The view forwards queries to a Source; Nacre owns catalog/ranking/providers.
+Immutable list snapshots avoid copying a populated model for a character edit.
+Correct output-based layout removes a recursive resize/idle-memory failure.
+Typing improves, but cold transitions and the overall niri tail remain open.
+
+| Nested default CPU,320 exact fixture rows | H120 | N60 |
+| --- | ---: | ---: |
+|200 keys, UI CPU mean ms/key |5.093|5.010|
+|All /steady presented p99 ms |13.959 /13.884|19.057 /16.485|
+|First key CPU /presented ms |31.307 /39.059|24.572 /28.931|
+|Same40-key steady diagnostics, before→shared models |8.30→4.15|10.62→5.49|
+|Launcher bar /first warm /third closed MiB |22.17 /53.07 /23.45|23.53 /51.25 /24.39|
+|Sound bar /first warm /closed5s MiB |22.07 /28.89 /22.78|23.62 /30.92 /23.68|
+|Helper CPU /real engine typing |unmeasured|unmeasured|
+
+One edit in flight, first a then a/ap populated list; no own heavy build overlap,
+external load/frequency uncontrolled. First key included and reported separately.
+Do not compare54ms initial grid/list-toggle CPU directly with5ms steady typing.
+All lifecycle closes within ownbar+5; current sound below published-Rust control.
+No allocator policy kept. Direct opaque composition now wins the repeated1c
+comparison: bar1.623/1.778ms direct/cached, sound0.586/1.683; alpha cache retained.
+Pixel/counter/transaction/budget tests pass;134workspace/fmt/clippy/CPU+release,
+Luau23modules/service/permissive-framework/license checks pass. Same cumulative
+50ms behaviour allowance excludes native/other-VM idle time; tests prevent resets.
+[Method and limits](docs/research/feature9-gate-d.md#feature-10-source-fixture-checkpoint--2026-10-16).
+Gate D, canonical engine/prefixes and matched QML launcher are not accepted yet.
+
 ## 2026-10-15 — populated notification and OSD comparison
 
 The view reads notifications through a Source; service behavior stays outside it.

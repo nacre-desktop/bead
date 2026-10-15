@@ -329,8 +329,16 @@ impl LayerShellHandler for App {
             }
 
             if self.surfaces[i].companion && self.panel_runtime.is_some() {
+                let surface = &self.surfaces[i];
+                let viewport = self
+                    .output
+                    .info(&surface.output)
+                    .and_then(|i| i.logical_size)
+                    .filter(|(w, h)| *w > 0 && *h > 0)
+                    .map(|(w, h)| (w as u32, h as u32))
+                    .unwrap_or((surface.width, surface.height));
                 if let Some(source) = &mut self.panel_runtime {
-                    source.viewport(self.surfaces[i].width, self.surfaces[i].height);
+                    source.viewport(viewport.0, viewport.1);
                 }
                 self.panel_ui(UiEvent::Relayout);
                 return;

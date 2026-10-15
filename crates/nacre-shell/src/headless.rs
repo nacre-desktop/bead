@@ -30,8 +30,7 @@ fn initial_models()
     session = session.reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
     session = session.reconcile(&crate::desktop::values(&Default::default(), ""))?;
     session = session.reconcile(&std::collections::BTreeMap::from([
-        ("launcher.catalog".into(), bead::core::Value::List(vec![])),
-        ("bead.workspaces".into(), bead::core::Value::List(vec![])),
+        ("bead.workspaces".into(), bead::core::Value::list(vec![])),
         (
             "bead.focused_title".into(),
             bead::core::Value::Text(String::new()),
@@ -166,7 +165,7 @@ mod tests {
         for entry in ["bar/main.luau", "sound/main.luau"] {
             let mut fixture = initial_models()?;
             fixture.insert("panel.open".into(), Value::Bool(true));
-            fixture.insert("bead.workspaces".into(),Value::List((1..=6).map(|i|serde_json::json!({"id":i.to_string(),"name":i.to_string(),"index":i,"active":i==1,"urgent":false,"mru":false})).collect()));
+            fixture.insert("bead.workspaces".into(),Value::list((1..=6).map(|i|serde_json::json!({"id":i.to_string(),"name":i.to_string(),"index":i,"active":i==1,"urgent":false,"mru":false})).collect()));
             fixture.insert(
                 "bead.desktop.audio.device".into(),
                 Value::Text("Private sound output".into()),
@@ -265,6 +264,75 @@ mod tests {
         }
         Ok(())
     }
+    #[test]
+    fn launcher_source_fixtures_cover_grid_results_and_prefixes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use bead::core::Value;
+        use serde_json::json;
+        let apps: Vec<_>=(0..320).map(|i|json!({"id":format!("app-{i:04}"),"kind":"app","label":format!("Application {i:04}"),"icon":"fixture","description":"Application fixture"})).collect();
+        let source = std::sync::Arc::new(crate::launcher::Fixture::new(json!({"queries":{
+            "":{"rows":apps},"a":{"rows":apps},
+            "=1+1":{"rows":[{"id":"calc-2","kind":"calculator","label":"2","description":"1 + 1"}]},
+            "emoji smile":{"rows":[{"id":"emoji-smile","kind":"emoji","label":"Smiling face","emoji":"☺"}]},
+            "clipboard item":{"rows":[{"id":"clip-1","kind":"clipboard","label":"Copied fixture"}]},
+            ": fixture":{"rows":[{"id":"file-1","kind":"file","label":"Fixture document"}]},
+            "# fixture":{"rows":[{"id":"brain-1","kind":"brain","label":"Fixture note"}]},
+            "> fixture":{"rows":[{"id":"action-1","kind":"action","label":"Fixture action"}]}
+        }}))?);
+        let menu = std::rc::Rc::new(crate::launcher::Menu::new(Some(source))?);
+        let mut h = bead_test::Harness::load_with_icons(
+            &root(),
+            Path::new("ui/main.luau"),
+            &root().join("palette.json"),
+            initial_models()?,
+            bead_test::Config {
+                width: 1164,
+                height: 654,
+                scale: 1.5,
+            },
+            std::collections::BTreeMap::from([
+                ("fixture".into(), root().join("tests/icon.svg")),
+                (
+                    "application-x-executable".into(),
+                    root().join("tests/icon.svg"),
+                ),
+            ]),
+        )?;
+        let projector = menu.clone();
+        h.session
+            .set_projector(Box::new(move |stores| projector.project(stores)));
+        h.reload()?;
+        h.render()?;
+        h.assert_accessible("Application 0000", accesskit::Role::Button)?;
+        for (query, label) in [
+            ("a", "Application 0000"),
+            ("=1+1", "2"),
+            ("emoji smile", "Smiling face"),
+            ("clipboard item", "Copied fixture"),
+            (": fixture", "Fixture document"),
+            ("# fixture", "Fixture note"),
+            ("> fixture", "Fixture action"),
+        ] {
+            h.update(std::collections::BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text(query.into()),
+            )]))?;
+            h.render()?;
+            h.assert_accessible(label, accesskit::Role::Button)?;
+            assert!(
+                h.session.view_nodes().len() < 100,
+                "results must stay windowed"
+            );
+        }
+        h.reload()?;
+        h.assert_accessible("Fixture action", accesskit::Role::Button)?;
+        assert!(
+            menu.activate("action-1").is_err(),
+            "fixture must never invoke external actions"
+        );
+        Ok(())
+    }
+
     #[test]
     fn notification_controls_follow_current_qml_visibility()
     -> Result<(), Box<dyn std::error::Error>> {

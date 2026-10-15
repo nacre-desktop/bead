@@ -18,6 +18,8 @@ impl App {
             "state" => {
                 let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count()});
                 if self.options.trace_state {
+                    value["cache_bytes"] =
+                        serde_json::to_value(bead_core::cache::report()).unwrap_or_default();
                     value["prepare_regions"] = serde_json::json!(
                         self.runtime
                             .as_ref()
@@ -47,6 +49,14 @@ impl App {
                     );
                 }
                 Ok(value)
+            }
+            "prepare" => {
+                if self.options.panel_spec.is_none() {
+                    Err("dynamic panel not configured".into())
+                } else {
+                    self.prepare_panel(call.output.as_deref());
+                    Ok(serde_json::Value::Null)
+                }
             }
             "open" | "toggle" => {
                 if call.method == "toggle" && self.panel_target {
@@ -176,10 +186,19 @@ impl App {
                 .fallback
                 .slide
                 .map_or(spec.fallback.offset.1, |s| s.open_y);
-        source.viewport(
-            spec.fallback.bounds.w.ceil() as u32,
-            height.ceil().max(1.) as u32,
-        );
+        // Content size is an output of layout, not its available-space input.
+        // Reusing the surface size here feeds percentage limits back into layout.
+        let viewport = self
+            .output
+            .info(&output)
+            .and_then(|i| i.logical_size)
+            .filter(|(w, h)| *w > 0 && *h > 0)
+            .map(|(w, h)| (w as u32, h as u32))
+            .unwrap_or((
+                spec.fallback.bounds.w.ceil() as u32,
+                height.ceil().max(1.) as u32,
+            ));
+        source.viewport(viewport.0, viewport.1);
         self.panel_ui_serial = 0;
         self.panel_runtime = Some(source);
         let qh = self.qh.clone();

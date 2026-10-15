@@ -308,21 +308,27 @@ impl App {
             }
             s.offset = scene.offset;
             renderer.presentation_motion(opaque_motion);
-            renderer.prepare(scene, scale)?;
-            let mut regions = if self.options.damage {
-                if let Some(frame) = renderer.prepared_frame() {
-                    s.visual_damage.update(
-                        &frame,
-                        scene.offset,
-                        scene.opacity,
-                        w as u32,
-                        h as u32,
-                    )?
+            {
+                let _prepare = bead_core::profile::Span::new("present_prepare");
+                renderer.prepare(scene, scale)?;
+            }
+            let mut regions = {
+                let _damage = bead_core::profile::Span::new("visual_damage");
+                if self.options.damage {
+                    if let Some(frame) = renderer.prepared_frame() {
+                        s.visual_damage.update(
+                            &frame,
+                            scene.offset,
+                            scene.opacity,
+                            w as u32,
+                            h as u32,
+                        )?
+                    } else {
+                        vec![Damage::full(w as u32, h as u32)]
+                    }
                 } else {
                     vec![Damage::full(w as u32, h as u32)]
                 }
-            } else {
-                vec![Damage::full(w as u32, h as u32)]
             };
             // An accepted generation can be pixel-identical (including edits to
             // filtered rows). Request actual compositor feedback for that new
@@ -415,6 +421,7 @@ impl App {
                     return Ok(());
                 }
                 let start = Instant::now();
+                let compose_profile = bead_core::profile::Span::new("compose");
                 renderer.draw(
                     scene,
                     RenderTarget::Gl(bead_render::gl::GlTarget {
@@ -424,6 +431,7 @@ impl App {
                     }),
                     Damage::full(w as u32, h as u32),
                 )?;
+                drop(compose_profile);
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
                 }
@@ -529,6 +537,7 @@ impl App {
                     };
                     let acquire_ms = acquired.elapsed().as_secs_f64() * 1000.;
                     let start = Instant::now();
+                    let compose_profile = bead_core::profile::Span::new("compose");
                     renderer.draw(
                         scene,
                         RenderTarget::Gpu(GpuTarget {
@@ -541,6 +550,7 @@ impl App {
                         }),
                         Damage::full(w as u32, h as u32),
                     )?;
+                    drop(compose_profile);
                     if let Some((_, view, blitter)) = &gpu.target {
                         let mut encoder = dev.device.create_command_encoder(&Default::default());
                         blitter.copy(
@@ -651,6 +661,7 @@ impl App {
                 .ok_or("three buffers still in use at callback")?;
             let damage = b.pending;
             let start = Instant::now();
+            let compose_profile = bead_core::profile::Span::new("compose");
             renderer.draw(
                 scene,
                 RenderTarget::Shm(ShmTarget {
@@ -665,6 +676,7 @@ impl App {
                 }),
                 damage,
             )?;
+            drop(compose_profile);
             if self.started.elapsed().as_secs_f64() > 2. {
                 s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
             }

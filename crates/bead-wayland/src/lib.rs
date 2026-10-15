@@ -89,6 +89,7 @@ pub enum UiEvent {
     Panel(u64, Box<UiEvent>),
     PanelVisibility(bool),
     CompanionVisibility(bool),
+    CompanionModel(std::collections::BTreeMap<String, bead_core::Value>),
     ClipboardSet(String),
     ClipboardRead,
     ClipboardText(String),

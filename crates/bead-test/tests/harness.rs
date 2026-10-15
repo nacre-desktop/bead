@@ -164,6 +164,7 @@ fn golden_diff_and_frame_replay_fail_for_real_regressions() -> Result<()> {
 fn opaque_transform_audit_reports_direct_composition_without_new_content_bakes() -> Result<()> {
     let mut test = test()?;
     let offset = test.scene().offset;
+    test.presentation_motion(true);
     let before = test.counters();
     for i in 0..120 {
         test.pose((offset.0 + i as f32 * 0.05, offset.1), 1.)?;
@@ -183,7 +184,7 @@ fn opaque_motion_uses_measured_paths_and_releases_panel_group() -> Result<()> {
     let mut test = test_at_scale(1.5)?;
     let offset = test.scene().offset;
     let direct = test.pose(offset, 1.)?;
-    test.presentation_motion(true); // measured cached path for opaque motion
+    test.opaque_composition(bead_render::tree::OpaqueComposition::Cached); // explicit comparison path
     let cached = test.pose(offset, 1.)?;
     let max = direct
         .pixels
@@ -210,12 +211,12 @@ fn opaque_motion_uses_measured_paths_and_releases_panel_group() -> Result<()> {
             "opaque poses must reuse the group without layout/content baking"
         );
     }
-    test.presentation_motion(false);
-    test.pose(offset, 1.)?; // resting frame releases the temporary group
+    test.opaque_composition(bead_render::tree::OpaqueComposition::Auto);
+    test.pose(offset, 1.)?; // default direct path releases the temporary group
     let resting = test.counters();
     assert_eq!(resting.rasters, warm.rasters);
     assert_eq!(resting.direct_composites, warm.direct_composites + 1);
-    test.presentation_motion(true);
+    test.opaque_composition(bead_render::tree::OpaqueComposition::Cached);
     test.pose(offset, 1.)?;
     assert_eq!(
         test.counters().rasters,

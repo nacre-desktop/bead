@@ -1,12 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
 local kit=require("bead.kit")
+local launcher=ui.resolve_for_check(ui.bind("bar.launcher"))
 local function glyph(id,text,color)
     return ui.Text{id=id,text=text,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color=color or "secondary",text_align="center"}
 end
 return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",
     ui.Row{id="left",height=34,gap=12,align="center",
-        ui.Image{id="brand",path="bar/assets/nacre-logo.svg",width=30,height=30},
+        launcher and kit.Button{id="brand",width=30,height=30,padding=0,fill="transparent",aria_label="Open launcher",on_activate=ui.action("launcher.open"),ui.Image{path="bar/assets/nacre-logo.svg",width=30,height=30}} or ui.Image{id="brand",path="bar/assets/nacre-logo.svg",width=30,height=30},
         ui.Row{id="capsule",height=34,padding_left=5,padding_right=5,gap=2,radius=17,fill="surfaceContainer",align="center",
             ui.Repeat{id="workspaces",model=ui.bind("bead.workspaces"),key="id",render=function(item)
                 local accent=({"primary","secondary","tertiary"})[((item.index or 1)-1)%3+1]

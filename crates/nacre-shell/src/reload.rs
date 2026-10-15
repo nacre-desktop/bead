@@ -6,6 +6,10 @@ use std::error::Error;
 pub struct Runtime {
     pub session: bead::ui::Session,
     pending: Option<Scene>,
+    launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
+    launcher_subscription: Option<bead::core::source::Subscription>,
+    launcher_memory: Option<crate::launcher::Memory>,
+    launcher_trigger: bool,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
     subscription: Option<bead::backends::Subscription>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
@@ -46,6 +50,10 @@ impl Runtime {
         Self {
             session,
             pending: None,
+            launcher: None,
+            launcher_subscription: None,
+            launcher_memory: None,
+            launcher_trigger: false,
             backend: None,
             subscription: None,
             desktop: None,
@@ -74,6 +82,61 @@ impl Runtime {
             runtime.session.restore_on_start(saved);
         }
         runtime
+    }
+    pub fn with_launcher(
+        mut self,
+        source: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let menu = std::rc::Rc::new(crate::launcher::Menu::new(source)?);
+        let projector = menu.clone();
+        self.session
+            .set_projector(Box::new(move |stores| projector.project(stores)));
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&std::collections::BTreeMap::from([(
+                "bead.focused".into(),
+                bead::core::Value::Text(String::new()),
+            )]))?;
+        self.session
+            .stores
+            .commit(std::collections::BTreeMap::from([(
+                "bead.focused".into(),
+                bead::core::Value::Text("launcher.search".into()),
+            )]))?;
+        self.actions.register("select_app", "launcher")?;
+        self.actions.grant("launcher");
+        self.launcher = Some(menu);
+        Ok(self)
+    }
+    pub fn with_launcher_memory(
+        mut self,
+        memory: crate::launcher::Memory,
+    ) -> Result<Self, Box<dyn Error>> {
+        let saved = memory
+            .lock()
+            .map_err(|_| "launcher view state unavailable")?
+            .clone();
+        self.session.stores = self.session.stores.reconcile(&saved)?;
+        self.launcher_memory = Some(memory);
+        Ok(self)
+    }
+    pub fn with_launcher_trigger(
+        mut self,
+        memory: crate::launcher::Memory,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.launcher_trigger = true;
+        self.launcher_memory = Some(memory);
+        self.actions.register("launcher.open", "launcher.view")?;
+        self.actions.grant("launcher.view");
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&std::collections::BTreeMap::from([(
+                "bar.launcher".into(),
+                bead::core::Value::Bool(true),
+            )]))?;
+        Ok(self)
     }
     pub fn with_trace(mut self, trace: bool) -> Self {
         self.trace = trace;
@@ -286,6 +349,15 @@ impl SceneSource for Runtime {
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let wakeup: std::sync::Arc<dyn Fn(UiEvent) + Send + Sync> = std::sync::Arc::from(wakeup);
         self.wakeup = Some(wakeup.clone());
+        if let Some(menu) = &self.launcher {
+            let wakeup = wakeup.clone();
+            match menu.subscribe(std::sync::Arc::new(move |_| {
+                wakeup(UiEvent::Model(Default::default()))
+            })) {
+                Ok(subscription) => self.launcher_subscription = subscription,
+                Err(_) => eprintln!("SOURCE_ERROR code=launcher_subscription"),
+            }
+        }
         if let Some(owner) = &self.notifications {
             self.notification_subscription =
                 Some(owner.subscribe(wakeup.clone(), self.notification_primary));
@@ -317,7 +389,13 @@ impl SceneSource for Runtime {
                 };
                 bead::wayland::InputRegion {
                     id: node.id.clone(),
-                    prepare_panel: self.bar && node.action.as_deref() == Some("services.audio"),
+                    prepare_panel: self.bar
+                        && node.action.as_deref()
+                            == Some(if self.launcher_trigger {
+                                "launcher.open"
+                            } else {
+                                "services.audio"
+                            }),
                     dismiss: node.action.as_deref() == Some("close")
                         && self.session.stores.get("panel.open").is_some(),
                     rect,
@@ -385,6 +463,45 @@ impl SceneSource for Runtime {
             UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
             _ => None,
         };
+        if let Some((_, name, _)) = &host_action
+            && name == "launcher.open"
+            && self.launcher_trigger
+        {
+            self.actions.authorize(name)?;
+            self.wakeup
+                .as_ref()
+                .ok_or("launcher event channel unavailable")?(
+                UiEvent::CompanionVisibility(true)
+            );
+            return Ok(None);
+        }
+        let launcher_id = if let Some((_, name, bead::core::Value::Text(id))) = &host_action {
+            (name == "select_app").then(|| id.clone())
+        } else if matches!(&event,UiEvent::Command{command,..} if command=="enter")
+            && self.session.surrounding_text().is_some()
+        {
+            match self.session.stores.get("launcher.selection") {
+                Some(bead::core::Value::Text(id)) => Some(id.clone()),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let (Some(menu), Some(id)) = (&self.launcher, launcher_id) {
+            self.actions.authorize("select_app")?;
+            let success = menu.activate(&id).is_ok();
+            return self
+                .session
+                .update(if success {
+                    std::collections::BTreeMap::from([(
+                        "panel.open".into(),
+                        bead::core::Value::Bool(false),
+                    )])
+                } else {
+                    Default::default()
+                })
+                .map_err(Into::into);
+        }
         if let Some((_, name, arg)) = host_action.as_ref()
             && name.starts_with("notifications.")
         {
@@ -438,7 +555,13 @@ impl SceneSource for Runtime {
             self.fonts.clear();
         }
         let mut scene = match event {
-            UiEvent::Model(values) => self.session.update_model(values)?,
+            UiEvent::Model(values) => {
+                if self.launcher.is_some() {
+                    self.session.update(values)?
+                } else {
+                    self.session.update_model(values)?
+                }
+            }
             UiEvent::Desktop(snapshot) => {
                 if self.notification_primary
                     && let Some(owner) = &self.notifications
@@ -464,6 +587,9 @@ impl SceneSource for Runtime {
                     snapshot.windows.len()
                 );
                 self.session.update_model(backend_values(&snapshot)?)?
+            }
+            UiEvent::CompanionModel(_) => {
+                return Err("companion model reached primary script".into());
             }
             UiEvent::CompanionVisibility(_) => {
                 return Err("companion visibility reached script".into());
@@ -523,9 +649,67 @@ impl SceneSource for Runtime {
                                 bead::services::ipc::Reply::error(call.id, "notifications", e)
                             }
                         },
+                        ("nacre", "launcher") if self.launcher_trigger => {
+                            let values = std::collections::BTreeMap::from([
+                                (
+                                    "launcher.search.text".into(),
+                                    bead::core::Value::Text(
+                                        call.args
+                                            .first()
+                                            .and_then(serde_json::Value::as_str)
+                                            .unwrap_or("")
+                                            .into(),
+                                    ),
+                                ),
+                                (
+                                    "launcher.mode".into(),
+                                    bead::core::Value::Text("apps".into()),
+                                ),
+                                (
+                                    "launcher.route".into(),
+                                    bead::core::Value::Text("apps".into()),
+                                ),
+                                (
+                                    "launcher.selection".into(),
+                                    bead::core::Value::Text(String::new()),
+                                ),
+                                ("launcher.scroll.y".into(), bead::core::Value::Number(0.)),
+                            ]);
+                            self.actions.authorize("launcher.open")?;
+                            *self
+                                .launcher_memory
+                                .as_ref()
+                                .ok_or("launcher view state unavailable")?
+                                .lock()
+                                .map_err(|_| "launcher view state unavailable")? = values.clone();
+                            let wakeup = self
+                                .wakeup
+                                .as_ref()
+                                .ok_or("launcher event channel unavailable")?;
+                            wakeup(UiEvent::CompanionVisibility(true));
+                            wakeup(UiEvent::CompanionModel(values));
+                            bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                        }
                         ("nacre", "state") => {
                             let snapshot = self.backend.as_ref().map(|b| b.snapshot());
-                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":if request.context.panel_open {"sound"}else{""},"clickEdgeMenus":false,"tab":0,"launcher":false,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":"","launcherMode":"apps","launcherRoute":"home","reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {vec!["bar","sound-output"]}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
+                            let view = self
+                                .launcher_memory
+                                .as_ref()
+                                .and_then(|m| m.lock().ok().map(|m| m.clone()))
+                                .unwrap_or_default();
+                            let view_text = |key: &str| match view.get(key) {
+                                Some(bead::core::Value::Text(s)) => s.as_str(),
+                                _ => "",
+                            };
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":if request.context.panel_open && !self.launcher_trigger {"sound"}else{""},"clickEdgeMenus":false,"tab":0,"launcher":self.launcher_trigger && request.context.panel_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
+                            #[cfg(all(feature = "trace", target_os = "linux", target_env = "gnu"))]
+                            let state = {
+                                let mut state = state;
+                                // SAFETY: read-only by-value allocator accounting.
+                                let heap = unsafe { nix::libc::mallinfo2() };
+                                state["bead"]["heap"] = serde_json::json!({"live":heap.uordblks,"free":heap.fordblks,"mapped":heap.hblkhd});
+                                state
+                            };
                             bead::services::ipc::Reply::ok(
                                 call.id,
                                 serde_json::Value::String(state.to_string()),
@@ -735,6 +919,12 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            if self.launcher.is_some()
+                && let Some(memory) = &self.launcher_memory
+                && let Ok(mut saved) = memory.lock()
+            {
+                *saved = crate::launcher::remember(&self.session.stores);
+            }
             if let Some(file) = &mut self.state_file
                 && let Err(error) = file.save(&self.session.stores)
             {
@@ -772,7 +962,7 @@ fn backend_values(
         ),
         (
             "bead.outputs".into(),
-            Value::List(
+            Value::list(
                 snapshot
                     .outputs
                     .iter()
@@ -782,7 +972,7 @@ fn backend_values(
         ),
         (
             "bead.workspaces".into(),
-            Value::List(
+            Value::list(
                 snapshot
                     .workspaces
                     .iter()
@@ -792,7 +982,7 @@ fn backend_values(
         ),
         (
             "bead.windows".into(),
-            Value::List(
+            Value::list(
                 snapshot
                     .windows
                     .iter()
@@ -843,7 +1033,7 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
                 "bead.focused_title".into(),
                 bead::core::Value::Text("Fixture title".into()),
             ),
-            ("bead.workspaces".into(), bead::core::Value::List(vec![])),
+            ("bead.workspaces".into(), bead::core::Value::list(vec![])),
         ]))?;
     let mut runtime = Runtime::new(session).with_desktop()?;
     let desktop = runtime

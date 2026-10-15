@@ -42,9 +42,14 @@ pub enum Value {
     Bool(bool),
     Number(f64),
     Text(String),
-    List(Vec<serde_json::Value>),
+    List(std::sync::Arc<Vec<serde_json::Value>>),
 }
 impl Value {
+    /// Immutable list payloads are shared across candidate/store snapshots.
+    pub fn list(items: Vec<serde_json::Value>) -> Self {
+        Self::List(std::sync::Arc::new(items))
+    }
+
     fn same_type(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)
     }
@@ -138,6 +143,36 @@ impl Stores {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn immutable_models_share_snapshots_and_replacement_stays_transactional() {
+        let original = Stores::default()
+            .reconcile(&BTreeMap::from([(
+                "rows".into(),
+                Value::list(vec![serde_json::json!({"id":"a","name":"Old"})]),
+            )]))
+            .unwrap();
+        let mut candidate = original.clone();
+        let (Some(Value::List(a)), Some(Value::List(b))) =
+            (original.get("rows"), candidate.get("rows"))
+        else {
+            panic!("list snapshot")
+        };
+        assert!(std::sync::Arc::ptr_eq(a, b));
+        candidate
+            .commit(BTreeMap::from([(
+                "rows".into(),
+                Value::list(vec![serde_json::json!({"id":"a","name":"New"})]),
+            )]))
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(original.get("rows").unwrap()).unwrap(),
+            serde_json::json!([{"id":"a","name":"Old"}])
+        );
+        assert_eq!(
+            serde_json::to_value(candidate.get("rows").unwrap()).unwrap(),
+            serde_json::json!([{"id":"a","name":"New"}])
+        );
+    }
     #[test]
     fn failed_batch_is_atomic_and_equal_values_do_not_notify() {
         let mut stores = Stores::default()

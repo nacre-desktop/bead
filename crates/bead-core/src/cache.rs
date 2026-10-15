@@ -133,7 +133,9 @@ pub fn json_bytes(v: &serde_json::Value) -> usize {
         + match v {
             String(s) => s.capacity(),
             Array(a) => {
-                a.capacity() * std::mem::size_of::<serde_json::Value>()
+                std::mem::size_of::<Vec<serde_json::Value>>()
+                    + 2 * std::mem::size_of::<usize>()
+                    + a.capacity() * std::mem::size_of::<serde_json::Value>()
                     + a.iter().map(json_bytes).sum::<usize>()
             }
             Object(o) => o
@@ -143,6 +145,7 @@ pub fn json_bytes(v: &serde_json::Value) -> usize {
             _ => 0,
         }
 }
+/// Shared model payloads are conservatively admitted once per cache reference.
 pub fn value_bytes(v: &crate::Value) -> usize {
     std::mem::size_of_val(v)
         + match v {

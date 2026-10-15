@@ -282,6 +282,9 @@ async fn published_rpc_events_and_deadlines_use_the_same_client_link() {
             .unwrap(),
         Value::Null
     );
+    let link = Source::snapshot(&client);
+    assert!(link.connected);
+    assert_eq!(link.data["boot"], serde_json::json!(client.status().boot));
     // Match the no-explicit-deadline golden semantically; the adapter always sends
     // its remaining caller deadline, which the old transcript permits optionally.
     let error = client

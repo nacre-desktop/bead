@@ -32,7 +32,3 @@ wgpu=["bead/wgpu"]
 vello=["wgpu"]
 gpu=["native-gl","wgpu"]
 trace=[]
-
-[dependencies.freedesktop-desktop-entry]
-version = "=0.8.3"
-default-features = false

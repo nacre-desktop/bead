@@ -37,8 +37,8 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         ("bead.desktop.battery.value".into(), Value::Text(s.battery.percentage.map_or("—".into(), |n| format!("{n:.0}")))),
         ("bead.desktop.network".into(), Value::Text(if s.network.connected { "wifi" } else { "wifi_off" }.into())),
         ("bead.desktop.bluetooth".into(), Value::Text(if s.bluetooth.powered { "bluetooth" } else { "bluetooth_disabled" }.into())),
-        ("bead.desktop.tray".into(), Value::List(s.tray.iter().filter(|t| t.visible).map(|t|serde_json::json!({"id":t.id,"title":t.title,"icon":format!("tray:{}",t.id)})).collect())),
-        ("bead.desktop.menu".into(), Value::List(menu)),
+        ("bead.desktop.tray".into(), Value::list(s.tray.iter().filter(|t| t.visible).map(|t|serde_json::json!({"id":t.id,"title":t.title,"icon":format!("tray:{}",t.id)})).collect())),
+        ("bead.desktop.menu".into(), Value::list(menu)),
     ])
 }
 
@@ -199,7 +199,7 @@ mod tests {
         let mut state = values(&Snapshot::default(), "");
         state.insert(
             "bead.workspaces".into(),
-            Value::List(vec![
+            Value::list(vec![
                 serde_json::json!({"id":"fixture-stable-id","name":"1","index":1,"active":true}),
             ]),
         );
@@ -244,7 +244,7 @@ mod tests {
         let state = values(&s, "stale-id");
         assert_eq!(state["bead.desktop.audio.available"], Value::Bool(false));
         assert_eq!(state["bead.desktop.battery.value"], Value::Text("—".into()));
-        assert_eq!(state["bead.desktop.menu"], Value::List(vec![]));
+        assert_eq!(state["bead.desktop.menu"], Value::list(vec![]));
         let Value::List(tray) = &state["bead.desktop.tray"] else {
             panic!()
         };
@@ -376,7 +376,7 @@ mod tests {
             panic!()
         };
         assert_eq!(
-            menu,
+            menu.as_ref(),
             &vec![serde_json::json!({"id":"item|1","label":"Open"})]
         );
     }

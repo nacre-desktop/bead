@@ -48,6 +48,7 @@ pub struct Status {
     pub methods: BTreeMap<String, nacre_protocol::Method>,
 }
 struct Shared {
+    link: Publisher,
     topics: BTreeMap<String, Publisher>,
     status: Mutex<Status>,
     stop: AtomicBool,
@@ -61,6 +62,7 @@ impl Drop for OnExit {
         if let Ok(mut status) = self.0.status.lock() {
             *status = Status::default();
         }
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.0.link.disconnect()));
         for publisher in self.0.topics.values() {
             let _ =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| publisher.disconnect()));
@@ -213,7 +215,10 @@ impl Client {
             p.disconnect()?;
             topics.insert(topic.clone(), p);
         }
+        let link = Publisher::new(epoch, serde_json::json!({}))?;
+        link.disconnect()?;
         let shared = Arc::new(Shared {
+            link,
             topics,
             status: Mutex::new(Status::default()),
             stop: AtomicBool::new(false),
@@ -326,6 +331,26 @@ impl Client {
         rx.await.map_err(|_| unavailable())?
     }
 }
+impl Source for Client {
+    fn snapshot(&self) -> Arc<Snapshot> {
+        self.0.shared.link.snapshot()
+    }
+    fn subscribe(&self, cb: Callback) -> source::Result<Subscription> {
+        self.0.shared.link.subscribe(cb)
+    }
+    fn invoke(&self, method: String, params: Value) -> source::Reply<'_> {
+        Box::pin(self.call(method, params, Duration::from_secs(3)))
+    }
+    fn call(&self, method: String, params: Value, duration: Duration) -> source::Reply<'_> {
+        Box::pin(Client::call(self, method, params, duration))
+    }
+    fn reconnect(&self) -> source::Reply<'_> {
+        Box::pin(self.control(false))
+    }
+    fn stop(&self) -> source::Reply<'_> {
+        Box::pin(self.control(true))
+    }
+}
 impl Source for Topic {
     fn snapshot(&self) -> Arc<Snapshot> {
         self.publisher.snapshot()
@@ -347,6 +372,7 @@ impl Source for Topic {
     }
 }
 fn disconnect(shared: &Shared) {
+    let _ = shared.link.disconnect();
     if let Ok(mut status) = shared.status.lock() {
         *status = Status::default();
     }
@@ -541,6 +567,9 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                     methods: session.methods.clone(),
                 };
             }
+            let _ = shared
+                .link
+                .publish(serde_json::json!({"boot":session.boot,"methods":session.methods}));
             let mut mirrors = config
                 .topics
                 .iter()
