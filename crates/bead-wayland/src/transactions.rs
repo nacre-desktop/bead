@@ -3,9 +3,98 @@
 use super::*;
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
+        if let UiEvent::Panel(epoch, event) = event {
+            if epoch == self.panel_epoch && self.panel_runtime.is_some() {
+                self.panel_ui(*event);
+            }
+            return;
+        }
+        if let UiEvent::Remote(request) = &event
+            && self.panel_command(request.clone())
+        {
+            return;
+        }
+        self.ui_inner(event);
+    }
+    pub(super) fn ui_inner(&mut self, event: UiEvent) {
+        match &event {
+            UiEvent::ClipboardSet(text) => {
+                if let Err(error) =
+                    self.clipboard
+                        .set(text.clone(), self.last_input_serial, &self.qh)
+                {
+                    eprintln!("CLIPBOARD_ERROR {error}");
+                }
+                return;
+            }
+            UiEvent::ClipboardRead => {
+                let panel = self.processing_panel;
+                let epoch = self.panel_epoch;
+                if let Some(sender) = self.event_sender.clone()
+                    && let Err(error) = self.clipboard.get(move |result| match result {
+                        Ok(text) => {
+                            let event = UiEvent::ClipboardText(text);
+                            let _ = sender.send(if panel {
+                                UiEvent::Panel(epoch, Box::new(event))
+                            } else {
+                                event
+                            });
+                        }
+                        Err(e) => eprintln!("CLIPBOARD_ERROR {e}"),
+                    })
+                {
+                    eprintln!("CLIPBOARD_ERROR {error}");
+                }
+                return;
+            }
+            _ => {}
+        }
+
         if let UiEvent::Remote(request) = &event
             && request.call.target == "bead"
         {
+            if request.call.method == "clipboard-set" {
+                let result = request
+                    .call
+                    .args
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .ok_or("clipboard-set needs text")
+                    .and_then(|text| {
+                        self.clipboard
+                            .set(text.into(), self.last_input_serial, &self.qh)
+                            .map_err(|_| "native clipboard set unavailable")
+                    });
+                let reply = match result {
+                    Ok(()) => {
+                        bead_services::ipc::Reply::ok(request.call.id, serde_json::Value::Null)
+                    }
+                    Err(e) => bead_services::ipc::Reply::error(request.call.id, "clipboard", e),
+                };
+                let _ = request.reply.send(reply);
+                return;
+            }
+            if request.call.method == "clipboard-get" {
+                let copy = request.clone();
+                let result = self.clipboard.get(move |result| {
+                    let reply = match result {
+                        Ok(text) => bead_services::ipc::Reply::ok(
+                            copy.call.id,
+                            serde_json::Value::String(text),
+                        ),
+                        Err(e) => bead_services::ipc::Reply::error(copy.call.id, "clipboard", e),
+                    };
+                    let _ = copy.reply.send(reply);
+                });
+                if let Err(e) = result {
+                    let _ = request.reply.send(bead_services::ipc::Reply::error(
+                        request.call.id,
+                        "clipboard",
+                        e,
+                    ));
+                }
+                return;
+            }
             let reply = match request.call.method.as_str() {
                 "ping" => {
                     bead_services::ipc::Reply::ok(request.call.id, serde_json::json!({"version":1}))
@@ -34,7 +123,7 @@ impl App {
         let mut scales: Vec<_> = self
             .surfaces
             .iter()
-            .filter(|s| s.configured && !s.companion)
+            .filter(|s| s.configured && s.companion == self.processing_panel)
             .map(|s| s.scale120 as f32 / 120.)
             .collect();
         scales.sort_by(f32::total_cmp);
@@ -61,7 +150,7 @@ impl App {
                     .surfaces
                     .iter()
                     .enumerate()
-                    .filter(|(_, s)| s.configured && !s.companion)
+                    .filter(|(_, s)| s.configured && s.companion == self.processing_panel)
                     .map(|(i, _)| i)
                     .collect();
                 for i in indices {
@@ -141,7 +230,11 @@ impl App {
                 let reopening = self.scene.motion.as_ref().is_some_and(|m| !m.open)
                     && scene.motion.as_ref().is_some_and(|m| m.open);
                 if reopening {
-                    for surface in self.surfaces.iter_mut().filter(|s| !s.companion) {
+                    for surface in self
+                        .surfaces
+                        .iter_mut()
+                        .filter(|s| s.companion == self.processing_panel)
+                    {
                         surface.callbacks.invalidate();
                     }
                 }
@@ -155,7 +248,11 @@ impl App {
                         bead_core::Edge::Top => Anchor::TOP,
                         bead_core::Edge::Bottom => Anchor::BOTTOM,
                     };
-                    for surface in self.surfaces.iter().filter(|s| !s.companion) {
+                    for surface in self
+                        .surfaces
+                        .iter()
+                        .filter(|s| s.companion == self.processing_panel)
+                    {
                         surface.layer.set_anchor(anchor);
                         surface.layer.commit();
                     }
@@ -167,7 +264,11 @@ impl App {
                         + self.scene.slide.map_or(self.scene.offset.1, |s| s.open_y))
                     .ceil()
                     .max(1.) as u32;
-                    for surface in self.surfaces.iter().filter(|s| !s.companion) {
+                    for surface in self
+                        .surfaces
+                        .iter()
+                        .filter(|s| s.companion == self.processing_panel)
+                    {
                         if surface.width != width || surface.height != height {
                             surface.layer.set_size(width, height);
                             surface.layer.commit();
@@ -209,8 +310,10 @@ impl App {
         self.runtime = Some(runtime);
         self.sync_ime();
         let qh = self.qh.clone();
-        for i in 0..self.surfaces.len() {
-            self.draw(i, &qh);
+        if !self.processing_panel {
+            for i in 0..self.surfaces.len() {
+                self.draw(i, &qh);
+            }
         }
     }
 
@@ -221,7 +324,17 @@ impl App {
         if self.ime_surface.is_none() {
             return;
         }
-        let current = self.runtime.as_ref().and_then(|r| r.surrounding_text());
+        let panel_focus = self.keyboard_surface.as_ref().is_some_and(|p| {
+            self.surfaces
+                .iter()
+                .any(|s| s.companion && s.layer.wl_surface() == p)
+        });
+        let source = if panel_focus && !self.processing_panel {
+            &self.panel_runtime
+        } else {
+            &self.runtime
+        };
+        let current = source.as_ref().and_then(|r| r.surrounding_text());
         if current == self.ime_last {
             return;
         }

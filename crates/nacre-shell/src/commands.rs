@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Audited compatibility signatures; features without native handlers fail explicitly.
-use bead_services::ipc::{Call, Reply};
+use bead::services::ipc::{Call, Reply};
 use serde::Deserialize;
 use serde_json::Value;
 #[derive(Deserialize)]
@@ -115,7 +115,7 @@ pub fn client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if call.target != "bead" && call.target != "bead.panel" {
         c.validate(&call)?;
     }
-    let reply = bead_services::ipc::call(
+    let reply = bead::services::ipc::call(
         &socket.ok_or("explicit --socket required")?,
         &call,
         std::time::Duration::from_secs(3),
@@ -154,13 +154,13 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     }
     let mut command = std::process::Command::new(&args[0]);
     command.arg(&args[1]);
-    let request = bead_services::process::HelperRequest {
+    let request = bead::services::process::HelperRequest {
         id: 1,
         tool: args[2].clone(),
         arguments: args[3..].to_vec(),
         input: None,
     };
-    let reply = bead_services::process::helper(&mut command, &request, Default::default())?;
+    let reply = bead::services::process::helper(&mut command, &request, Default::default())?;
     print!("{}", reply.output);
     if reply.code != 0 {
         return Err(format!("helper code {}", reply.code).into());
@@ -168,6 +168,34 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
+pub fn map(mut call: Call) -> Result<Call, Reply> {
+    if call.target == "bead" || call.target == "bead.panel" {
+        return Ok(call);
+    }
+    validate(&call)?;
+    let method = match (call.target.as_str(), call.method.as_str()) {
+        ("nacre", "popout" | "controls")
+            if call
+                .args
+                .first()
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s == "sound" || s == "audio") =>
+        {
+            Some("open")
+        }
+        ("nacre", "close" | "hide") => Some("close"),
+        ("drawers", "toggle") if call.args.first().and_then(|v| v.as_str()) == Some("sound") => {
+            Some("toggle")
+        }
+        _ => None,
+    };
+    if let Some(method) = method {
+        call.target = "bead.panel".into();
+        call.method = method.into();
+        call.args = vec![Value::String("sound".into())];
+    }
+    Ok(call)
+}
 #[cfg(test)]
 fn fixture_catalog() -> serde_json::Value {
     serde_json::from_str(include_str!("../../../shell/command-fixtures.json"))

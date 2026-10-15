@@ -787,3 +787,30 @@ Source catalog availability is explicit; notifications/dashboard/etc. are not
 implemented early. Source/shared protocol tests use private fixtures, and GUI
 proofs use private buses/outputs only. Evidence .research/feature7/commands-*.
 No installed command, live binding, Nacre/Orient write or release.
+
+## Gate C foundation and real sound output — checkpoint (2026-10-15)
+
+One small sound-output panel shares bar-native PipeWire services, with its own
+script/raster worker and lifetime. Close-idle drops the worker, VM, raster tree,
+SHM pools, renderer and surfaces, then trims free allocator pages. Durable page
+state survives separately. CPU selected for this small view; GL remains explicit.
+
+| Private Hypr 2880×1800 / 1.5 / virtual120 | Measured |
+|---|---|
+| CPU bar / warm output panel, PSS+DRM MiB |20.78 /29–34|
+| Ten close-idle deltas from matched bar, MiB |+0.38–3.86; <=5 pass|
+| Earlier two-cycle CPU control, MiB |22.83 bar; +2.07/+3.93 closed|
+| GL alternative after context/display shutdown |~43 closed vs~23 bar; FAIL|
+| Retained GL mappings observed in smaps |Mesa+LLVM ~11.5 MiB, plus anonymous/heap|
+| Actions/lifetime |click50%, drag75%, key70%, mute, Escape/outside/button, move/remove pass|
+
+Core clipboard protocol transfer passes with private keyboard serial. Exclusive
+Hypr layers receive outside presses on the panel itself; handle those bounds too
+([versioned source](https://github.com/hyprwm/Hyprland/blob/v0.56.2/src/managers/input/InputManager.cpp#L413)).
+Facade-only shell imports, non-Nacre example, headless validation, Rust-generated
+SDK and18 actual Luau modules/analyzerCI are in place. Numeric-only30s report
+implemented; actual duration proof pending. Local68 tests/fmt/clippy/CPU-only/
+all-features checks pass. Not a Gate C verdict: niri,60s CPU, matched QML,
+reload/state and longer pacing still pending. Evidence .research/feature8/.
+Failed probes retained; no unsafe driver-map eviction. Do not infer full-shell
+savings from this smaller panel. Typing29.6→32.7% remains optimization work.

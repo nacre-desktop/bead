@@ -53,8 +53,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pointer.frame();
                 pointer.button(0, 0x110, wl_pointer::ButtonState::Released);
             }
+            ["press"] => pointer.button(0, 0x110, wl_pointer::ButtonState::Pressed),
+            ["release"] => pointer.button(0, 0x110, wl_pointer::ButtonState::Released),
             ["stop"] => break,
-            _ => return Err("expected move X Y, scroll DELTA, click or stop".into()),
+            _ => {
+                return Err(
+                    "expected move X Y, scroll DELTA, click, press, release or stop".into(),
+                );
+            }
         }
         pointer.frame();
         events.roundtrip(&mut state)?;

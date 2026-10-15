@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
 mod accessibility;
+mod clipboard;
+mod panel;
 mod policy;
 mod protocols;
 mod rendering;
+mod report;
 mod runtime;
 mod transactions;
 use runtime::App;
@@ -76,6 +79,11 @@ pub struct Remote {
 }
 #[derive(Clone, Debug)]
 pub enum UiEvent {
+    Panel(u64, Box<UiEvent>),
+    PanelVisibility(bool),
+    ClipboardSet(String),
+    ClipboardRead,
+    ClipboardText(String),
     Remote(std::sync::Arc<Remote>),
     Fatal(String),
     Drag {
@@ -177,9 +185,23 @@ pub trait SceneSource {
     fn commit(&mut self) -> bool;
     fn error_scene(&mut self, error: String) -> Scene;
 }
+pub type CommandMap = std::sync::Arc<
+    dyn Fn(bead_services::ipc::Call) -> Result<bead_services::ipc::Call, bead_services::ipc::Reply>
+        + Send
+        + Sync,
+>;
+#[derive(Clone)]
+pub struct PanelSpec {
+    pub factory: std::sync::Arc<dyn Fn() -> Result<Box<dyn SceneSource>, String> + Send + Sync>,
+    pub fallback: Scene,
+    pub renderer: RendererKind,
+}
 #[derive(Clone)]
 pub struct Options {
     pub namespace: String,
+    pub panel_spec: Option<PanelSpec>,
+    pub command_map: Option<CommandMap>,
+    pub report: Option<std::path::PathBuf>,
     pub command_socket: Option<std::path::PathBuf>,
     pub animate: bool,
     pub debug_continuous: bool,
@@ -214,7 +236,10 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             namespace: "bead-dev".into(),
+            panel_spec: None,
+            command_map: None,
             command_socket: None,
+            report: None,
             animate: false,
             debug_continuous: false,
             debug_progress: false,

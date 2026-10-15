@@ -213,6 +213,51 @@ impl Session {
             node.action_arg.clone().unwrap_or(Value::Bool(true)),
         ))
     }
+    /// Resolve a host action without executing a script handler during a range gesture.
+    pub fn range_action(&self, back: bool) -> Option<(String, String, Value)> {
+        let Value::Text(focused) = self.stores.get("bead.focused")? else {
+            return None;
+        };
+        let current = self
+            .current_nodes
+            .iter()
+            .find(|n| &n.id == focused && n.drag)?;
+        let peers: Vec<_> = self
+            .current_nodes
+            .iter()
+            .filter(|n| {
+                n.drag
+                    && n.id.rsplit_once('.').map(|(p, _)| p)
+                        == current.id.rsplit_once('.').map(|(p, _)| p)
+            })
+            .collect();
+        let index = peers.iter().position(|n| n.id == current.id)?;
+        let next = if back {
+            index.saturating_sub(1)
+        } else {
+            (index + 1).min(peers.len() - 1)
+        };
+        let r = rect(&peers[next].draw);
+        self.action_at(r.x + r.w / 2., r.y + r.h / 2.)
+    }
+    pub fn drag_action(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
+        let Value::Text(focused) = self.stores.get("bead.focused")? else {
+            return None;
+        };
+        let current = self
+            .current_nodes
+            .iter()
+            .find(|n| &n.id == focused && n.drag)?;
+        let hit = self.hit(x, y, false)?;
+        if hit.drag
+            && hit.id.rsplit_once('.').map(|(p, _)| p)
+                == current.id.rsplit_once('.').map(|(p, _)| p)
+        {
+            self.action_at(x, y)
+        } else {
+            None
+        }
+    }
     pub fn activate_focused(&mut self) -> Result<Option<Scene>, Diagnostic> {
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
             return Ok(None);

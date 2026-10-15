@@ -155,6 +155,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                     {
                         s.presented_ms.push((ns - last) as f64 / 1_000_000.);
                     }
+                    if state.options.trace_state && s.companion {
+                        println!("PANEL_PRESENTED monotonic_ns={ns}");
+                    }
                     if state.options.debug_luau_stall_ms.is_some() {
                         println!(
                             "DEBUG_PRESENTED monotonic_ns={ns} companion={}",
@@ -202,6 +205,9 @@ impl OutputHandler for App {
         _: &QueueHandle<Self>,
         output: wl_output::WlOutput,
     ) {
+        if self.panel_output.as_ref() == Some(&output) {
+            self.release_panel();
+        }
         self.surfaces.retain(|s| s.output != output);
         println!("OUTPUT_REMOVED remaining={}", self.surfaces.len());
     }
@@ -223,6 +229,43 @@ impl LayerShellHandler for App {
         config: LayerSurfaceConfigure,
         _: u32,
     ) {
+        if let Some(dismiss) = &self.dismiss
+            && dismiss.layer == *layer
+        {
+            if self.options.trace_state {
+                println!(
+                    "DISMISS_CONFIG width={} height={}",
+                    config.new_size.0, config.new_size.1
+                );
+            }
+            dismiss.viewport.set_destination(
+                config.new_size.0.max(1) as i32,
+                config.new_size.1.max(1) as i32,
+            );
+            let region = match Region::new(&self.compositor) {
+                Ok(r) => r,
+                Err(e) => {
+                    self.fail(e);
+                    return;
+                }
+            };
+            region.add(
+                0,
+                0,
+                config.new_size.0.max(1) as i32,
+                config.new_size.1.max(1) as i32,
+            );
+            layer
+                .wl_surface()
+                .set_input_region(Some(region.wl_region()));
+            layer.wl_surface().damage_buffer(0, 0, 1, 1);
+            if let Err(e) = dismiss.buffer.attach_to(layer.wl_surface()) {
+                self.fail(e);
+                return;
+            }
+            layer.commit();
+            return;
+        }
         if let Some(i) = self.surfaces.iter().position(|s| s.layer == *layer) {
             let s = &mut self.surfaces[i];
             s.width = config.new_size.0;
@@ -238,6 +281,13 @@ impl LayerShellHandler for App {
                 bridge.adapter.set_root_window_bounds(bounds, bounds);
             }
 
+            if self.surfaces[i].companion && self.panel_runtime.is_some() {
+                if let Some(source) = &mut self.panel_runtime {
+                    source.viewport(self.surfaces[i].width, self.surfaces[i].height);
+                }
+                self.panel_ui(UiEvent::Relayout);
+                return;
+            }
             // One shared view fits the smallest output; anonymous layout boxes never own state.
             let viewport = self
                 .surfaces
@@ -292,6 +342,7 @@ impl SeatHandler for App {
         }
         match capability {
             Capability::Keyboard if self.keyboard.is_none() => {
+                self.clipboard.seat(&seat, qh);
                 if self.text_input.is_none()
                     && let Some(manager) = &self.text_input_manager
                 {
@@ -350,6 +401,19 @@ impl PointerHandler for App {
         events: &[PointerEvent],
     ) {
         for event in events {
+            if self
+                .dismiss
+                .as_ref()
+                .is_some_and(|d| d.layer.wl_surface() == &event.surface)
+            {
+                if matches!(event.kind, PointerEventKind::Press { button: 0x110, .. }) {
+                    if self.options.trace_state {
+                        println!("DISMISS_INPUT press=true");
+                    }
+                    self.close_panel();
+                }
+                continue;
+            }
             let Some(surface) = self
                 .surfaces
                 .iter()
@@ -357,6 +421,20 @@ impl PointerHandler for App {
             else {
                 continue;
             };
+            let panel = surface.companion;
+            // Some compositors route all pointer events to an exclusive keyboard
+            // layer, even outside its bounds. Treat that path like the backdrop.
+            if panel
+                && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+                && (event.position.0 < 0.
+                    || event.position.1 < 0.
+                    || event.position.0 >= surface.width as f64
+                    || event.position.1 >= surface.height as f64)
+            {
+                self.pointer_pressed = false;
+                self.close_panel();
+                continue;
+            }
             let x = event.position.0 as f32 - surface.offset.0;
             let y = event.position.1 as f32 - surface.offset.1;
             if !surface.configured {
@@ -368,7 +446,14 @@ impl PointerHandler for App {
             if let Some(device) = &self.cursor_device
                 && self.cursor_enter_serial != 0
             {
-                let shape = match self.runtime.as_ref().map(|r| r.pointer_cursor(x, y)) {
+                let shape = match (if panel {
+                    &self.panel_runtime
+                } else {
+                    &self.runtime
+                })
+                .as_ref()
+                .map(|r| r.pointer_cursor(x, y))
+                {
                     Some("text") => wp_cursor_shape_device_v1::Shape::Text,
                     Some("pointer") => wp_cursor_shape_device_v1::Shape::Pointer,
                     _ => wp_cursor_shape_device_v1::Shape::Default,
@@ -378,28 +463,31 @@ impl PointerHandler for App {
             match event.kind {
                 PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
                     if self.pointer_pressed {
-                        self.ui(UiEvent::Drag { x, y });
+                        self.view_event(panel, UiEvent::Drag { x, y });
                     } else {
-                        self.ui(UiEvent::Hover { x, y });
+                        self.view_event(panel, UiEvent::Hover { x, y });
                     }
                 }
                 PointerEventKind::Leave { .. } => {
                     self.pointer_pressed = false;
-                    self.ui(UiEvent::Hover { x: -1., y: -1. });
+                    self.view_event(panel, UiEvent::Hover { x: -1., y: -1. });
                 }
                 PointerEventKind::Press { button: 0x110, .. } => {
                     self.pointer_pressed = true;
-                    self.ui(UiEvent::Click { x, y });
+                    self.view_event(panel, UiEvent::Click { x, y });
                 }
                 PointerEventKind::Release { button: 0x110, .. } => self.pointer_pressed = false,
                 PointerEventKind::Press { button: 0x111, .. } => {
-                    self.ui(UiEvent::ContextMenu { x, y })
+                    self.view_event(panel, UiEvent::ContextMenu { x, y })
                 }
-                PointerEventKind::Axis { vertical, .. } => self.ui(UiEvent::Scroll {
-                    x,
-                    y,
-                    delta: vertical.absolute,
-                }),
+                PointerEventKind::Axis { vertical, .. } => self.view_event(
+                    panel,
+                    UiEvent::Scroll {
+                        x,
+                        y,
+                        delta: vertical.absolute,
+                    },
+                ),
                 _ => {}
             }
         }
@@ -442,9 +530,10 @@ impl KeyboardHandler for App {
         _: &Connection,
         _: &QueueHandle<Self>,
         _: &wl_keyboard::WlKeyboard,
-        _: u32,
+        serial: u32,
         event: KeyEvent,
     ) {
+        self.last_input_serial = serial;
         if self.options.trace_state {
             println!(
                 "INPUT_KEY sym={:?} focused_surface={}",
@@ -457,7 +546,13 @@ impl KeyboardHandler for App {
                 .iter()
                 .any(|s| s.layer.wl_surface() == surface)
         }) {
+            let panel = self.keyboard_surface.as_ref().is_some_and(|surface| {
+                self.surfaces
+                    .iter()
+                    .any(|s| s.companion && s.layer.wl_surface() == surface)
+            });
             let command = match event.keysym {
+                Keysym::Escape => Some("escape"),
                 Keysym::Tab | Keysym::ISO_Left_Tab => Some("tab"),
                 Keysym::Return | Keysym::KP_Enter => Some("enter"),
                 Keysym::Left => Some("left"),
@@ -474,15 +569,21 @@ impl KeyboardHandler for App {
                 _ => None,
             };
             if let Some(command) = command {
-                self.ui(UiEvent::Command {
-                    command: command.into(),
-                    shift: self.modifiers.shift || event.keysym == Keysym::ISO_Left_Tab,
-                });
+                self.view_event(
+                    panel,
+                    UiEvent::Command {
+                        command: command.into(),
+                        shift: self.modifiers.shift || event.keysym == Keysym::ISO_Left_Tab,
+                    },
+                );
             } else if !self.modifiers.ctrl && !self.modifiers.alt {
-                self.ui(UiEvent::Key {
-                    text: event.utf8.unwrap_or_default(),
-                    backspace: event.keysym == Keysym::BackSpace,
-                });
+                self.view_event(
+                    panel,
+                    UiEvent::Key {
+                        text: event.utf8.unwrap_or_default(),
+                        backspace: event.keysym == Keysym::BackSpace,
+                    },
+                );
             }
         }
     }

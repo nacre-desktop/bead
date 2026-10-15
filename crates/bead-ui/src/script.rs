@@ -88,6 +88,7 @@ impl Script {
     pub fn validate_action(&self, name: &str) -> Result<(), Diagnostic> {
         if [
             "services.audio",
+            "services.audio.volume",
             "services.tray",
             "services.menu",
             "backend.workspace.switch",

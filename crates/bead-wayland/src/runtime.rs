@@ -2,6 +2,16 @@
 //! Actor state, worker transactions and per-surface drawing lifecycle.
 use super::*;
 pub(super) struct App {
+    pub(super) clipboard: clipboard::Clipboard,
+    pub(super) last_input_serial: u32,
+    pub(super) event_sender: Option<calloop::channel::Sender<UiEvent>>,
+    pub(super) dismiss: Option<panel::Dismiss>,
+    pub(super) panel_runtime: Option<Box<dyn SceneSource>>,
+    pub(super) panel_epoch: u64,
+    pub(super) panel_close_epoch: u64,
+    pub(super) panel_target: bool,
+    pub(super) panel_output: Option<wl_output::WlOutput>,
+    pub(super) processing_panel: bool,
     pub(super) runtime: Option<Box<dyn SceneSource>>,
     pub(super) seat: SeatState,
     pub(super) keyboard: Option<wl_keyboard::WlKeyboard>,
@@ -40,6 +50,7 @@ pub(super) struct App {
     pub(super) viewporter: Option<WpViewporter>,
     pub(super) presentation: Option<WpPresentation>,
     pub(super) surfaces: Vec<Surface>,
+    pub(super) report_surfaces: Vec<serde_json::Value>,
     pub(super) options: Options,
     pub(super) signal: LoopSignal,
     pub(super) failure: Option<String>,
@@ -84,6 +95,16 @@ pub fn run_runtime(
         })
         .transpose()?;
     let mut app = App {
+        clipboard: clipboard::Clipboard::new(&globals, &qh),
+        last_input_serial: 0,
+        event_sender: None,
+        dismiss: None,
+        panel_runtime: None,
+        panel_epoch: 0,
+        panel_close_epoch: 0,
+        panel_target: false,
+        panel_output: None,
+        processing_panel: false,
         runtime,
         seat: SeatState::new(&globals, &qh),
         keyboard: None,
@@ -122,6 +143,7 @@ pub fn run_runtime(
         viewporter: globals.bind(&qh, 1..=1, ()).ok(),
         presentation: globals.bind(&qh, 1..=2, ()).ok(),
         surfaces: Vec::new(),
+        report_surfaces: Vec::new(),
         options,
         signal: loop_.get_signal(),
         failure: None,
@@ -159,6 +181,7 @@ pub fn run_runtime(
                 let _ = service_sender.send(event);
             }));
         }
+        app.event_sender = Some(sender.clone());
         app.accessibility = Some(accessibility::Bridge::new(sender));
     }
     if let Some(runtime) = &mut app.runtime {
@@ -195,9 +218,18 @@ pub fn run_runtime(
                 app.ui(event);
             }
         })?;
+        let command_map = app.options.command_map.clone();
         Some(bead_services::ipc::Server::bind(
             path.clone(),
             move |call| {
+                let call = if let Some(map) = &command_map {
+                    match map(call) {
+                        Ok(c) => c,
+                        Err(reply) => return reply,
+                    }
+                } else {
+                    call
+                };
                 let id = call.id;
                 let (tx, rx) = std::sync::mpsc::sync_channel(1);
                 if sender
@@ -289,6 +321,9 @@ pub fn run_runtime(
                 .unwrap_or(f64::NAN)
         );
     }
+    if let Some(path) = &app.options.report {
+        report::save(&app, path)?;
+    }
     // Destroy GPU-owned renderer objects while their context/surfaces are alive.
     app.renderer = bead_render::renderer(RendererKind::Cpu)?;
     app.companion = None;
@@ -307,13 +342,21 @@ impl App {
         self.signal.stop();
     }
     pub(super) fn add_output(&mut self, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
-        if self.options.output.as_ref().is_some_and(|name| {
-            self.output.info(&output).and_then(|i| i.name).as_ref() != Some(name)
-        }) {
+        let primary = self.options.output.as_ref().is_none_or(|name| {
+            self.output.info(&output).and_then(|i| i.name).as_ref() == Some(name)
+        });
+        let selected =
+            self.options.panel_spec.is_none() || self.panel_output.as_ref() == Some(&output);
+        if !primary && !(selected && self.companion.is_some()) {
             return;
         }
-        let count = self.surfaces.iter().filter(|s| s.output == output).count();
-        let total = self.options.surface_count + usize::from(self.companion.is_some());
+        let count = self.surfaces.iter().filter(|s| s.output == output).count()
+            + if primary {
+                0
+            } else {
+                self.options.surface_count
+            };
+        let total = self.options.surface_count + usize::from(self.companion.is_some() && selected);
         let companion = count == self.options.surface_count;
         if count >= total {
             return;
@@ -321,7 +364,7 @@ impl App {
         let result = (|| -> Result<Surface, Box<dyn Error>> {
             let surface = self.compositor.create_surface(qh);
             let empty = Region::new(&self.compositor)?;
-            if !self.options.interactive || companion {
+            if !self.options.interactive || (companion && self.options.panel_spec.is_none()) {
                 surface.set_input_region(Some(empty.wl_region()));
             }
             let fractional = if self.viewporter.is_some() {
@@ -402,13 +445,17 @@ impl App {
             } else {
                 0
             });
-            layer.set_keyboard_interactivity(if self.options.test_keyboard && !companion {
-                KeyboardInteractivity::Exclusive
-            } else if self.options.interactive && self.options.keyboard_focus && !companion {
-                KeyboardInteractivity::OnDemand
-            } else {
-                KeyboardInteractivity::None
-            });
+            layer.set_keyboard_interactivity(
+                if (companion && self.options.panel_spec.is_some())
+                    || (self.options.test_keyboard && !companion)
+                {
+                    KeyboardInteractivity::Exclusive
+                } else if self.options.interactive && self.options.keyboard_focus && !companion {
+                    KeyboardInteractivity::OnDemand
+                } else {
+                    KeyboardInteractivity::None
+                },
+            );
             layer.commit();
             let scale120 = self
                 .output

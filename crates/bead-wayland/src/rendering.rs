@@ -30,6 +30,7 @@ impl App {
             if !self.release_timer {
                 let qh = qh.clone();
                 self.loop_handle.insert_source(Timer::from_duration(Duration::from_secs(2)), move |_, _, app| {
+                    if !app.release_timer||app.companion.is_none(){return TimeoutAction::Drop;}
                     let now = app.started.elapsed().as_secs_f64();
                     if app.companion_policy.expire(now) {
                         if let Some((_, renderer, kind)) = &mut app.companion {
@@ -245,7 +246,11 @@ impl App {
                 let phase = self.started.elapsed().as_secs_f32() % 2.;
                 rect.w = 1. + 299. * if phase < 1. { phase } else { 2. - phase };
             }
-            if panel && self.options.interactive && !s.companion && scene.motion.is_some() {
+            if panel
+                && self.options.interactive
+                && (!s.companion || self.options.panel_spec.is_some())
+                && scene.motion.is_some()
+            {
                 let visible = scene.opacity > 0.001 && scene.motion.as_ref().is_none_or(|m| m.open);
                 if s.input_visible != Some(visible) {
                     if visible {
@@ -257,9 +262,9 @@ impl App {
                             .set_input_region(Some(empty.wl_region()));
                     }
                     s.layer.set_keyboard_interactivity(
-                        if !visible || !self.options.keyboard_focus {
+                        if !visible || (!self.options.keyboard_focus && !s.companion) {
                             KeyboardInteractivity::None
-                        } else if self.options.test_keyboard {
+                        } else if self.options.test_keyboard || s.companion {
                             KeyboardInteractivity::Exclusive
                         } else {
                             KeyboardInteractivity::OnDemand
@@ -658,6 +663,12 @@ impl App {
                     "DEBUG_FRAME monotonic_ns={} companion={}",
                     monotonic_ns(),
                     self.surfaces[index].companion
+                );
+            }
+            if self.options.trace_state && self.surfaces[index].companion {
+                println!(
+                    "PANEL_FRAME processing_ms={:.3}",
+                    frame_started.elapsed().as_secs_f64() * 1000.
                 );
             }
             self.surfaces[index]

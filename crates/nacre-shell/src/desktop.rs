@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-use bead_core::Value;
-use bead_services::Snapshot;
+use bead::core::Value;
+use bead::services::Snapshot;
 use std::collections::BTreeMap;
 
 pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
@@ -10,7 +10,7 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         _ => "volume_mute",
     };
     let mut menu = Vec::new();
-    fn entries(item: &str, rows: &[bead_services::MenuEntry], menu: &mut Vec<serde_json::Value>) {
+    fn entries(item: &str, rows: &[bead::services::MenuEntry], menu: &mut Vec<serde_json::Value>) {
         for row in rows
             .iter()
             .filter(|row| row.visible && row.enabled && !row.separator)
@@ -26,6 +26,9 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         entries(&item.id, &item.menu, &mut menu);
     }
     BTreeMap::from([
+        ("bead.desktop.audio.percent".into(),Value::Number(s.audio.volume.unwrap_or(0.)*100.)),
+        ("bead.desktop.audio.device".into(),Value::Text(s.audio.default_sink.clone().unwrap_or_else(||"Output unavailable".into()))),
+        ("bead.desktop.audio.label".into(),Value::Text(s.audio.volume.map(|v|format!("{:.0}%",v*100.)).unwrap_or_else(||"Unavailable".into()))),
         ("bead.desktop.titlevisible".into(),Value::Bool(menu.is_empty())),
         ("bead.desktop.clock".into(), Value::Text(s.clock.clone())),
         ("bead.desktop.audio".into(), Value::Text(audio.into())),
@@ -44,7 +47,7 @@ fn valid_pixmap(p: &(i32, i32, Vec<u8>)) -> bool {
     *w > 0 && *h > 0 && *w <= 512 && *h <= 512 && bytes.len() == (*w as usize) * (*h as usize) * 4
 }
 
-fn named_icon(item: &bead_services::TrayItem) -> Option<std::path::PathBuf> {
+fn named_icon(item: &bead::services::TrayItem) -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     if item.icon_name.is_empty() {
         return None;
@@ -93,12 +96,12 @@ fn named_icon(item: &bead_services::TrayItem) -> Option<std::path::PathBuf> {
 }
 
 pub fn icons(
-    scene: &mut bead_render::Scene,
+    scene: &mut bead::render::Scene,
     snapshot: &Snapshot,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use image::ImageEncoder;
     for draw in &mut scene.primitives {
-        let bead_render::Primitive::Image { path, .. } = draw else {
+        let bead::render::Primitive::Image { path, .. } = draw else {
             continue;
         };
         let Some(id) = path.to_str().and_then(|p| p.strip_prefix("@icon:tray:")) else {
@@ -111,7 +114,7 @@ pub fn icons(
             .ok_or("tray icon disappeared")?;
         if let Some(named) = named_icon(item)
             && let Ok(bytes) = std::fs::read(&named)
-            && bead_render::validate_asset(&named, &bytes).is_ok()
+            && bead::render::validate_asset(&named, &bytes).is_ok()
         {
             scene
                 .asset_data
@@ -171,7 +174,7 @@ mod tests {
     fn actual_bar_bundle_loads_native_actions_assets_and_full_width_layout() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
         let palette_path = root.join("palette.json");
-        let fallback = bead_render::Scene {
+        let fallback = bead::render::Scene {
             opacity: 1.,
             motion: None,
             resource_revision: 0,
@@ -184,13 +187,13 @@ mod tests {
             slide: None,
             primitives: vec![],
             offset: (0., 0.),
-            bounds: bead_render::Rect::new(0., 0., 1920., 50.),
+            bounds: bead::render::Rect::new(0., 0., 1920., 50.),
         };
-        let mut session = bead_ui::Session::new(
+        let mut session = bead::ui::Session::new(
             root,
             "bar/main.luau".into(),
             palette_path.clone(),
-            bead_render::Palette::read(&palette_path).unwrap(),
+            bead::render::Palette::read(&palette_path).unwrap(),
             fallback,
         );
         let mut state = values(&Snapshot::default(), "");
@@ -208,7 +211,7 @@ mod tests {
         session.set_viewport(1920, 1200);
         let scene = session.reload().unwrap();
         assert_eq!(scene.width, 1920.);
-        assert!(scene.primitives.iter().any(|draw|matches!(draw,bead_render::Primitive::Rounded{rect,..} if rect.x==0. && rect.y==0. && rect.w==1920. && rect.h==50.)));
+        assert!(scene.primitives.iter().any(|draw|matches!(draw,bead::render::Primitive::Rounded{rect,..} if rect.x==0. && rect.y==0. && rect.w==1920. && rect.h==50.)));
         session.commit(scene);
         let workspace = session
             .view_nodes()
@@ -229,7 +232,7 @@ mod tests {
     #[test]
     fn unavailable_audio_and_bad_tray_pixels_do_not_become_valid_ui_state() {
         let s = Snapshot {
-            tray: vec![bead_services::TrayItem {
+            tray: vec![bead::services::TrayItem {
                 id: "bad".into(),
                 visible: true,
                 icon_name: "application-x-executable".into(),
@@ -258,14 +261,14 @@ mod tests {
             .write_image(&[20, 40, 60, 255], 1, 1, image::ExtendedColorType::Rgba8)
             .unwrap();
         std::fs::write(&named, &png).unwrap();
-        let item = bead_services::TrayItem {
+        let item = bead::services::TrayItem {
             id: "fixture".into(),
             icon_name: "fixture".into(),
             icon_theme_path: dir.to_string_lossy().into(),
             icon_pixmap: vec![(1, 1, vec![128, 20, 40, 60])],
             ..Default::default()
         };
-        let mut scene = bead_render::Scene {
+        let mut scene = bead::render::Scene {
             opacity: 1.,
             motion: None,
             resource_revision: 0,
@@ -278,12 +281,12 @@ mod tests {
             slide: None,
             primitives: vec![],
             offset: (0., 0.),
-            bounds: bead_render::Rect::new(0., 0., 24., 24.),
+            bounds: bead::render::Rect::new(0., 0., 24., 24.),
         };
-        scene.primitives.push(bead_render::Primitive::Image {
+        scene.primitives.push(bead::render::Primitive::Image {
             blur: 0.,
             path: "@icon:tray:fixture".into(),
-            rect: bead_render::Rect::new(0., 0., 24., 24.),
+            rect: bead::render::Rect::new(0., 0., 24., 24.),
         });
         let snapshot = Snapshot {
             tray: vec![item.clone()],
@@ -302,10 +305,10 @@ mod tests {
         assert_eq!(named_icon(&item), Some(nested.join("fixture.png")));
         // A found but undecodable named icon also falls back to the real pixmap.
         std::fs::write(nested.join("fixture.png"), b"broken PNG").unwrap();
-        scene.primitives[0] = bead_render::Primitive::Image {
+        scene.primitives[0] = bead::render::Primitive::Image {
             blur: 0.,
             path: "@icon:tray:fixture".into(),
-            rect: bead_render::Rect::new(0., 0., 24., 24.),
+            rect: bead::render::Rect::new(0., 0., 24., 24.),
         };
         icons(
             &mut scene,
@@ -320,10 +323,10 @@ mod tests {
         assert_eq!(decoded.get_pixel(0, 0).0, [20, 40, 60, 128]);
         let mut missing = snapshot.tray[0].clone();
         missing.icon_name = "bead-nonexistent-icon-7832".into();
-        scene.primitives[0] = bead_render::Primitive::Image {
+        scene.primitives[0] = bead::render::Primitive::Image {
             blur: 0.,
             path: "@icon:tray:fixture".into(),
-            rect: bead_render::Rect::new(0., 0., 24., 24.),
+            rect: bead::render::Rect::new(0., 0., 24., 24.),
         };
         icons(
             &mut scene,
@@ -334,30 +337,30 @@ mod tests {
         )
         .unwrap();
         assert!(
-            matches!(&scene.primitives[0],bead_render::Primitive::Image {path,..} if path.to_string_lossy().starts_with("@tray-pixmap/"))
+            matches!(&scene.primitives[0],bead::render::Primitive::Image {path,..} if path.to_string_lossy().starts_with("@tray-pixmap/"))
         );
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn tray_menu_excludes_disabled_hidden_and_separator_entries() {
         let s = Snapshot {
-            tray: vec![bead_services::TrayItem {
+            tray: vec![bead::services::TrayItem {
                 id: "item".into(),
                 menu: vec![
-                    bead_services::MenuEntry {
+                    bead::services::MenuEntry {
                         id: 1,
                         label: "_Open".into(),
                         enabled: true,
                         visible: true,
                         ..Default::default()
                     },
-                    bead_services::MenuEntry {
+                    bead::services::MenuEntry {
                         id: 2,
                         label: "Hidden".into(),
                         enabled: true,
                         ..Default::default()
                     },
-                    bead_services::MenuEntry {
+                    bead::services::MenuEntry {
                         id: 3,
                         label: "Disabled".into(),
                         visible: true,

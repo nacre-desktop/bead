@@ -1,0 +1,20 @@
+[package]
+name="bead"
+version="0.1.0"
+edition.workspace=true
+rust-version.workspace=true
+license="MIT OR Apache-2.0"
+publish=false
+[dependencies]
+bead-core={path="../bead-core"}
+bead-render={path="../bead-render",default-features=false}
+bead-ui={path="../bead-ui"}
+bead-wayland={path="../bead-wayland",default-features=false}
+bead-services={path="../bead-services"}
+bead-backends={path="../bead-backends"}
+[features]
+default=["native-gl"]
+native-gl=["bead-render/native-gl","bead-wayland/native-gl"]
+wgpu=["bead-render/wgpu","bead-wayland/wgpu"]
+vello=["wgpu"]
+gpu=["native-gl","wgpu"]

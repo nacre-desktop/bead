@@ -755,6 +755,7 @@ fn load_image(path: &Path, rect: Rect, scale: f32, snapshot: Option<&[u8]>) -> R
     Ok(pix)
 }
 /// Reads Orient format 1 only. Unknown metadata is intentionally ignored.
+#[derive(Clone)]
 pub struct Palette(pub HashMap<String, [u8; 4]>);
 impl Palette {
     pub fn read(path: &Path) -> Result<Self> {

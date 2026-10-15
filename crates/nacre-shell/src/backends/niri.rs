@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Official niri-ipc types and persistent command socket; event stream is separate.
 use super::{Shared, epoch, protocol};
-use bead_backends::{
+use bead::backends::{
     Action, Capabilities, Direction, Error, Event as BackendEvent, Id, Output, Snapshot, Window,
     Workspace, stable_id,
 };

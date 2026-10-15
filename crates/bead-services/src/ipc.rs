@@ -57,8 +57,18 @@ pub struct Fault {
 pub struct Reply {
     pub version: u16,
     pub id: u64,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_value"
+    )]
     pub result: Option<Value>,
     pub error: Option<Fault>,
+}
+fn present_value<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(deserializer).map(Some)
 }
 impl Reply {
     pub fn ok(id: u64, result: Value) -> Self {
@@ -312,6 +322,19 @@ pub fn call(path: &Path, request: &Call, timeout: Duration) -> Result<Reply, Str
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn null_success_remains_distinct_from_absent_result() {
+        let success = super::Reply::ok(1, serde_json::Value::Null);
+        let decoded: super::Reply =
+            serde_json::from_slice(&serde_json::to_vec(&success).unwrap()).unwrap();
+        assert_eq!(decoded.result, Some(serde_json::Value::Null));
+        assert!(decoded.error.is_none());
+        let error = super::Reply::error(1, "fixture", "failed");
+        let decoded: super::Reply =
+            serde_json::from_slice(&serde_json::to_vec(&error).unwrap()).unwrap();
+        assert!(decoded.result.is_none());
+        assert!(decoded.error.is_some());
+    }
     use super::*;
     #[test]
     fn owner_socket_version_errors_and_cleanup() {

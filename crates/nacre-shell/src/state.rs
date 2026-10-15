@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Only panel open/page state is durable; transport snapshots and typed text are excluded.
-use bead_core::{Stores, Value};
+use bead::core::{Stores, Value};
 use std::{
     collections::BTreeMap,
     io::{Read, Write},

@@ -24,6 +24,18 @@ jobs:
         run: |
           cargo check -p nacre-shell --no-default-features --locked -j2
           cargo check --workspace --all-features --locked -j2
+      - name: Facade, headless UI and Luau schema
+        shell: bash
+        run: |
+          cargo run -p bead --example minimal -- --check
+          cargo build -p nacre-shell --no-default-features --locked -j2
+          target/debug/nacre-shell --check shell/ui/main.luau
+          mkdir -p "$RUNNER_TEMP/luau"
+          curl -fsSL https://github.com/luau-lang/luau/releases/download/0.740/luau-ubuntu.zip -o "$RUNNER_TEMP/luau.zip"
+          echo "7d4035db01816f977f6e4c42e3d5e8ef4235d95e9afe63a3c38905b42dde60f2  $RUNNER_TEMP/luau.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/luau.zip" -d "$RUNNER_TEMP/luau"
+          chmod +x "$RUNNER_TEMP/luau/luau-analyze"
+          python3 tools/check-luau.py --analyzer "$RUNNER_TEMP/luau/luau-analyze" --binary "$PWD/target/debug/nacre-shell" --check-generated
       - name: Private service owner lifecycle
         run: python3 spikes/services-check.py
       - name: Install cargo-deny
@@ -40,6 +52,6 @@ jobs:
       - name: Dependency and license checks
         run: |
           cargo deny check
-          for manifest in crates/bead-*/Cargo.toml; do
+          for manifest in crates/bead-*/Cargo.toml crates/bead/Cargo.toml; do
             cargo deny --manifest-path "$manifest" --all-features --config deny-framework.toml check
           done

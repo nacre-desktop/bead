@@ -419,6 +419,15 @@ fn framework_kit_shared_scale_edges_and_independent_tile_actions() {
             .unwrap();
         session.commit(scene);
         assert_eq!(session.stores.get("volume"), Some(&Value::Number(75.)));
+        assert_eq!(session.range_action(true).unwrap().2, Value::Number(70.));
+        assert_eq!(
+            session
+                .drag_action(r.x + r.w / 2., r.y + r.h / 2.)
+                .unwrap()
+                .2,
+            Value::Number(75.)
+        );
+        assert!(session.drag_action(-1., -1.).is_none());
         let scene = session.step_range(true).unwrap().unwrap();
         session.commit(scene);
         assert_eq!(session.stores.get("volume"), Some(&Value::Number(70.)));

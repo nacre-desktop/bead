@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 use super::{Shared, epoch, protocol};
-use bead_backends::{
+use bead::backends::{
     Action, Capabilities, Direction, Error, Event, Id, Output, Snapshot, Window, Workspace,
     stable_id,
 };

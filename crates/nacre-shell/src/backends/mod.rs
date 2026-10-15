@@ -3,7 +3,7 @@
 pub mod hyprland;
 pub mod niri;
 pub mod probe;
-use bead_backends::{Action, Backend, Error, Event, Snapshot, Subscription};
+use bead::backends::{Action, Backend, Error, Event, Snapshot, Subscription};
 use std::{
     collections::BTreeMap,
     os::unix::{fs::MetadataExt, net::UnixStream},
@@ -33,7 +33,7 @@ impl Shared {
         Arc::new(Self {
             snapshot: Mutex::new(Arc::new(Snapshot {
                 backend: name.into(),
-                capabilities: bead_backends::Capabilities::empty(),
+                capabilities: bead::backends::Capabilities::empty(),
                 ..Snapshot::default()
             })),
             callbacks: Mutex::new(BTreeMap::new()),

@@ -6,6 +6,7 @@ mod generation;
 pub mod input;
 mod interaction;
 pub mod layout;
+pub mod schema;
 pub mod script;
 mod session;
 use bead_core::{Stores, Value};

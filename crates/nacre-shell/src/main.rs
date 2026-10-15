@@ -4,10 +4,12 @@ mod catalog;
 mod commands;
 mod desktop;
 mod font_sources;
+mod headless;
 mod reload;
+mod sound;
 mod state;
-use bead_render::{Palette, Primitive, Rect, Scene, Slide};
-use bead_wayland::{Options, run};
+use bead::render::{Palette, Primitive, Rect, Scene, Slide};
+use bead::wayland::{Options, run};
 use std::path::{Path, PathBuf};
 fn main() {
     std::panic::set_hook(Box::new(|info| {
@@ -28,6 +30,17 @@ fn main() {
 }
 fn start() -> Result<(), Box<dyn std::error::Error>> {
     let cli: Vec<String> = std::env::args().skip(1).collect();
+    if cli.first().is_some_and(|a| a == "--check") {
+        return headless::check(Path::new(cli.get(1).ok_or("--check needs FILE")?));
+    }
+    if cli.first().is_some_and(|a| a == "--generate-types") {
+        std::fs::write(
+            cli.get(1).ok_or("--generate-types needs FILE")?,
+            bead::ui::schema::luau(),
+        )?;
+        return Ok(());
+    }
+
     if cli.first().is_some_and(|a| a == "helper") {
         return commands::helper_client(&cli[1..]);
     }
@@ -48,13 +61,18 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let started = std::time::Instant::now();
     let mut profile = false;
     let mut bar_panel = false;
-    let mut panel_edge = bead_core::Edge::Right;
-    let mut panel_renderer = if cfg!(feature = "native-gl") {
-        bead_render::RendererKind::FemtovgGl
+    let mut audio_panel = false;
+    let mut panel_edge = bead::core::Edge::Right;
+    let default_panel_renderer = if cfg!(feature = "native-gl") {
+        bead::render::RendererKind::FemtovgGl
     } else {
-        bead_render::RendererKind::Cpu
+        bead::render::RendererKind::Cpu
     };
-    let mut options = Options::default();
+    let mut panel_renderer = None;
+    let mut options = Options {
+        command_map: Some(std::sync::Arc::new(commands::map)),
+        ..Options::default()
+    };
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
     let mut catalog: Option<PathBuf> = None;
@@ -67,6 +85,11 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bar-panel" => bar_panel = true,
+            "--audio-panel" => audio_panel = true,
+            "--report" => {
+                options.report = Some(args.next().ok_or("--report needs FILE")?.into());
+                options.seconds = Some(30.);
+            }
             "--command-socket" => {
                 options.command_socket = Some(
                     args.next()
@@ -98,7 +121,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                     &mut panel_options,
                     &args.next().ok_or("--panel-renderer needs value")?,
                 )?;
-                panel_renderer = panel_options.renderer;
+                panel_renderer = Some(panel_options.renderer);
             }
             "--bar" => {
                 options.bar = true;
@@ -185,6 +208,9 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
+    if options.report.is_some() {
+        options.seconds = Some(30.);
+    }
     if options.bar {
         options.panel = false;
         options.content_size = false;
@@ -195,7 +221,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         options.test_keyboard = false;
     }
     if options.bar && options.auto_fallback {
-        options.renderer = bead_render::RendererKind::Cpu;
+        options.renderer = bead::render::RendererKind::Cpu;
         options.lazy_gl = true;
     }
     let colors = Palette::read(&palette)?;
@@ -207,14 +233,14 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         companion.font_files = font_sources::select(&companion)?;
         companion.offset = (32., 32.);
         companion.slide = None;
-        companion.motion = Some(bead_render::Motion {
+        companion.motion = Some(bead::render::Motion {
             id: "companion".into(),
             open: true,
             duration: 0.2,
             spring: false,
             edge: panel_edge,
         });
-        options.companion = Some((companion, panel_renderer));
+        options.companion = Some((companion, panel_renderer.unwrap_or(default_panel_renderer)));
     }
     let mut scene = if ui.is_some() {
         Scene {
@@ -281,7 +307,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         started.elapsed().as_secs_f64() * 1000.
     );
     if profile {
-        use bead_render::{CpuRenderer, Damage, PixelFormat, Renderer, ShmTarget};
+        use bead::render::{CpuRenderer, Damage, PixelFormat, Renderer, ShmTarget};
         let mut renderer = CpuRenderer::default();
         renderer.prepare(&scene, 1.5)?;
         let width = (scene.bounds.w * 1.5).ceil() as u32;
@@ -306,23 +332,53 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
+    if audio_panel && !options.bar {
+        return Err("--audio-panel requires --bar".into());
+    }
+    let desktop_owner = std::sync::Arc::new(std::sync::OnceLock::new());
+    if audio_panel {
+        let owner = desktop_owner.clone();
+        let panel_palette = palette.clone();
+        let panel_colors = colors.clone();
+        let fallback = sound::fallback(colors.get("surface")?);
+        let cold = fallback.clone();
+        options.panel_spec = Some(bead::wayland::PanelSpec {
+            fallback,
+            // This modest transient view does not amortize the native driver residency.
+            renderer: panel_renderer.unwrap_or(bead::render::RendererKind::Cpu),
+            factory: std::sync::Arc::new(move || {
+                let session = bead::ui::Session::new(
+                    "shell".into(),
+                    "sound/main.luau".into(),
+                    panel_palette.clone(),
+                    panel_colors.clone(),
+                    cold.clone(),
+                );
+                let desktop = owner.get().cloned().ok_or("bar services not ready")?;
+                reload::Runtime::panel_session(session)
+                    .with_shared_desktop(desktop, false)
+                    .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
+                    .map_err(|e| e.to_string())
+            }),
+        });
+    }
     if let Some(entry) = ui {
         let ui_entry_is_launcher = entry == Path::new("ui/main.luau");
         let fallback = scene.clone();
         let bar = options.bar;
-        let factory: bead_wayland::worker::Factory =
+        let factory: bead::wayland::worker::Factory =
             Box::new(move || {
                 let result =
-                (|| -> Result<Box<dyn bead_wayland::SceneSource>, Box<dyn std::error::Error>> {
+                (|| -> Result<Box<dyn bead::wayland::SceneSource>, Box<dyn std::error::Error>> {
                     let mut session =
-                        bead_ui::Session::new("shell".into(), entry, palette, colors, fallback);
+                        bead::ui::Session::new("shell".into(), entry, palette, colors, fallback);
                     if ui_entry_is_launcher {
                         session.stores =
                             session
                                 .stores
                                 .reconcile(&std::collections::BTreeMap::from([(
                                     "launcher.catalog".into(),
-                                    bead_core::Value::List(catalog::load(catalog.as_deref())?),
+                                    bead::core::Value::List(catalog::load(catalog.as_deref())?),
                                 )]))?;
                     }
                     let runtime = reload::Runtime::new(session);
@@ -332,13 +388,14 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                         runtime
                     };
                     let runtime = if bar { runtime.with_desktop()? } else { runtime };
+                    if let Some(desktop)=runtime.desktop_owner(){let _=desktop_owner.set(desktop);}
                     Ok(Box::new(runtime))
                 })();
                 result.map_err(|e| e.to_string())
             });
-        let renderer = bead_render::renderer(options.renderer)?;
-        let runtime = bead_wayland::worker::Source::new(factory, scene.clone());
-        bead_wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))
+        let renderer = bead::render::renderer(options.renderer)?;
+        let runtime = bead::wayland::worker::Source::new(factory, scene.clone());
+        bead::wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))
     } else {
         run(options, scene)
     }
@@ -504,7 +561,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
 }
 
 fn select_renderer(options: &mut Options, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    use bead_render::RendererKind;
+    use bead::render::RendererKind;
     options.auto_fallback = name == "auto";
     options.renderer = match name {
         "cpu" => RendererKind::Cpu,
@@ -533,7 +590,7 @@ mod tests {
         let palette_path = root.join("palette.json");
         let palette = Palette::read(&palette_path).unwrap();
         let fallback = panel(&palette, &root).unwrap();
-        let mut session = bead_ui::Session::new(
+        let mut session = bead::ui::Session::new(
             root,
             "legacy-ui/main.json".into(),
             palette_path,
@@ -548,7 +605,7 @@ mod tests {
         let state: serde_json::Value = serde_json::from_str(&session.state_summary()).unwrap();
         assert_eq!(state["launcher.search.text"], "");
         assert_eq!(state["launcher.open"], true);
-        session = bead_ui::Session::new(
+        session = bead::ui::Session::new(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell"),
             "ui/main.luau".into(),
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json"),

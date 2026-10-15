@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Measurement-only stdin driver, not the shell's future public command surface.
 use super::Native;
-use bead_backends::{Action, Backend, Event, Snapshot};
+use bead::backends::{Action, Backend, Event, Snapshot};
 use std::{
     io::BufRead,
     sync::{Arc, Condvar, Mutex},

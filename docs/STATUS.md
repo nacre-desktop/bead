@@ -1,43 +1,34 @@
 # Status
 
-## 2026-10-15 — Feature 7 complete; Gate C foundation next
+## 2026-10-15 — Feature 8 / Gate C in progress
 
-Owner accepted6b and authorized7–8 throughGateC. Stop atGateC.
-Feature7: owner-only private versioned socket/client,120 audited methods
-across43 targets,30 CLI-source locations and12 shortcut declarations indexed.
-Typed decoding/selector fixtures cover their contracts. Native bar/state
-handlers work; later-feature routes return explicit unavailable errors.
-Existing Python helper JSON-lines protocol remains external, via bounded
-argv/input/output/deadline transport. Regular-file snapshots/watch/replacement
-retain last-good validated JSON; no live config/binding changes.
+Feature 7 published at 4d74cba; CI 38693436696 passed. Private versioned
+commands, audited route fixtures, bounded files/process/helper transport done.
+Owner accepted 6b; authorized Features 7–8 only. Stop at Gate C.
 
-66 workspace tests and fmt/clippy pass. Real CLI/socket/state/error/cleanup
-proofs pass on nested niri and virtual120 Hypr. New source checkpoint CI
-checked after publication. Evidence: .research/feature7/commands-*.
+Current source checkpoint: facade/example, Rust-generated Luau SDK with
+18-module analyzer CI, headless --check, numeric-only 30s --report, native
+core/ext clipboard, and a lazy real sound-output panel sharing bar services.
+Local 68 tests, clippy, CPU-only/all-features checks and facade example pass.
+Generated SDK analysis and headless sound/launcher checks pass. Private Hypr
+passes clipboard, slider click/drag/keys, mute, Escape/outside/button dismissal,
+ten close/idle cycles, output movement/removal. Not yet a Gate C pass.
 
-Next: facade/example, Rust-generated Luau types+analyzerCI, native clipboard,
-headless --check and30s --report; then real sound-output panel and GateC proof.
+Latest ten-cycle Hypr probe (MiB PSS + deduplicated DRM): bar 20.78; small
+CPU sound panel warm 29–34; closed idle +0.38–3.86. Earlier two-cycle bar
+22.83; warm 31.81–34.57; closed +2.07/+3.93. Matched deltas pass <=5.
+GL alternative failed idle: +~20 MiB, including Mesa/LLVM mappings after
+EGL shutdown. CPU selected provisionally for this small view, pending pacing
+and repeated <=5 MiB checks. Larger native-GL benchmark remains selectable.
+Evidence: canonical .research/feature8/panel-hypr-*; failed probes retained.
 
-New Gate C limit: after panel closes and idles, process PSS + deduplicated
-DRM must return within 5 MiB of matched bar-only (~23 MiB). Release panel
-rasters, SHM buffers, CPU pools and worker caches. Report warm bar+panel
-against Feature6 (~105 MiB), including the cause of any increase. Retain
-typing CPU 29.6→32.7% on the later optimization list.
+Next: repeat close/reopen on nested niri; measure 60s CPU, pacing, reload/state, 30s report
+and matched QML output-control subset; commit/push/check CI at checkpoints.
 
-Worktree: feature7-gate-c, forked from accepted beed15c. Prior worktree,
-WIP snapshot, measurements and failed probes remain untouched. Canonical
-checkout stays read-only. Tool/target directories remain canonical.
-
-Plan/checkpoints:
-1. Private versioned command socket/client and audited compatibility catalog;
-   bounded subprocess, files/watch and existing helper JSON-lines transport.
-2. Feature7 integration/fixture proofs, commit/push/CI and concise results.
-3. GateC foundation: facade/example, generated Luau types+analyzer, native
-   clipboard, headless --check and private --report.
-4. Real audio-control panel with command open/close/focus/dismiss/output
-   lifecycle; aggressive closed-idle release with preserved small state.
-5. Matched GateC bar+panel/QML, warm/idle PSS+DRM, CPU/pacing/action timings,
-   repeat close/reopen/output removal and honest gate recommendation.
-
-Keep 6b's nested niri pacing/idle-invariance concerns separate. Nested only,
-nice10/Cargo-j2; no desktop/session installation, physical test or release.
+Worktree: ~/.local/share/nacre/ai/worktrees/bead-feature7-gate-c.
+Canonical checkout read-only; CARGO_TARGET_DIR=/home/siverteh/Projects/bead/target.
+Use TMPDIR=/var/tmp (host /tmp full; long paths break Hypr IPC sockets).
+Nested only, nice10/Cargo-j2; no desktop install, physical test or release.
+Keep 6b niri pacing/idle invariance open; retain typing CPU 29.6→32.7% for
+post-Gate-C optimization. Report warm memory against Feature 6 ~105 MiB
+with scene-size/renderer differences disclosed. No optimization pass yet.

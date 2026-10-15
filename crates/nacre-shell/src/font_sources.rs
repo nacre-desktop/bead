@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Native desktop font selection stays in the application, not Bead's dependency graph.
-use bead_render::{Primitive, Result, Scene};
+use bead::render::{Primitive, Result, Scene};
 use skrifa::MetadataProvider;
 use std::{collections::BTreeSet, ffi::CString, path::PathBuf, time::Instant};
 pub fn select(scene: &Scene) -> Result<Vec<PathBuf>> {

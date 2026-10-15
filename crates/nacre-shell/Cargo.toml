@@ -7,13 +7,8 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+bead={path="../bead",default-features=false}
 image = { version = "0.25", default-features = false, features = ["png"] }
-bead-wayland = { path = "../bead-wayland", default-features = false }
-bead-render = { path = "../bead-render", default-features = false }
-bead-ui = { path = "../bead-ui" }
-bead-core = { path = "../bead-core" }
-bead-backends = { path = "../bead-backends" }
-bead-services = { path = "../bead-services" }
 niri-ipc = "=26.4.0"
 nix = {version="0.31",features=["signal"]}
 serde_json = "1"
@@ -28,8 +23,8 @@ skrifa = "=0.44.0"
 
 [features]
 default=["native-gl"]
-native-gl=["bead-wayland/native-gl","bead-render/native-gl"]
-wgpu=["bead-wayland/wgpu","bead-render/wgpu"]
+native-gl=["bead/native-gl"]
+wgpu=["bead/wgpu"]
 vello=["wgpu"]
 gpu=["native-gl","wgpu"]
 trace=[]

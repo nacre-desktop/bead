@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 use super::*;
-use bead_backends::{Id, stable_id};
+use bead::backends::{Id, stable_id};
 use serde_json::Value;
 fn records(name: &str) -> Vec<Value> {
     let text = match name {

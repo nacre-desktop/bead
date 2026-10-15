@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-only
-use bead_backends::Backend;
-use bead_render::Scene;
-use bead_wayland::{SceneSource, UiEvent};
+use bead::backends::Backend;
+use bead::render::Scene;
+use bead::wayland::{SceneSource, UiEvent};
 use std::error::Error;
 pub struct Runtime {
-    pub session: bead_ui::Session,
+    pub session: bead::ui::Session,
     pending: Option<Scene>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
-    subscription: Option<bead_backends::Subscription>,
-    desktop: Option<std::sync::Arc<bead_services::Desktop>>,
-    desktop_subscription: Option<bead_services::Subscription>,
+    subscription: Option<bead::backends::Subscription>,
+    desktop: Option<std::sync::Arc<bead::services::Desktop>>,
+    desktop_subscription: Option<bead::services::Subscription>,
     menu_item: String,
+    pending_focus: Option<String>,
     bar: bool,
     state_file: Option<crate::state::File>,
-    actions: bead_core::capabilities::Registry,
+    actions: bead::core::capabilities::Registry,
+    wakeup: Option<std::sync::Arc<dyn Fn(UiEvent) + Send + Sync>>,
 }
 impl Runtime {
-    pub fn new(mut session: bead_ui::Session) -> Self {
+    pub fn new(mut session: bead::ui::Session) -> Self {
         let state_file = match crate::state::File::path()
             .map_err(|e| -> Box<dyn Error> { e.into() })
             .and_then(crate::state::File::open)
@@ -38,37 +40,70 @@ impl Runtime {
             desktop: None,
             desktop_subscription: None,
             menu_item: String::new(),
+            pending_focus: None,
             bar: false,
             state_file,
             actions: Default::default(),
+            wakeup: None,
         }
     }
-    pub fn with_desktop(mut self) -> Result<Self, Box<dyn Error>> {
-        let desktop = bead_services::Desktop::start();
+    pub fn panel_session(session: bead::ui::Session) -> Self {
+        let mut runtime = Self::new(session);
+        if let Ok((_, mut saved)) = crate::state::File::path()
+            .map_err(|e| -> Box<dyn Error> { e.into() })
+            .and_then(crate::state::File::open)
+        {
+            saved.insert("panel.open".into(), bead::core::Value::Bool(true));
+            runtime.session.restore_on_start(saved);
+        }
+        runtime
+    }
+    pub fn with_desktop(self) -> Result<Self, Box<dyn Error>> {
+        self.with_shared_desktop(bead::services::Desktop::start(), true)
+    }
+    pub fn desktop_owner(&self) -> Option<std::sync::Arc<bead::services::Desktop>> {
+        self.desktop.clone()
+    }
+    pub fn with_shared_desktop(
+        mut self,
+        desktop: std::sync::Arc<bead::services::Desktop>,
+        bar: bool,
+    ) -> Result<Self, Box<dyn Error>> {
         self.session.stores = self
             .session
             .stores
             .reconcile(&crate::desktop::values(&desktop.snapshot(), ""))?;
-        for name in ["services.audio", "services.tray", "services.menu"] {
+        for name in [
+            "services.audio",
+            "services.audio.volume",
+            "services.tray",
+            "services.menu",
+        ] {
             self.actions.register(name, "desktop.services")?;
         }
         self.actions.grant("desktop.services");
         self.desktop = Some(desktop);
-        self.bar = true;
+        self.bar = bar;
         Ok(self)
     }
     fn desktop_action(
         &mut self,
         name: &str,
-        arg: bead_core::Value,
+        arg: bead::core::Value,
         delta: Option<f64>,
         context_menu: bool,
     ) -> Result<(), Box<dyn Error>> {
         self.actions.authorize(name)?;
-        use bead_services::Action;
+        use bead::services::Action;
         let desktop = self.desktop.as_ref().ok_or("desktop unavailable")?;
         let snapshot = desktop.snapshot();
         let action = match name {
+            "services.audio.volume" => {
+                let bead::core::Value::Number(value) = arg else {
+                    return Err("volume requires a number".into());
+                };
+                Action::Volume((value / 100.).clamp(0., 1.))
+            }
             "services.audio" => {
                 if let Some(delta) = delta {
                     Action::Volume(
@@ -80,7 +115,7 @@ impl Runtime {
                 }
             }
             "services.tray" => {
-                let bead_core::Value::Text(item) = arg else {
+                let bead::core::Value::Text(item) = arg else {
                     return Err("tray ID required".into());
                 };
                 let tray = snapshot
@@ -100,7 +135,7 @@ impl Runtime {
                 }
             }
             "services.menu" => {
-                let bead_core::Value::Text(value) = arg else {
+                let bead::core::Value::Text(value) = arg else {
                     return Err("menu ID required".into());
                 };
                 let (item, entry) = value.rsplit_once('|').ok_or("menu ID required")?;
@@ -136,22 +171,22 @@ impl Runtime {
         self.backend = Some(backend);
         Ok(self)
     }
-    fn backend_action(&self, name: &str, arg: bead_core::Value) -> Result<(), Box<dyn Error>> {
+    fn backend_action(&self, name: &str, arg: bead::core::Value) -> Result<(), Box<dyn Error>> {
         self.actions.authorize(name)?;
         let backend = self.backend.as_ref().ok_or("backend unavailable")?;
-        let bead_core::Value::Text(id) = arg else {
+        let bead::core::Value::Text(id) = arg else {
             return Err("backend action requires a stable ID".into());
         };
-        let id = bead_backends::Id(id);
+        let id = bead::backends::Id(id);
         let action = match name {
-            "backend.workspace.switch" => bead_backends::Action::SwitchWorkspace { workspace: id },
-            "backend.window.focus" => bead_backends::Action::FocusWindow { window: id },
-            "backend.window.close" => bead_backends::Action::CloseWindow { window: id },
-            "backend.windowTrash" => bead_backends::Action::WindowTrash { window: id },
-            "backend.scratchpad" => bead_backends::Action::Scratchpad { window: Some(id) },
-            "backend.windowCapture" => bead_backends::Action::WindowCapture { window: id },
+            "backend.workspace.switch" => bead::backends::Action::SwitchWorkspace { workspace: id },
+            "backend.window.focus" => bead::backends::Action::FocusWindow { window: id },
+            "backend.window.close" => bead::backends::Action::CloseWindow { window: id },
+            "backend.windowTrash" => bead::backends::Action::WindowTrash { window: id },
+            "backend.scratchpad" => bead::backends::Action::Scratchpad { window: Some(id) },
+            "backend.windowCapture" => bead::backends::Action::WindowCapture { window: id },
             _ => {
-                return Err(bead_backends::Error::Unsupported {
+                return Err(bead::backends::Error::Unsupported {
                     operation: name.into(),
                     backend: backend.snapshot().backend.clone(),
                 }
@@ -169,7 +204,8 @@ impl Runtime {
 }
 impl SceneSource for Runtime {
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
-        let wakeup = std::sync::Arc::new(wakeup);
+        let wakeup: std::sync::Arc<dyn Fn(UiEvent) + Send + Sync> = std::sync::Arc::from(wakeup);
+        self.wakeup = Some(wakeup.clone());
         if let Some(desktop) = &self.desktop {
             let wakeup = wakeup.clone();
             self.desktop_subscription =
@@ -177,25 +213,25 @@ impl SceneSource for Runtime {
         }
         if let Some(backend) = &self.backend {
             self.subscription = Some(backend.subscribe(Box::new(move |event| {
-                if let bead_backends::Event::Snapshot(snapshot) = event {
+                if let bead::backends::Event::Snapshot(snapshot) = event {
                     wakeup(UiEvent::Backend(snapshot));
                 }
             })));
         }
     }
-    fn input_regions(&self) -> Vec<bead_wayland::InputRegion> {
+    fn input_regions(&self) -> Vec<bead::wayland::InputRegion> {
         self.session
             .view_nodes()
             .iter()
             .filter(|node| node.input.is_some() || node.action.is_some())
             .map(|node| {
                 let rect = match &node.draw {
-                    bead_render::Primitive::Rounded { rect, .. }
-                    | bead_render::Primitive::Text { rect, .. }
-                    | bead_render::Primitive::Image { rect, .. }
-                    | bead_render::Primitive::Shadow { rect, .. } => *rect,
+                    bead::render::Primitive::Rounded { rect, .. }
+                    | bead::render::Primitive::Text { rect, .. }
+                    | bead::render::Primitive::Image { rect, .. }
+                    | bead::render::Primitive::Shadow { rect, .. } => *rect,
                 };
-                bead_wayland::InputRegion {
+                bead::wayland::InputRegion {
                     rect,
                     clip: node.clip,
                     cursor: if node.input.is_some() {
@@ -232,9 +268,13 @@ impl SceneSource for Runtime {
             | UiEvent::ContextMenu { x, y }
             | UiEvent::Scroll { x, y, .. } => self.session.action_at(*x, *y),
             UiEvent::Command { command, .. } if command == "enter" => self.session.focused_action(),
+            UiEvent::Command { command, .. } if command == "left" || command == "right" => {
+                self.session.range_action(command == "left")
+            }
+            UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
             _ => None,
         };
-        if let Some((_, name, arg)) = host_action.as_ref()
+        if let Some((id, name, arg)) = host_action.as_ref()
             && name.starts_with("services.")
         {
             let delta = if let UiEvent::Scroll { delta, .. } = &event {
@@ -249,6 +289,9 @@ impl SceneSource for Runtime {
                     delta,
                     matches!(event, UiEvent::ContextMenu { .. }),
                 )?;
+            }
+            if !self.bar {
+                self.pending_focus = Some(id.clone());
             }
             event = UiEvent::Desktop(
                 self.desktop
@@ -271,9 +314,13 @@ impl SceneSource for Runtime {
         }
         let reload = matches!(event, UiEvent::Reload);
         let mut scene = match event {
-            UiEvent::Desktop(snapshot) => self
-                .session
-                .update(crate::desktop::values(&snapshot, &self.menu_item))?,
+            UiEvent::Desktop(snapshot) => {
+                let mut values = crate::desktop::values(&snapshot, &self.menu_item);
+                if let Some(id) = self.pending_focus.take() {
+                    values.insert("bead.focused".into(), bead::core::Value::Text(id));
+                }
+                self.session.update(values)?
+            }
             UiEvent::Backend(snapshot) => {
                 println!(
                     "BACKEND_UPDATE backend={} connected={} workspaces={} windows={}",
@@ -284,6 +331,13 @@ impl SceneSource for Runtime {
                 );
                 self.session.update(backend_values(&snapshot)?)?
             }
+            UiEvent::Panel(_, _) => return Err("panel envelope reached script".into()),
+            UiEvent::PanelVisibility(open) => {
+                self.session.update(std::collections::BTreeMap::from([(
+                    "panel.open".into(),
+                    bead::core::Value::Bool(open),
+                )]))?
+            }
             UiEvent::Fatal(error) => return Err(error.into()),
             UiEvent::Worker(_) => return Err("worker packet cannot reach script executor".into()),
             UiEvent::DebugScriptStall(ms) => {
@@ -293,6 +347,10 @@ impl SceneSource for Runtime {
                 println!("DEBUG_SCRIPT_STALL end_ns={}", clock());
                 None
             }
+            UiEvent::ClipboardText(text) => self.session.key(&text, false)?,
+            UiEvent::ClipboardSet(_) | UiEvent::ClipboardRead => {
+                return Err("clipboard transport event reached script".into());
+            }
             UiEvent::Remote(request) => {
                 let call = &request.call;
                 let reply = match crate::commands::validate(call) {
@@ -301,21 +359,21 @@ impl SceneSource for Runtime {
                         ("nacre", "state") => {
                             let snapshot = self.backend.as_ref().map(|b| b.snapshot());
                             let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":"","clickEdgeMenus":false,"tab":0,"launcher":false,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":"","launcherMode":"apps","launcherRoute":"home","reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":["bar"]}});
-                            bead_services::ipc::Reply::ok(
+                            bead::services::ipc::Reply::ok(
                                 call.id,
                                 serde_json::Value::String(state.to_string()),
                             )
                         }
                         ("compositorState", "state") => {
                             if let Some(backend) = &self.backend {
-                                bead_services::ipc::Reply::ok(
+                                bead::services::ipc::Reply::ok(
                                     call.id,
                                     serde_json::Value::String(serde_json::to_string(
                                         &*backend.snapshot(),
                                     )?),
                                 )
                             } else {
-                                bead_services::ipc::Reply::error(
+                                bead::services::ipc::Reply::error(
                                     call.id,
                                     "unavailable",
                                     "compositor not configured",
@@ -323,14 +381,14 @@ impl SceneSource for Runtime {
                             }
                         }
                         (_, "state") if call.target.starts_with("windowTitle-") => {
-                            bead_services::ipc::Reply::ok(
+                            bead::services::ipc::Reply::ok(
                                 call.id,
                                 serde_json::Value::String(serde_json::to_string(
                                     &serde_json::json!({"title":self.backend.as_ref().map(|b|b.snapshot()).and_then(|s|s.focused_window().map(|w|w.title.clone())).unwrap_or_default(),"retained":false}),
                                 )?),
                             )
                         }
-                        _ => bead_services::ipc::Reply::error(
+                        _ => bead::services::ipc::Reply::error(
                             call.id,
                             "unavailable",
                             "compatibility route belongs to a later native feature",
@@ -358,40 +416,31 @@ impl SceneSource for Runtime {
             UiEvent::Command { command, shift } => match command.as_str() {
                 "clipboard-copy" | "clipboard-cut" => {
                     if let Some(text) = self.session.selected_text() {
-                        use std::io::Write;
-                        let mut child = std::process::Command::new("wl-copy")
-                            .args(["--type", "text/plain;charset=utf-8"])
-                            .stdin(std::process::Stdio::piped())
-                            .spawn()?;
-                        child
-                            .stdin
-                            .take()
-                            .ok_or("clipboard pipe")?
-                            .write_all(text.as_bytes())?;
-                        if !child.wait()?.success() {
-                            return Err("clipboard copy failed".into());
-                        }
-                        if command == "clipboard-cut" {
-                            self.session.key("", false)?
-                        } else {
-                            None
-                        }
+                        self.wakeup
+                            .as_ref()
+                            .ok_or("clipboard event channel unavailable")?(
+                            UiEvent::ClipboardSet(text),
+                        );
+                    }
+                    if command == "clipboard-cut" {
+                        self.session.key("", false)?
                     } else {
                         None
                     }
                 }
                 "clipboard-paste" => {
-                    let output = std::process::Command::new("wl-paste")
-                        .arg("--no-newline")
-                        .output()?;
-                    if !output.status.success() {
-                        return Err("clipboard unavailable".into());
-                    }
-                    if output.stdout.len() > 65536 {
-                        return Err("clipboard text exceeds64KiB".into());
-                    }
-                    self.session
-                        .key(&String::from_utf8(output.stdout)?, false)?
+                    self.wakeup
+                        .as_ref()
+                        .ok_or("clipboard event channel unavailable")?(
+                        UiEvent::ClipboardRead
+                    );
+                    None
+                }
+                "escape" if self.session.stores.get("panel.open").is_some() => {
+                    self.session.update(std::collections::BTreeMap::from([(
+                        "panel.open".into(),
+                        bead::core::Value::Bool(false),
+                    )]))?
                 }
                 "tab" => self.session.focus_next(shift)?,
                 "enter" => self.session.activate_focused()?,
@@ -404,12 +453,12 @@ impl SceneSource for Runtime {
                 }
                 key => {
                     let key = match key {
-                        "left" => bead_ui::input::EditKey::Left,
-                        "right" => bead_ui::input::EditKey::Right,
-                        "home" => bead_ui::input::EditKey::Home,
-                        "end" => bead_ui::input::EditKey::End,
-                        "delete" => bead_ui::input::EditKey::Delete,
-                        "select-all" => bead_ui::input::EditKey::SelectAll,
+                        "left" => bead::ui::input::EditKey::Left,
+                        "right" => bead::ui::input::EditKey::Right,
+                        "home" => bead::ui::input::EditKey::Home,
+                        "end" => bead::ui::input::EditKey::End,
+                        "delete" => bead::ui::input::EditKey::Delete,
+                        "select-all" => bead::ui::input::EditKey::SelectAll,
                         _ => return Err("unsupported input command".into()),
                     };
                     self.session.edit_key(key, shift)?
@@ -426,7 +475,7 @@ impl SceneSource for Runtime {
                 crate::desktop::icons(scene, &desktop.snapshot())?;
             }
             for draw in &mut scene.primitives {
-                if let bead_render::Primitive::Image { path, .. } = draw
+                if let bead::render::Primitive::Image { path, .. } = draw
                     && let Some(icon) = path.to_str().and_then(|s| s.strip_prefix("@icon:"))
                 {
                     *path = if std::env::var_os("BEAD_MATCHED_ICONS").is_some() {
@@ -458,7 +507,7 @@ impl SceneSource for Runtime {
             if self.bar {
                 scene.offset = (0., 0.);
                 scene.slide = None;
-                scene.bounds = bead_render::Rect::new(0., 0., scene.width, 50.);
+                scene.bounds = bead::render::Rect::new(0., 0., scene.width, 50.);
             }
             self.session.decorate_inputs(scene)?;
         }
@@ -521,9 +570,9 @@ impl SceneSource for Runtime {
 }
 
 fn backend_values(
-    snapshot: &bead_backends::Snapshot,
-) -> Result<std::collections::BTreeMap<String, bead_core::Value>, Box<dyn Error>> {
-    use bead_core::Value;
+    snapshot: &bead::backends::Snapshot,
+) -> Result<std::collections::BTreeMap<String, bead::core::Value>, Box<dyn Error>> {
+    use bead::core::Value;
     let mut values = std::collections::BTreeMap::from([
         ("bead.connected".into(), Value::Bool(snapshot.connected)),
         (
@@ -577,7 +626,7 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
     if std::env::var("BEAD_PRIVATE_SERVICES_TEST").as_deref() != Ok("1") {
         return Err("requires private proof environment".into());
     }
-    let palette = bead_render::Palette::read(std::path::Path::new("shell/palette.json"))?;
+    let palette = bead::render::Palette::read(std::path::Path::new("shell/palette.json"))?;
     let fallback = Scene {
         opacity: 1.,
         motion: None,
@@ -591,9 +640,9 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
         slide: None,
         primitives: vec![],
         offset: (0., 0.),
-        bounds: bead_render::Rect::new(0., 0., 1920., 50.),
+        bounds: bead::render::Rect::new(0., 0., 1920., 50.),
     };
-    let mut session = bead_ui::Session::new(
+    let mut session = bead::ui::Session::new(
         "shell".into(),
         "bar/main.luau".into(),
         "shell/palette.json".into(),
@@ -606,9 +655,9 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
         .reconcile(&std::collections::BTreeMap::from([
             (
                 "bead.focused_title".into(),
-                bead_core::Value::Text("Fixture title".into()),
+                bead::core::Value::Text("Fixture title".into()),
             ),
-            ("bead.workspaces".into(), bead_core::Value::List(vec![])),
+            ("bead.workspaces".into(), bead::core::Value::List(vec![])),
         ]))?;
     let mut runtime = Runtime::new(session).with_desktop()?;
     let desktop = runtime
@@ -637,7 +686,7 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
             .iter()
             .find(|n| n.action.as_deref() == Some(action))
             .ok_or("action node missing")?;
-        let bead_render::Primitive::Rounded { rect, .. } = node.draw else {
+        let bead::render::Primitive::Rounded { rect, .. } = node.draw else {
             return Err("action bounds missing".into());
         };
         Ok((rect.x + rect.w / 2., rect.y + rect.h / 2.))
