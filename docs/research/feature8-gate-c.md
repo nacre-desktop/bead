@@ -1,8 +1,10 @@
 # Feature 7–8 / Gate C — 2026-10-15
 
-Feature 7 is implemented; Feature 8 is at Gate C. **Recommendation: adjust**
-for nested niri pacing and remaining hardware coverage. The new memory limit
-passes. Stop here; no optimization pass or Feature 9 has been started.
+Features 7–8 are accepted through Gate C after the owner-confirmed physical
+check recorded below. The original nested recommendation was adjust; the
+close-idle memory limit passes. The [optimization pass](optimization-pass.md)
+is now complete. Stop before Feature 9. Earlier measurements below describe
+the Gate C checkpoint, not the optimized source.
 
 ## Scope and validation
 

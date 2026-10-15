@@ -1228,3 +1228,60 @@ No inherited arena/preload override. All cases passed strict valid-presentation
 and pixel checks. Results do not show a useful incremental memory benefit;
 no mallopt or environment override added. Long aging remains pending.
 Evidence: .research/optimization/arena-interaction-*.
+
+## Optimization — one-hour allocator aging (2026-10-15)
+
+All eight memory-only runs completed3600.70–3606.47s of actual open/release
+use,370–372cycles, then60s idle. These are stress-aging measurements, not
+functional/pacing passes. Keep the system allocator: mimalloc retains much
+more here, while arena tuning adds no benefit to the selected implementation.
+
+| Start bar /hour warm /closed60s, MiB | Hypr | niri |
+|---|---:|---:|
+| System |7.89/18.16/11.72|8.45/20.29/11.99|
+| System arena2 |7.77/16.30/9.96|8.32/17.62/7.21|
+| mimalloc3.5.3 |32.53/51.06/51.13|31.09/52.66/50.33|
+| jemalloc |44.55/25.67/16.58|16.02/21.65/8.99|
+
+PSS+DRM+SwapPss; same a8eb43e-era executable, shared file pages across eight
+clients. Small concurrent PSS is not a single-client~23MiB replacement.
+Default allocator integrations via client-only LD_PRELOAD, existing glibc
+trimming unchanged; not a fully tuned alternative-allocator purge adapter.
+Stress logs include14deadline lines,4layer-range lines and4post-failed-load
+state lines (duplicate reporting possible). No budget raised; closed-error
+layer/cache bug fixed in current source. Failed early soaks remain separate.
+Arena2's older-baseline saving overlaps selected changes; actual selected
+scene's closed memory was worse, so no override/dependency added.
+All owned aging product/fixture PIDs exited. Strict quiet current-source
+acceptance follows independently. Evidence: .research/optimization/aging-*.
+
+## Optimization — final quiet acceptance (2026-10-15)
+
+The final CPU scene passes all20cold/reopen and20prepared cycles per compositor.
+Unused hover preparation expires without warm retention; controls and exact
+reload/state/crash proofs pass. Keep the memory/latency gains, but typing is
+not improved in the final matched trial. Stop before Feature9.
+
+| Quiet selected source | Hypr virtual120 | niri nested60 |
+|---|---:|---:|
+| Cold baseline→prepared ready p50 ms |70.27→15.67|98.55→13.20|
+| Prepared ready p95 ms |17.18|17.89|
+| Bar /active warm /closed60s MiB |20.13/26.67/21.32|21.48/29.03/22.05|
+| Final lifecycle closed MiB |22.20 (+2.07)|22.25 (+.77)|
+| Prepared opening/closing p99 ms |9.04/8.81|34.44/33.95|
+| Typing CPU before→after % |59.85→59.54|56.60→57.17|
+
+PSS+DRM+SwapPss, selected samples swap0; warm active median, not reclaimedidle.
+Every cycle/closed/final≤matchedbar+5MiB. Unusedhover60s deltas−.75/−.92MiB.
+Correction: preparation commits before open. First-presentation proof now
+matches exact earlier validated update; wrong/future/error commits fail.
+Old late-update timing retained; corrected20-cycle runs save both timestamps.
+Niri median phase sensitivity and6b0a pacing/idle invariance stay open.
+Historical29.61→32.66% typing remains unresolved; final CPUms/op38.82→38.89
+Hypr/180.00→183.56niri. No net typing improvement claimed. Source d72a55f
+CI38733902941 passed;75tests/fmt/clippy,default+CPU-only,18moduleanalyzer pass.
+Reloadfile→presentp50/p9565.30/71.64 and62.64/71.70ms includes50msdebounce.
+Report30.00174s, numeric0600, closed-viewhistory; native controls/clipboard/
+dismissal,rapidintent,Hyproutputlifecycle,recovery/SIGKILL pass. Physical
+acceptance remains the sole supervised earlier run; no optimized physical test.
+Evidence: .research/optimization/quiet-*; full readable report in docs/research.

@@ -4,13 +4,13 @@ Updated 2026-10-15. Feature 6b accepted with measured concerns.
 Features 7–8 are accepted through Gate C after the supervised physical check.
 See [Gate C report](research/feature8-gate-c.md) and the
 [optimization measurements](research/optimization-pass.md). Optimization is
-authorized; stop after that pass, before Feature 9.
+complete; stop before Feature 9.
 Step 0a nested pacing/idle acceptance remains open. The new close-idle
 memory limit passes; niri presentation tails remain a concern.
 Automatic bars and the small sound-output panel use CPU retained rasters;
 native GL remains available for larger views. Script/baking is off-thread.
-The earlier authorized live niri comparison is historical evidence only;
-no new physical/live test or installation was performed for Features 7–8.
+The supervised physical Gate C check passed; its single authorization is
+consumed. Optimized source was tested nested; no installation was performed.
 Physical niri hotplug, real IME/screen-reader and NVIDIA acceptance remain
 unvalidated. Owner may veto ADR0002. General shader/allocator work remains
 in the post-Gate-C optimization pass; typing 29.6→32.7% stays on that list.

@@ -1,115 +1,177 @@
-# Optimization pass
+# Optimization pass — complete
 
-Gate C is accepted after the supervised 2026-10-15 physical test. All further
-experiments are nested. Stop before Feature 9.
+Gate C is accepted. The optimization pass is complete; stop before Feature 9.
+No installation, release, reference-repository changes or further live test.
 
-## Baseline and policy
+## Physical Gate C decision
 
-The physical bar + CPU sound panel passed opening/closing p99 16.667/8.337 ms;
-longest opening 58.330 ms and command→ready p50/p95 45.25/64.64 ms still
-justify bounded hover preparation. Nested Gate C ready p50 was 48.63 ms
-(Hyprland virtual 120 Hz) / 74.88 ms (niri nested 60 Hz).
+The owner confirmed the one supervised live niri run immediately before it.
+Twenty cold open/close cycles at 2880×1800, scale 1.5, 120 Hz passed the
+adjusted ≤16.7 ms p99 gate. Opening p50/p95/p99: 8.333/8.336/16.667 ms
+(466 periods); closing: 8.333/8.336/8.337 ms (470). Longest: 58.330/8.338 ms.
+CLOCK_MONOTONIC feedback reported an 8.333313 ms refresh period. Cold ready
+p50/p95 was 45.25/64.64 ms. This does not claim uninterrupted 120 Hz.
 
-Use CPU for small panels and GL for large animated surfaces. The earlier
-explicit small-GL experiment retained about 20 MiB above the bar even after
-EGL shutdown and allocator trimming, including Mesa/LLVM mappings. Dropping
-Bead's caches cannot safely discard driver-owned process mappings. The CPU
-sound panel passes the close/idle ≤5 MiB gate. Feature 6's ~105 MiB used a
-larger GL stress panel, not this 400×286 content panel.
+Private state/bus/PipeWire, passive overlay and IPC only; no input injection,
+capture, real audio/config changes or installation. Owned processes exited,
+PID file removed. Authorization consumed. Optimized source was tested nested.
 
-Typing 29.61→32.66% remains an optimization candidate. Nested niri/shared-GL
-pacing and strict idle invariance from 6b step 0a remain open; the physical
-small-CPU-panel result does not close those distinct experiments.
+## Latency and preparation
 
-## Bounded hover preparation — initial checkpoint
+Matched nested geometry: 2880×1800/1.5. Hyprland uses virtual 120 Hz; niri's
+nested Winit path runs at 60 Hz. Twenty cycles per case, no concurrent Bead
+builds/aging. Ready means command-start → presentation of the first validated
+UI generation. It includes CLI/IPC and is not merely a frame callback.
 
-Entering the bar's audio icon starts the existing script/bake worker with
-closed initial state, the hovered output and its scale. It creates no panel
-or dismissal surface. Opening consumes this preparation; otherwise the
-worker/VM/rasters expire after two seconds, with idle trimming. Moving within
-the icon does not renew the deadline; leave/re-entry can start a new attempt.
-No persistent warm actor or cache is introduced.
+| Ready p50 / p95, ms | Hyprland | niri |
+|---|---:|---:|
+| Fresh cold baseline |70.27 /106.84|98.55 /102.93|
+| Selected source, cold |65.02 /105.93|106.93 /111.24|
+| Selected source, 150 ms hover lead |15.67 /17.18|13.20 /17.89|
 
-Three pixel-verified cycles after 150 ms hover lead: command→ready p50/p95
-9.99/10.73 ms (Hyprland), 7.39/7.72 ms (niri). Unused expiry PSS+DRM delta
-−0.49/−0.80 MiB; closed +2.07/+0.10 MiB. These are exploratory trials during
-the pass; matched longer A/B and final lifecycle checks are still pending.
+Audio-icon entry starts the existing script/bake worker with closed state,
+the hovered output and its scale. It creates no panel/dismissal surface.
+Opening uses the preparation; unused work expires after 2 s. Remaining in
+the icon does not renew the deadline. Worker, VM and rasters are dropped;
+no persistent warm cache. Unused-hover 60 s memory deltas were −0.75/−0.92 MiB.
+The journal stayed closed. Every measured reopen has visible-slider checks.
 
-## Typing: immutable bytecode, fresh evaluation
+The first final proof incorrectly required a commit after open, timing a later
+visibility update (32.67/74.34 ms p50). Preparation intentionally commits before
+open. The corrected proof requires a new presentation after the command with
+an exact earlier generation/update, companion and source_error=false match.
+Wrong updates, future commits and source errors fail. Both corrected 20-cycle
+runs passed; explicit command/presentation timestamps are saved. Earlier data
+remain under quiet-hover-*; corrected timing is quiet-first-present-hover-*.
 
-A/B/B/A trials (240-row launcher stress workload, two8s samples per version)
-reduced CPU35.26→32.05% on Hyprland and36.89→36.26% on niri. CPU per
-operation22.69→20.45/125.83→124.47ms; memory116.40→116.38/117.33→117.18MiB
-PSS+DRM, swap0. Same background hour-soaks affected both versions; final quiet
-measurements remain pending. This is separate from the small sound-panel scene.
+| Opening /closing presentation p99, ms | Hyprland | niri |
+|---|---:|---:|
+| Fresh cold baseline |21.55 /9.17|33.85 /33.68|
+| Selected prepared panel |9.04 /8.81|34.44 /33.95|
+| Prepared longest interval |17.01 /9.08|37.81 /34.04|
 
-The generation owns compiled markup/kit/SDK bytecode (8MiB budget), not a VM.
-Each evaluation still creates a fresh sandbox with the existing50ms/8MiB limits.
-A test verifies module-local state resets and edited imports replace bytecode
-without losing text stores. All71 workspace tests and fmt/clippy pass.
+Nested niri median cadence varied between ~16.6 and ~33.3 ms across identical
+prepared binaries; its p99 stayed ~34 ms. This remains phase-sensitive nested
+pacing evidence, not optimized physical scanout validation. Keep 6b step 0a's
+nested niri/shared-GL pacing and strict idle-invariance items open.
 
-## Retained: share one scoped file watcher
+## Memory and idle acceptance
 
-Identical bundle/palette subscriptions share one notification thread. Revisions
-and source validation remain per view; the last subscriber drops all ownership.
-Warm PSS+DRM+SwapPss29.97→27.59MiB (Hyprland),29.85→27.48(niri), one
-thread and three FDs fewer on both. Initial full controls/clipboard/dismissal/
-reopen/crash/reload proofs pass. Recovery now matches a non-error companion
-commit to its exact presentation update; generic bar commits cannot pass it.
+All numbers below include PSS+DRM+SwapPss. Selected-source samples had no swap.
+Active warm is the median after opening, before long-idle reclamation. The
+400×286 content/464×350 outer CPU panel is the same scene across these runs.
 
-## Rejected exploratory changes
+| Selected source, MiB | Hyprland | niri |
+|---|---:|---:|
+| Bar, 60 s idle |20.13|21.48|
+| Active bar+panel, median |26.67|29.03|
+| Panel open, 60 s idle |26.18|28.69|
+| Closed, 60 s idle |21.32 (+1.18)|22.05 (+0.57)|
+| Post-lifecycle closed |22.20 (+2.07)|22.25 (+0.77)|
 
-- Fewer scene copies: no typing improvement; patch reverted.
-- Two SHM buffers: nested niri exhausted both compositor-owned slots; retain3.
-- 512 KiB stacks and16MiB raster cap: no consistent warm-memory improvement.
-  Keep default stack headroom and64MiB raster/GL-image limits; idle drops them.
-- GL0/0/0 attachments: renders a square slider thumb; reject despite lower memory.
-  Zero depth with required stencil selected24/8/0 on both; no saving. Existing
-  config is already non-MSAA. Several cold small-GL runs also failed the
-  strict feedback proof. Keep CPU-small/GL-large policy and the prior~20MiB
-  driver-residue finding. Full panel pixels matched for the depth-only trial.
-- Display-size decoding: SVG path already does this; actual matched sound
-  scene has no large raster-image decode bottleneck. No decoder dependency added.
+All 20 individual release cycles, closed 60 s and final lifecycle checks pass
+within the matched bar+5 MiB, including swap. Reopens, controls, native clipboard,
+all dismissals and rapid latest-intent visibility pass. Hypr real private output
+move/removal passes; nested niri does not prove real output disappearance.
 
-## Allocator aging methodology
+Fresh baseline active warm medians were 32.73/30.89 MiB. Feature 6's ~105 MiB
+used a larger GL stress panel (1100×590 content), not this small CPU scene.
+Accepted 6b's 143–153 MiB stress increase came from CPU-first rasters/allocator
+and warm GL coexisting. Do not claim a like-for-like ~75% renderer saving.
+The earlier small-GL experiment retained ~20 MiB above the bar after EGL shutdown
+and trimming, including Mesa/LLVM mappings. Policy: CPU for small panels; GL
+only for large animated surfaces. Do not discard driver-owned mappings unsafely.
 
-Initial concurrent soaks terminated early on animation-feedback assertions and
-are not one-hour evidence. Restarted memory-only aging still requires each
-opening to present and each close to release the actor; timing failures are
-recorded without stopping the memory workload. Its pacing field is N/A.
-Dedicated sequential pacing acceptance retains the strict feedback requirement.
-All variants use the same baseline executable, private compositor/services,
-one hour of open/release cycles, and60s endpoint idle. Shared executable/driver
-PSS differs from a single-client desktop measurement; include SwapPss.
+60 s idle CPU, one-core percent (bar/open/closed): Hypr 0.017/0.050/0.017;
+niri 0/0.050/0.033. Tick resolution is 0.017 percentage points per minute.
+These samples do not establish strict idle invariance. File-page reclamation
+and SwapPss explain why some long-idle baselines are below active warm memory.
 
-## Release profile and error-scene validation
+## CPU and retained changes
 
-Selected codegen-units=1: executable25.98→20.02MiB; matched bar/warm
-PSS+DRM22.02/28.30→20.11/26.53MiB Hypr and22.83/30.14→21.21/29.01niri.
-File-backed PSS accounts for the reduction, not a reduced scene. Three
-validated/pixel-checked cycles each; fixed2ops/s typing6.00→6.37% Hypr,
-27.00→24.62%niri. One Hypr injection deadline missed; quiet confirmation
-still pending. Background aging is shared by all exploratory samples.
-Thin LTO did not lower memory; stripping only reduced file size and removes
-symbols. Keep unwinding because worker panic containment is tested.
+Recorded physical field differences showed 599 unfocused title changes driving
+600 window-list changes/603 bar updates without a focused-title change. The bar
+did not read that model. An A/B/B/A replay with the real bar+panel delivered
+200 backend updates in each 20 s trial. Host models now stay current without
+view preparation when no binding reads them. Used/computed dependencies still
+stage atomically; rejected branches retain prior reads. JSON and cache overflow
+use conservative staging. Future bindings/reloads see the latest model.
 
-Stress also found a real closed-error-scene bug: removed primitives retained
-old layer ranges/prepared frame. Regression first failed with invalid layer
-range; correction makes a valid two-item error banner while retaining the
-last-good body/state separately.50ms script limit remains unchanged.
+| CPU, one core, matched comparisons | Hyprland | niri |
+|---|---:|---:|
+| Background title churn, before→after |3.70→0.45%|3.43→0.25%|
+| Final maximum-rate typing, before→after |59.85→59.54%|56.60→57.17%|
 
-## Retained: avoid view work for unread backend models
+Background updates caused ~200→0 bar commits, except one legitimate clock.
+Genuine focus changes committed and presented on both. Fixed separate probe
+executable avoids client/probe executable-page sharing bias.
 
-Recorded physical field differences show599 unfocused title changes driving
-600 window-list changes without a focused-title change. Replayed10Hz titles
-privately with a passive bar+sound panel: CPU3.70→.45% Hypr,3.43→.25%niri
-(two20s trials/version, A/B/B/A). Each trial delivered200 backend updates;
-bar commits200–202→0, except one real clock update. Genuine focus change
-then commits and presents correctly. Model data remains current for future
-actions/reload; used and computed dependencies retain staged validation.
-Rejected branch reads cannot erase committed dependencies. Cache is bounded;
-overflow uses the original staging path. JSON also stays conservative.
+The final typing A/B/B/A does **not** demonstrate a meaningful improvement.
+CPU ms/operation: 38.82→38.89 Hypr; 180.00→183.56 niri. Historical
+29.61→32.66% came from different runs and remains an unresolved optimization
+item. Early isolated bytecode trials helped Hypr, but no net final typing win
+is claimed. Keep the final negative result visible.
 
-Arena2 interaction with the selected code does not improve closed memory:
-Hypr19.73→20.95MiB, niri20.27→21.17; warm changes are mixed. Keep the
-system allocator without hardcoded arena tuning; hour endpoints still pending.
+Other retained changes: generation-owned markup/kit/SDK bytecode with fresh
+sandbox evaluation (8 MiB bytecode budget; existing 50 ms/8 MiB Lua limits);
+shared scoped watcher (one thread/three FDs fewer, ~2.4 MiB warm in its trial);
+codegen-units=1 (1.6–1.9 MiB less mapped code, executable 25.98→20.02 MiB).
+A stress-discovered closed-error overlay now clears stale layer ranges and
+prepared frames while preserving last-good body/state. Regression failed
+before the fix and passed afterward, with and without prepared frames.
+
+## Rejected candidates and one-hour aging
+
+| Candidate | Evidence / decision |
+|---|---|
+| Fewer whole-scene copies |No useful typing gain; reverted.|
+| Two SHM buffers |Nested niri exhausted compositor-owned slots; retain three.|
+| 512 KiB thread stacks |No consistent PSS saving; retain normal stack headroom.|
+| 16 versus 64 MiB raster/GL-image cap |Active scene below budget; no useful gain.|
+| Zero GL depth/stencil |Round slider became square; reject despite lower memory.|
+| Zero depth, stencil retained |Driver selected the same 24/8/0 on both; no saving.|
+| MSAA |Already zero samples.|
+| Thin LTO |No mapped-memory saving in the actual scene.|
+| Strip-all |Disk-only reduction, removes symbols; not selected.|
+| panic=abort |Disables tested worker-panic→Fatal contract; retain unwind.|
+| Image decode sizing |SVG already display-sized; no large JPEG/PNG hotspot here.|
+
+Eight aging runs completed 3600.70–3606.47 s of actual open/release use,
+370–372 cycles, plus 60 s endpoint idle. PSS+DRM+SwapPss start-bar/hour-warm/
+closed MiB are below. Same older-baseline executable shared pages across eight
+clients: these small concurrent PSS figures are not standalone bar measurements.
+
+| Allocator | Hyprland | niri |
+|---|---:|---:|
+| System |7.89 /18.16 /11.72|8.45 /20.29 /11.99|
+| Arena2 |7.77 /16.30 /9.96|8.32 /17.62 /7.21|
+| mimalloc 3.5.3 |32.53 /51.06 /51.13|31.09 /52.66 /50.33|
+| jemalloc |44.55 /25.67 /16.58|16.02 /21.65 /8.99|
+
+Default client-only preloads retained the existing glibc trim lifecycle, not
+allocator-specific purge adapters. Concurrent stress logged 14 deadline,
+4 layer-range and 4 post-failed-load state error lines (duplicates possible).
+These are memory-aging results, not functional/pacing passes. Initial soaks
+that ended early remain separate. No budget raised or failure hidden.
+
+Arena2 did not help the **selected combination** in its separate interaction
+trial: closed Hypr 19.73→20.95 MiB, niri 20.27→21.17. Keep the system allocator
+without a dependency, environment override or mallopt policy. Patches and failed
+experiments remain in ignored evidence; rejected product hooks were removed.
+
+## Validation and reproducibility
+
+75 workspace tests, fmt/clippy, default and linked CPU-only release builds pass.
+Official Luau analyzer checks 18 real modules and the generated Rust SDK.
+Final quiet proofs: 20 cold and 20 prepared cycles per compositor with pixel
+checks; controls/native clipboard/dismissals; rapid intent and lifecycle;
+five exact-update reloads plus invalid/dependency recovery and SIGKILL restore.
+Reload file→present p50/p95: 65.30/71.64 ms Hypr, 62.64/71.70 niri, including
+the unchanged 50 ms debounce. Numeric-only 0600 report ran 30.00174 s and
+retained closed-view history. Executable source d72a55f passed CI 38733902941.
+
+Evidence: ignored .research/optimization, especially quiet-final-summary.json,
+aging-summary.json, quiet-* and quiet-first-present-hover-*. The default and
+CPU-only variants used the existing shared Cargo target, nice10/Cargo-j2.
+The default executable was restored and matched its saved hash. No physical
+optimized-run, IME/Orca/NVIDIA or real niri hotplug claim. Stop before Feature 9.

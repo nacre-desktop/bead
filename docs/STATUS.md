@@ -1,35 +1,36 @@
 # Status
 
-## 2026-10-15 — Gate C accepted; optimization final checks pending
+## 2026-10-15 — Optimization pass complete; STOP before Feature 9
 
-One supervised physical niri test passed: 20 cold sound-panel cycles,
-opening/closing p99 16.667/8.337 ms, refresh 8.333313 ms at 120 Hz.
-Longest opening 58.330 ms; cold ready p50/p95 45.25/64.64 ms.
-Processes/PID file cleaned; physical authorization consumed. No install.
+Gate C accepted after the one supervised physical niri/120 Hz test:
+20 cycles, opening/closing p99 16.667/8.337 ms (limit ≤16.7 ms).
+Authorization consumed; exact processes/PID file cleaned. No installation.
+[Measured report](research/optimization-pass.md).
 
-Retained: bounded hover preparation (2 s expiry, no surface/focus, closed
-journal), generation bytecode, shared watcher, CGU1 and closed-error-scene
-repair. CI through cb1ac45 passed. Shared watcher saves ~2.4 MiB warm,
-one thread/three FDs; CGU1 saves 1.6–1.9 MiB mapped code on both.
+Final first-valid-UI ready p50/p95 after 150 ms hover lead:
+Hypr 15.67/17.18 ms, niri 13.20/17.89 ms; fresh cold baselines
+70.27/106.84 and 98.55/102.93 ms. Unused preparation expires in 2 s,
+with no surface/focus and a closed journal; 60 s memory returns below bar.
 
-Unread backend-model projection now measured: 200 background updates
-cause ~200→0 bar commits, CPU 3.70→0.45% Hypr /3.43→0.25% niri.
-Genuine focus change presents correctly; current models, future bindings,
-computed reads and rejected-branch dependencies tested. 75 tests plus
-fmt/clippy pass. No new services or Feature 9 work.
+Memory gate passes every release, closed 60 s and final lifecycle:
+Hypr bar/warm/closed/final 20.13/26.67/21.32/22.20 MiB;
+niri 21.48/29.03/22.05/22.25 MiB. No swap in selected final samples.
+Warm is active median; Feature 6 ~105 MiB was a larger GL stress panel.
+CPU small panels, GL large animated surfaces; ~20 MiB Mesa residue noted.
 
-Rejected copies, two buffers (niri exhausted slots), smaller stacks/cache
-cap, zero-stencil GL (wrong pixels), Thin LTO and stripping. CPU small
-panels; GL large animated surfaces, prior ~20 MiB Mesa residue. Arena2
-has no useful incremental gain with selected code; no tuning added.
+Retained hover preparation, bytecode, shared watcher, CGU1, unread-model
+projection and closed-error-scene repair. Title-churn CPU 3.70→0.45% /
+3.43→0.25%; genuine focus still presents. Final maximum-rate typing CPU
+has no meaningful gain (59.85→59.54% /56.60→57.17%); keep historical
+29.61→32.66% regression unresolved. Nested niri prepared p99 ~34 ms;
+6b 0a nested/shared-GL pacing and strict idle invariance remain open.
 
-Next: allocator hour endpoints (aging-*), then quiet final hover/cold,
-typing, 60 s idle memory/CPU/pacing and lifecycle checks on both. Initial
-aging attempts ended early; current memory-only runs record stress/deadline
-failures and are not pacing/functional passes. Keep 29.61→32.66% typing,
-6b 0a nested niri/shared-GL pacing and strict idle invariance qualified.
-Stop after optimization, before Feature 9; no further live test authorized.
+75 tests/fmt/clippy, default+linked CPU-only, SDK/analyzer, controls,
+clipboard, reload/recovery/reopen/SIGKILL and 30.002 s report pass.
+Source d72a55f CI 38733902941 passed. All allocator hour endpoints
+measured; system defaults kept after selected-code interaction showed
+no arena benefit. Rejected experiments and stress failures preserved.
 
-[Report](research/optimization-pass.md). Worktree: bead-optimization-pass;
-existing shared Cargo target. Evidence: canonical .research/optimization.
-Nested nice10/Cargo-j2; no installation or release.
+Worktree: bead-optimization-pass; existing shared Cargo target.
+Evidence: canonical .research/optimization. Nested nice10/Cargo-j2.
+No Feature 9, additional live/physical test, reference edits or release.
