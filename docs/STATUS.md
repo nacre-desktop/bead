@@ -20,7 +20,11 @@ closed journal, selected output/scale. Three pixel-checked cycles each:
 ready p50 9.99/7.39 ms (Hypr/niri); timeout and closed memory pass +5 MiB.
 Local fmt/clippy/workspace tests pass; acceptance CI38723361044 passed.
 
-Next: matched longer validation, typing CPU, and ROADMAP optimization
+Typing bytecode reuse retained: paired CPU35.26→32.05% Hypr,
+36.89→36.26% niri, unchanged matched PSS+DRM; fresh VM per evaluation.
+71 workspace tests/fmt/clippy pass; hover CI38724435974 passed.
+
+Next: matched longer validation and remaining ROADMAP optimization
 candidates, each measured on both nested compositors. CPU for small
 panels; GL for large animated surfaces (~20 MiB idle Mesa residue).
 Keep 6b step 0a nested niri/shared-GL pacing and idle invariance open.

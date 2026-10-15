@@ -34,3 +34,16 @@ Three pixel-verified cycles after 150 ms hover lead: command→ready p50/p95
 9.99/10.73 ms (Hyprland), 7.39/7.72 ms (niri). Unused expiry PSS+DRM delta
 −0.49/−0.80 MiB; closed +2.07/+0.10 MiB. These are exploratory trials during
 the pass; matched longer A/B and final lifecycle checks are still pending.
+
+## Typing: immutable bytecode, fresh evaluation
+
+A/B/B/A trials (240-row launcher stress workload, two8s samples per version)
+reduced CPU35.26→32.05% on Hyprland and36.89→36.26% on niri. CPU per
+operation22.69→20.45/125.83→124.47ms; memory116.40→116.38/117.33→117.18MiB
+PSS+DRM, swap0. Same background hour-soaks affected both versions; final quiet
+measurements remain pending. This is separate from the small sound-panel scene.
+
+The generation owns compiled markup/kit/SDK bytecode (8MiB budget), not a VM.
+Each evaluation still creates a fresh sandbox with the existing50ms/8MiB limits.
+A test verifies module-local state resets and edited imports replace bytecode
+without losing text stores. All71 workspace tests and fmt/clippy pass.

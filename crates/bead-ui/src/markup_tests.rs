@@ -498,3 +498,56 @@ fn restored_panel_state_is_staged_and_commits_only_after_validation() {
     );
     assert!(session.stores.get("obsolete.open").is_none());
 }
+
+#[test]
+fn compiled_markup_keeps_evaluations_fresh_and_replaces_changed_imports() {
+    let f = fixture();
+    let path = f.0.join("ui/components/card.luau");
+    let source = r#"local ui=require("bead.ui")
+local count=0
+return function(p) count+=1; return ui.Button{id="tile",text=p.item.name..count} end"#;
+    fs::write(&path, source).unwrap();
+    let mut session = session(&f);
+    let labels = |s: &Session| {
+        s.current
+            .primitives
+            .iter()
+            .filter_map(|p| {
+                if let Primitive::Text { text, .. } = p {
+                    Some(text.clone())
+                } else {
+                    None
+                }
+            })
+            .filter(|s| s.starts_with("Alpha") || s.starts_with("Beta") || s.starts_with("Gamma"))
+            .collect::<Vec<_>>()
+    };
+    let before = labels(&session);
+    assert!(before.iter().any(|s| s == "Alpha1"));
+    let scene = session
+        .update(BTreeMap::from([(
+            "query".into(),
+            Value::Text("typed".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    assert_eq!(
+        labels(&session),
+        before,
+        "no Lua module state may survive an evaluation"
+    );
+    fs::write(
+        &path,
+        source.replace("p.item.name..count", "p.item.name..'-new'..count"),
+    )
+    .unwrap();
+    let scene = session.reload().unwrap();
+    session.check_sources().unwrap();
+    session.commit(scene);
+    assert!(labels(&session).iter().any(|s| s == "Alpha-new1"));
+    assert_eq!(
+        session.stores.get("query"),
+        Some(&Value::Text("typed".into()))
+    );
+}

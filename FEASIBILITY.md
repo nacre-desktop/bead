@@ -1034,3 +1034,26 @@ Local fmt/clippy/workspace tests pass; a8eb43e CI38723361044 passed.
 Allocator hour-soaks (system/arena2/mimalloc3.5.3/jemalloc) now run privately
 on both compositors; no adoption before matched timing/idle measurements.
 Evidence: .research/optimization/prepared-pixels-{hyprland,niri}.
+
+## Optimization — generation-owned markup bytecode (2026-10-15)
+
+Typing repeatedly compiled unchanged markup, kit and SDK code in fresh VMs.
+Compile it once per validated generation; keep evaluations in fresh sandboxes.
+The bytecode cache is bounded8MiB, owned by the view and dropped with it.
+Counterbalanced A/B/B/A trials show a Hypr CPU benefit without a memory cost;
+niri's smaller change remains qualified, not a resolved historical regression.
+
+| Two eight-second trials each | Hypr before→after | niri before→after |
+|---|---:|---:|
+| CPU % one core, mean |35.26→32.05|36.89→36.26|
+| CPU ms per workload operation |22.69→20.45|125.83→124.47|
+| Operations per trial |128,122→127,124|24,24→24,23|
+| PSS+DRM MiB, mean |116.40→116.38|117.33→117.18|
+
+Same240-row typing workload/binary configuration, no swap. Both cases had
+the same background allocator soaks; final quiet validation remains pending.
+These are current matched baselines, not direct equivalence to historical
+29.61/32.66%. Fresh-evaluation/import-replacement test and all71 workspace
+tests pass; fmt/clippy pass. Existing50ms/8MiB Lua limits remain unchanged.
+Verdict: retain bytecode reuse; continue the measured typing investigation.
+1ade037 CI38724435974 passed. Evidence: .research/optimization/typing-paired-*.

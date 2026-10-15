@@ -15,21 +15,68 @@ use std::{
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
 pub trait FrontEnd {
-    fn build(
-        &self,
-        entry: &Path,
-        sources: &Sources,
-        resolve: &Resolve<'_>,
-    ) -> Result<RawNode, Diagnostic>;
+    fn build(&self, entry: &Path, resolve: &Resolve<'_>) -> Result<RawNode, Diagnostic>;
 }
-pub struct LuauFrontEnd;
+const INSTALL: &str = r#"
+return function(ui)
+    local function check(value, schema, path)
+        value = ui.resolve_for_check(value)
+        if type(schema) == "string" then
+            if type(value) ~= schema then error(path .. " must be " .. schema, 3) end
+        else
+            if type(value) ~= "table" then error(path .. " must be a record", 3) end
+            for key, expected in schema do check(value[key], expected, path .. "." .. key) end
+        end
+    end
+    ui.component = function(name, schema, render)
+        return function(props)
+            for key in props do if schema[key] == nil then error(name .. ": unknown property " .. key, 2) end end
+            for key, expected in schema do check(props[key], expected, name .. "." .. key) end
+            return render(props)
+        end
+    end
+end
+"#;
+/// Immutable generation-owned bytecode; evaluation always uses a fresh sandbox.
+pub struct LuauFrontEnd {
+    compiled: Sources,
+    kit: Vec<u8>,
+    install: Vec<u8>,
+}
+impl LuauFrontEnd {
+    pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
+        let compiler = mlua::chunk::Compiler::new();
+        let mut compiled = Sources::new();
+        let mut size = 0;
+        for (path, bytes) in sources {
+            if path.extension().is_some_and(|ext| ext == "luau") {
+                let code = compiler.compile(bytes).map_err(|e| diagnostic(path, e))?;
+                size += code.len();
+                if size > 8 * 1024 * 1024 {
+                    return Err(Diagnostic::new(
+                        path,
+                        1,
+                        1,
+                        "compiled markup exceeds 8 MiB cache budget",
+                    ));
+                }
+                compiled.insert(path.clone(), code);
+            }
+        }
+        Ok(Self {
+            compiled,
+            kit: compiler
+                .compile(include_str!("../assets/kit.luau"))
+                .map_err(|e| diagnostic(entry, e))?,
+            install: compiler
+                .compile(INSTALL)
+                .map_err(|e| diagnostic(entry, e))?,
+        })
+    }
+}
 impl FrontEnd for LuauFrontEnd {
-    fn build(
-        &self,
-        entry: &Path,
-        sources: &Sources,
-        resolve: &Resolve<'_>,
-    ) -> Result<RawNode, Diagnostic> {
+    fn build(&self, entry: &Path, resolve: &Resolve<'_>) -> Result<RawNode, Diagnostic> {
+        let sources = &self.compiled;
         let lua = Lua::new();
         let deadline = Instant::now() + Duration::from_millis(50);
         lua.set_interrupt(move |_| {
@@ -49,34 +96,40 @@ impl FrontEnd for LuauFrontEnd {
                         .create_function(move |lua, props: Table| make_node(lua, kind, props))?;
                     sdk.set(name, constructor)?;
                 }
-                sdk.set("alpha",scope.create_function(|lua,(role,alpha):(String,f64)| {let t=lua.create_table()?;t.set("role",role)?;t.set("alpha",alpha)?;Ok(t)})?)?;
-                sdk.set("tint",scope.create_function(|lua,(base,over,alpha):(String,String,f64)| {let t=lua.create_table()?;t.set("base",base)?;t.set("over",over)?;t.set("alpha",alpha)?;Ok(t)})?)?;
-                sdk.set("resolve_for_check",scope.create_function(|lua,value:mlua::Value| {
-                    if let mlua::Value::Table(table)=&value && let Ok(name)=table.get::<String>("__bind") {
-                        return lua.to_value(&resolve(&name).map_err(mlua::Error::external)?);
-                    }
-                    Ok(value)
-                })?)?;
-                let install:Function=lua.load(r#"
-return function(ui)
-    local function check(value, schema, path)
-        value = ui.resolve_for_check(value)
-        if type(schema) == "string" then
-            if type(value) ~= schema then error(path .. " must be " .. schema, 3) end
-        else
-            if type(value) ~= "table" then error(path .. " must be a record", 3) end
-            for key, expected in schema do check(value[key], expected, path .. "." .. key) end
-        end
-    end
-    ui.component = function(name, schema, render)
-        return function(props)
-            for key in props do if schema[key] == nil then error(name .. ": unknown property " .. key, 2) end end
-            for key, expected in schema do check(props[key], expected, name .. "." .. key) end
-            return render(props)
-        end
-    end
-end
-"#).set_name("@bead.ui").eval()?;
+                sdk.set(
+                    "alpha",
+                    scope.create_function(|lua, (role, alpha): (String, f64)| {
+                        let t = lua.create_table()?;
+                        t.set("role", role)?;
+                        t.set("alpha", alpha)?;
+                        Ok(t)
+                    })?,
+                )?;
+                sdk.set(
+                    "tint",
+                    scope.create_function(|lua, (base, over, alpha): (String, String, f64)| {
+                        let t = lua.create_table()?;
+                        t.set("base", base)?;
+                        t.set("over", over)?;
+                        t.set("alpha", alpha)?;
+                        Ok(t)
+                    })?,
+                )?;
+                sdk.set(
+                    "resolve_for_check",
+                    scope.create_function(|lua, value: mlua::Value| {
+                        if let mlua::Value::Table(table) = &value
+                            && let Ok(name) = table.get::<String>("__bind")
+                        {
+                            return lua.to_value(&resolve(&name).map_err(mlua::Error::external)?);
+                        }
+                        Ok(value)
+                    })?,
+                )?;
+                let install: Function = lua
+                    .load(self.install.as_slice())
+                    .set_name("@bead.ui")
+                    .eval()?;
                 install.call::<()>(sdk.clone())?;
                 sdk.set(
                     "bind",
@@ -148,11 +201,16 @@ end
                 let loading = RefCell::new(BTreeSet::<PathBuf>::new());
                 let entry_parent = entry.parent().unwrap_or(Path::new("")).to_path_buf();
                 let sdk_copy = sdk.clone();
-                let kit_factory: Function = lua.load(include_str!("../assets/kit.luau")).set_name("@bead.kit").eval()?;
-                let tokens: serde_json::Value = serde_json::from_str(include_str!("../assets/size-scale.json")).map_err(mlua::Error::external)?;
+                let kit_factory: Function =
+                    lua.load(self.kit.as_slice()).set_name("@bead.kit").eval()?;
+                let tokens: serde_json::Value =
+                    serde_json::from_str(include_str!("../assets/size-scale.json"))
+                        .map_err(mlua::Error::external)?;
                 let kit: Table = kit_factory.call((sdk.clone(), lua.to_value(&tokens)?))?;
                 let require = scope.create_function(move |lua, name: String| {
-                    if name == "bead.kit" { return Ok(mlua::Value::Table(kit.clone())); }
+                    if name == "bead.kit" {
+                        return Ok(mlua::Value::Table(kit.clone()));
+                    }
                     if name == "bead.ui" {
                         return Ok(mlua::Value::Table(sdk_copy.clone()));
                     }

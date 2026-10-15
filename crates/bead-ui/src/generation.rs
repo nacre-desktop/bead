@@ -60,6 +60,7 @@ pub struct Generation {
     pub revision: u64,
     pub(super) assets: BTreeMap<PathBuf, std::sync::Arc<[u8]>>,
     pub(super) markup_entry: Option<PathBuf>,
+    markup_frontend: Option<frontend::LuauFrontEnd>,
     pub(super) root: PathBuf,
 }
 struct Loader {
@@ -258,6 +259,7 @@ impl Generation {
             revision,
             assets,
             markup_entry: None,
+            markup_frontend: None,
             root: loader.root.clone(),
         };
         // Validate properties even when a node is currently hidden.
@@ -374,6 +376,7 @@ impl Generation {
             })
             .map(|(path, data)| (loader.root.join(path), std::sync::Arc::from(data.clone())))
             .collect();
+        let markup_frontend = Some(frontend::LuauFrontEnd::new(entry, &loader.sources)?);
         let generation = Self {
             script,
             nodes: vec![],
@@ -383,6 +386,7 @@ impl Generation {
             revision,
             assets,
             markup_entry: Some(entry.to_path_buf()),
+            markup_frontend,
             root: loader.root,
         };
         generation.check_sources(root)?;
@@ -398,7 +402,11 @@ impl Generation {
             use frontend::FrontEnd;
             self.script.begin();
             let resolve = |name: &str| self.script.resolve(name, stores);
-            let raw = frontend::LuauFrontEnd.build(entry, &self.sources, &resolve)?;
+            let raw = self
+                .markup_frontend
+                .as_ref()
+                .ok_or_else(|| Diagnostic::new(entry, 1, 1, "missing markup frontend"))?
+                .build(entry, &resolve)?;
             let view = layout::ViewSpec::from_raw(&raw, &resolve)?;
             let mut result = layout::layout(&view, &resolve, palette, self.revision, viewport)?;
             for node in &result.nodes {
