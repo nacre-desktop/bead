@@ -16,6 +16,14 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get("BEAD_HARDENING") == "notifications":
+        spec=importlib.util.spec_from_file_location("notification_proof",ROOT/"spikes/notification-proof.py")
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
+    if os.environ.get("BEAD_HARDENING") == "typing":
+        spec=importlib.util.spec_from_file_location("typing_proof",ROOT/"spikes/typing-proof.py")
+        proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)
+        return proof.sample(env,raw,compositor,stop)
     if os.environ.get('BEAD_HARDENING') == 'models':
         spec=importlib.util.spec_from_file_location('model_proof',ROOT/'spikes/model-proof.py')
         proof=importlib.util.module_from_spec(spec);spec.loader.exec_module(proof)

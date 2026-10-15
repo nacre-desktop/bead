@@ -33,6 +33,7 @@ struct Sink {
 #[derive(Default)]
 struct Graph {
     default: Option<String>,
+    default_source: Option<String>,
     sinks: HashMap<u32, Sink>,
     metadata: HashMap<u32, (Metadata, MetadataListener)>,
 }
@@ -42,7 +43,16 @@ impl Graph {
             .default
             .as_ref()
             .and_then(|name| self.sinks.values().find(|s| &s.name == name));
+        let source = self
+            .default_source
+            .as_ref()
+            .and_then(|name| self.sinks.values().find(|s| &s.name == name));
         Audio {
+            default_source: self.default_source.clone(),
+            mic_volume: source
+                .and_then(|s| s.channels.iter().copied().reduce(f32::max))
+                .map(|v| f64::from(v.max(0.).cbrt())),
+            mic_muted: source.and_then(|s| s.muted),
             connected: true,
             default_sink: self.default.clone(),
             volume: sink
@@ -112,7 +122,11 @@ fn connect(shared: &Arc<Shared>) -> Result<(), Box<dyn std::error::Error>> {
         .add_listener_local()
         .global(move |object| {
             if object.type_ == ObjectType::Node
-                && object.props.as_ref().and_then(|p| p.get("media.class")) == Some("Audio/Sink")
+                && object
+                    .props
+                    .as_ref()
+                    .and_then(|p| p.get("media.class"))
+                    .is_some_and(|class| class == "Audio/Sink" || class == "Audio/Source")
             {
                 let Ok(node) = registry_copy.bind::<Node, _>(object) else {
                     return;
@@ -186,14 +200,22 @@ fn connect(shared: &Arc<Shared>) -> Result<(), Box<dyn std::error::Error>> {
                     .add_listener_local()
                     .property(move |subject, key, _, value| {
                         if subject == 0
-                            && (key == Some("default.audio.sink") || key.is_none())
+                            && (key == Some("default.audio.sink")
+                                || key == Some("default.audio.source")
+                                || key.is_none())
                             && let Some(graph) = weak.upgrade()
                         {
-                            graph.borrow_mut().default = value
-                                .and_then(|value| {
-                                    serde_json::from_str::<serde_json::Value>(value).ok()
-                                })
+                            let name = value
+                                .and_then(|v| serde_json::from_str::<serde_json::Value>(v).ok())
                                 .and_then(|v| v["name"].as_str().map(str::to_owned));
+                            if key == Some("default.audio.source") {
+                                graph.borrow_mut().default_source = name;
+                            } else {
+                                graph.borrow_mut().default = name;
+                                if key.is_none() {
+                                    graph.borrow_mut().default_source = None;
+                                }
+                            }
                             publish(&graph, &state);
                         }
                         0

@@ -66,6 +66,25 @@ return function(ui, tokens)
         end
         return ui.Row(props(children,{id=p.id,gap=tokens.spacing.xs}))
     end
+    -- Keep the complete model and scroll extent; materialize viewport + one row each side.
+    function kit.VirtualGrid(p)
+        local columns=math.max(1,math.floor((p.width+p.gap_x)/(p.min_cell_width+p.gap_x)))
+        local pitch=p.row_height+p.gap_y
+        local model=value(p.model,{})
+        local rows=math.ceil(#model/columns)
+        local height=math.max(0,rows*pitch-p.gap_y)
+        local scroll=math.clamp(value(p.scroll,0),0,math.max(0,height-p.height))
+        local first=math.max(0,math.floor(scroll/pitch)-1)
+        local count=math.ceil(p.height/pitch)+2
+        return ui.Scroll{id=p.id,scroll=p.scroll,grow=1,
+            ui.Box{id="extent",height=height,shrink=0,width="fill",
+                ui.Grid{id="window",position="absolute",top=first*pitch,width="fill",
+                    columns=columns,row_height=p.row_height,gap_x=p.gap_x,gap_y=p.gap_y,
+                    ui.Repeat{id="rows",model=p.model,key=p.key,first=first*columns,count=count*columns,render=p.render},
+                },
+            },
+        }
+    end
     function kit.List(p) return ui.Scroll(props(p,{grow=1})) end
     function kit.ListRow(p) return kit.Button(props(p,{height=40,width="fill",text_align="left"})) end
     function kit.Card(p) return ui.Column(props(p,{padding=tokens.spacing.md,gap=tokens.spacing.sm,radius=tokens.radii.medium,fill="surfaceContainer"})) end

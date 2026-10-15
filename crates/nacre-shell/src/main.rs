@@ -5,6 +5,8 @@ mod commands;
 mod desktop;
 mod font_sources;
 mod headless;
+mod launcher;
+mod notifications;
 mod reload;
 mod sound;
 mod state;
@@ -62,6 +64,8 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     let mut profile = false;
     let mut bar_panel = false;
     let mut audio_panel = false;
+    let mut notification_bus = None;
+    let mut notification_history = None;
     let mut panel_edge = bead::core::Edge::Right;
     let default_panel_renderer = if cfg!(feature = "native-gl") {
         bead::render::RendererKind::FemtovgGl
@@ -85,6 +89,25 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bar-panel" => bar_panel = true,
+            "--notification-bus" => {
+                notification_bus = Some(std::path::PathBuf::from(
+                    args.next()
+                        .ok_or("--notification-bus needs a new private socket path")?,
+                ));
+                ui = Some("notifications/main.luau".into());
+                options.panel = true;
+                options.content_size = true;
+                options.interactive = true;
+                options.keyboard_focus = false;
+                options.edge = bead::core::Edge::Right;
+                options.renderer = bead::render::RendererKind::Cpu;
+                options.auto_fallback = false;
+            }
+            "--notification-history" => {
+                notification_history = Some(std::path::PathBuf::from(
+                    args.next().ok_or("--notification-history needs path")?,
+                ))
+            }
             "--audio-panel" => audio_panel = true,
             "--report" => {
                 options.report = Some(args.next().ok_or("--report needs FILE")?.into());
@@ -332,10 +355,14 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
+    if notification_bus.is_some() && (audio_panel || options.bar) {
+        return Err("notification service mode uses independent private notice/OSD surfaces; combine no bar/audio mode flags".into());
+    }
     if audio_panel && !options.bar {
         return Err("--audio-panel requires --bar".into());
     }
     let desktop_owner = std::sync::Arc::new(std::sync::OnceLock::new());
+    let panel_trace = options.trace_state;
     if audio_panel {
         let owner = desktop_owner.clone();
         let panel_palette = palette.clone();
@@ -343,6 +370,7 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
         let fallback = sound::fallback(colors.get("surface")?);
         let cold = fallback.clone();
         options.panel_spec = Some(bead::wayland::PanelSpec {
+            passive: false,
             initial_open: state::File::path()
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
                 .and_then(state::File::open)
@@ -362,19 +390,60 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 let desktop = owner.get().cloned().ok_or("bar services not ready")?;
                 reload::Runtime::panel_session(session, open)
+                    .with_trace(panel_trace)
                     .with_shared_desktop(desktop, false)
                     .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
                     .map_err(|e| e.to_string())
             }),
         });
     }
+    let notification_owner = std::sync::Arc::new(std::sync::OnceLock::new());
+    if notification_bus.is_some() {
+        let owner = notification_owner.clone();
+        let colors = colors.clone();
+        let palette = palette.clone();
+        let mut fallback = sound::fallback(colors.get("surface")?);
+        fallback.width = 340.;
+        fallback.bounds = Rect::new(-32., -32., 404., 144.);
+        fallback.primitives.clear();
+        if let Some(m) = &mut fallback.motion {
+            m.id = "osd".into();
+            m.edge = bead::core::Edge::Bottom;
+        }
+        let cold = fallback.clone();
+        options.panel_spec = Some(bead::wayland::PanelSpec {
+            passive: true,
+            initial_open: false,
+            fallback,
+            renderer: bead::render::RendererKind::Cpu,
+            factory: std::sync::Arc::new(move |open| {
+                let session = bead::ui::Session::new(
+                    "shell".into(),
+                    "osd/main.luau".into(),
+                    palette.clone(),
+                    colors.clone(),
+                    cold.clone(),
+                );
+                let owner = owner.get().cloned().ok_or("notification owner not ready")?;
+                reload::Runtime::panel_session(session, open)
+                    .with_trace(panel_trace)
+                    .with_notification_owner(owner, open)
+                    .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
+                    .map_err(|e| e.to_string())
+            }),
+        });
+        scene.primitives.clear();
+        scene.width = 400.;
+        scene.bounds = Rect::new(-32., -32., 464., 65.);
+        scene.motion = None;
+    }
     if let Some(entry) = ui {
         let ui_entry_is_launcher = entry == Path::new("ui/main.luau");
         let fallback = scene.clone();
         let bar = options.bar;
-        let factory: bead::wayland::worker::Factory =
-            Box::new(move || {
-                let result =
+        let trace = options.trace_state;
+        let factory: bead::wayland::worker::Factory = Box::new(move || {
+            let result =
                 (|| -> Result<Box<dyn bead::wayland::SceneSource>, Box<dyn std::error::Error>> {
                     let mut session =
                         bead::ui::Session::new("shell".into(), entry, palette, colors, fallback);
@@ -387,18 +456,40 @@ fn start() -> Result<(), Box<dyn std::error::Error>> {
                                     bead::core::Value::List(catalog::load(catalog.as_deref())?),
                                 )]))?;
                     }
-                    let runtime = reload::Runtime::new(session);
+                    if ui_entry_is_launcher {
+                        session.set_projector(Box::new(launcher::project));
+                    }
+                    let runtime = reload::Runtime::new(session).with_trace(trace);
+                    let runtime = if let Some(socket) = notification_bus {
+                        let history = notification_history.ok_or(
+                            "--notification-bus requires --notification-history (private state)",
+                        )?;
+                        runtime
+                            .with_notifications(socket, history)?
+                            .with_shared_desktop(bead::services::Desktop::start(), false)?
+                    } else {
+                        runtime
+                    };
+                    if let Some(owner) = runtime.notification_owner() {
+                        let _ = notification_owner.set(owner);
+                    }
                     let runtime = if backend_enabled {
                         runtime.with_backend(backends::Native::from_env()?)?
                     } else {
                         runtime
                     };
-                    let runtime = if bar { runtime.with_desktop()? } else { runtime };
-                    if let Some(desktop)=runtime.desktop_owner(){let _=desktop_owner.set(desktop);}
+                    let runtime = if bar {
+                        runtime.with_desktop()?
+                    } else {
+                        runtime
+                    };
+                    if let Some(desktop) = runtime.desktop_owner() {
+                        let _ = desktop_owner.set(desktop);
+                    }
                     Ok(Box::new(runtime))
                 })();
-                result.map_err(|e| e.to_string())
-            });
+            result.map_err(|e| e.to_string())
+        });
         let renderer = bead::render::renderer(options.renderer)?;
         let runtime = bead::wayland::worker::Source::new(factory, scene.clone());
         bead::wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))

@@ -3,6 +3,18 @@
 use super::*;
 impl App {
     pub(super) fn ui(&mut self, mut event: UiEvent) {
+        if let UiEvent::CompanionVisibility(open) = event {
+            if open {
+                if !self.panel_target
+                    && let Err(e) = self.open_panel(None)
+                {
+                    eprintln!("COMPANION_ERROR {e}");
+                }
+            } else if self.panel_target {
+                self.close_panel();
+            }
+            return;
+        }
         if let UiEvent::Panel(epoch, event) = event {
             if epoch == self.panel_epoch && self.panel_runtime.is_some() {
                 if matches!(&*event, UiEvent::Reload) {
@@ -357,6 +369,9 @@ impl App {
                 eprintln!("UI_ERROR {error}");
                 self.scene = runtime.error_scene(error.to_string());
             }
+        }
+        if let Some(motion) = &self.scene.motion {
+            runtime.set_idle(!motion.open);
         }
         self.runtime = Some(runtime);
         if !self.processing_panel

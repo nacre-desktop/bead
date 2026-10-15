@@ -87,6 +87,7 @@ pub struct CommandContext {
 pub enum UiEvent {
     Panel(u64, Box<UiEvent>),
     PanelVisibility(bool),
+    CompanionVisibility(bool),
     ClipboardSet(String),
     ClipboardRead,
     ClipboardText(String),
@@ -101,6 +102,7 @@ pub enum UiEvent {
     DebugScriptStall(u64),
     Worker(std::sync::Arc<worker::Packet>),
     Desktop(std::sync::Arc<bead_services::Snapshot>),
+    Model(std::collections::BTreeMap<String, bead_core::Value>),
     Backend(std::sync::Arc<bead_backends::Snapshot>),
     Relayout,
     Hover {
@@ -218,6 +220,8 @@ pub type PanelFactory =
     std::sync::Arc<dyn Fn(bool) -> Result<Box<dyn SceneSource>, String> + Send + Sync>;
 #[derive(Clone)]
 pub struct PanelSpec {
+    /// Passive notices never create a dismissal layer or request keyboard focus.
+    pub passive: bool,
     pub initial_open: bool,
     pub factory: PanelFactory,
     pub fallback: Scene,

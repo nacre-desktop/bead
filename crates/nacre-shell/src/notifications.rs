@@ -1,0 +1,264 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! Nacre projection of a private native notification server.
+use bead::{
+    core::Value,
+    services::notification_bus::{Control, Server},
+    wayland::UiEvent,
+};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+type Wakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
+struct Shared {
+    last: serde_json::Value,
+    wakeups: BTreeMap<u64, (Wakeup, bool)>,
+    next: u64,
+    audio: Option<bead::services::Audio>,
+}
+pub struct Subscription {
+    shared: std::sync::Weak<Mutex<Shared>>,
+    id: u64,
+}
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        if let Some(shared) = self.shared.upgrade()
+            && let Ok(mut s) = shared.lock()
+        {
+            s.wakeups.remove(&self.id);
+        }
+    }
+}
+pub struct Owner {
+    server: Server,
+    shared: Arc<Mutex<Shared>>,
+}
+impl Owner {
+    pub fn start(socket: PathBuf, history: PathBuf) -> Result<Self, String> {
+        let shared = Arc::new(Mutex::new(Shared {
+            last: serde_json::Value::Null,
+            wakeups: BTreeMap::new(),
+            next: 0,
+            audio: None,
+        }));
+        let state = shared.clone();
+        let server = Server::start(socket, history, move |snapshot| {
+            let wakeups = if let Ok(mut state) = state.lock() {
+                state.last = snapshot.clone();
+                state.wakeups.values().cloned().collect::<Vec<_>>()
+            } else {
+                vec![]
+            };
+            for (wakeup, primary) in wakeups {
+                if primary {
+                    wakeup(UiEvent::CompanionVisibility(snapshot["osd"].is_object()));
+                }
+                let mut models = values(&snapshot);
+                if !snapshot["osd"].is_object() {
+                    models.retain(|key, _| {
+                        !matches!(key.as_str(), "osd.label" | "osd.status" | "osd.level")
+                    });
+                }
+                wakeup(UiEvent::Model(models));
+            }
+        })?;
+        println!("NOTIFICATIONS_PRIVATE address={}", server.address);
+        Ok(Self { server, shared })
+    }
+    pub fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Subscription {
+        let (last, id) = if let Ok(mut state) = self.shared.lock() {
+            state.next += 1;
+            let id = state.next;
+            state.wakeups.insert(id, (wakeup.clone(), primary));
+            (state.last.clone(), id)
+        } else {
+            (serde_json::Value::Null, 0)
+        };
+        if primary {
+            wakeup(UiEvent::CompanionVisibility(last["osd"].is_object()));
+        }
+        wakeup(UiEvent::Model(values(&last)));
+        Subscription {
+            shared: Arc::downgrade(&self.shared),
+            id,
+        }
+    }
+    pub fn audio_changed(&self, audio: &bead::services::Audio) {
+        let previous = if let Ok(mut state) = self.shared.lock() {
+            state.audio.replace(audio.clone())
+        } else {
+            None
+        };
+        if let Some(previous) = previous {
+            for (channel, old, old_mute, new, muted) in [
+                (
+                    "volume",
+                    previous.volume,
+                    previous.muted,
+                    audio.volume,
+                    audio.muted,
+                ),
+                (
+                    "microphone",
+                    previous.mic_volume,
+                    previous.mic_muted,
+                    audio.mic_volume,
+                    audio.mic_muted,
+                ),
+            ] {
+                if old.is_some() && new.is_some() && (old != new || old_mute != muted) {
+                    let _ = self.server.control(Control::Osd {
+                        channel: channel.into(),
+                        value: new.unwrap_or(0.).clamp(0., 1.),
+                        muted: muted.unwrap_or(false),
+                    });
+                }
+            }
+        }
+    }
+    pub fn hover(&self, id: u32, value: bool) {
+        let _ = self.server.control(Control::Hover(id, value));
+    }
+    pub fn feedback(&self, args: &[serde_json::Value]) -> Result<serde_json::Value, &'static str> {
+        if args.len() != 3 {
+            return Err("OSD show needs channel, normalized level and muted boolean");
+        }
+        let channel = args[0]
+            .as_str()
+            .filter(|s| ["volume", "brightness", "microphone", "capslock"].contains(s))
+            .ok_or("unknown OSD channel")?;
+        let value = args[1]
+            .as_f64()
+            .or_else(|| args[1].as_str().and_then(|s| s.parse().ok()))
+            .filter(|n| n.is_finite() && (0. ..=1.).contains(n))
+            .ok_or("OSD level must be within0..1")?;
+        let muted = args[2]
+            .as_bool()
+            .or_else(|| args[2].as_str().and_then(|s| s.parse().ok()))
+            .ok_or("OSD muted must be boolean")?;
+        self.server
+            .control(Control::Osd {
+                channel: channel.into(),
+                value,
+                muted,
+            })
+            .map_err(|_| "notification server stopped")?;
+        Ok(serde_json::Value::Null)
+    }
+    pub fn command(
+        &self,
+        call: &bead::services::ipc::Call,
+    ) -> Result<serde_json::Value, &'static str> {
+        match call.method.as_str() {
+            "counts" => {
+                let state = self
+                    .shared
+                    .lock()
+                    .map_err(|_| "notification state unavailable")?;
+                Ok(serde_json::Value::String(serde_json::json!({"popups":state.last["popup_count"],"retained":state.last["history_count"],"timers":[],"historyReady":true,"error":""}).to_string()))
+            }
+            "clear" => self
+                .server
+                .control(Control::HidePopups)
+                .map(|_| serde_json::Value::Null)
+                .map_err(|_| "notification server stopped"),
+            "clearHistory" => self
+                .server
+                .control(Control::ClearHistory)
+                .map(|_| serde_json::Value::Null)
+                .map_err(|_| "notification server stopped"),
+            "dismissKey" => {
+                let id = call
+                    .args
+                    .first()
+                    .and_then(|a| a.as_str())
+                    .and_then(|s| s.parse().ok())
+                    .ok_or("invalid notification key")?;
+                self.server
+                    .control(Control::Dismiss(id))
+                    .map(|_| serde_json::Value::Null)
+                    .map_err(|_| "notification server stopped")
+            }
+            _ => Err("unknown notification command"),
+        }
+    }
+    pub fn action(&self, name: &str, arg: &Value) -> Result<(), String> {
+        let text = if let Value::Text(s) = arg {
+            s.as_str()
+        } else {
+            ""
+        };
+        let command = match name {
+            "notifications.details" => {
+                Control::Details(text.parse().map_err(|_| "invalid notification ID")?)
+            }
+            "notifications.dismiss" => {
+                Control::Dismiss(text.parse().map_err(|_| "invalid notification ID")?)
+            }
+            "notifications.action" => {
+                let (id, key) = text.split_once('|').ok_or("action needs ID/key")?;
+                Control::Action(
+                    id.parse().map_err(|_| "invalid notification ID")?,
+                    key.into(),
+                )
+            }
+            "notifications.dnd" => Control::Dnd(matches!(arg, Value::Bool(true))),
+            "notifications.clear" => Control::ClearHistory,
+            _ => return Err("unknown notification action".into()),
+        };
+        self.server.control(command)
+    }
+}
+pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
+    let rows = snapshot["rows"].as_array().cloned().unwrap_or_default();
+    let osd = &snapshot["osd"];
+    let channel = osd["channel"].as_str().unwrap_or("volume");
+    let muted = osd["muted"].as_bool().unwrap_or(false);
+    let value = osd["value"].as_f64().unwrap_or(0.);
+    let label = match channel {
+        "brightness" => "Display brightness",
+        "microphone" => "Microphone",
+        "capslock" => "Caps lock",
+        _ => "Volume",
+    };
+    BTreeMap::from([
+        (
+            "notifications.open".into(),
+            Value::Bool(snapshot["popup_count"].as_u64().unwrap_or(0) > 0),
+        ),
+        ("notifications.rows".into(), Value::List(rows)),
+        (
+            "notifications.dnd".into(),
+            Value::Bool(snapshot["dnd"].as_bool().unwrap_or(false)),
+        ),
+        (
+            "notifications.history_count".into(),
+            Value::Number(snapshot["history_count"].as_u64().unwrap_or(0) as f64),
+        ),
+        ("osd.open".into(), Value::Bool(osd.is_object())),
+        ("osd.label".into(), Value::Text(label.into())),
+        (
+            "osd.level".into(),
+            Value::Number(if channel == "capslock" {
+                if value > 0. { 100. } else { 0. }
+            } else {
+                value * 100.
+            }),
+        ),
+        (
+            "osd.status".into(),
+            Value::Text(if channel == "capslock" {
+                if value > 0. {
+                    "On".into()
+                } else {
+                    "Off".into()
+                }
+            } else if muted {
+                "Muted".into()
+            } else {
+                format!("{:.0}%", value * 100.)
+            }),
+        ),
+    ])
+}

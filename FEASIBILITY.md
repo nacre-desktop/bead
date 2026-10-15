@@ -1285,3 +1285,26 @@ Report30.00174s, numeric0600, closed-viewhistory; native controls/clipboard/
 dismissal,rapidintent,Hyproutputlifecycle,recovery/SIGKILL pass. Physical
 acceptance remains the sole supervised earlier run; no optimized physical test.
 Evidence: .research/optimization/quiet-*; full readable report in docs/research.
+
+## Features 9–10 typing/private-notification foundation (2026-10-15, active)
+
+A320-app proof now measures each edit against exact presentation feedback.
+Luau construction and repeated font selection dominated the measured CPU cost.
+Windowing/native projection/text-only layout reuse show a real CPU reduction;
+matched repeats and the full launcher are still pending. No Gate D verdict yet.
+
+| Development trial | Hypr presented p99 ms | CPU median / mean ms per key |
+| --- | ---: | ---: |
+| Initial traced grid40 keys | 55.49 | 41.35 / not paired |
+| Text-patch grid80 keys, numeric-only | 17.29 | 7.32 /7.32 |
+| Initial nested niri60 grid | 49.59 | 42.76 / not paired |
+
+Different tracing/counts and contended trials prevent a final before/after claim.
+Latest CPU p99 11.12;120Hz niri acceptance unverified, deadline unchanged.
+Private protocol/ownership/history restart/four exact OSD presentations and
+CPU/no-DRM proofs pass both. Empty/warm MiB15.60/27.49 and16.17/29.91; bus
+adds0.66/0.69. Two-second idle is only smoke. Visual/hover/commands/QML pending.
+Foundation checkpoint ~1.3 h elapsed, ~2.4k added lines including proofs/docs.
+A missing PropertiesChanged signal caused stale inhibition state and was fixed.
+No live notification bus, physical desktop or reference repo was changed.
+See docs/research/feature9-gate-d.md; ignored evidence .research/gate-d.

@@ -697,3 +697,106 @@ return ui.Panel{id="panel",width=400,height=240,ui.Text{id="host",text=ui.bind("
         "committed dependency must survive rejected candidate"
     );
 }
+
+#[test]
+fn windowed_repeat_keeps_stable_ids_extent_and_validates_offscreen_keys() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"local rows={};for i=1,320 do rows[i]={id=tostring(i),name="Application "..i} end
+return {stores={scroll=0,rows=rows},actions={select=function()end},computed={}}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui");local kit=require("bead.kit")
+return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=400,height=240,min_cell_width=100,gap_x=0,gap_y=0,row_height=48,scroll=ui.bind("scroll"),model=ui.bind("rows"),key="id",render=function(item)return ui.Button{id="tile",text=item.name,on_activate=ui.action("select",item.id)}end}}"#).unwrap();
+    let mut s = session(&f);
+    assert!(s.view_nodes().len() < 35);
+    let first = s
+        .view_nodes()
+        .iter()
+        .find(|n| n.id.ends_with(".tile"))
+        .unwrap()
+        .id
+        .clone();
+    let next = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(1000.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(next);
+    assert!(s.view_nodes().len() < 35);
+    assert!(!s.view_nodes().iter().any(|n| n.id == first));
+    // Invalid keys outside the viewport still reject the candidate.
+    let mut rows = if let Some(Value::List(rows)) = s.stores.get("rows") {
+        rows.clone()
+    } else {
+        panic!()
+    };
+    rows[319]["id"] = rows[318]["id"].clone();
+    assert!(
+        s.update(BTreeMap::from([("rows".into(), Value::List(rows))]))
+            .is_err()
+    );
+}
+
+#[test]
+fn text_patch_updates_pixels_label_and_structural_bindings_still_relayout() {
+    let f = fixture();
+    let mut s = session(&f);
+    let next = s
+        .update(BTreeMap::from([(
+            "query".into(),
+            Value::Text("changed".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    s.commit(next);
+    assert!(
+        s.current
+            .primitives
+            .iter()
+            .any(|p| matches!(p,Primitive::Text{text,..}if text=="changed"))
+    );
+    assert!(
+        s.view_nodes()
+            .iter()
+            .any(|n| n.input.as_deref() == Some("query") && n.label == "changed")
+    );
+    let next = s
+        .update(BTreeMap::from([("query".into(), Value::Text("".into()))]))
+        .unwrap()
+        .unwrap();
+    s.commit(next);
+    assert!(
+        !s.current
+            .primitives
+            .iter()
+            .any(|p| matches!(p,Primitive::Text{text,..}if text=="changed"))
+    );
+    let next = s
+        .update(BTreeMap::from([(
+            "selected".into(),
+            Value::Text("a".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    s.commit(next);
+    // A structural text/size binding cannot take the text-only shortcut.
+    let source = fs::read_to_string(f.0.join("ui/main.luau")).unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        source.replace("width=400", "width=ui.bind(\"scroll\")"),
+    )
+    .unwrap();
+    let next = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(400.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(next);
+    let next = s.reload().unwrap();
+    s.commit(next);
+    let next = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(500.))]))
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.width, 500.);
+}

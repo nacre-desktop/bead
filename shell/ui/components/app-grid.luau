@@ -1,5 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui = require("bead.ui")
+local kit = require("bead.kit")
 local Tile = ui.component("AppTile", {item={id="string",name="string",icon="string",selected="boolean"}}, function(p)
     return ui.Button {id="tile",height="fill",width="fill",radius=11,padding=0,
         selected=p.item.selected,fill="transparent",color="onSurface",border_color="outlineVariant",
@@ -13,9 +14,9 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
     }
 end)
 return ui.component("AppGrid",{},function(_)
-    return ui.Scroll{id="app-grid",scroll=ui.bind("launcher.scroll.y"),grow=1,
-        ui.Grid{shrink=0,min_cell_width=110,gap_x=6,gap_y=5,padding_right=6,padding_bottom=5,row_height=76.2,
-            ui.Repeat{id="apps",model=ui.bind("launcher.apps"),key="id",render=function(item)return Tile{item=item}end},
-        },
-    }
+    local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width"))
+    local width=math.min(1100,viewport*.9)-12-20-152-18-6
+    return kit.VirtualGrid{id="app-grid",scroll=ui.bind("launcher.scroll.y"),
+        width=width,height=400,min_cell_width=110,gap_x=6,gap_y=5,row_height=76.2,
+        model=ui.bind("launcher.apps"),key="id",render=function(item)return Tile{item=item}end}
 end)

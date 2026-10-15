@@ -32,7 +32,7 @@ def sample(env, raw, compositor, stop):
         grid = bundle/'shell/ui/components/app-grid.luau'
         grid.write_text(grid.read_text().replace('ui.Grid{min_cell_width=110,', 'ui.Grid{shrink=0,min_cell_width=110,'))
         catalog = bundle/'catalog.json'
-        catalog.write_text(json.dumps([{'id': f'proof-{i:04}', 'name': f'Application {i:04}', 'icon': 'fixture'} for i in range(48 if cases == ['hover'] else 240)]))
+        catalog.write_text(json.dumps([{'id': f'proof-{i:04}', 'name': f'Application {i:04}', 'icon': 'fixture'} for i in range(48 if cases == ['hover'] else int(os.environ.get('BEAD_CATALOG_SIZE','320')))]))
         for case in cases:
             path = raw/(case+'.log'); pointer = None; client = None
             command = [str(binary), '--renderer', 'femtovg-gl', '--namespace', 'bead-layer-proof']

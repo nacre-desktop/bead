@@ -8,6 +8,12 @@ pub struct Audio {
     pub default_sink: Option<String>,
     pub volume: Option<f64>,
     pub muted: Option<bool>,
+    #[serde(default)]
+    pub default_source: Option<String>,
+    #[serde(default)]
+    pub mic_volume: Option<f64>,
+    #[serde(default)]
+    pub mic_muted: Option<bool>,
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Battery {
@@ -71,3 +77,6 @@ pub use runtime::{Action, Desktop, Subscription};
 
 #[cfg(test)]
 mod tests;
+
+pub mod notification_bus;
+pub mod notifications;

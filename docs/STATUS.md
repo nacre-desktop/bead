@@ -1,36 +1,36 @@
 # Status
 
-## 2026-10-15 — Optimization pass complete; STOP before Feature 9
+## 2026-10-15 — Features 9–10 active; STOP at Gate D
 
-Gate C accepted after the one supervised physical niri/120 Hz test:
-20 cycles, opening/closing p99 16.667/8.337 ms (limit ≤16.7 ms).
-Authorization consumed; exact processes/PID file cleaned. No installation.
-[Measured report](research/optimization-pass.md).
+Owner authorized notifications/OSD, then the core launcher. No installation,
+release, live notification ownership or new physical test is authorized.
+Worktree bead-feature9-gate-d; existing shared Cargo target; nice10/Cargo-j2.
+[Active measurements and limits](research/feature9-gate-d.md).
 
-Final first-valid-UI ready p50/p95 after 150 ms hover lead:
-Hypr 15.67/17.18 ms, niri 13.20/17.89 ms; fresh cold baselines
-70.27/106.84 and 98.55/102.93 ms. Unused preparation expires in 2 s,
-with no surface/focus and a closed journal; 60 s memory returns below bar.
+Typing first: new320-app proof joins input receipt→validated presentation;
+separate CPU profiles cover filtering/markup/layout/shaping/bake/fonts.
+Initial traced p99 Hypr55.49 /nested niri60 49.59 ms; CPU median41.35/42.76.
+Latest grid candidate: Hypr p99 17.29 ms; CPU median/mean7.32/7.32 ms per key,
+CPU p99 11.12. Quiet matched repeats, varied queries and niri remain pending.
+Candidates: windowed rows, native projection, immutable markup, fixed-box text
+patches and bounded font-path cache. Targets are not yet accepted.
 
-Memory gate passes every release, closed 60 s and final lifecycle:
-Hypr bar/warm/closed/final 20.13/26.67/21.32/22.20 MiB;
-niri 21.48/29.03/22.05/22.25 MiB. No swap in selected final samples.
-Warm is active median; Feature 6 ~105 MiB was a larger GL stress panel.
-CPU small panels, GL large animated surfaces; ~20 MiB Mesa residue noted.
+Private-owned bus proofs pass both compositors: replacement/actions/expiry,
+history restart/DND/inhibition disconnect, four exact OSD presentations,
+CPU rendering and owned-daemon cleanup. Empty/warm PSS Hypr15.60/27.49 MiB,
+niri16.17/29.91; bus adds0.66/0.69; no DRM. Idle samples only2 s.
+Visual controls/hover, legacy commands and QML comparisons remain active.
+Feature10 catalog/ranking/providers and GateD QML comparison/estimate pending.
+78 workspace tests, clippy, headless notice/OSD, and22-module official Luau
+analysis pass. This is a foundation checkpoint, not completed Feature9.
 
-Retained hover preparation, bytecode, shared watcher, CGU1, unread-model
-projection and closed-error-scene repair. Title-churn CPU 3.70→0.45% /
-3.43→0.25%; genuine focus still presents. Final maximum-rate typing CPU
-has no meaningful gain (59.85→59.54% /56.60→57.17%); keep historical
-29.61→32.66% regression unresolved. Nested niri prepared p99 ~34 ms;
-6b 0a nested/shared-GL pacing and strict idle invariance remain open.
+## Accepted Gate C and optimization baseline
 
-75 tests/fmt/clippy, default+linked CPU-only, SDK/analyzer, controls,
-clipboard, reload/recovery/reopen/SIGKILL and 30.002 s report pass.
-Source d72a55f CI 38733902941 passed. All allocator hour endpoints
-measured; system defaults kept after selected-code interaction showed
-no arena benefit. Rejected experiments and stress failures preserved.
-
-Worktree: bead-optimization-pass; existing shared Cargo target.
-Evidence: canonical .research/optimization. Nested nice10/Cargo-j2.
-No Feature 9, additional live/physical test, reference edits or release.
+[Optimization report](research/optimization-pass.md). Main baseline c8c8058.
+One physical niri120Hz test:20 cycles, open/close p99 16.667/8.337 ms; accepted.
+Permission consumed and cleanup verified. Optimized source tested nested only.
+Bar/warm/closed60s MiB: Hypr20.13/26.67/21.32; niri21.48/29.03/22.05.
+Every close/release/lifecycle stayed within bar+5 MiB, including swap.
+CPU small panels; GL large animated views; ~20 MiB Mesa residue documented.
+Historical typing29.61→32.66%, 6b0a nested/shared-GL pacing and strict idle
+invariance remain open. Real niri hotplug/IME/Orca/NVIDIA remain unvalidated.

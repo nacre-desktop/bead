@@ -34,6 +34,9 @@ pub fn check(file: &Path) -> Result<(), Box<dyn std::error::Error>> {
     );
     session.stores = session
         .stores
+        .reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
+    session.stores = session
+        .stores
         .reconcile(&crate::desktop::values(&Default::default(), ""))?;
     session.stores = session
         .stores

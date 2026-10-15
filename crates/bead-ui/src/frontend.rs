@@ -15,7 +15,11 @@ use std::{
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
 pub trait FrontEnd {
-    fn build(&self, entry: &Path, resolve: &Resolve<'_>) -> Result<RawNode, Diagnostic>;
+    fn build(
+        &self,
+        entry: &Path,
+        resolve: &Resolve<'_>,
+    ) -> Result<std::rc::Rc<RawNode>, Diagnostic>;
 }
 const INSTALL: &str = r#"
 return function(ui)
@@ -38,8 +42,10 @@ return function(ui)
 end
 "#;
 /// Immutable generation-owned bytecode; evaluation always uses a fresh sandbox.
+type Materialized = (std::rc::Rc<RawNode>, BTreeMap<String, Value>);
 pub struct LuauFrontEnd {
     compiled: Sources,
+    materialized: RefCell<Option<Materialized>>,
     kit: Vec<u8>,
     install: Vec<u8>,
 }
@@ -65,6 +71,7 @@ impl LuauFrontEnd {
         }
         Ok(Self {
             compiled,
+            materialized: RefCell::new(None),
             kit: compiler
                 .compile(include_str!("../assets/kit.luau"))
                 .map_err(|e| diagnostic(entry, e))?,
@@ -75,7 +82,27 @@ impl LuauFrontEnd {
     }
 }
 impl FrontEnd for LuauFrontEnd {
-    fn build(&self, entry: &Path, resolve: &Resolve<'_>) -> Result<RawNode, Diagnostic> {
+    fn build(
+        &self,
+        entry: &Path,
+        resolve: &Resolve<'_>,
+    ) -> Result<std::rc::Rc<RawNode>, Diagnostic> {
+        if let Some((raw, reads)) = &*self.materialized.borrow()
+            && reads
+                .iter()
+                .all(|(name, value)| resolve(name).is_ok_and(|next| next == *value))
+        {
+            return Ok(raw.clone());
+        }
+        let reads = RefCell::new(BTreeMap::new());
+        let upstream = resolve;
+        let record = |name: &str| {
+            let value = upstream(name)?;
+            reads.borrow_mut().insert(name.to_owned(), value.clone());
+            Ok(value)
+        };
+        let resolve: &Resolve<'_> = &record;
+        let setup_profile = bead_core::profile::Span::new("markup_setup");
         let sources = &self.compiled;
         let lua = Lua::new();
         let deadline = Instant::now() + Duration::from_millis(50);
@@ -153,6 +180,8 @@ impl FrontEnd for LuauFrontEnd {
                 sdk.set(
                     "Repeat",
                     scope.create_function(|lua, props: Table| {
+                        let first = props.get::<Option<usize>>("first")?.unwrap_or(0);
+                        let count = props.get::<Option<usize>>("count")?.unwrap_or(2048);
                         let id: String = props.get("id")?;
                         let key: String = props.get("key")?;
                         let model: Table = props.get("model")?;
@@ -182,13 +211,16 @@ impl FrontEnd for LuauFrontEnd {
                                     "{name}: duplicate key {key}"
                                 )));
                             }
+                            if i < first || i >= first.saturating_add(count) {
+                                continue;
+                            }
                             let row: Table = render.call(lua.to_value(item)?)?;
                             let prefix = format!(
                                 "{id}.k{}.",
                                 key.bytes().map(|b| format!("{b:02x}")).collect::<String>()
                             );
                             row.set("scope", prefix)?;
-                            children.set(i + 1, row)?;
+                            children.set(children.raw_len() + 1, row)?;
                         }
                         let clean = lua.create_table()?;
                         clean.set("id", id)?;
@@ -248,14 +280,24 @@ impl FrontEnd for LuauFrontEnd {
                 let bytes = sources
                     .get(entry)
                     .ok_or_else(|| mlua::Error::runtime("missing entry source"))?;
+                drop(setup_profile);
+                let eval_profile = bead_core::profile::Span::new("markup_eval");
                 let node: mlua::Value = lua
                     .load(bytes)
                     .set_name(format!("@{}", entry.display()))
                     .eval()?;
+                drop(eval_profile);
+                let _serde_profile = bead_core::profile::Span::new("markup_serde");
                 lua.from_value(node)
             })
         })();
-        result.map_err(|error| diagnostic(entry, error))
+        let result = result
+            .map(std::rc::Rc::new)
+            .map_err(|error| diagnostic(entry, error));
+        if let Ok(raw) = &result {
+            *self.materialized.borrow_mut() = Some((raw.clone(), reads.into_inner()));
+        }
+        result
     }
 }
 fn normalize(path: &Path) -> Result<PathBuf, String> {

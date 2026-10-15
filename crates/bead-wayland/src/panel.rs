@@ -108,11 +108,15 @@ impl App {
             source.set_idle(false);
         }
         if self.panel_runtime.is_some() {
-            if self.panel_output.as_ref() != Some(&output) || self.dismiss.is_none() {
+            if self.panel_output.as_ref() != Some(&output)
+                || (!spec.passive && self.dismiss.is_none())
+            {
                 drop(self.dismiss.take());
                 self.surfaces.retain(|s| !s.companion);
                 self.panel_output = Some(output.clone());
-                self.create_dismiss(&output)?;
+                if !spec.passive {
+                    self.create_dismiss(&output)?;
+                }
                 let qh = self.qh.clone();
                 self.add_output(&qh, output);
             }
@@ -132,7 +136,7 @@ impl App {
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_output = Some(output.clone());
-        if open {
+        if open && !spec.passive {
             self.create_dismiss(&output)?;
         }
         self.companion_policy = Default::default();
@@ -247,7 +251,7 @@ impl App {
         self.options.bar = false;
         self.options.panel = true;
         self.options.content_size = true;
-        self.options.keyboard_focus = true;
+        self.options.keyboard_focus = !self.options.panel_spec.as_ref().is_some_and(|s| s.passive);
         let changed = self.ui_inner(event);
         self.options.bar = bar;
         self.options.panel = panel;

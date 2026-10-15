@@ -565,7 +565,7 @@ pub struct LaidOut {
     pub scene: Scene,
     pub nodes: Vec<Node>,
 }
-fn color(
+pub(super) fn color(
     value: Option<&Json>,
     default: [u8; 4],
     palette: &Palette,

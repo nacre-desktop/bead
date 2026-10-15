@@ -3,6 +3,44 @@
 use bead::render::{Primitive, Result, Scene};
 use skrifa::MetadataProvider;
 use std::{collections::BTreeSet, ffi::CString, path::PathBuf, time::Instant};
+type Selection = (BTreeSet<String>, BTreeSet<char>, Vec<PathBuf>);
+#[derive(Default)]
+pub struct Selector {
+    entries: std::collections::VecDeque<Selection>,
+}
+impl Selector {
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+    pub fn select(&mut self, scene: &Scene) -> Result<Vec<PathBuf>> {
+        let _profile = bead::core::profile::Span::new("font_select");
+        let mut families = BTreeSet::new();
+        let mut chars = BTreeSet::new();
+        for p in &scene.primitives {
+            if let Primitive::Text { family, text, .. } = p {
+                families.insert(family.clone());
+                chars.extend(text.chars().filter(|c| !c.is_control()));
+            }
+        }
+        if let Some((_, _, paths)) = self
+            .entries
+            .iter()
+            .find(|(f, c, _)| *f == families && c.is_superset(&chars))
+        {
+            return Ok(paths.clone());
+        }
+        let paths = select(scene)?;
+        if families.len() <= 32 && chars.len() <= 4096 {
+            self.entries.push_back((families, chars, paths.clone()));
+            if self.entries.len() > 8 {
+                self.entries.pop_front();
+            }
+        } else {
+            self.entries.clear();
+        }
+        Ok(paths)
+    }
+}
 pub fn select(scene: &Scene) -> Result<Vec<PathBuf>> {
     let start = Instant::now();
     let mut families = BTreeSet::new();

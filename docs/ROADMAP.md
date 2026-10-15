@@ -4,7 +4,7 @@ Updated 2026-10-15. Feature 6b accepted with measured concerns.
 Features 7–8 are accepted through Gate C after the supervised physical check.
 See [Gate C report](research/feature8-gate-c.md) and the
 [optimization measurements](research/optimization-pass.md). Optimization is
-complete; stop before Feature 9.
+complete. Owner authorized Features9–10 through Gate D; work is active.
 Step 0a nested pacing/idle acceptance remains open. The new close-idle
 memory limit passes; niri presentation tails remain a concern.
 Automatic bars and the small sound-output panel use CPU retained rasters;

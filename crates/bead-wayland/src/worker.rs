@@ -20,6 +20,7 @@ struct Mirror {
 }
 impl Mirror {
     fn read(source: &dyn SceneSource) -> Self {
+        let _profile = bead_core::profile::Span::new("mirror");
         Self {
             focused_dismiss: source.focused_dismiss(),
             regions: source.input_regions(),
@@ -211,6 +212,7 @@ impl SceneSource for Source {
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) => {
                             let reload = matches!(event, UiEvent::Reload);
+                            let _profile = bead_core::profile::Span::new("worker");
                             let started = std::time::Instant::now();
                             token += 1;
                             let (mut scene, fault) = match source.stage(event) {
@@ -232,6 +234,7 @@ impl SceneSource for Source {
                                 }
                             };
                             needs_trim = true;
+                            let bake_profile = bead_core::profile::Span::new("bake");
                             if let Err(error) = bake(&mut cache, &mut scene, &scales) {
                                 wakeup(UiEvent::Worker(Arc::new(Packet {
                                     phase: Phase::Failed,
@@ -243,6 +246,7 @@ impl SceneSource for Source {
                                 })));
                                 continue;
                             }
+                            drop(bake_profile);
                             println!(
                                 "WORKER_PREPARE token={token} reload={reload} total_ms={:.3} builds={}",
                                 started.elapsed().as_secs_f64() * 1000.,

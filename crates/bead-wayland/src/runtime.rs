@@ -378,7 +378,11 @@ impl App {
         let result = (|| -> Result<Surface, Box<dyn Error>> {
             let surface = self.compositor.create_surface(qh);
             let empty = Region::new(&self.compositor)?;
-            if !self.options.interactive || (companion && self.options.panel_spec.is_none()) {
+            if !self.options.interactive
+                || (companion
+                    && (self.options.panel_spec.is_none()
+                        || self.options.panel_spec.as_ref().is_some_and(|s| s.passive)))
+            {
                 surface.set_input_region(Some(empty.wl_region()));
             }
             let fractional = if self.viewporter.is_some() {
@@ -461,7 +465,7 @@ impl App {
             });
             layer.set_keyboard_interactivity(
                 if !self.options.test_passive
-                    && ((companion && self.options.panel_spec.is_some())
+                    && ((companion && self.options.panel_spec.as_ref().is_some_and(|s| !s.passive))
                         || (self.options.test_keyboard && !companion))
                 {
                     KeyboardInteractivity::Exclusive

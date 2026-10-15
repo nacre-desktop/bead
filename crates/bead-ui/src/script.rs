@@ -87,6 +87,11 @@ impl Script {
     }
     pub fn validate_action(&self, name: &str) -> Result<(), Diagnostic> {
         if [
+            "notifications.details",
+            "notifications.dismiss",
+            "notifications.action",
+            "notifications.dnd",
+            "notifications.clear",
             "services.audio",
             "services.audio.volume",
             "services.tray",
@@ -198,6 +203,7 @@ impl Script {
         {
             return Ok(cached.value.clone());
         }
+        let _profile = bead_core::profile::Span::new("computed");
         let reads = Rc::new(RefCell::new(BTreeMap::new()));
         let value = evaluate(
             &self.lua,

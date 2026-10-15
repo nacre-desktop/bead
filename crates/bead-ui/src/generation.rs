@@ -61,6 +61,7 @@ pub struct Generation {
     pub(super) assets: BTreeMap<PathBuf, std::sync::Arc<[u8]>>,
     pub(super) markup_entry: Option<PathBuf>,
     markup_frontend: Option<frontend::LuauFrontEnd>,
+    materialized: std::cell::RefCell<Option<crate::materialized::Cached>>,
     view_reads: std::cell::RefCell<BTreeSet<String>>,
     view_reads_overflow: std::cell::Cell<bool>,
     pub(super) root: PathBuf,
@@ -262,6 +263,7 @@ impl Generation {
             assets,
             markup_entry: None,
             markup_frontend: None,
+            materialized: Default::default(),
             view_reads: Default::default(),
             view_reads_overflow: Default::default(),
             root: loader.root.clone(),
@@ -391,6 +393,7 @@ impl Generation {
             assets,
             markup_entry: Some(entry.to_path_buf()),
             markup_frontend,
+            materialized: Default::default(),
             view_reads: Default::default(),
             view_reads_overflow: Default::default(),
             root: loader.root,
@@ -415,6 +418,12 @@ impl Generation {
             use frontend::FrontEnd;
             self.script.begin();
             let resolve = |name: &str| {
+                if name == "bead.viewport.width" {
+                    return Ok(Value::Number(viewport.0 as f64));
+                }
+                if name == "bead.viewport.height" {
+                    return Ok(Value::Number(viewport.1 as f64));
+                }
                 let value = self.script.resolve(name, stores)?;
                 // Union within a generation: a rejected branch must not erase
                 // dependencies still used by the committed view.
@@ -430,13 +439,24 @@ impl Generation {
                 }
                 Ok(value)
             };
+            let markup_profile = bead_core::profile::Span::new("markup");
             let raw = self
                 .markup_frontend
                 .as_ref()
                 .ok_or_else(|| Diagnostic::new(entry, 1, 1, "missing markup frontend"))?
                 .build(entry, &resolve)?;
+            drop(markup_profile);
+            if let Some(cached) = &*self.materialized.borrow()
+                && let Some(result) = cached.patch(&raw, &resolve, viewport)?
+            {
+                return Ok(result);
+            }
+            let view_profile = bead_core::profile::Span::new("view_ir");
             let view = layout::ViewSpec::from_raw(&raw, &resolve)?;
+            drop(view_profile);
+            let layout_profile = bead_core::profile::Span::new("layout");
             let mut result = layout::layout(&view, &resolve, palette, self.revision, viewport)?;
+            drop(layout_profile);
             for node in &result.nodes {
                 if let Some(action) = &node.action {
                     self.script.validate_action(action)?;
@@ -483,6 +503,15 @@ impl Generation {
                 }
             }
             result.scene.asset_data = self.assets.clone();
+            *self.materialized.borrow_mut() = Some(crate::materialized::Cached::new(
+                raw,
+                &view,
+                &result.scene,
+                &result.nodes,
+                &resolve,
+                palette,
+                viewport,
+            )?);
             return Ok((result.scene, result.nodes));
         }
         Ok((self.scene(stores, palette, true)?, self.nodes.clone()))

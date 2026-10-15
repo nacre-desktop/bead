@@ -10,6 +10,12 @@ pub struct Runtime {
     subscription: Option<bead::backends::Subscription>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
     desktop_subscription: Option<bead::services::Subscription>,
+    notification_hover: Option<u32>,
+    notification_primary: bool,
+    fonts: crate::font_sources::Selector,
+    trace: bool,
+    notifications: Option<std::sync::Arc<crate::notifications::Owner>>,
+    notification_subscription: Option<crate::notifications::Subscription>,
     menu_item: String,
     pending_focus: Option<String>,
     bar: bool,
@@ -39,6 +45,12 @@ impl Runtime {
             subscription: None,
             desktop: None,
             desktop_subscription: None,
+            notification_hover: None,
+            notification_primary: false,
+            fonts: Default::default(),
+            trace: false,
+            notifications: None,
+            notification_subscription: None,
             menu_item: String::new(),
             pending_focus: None,
             bar: false,
@@ -57,6 +69,69 @@ impl Runtime {
             runtime.session.restore_on_start(saved);
         }
         runtime
+    }
+    pub fn with_trace(mut self, trace: bool) -> Self {
+        self.trace = trace;
+        self
+    }
+    pub fn with_notifications(
+        mut self,
+        socket: std::path::PathBuf,
+        history: std::path::PathBuf,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
+        for name in [
+            "notifications.details",
+            "notifications.dismiss",
+            "notifications.action",
+            "notifications.dnd",
+            "notifications.feedback",
+            "notifications.clear",
+        ] {
+            self.actions.register(name, "notifications")?;
+        }
+        self.actions.grant("notifications");
+        self.notification_primary = true;
+        self.state_file = None;
+        self.notifications = Some(std::sync::Arc::new(crate::notifications::Owner::start(
+            socket, history,
+        )?));
+        Ok(self)
+    }
+    pub fn notification_owner(&self) -> Option<std::sync::Arc<crate::notifications::Owner>> {
+        self.notifications.clone()
+    }
+    pub fn with_notification_owner(
+        mut self,
+        owner: std::sync::Arc<crate::notifications::Owner>,
+        open: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
+        for name in [
+            "notifications.details",
+            "notifications.dismiss",
+            "notifications.action",
+            "notifications.dnd",
+            "notifications.feedback",
+            "notifications.clear",
+        ] {
+            self.actions.register(name, "notifications")?;
+        }
+        self.actions.grant("notifications");
+        self.state_file = None;
+        self.session
+            .restore_on_start(std::collections::BTreeMap::from([(
+                "panel.open".into(),
+                bead::core::Value::Bool(open),
+            )]));
+        self.notifications = Some(owner);
+        Ok(self)
     }
     pub fn with_desktop(self) -> Result<Self, Box<dyn Error>> {
         self.with_shared_desktop(bead::services::Desktop::start(), true)
@@ -206,6 +281,10 @@ impl SceneSource for Runtime {
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let wakeup: std::sync::Arc<dyn Fn(UiEvent) + Send + Sync> = std::sync::Arc::from(wakeup);
         self.wakeup = Some(wakeup.clone());
+        if let Some(owner) = &self.notifications {
+            self.notification_subscription =
+                Some(owner.subscribe(wakeup.clone(), self.notification_primary));
+        }
         if let Some(desktop) = &self.desktop {
             let wakeup = wakeup.clone();
             self.desktop_subscription =
@@ -266,6 +345,29 @@ impl SceneSource for Runtime {
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         self.pending = None;
+        if let UiEvent::Hover { x, y } = &event
+            && let Some(owner) = &self.notifications
+        {
+            let next = self.session.action_at(*x, *y).and_then(|(_, name, arg)| {
+                if !name.starts_with("notifications.") {
+                    return None;
+                }
+                if let bead::core::Value::Text(id) = arg {
+                    id.split('|').next().and_then(|id| id.parse::<u32>().ok())
+                } else {
+                    None
+                }
+            });
+            if next != self.notification_hover {
+                if let Some(id) = self.notification_hover.take() {
+                    owner.hover(id, false);
+                }
+                if let Some(id) = next {
+                    owner.hover(id, true);
+                    self.notification_hover = Some(id);
+                }
+            }
+        }
         let host_action = match &event {
             UiEvent::Click { x, y }
             | UiEvent::ContextMenu { x, y }
@@ -277,6 +379,16 @@ impl SceneSource for Runtime {
             UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
             _ => None,
         };
+        if let Some((_, name, arg)) = host_action.as_ref()
+            && name.starts_with("notifications.")
+        {
+            self.actions.authorize(name)?;
+            self.notifications
+                .as_ref()
+                .ok_or("notification server unavailable")?
+                .action(name, arg)?;
+            return Ok(None);
+        }
         if let Some((id, name, arg)) = host_action.as_ref()
             && name.starts_with("services.")
         {
@@ -316,13 +428,26 @@ impl SceneSource for Runtime {
             event = UiEvent::Relayout;
         }
         let reload = matches!(event, UiEvent::Reload);
+        if reload {
+            self.fonts.clear();
+        }
         let mut scene = match event {
+            UiEvent::Model(values) => self.session.update_model(values)?,
             UiEvent::Desktop(snapshot) => {
+                if self.notification_primary
+                    && let Some(owner) = &self.notifications
+                {
+                    owner.audio_changed(&snapshot.audio);
+                }
                 let mut values = crate::desktop::values(&snapshot, &self.menu_item);
                 if let Some(id) = self.pending_focus.take() {
                     values.insert("bead.focused".into(), bead::core::Value::Text(id));
                 }
-                self.session.update(values)?
+                if self.notification_primary {
+                    self.session.update_model(values)?
+                } else {
+                    self.session.update(values)?
+                }
             }
             UiEvent::Backend(snapshot) => {
                 println!(
@@ -333,6 +458,9 @@ impl SceneSource for Runtime {
                     snapshot.windows.len()
                 );
                 self.session.update_model(backend_values(&snapshot)?)?
+            }
+            UiEvent::CompanionVisibility(_) => {
+                return Err("companion visibility reached script".into());
             }
             UiEvent::Panel(_, _) => return Err("panel envelope reached script".into()),
             UiEvent::PanelVisibility(open) => {
@@ -356,9 +484,39 @@ impl SceneSource for Runtime {
             }
             UiEvent::Remote(request) => {
                 let call = &request.call;
-                let reply = match crate::commands::validate(call) {
+                let validation = if call.target == "bead.osd" {
+                    call.validate()
+                        .map_err(|e| bead::services::ipc::Reply::error(call.id, "invalid-call", e))
+                } else {
+                    crate::commands::validate(call)
+                };
+                let reply = match validation {
                     Err(reply) => reply,
                     Ok(()) => match (call.target.as_str(), call.method.as_str()) {
+                        ("bead.osd", "show") => match self
+                            .actions
+                            .authorize("notifications.feedback")
+                            .map_err(|_| "notification feedback capability denied")
+                            .and_then(|_| {
+                                self.notifications
+                                    .as_ref()
+                                    .ok_or("notification server unavailable")
+                                    .and_then(|owner| owner.feedback(&call.args))
+                            }) {
+                            Ok(value) => bead::services::ipc::Reply::ok(call.id, value),
+                            Err(e) => bead::services::ipc::Reply::error(call.id, "osd", e),
+                        },
+                        ("notifs", _) => match self
+                            .notifications
+                            .as_ref()
+                            .ok_or("notification server unavailable")
+                            .and_then(|owner| owner.command(call))
+                        {
+                            Ok(value) => bead::services::ipc::Reply::ok(call.id, value),
+                            Err(e) => {
+                                bead::services::ipc::Reply::error(call.id, "notifications", e)
+                            }
+                        },
                         ("nacre", "state") => {
                             let snapshot = self.backend.as_ref().map(|b| b.snapshot());
                             let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":if request.context.panel_open {"sound"}else{""},"clickEdgeMenus":false,"tab":0,"launcher":false,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":"","launcherMode":"apps","launcherRoute":"home","reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {vec!["bar","sound-output"]}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
@@ -477,6 +635,7 @@ impl SceneSource for Runtime {
             if let Some(desktop) = &self.desktop {
                 crate::desktop::icons(scene, &desktop.snapshot())?;
             }
+            let asset_profile = bead::core::profile::Span::new("assets");
             for draw in &mut scene.primitives {
                 if let bead::render::Primitive::Image { path, .. } = draw
                     && let Some(icon) = path.to_str().and_then(|s| s.strip_prefix("@icon:"))
@@ -503,8 +662,9 @@ impl SceneSource for Runtime {
                     scene.asset_data.insert(path.clone(), data);
                 }
             }
+            drop(asset_profile);
             // Service text can introduce a family/codepoint after an initially empty title.
-            scene.font_files = crate::font_sources::select(scene)?;
+            scene.font_files = self.fonts.select(scene)?;
         }
         if let Some(scene) = &mut scene {
             if self.bar {
@@ -512,7 +672,9 @@ impl SceneSource for Runtime {
                 scene.slide = None;
                 scene.bounds = bead::render::Rect::new(0., 0., scene.width, 50.);
             }
+            let editor_profile = bead::core::profile::Span::new("editor_shape");
             self.session.decorate_inputs(scene)?;
+            drop(editor_profile);
         }
         self.session.check_sources()?;
         self.pending = scene.clone();
@@ -547,6 +709,9 @@ impl SceneSource for Runtime {
         counts
     }
     fn state_summary(&self) -> String {
+        if !self.trace {
+            return String::new();
+        }
         self.session.state_summary()
     }
     fn focused_dismiss(&self) -> bool {

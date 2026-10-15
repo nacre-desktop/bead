@@ -2,6 +2,7 @@
 //! Durable, typed state keyed independently from any view generation.
 pub mod animation;
 pub mod capabilities;
+pub mod profile;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 /// A surface's owning edge; inward vectors also place popouts away from bars.

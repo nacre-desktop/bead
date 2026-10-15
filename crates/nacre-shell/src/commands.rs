@@ -169,7 +169,7 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 pub fn map(mut call: Call) -> Result<Call, Reply> {
-    if call.target == "bead" || call.target == "bead.panel" {
+    if call.target == "bead" || call.target == "bead.panel" || call.target == "bead.osd" {
         return Ok(call);
     }
     validate(&call)?;

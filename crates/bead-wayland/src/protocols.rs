@@ -166,8 +166,17 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                     }
                     if s.presented_generation != Some(data.update) {
                         println!(
-                            "UI_PRESENTED generation={} monotonic_ns={} refresh_ns={} companion={} update={}",
-                            data.generation, ns, refresh, s.companion, data.update
+                            "UI_PRESENTED generation={} monotonic_ns={} refresh_ns={} companion={} update={} cpu_ns={}",
+                            data.generation,
+                            ns,
+                            refresh,
+                            s.companion,
+                            data.update,
+                            if bead_core::profile::enabled() {
+                                bead_core::profile::process_cpu_ns()
+                            } else {
+                                0
+                            }
                         );
                         s.presented_generation = Some(data.update);
                     }
@@ -585,6 +594,13 @@ impl KeyboardHandler for App {
         event: KeyEvent,
     ) {
         self.last_input_serial = serial;
+        if bead_core::profile::enabled() {
+            println!(
+                "INPUT_RECEIVED monotonic_ns={} cpu_ns={}",
+                bead_core::profile::monotonic_ns(),
+                bead_core::profile::process_cpu_ns()
+            );
+        }
         if self.options.trace_state {
             println!(
                 "INPUT_KEY sym={:?} focused_surface={}",

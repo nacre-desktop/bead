@@ -9,8 +9,10 @@ pub(super) struct Pending {
     pub(super) watch_revision: u64,
     pub(super) nodes: Vec<Node>,
 }
+pub type Projector = Box<dyn Fn(&Stores) -> Result<BTreeMap<String, Value>, Diagnostic>>;
 /// The state owner survives every view/script replacement.
 pub struct Session {
+    projector: Option<Projector>,
     pub(crate) root: PathBuf,
     pub(crate) entry: PathBuf,
     pub(super) palette_path: PathBuf,
@@ -30,6 +32,9 @@ pub struct Session {
     pub(super) restore: Option<BTreeMap<String, Value>>,
 }
 impl Session {
+    pub fn set_projector(&mut self, projector: Projector) {
+        self.projector = Some(projector);
+    }
     pub fn new(
         root: PathBuf,
         entry: PathBuf,
@@ -38,6 +43,7 @@ impl Session {
         fallback: Scene,
     ) -> Self {
         Self {
+            projector: None,
             root,
             entry,
             palette_path,
@@ -103,6 +109,11 @@ impl Session {
                 .collect();
             stores
                 .commit(compatible)
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
+        if let Some(projector) = &self.projector {
+            stores
+                .commit(projector(&stores)?)
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
         }
         let (mut scene, mut nodes) = generation.materialize(&stores, &palette, self.viewport)?;
@@ -201,6 +212,11 @@ impl Session {
             return Ok(None);
         };
         let mut stores = stores;
+        if let Some(projector) = &self.projector {
+            stores
+                .commit(projector(&stores)?)
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
         let (mut scene, mut nodes) =
             generation.materialize(&stores, &self.palette, self.viewport)?;
         if let Some(Value::Text(focused)) = stores.get("bead.focused")
