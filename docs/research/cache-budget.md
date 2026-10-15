@@ -56,13 +56,14 @@ rasters past the 64 MiB cache boundary, checking every live owner and the global
 ceiling throughout. Admission tests cover recency and shared-reference lifetime.
 Existing goldens, pose counters and service dependency boundaries remain active.
 
-## Memory result: hold for the owner
+## Memory result: accepted with a bounded follow-up
 
-The cache candidate is **not integrated**. The owner's brief requires stopping
-if a gap fix regresses the accepted Gate C/optimization memory figures. First
-open rose in the final matched pair, although later opens became smaller and
-all close/lifecycle checks passed. Keep this checkpoint for review; do not
-resume opaque-composition work or Features 9–10 until the owner decides.
+Owner accepted215ea35 after reviewing the following matched measurements.
+All close/lifecycle checks pass bar+5 MiB and later opens became smaller.
+A first-open delta below1 MiB may proceed with no steady/closed regression;
+larger first-open or any steady/closed regression still stops. The owner requested
+at most roughly one hour of diagnosis and five alternating samples per compositor.
+Record median/spread; if the delta lies within the spread, classify it as noise.
 
 Existing nested harness, real bar plus sound panel, CPU renderer, 2880×1800,
 scale 1.5. Hyprland virtual120 Hz; niri nested60 Hz, not physical120. Three
@@ -110,8 +111,8 @@ closed state. The existing report30s default had overridden explicit --seconds;
 that option now works and the unchanged default remains30s. No live service,
 configuration, installation or release was touched. No task processes remain.
 
-Owner decision: accept the first-open tradeoff, or require it removed before
-integration. Recommended: adjust the first-open retention before resuming UI
-features. Opaque CPU comparison, Feature9 matched QML, Feature10 real helper,
-protocol adapter and GateD remain outstanding. Published Nacre5995d171 still has
-no implemented v1 package/goldens to pin at this checkpoint.
+The owner accepted the measured first-open tradeoff. The bounded follow-up
+will inspect registry/LRU metadata, eager capacity and new structures; only a
+simple demonstrated improvement will be retained. Opaque composition, Feature9
+matched QML, real-engine Feature10, protocol adapter and GateD follow. Published
+Nacre5995d171 still lacks implemented protocol v1/goldens at this checkpoint.

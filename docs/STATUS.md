@@ -1,30 +1,23 @@
 # Status
 
-## 2026-10-15 — STOP: cache candidate needs a memory decision
+## 2026-10-15 — cache checkpoint accepted; bounded investigation, then Gate D
 
-Published main `5afb5a3` / CI `38788177900` green: OSD overflow corrected.
-Recovered cache work preserved in the isolated gate-d-foundation checkpoint;
-not integrated because the owner's memory-regression stop condition applies.
-[Cache implementation, tests, measurements and decision](research/cache-budget.md).
+Owner accepted215ea35: all close/lifecycle checks pass bar+5 MiB and later
+opens became smaller. Integrating the tested cache checkpoint; CI checked per push.
+[Cache implementation, measurements and limits](research/cache-budget.md).
 
-Nested H120/N60, matched real bar+sound, three cycles/five-second idle:
-first warm PSS+DRM MiB 27.848→28.482 / 30.854→31.259 (+0.634/+0.405).
-Third warm 28.035→26.741 / 30.101→29.382. Closed 22.602→22.986 /
-23.077→23.761; every close/lifecycle stays within its own bar+5 MiB.
-Contended short samples; no physical, QML, CPU or idle-invariance acceptance.
-Owner: accept the first-open tradeoff, or remove it before integration.
+Next: at most about one hour investigating first-open allocation, including
+five alternating before/candidate samples per compositor with median/spread.
+Fix only a simple demonstrated cause; otherwise record it and move on.
+Then opaque composition measurement, Feature9 Source UI + matched QML,
+Feature10 via Nacre's existing helper lane, protocol adapter when published,
+and STOP at GateD. Nacre main5995d171 still lacks implemented protocol v1.
 
-111 tests/fmt/all-features clippy/CPU and release builds/deny/Luau pass.
-Shared 192 MiB cache admission, per-owner byte/LRU limits, lifetime charges,
-report totals and stress tests implemented; dependency internals externally
-bounded and documented. Interrupted empty measurement script recovered.
-No task leftovers, live changes, installation or release.
-
-Next after owner decision: opaque composition measurement, Feature9 Source UI
-and matched QML, Feature10 via Nacre's existing helper lane, protocol adapter
-when published, then GateD. Nacre main `5995d171` still lacks implemented v1.
-Backends frozen; no helper edits or duplicate catalog/ranking/providers.
-[Prior F5 report](research/foundation-f5.md). Typing targets remain unaccepted.
+Nested H120/N60 first-warm delta+0.634/+0.405 MiB; third-open−1.294/−0.719.
+111 tests/fmt/all-features clippy/CPU+release builds/deny/Luau pass.
+First-open increase<1 MiB may continue if bar+5 passes and steady/closed memory
+is not regressed. Greater first-open or steady/closed regressions still stop.
+Backends frozen; no helper edits/catalog duplication. No live/install/release.
 
 ## Accepted Gate C and optimization baseline
 

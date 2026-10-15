@@ -63,3 +63,9 @@
   catalog, ranking or providers. Existing in-process services are transitional.
   The migration agent owns nacre-daemon / nacre-protocol; coordinate additive needs.
   No live desktop permission carries over. Local commands nice10, Cargo-j2.
+
+- Owner memory rule (2026-10-15): first-open increases under 1 MiB may proceed
+  if every close/lifecycle stays within bar+5 MiB and steady/closed memory does
+  not regress. Report the change; increases over 1 MiB or steady/closed regressions
+  still stop. Cache checkpoint215ea35 accepted with a roughly one-hour diagnostic
+  time-box and five alternating before/candidate samples per compositor.
