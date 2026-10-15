@@ -32,7 +32,14 @@ Earlier all-features/facade/analyzer pass. --report proved30.001s,0600,
 numeric-only with closed/current surface history. Final QML subset comparison
 uses audited Nacre68df8dd archive, read-only. No microphone/device-list parity claim.
 
-Next: final60s bar/warm/closed CPU+PSS+DRM+SwapPss on both; matched QML
+09b4722 CI 38708841380 passed. Long default runs met <=5 MiB: Hypr
+21.27→25.75 (+4.48), niri22.24→23.77 (+1.54), with2.63 SwapPss on niri.
+Rapid close/reopen then exposed a stale-candidate visibility race: fixed with
+controller-owned motion/input and explicit dismissal metadata. Rapid Hypr
+repeat, actual legacy open/closed state,69 tests/clippy/CPU-only/analyzer pass.
+Final lifecycle sample now also checks post-output/rapid cleanup.
+
+Next: final lifecycle repeats and matched QML
 output-controls subset; final report/CI/brain, then STOP at Gate C.
 Keep typing29.6→32.7% and inherited6b niri pacing/idle invariance concerns.
 Worktree: ~/.local/share/nacre/ai/worktrees/bead-feature7-gate-c.

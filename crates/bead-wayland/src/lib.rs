@@ -76,6 +76,12 @@ use wayland_protocols::wp::{
 pub struct Remote {
     pub call: bead_services::ipc::Call,
     pub reply: std::sync::mpsc::SyncSender<bead_services::ipc::Reply>,
+    pub context: CommandContext,
+}
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CommandContext {
+    pub panel_open: bool,
+    pub panel_configured: bool,
 }
 #[derive(Clone, Debug)]
 pub enum UiEvent {
@@ -152,8 +158,23 @@ pub struct InputRegion {
     pub rect: Rect,
     pub clip: Option<Rect>,
     pub cursor: &'static str,
+    pub dismiss: bool,
 }
 pub trait SceneSource {
+    fn focused_dismiss(&self) -> bool {
+        false
+    }
+    fn dismiss_at(&self, x: f32, y: f32) -> bool {
+        self.input_regions().iter().any(|r| {
+            r.dismiss
+                && x >= r.rect.x
+                && y >= r.rect.y
+                && x < r.rect.x + r.rect.w
+                && y < r.rect.y + r.rect.h
+                && r.clip
+                    .is_none_or(|c| x >= c.x && y >= c.y && x < c.x + c.w && y < c.y + c.h)
+        })
+    }
     fn scales(&mut self, _: Vec<f32>) {}
     fn input_regions(&self) -> Vec<InputRegion> {
         Vec::new()

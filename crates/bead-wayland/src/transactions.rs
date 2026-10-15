@@ -2,7 +2,7 @@
 //! Validated worker candidates and IME synchronization.
 use super::*;
 impl App {
-    pub(super) fn ui(&mut self, event: UiEvent) {
+    pub(super) fn ui(&mut self, mut event: UiEvent) {
         if let UiEvent::Panel(epoch, event) = event {
             if epoch == self.panel_epoch && self.panel_runtime.is_some() {
                 if matches!(&*event, UiEvent::Reload) {
@@ -31,6 +31,16 @@ impl App {
             && self.panel_command(request.clone())
         {
             return;
+        }
+        if let UiEvent::Remote(request) = &event {
+            event = UiEvent::Remote(std::sync::Arc::new(Remote {
+                call: request.call.clone(),
+                reply: request.reply.clone(),
+                context: CommandContext {
+                    panel_open: self.panel_target,
+                    panel_configured: self.options.panel_spec.is_some(),
+                },
+            }));
         }
         self.ui_inner(event);
     }

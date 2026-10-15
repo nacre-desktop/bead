@@ -203,15 +203,6 @@ impl App {
             std::mem::swap(&mut self.scene, scene);
             std::mem::swap(&mut self.renderer, renderer);
         }
-        if self.panel_target
-            && self
-                .companion
-                .as_ref()
-                .and_then(|c| c.0.motion.as_ref())
-                .is_some_and(|m| !m.open)
-        {
-            self.close_panel();
-        }
         let qh = self.qh.clone();
         let indices: Vec<_> = self
             .surfaces

@@ -232,6 +232,8 @@ impl SceneSource for Runtime {
                     | bead::render::Primitive::Shadow { rect, .. } => *rect,
                 };
                 bead::wayland::InputRegion {
+                    dismiss: node.action.as_deref() == Some("close")
+                        && self.session.stores.get("panel.open").is_some(),
                     rect,
                     clip: node.clip,
                     cursor: if node.input.is_some() {
@@ -358,7 +360,7 @@ impl SceneSource for Runtime {
                     Ok(()) => match (call.target.as_str(), call.method.as_str()) {
                         ("nacre", "state") => {
                             let snapshot = self.backend.as_ref().map(|b| b.snapshot());
-                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":"","clickEdgeMenus":false,"tab":0,"launcher":false,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":"","launcherMode":"apps","launcherRoute":"home","reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":["bar"]}});
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":if request.context.panel_open {"sound"}else{""},"clickEdgeMenus":false,"tab":0,"launcher":false,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":"","launcherMode":"apps","launcherRoute":"home","reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {vec!["bar","sound-output"]}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
                             bead::services::ipc::Reply::ok(
                                 call.id,
                                 serde_json::Value::String(state.to_string()),
@@ -545,6 +547,13 @@ impl SceneSource for Runtime {
     }
     fn state_summary(&self) -> String {
         self.session.state_summary()
+    }
+    fn focused_dismiss(&self) -> bool {
+        self.session.stores.get("panel.open").is_some()
+            && self
+                .session
+                .focused_action()
+                .is_some_and(|(_, name, _)| name == "close")
     }
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {

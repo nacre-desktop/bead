@@ -243,6 +243,7 @@ pub fn run_runtime(
                     .send(UiEvent::Remote(std::sync::Arc::new(Remote {
                         call,
                         reply: tx,
+                        context: Default::default(),
                     })))
                     .is_err()
                 {

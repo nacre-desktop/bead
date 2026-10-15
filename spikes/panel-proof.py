@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import subprocess
+import socket as unix_socket
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -101,6 +102,8 @@ def sample(env, raw, compositor, stop):
                     r'UI_PRESENTED generation=1 monotonic_ns=(\d+).*companion=true',
                     matrix.log_text(log)[offset:]))
                 time.sleep(.4)
+                legacy=json.loads(call('state',target_name='nacre')['result'])
+                assert legacy['edgeMenu']=='sound' and legacy['bead']['panelOpen']
                 warm = memory()
                 segment = matrix.log_text(log)[offset:]
                 timestamps = [int(n) for n in re.findall(r'PANEL_PRESENTED monotonic_ns=(\d+)', segment)]
@@ -172,6 +175,8 @@ def sample(env, raw, compositor, stop):
                 else:
                     call('close')
                 wait_closed()
+                legacy=json.loads(call('state',target_name='nacre')['result'])
+                assert legacy['edgeMenu']=='' and not legacy['bead']['panelOpen']
                 time.sleep(.3)
                 idle = memory()
                 row.update(idle=idle, delta_from_bar_mib=idle['total_mib']-baseline['total_mib'])
@@ -205,10 +210,29 @@ def sample(env, raw, compositor, stop):
                     time.sleep(1)
                     result['nested_output_off']={'response':response.stdout.strip(),'released':not call('state')['result']['resident']}
                 finally:run('niri','msg','output',name,'on')
+            if os.environ.get('BEAD_PANEL_RAPID'):
+                def fast(method):
+                    with unix_socket.socket(unix_socket.AF_UNIX,unix_socket.SOCK_STREAM) as stream:
+                        stream.settimeout(3);stream.connect(str(socket))
+                        stream.sendall((json.dumps({'version':1,'id':1,'target':'bead.panel','method':method,'args':['sound'] if method=='open' else []})+'\n').encode())
+                        reply=json.loads(stream.makefile('rb').readline(65537))
+                        assert reply.get('error') is None,reply
+                fast('open');time.sleep(.3)
+                for _ in range(10):fast('close');fast('open');time.sleep(.03)
+                time.sleep(.5)
+                result['rapid_reversal']=call('state')['result']['target_open']
+                assert result['rapid_reversal'], 'a stale closed candidate overrode the latest open intent'
+                run('wtype','-s','200','-k','Tab','-s','100','-k','Return','-s','200')
+                assert not call('state')['result']['target_open'], 'focused close activation failed'
+                result['keyboard_close']=True
+                wait_closed()
+            time.sleep(.3)
+            result['lifecycle_idle']=memory()
+            result['lifecycle_delta_mib']=result['lifecycle_idle']['total_mib']-baseline['total_mib']
             text = matrix.log_text(log)
             assert 'PRESENTATION clock_id=1' in text
             assert 'UI_ERROR' not in text and 'PANIC ' not in text
-            result['memory_acceptance'] = all(r['delta_from_bar_mib'] <= 5 for r in result['cycles']) and (not seconds or result['closed_idle']['pss_plus_drm_mib']-baseline['total_mib']<=5)
+            result['memory_acceptance'] = all(r['delta_from_bar_mib'] <= 5 for r in result['cycles']) and result['lifecycle_delta_mib']<=5 and (not seconds or result['closed_idle']['pss_plus_drm_mib']-baseline['total_mib']<=5)
             (raw/'panel-proof.json').write_text(json.dumps(result, indent=2)+'\n')
             print('PANEL_PROOF '+json.dumps({k:v for k,v in result.items() if k!='cycles'}), flush=True)
             assert result['memory_acceptance'], 'closed-idle exceeds bar + 5MiB'

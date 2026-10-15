@@ -174,6 +174,8 @@ impl App {
                 let now = self.started.elapsed().as_secs_f64();
                 let open = if self.options.animate {
                     ((now - 3.).max(0.) % 2.) >= 1. || now < 3.
+                } else if s.companion && self.options.panel_spec.is_some() {
+                    self.panel_target
                 } else {
                     motion.open
                 };
@@ -251,7 +253,12 @@ impl App {
                 && (!s.companion || self.options.panel_spec.is_some())
                 && scene.motion.is_some()
             {
-                let visible = scene.opacity > 0.001 && scene.motion.as_ref().is_none_or(|m| m.open);
+                let visible = scene.opacity > 0.001
+                    && if s.companion && self.options.panel_spec.is_some() {
+                        self.panel_target
+                    } else {
+                        scene.motion.as_ref().is_none_or(|m| m.open)
+                    };
                 if s.input_visible != Some(visible) {
                     if visible {
                         s.layer.wl_surface().set_input_region(None);

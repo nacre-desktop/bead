@@ -451,6 +451,17 @@ impl PointerHandler for App {
             if !surface.configured {
                 continue;
             }
+            if panel
+                && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+                && self
+                    .panel_runtime
+                    .as_ref()
+                    .is_some_and(|r| r.dismiss_at(x, y))
+            {
+                self.close_panel();
+                self.view_event(true, UiEvent::Click { x, y });
+                continue;
+            }
             if let PointerEventKind::Enter { serial, .. } = event.kind {
                 self.cursor_enter_serial = serial;
             }
@@ -580,6 +591,16 @@ impl KeyboardHandler for App {
                 _ => None,
             };
             if let Some(command) = command {
+                if panel
+                    && (command == "escape"
+                        || (command == "enter"
+                            && self
+                                .panel_runtime
+                                .as_ref()
+                                .is_some_and(|r| r.focused_dismiss())))
+                {
+                    self.close_panel();
+                }
                 self.view_event(
                     panel,
                     UiEvent::Command {

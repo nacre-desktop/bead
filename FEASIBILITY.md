@@ -875,3 +875,27 @@ object. Bind existing seats immediately after App construction as well. The
 strict pre-keyboard extension transfer now passes on Hypr, as it did on niri.
 Source66588ad CI38708160203 passed. Final long measurements continue with
 this small correction; QML frame probe is being reused for matched animations.
+
+## Gate C latest visibility intent wins (2026-10-15)
+
+A fast versioned-socket close/open test reproduced a stale worker candidate
+closing a newer open request. Controller target now owns dynamic motion/input;
+close-hit/focused-action metadata routes real dismissal at input acceptance.
+Worker candidates can update content without overriding that target. The same
+controller snapshot feeds legacy nacre state (edgeMenu and native panelOpen),
+so it reports actual accepted visibility. Header controls are bounded to360px.
+
+| Check | Result |
+|---|---|
+| Ten rapid reversals before/after |FAIL → pass; real controls/state also pass|
+| Latest validation |69 tests, fmt/clippy/CPU-only,18-module Luau analyzer pass|
+| Source09b4722 CI |38708841380 passed|
+| Prior stable long default PSS+DRM MiB, bar→closed60s |Hypr21.27→25.75; niri22.24→23.77|
+| Niri extra closed SwapPss |2.63 MiB; resident+swap delta4.16 MiB|
+| Prior Hypr opening/closing p99 |8.76/8.78ms; max9.03ms, virtual120|
+
+Final source lifecycle repeats add keyboard dismissal, rapid intent changes
+and post-output/rapid cleanup to the strict memory check. Those plus matched
+QML subset timings are pending. Earlier100.32ms niri p99 and failed+5.13MiB
+sample remain evidence, not superseded by a favorable run. Sources/evidence:
+.research/feature8/rapid-hypr*, reversal-checks.log and final-*-seat.

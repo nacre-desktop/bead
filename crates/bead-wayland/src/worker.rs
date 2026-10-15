@@ -11,6 +11,7 @@ use std::{
 pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Send>;
 #[derive(Default)]
 struct Mirror {
+    focused_dismiss: bool,
     regions: Vec<InputRegion>,
     surrounding: Option<(String, i32, i32)>,
     tree: Option<accesskit::TreeUpdate>,
@@ -20,6 +21,7 @@ struct Mirror {
 impl Mirror {
     fn read(source: &dyn SceneSource) -> Self {
         Self {
+            focused_dismiss: source.focused_dismiss(),
             regions: source.input_regions(),
             surrounding: source.surrounding_text(),
             tree: source.accessibility_tree(),
@@ -355,6 +357,9 @@ impl SceneSource for Source {
     }
     fn input_regions(&self) -> Vec<InputRegion> {
         self.mirror.regions.clone()
+    }
+    fn focused_dismiss(&self) -> bool {
+        self.mirror.focused_dismiss
     }
     fn pointer_cursor(&self, x: f32, y: f32) -> &str {
         self.mirror
