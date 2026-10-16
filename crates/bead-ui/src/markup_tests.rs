@@ -36,6 +36,54 @@ fn session(f: &Fixture) -> Session {
     session
 }
 #[test]
+fn sdk_brush_helpers_preserve_values_coercion_and_reject_bad_arguments() {
+    use crate::frontend::{FrontEnd, LuauFrontEnd, Sources};
+    let entry = Path::new("ui/main.luau");
+    let build = |expression: &str| {
+        let sources = Sources::from([(
+            entry.to_path_buf(),
+            format!(
+                "local ui=require(\"bead.ui\")\nreturn ui.Box{{id=\"test\",fill={expression}}}"
+            )
+            .into_bytes(),
+        )]);
+        LuauFrontEnd::new(entry, &sources)
+            .unwrap()
+            .build(entry, &|_| {
+                Err(Diagnostic::new(entry, 1, 1, "unexpected binding"))
+            })
+    };
+    for (expression, expected) in [
+        (
+            "ui.alpha(\"surface\", .5)",
+            serde_json::json!({"role":"surface","alpha":0.5}),
+        ),
+        (
+            "ui.alpha(42, \".5\")",
+            serde_json::json!({"role":"42","alpha":0.5}),
+        ),
+        (
+            "ui.tint(\"surface\", 5, \".25\")",
+            serde_json::json!({"base":"surface","over":"5","alpha":0.25}),
+        ),
+    ] {
+        assert_eq!(build(expression).unwrap().props["fill"], expected);
+    }
+    for expression in [
+        "ui.alpha({}, .5)",
+        "ui.alpha(\"surface\", {})",
+        "ui.tint(\"surface\", false, .5)",
+        "ui.tint(\"surface\", \"primary\", false)",
+    ] {
+        let error = build(expression).unwrap_err();
+        assert!(error.file.ends_with("ui/main.luau"));
+        assert_eq!(
+            error.line, 2,
+            "brush errors must identify their caller: {error}"
+        );
+    }
+}
+#[test]
 fn luau_components_imports_taffy_and_relative_sizes() {
     let f = fixture();
     let session = session(&f);

@@ -9,6 +9,28 @@ Typing targets are not accepted; this is an interim checkpoint, not Gate D.
 
 
 
+## Rejected static-property borrowing — 2026-10-16
+
+Copy-on-write borrowing avoided cloning RawNode properties without bindings.
+All157 tests/fmt/clippy ALL targets/CPU-only/release and pixel goldens passed,
+but five alternating200-key typing pairs each did not show a robust CPU benefit.
+H CPU median9.980→9.888ms/key (paired−0.244,control width0.682);
+N9.881→10.664 (paired+0.288,width1.527). Presented p99 medians22.282→22.246 /
+19.694→20.938ms, inside control widths5.853/6.413.4000 exact key proofs pass.
+A separate lifecycle pair passes all guards, but cannot rescue the CPU result.
+The source patch is saved and reversed; no property borrowing is kept. This does
+not identify why total CPU changed; do not claim a proven cache/locality cause.
+Raw `borrow-properties-fivepairs/summary.json` and
+`borrow-static-properties-rejected-source.patch`.
+
+The independent catalog-selection fix is retained: if an unchanged query loses
+its selected result, fallback selection and scroll reset together. Valid restored
+selection/scroll stays intact. Its regression test uses a Source revision change
+without editing the query. No ranking/provider change or new retained cache.
+The control binary includes this fix; the rejected candidate adds only borrowing.
+A brush-helper contract test records existing values/numeric coercion/diagnostics
+before a separate measured experiment. All current typing targets stay open.
+
 ## Real-engine Source and refresh checkpoint — 2026-10-16
 
 Nacre engineb44d1afb /CI38874838563 is green. Bead pins its protocol and replays
@@ -18,7 +40,7 @@ Source wakeups; the no-change check now follows projection. A regression test
 proves no-op, staged refresh, atomic commit and last-good failure preservation.
 Only idempotent menu.query busy+retry=true replies retry,25ms doubling to400ms,
 inside the original3s absolute deadline; activation never retries. Tests cover
-flag/code/deadline limits.155 tests/fmt/clippy ALL targets/CPU-only/release pass.
+flag/code/deadline limits.156 tests/fmt/clippy ALL targets/CPU-only/release pass.
 
 Three fresh200-key runs per compositor,320 synthetic apps,101 populated results
 for a/ap:1200 exact RPC ID→typed revision/count→committed/presented update proofs.

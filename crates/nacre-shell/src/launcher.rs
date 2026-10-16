@@ -516,13 +516,14 @@ impl Menu {
             view.stamp = stamp;
         }
         let reset_selection = query_changed && view.error.is_empty();
-        let selection = if !view.error.is_empty()
+        let keep_selection = !view.error.is_empty()
             || (!reset_selection
-                && view
-                    .rows
-                    .iter()
-                    .any(|r| r["id"].as_str() == Some(selection.as_str()) && r["disabled"] != true))
-        {
+                && view.rows.iter().any(|r| {
+                    r["id"].as_str() == Some(selection.as_str()) && r["disabled"] != true
+                }));
+        let reset_scroll = view.error.is_empty()
+            && (reset_selection || (!keep_selection && (choose_first || !selection.is_empty())));
+        let selection = if keep_selection {
             selection
         } else if choose_first {
             view.rows
@@ -549,7 +550,7 @@ impl Menu {
             ("launcher.selection".into(), Value::Text(selection)),
             ("launcher.error".into(), Value::Text(view.error.clone())),
         ]);
-        if reset_selection {
+        if reset_scroll {
             delta.insert("launcher.scroll.y".into(), Value::Number(0.));
         }
         // A query may change while the ordered engine result stays identical.
@@ -947,6 +948,44 @@ mod tests {
             .unwrap();
         let grid = menu.project(&stores).unwrap();
         assert_eq!(grid["launcher.selection"], Value::Text(String::new()));
+    }
+    #[test]
+    fn catalog_removal_resets_scroll_with_fallback_selection_without_query_edit() {
+        let rows = (0..40)
+            .map(|i| json!({"id":format!("item{i}"),"name":format!("Item {i}")}))
+            .collect::<Vec<_>>();
+        let source = Arc::new(
+            Fixture::new(json!({"queries":{"a":fixture_reply("a",rows.clone())}})).unwrap(),
+        );
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text("a".into())),
+                ("launcher.selection".into(), Value::Text("item30".into())),
+                ("launcher.scroll.y".into(), Value::Number(1500.)),
+            ]))
+            .unwrap();
+        let initial = menu.project(&stores).unwrap();
+        assert_eq!(initial["launcher.selection"], Value::Text("item30".into()));
+        assert!(
+            !initial.contains_key("launcher.scroll.y"),
+            "valid restored selection must keep scroll"
+        );
+        stores = stores.reconcile(&initial).unwrap();
+        stores.commit(initial).unwrap();
+        let mut reply = fixture_reply("a", rows[..10].to_vec());
+        reply["catalog_rev"] = json!(2);
+        source
+            .publisher
+            .publish(json!({"queries":{"a":reply}}))
+            .unwrap();
+        let changed = menu.project(&stores).unwrap();
+        assert_eq!(changed["launcher.selection"], Value::Text("item0".into()));
+        assert_eq!(changed["launcher.scroll.y"], Value::Number(0.));
+        assert_eq!(
+            stores.get("launcher.search.text"),
+            Some(&Value::Text("a".into()))
+        );
     }
     #[test]
     fn response_for_another_query_cannot_replace_the_view() {

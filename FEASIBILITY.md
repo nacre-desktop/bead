@@ -1,5 +1,25 @@
 # Feasibility
 
+## 2026-10-16 — Drop static property-map borrowing
+
+The copy-on-write prototype preserved rendered pixels and all existing behavior checks.
+It did not deliver a CPU median win on both compositors over five alternating pairs.
+The patch is saved and reversed; the independent catalog-selection fix remains.
+No cache, ranking or provider change is accepted from this experiment.
+
+|5 typing-pair medians|Before H /N|Candidate H /N|
+| --- | ---: | ---: |
+|UI CPU ms/key|9.980 /9.881|9.888 /10.664|
+|Presented p99 ms|22.282 /19.694|22.246 /20.938|
+
+H paired CPU−0.244ms within0.682 control range; N+0.288 within1.527.
+No repeated total CPU benefit on both; tail deltas fit control spreads.4000 exact
+key proofs and the first lifecycle pairs pass,157 tests/fmt/clippy ALL targets/
+CPU-only/release pass. New fallback-selection test covers catalog shrink without
+query edit. Fresh private Hvirtual120/N60,scale1.5,unknown refresh prediction;
+no own build overlap; external contention uncontrolled. No physical acceptance.
+[Method](docs/research/feature9-gate-d.md#rejected-static-property-borrowing--2026-10-16).
+
 ## 2026-10-16 — Real engine Source, catalog refresh and separate CPU clocks
 
 The launcher now observes daemon menu generations and refreshes without a key.
@@ -18,7 +38,7 @@ The typing budgets fail; same-engine QML comparison remains unavailable until F3
 |Matched bar group MiB|51.620|54.498|
 
 1200 exact RPC/typed-result/commit/presentation proofs pass; no timed busy retry.
-155 tests/fmt/clippy ALL targets/CPU-only/release and five canonical transcript
+156 tests/fmt/clippy ALL targets/CPU-only/release and five canonical transcript
 families pass. Native catalog invalidation and owned-worker cleanup pass. H10/N5
 fixture memory pairs: first/warm/closed deltas fit control spreads;90 cycle and
 hover guards pass ownbar+5. Original borderline H5 set retained, one fixed

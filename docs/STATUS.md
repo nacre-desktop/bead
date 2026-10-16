@@ -2,12 +2,12 @@
 
 ## 2026-10-16 — Real engine integrated; typing budgets not accepted
 
-Last published input checkpointcc66051 /CI38874364939 is green. This checkpoint
+Published Source checkpointf664941 /CI38881989088 is green. It
 pins engine SDKb44d1afb /upstream CI38874838563 green and replays five menu
 transcript families. Menu topic changes refresh the view without input. Empty
 Source wakeups now project before the no-change check; busy reads back off within
-one3s deadline. Activation never retries.155 tests/fmt/clippy ALL targets/
-CPU-only/release and both native lifecycle proofs pass; fresh CI follows this push.
+one3s deadline. Activation never retries.156 tests/fmt/clippy ALL targets/
+CPU-only/release and both native lifecycle proofs pass; Source CI is green.
 
 Three200-key runs each:1200 exact RPC→typed revision/count→commit→presentation
 proofs, no busy retry during timed keys. CPU mean medians H/N: UI12.230/12.047,
@@ -25,7 +25,10 @@ Real warm UI+daemon/workers H96.96/N95.85MiB;35s closed53.19/55.12 versus
 matched bar groups51.62/54.50, both within+5 including SwapPss. The daemon's
 retained index is included; compositor/private-bus infrastructure is excluded.
 
-Next: measured fixture UI CPU improvements; repeat native proof on migration's
+Static-property borrowing is rejected after five pairs (N CPU9.88→10.66ms/key).
+Catalog-removal fallback selection now also resets scroll.158 tests/full local
+checks pass, including the existing brush value/coercion/caller-error contract.
+Next: measure native Luau brush helpers; repeat native proof on migration's
 coalesced-load engine build. Shared QML adapter is F3 work, no parallel client.
 Optional conversion/guidance visuals, UI-provider actions/reconnect mark remain
 open. STOP at Gate D; no Feature11/live/install/release work. Keep6b pacing/
