@@ -76,6 +76,7 @@ export type SDK = {
     tint:(string,string,number)->any,
     component:(string,any,any)->any,
     resolve_for_check:(any)->any,
+    model_count:(any)->number,
 }
 local sdk:SDK = {} :: any
 return sdk

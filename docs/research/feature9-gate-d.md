@@ -392,7 +392,7 @@ smokes pass on both with grid↔list input, exact feedback, actual GL initializa
 and cleanup; centered grid text was inspected. Hyprland debug overlays remain in
 the short GL capture; its timing is not an acceptance measurement.
 
-## Count-only model access — measured candidate held, 2026-10-16
+## Count-only model access — earlier candidate held, 2026-10-16
 
 A small native model_count(binding) accessor avoids serializing every result into
 Luau solely to calculate VirtualGrid's extent. Repeat still validates every key
@@ -431,6 +431,45 @@ Canonical menu schemas/engine are still unavailable. Upstream F2 is held for a
 separate regression/priority review; the owner decision blocks end-to-end work.
 The additive menu draft remains off main with its migration owner. Stop at this
 dependency decision; Gate D is not accepted and no Feature 11 work has started.
+
+## Count-only decision: five alternating pairs — 2026-10-16
+
+The owner resumed independent typing work and requested five alternating pairs per
+compositor. Each binary has200 changed-result keys and a separate three-close
+lifecycle proof in fresh private sessions. All40 proof invocations pass:4000 keys
+and80 closed/unused-hover checks. Same saved cropped/count binaries and fixture;
+no local heavy builds overlap. H runs before/candidate five times, N reverses that
+order. External load/frequency/paging were uncontrolled, so these are shared-host
+nested measurements, not an isolated or physical120Hz acceptance.
+
+|Five trial medians | Before H /N | Count-only H /N | Baseline spread H /N |
+| --- | ---: | ---: | ---: |
+|UI CPU mean ms/key |17.459 /19.973|16.160 /17.775|3.175 /2.583|
+|Presented p99 ms |30.296 /29.822|25.129 /27.198|7.243 /3.957|
+|Third warm PSS+DRM MiB |48.059 /46.397|48.238 /46.432|0.391 /0.586|
+|Third closed PSS+DRM MiB |21.544 /22.638|21.788 /22.692|0.547 /0.638|
+
+Spread means baseline min-to-max of per-run metrics, not pooled keys or an inflated
+candidate band. Both marginal and paired CPU medians improve (paired−1.830/−1.446
+ms). Both p99 medians improve; candidate maximum p99 excess on N is only0.161ms,
+inside its3.957ms baseline spread. Positive median closed deltas+.244/+.055MiB
+and paired deltas+.290/−.003MiB fit the baseline spread. Steady warm deltas
++.180/+.034MiB also fit. First-warm medians change−.006/+.033MiB, below1MiB.
+Every individual close still passes bar+5 including swap; no tolerance was changed.
+One candidate first-warm H sample is unusually low; its cause was not established.
+
+Keep95862ca's count-only API under the owner's stated criteria. This supersedes
+the earlier hold, not the recorded mixed short-trial results. The complete numeric
+cohorts/provenance remain in the ignored five-pair artifacts.137 workspace tests,
+fmt/all-features clippy and generated Luau checks pass; source matches the tested
+saved candidate. Both8ms CPU and16.7ms presentation targets still fail. Next is
+ordered pixel-damage reuse, measured independently, and canonical protocol adoption.
+
+Nacre's reviewed additive menu contract is published as3042f3f2; source CI is
+checked after publication. Its eleven protocol tests/export/fmt/clippy pass and
+all nine original wire artifacts remain byte-identical. No helper/registry change
+was made. The real engine follows the time-boxed startup investigation before F2
+finishes; end-to-end UI/daemon CPU and Gate D remain unaccepted until measured.
 
 ## Remaining-parity forecast — provisional until the engine comparison
 

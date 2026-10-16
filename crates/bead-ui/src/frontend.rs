@@ -187,6 +187,16 @@ impl FrontEnd for LuauFrontEnd {
                         Ok(value)
                     })?,
                 )?;
+                sdk.set(
+                    "model_count",
+                    scope.create_function(|_, model: Table| {
+                        let name: String = model.get("__bind")?;
+                        match resolve(&name).map_err(mlua::Error::external)? {
+                            Value::List(rows) => Ok(rows.len()),
+                            _ => Err(mlua::Error::runtime(format!("model {name} must be a list"))),
+                        }
+                    })?,
+                )?;
                 let install: Function = lua
                     .load(self.install.as_slice())
                     .set_name("@bead.ui")

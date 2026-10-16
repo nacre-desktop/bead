@@ -1,5 +1,27 @@
 # Feasibility
 
+## 2026-10-16 — keep count-only after five alternating pairs
+
+Five pairs per compositor confirm the median CPU benefit on a consistent workload.
+Presented p99 medians improve; closed and steady deltas fit baseline run spread.
+All4000 key presentations and80 close/unused-hover checks pass without loosening.
+The count-only API is kept; both typing budgets remain unaccepted.
+
+|Five trial medians | Before H /N | Candidate H /N | Baseline range width H /N |
+| --- | ---: | ---: | ---: |
+|UI CPU mean ms/key |17.459 /19.973|16.160 /17.775|3.175 /2.583|
+|Presented p99 ms |30.296 /29.822|25.129 /27.198|7.243 /3.957|
+|Third warm PSS+DRM MiB |48.059 /46.397|48.238 /46.432|0.391 /0.586|
+|Third closed PSS+DRM MiB |21.544 /22.638|21.788 /22.692|0.547 /0.638|
+
+Paired CPU medians−1.830/−1.446ms; closed deltas+.244/+.055MiB fit the band.
+Every close <=bar+5 incl swap; first-warm median change−.006/+.033MiB.
+H virtual120/N nested60,320apps/disjoint160-row exact replies,200keys/sample.
+Fresh sessions, no own heavy build overlap; shared-host load/paging uncontrolled.
+137tests/fmt/clippy/Luau pass. Canonical menu contract3042f3f2 is now upstream;
+engine/end-to-end CPU still unmeasured. No physical/full-parity/typing acceptance.
+[Method and limitations](docs/research/feature9-gate-d.md#count-only-decision-five-alternating-pairs--2026-10-16).
+
 ## 2026-10-16 — count-only API saved; mixed tails remain unresolved
 
 Directly reading model length reduces Luau preparation and median UI CPU.

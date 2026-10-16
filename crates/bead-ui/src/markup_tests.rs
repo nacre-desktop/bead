@@ -716,6 +716,44 @@ return ui.Panel{id="panel",width=400,height=240,ui.Text{id="host",text=ui.bind("
 }
 
 #[test]
+fn model_count_tracks_empty_growing_and_replaced_store_models() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=400,height=240,
+    ui.Text{id="count",text=tostring(ui.model_count(ui.bind("rows")))}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    for count in [320, 1, 0, 3] {
+        let rows = (0..count)
+            .map(|i| serde_json::json!({"id":i.to_string(),"name":"Fixture"}))
+            .collect();
+        let next = s
+            .update(BTreeMap::from([("rows".into(), Value::list(rows))]))
+            .unwrap()
+            .expect("a count-only binding must track its model dependency");
+        assert!(next.primitives.iter().any(|p| matches!(p,
+            bead_render::Primitive::Text{text,..} if text == &count.to_string())));
+        s.commit(next);
+    }
+    let before = s.state_summary();
+    assert!(
+        s.update(BTreeMap::from([(
+            "rows".into(),
+            Value::Text("not a model".into())
+        )]))
+        .is_err()
+    );
+    assert_eq!(
+        s.state_summary(),
+        before,
+        "a failed count projection must keep the committed view"
+    );
+}
+
+#[test]
 fn windowed_repeat_keeps_stable_ids_extent_and_validates_offscreen_keys() {
     let f = fixture();
     fs::write(

@@ -19,6 +19,7 @@ pub fn luau() -> String {
         ("tint", "(string,string,number)->any"),
         ("component", "(string,any,any)->any"),
         ("resolve_for_check", "(any)->any"),
+        ("model_count", "(any)->number"),
     ] {
         out.push_str(&format!("    {name}:{ty},\n"));
     }

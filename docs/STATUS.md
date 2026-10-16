@@ -1,40 +1,32 @@
 # Status
 
-## 2026-10-16 — UI typing resumed; five-pair count study running
+## 2026-10-16 — Count-only accepted; canonical menu contract published
 
-Main 3cf413c / CI38830981182 is green; renderer checkpoints347bd22 and
-59f00f1 are also green. Owner resumed independent UI typing work.
-Active-view construction and cropped text are kept. 136 tests, fmt, clippy,
-release, exact pixel/counter checks and both native-GL smokes pass.
+Main 351fc54 / CI38842700729 is green. Five alternating pairs per compositor
+accept count-only95862ca: CPU median H 17.46→16.16/N 19.97→17.78 ms/key;
+presented p99 median 30.30→25.13/29.82→27.20 ms. Closed deltas +0.24/+0.05 MiB
+fit baseline spreads 0.55/0.64; steady deltas also fit. All 4,000 key presentations
+and 80 closed/unused-hover guards pass. 137 tests/fmt/clippy/Luau pass; fresh CI
+is checked after push. Both 8 ms CPU /16.7 ms presentation targets still fail.
+[Methods and full comparison](research/feature9-gate-d.md#count-only-decision-five-alternating-pairs--2026-10-16).
 
-Matched crop pairs, 200 changed-result keys: UI CPU H24.95/N25.69 →18.45/18.77
-ms/key; presented p99 33.52/41.35 →30.43/29.02 ms. Typed-list PSS+DRM falls
-3.70/3.78 MiB. Both typing targets still fail; identical rows are a best case.
-H virtual 120 / N nested 60, not physical; helper/end-to-end unmeasured.
-[Measurements and provisional forecast](research/feature9-gate-d.md#tight-text-rasters--2026-10-16).
+Active-view construction and cropped text stay kept; previous 136-test code and
+native-GL/pixel/counter proofs are green. Crop typed-list memory falls 3.7–3.8 MiB;
+every lifecycle close remains within bar + 5 MiB. No allocator/font-engine rewrite.
+H virtual 120/N nested 60, not physical. Helper/end-to-end CPU unmeasured.
 
-Count-only model API is saved locally as 95862ca, held off main. Three trial CPU
-medians improve H 18.40→16.08/N 20.33→16.74 ms/key, but niri tails are mixed.
-Closed PSS +0.18/+0.06 MiB needs confirmation; no tolerance waived. 137 local
-tests/fmt/clippy/release/Luau pass. Default executable is the accepted crop build.
+Reviewed menu payload/schema/transcripts are on Nacre main 3042f3f2; its eleven
+protocol tests/export/fmt/clippy pass, old wire artifacts byte-identical. Source
+CI is checked after push. Next pin this canonical revision and switch the fixture
+Source to keyed items/order and opaque activation. Nacre owns catalog/ranking/
+providers; no helper edits. Engine follows time-boxed startup work before F2 ends.
 
-Crop lifecycle: H bar 22.31 → third warm 48.42 / closed 21.91 MiB; N 23.72 →
-46.50/19.40. Every close stays within bar + 5 MiB; first/steady/closed controls show
-no regression. Query RAM, hover expiry, feedback and cleanup pass. No allocator
-policy change. CPU small panels/direct opaque paint; alpha groups stay cached.
-
-Nacre owns catalog/ranking/providers; Bead uses Sources/exact fixtures. Published
-SDK pin 6bdc22e and standalone F1 adapter proofs pass. Canonical menu schemas/
-engine follow a time-boxed upstream cold-start investigation, before F2 finishes.
-Additive protocol draft is reviewed and held off main until migration publishes
-its schema/transcripts. End-to-end/prefix/activation acceptance still waits.
-
-Owner resumed work: five alternating before/candidate pairs per compositor,
-200 keys plus three lifecycle closes each. Keep count-only only if CPU median
-wins and presentation/closed-memory deltas fit the measured spread. Continue
-independent UI CPU work; adopt published menu schema then measure UI/daemon CPU
-separately. STOP at Gate D. Keep 6b pacing/idle, historical typing, IME/hardware,
-cache gaps and name clash open. No Feature 11 or live/install/release work.
+Continue independent UI CPU work: ordered pixel-damage reuse is saved locally,
+not tested/measured yet. Then real engine/UI-provider/prefix/actions, separate UI
+and daemon CPU, matched QML comparison and final Gate D forecast. STOP at Gate D.
+Keep 6b pacing/idle, historical typing CPU, IME/hardware/cache gaps and name clash
+open. No Feature 11/live/install/release work. CPU small panels/GL large animation;
+Mesa residue finding remains. No persistent warm launcher memory.
 
 ## Accepted Gate C and optimization baseline
 
