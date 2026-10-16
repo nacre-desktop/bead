@@ -585,6 +585,15 @@ async fn partial_frame_survives_an_intervening_outbound_call() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn actual_ui_provider_acknowledges_dispatch_before_a_pending_menu_reply() {
+    actual_provider_with_pending_menu("menu-apps").await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn actual_ui_provider_acknowledges_dispatch_before_a_pending_activation_reply() {
+    actual_provider_with_pending_menu("menu-activation").await;
+}
+
+async fn actual_provider_with_pending_menu(golden: &str) {
     let lab = Lab::new();
     let listener = lab.bind();
     let ui_path = lab.0.join("ui.sock");
@@ -598,7 +607,7 @@ async fn actual_ui_provider_acknowledges_dispatch_before_a_pending_menu_reply() 
         bead::services::ipc::Reply::ok(call.id, Value::Null)
     })
     .unwrap();
-    let menu = fixture("menu-apps");
+    let menu = fixture(golden);
     let request = menu[0].clone();
     let server = tokio::spawn(async move {
         let ui = fixture("ui");
@@ -644,7 +653,7 @@ async fn actual_ui_provider_acknowledges_dispatch_before_a_pending_menu_reply() 
     let Message::Ret {
         reply: nacre_protocol::Reply::Ok { ok: expected },
         ..
-    } = fixture("menu-apps")[1].clone()
+    } = fixture(golden)[1].clone()
     else {
         panic!("golden menu result expected")
     };

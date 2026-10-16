@@ -194,6 +194,20 @@ No failed optimization cost is added to the accepted baseline. Data in
 profiles still identify markup construction as the large repeat cost. Next probe
 is declarative row instantiation, preserving the fresh Lua sandbox and UI output.
 
+## Outbound activation duplex contract — 2026-10-16
+
+The actual ui_provider now has two private duplex regressions: incoming published
+ui.dispatch is ACKed BEFORE a held outgoing menu.query OR menu.activate reply.
+Both use committed pinned-protocol transcripts, the real provider handler and a
+private UI IPC server; no guessed ui.menu.activate fields or advertised method.
+The fake daemon releases the menu reply only after the exact string-ID ACK.
+Thus an outgoing activation wait cannot starve transport-side UI dispatch.
+This does not accept the pending F3 non-app view/action path or a physical test.
+176 workspace tests, fmt, all-target/all-feature clippy and CPU-only checks pass;
+production behavior and memory remain unchanged. Calendar rollover preparation
+is separately saved locally,179 tests with the unshipped calendar body; no source
+or bar routing is claimed. Desktop plan remains HOLD.
+
 ## Persistent-call component cross-check — 2026-10-16
 
 Replayed Nacre92cb's existing benchmark-menu loop on this host: exact fixed75157

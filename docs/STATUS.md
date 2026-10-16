@@ -12,13 +12,14 @@ Tools6350045 / [CI38947299625](https://github.com/nacre-desktop/bead/actions/run
 Native row-template WIP rejected: niri warm+0.559/settled+0.482MiB exceed
 0.313/0.211 control spreads. Five-pair CPU8.445/8.507ms still misses8ms.
 Preserved4db6682; runtime stays acceptedb0. Actual UI-provider duplex ACK test
-passes with174 tests/fmt/clippy/CPU-only checks. Lua-only5043af7 also rejected:
+also passes while menu.activate waits;176 tests/fmt/clippy/CPU-only pass.
+Lua-only5043af7 also rejected:
 one-pair CPU10.696→10.580 /11.214→11.345ms, no consistent win; runtime unchanged.
 Next: daemon typing and activation/reconnect/provider contracts, then remaining
 bar popouts/service views. STOP after service views, before dashboard.
 Five-pair accepted-control typing UI10.792/10.736ms/key, p9924.705/33.462ms H/N;
 targets open. Actual-widget exact pixel/action regressions pass with175 workspace
-tests, fmt, all-target/all-feature clippy and CPU-only checks. Runtime unchanged.
+tests at the pixel checkpoint; now176 with activation duplex coverage. Runtime unchanged.
 Persistent2,000-call daemon+provider CPU5.715/4.260ms H/N; query checks pass,
 idle samples invalid under host paging. This is component CPU, not UI latency.
 Official F3 actions/same-engine QML pending. Core estimate40–81 eight-hour days,

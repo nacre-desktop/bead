@@ -1,5 +1,23 @@
 # Feasibility
 
+## 2026-10-16 — UI dispatch remains responsive during activation
+
+Extend the actual-provider duplex proof from queries to published menu activation.
+The fake daemon withholds the outgoing reply until the incoming dispatch is ACKed.
+This tests the concurrency boundary that could otherwise deadlock the UI link.
+No production handler, protocol payload or advertised capability changes.
+
+| Private headless proof | Result |
+| --- | ---: |
+| Held menu.query /menu.activate |Both exact incoming UI ACKs precede replies|
+| Workspace tests |176 passed|
+| fmt /clippy -D warnings /CPU-only |Passed|
+
+Committed pinned transcripts, actual ui_provider and private UI IPC; no compositor
+or live desktop. F3 typed non-app actions/same-engine QML remain upstream, so this
+is transport coverage rather than final non-app acceptance. Memory is unchanged.
+[Evidence](docs/research/feature9-gate-d.md#outbound-activation-duplex-contract--2026-10-16).
+
 ## 2026-10-16 — Reject Lua row cloning; retain launcher pixel coverage
 
 Cloning static row skeletons in Luau has no consistent typing CPU benefit.
