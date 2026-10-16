@@ -21,7 +21,9 @@ jobs:
       - name: Headless services dependency boundary
         run: python3 tools/check-service-boundary.py
       - name: Tests
-        run: cargo test --workspace --locked -j2
+        run: |
+          cargo test --workspace --locked -j2
+          cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::
         env:
           BEAD_TEST_ARTIFACTS: ${{ runner.temp }}/bead-headless
       - name: Headless golden artifacts on failure

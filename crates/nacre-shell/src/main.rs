@@ -7,6 +7,7 @@ mod font_sources;
 mod headless;
 mod launcher;
 mod launcher_panel;
+mod memory_policy;
 mod nacre_source;
 mod notifications;
 mod popouts;
@@ -18,6 +19,7 @@ use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
 use std::path::{Path, PathBuf};
 fn main() {
+    memory_policy::configure();
     std::panic::set_hook(Box::new(|_| {
         eprintln!("PANIC code=ui_panic");
     }));

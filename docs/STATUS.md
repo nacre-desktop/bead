@@ -1,15 +1,18 @@
 # Status
 
-## 2026-10-17 — Closed-panel audit: cleanup candidate under validation
+## 2026-10-17 — Closed-panel audit: allocator retention exposed
 
-Panel modules/assets are already scoped to their own bundles; a new headless
-assertion proves the core bar loads none of the closed view bundles. Workers,
-Source subscriptions and rasters retire after2.2s closed (unused hover:2s).
-The launcher scalar-state mirror was retained by the bar. The candidate clears
-it on worker retirement; quick reopen inside the grace keeps the live state.
-193 tests, fmt, all-feature clippy and CPU-only build pass.
-No cleanup memory saving is claimed yet. Next: matched old/new settled memory,
-plus native quick-reopen/idle-reset checks, before adding another panel.
+Modules/assets already load per view; retirement now clears the launcher's
+scalar-state mirror too (2.2s close grace, quick reopen keeps the live worker).
+A stronger test discards two unused preparations: accepted/candidate both reach
+28.66/28.84 MiB from about22 MiB bar, failing the unchanged close+5 guard.
+Accounted caches return to164 KiB; diagnostic heap counters and a UI-only mmap
+threshold trial point to allocator retention of a large transient raster.
+An application-only1 MiB mmap policy is a candidate, respecting explicit allocator
+settings. Framework allocation/font code is unchanged. 193 workspace tests,
+isolated trace allocation proof, fmt/clippy/CPU-only pass. Native and five-pair
+old/new memory validation remain; no cleanup saving or new acceptance claimed.
+No next panel is added until this audit is resolved.
 
 ## 2026-10-17 — Calendar/sound/routing cost accepted; idle audit next
 

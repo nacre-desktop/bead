@@ -1,5 +1,25 @@
 # Feasibility
 
+## 2026-10-17 — Closed-panel audit exposes unused-preparation retention
+
+Closed modules already load on demand; worker retirement now clears mirrored
+launcher view state. Two consecutive unused preparations expose an older
+resident-memory failure in both normal accepted and cleanup binaries.
+An application-only mmap policy is under validation; no saving accepted yet.
+
+| Hyprland diagnostic, UI MiB | Bar | After second unused discard | Settled |
+| --- | ---: | ---: | ---: |
+| Accepted normal binary |21.782|28.656: close+5 fails|Not measured|
+| Cleanup normal binary |22.102|28.838: close+5 fails|Not measured|
+| Accepted, child-only1 MiB mmap threshold |22.114|21.914|22.909|
+
+Nested/private, scale1.5, frozen75157 daemon,320 apps; host contention uncontrolled.
+No own build overlap. Trace-only heap accounting shows freed bytes can remain
+reserved; it changes allocation layout and is not an acceptance substitute.
+193 workspace tests plus the isolated trace allocation proof, fmt/clippy/CPU-only
+pass. Five alternating memory pairs, normal native stress and typing remain.
+[Audit and method](docs/research/feature9-gate-d.md#closed-panel-residency-audit--candidate-2026-10-17).
+
 ## 2026-10-17 — Named service views: measured combined feature cost accepted
 
 One cold catalog selects launcher, sound or calendar on the shared panel lifecycle.

@@ -56,7 +56,35 @@ Immediate named-view switching retires state too; quick close/reopen within the
 existing grace retains it. After idle, reopening starts fresh unless a new launch
 command supplies a query. This intentionally supersedes indefinite query retention.
 
-Before/after memory is pending. The accepted feature's mapped code pages are
+The stronger native check discards two consecutive prepared-but-never-opened
+launchers. The normal accepted/candidate binaries both fail the unchanged
+close+5 guard:21.782->28.656 and22.102->28.838 MiB H respectively. Waiting4s more
+does not release it. Both report only164 KiB of accounted caches afterward.
+This is new coverage of an existing retention path, not a measured regression
+caused by clearing the scalar mirror. Failed raw runs are preserved separately.
+
+A separate trace build reaches3.07->3.32 MiB live heap while free heap reaches
+12.72 MiB; its PSS stays low, so those instrumented results cannot stand in for
+the normal binary. A UI-only diagnostic on the normal accepted binary fixes
+mmap threshold at1 MiB: the second discard is21.914 MiB, settled22.909 MiB,
+and all its close/settled/group guards pass. Together these observations point
+to allocator residency of a freed large raster; they do not prove exclusivity.
+The launcher shadow alone is6.53 MiB at this scale.
+
+The application-only candidate sets glibc's mmap threshold to1 MiB before
+threads start, respecting explicit mmap/trim environment settings and malloc
+tunables. This lets large temporary buffers use individually releasable mappings
+instead of adapting toward reusable thread arenas. It does not change the
+framework's allocator/font code or child process environments. More OS mappings
+are a possible cost; matched warm/settled memory and typing checks are pending.
+The [glibc documentation](https://sourceware.org/glibc/manual/latest/html_node/Malloc-Tunable-Parameters.html)
+describes this threshold; [allocator source](https://raw.githubusercontent.com/bminor/glibc/master/malloc/malloc.c)
+shows why free bytes and resident bytes need not agree.
+An isolated trace-only test raises the adaptive threshold, applies the policy,
+and proves three1.5 MiB allocations each return their mapping on drop; CI runs it.
+No allocator rewrite, cache-ledger tolerance or relaxed close assertion is added.
+
+Five alternating before/after memory pairs remain pending. The accepted feature's mapped code pages are
 not retained panel data; they cannot be unloaded by dropping a view. No unsafe
 code-page discard or allocator/font-engine rewrite is introduced. No new panel
 is added until the cleanup has its matched measurements.

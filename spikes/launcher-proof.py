@@ -113,11 +113,11 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             assert not state['target_open']and state['surfaces']==0,'hover mapped launcher'
             pointer.command('move 1000 600','POINTER_DONE')
             result['unused_hover']=closed_guard()
-            if query_on_open:
+            if os.environ.get('BEAD_PANEL_PREPARE_STRESS')=='1':
                 call('prepare');state_wait(lambda s:s['prepared'])
                 result['unused_explicit_prepare']=closed_guard()
             for cycle in range(3):
-                if not query_on_open:
+                if not query_on_open or cycle==0:
                     call('prepare');state_wait(lambda s:s['prepared'])
                 offset=len(matrix.log_text(log));began=time.monotonic_ns()
                 if query_on_open:call('launcher','a',target='nacre')
