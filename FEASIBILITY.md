@@ -1,5 +1,29 @@
 # Feasibility
 
+## 2026-10-16 — Reject Lua row cloning; retain launcher pixel coverage
+
+Cloning static row skeletons in Luau has no consistent typing CPU benefit.
+The screen uses identical accepted executables, so native code growth is absent.
+Keep the runtime unchanged and preserve local5043af7 rather than expand the trial.
+Retain the useful accepted-widget pixel/action tests independently.
+
+| One native200-key pair, H /N | Before → prototype |
+| --- | ---: |
+| UI CPU mean, ms/key |10.696→10.580 /11.214→11.345|
+| Presented p99, ms |26.815→26.402 /29.674→34.609|
+| Settled UI MiB |21.777→21.776 /22.817→22.811|
+
+Eight cells exit0; all UI-close/35s-group guards pass. A single pair cannot
+establish spread or a tail regression.320 apps, same75157 engine, matching
+immutable bundles, Hvirtual120/N60,2880×1800/scale1.5; refresh unknown,
+contention uncontrolled, no own build overlap. CPU includes background work.
+Persistent2,000-call loop: daemon+provider CPU5.715/4.260ms H/N; RTTp99
+10.038/8.652ms. Query checks pass; both idle checks fail host paging. No UI
+frame claim. Shared method sent upstream; cross-host cause remains unproved.
+Three actual-widget goldens cover grid/results/scroll, disabled rows and actions;
+bundled fonts and exact pixels. Calendar body remains local, unwired preparation.
+[Evidence](docs/research/feature9-gate-d.md#lua-row-cloning--rejected-at-the-screen).
+
 ## 2026-10-16 — Native row templates rejected; provider duplex proved
 
 The native template prototype saves about21% UI CPU but still misses8ms/key.

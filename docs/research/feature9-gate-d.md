@@ -194,6 +194,65 @@ No failed optimization cost is added to the accepted baseline. Data in
 profiles still identify markup construction as the large repeat cost. Next probe
 is declarative row instantiation, preserving the fresh Lua sandbox and UI output.
 
+## Persistent-call component cross-check — 2026-10-16
+
+Replayed Nacre92cb's existing benchmark-menu loop on this host: exact fixed75157
+helper, alpha320 catalog, a/ap,100 warmups then2,000 completed sequential RPCs on
+ONE persistent link. No Bead UI runs in this component capture. The wider typing
+CPU window does not explain the entire difference from upstream's reported
+~1.028ms total daemon/provider CPU. A cross-host comparison does not isolate why.
+
+| Component method, H / N | Result |
+| --- | ---: |
+| Daemon CPU, ms/query |4.065 /2.945|
+| Provider CPU, ms/query |1.650 /1.315|
+| Sum, ms/query |5.715 /4.260|
+| Client round trip p50 /p99, ms |6.363/10.038;4.735/8.652|
+| CPU tick quantum, ms/query |0.005 /0.005|
+
+Both query samples pass the original swap check: process SwapPss0, host swap-in
+60/31 pages below1MiB. BOTH subsequent60s idle samples FAIL their host-paging
+check; do not claim idle invariance or substitute0 for missing valid idle data.
+Existing private Bead compositor wrapper supplies Hvirtual120/N60, scale1.5;
+upstream wlr-randr is absent, nothing installed. Only the copied tool's private
+runtime prefix guard changes; the query loop is unchanged. No own build overlaps,
+host contention uncontrolled, same process-clock accounting as upstream. The
+upstream tool's inherited desktop-PC condition label is not a hardware claim
+about this host; raw summary records the actual boundary. Fonts/provider setup
+remain potential environmental differences; no hardware cause is established.
+These CPU/RTT numbers are not UI latency, additive typing-delay components or
+physical120Hz acceptance. Shared-loop results sent to migration; no engine copy
+or transport/validation weakening follows. Raw ignored core-persistent-menu/.
+
+## Lua row cloning — rejected at the screen
+
+Local5043af7 tried shallow property/deep child cloning of static row skeletons
+in GPL Luau only. Both sides used the EXACT acceptedb0 executable and matching
+immutable bundles; no native API, retained cache or ranking changed. The first
+pair has no consistent CPU benefit, so do not spend five-pair acceptance runs
+on it. Preserve the branch; exclude its production Lua from main and the plan.
+
+| One200-key native screen, H / N | Before → prototype |
+| --- | ---: |
+| UI process CPU mean, ms/key |10.696→10.580 /11.214→11.345|
+| Presented p99, ms |26.815→26.402 /29.674→34.609|
+| Settled UI PSS+DRM+SwapPss, MiB |21.777→21.776 /22.817→22.811|
+
+All eight typing/lifecycle cells exit0 with strict owned cleanup. Three opens
+per memory cell, every UI-close and35s group guard passes.320 synthetic apps,
+same75157 helper, nested Hvirtual120/N60 at2880×1800/scale1.5; feedback refresh
+unknown, host contention uncontrolled, no own builds overlapped. A single pair
+cannot establish statistical spread or a tail regression; rejection means lack
+of a useful signal, not a proven slowdown. CPU windows include background work.
+Raw ignored core-lua-rows-screen is preserved with immutable candidate bundles.
+
+Retain the independent actual-widget regression test: grid, search results and
+scrolled rows match three accepted-markup goldens EXACTLY atscale1.5. The320-row
+fixture includes selected/disabled rows, icon/emoji branches and distinct action
+IDs, using bead-test's bundled fonts. The runtime optimization is not required
+by these tests. Calendar fixture preparation remains local and unwired; it does
+not yet count as completed service-view integration.
+
 ## Native row templates — rejected after five pairs
 
 A native row-template prototype removes repeated Luau construction while keeping
@@ -228,8 +287,7 @@ The prototype passed178 tests, fmt/clippy/CPU-only/release, exact scale1.5 pixel
 actions/identity, expansion/cache stress and top/middle/bottom overscan. V2 traced
 32-key warm markup0.510/0.608ms, composition1.472/2.192ms: sums per key then medians,
 overlapping spans not added, not native timing. Raw ignored core-template-v3-matrix
-contains summary and all40 cells; rejected WIP remains local. A smaller Lua-only
-construction experiment will use the same accepted executable for both sides.
+contains summary and all40 cells; rejected WIP remains local. The Lua-only screen below uses the same accepted executable for both sides.
 
 Control setup failures are preserved and excluded: lifecycle originally read WIP
 markup. It now runs inside its pinned private bundle; no assertion was weakened.
