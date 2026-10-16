@@ -114,9 +114,26 @@ def sample(env, raw, compositor, stop):
                         # Workers expire after30s idle. Discard a partial read
                         # and retry the WHOLE group if one exits mid-sample.
                         # Never count a vanished/unmeasured process as zero.
+                        def live_members():
+                            members = set()
+                            exited = []
+                            for pid in {daemon.pid, *clocks.descendants(daemon)}:
+                                # A zombie has exited and has no userspace memory,
+                                # but can remain in the child list until reaped.
+                                state = pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
+                                if state == 'Z':
+                                    assert pid != daemon.pid, 'private daemon exited during observation'
+                                    exited.append({'pid': pid, 'state': state})
+                                else:
+                                    members.add(pid)
+                            return members, exited
                         for attempt in range(5):
                             assert daemon.poll() is None, 'private daemon exited during observation'
-                            members = {daemon.pid, *clocks.descendants(daemon)}
+                            processes = []
+                            try:
+                                members, exited = live_members()
+                            except (FileNotFoundError, ProcessLookupError):
+                                continue
                             processes = []
                             try:
                                 for pid in sorted(members):
@@ -133,10 +150,14 @@ def sample(env, raw, compositor, stop):
                                                       'drm_fds': devices, 'pss_plus_drm_swap_mib': memory['pss_mib'] + (drm or 0) + memory['swap_pss_mib']})
                             except (FileNotFoundError, ProcessLookupError):
                                 continue
-                            if members != {daemon.pid, *clocks.descendants(daemon)}:
+                            try:
+                                after, exited_after = live_members()
+                            except (FileNotFoundError, ProcessLookupError):
+                                continue
+                            if members != after:
                                 continue
                             return {'processes': processes, 'pss_plus_drm_swap_mib': sum(p['pss_plus_drm_swap_mib'] for p in processes),
-                                    'membership_stable': True, 'observation_retries': attempt}
+                                    'membership_stable': True, 'observation_retries': attempt, 'exited_children': exited + exited_after}
                         raise RuntimeError('no stable daemon worker group for memory observation')
                     lifecycle = load('engine_launcher_lifecycle', ROOT / 'spikes/launcher-proof.py')
                     lifecycle.sample(dict(env, BEAD_LAUNCHER_ENGINE_SOCKET=str(endpoint)), raw, compositor, stop, observe, bundle_root=root)
