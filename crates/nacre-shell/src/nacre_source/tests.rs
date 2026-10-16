@@ -584,6 +584,77 @@ async fn partial_frame_survives_an_intervening_outbound_call() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn actual_ui_provider_acknowledges_dispatch_before_a_pending_menu_reply() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let ui_path = lab.0.join("ui.sock");
+    let handled = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = handled.clone();
+    let _ui = bead::services::ipc::Server::bind(ui_path.clone(), move |call| {
+        assert_eq!(call.target, "nacre");
+        assert_eq!(call.method, "launcher");
+        assert_eq!(call.args, vec![serde_json::json!("")]);
+        count.fetch_add(1, Ordering::SeqCst);
+        bead::services::ipc::Reply::ok(call.id, Value::Null)
+    })
+    .unwrap();
+    let menu = fixture("menu-apps");
+    let request = menu[0].clone();
+    let server = tokio::spawn(async move {
+        let ui = fixture("ui");
+        let (mut reader, mut writer) = accepted(&listener).await;
+        assert_eq!(next(&mut reader).await, ui[0]);
+        let observed = next(&mut reader).await;
+        let Message::Call { id, m, p, .. } = observed else {
+            panic!("outbound menu call expected")
+        };
+        let Message::Call {
+            id: expected,
+            m: method,
+            p: params,
+            ..
+        } = &menu[0]
+        else {
+            panic!("golden menu call expected")
+        };
+        assert_eq!((&id, &m, &p), (expected, method, params));
+        // Do not release the outgoing reply until this same client services
+        // the incoming UI call. Waiting synchronously on the menu here would
+        // deadlock. Use the published string provider ID and exact ACK.
+        framing::write(&mut writer, &ui[2]).await.unwrap();
+        assert_eq!(next(&mut reader).await, ui[3]);
+        framing::write(&mut writer, &menu[1]).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    });
+    let provider = Arc::new(crate::ui_provider::start(lab.socket(), ui_path, None).unwrap());
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while provider.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let Message::Call { id, m, p, .. } = request else {
+        panic!("golden menu call expected")
+    };
+    let result = provider
+        .call_id(Some(id), m, p, Duration::from_secs(5))
+        .await
+        .unwrap();
+    let Message::Ret {
+        reply: nacre_protocol::Reply::Ok { ok: expected },
+        ..
+    } = fixture("menu-apps")[1].clone()
+    else {
+        panic!("golden menu result expected")
+    };
+    assert_eq!(result, expected);
+    assert_eq!(handled.load(Ordering::SeqCst), 1);
+    provider.control(true).await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn full_snapshots_preserve_new_null_members() {
     let lab = Lab::new();
     let listener = lab.bind();

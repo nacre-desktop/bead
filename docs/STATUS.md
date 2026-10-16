@@ -8,9 +8,11 @@ fit the new25MiB UI ceiling. Exact173-test source integrated; fmt/clippy/
 CPU-only/release checks pass. Feature CI: [latest main run](https://github.com/nacre-desktop/bead/actions/workflows/ci.yml).
 New policy: pure optimizations preserve warm/settled spreads; explained features
 may add≤0.5MiB settled each within close+5/25MiB limits. Record and continue.
-Local unaccepted row-template probe:178 tests/fmt/clippy/CPU-only/release pass.
-First native pair UI10.866→8.592/10.965→8.751ms H/N;8ms target still open.
-Initial lifecycle guards pass; bounded/reuse/window fix enters five-pair checks.
+Tools6350045 / [CI38947299625](https://github.com/nacre-desktop/bead/actions/runs/38947299625) green; pinned preview passes private smoke.
+Native row-template WIP rejected: niri warm+0.559/settled+0.482MiB exceed
+0.313/0.211 control spreads. Five-pair CPU8.445/8.507ms still misses8ms.
+Preserved4db6682; runtime stays acceptedb0. Actual UI-provider duplex ACK test
+passes with174 tests/fmt/clippy/CPU-only checks. Next probe is Lua-only.
 Next: daemon typing and activation/reconnect/provider contracts, then remaining
 bar popouts/service views. STOP after service views, before dashboard.
 Current typing UI11.041/10.988ms/key, p9924.287/34.679ms H/N; targets open.

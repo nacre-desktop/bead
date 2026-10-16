@@ -1,5 +1,34 @@
 # Feasibility
 
+## 2026-10-16 — Native row templates rejected; provider duplex proved
+
+The native template prototype saves about21% UI CPU but still misses8ms/key.
+It raises niri warm/settled memory beyond the matched control spread.
+Keep the accepted renderer/frontend; preserve4db6682 locally, outside the plan.
+The actual UI provider can ACK an incoming call while an outgoing reply is held.
+
+| Five alternating pairs/compositor | H / N |
+| --- | ---: |
+| UI CPU median before→candidate ms/key |10.792→8.445 /10.736→8.507|
+| Presented p99 median before→candidate ms |24.705→23.664 /33.462→31.865|
+| Warm paired delta / control spread MiB |+0.555/0.704; +0.559/0.313|
+| Settled paired delta / control spread MiB |+0.397/0.842; +0.482/0.211|
+| Candidate settled maximum MiB |22.527 /23.455|
+| UI close/idle and35s group guards |100/100 and20/20 pass|
+
+40 cells exit0;320 apps,200 keys, fixed75157 helper and matching binary/markup.
+Nested Hvirtual120/N60,scale1.5; unknown feedback refresh, contended host,
+no own build overlap. CPU windows include background work, not engine-only CPU.
+Niri file/anonymous settled deltas+0.339/+0.129MiB; text grew57,636bytes,
+insufficient to isolate all residency. Prototype178 tests and required checks pass.
+Passing close+5/25MiB does not override pure-optimization spread limits.
+Actual provider test uses published dispatch/ACK, same link, private UI socket,
+and releases menu reply only after ACK;174 tests/fmt/clippy/CPU-only pass.
+Tools6350045 CI38947299625 green. F3 typed actions/QML still pending upstream.
+[Evidence](docs/research/feature9-gate-d.md#native-row-templates--rejected-after-five-pairs).
+No live/install/release. Desktop plan HOLD; stop after bar service views.
+
+
 
 
 ## 2026-10-16 — Recovery/static text accepted for the core route

@@ -194,27 +194,50 @@ No failed optimization cost is added to the accepted baseline. Data in
 profiles still identify markup construction as the large repeat cost. Next probe
 is declarative row instantiation, preserving the fresh Lua sandbox and UI output.
 
-## Row-template pre-screen — unaccepted local work
+## Native row templates — rejected after five pairs
 
-The first template prototype defines one Luau row and expands keyed data in
-Rust. One native200-key pair, same320-app daemon75157, Hvirtual120/Nnested60,
-scale1.5, no own build overlap: UI10.866→8.592/10.965→8.751ms/key and presented
-p9927.381→24.112/30.940→30.878ms. Targets remain open; no acceptance yet.
-One lifecycle pair per compositor passes every UI-close/35s-group guard.
-First/warm/settled paired MiB deltas: H+.103/+.117/−.104; N+.321/+.312/+.269.
-These are screening values, not five-pair pure-optimization memory acceptance.
-A revised local path bounds expansion before cloning and reuses the old raw
-identity only for exactly identical visible output, after all keys validate.
-178tests/fmt/clippy/CPU-only/release pass, including exact scale1.5 pixels,
-actions/identity, expansion/cache stress and correct top/middle/bottom overscan.
-The top window previously prepared an unnecessary second row below the viewport.
-V2 traced32-key diagnostic warm markup0.510/0.608ms, composition1.472/2.192ms;
-per-key sums then medians, overlapping spans are not added. Not native timing.
-Five native alternating pairs per compositor are pending for the revised path.
-Control binaries now use a pinned matching markup bundle in both typing and
-lifecycle branches. Two failed control setups (unsupported candidate API)
-are excluded, preserved, and fixed by starting lifecycle in its private bundle;
-no proof assertion was weakened. Preview can likewise pin matching markup.
+A native row-template prototype removes repeated Luau construction while keeping
+fresh sandboxes, stable keys, validated offscreen IDs and exact pixels. It is a
+pure optimization and fails niri's warm/settled spread limits. Preserve local
+4db6682 and its predecessors; exclude runtime/API changes from main and the plan.
+
+| Five alternating pairs, H / N | Before → prototype median | Paired delta / control spread |
+| --- | ---: | ---: |
+| UI CPU, ms/key |10.792→8.445 /10.736→8.507|−2.347 /−2.229|
+| Presented p99, ms |24.705→23.664 /33.462→31.865|control spread9.512 /7.246|
+| Third warm, MiB |47.378→47.781 /45.177→45.772|+0.555/0.704; +0.559/0.313|
+| Third closed, MiB |22.021→22.470 /22.655→23.069|+0.383/0.669; +0.458/0.337|
+| Settled, MiB |21.838→22.452 /22.712→23.136|+0.397/0.842; +0.482/0.211|
+| First-open paired delta, MiB |+0.215 /+0.084|under1MiB, not the rejection cause|
+
+UI8ms/key remains unmet; this is not a two-frame acceptance candidate. Daemon
+median CPU5.101→5.212 /4.971→5.077ms/key; provider1.994→2.057 /2.048→2.083.
+These CPU windows span injected key to observed presentation and include background
+work; they are not engine-only CPU or additive latency components.
+40 cells complete with exit0;320 synthetic apps,200 keys/typing cell, same75157
+helper and immutable matching binaries AND markup. Nested Hvirtual120/N60,
+2880×1800/scale1.5, feedback refresh unknown, host contention uncontrolled,
+no own builds overlapped captures. Every100 UI-close/idle sample and20 group
+35s-idle guards passes; candidate settled maxima22.527/23.455MiB remain below25.
+Passing those guards does not waive the pure-optimization spread rule.
+Niri settled file/anonymous paired medians+0.339/+0.129MiB; ELFtext+57,636bytes.
+More executable pages touched and allocator/page residency are plausible causes;
+the trial does not isolate them. Cache-cap stress passes; that is not a PSS proof.
+
+The prototype passed178 tests, fmt/clippy/CPU-only/release, exact scale1.5 pixels,
+actions/identity, expansion/cache stress and top/middle/bottom overscan. V2 traced
+32-key warm markup0.510/0.608ms, composition1.472/2.192ms: sums per key then medians,
+overlapping spans not added, not native timing. Raw ignored core-template-v3-matrix
+contains summary and all40 cells; rejected WIP remains local. A smaller Lua-only
+construction experiment will use the same accepted executable for both sides.
+
+Control setup failures are preserved and excluded: lifecycle originally read WIP
+markup. It now runs inside its pinned private bundle; no assertion was weakened.
+Preview likewise pins acceptedb0 markup/binary; private headless niri smoke exits0
+with READY/STOPPED and owned cleanup. Tools6350045/CI38947299625 is green.
+The actual UI-provider test holds an outbound menu reply until published
+ui.dispatch is ACKed through the real handler and private UI socket.174 workspace
+tests/fmt/clippy/CPU-only checks pass. F3 typed activation/QML remains upstream.
 
 ## Gate D review — 2026-10-16
 
