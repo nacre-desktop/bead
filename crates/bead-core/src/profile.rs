@@ -5,6 +5,14 @@ pub fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| std::env::var_os("BEAD_PROFILE_INPUT").is_some())
 }
+// Keep exact input/presentation clocks usable without per-stage logging cost.
+fn stages_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var_os("BEAD_PROFILE_INPUT")
+            .is_some_and(|value| value.as_os_str() != std::ffi::OsStr::new("clocks"))
+    })
+}
 pub fn clock(id: libc::clockid_t) -> u64 {
     let mut time = libc::timespec {
         tv_sec: 0,
@@ -30,7 +38,7 @@ impl Span {
     pub fn new(stage: &'static str) -> Self {
         Self {
             stage,
-            start: enabled().then(|| (monotonic_ns(), clock(libc::CLOCK_THREAD_CPUTIME_ID))),
+            start: stages_enabled().then(|| (monotonic_ns(), clock(libc::CLOCK_THREAD_CPUTIME_ID))),
         }
     }
 }

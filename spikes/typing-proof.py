@@ -11,8 +11,10 @@ matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
 spec=importlib.util.spec_from_file_location('menu_fixtures',ROOT/'spikes/menu-fixtures.py')
 menu_fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(menu_fixtures)
 def sample(env,raw,compositor,stop):
+    profile_mode=os.environ.get('BEAD_TYPING_PROFILE','1')
+    assert profile_mode in ('1','clocks'),'unknown typing profile mode'
     binary=os.environ.get('BEAD_HARDENING_BINARY',str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'))
-    env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_PROFILE_INPUT':'1','BEAD_MATCHED_ICONS':'1','DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
+    env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_PROFILE_INPUT':os.environ.get('BEAD_TYPING_PROFILE','1'),'BEAD_MATCHED_ICONS':'1','DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
     steady=os.environ.get('BEAD_TYPING_STEADY_LIST')=='1'
     rows=[]
     with tempfile.TemporaryDirectory(prefix='bead-type-') as directory:
@@ -62,15 +64,17 @@ def sample(env,raw,compositor,stop):
                     found=[p for p in presentations if p[4] in commits and int(p[1])>=start]
                     assert found,'no presentation for edit commit'
                     gen,ns,refresh,companion,update,endcpu=found[0]
+                    assert int(endcpu)>cpu>0 and int(ns)>start>0,'invalid input/presentation clocks'
                     profiles=[{'stage':s,'wall_ms':float(w),'cpu_ms':float(c)} for s,w,c in re.findall(r'INPUT_PROFILE stage=(\w+) wall_ms=([\d.]+) cpu_ms=([\d.]+)',segment)]
-                    rows.append({'index':index,'input_ns':start,'presented_ns':int(ns),'latency_ms':(int(ns)-start)/1e6,'cpu_ms':(int(endcpu)-cpu)/1e6,'update':int(update),'refresh_ns':int(refresh),'profiles':profiles})
+                    if profile_mode=='clocks':assert not profiles,'clock-only run emitted stage traces'
+                    rows.append({'index':index,'input_ns':start,'presented_ns':int(ns),'latency_ms':(int(ns)-start)/1e6,'cpu_ms':(int(endcpu)-cpu)/1e6,'update':int(update),'refresh_ns':int(refresh) or None,'profiles':profiles})
                     time.sleep(.04)
                 assert 'PRESENTATION clock_id=1' in matrix.log_text(path)
                 idle=None
                 if os.environ.get('BEAD_TYPING_IDLE_SECONDS'):
                     idle=matrix.idle(client.pid,float(os.environ['BEAD_TYPING_IDLE_SECONDS']))
                     subprocess.run(['grim',str(raw/'typing-native.png')],env=env,capture_output=True,check=True,timeout=8)
-                result={'compositor':compositor,'catalog_size':320,'idle':idle,'source':'legacy catalog fixture' if legacy else 'exact menu.query fixtures; no engine','workload':'first grid-to-list key, then a/ap populated list'if steady else'alternating empty/a grid-list transitions','helper_cpu_ms':None,'changed_result_ids':changed,'fixture_result_counts':{q:len(r['rows'])for q,r in replies.items()},'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
+                result={'compositor':compositor,'catalog_size':320,'idle':idle,'source':'legacy catalog fixture' if legacy else 'exact menu.query fixtures; no engine','workload':'first grid-to-list key, then a/ap populated list'if steady else'alternating empty/a grid-list transitions','helper_cpu_ms':None,'unknown_refresh_predictions':sum(r['refresh_ns'] is None for r in rows),'profile_mode':os.environ.get('BEAD_TYPING_PROFILE','1'),'changed_result_ids':changed,'fixture_result_counts':{q:len(r['rows'])for q,r in replies.items()},'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
 
         finally:
             if pointer:pointer.close()

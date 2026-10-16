@@ -514,6 +514,52 @@ Renderer ID/difference experiments remain separate local work, not included in
 this Source checkpoint or its141-test count. Gate D is still pending the real
 engine/provider/input comparison and updated measured forecast.
 
+## Typing clocks and tracing — 2026-10-16
+
+`BEAD_TYPING_PROFILE=clocks` keeps whole-process CPU and monotonic input→exact
+commit→presentation timestamps, suppressing optional per-stage spans. Default1
+keeps detailed profiling for diagnosis. The proof requires positive clock progress,
+exact update feedback, clock ID1 and no stage spans in clocks-only mode. Unknown
+presentation refresh predictions are null, not a measured zero-Hz rate.
+
+Calibration used the same unaccepted147-test UI binary in eight fresh private
+sessions,64 changed-result keys each: H detail/clocks/clocks/detail, N reverse.
+No own heavy build overlap; shared-host load/frequency/paging uncontrolled.
+
+|Per-run UI CPU mean ms/key | Detailed values | Clocks-only values | Median difference |
+| --- | --- | --- | ---: |
+|H configured virtual120 |12.935,11.262|8.797,11.576|−1.912|
+|N configured nested60 |13.168,13.340|11.805,11.701|−1.501|
+
+All512 exact key proofs pass; each64-key detailed run emits12832 stage records,
+clocks-only emits none. H spread is large; do not call the mode difference an
+optimization or accept either typing budget. Compare future before/candidate with
+matching clocks-only instrumentation and retain detailed profiles separately.
+Both buffers are logical1164×654 /physical1746×981 at scale1.5, RGBA. Both provide
+valid monotonic presentation timestamps but report unknown refresh prediction.
+The configured rates above are not physical or feedback-verified refresh rates.
+[Protocol definition](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/stable/presentation-time/presentation-time.xml).
+Raw method/manifest: `.research/gate-d-foundation/clock-mode-calibration-v2/`.
+
+## Rejected ID-map damage experiments — 2026-10-16
+
+A same-paint-position fallback for completely replaced primitive IDs reduced
+composition cost, but its closed/steady memory did not meet the standing rule.
+Five alternating H lifecycle pairs after the canonical Source used fresh private
+sessions, three openings and the unchanged bar+5/hover/query/geometry proofs.
+The third-closed median rose21.875→22.176MiB, exceeding baseline range width0.208;
+third-warm48.557→48.846 exceeded width0.239. Anonymous closed memory fell slightly;
+per-mapping smaps attributed roughly0.37MiB to private executable-backed pages.
+No driver/allocator/cache workaround or memory tolerance was added.
+
+A smaller two-pass map implementation also failed the memory comparison despite
+CPU wins: H18.172→12.760/N18.504→15.329ms/key, presented p9931.303→23.854/
+27.099→23.913ms. Third-closed H21.601→22.229/N22.695→23.255MiB; third-warm
+48.329→48.907/46.537→47.069. Both implementations are rejected, saved locally
+for audit, and absent from accepted results. Nested Hvirtual120/N60;200 changed-
+result keys per cell, no own heavy build overlap; shared-host load is uncontrolled.
+A simpler ordered-record vector is measured separately before any decision.
+
 ## Remaining-parity forecast — provisional until the engine comparison
 
 Gate D is not accepted by this forecast. The engine/prefix/activation comparison

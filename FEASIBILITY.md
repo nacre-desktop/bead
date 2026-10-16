@@ -1,5 +1,26 @@
 # Feasibility
 
+## 2026-10-16 — Separate typing clocks from detailed stage tracing
+
+Detailed tracing adds observation work, especially with several paint regions.
+Timestamp-only mode retains the exact presentation proof and whole-process CPU.
+Unknown refresh predictions remain missing data, not an asserted zero rate.
+The same-binary calibration is not an optimization acceptance.
+
+|Calibration,64 keys/run,2 runs/mode/compositor |H |N |
+| --- | ---: | ---: |
+|Detailed CPU median ms/key |12.099|13.254|
+|Clocks-only CPU median ms/key |10.187|11.753|
+|Clocks-only range ms/key |8.797–11.576|11.701–11.805|
+|Exact key proofs /unknown refresh predictions |256 /256|256 /256|
+
+147 local candidate tests/fmt/clippy/CPU-only/release pass; this checkpoint
+publishes only measurement infrastructure/docs. Default detailed mode is retained.
+Private Hvirtual120/Nnested60 configured, scale1.5; no own build overlap, external
+contention uncontrolled. Neither configured refresh is verified by feedback; no
+physical test. UI8ms/presentation16.7ms and real-engine comparisons remain open.
+[Method](docs/research/feature9-gate-d.md#typing-clocks-and-tracing--2026-10-16).
+
 ## 2026-10-16 — canonical menu payloads reach the fixture Source
 
 The pinned Nacre contract replaces the interim row-array transport shape.
