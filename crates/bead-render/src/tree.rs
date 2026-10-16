@@ -17,6 +17,7 @@ pub struct Raster {
     pub origin: (u32, u32),
     pub key: u64,
     pub base_key: Option<u64>,
+    /// Includes removed texels beyond the current extent; uploads must clip.
     pub changed: Damage,
     pub(crate) _charge: bead_core::cache::Charge,
 }
@@ -102,25 +103,46 @@ fn signature(scene: &Scene, primitive: &Primitive, scale: f32) -> Result<u64> {
     Ok(hash.finish())
 }
 fn pixel_difference(before: &Pixmap, after: &Pixmap) -> Damage {
-    if before.width() != after.width() || before.height() != after.height() {
-        return Damage::full(after.width(), after.height());
-    }
-    let (mut left, mut top, mut right, mut bottom) = (after.width(), after.height(), 0, 0);
-    for (index, (old, new)) in before
-        .data()
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .zip(after.data().as_chunks::<4>().0.iter())
-        .enumerate()
-    {
-        if old != new {
-            let x = index as u32 % after.width();
-            let y = index as u32 / after.width();
-            left = left.min(x);
-            top = top.min(y);
-            right = right.max(x + 1);
-            bottom = bottom.max(y + 1);
+    let width = before.width().max(after.width());
+    let height = before.height().max(after.height());
+    let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
+    let mut changed = |x: u32, y: u32| {
+        left = left.min(x);
+        top = top.min(y);
+        right = right.max(x + 1);
+        bottom = bottom.max(y + 1);
+    };
+    if before.width() == after.width() && before.height() == after.height() {
+        for (index, (old, new)) in before
+            .data()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(after.data().as_chunks::<4>().0.iter())
+            .enumerate()
+        {
+            if old != new {
+                changed(index as u32 % width, index as u32 / width);
+            }
+        }
+    } else {
+        // Missing texels are transparent. Include removed tails as well as new
+        // ink; the CPU repair clears and repaints the union of both extents.
+        let sample = |image: &Pixmap, x: u32, y: u32| {
+            if x < image.width() && y < image.height() {
+                let i = (y * image.width() + x) as usize * 4;
+                let pixel = &image.data()[i..i + 4];
+                [pixel[0], pixel[1], pixel[2], pixel[3]]
+            } else {
+                [0; 4]
+            }
+        };
+        for y in 0..height {
+            for x in 0..width {
+                if sample(before, x, y) != sample(after, x, y) {
+                    changed(x, y);
+                }
+            }
         }
     }
     Damage {
@@ -243,10 +265,21 @@ impl TreeCache {
                         (pixels, (0, 0))
                     };
                     let pixels = Arc::new(pixels);
-                    let previous = self.entries.get(&slot);
+                    // Prefer the last ordered paint slot: a replacement row can
+                    // have a new state ID while most of its raster is unchanged.
+                    // The presenter uses this delta only when its exact previous
+                    // raster key, geometry, clip and opacity match.
+                    let previous = self
+                        .frame
+                        .as_ref()
+                        .filter(|frame| frame.scale == scale)
+                        .and_then(|frame| frame.items.get(index))
+                        .and_then(|item| item.raster.as_deref())
+                        .or_else(|| self.entries.get(&slot).map(|old| old.raster.as_ref()));
+                    let base_key = previous.map(|old| old.key);
                     let changed = previous.map_or_else(
                         || Damage::full(pixels.width(), pixels.height()),
-                        |old| pixel_difference(&old.raster.pixels, &pixels),
+                        |old| pixel_difference(&old.pixels, &pixels),
                     );
                     let bytes = pixels.data().len() + id.capacity() + 192;
                     let budget = self.raster_budget.get_or_insert_with(|| {
@@ -273,13 +306,12 @@ impl TreeCache {
                             }
                         }
                     };
-                    let previous = self.entries.get(&slot);
                     let raster = Arc::new(Raster {
                         _charge: charge,
                         pixels,
                         origin,
                         key,
-                        base_key: previous.map(|old| old.raster.key),
+                        base_key,
                         changed,
                     });
                     self.entries.insert(
@@ -298,7 +330,28 @@ impl TreeCache {
                 }
                 let entry = self.entries.get_mut(&slot).ok_or("layer cache missing")?;
                 entry.touched = self.serial;
-                Some(entry.raster.clone())
+                let raster = entry.raster.clone();
+                let previous = self
+                    .frame
+                    .as_ref()
+                    .filter(|frame| frame.scale == scale)
+                    .and_then(|frame| frame.items.get(index))
+                    .and_then(|item| item.raster.as_ref());
+                Some(
+                    if let Some(previous) = previous
+                        && previous.key != raster.key
+                        && raster.base_key != Some(previous.key)
+                    {
+                        // The pixels can be cached while their comparison base is
+                        // from an older frame. Refresh only frame-owned metadata.
+                        let mut delta = (*raster).clone();
+                        delta.base_key = Some(previous.key);
+                        delta.changed = pixel_difference(&previous.pixels, &raster.pixels);
+                        Arc::new(delta)
+                    } else {
+                        raster
+                    },
+                )
             };
             items.push(Item {
                 id,
@@ -408,6 +461,9 @@ impl TreeCache {
             .iter()
             .map(|i| {
                 i.id.capacity() + crate::primitive_bytes(&i.primitive) + std::mem::size_of::<Item>()
+                    // Conservatively cover a frame-owned raster delta wrapper,
+                    // including frames that share the cache's original wrapper.
+                    + i.raster.as_ref().map_or(0, |_| std::mem::size_of::<Raster>())
             })
             .sum::<usize>()
             + layers.capacity() * std::mem::size_of::<LayerPose>();
@@ -1200,6 +1256,108 @@ mod tests {
         assert_eq!(budget.used(), bytes);
         drop(held);
         assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn replacement_raster_delta_uses_previous_paint_slot_and_repairs_exactly() {
+        for scale in [1., 1.5] {
+            for crop in [false, true] {
+                let before = scene();
+                let mut after = before.clone();
+                after.layers[0].id = "replacement-row".into();
+                after.resource_revision += 1;
+                let mut image =
+                    Pixmap::decode_png(&before.asset_data[std::path::Path::new("proof.png")])
+                        .unwrap();
+                if crop {
+                    image = image
+                        .clone_rect(tiny_skia::IntRect::from_xywh(0, 0, 6, 8).unwrap())
+                        .unwrap();
+                    if let Primitive::Image { rect, .. } = &mut after.primitives[0] {
+                        rect.w = 6.;
+                    }
+                } else {
+                    image.pixels_mut()[3 * 8 + 2] =
+                        tiny_skia::PremultipliedColorU8::from_rgba(200, 10, 20, 255).unwrap();
+                }
+                after
+                    .asset_data
+                    .insert("proof.png".into(), Arc::from(image.encode_png().unwrap()));
+                let mut cache = TreeCache::default();
+                cache.prepare(&before, scale).unwrap();
+                let old = cache.frame.as_ref().unwrap().clone();
+                cache.trim_idle();
+                cache.prepare(&after, scale).unwrap();
+                let new = cache.frame.as_ref().unwrap().clone();
+                assert_ne!(old.items[0].id, new.items[0].id);
+                let old_raster = old.items[0].raster.as_ref().unwrap();
+                let new_raster = new.items[0].raster.as_ref().unwrap();
+                assert_eq!(new_raster.base_key, Some(old_raster.key));
+                assert!(
+                    new_raster.changed.w > 0 && new_raster.changed.w < new_raster.pixels.width()
+                );
+                let builds = cache.builds;
+                cache.prepare(&before, scale).unwrap();
+                let reverted = cache.frame.as_ref().unwrap().clone();
+                assert_eq!(
+                    cache.builds, builds,
+                    "cached pixels must not be baked again"
+                );
+                assert_eq!(
+                    reverted.items[0].raster.as_ref().unwrap().base_key,
+                    Some(new_raster.key)
+                );
+                for (old, new) in [(&old, &new), (&new, &reverted)] {
+                    for offset in [(0., 0.), (0.3333, -0.5)] {
+                        let mut tracker = crate::damage::FrameDamage::default();
+                        tracker.update(old, offset, 1., 40, 40).unwrap();
+                        let damage = tracker
+                            .update(new, offset, 1., 40, 40)
+                            .unwrap()
+                            .into_iter()
+                            .fold(Damage::full(0, 0), Damage::union);
+                        for format in [crate::PixelFormat::Rgba, crate::PixelFormat::Bgra] {
+                            let mut repaired = vec![0; 40 * 40 * 4];
+                            let mut expected = repaired.clone();
+                            for (frame, bytes, damage) in [
+                                (&*old, repaired.as_mut_slice(), Damage::full(40, 40)),
+                                (&*new, expected.as_mut_slice(), Damage::full(40, 40)),
+                            ] {
+                                paint(
+                                    frame,
+                                    offset,
+                                    ShmTarget {
+                                        bytes,
+                                        width: 40,
+                                        height: 40,
+                                        scale,
+                                        format,
+                                    },
+                                    damage,
+                                )
+                                .unwrap();
+                            }
+                            paint(
+                                &new,
+                                offset,
+                                ShmTarget {
+                                    bytes: &mut repaired,
+                                    width: 40,
+                                    height: 40,
+                                    scale,
+                                    format,
+                                },
+                                damage,
+                            )
+                            .unwrap();
+                            assert!(
+                                repaired == expected,
+                                "replacement raster repair at scale{scale}, offset{offset:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
     fn scene() -> Scene {
         let mut image = Pixmap::new(8, 8).unwrap();

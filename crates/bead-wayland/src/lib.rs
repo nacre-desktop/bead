@@ -323,7 +323,7 @@ struct PresentationData {
 }
 struct Reusable {
     buffer: Buffer,
-    pending: Damage,
+    pending: Vec<Damage>,
 }
 struct Surface {
     background:Option<wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1>,

@@ -22,7 +22,30 @@ pub trait FrontEnd {
     ) -> Result<std::rc::Rc<RawNode>, Diagnostic>;
 }
 const INSTALL: &str = r#"
-return function(ui)
+return function(ui, constructors, allowed, arrayMarker)
+    local inspect = debug.info
+    for name, kind in constructors do
+        ui[name] = function(props)
+            if type(props) ~= "table" then error("node properties need a table", 2) end
+            local named, indexed = {}, {}
+            for key, value in next, props do
+                if type(key) == "string" then
+                    if not allowed[key] then error("unknown " .. name .. " property " .. key, 2) end
+                    named[key] = value
+                elseif type(key) == "number" and key > 0 and key % 1 == 0 then
+                    indexed[key] = value
+                else
+                    error("node properties need names or ordered children", 2)
+                end
+            end
+            local children = setmetatable({}, arrayMarker)
+            for index, child in ipairs(indexed) do children[index] = child end
+            local file, line = inspect(2, "sl")
+            file = (file or ""):gsub("^@+", "")
+            return {kind=kind, props=named, children=children,
+                source={file=file ~= "" and file or "ui/main.luau", line=line or 1}}
+        end
+    end
     local function check(value, schema)
         -- Ordinary row scalars/records need no Rust callback. Bind markers keep
         -- the same resolution and every property still receives its type check.
@@ -152,11 +175,13 @@ impl FrontEnd for LuauFrontEnd {
             lua.sandbox(true)?;
             lua.scope(|scope| {
                 let sdk = lua.create_table()?;
+                let constructors = lua.create_table()?;
                 for (name, kind) in Widget::constructors() {
-                    let constructor = scope
-                        .create_function(move |lua, props: Table| make_node(lua, kind, props))?;
-                    sdk.set(name, constructor)?;
+                    constructors.set(name, lua.to_value(&kind)?)?;
                 }
+                let allowed = lua.create_table_from(
+                    crate::layout::PROPERTIES.iter().map(|name| (*name, true)),
+                )?;
                 sdk.set(
                     "alpha",
                     scope.create_function(|lua, (role, alpha): (String, f64)| {
@@ -201,7 +226,7 @@ impl FrontEnd for LuauFrontEnd {
                     .load(self.install.as_slice())
                     .set_name("@bead.ui")
                     .eval()?;
-                install.call::<()>(sdk.clone())?;
+                install.call::<()>((sdk.clone(), constructors, allowed, lua.array_metatable()))?;
                 sdk.set(
                     "bind",
                     scope.create_function(|lua, name: String| {
@@ -221,9 +246,10 @@ impl FrontEnd for LuauFrontEnd {
                         Ok(action)
                     })?,
                 )?;
+                let group: Function = sdk.get("Group")?;
                 sdk.set(
                     "Repeat",
-                    scope.create_function(|lua, props: Table| {
+                    scope.create_function(move |lua, props: Table| {
                         let first = props.get::<Option<usize>>("first")?.unwrap_or(0);
                         let count = props.get::<Option<usize>>("count")?.unwrap_or(2048);
                         let id: String = props.get("id")?;
@@ -268,7 +294,9 @@ impl FrontEnd for LuauFrontEnd {
                         }
                         let clean = lua.create_table()?;
                         clean.set("id", id)?;
-                        let node = make_node(lua, Widget::Group, clean)?;
+                        let origin = source(lua, entry);
+                        let node: Table = group.call(clean)?;
+                        node.set("source", lua.to_value(&origin)?)?;
                         node.set("children", children)?;
                         Ok(node)
                     })?,
@@ -383,46 +411,6 @@ fn source(lua: &Lua, fallback: &Path) -> crate::layout::Source {
         file: fallback.display().to_string(),
         line: 1,
     })
-}
-fn make_node(lua: &Lua, kind: Widget, props: Table) -> mlua::Result<Table> {
-    let source = source(lua, Path::new("ui/main.luau"));
-    let result = lua.create_table()?;
-    let named = lua.create_table()?;
-    let children = lua.create_table()?;
-    for pair in props.pairs::<mlua::Value, mlua::Value>() {
-        let (key, value) = pair?;
-        match key {
-            mlua::Value::String(name) => {
-                let name = name.to_str()?;
-                if !crate::layout::allowed_property(&name) {
-                    return Err(mlua::Error::runtime(format!(
-                        "unknown {kind:?} property {name}"
-                    )));
-                }
-                named.set(name, value)?;
-            }
-            mlua::Value::Integer(index) if index > 0 => children.set(index, value)?,
-            _ => {
-                return Err(mlua::Error::runtime(
-                    "node properties need names or ordered children",
-                ));
-            }
-        }
-    }
-    result.set("kind", lua.to_value(&kind)?)?;
-    result.set("props", named)?;
-    // A sequence marker preserves empty lists when crossing serde.
-    let mut children_json: Vec<mlua::Value> = Vec::new();
-    for child in children.sequence_values::<mlua::Value>() {
-        children_json.push(child?);
-    }
-    result.set("children", lua.to_value(&Vec::<u8>::new())?)?;
-    let array: Table = result.get("children")?;
-    for (i, value) in children_json.into_iter().enumerate() {
-        array.set(i + 1, value)?;
-    }
-    result.set("source", lua.to_value(&source)?)?;
-    Ok(result)
 }
 fn diagnostic(entry: &Path, error: mlua::Error) -> Diagnostic {
     let message = error.to_string();

@@ -233,7 +233,7 @@ struct View {
     actions: BTreeMap<String, String>,
     catalog_rev: u64,
     stamp: Option<(String, u64, bool)>,
-    rows: Vec<Json>,
+    rows: Arc<Vec<Json>>,
     error: String,
 }
 pub struct Menu {
@@ -348,7 +348,7 @@ impl Menu {
             };
             match result {
                 Ok(prepared) => {
-                    view.rows = prepared.rows;
+                    view.rows = Arc::new(prepared.rows);
                     view.actions = prepared.actions;
                     view.catalog_rev = prepared.catalog_rev;
                     view.error.clear();
@@ -373,9 +373,12 @@ impl Menu {
                 .unwrap_or("")
                 .to_string()
         };
-        for row in &mut view.rows {
-            let selected = row["id"].as_str() == Some(selection.as_str());
-            row["selected"] = Json::Bool(selected);
+        if view.rows.iter().any(|row| {
+            row["selected"].as_bool() != Some(row["id"].as_str() == Some(selection.as_str()))
+        }) {
+            for row in Arc::make_mut(&mut view.rows) {
+                row["selected"] = Json::Bool(row["id"].as_str() == Some(selection.as_str()));
+            }
         }
         let mut delta = BTreeMap::from([
             (
@@ -387,9 +390,15 @@ impl Menu {
         ]);
         // A query may change while the ordered engine result stays identical.
         // Retain the store's immutable model instead of cloning it just to compare.
-        if !matches!(stores.get("launcher.apps"),Some(Value::List(current))if current.as_ref()==&view.rows)
-        {
-            delta.insert("launcher.apps".into(), Value::list(view.rows.clone()));
+        match stores.get("launcher.apps") {
+            Some(Value::List(current))
+                if Arc::ptr_eq(current, &view.rows) || current.as_ref() == view.rows.as_ref() =>
+            {
+                view.rows = current.clone();
+            }
+            _ => {
+                delta.insert("launcher.apps".into(), Value::List(view.rows.clone()));
+            }
         }
         Ok(delta)
     }
@@ -574,6 +583,40 @@ mod tests {
         assert!(
             matches!(&menu.project(&stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["name"]=="New")
         );
+    }
+    #[test]
+    fn projection_shares_rows_without_mutating_previous_selection_snapshots() {
+        let source = Arc::new(
+            Fixture::new(json!({"queries":{"":fixture_reply("",vec![
+                json!({"id":"a","name":"Alpha"}),json!({"id":"b","name":"Beta"})
+            ])}}))
+            .unwrap(),
+        );
+        let menu = Menu::new(Some(source)).unwrap();
+        let initial = menu.project(&Stores::default()).unwrap();
+        let Value::List(before) = &initial["launcher.apps"] else {
+            panic!("missing model")
+        };
+        assert!(Arc::ptr_eq(before, &menu.view.borrow().rows));
+        let mut stores = Stores::default().reconcile(&initial).unwrap();
+        assert!(!menu.project(&stores).unwrap().contains_key("launcher.apps"));
+        assert!(Arc::ptr_eq(before, &menu.view.borrow().rows));
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.selection".into(),
+                Value::Text("b".into()),
+            )]))
+            .unwrap();
+        let next = menu.project(&stores).unwrap();
+        let Value::List(after) = &next["launcher.apps"] else {
+            panic!("missing changed model")
+        };
+        assert!(!Arc::ptr_eq(before, after));
+        assert!(Arc::ptr_eq(after, &menu.view.borrow().rows));
+        assert_eq!(before[0]["selected"], true);
+        assert_eq!(before[1]["selected"], false);
+        assert_eq!(after[0]["selected"], false);
+        assert_eq!(after[1]["selected"], true);
     }
     #[test]
     fn exact_fixture_queries_do_not_filter_or_rank() {

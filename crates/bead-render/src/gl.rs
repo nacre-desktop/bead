@@ -355,6 +355,15 @@ impl GlRenderer {
                     } else {
                         Damage::full(w, h)
                     };
+                    // CPU damage may include a removed tail beyond the new
+                    // raster. Upload only texels inside the current texture;
+                    // size changes already reallocate it above.
+                    let changed = Damage {
+                        x: changed.x.min(w),
+                        y: changed.y.min(h),
+                        w: changed.w.min(w.saturating_sub(changed.x)),
+                        h: changed.h.min(h.saturating_sub(changed.y)),
+                    };
                     if changed.w > 0 && changed.h > 0 {
                         let crop = raster
                             .pixels

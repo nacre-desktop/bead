@@ -632,7 +632,7 @@ impl App {
                     )?;
                     s.buffers.push(Reusable {
                         buffer,
-                        pending: Damage::full(w as u32, h as u32),
+                        pending: vec![Damage::full(w as u32, h as u32)],
                     });
                     s.allocations += 1;
                 }
@@ -647,35 +647,56 @@ impl App {
                 );
             }
             let current = scene.bounds();
-            let d = regions
-                .iter()
-                .copied()
-                .fold(Damage::full(0, 0), Damage::union);
             for b in &mut s.buffers {
-                b.pending = b.pending.union(d);
+                for region in &regions {
+                    track_repair(&mut b.pending, *region);
+                }
             }
             let b = s
                 .buffers
                 .iter_mut()
                 .find(|b| !b.buffer.slot().has_active_buffers())
                 .ok_or("three buffers still in use at callback")?;
-            let damage = b.pending;
+            let bounding = b
+                .pending
+                .iter()
+                .copied()
+                .fold(Damage::full(0, 0), Damage::union);
+            let repairs = if _kind == RendererKind::Cpu {
+                b.pending.as_slice()
+            } else {
+                std::slice::from_ref(&bounding)
+            };
             let start = Instant::now();
             let compose_profile = bead_core::profile::Span::new("compose");
-            renderer.draw(
-                scene,
-                RenderTarget::Shm(ShmTarget {
-                    bytes: b
-                        .buffer
-                        .canvas(&mut s.pool)
-                        .ok_or("compositor owns buffer")?,
-                    width: w as u32,
-                    height: h as u32,
-                    scale,
-                    format,
-                }),
-                damage,
-            )?;
+            let canvas = b
+                .buffer
+                .canvas(&mut s.pool)
+                .ok_or("compositor owns buffer")?;
+            for damage in repairs {
+                renderer.draw(
+                    scene,
+                    RenderTarget::Shm(ShmTarget {
+                        bytes: &mut *canvas,
+                        width: w as u32,
+                        height: h as u32,
+                        scale,
+                        format,
+                    }),
+                    *damage,
+                )?;
+            }
+            if std::env::var_os("BEAD_PROFILE_DAMAGE").is_some() {
+                println!(
+                    "INPUT_REPAIR rects={} pixels={} bounding_pixels={}",
+                    repairs.len(),
+                    repairs
+                        .iter()
+                        .map(|d| u64::from(d.w) * u64::from(d.h))
+                        .sum::<u64>(),
+                    u64::from(bounding.w) * u64::from(bounding.h)
+                );
+            }
             drop(compose_profile);
             if self.started.elapsed().as_secs_f64() > 2. {
                 s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
@@ -712,7 +733,7 @@ impl App {
             }
             b.buffer.attach_to(s.layer.wl_surface())?;
             s.layer.commit();
-            b.pending = Damage::full(0, 0);
+            b.pending.clear();
             s.previous = Some(current);
             s.frames += 1;
             Ok(())
@@ -769,6 +790,190 @@ impl App {
                 return;
             }
             self.fail(e);
+        }
+    }
+}
+
+/// Keep a bounded repair history for each compositor-owned SHM buffer.
+fn track_repair(pending: &mut Vec<Damage>, mut region: Damage) {
+    if region.w == 0 || region.h == 0 {
+        return;
+    }
+    let mut index = 0;
+    while index < pending.len() {
+        let old = pending[index];
+        if region.x < old.x + old.w
+            && old.x < region.x + region.w
+            && region.y < old.y + old.h
+            && old.y < region.y + region.h
+        {
+            region = region.union(pending.swap_remove(index));
+            index = 0;
+        } else {
+            index += 1;
+        }
+    }
+    if pending.len() < 8 {
+        pending.push(region);
+    } else {
+        let area = |d: Damage| u64::from(d.w) * u64::from(d.h);
+        let index = pending
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, old)| {
+                area(old.union(region))
+                    .saturating_sub(area(**old))
+                    .saturating_sub(area(region))
+            })
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        pending[index] = pending[index].union(region);
+    }
+}
+
+#[cfg(test)]
+mod repair_tests {
+    use super::*;
+    use bead_render::{Primitive, Rect, Renderer, Scene, tree::TreeCpuRenderer};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn repair_history_is_bounded_and_preserves_every_dirty_rectangle() {
+        let changes: Vec<_> = (0..30)
+            .map(|i| Damage {
+                x: i * 7,
+                y: (i % 3) * 9,
+                w: 2,
+                h: 2,
+            })
+            .collect();
+        let mut pending = Vec::new();
+        for change in &changes {
+            track_repair(&mut pending, *change);
+            assert!(pending.len() <= 8);
+        }
+        for change in changes {
+            assert!(pending.iter().any(|d| d.x <= change.x
+                && d.y <= change.y
+                && d.x + d.w >= change.x + change.w
+                && d.y + d.h >= change.y + change.h));
+        }
+        let mut separate = Vec::new();
+        track_repair(
+            &mut separate,
+            Damage {
+                x: 2,
+                y: 2,
+                w: 4,
+                h: 4,
+            },
+        );
+        track_repair(
+            &mut separate,
+            Damage {
+                x: 80,
+                y: 50,
+                w: 4,
+                h: 4,
+            },
+        );
+        assert_eq!(
+            separate.len(),
+            2,
+            "distant edits must not repaint their intervening area"
+        );
+    }
+
+    #[test]
+    fn three_buffer_disjoint_repair_matches_full_frames_with_age_and_alpha() {
+        for scale in [1., 1.5] {
+            let (width, height) = ((96. * scale) as u32, (72. * scale) as u32);
+            for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
+                let mut buffers: Vec<_> = (0..3)
+                    .map(|_| {
+                        (
+                            vec![0; (width * height * 4) as usize],
+                            vec![Damage::full(width, height)],
+                        )
+                    })
+                    .collect();
+                let mut renderer = TreeCpuRenderer::default();
+                for frame in 0..12 {
+                    let fill = |rect, color| Primitive::Rounded {
+                        rect,
+                        radius: 3.,
+                        fill: color,
+                        border: None,
+                    };
+                    let scene = Scene {
+                        opacity: 1.,
+                        motion: None,
+                        resource_revision: 1,
+                        asset_data: BTreeMap::new(),
+                        clips: BTreeMap::new(),
+                        layers: vec![],
+                        prepared: BTreeMap::new(),
+                        font_files: vec![],
+                        width: 96.,
+                        slide: None,
+                        offset: (0., 0.),
+                        bounds: Rect::new(0., 0., 96., 72.),
+                        primitives: vec![
+                            fill(Rect::new(0., 0., 96., 72.), [17, 31, 71, 210]),
+                            fill(Rect::new(4., 4., 16., 10.), [frame * 13, 93, 25, 170]),
+                            fill(Rect::new(74., 54., 16., 10.), [29, frame * 11, 217, 255]),
+                        ],
+                    };
+                    for (_, pending) in &mut buffers {
+                        track_repair(
+                            pending,
+                            Rect::new(2., 2., 20., 14.).pixels(scale, width, height),
+                        );
+                        track_repair(
+                            pending,
+                            Rect::new(72., 52., 20., 14.).pixels(scale, width, height),
+                        );
+                    }
+                    renderer.prepare(&scene, scale).unwrap();
+                    let (bytes, pending) = &mut buffers[usize::from(frame) % 3];
+                    for damage in pending.iter().copied() {
+                        renderer
+                            .draw(
+                                &scene,
+                                RenderTarget::Shm(ShmTarget {
+                                    bytes: &mut *bytes,
+                                    width,
+                                    height,
+                                    scale,
+                                    format,
+                                }),
+                                damage,
+                            )
+                            .unwrap();
+                    }
+                    pending.clear();
+                    let mut expected = vec![0; bytes.len()];
+                    let mut reference = TreeCpuRenderer::default();
+                    reference.prepare(&scene, scale).unwrap();
+                    reference
+                        .draw(
+                            &scene,
+                            RenderTarget::Shm(ShmTarget {
+                                bytes: &mut expected,
+                                width,
+                                height,
+                                scale,
+                                format,
+                            }),
+                            Damage::full(width, height),
+                        )
+                        .unwrap();
+                    assert!(
+                        *bytes == expected,
+                        "stale buffer at frame{frame},scale{scale},format{format:?}"
+                    );
+                }
+            }
         }
     }
 }

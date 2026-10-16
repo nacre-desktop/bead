@@ -412,8 +412,8 @@ impl Session {
                 .map_err(|e| node.diagnostic(e))
         };
         let x = measure(cursor)?;
-        let end = measure(anchor)?;
         if cursor != anchor {
+            let end = measure(anchor)?;
             let highlight = Primitive::Rounded {
                 rect: Rect::new(
                     area.x + x.min(end),

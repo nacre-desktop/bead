@@ -1,5 +1,29 @@
 # Feasibility
 
+## 2026-10-16 — Keep clocked UI typing improvements
+
+Matched clock-only runs confirm the UI CPU median win on both compositors.
+Ordered pixels and separate SHM repair avoid broad repaints; Luau builds fewer
+native objects and result models share immutable storage.
+Ten lifecycle pairs each show lower first/steady/closed memory, without a waiver.
+The8ms CPU and16.7ms presentation targets remain unaccepted.
+
+|Per-run medians |Before H /N |Candidate H /N |
+| --- | ---: | ---: |
+|UI CPU ms/key,5 pairs |15.467 /16.957|10.099 /10.830|
+|Presented p99 ms,5 pairs |24.715 /27.019|22.191 /21.338|
+|First warm MiB,10 pairs |50.796 /48.296|50.224 /47.623|
+|Third warm MiB,10 pairs |48.510 /46.197|47.949 /45.604|
+|Third closed MiB,10 pairs |21.867 /22.292|21.638 /22.026|
+
+147 tests/fmt/clippy/CPU-only/release pass.4000 key proofs/160 current lifecycle
+checks pass; one initial N private IPC failure is retained, exact retest and20
+extra lifecycle sessions pass. Failure reply capture is added; cause unclassified.
+Fresh private Hvirtual120/N60 configured,scale1.5; feedback refresh unknown.
+No own heavy build overlap; external contention uncontrolled. No physical/engine
+acceptance. Later font/RPC drafts are excluded. Native GL functional smoke passes (6 keys each).
+[Method, spreads and limits](docs/research/feature9-gate-d.md#clocked-ui-typing-improvements--2026-10-16).
+
 ## 2026-10-16 — Separate typing clocks from detailed stage tracing
 
 Detailed tracing adds observation work, especially with several paint regions.

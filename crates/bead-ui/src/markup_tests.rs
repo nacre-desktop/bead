@@ -855,3 +855,46 @@ fn text_patch_updates_pixels_label_and_structural_bindings_still_relayout() {
         .unwrap();
     assert_eq!(next.width, 500.);
 }
+
+#[test]
+fn widget_constructors_preserve_empty_children_and_callsite_diagnostics() {
+    use crate::frontend::{FrontEnd, LuauFrontEnd};
+    let entry = PathBuf::from("ui/main.luau");
+    let sources = BTreeMap::from([(
+        entry.clone(),
+        br#"local ui=require('bead.ui')
+return ui.Panel{id='root',width=120,height=80,
+ ui.Text{id='label',text='Hello'},
+ ui.Box{id='empty'}
+}"#
+        .to_vec(),
+    )]);
+    let frontend = LuauFrontEnd::new(&entry, &sources).unwrap();
+    let resolve = |name: &str| Err(Diagnostic::new(&entry, 1, 1, name));
+    let raw = frontend.build(&entry, &resolve).unwrap();
+    assert_eq!(raw.source.file, "ui/main.luau");
+    assert!((2..=5).contains(&raw.source.line));
+    assert_eq!(raw.children.len(), 2);
+    assert_eq!(raw.children[0].source.line, 3);
+    assert_eq!(raw.children[1].source.line, 4);
+    assert!(raw.children.iter().all(|node| node.children.is_empty()));
+    for (body, message, line) in [
+        (
+            "local ui=require('bead.ui')\nreturn ui.Box{id='bad',typo=3}",
+            "unknown Box property typo",
+            2,
+        ),
+        (
+            "local ui=require('bead.ui')\nreturn ui.Box{[false]='bad'}",
+            "node properties need names or ordered children",
+            2,
+        ),
+    ] {
+        let sources = BTreeMap::from([(entry.clone(), body.as_bytes().to_vec())]);
+        let frontend = LuauFrontEnd::new(&entry, &sources).unwrap();
+        let error = frontend.build(&entry, &resolve).unwrap_err();
+        assert!(error.message.contains(message), "{}", error.message);
+        assert_eq!(error.file, entry.display().to_string());
+        assert_eq!(error.line, line);
+    }
+}

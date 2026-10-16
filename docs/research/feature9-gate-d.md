@@ -514,6 +514,59 @@ Renderer ID/difference experiments remain separate local work, not included in
 this Source checkpoint or its141-test count. Gate D is still pending the real
 engine/provider/input comparison and updated measured forecast.
 
+## Clocked UI typing improvements — 2026-10-16
+
+Keep the UI candidate after a matched clock-only comparison. Ordered paint records
+avoid repainting identical pixels just because action/state IDs change. Cached
+raster deltas refresh their comparison base and cover shrinking/growing extents;
+removed tails are cleared, GPU uploads clip to current texture bounds. State IDs
+remain unchanged in the view/state layer. Luau constructors retain the same
+property registry, caller diagnostics, fresh sandbox and50ms/8MiB limits. Projected
+rows share immutable storage; selection uses copy-on-write. Collapsed selections
+shape the caret boundary once.
+
+SHM previously unioned distant dirty regions into one bounding box before drawing.
+Each reusable buffer now keeps at most8 repair regions, including all missed-frame
+history. CPU draws them separately; non-CPU SHM fallbacks retain bounding draws.
+The existing one-pixel presentation request for pixel-identical new generations
+stays intact. Exact three-buffer repair tests cover RGBA/BGRA, scale1/1.5 and alpha.
+Diagnosis: four repair rectangles process3.4% of their bounding-box area; H detailed
+composition6.56→3.75ms before this step, then component3.62→1.87ms with separate
+regions. The unbuilt translucent shortcut was shelved: fixture fills are opaque.
+
+|Clock-only per-run medians,5 alternating pairs |Before H /N |Candidate H /N |
+| --- | ---: | ---: |
+|UI-process CPU mean ms/key |15.467 /16.957|10.099 /10.830|
+|Presented p99 ms |24.715 /27.019|22.191 /21.338|
+|First warm MiB,10 lifecycle pairs |50.796 /48.296|50.224 /47.623|
+|Third warm MiB,10 pairs |48.510 /46.197|47.949 /45.604|
+|Third closed MiB,10 pairs |21.867 /22.292|21.638 /22.026|
+
+CPU median differences−5.368/−6.127ms; paired median−5.885/−6.581. Positive p99
+regression is absent in the medians; baseline p99 range widths6.550/2.804ms.
+The first five H closed trials were borderline (+0.105MiB vs baseline width0.088).
+Five further alternating lifecycle pairs each resolve it without a waiver:
+combined closed deltas−0.229/−0.266, baseline widths0.832/1.007; paired deltas
+−0.216/−0.225. First/third warm medians also decrease. All current closed and
+unused-hover guards pass bar+5MiB including swap; teardown/query RAM/geometry pass.
+
+One original N pair04 candidate state command returned nonzero. Its original raw
+cell is retained under `launcher-failed-ipc01`; the exact diagnostic passed and is
+labelled in `retry-review.json`, followed by20 clean confirmation sessions. The
+original reply was not captured, no panic marker was found, and its cause remains
+unclassified. The harness now saves failing command reply/exit/client status;
+no deadline, presentation, memory or lifecycle assertion was relaxed.
+
+147 local tests/fmt/clippy/CPU-only/release and native GL6-key smokes each pass. Control is measurement-only
+e4145f5 (binary953a03e5); candidate27ec2fec has the measured UI code, not later
+font/RPC drafts. Fresh private sessions,200 keys then a separate3-cycle lifecycle
+cell per trial; no own heavy build overlap, external load/frequency/paging not
+controlled. Buffers logical1164×654/physical1746×981,scale1.5,RGBA on both.
+Hvirtual120/Nnested60 are configured; both feedback refresh predictions are unknown.
+No physical or real-engine acceptance. Helper CPU is missing, not zero. Both typing
+budgets stay open. Raw: `.research/gate-d-foundation/typing-clock-fivepairs/` and
+`clock-lifecycle-confirm/`; full data includes the failed cell and diagnostic retry.
+
 ## Typing clocks and tracing — 2026-10-16
 
 `BEAD_TYPING_PROFILE=clocks` keeps whole-process CPU and monotonic input→exact

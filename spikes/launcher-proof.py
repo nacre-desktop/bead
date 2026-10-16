@@ -20,7 +20,9 @@ def sample(env,raw,compositor,stop):
     if compositor=='hyprland':command+=['--output','bead-bench']
     def call(method,*args,target='bead.panel',ok=True):
         p=subprocess.run([binary,'ipc','--socket',str(sock),'--json',target,method,*args],env=env,cwd=ROOT,capture_output=True,text=True,timeout=5)
-        assert (p.returncode==0)==ok, 'private command result differs'
+        if (p.returncode==0)!=ok:
+            (raw/'ipc-failure.json').write_text(json.dumps({'target':target,'method':method,'args':args,'returncode':p.returncode,'stdout':p.stdout[-4096:],'stderr':p.stderr[-4096:],'client_returncode':client.poll()if client else None,'socket_exists':sock.exists(),'monotonic_ns':time.monotonic_ns()},indent=2)+'\n')
+            raise AssertionError('private command result differs; see ipc-failure.json')
         return json.loads(p.stdout)['result']if ok else None
     def state_wait(predicate,timeout=8):
         deadline=time.monotonic()+timeout
