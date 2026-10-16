@@ -350,6 +350,48 @@ Local135tests/fmt/all-features clippy/Luau pass. The default launcher lifecycle
 proof passes both: hover expiry, explicit preparation, preserved query, three
 closes within bar+5MiB including swap, exact feedback and process cleanup.
 
+## Tight text rasters — 2026-10-16
+
+Caching a raster did not make its composition cheap: text images retained their
+whole layout width, including transparent padding. Numeric paint spans identified
+text blending as the dominant cost. Newly baked text now stores only nonzero-alpha
+ink plus an integer pixel origin. CPU and native GL add that origin after rounding
+the original position; damage tracks the resulting ink bounds. Layout, shaping,
+fonts and hit targets remain unchanged. Empty text retains one transparent pixel.
+
+|200 changed-result keys, UI only | Before H /N | Cropped H /N |
+| --- | ---: | ---: |
+|UI CPU mean ms/key |24.946 /25.691|18.454 /18.774|
+|Presented p99 ms |33.525 /41.354|30.426 /29.015|
+|Typed-list PSS+DRM MiB,3s idle |42.517 /46.243|38.821 /42.459|
+|Steady text composition CPU ms/key |6.799 /7.808|0.560 /0.617|
+|Steady whole composition CPU ms/key |12.314 /13.990|6.229 /6.550|
+
+Both binaries use the active-view bundle and identical numeric spans. Before is
+59f00f1 plus diagnostic spans; candidate adds cropped text. Same320-app/disjoint
+160-row a/ap fixture,200 exact receipt/commit/presentation generations. H virtual120,
+N nested60,2880×1800/scale1.5; sequential beforeH/candidateH/candidateN/beforeN,
+fresh private sessions. No own heavy build overlap; external activity/frequency
+uncontrolled, migration's independent diagnostic may overlap. One pair per side,
+not a five-pair invariance claim. No SwapPss;3s memory is diagnostic only.
+
+Composition and retained bytes improve, but8ms CPU/16.7ms presentation targets
+still fail. Remaining markup serializes the complete model into Luau to obtain
+its length; that is a separate next experiment. Helper/end-to-end remain unmeasured.
+136 tests/fmt/all-features clippy/release pass, including unchanged notification/OSD
+goldens and a new exact-pixel check for both formats, fractional scale/translation,
+clips, very low alpha, partial repaints and moving cropped origins. Counter tests
+still show no new layout or rasterization during transform/opacity replay.
+Matched default launcher lifecycle controls/candidates pass both, including swap:
+H bar/first/third warm/third closed MiB22.056/52.733/51.196/22.173 →
+22.312/51.166/48.424/21.906; N23.358/51.084/50.212/24.124 →
+23.715/49.369/46.503/19.401. All three candidate closes H21.70–21.91 and
+N19.40–22.79MiB stay within their bar+5. This sequential comparison shows no
+first-open/steady/closed regression; it is not strict idle invariance. Native GL
+smokes pass on both with grid↔list input, exact feedback, actual GL initialization
+and cleanup; centered grid text was inspected. Hyprland debug overlays remain in
+the short GL capture; its timing is not an acceptance measurement.
+
 ## Remaining-parity forecast — provisional until the engine comparison
 
 Gate D is not accepted by this forecast. The engine/prefix/activation comparison

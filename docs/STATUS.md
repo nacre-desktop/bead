@@ -1,34 +1,32 @@
 # Status
 
-## 2026-10-16 — Launcher changed-result checkpoint; Gate D pending
+## 2026-10-16 — Tight text rasters; Gate D pending
 
-Code e2ba01d CI38827038558 passed. Docs-only 5a7f548 CI38827618562 repeated
-its 50 ms markup failure. Active-view preparation removes hidden grid work;
-135 tests/fmt/clippy/Luau pass. Fresh CI follows; execution limit unchanged.
+Main 59f00f1 / CI38828546515 is green. Active-view preparation fixes the
+repeated markup guard failure; the 50 ms limit and 320-app fixture stay intact.
+Cropped-text checkpoint: 136 tests, fmt, clippy and release pass. Both lifecycle
+memory and native-GL smokes pass; fresh CI is checked after push.
 
-320 fixture apps, 200 keys: identical rows were a best-case reuse workload.
-Disjoint160-row results expose CPU mean H 36.57 / N 35.60 ms/key; active-view
-candidate 23.90 / 26.06. Presented p99 improves 48.05/50.52 → 38.97/40.49 ms.
-Both typing targets remain unaccepted. Composition and markup are still costly.
-Matched unchanged QML gets the same rows; CPU 133.78/135.56 ms/key. Extra
-QML controls remain; no full-parity claim. H virtual 120 / N nested 60, not physical.
-[Measurements and provisional forecast](research/feature9-gate-d.md#changed-result-typing-and-active-view-preparation--2026-10-16).
+Disjoint 160-row results, 200 keys: UI CPU mean H24.95/N25.69 →18.45/18.77
+ms/key; presented p99 33.52/41.35 →30.43/29.02 ms. Text blending falls from
+6.80/7.81 to0.56/0.62 ms; typed-list PSS+DRM falls by3.70/3.78 MiB.
+Both typing targets still fail. Identical-row fixtures remain a separate best case.
+H virtual120/N nested60, not physical; helper CPU/end-to-end unmeasured.
+[Methods, comparisons and forecast](research/feature9-gate-d.md#tight-text-rasters--2026-10-16).
 
-Source calls/exact fixtures replace local catalog/filtering; Nacre owns engine,
-ranking and providers. Published SDK pin 6bdc22e and private standalone F1 proof
-pass. Canonical menu schemas/engine follow upstream F2; end-to-end/helper CPU wait.
-Additive protocol draft reviewed locally, held off main for migration integration.
+Source calls replace local catalog/filtering; Nacre owns engine/ranking/providers.
+SDK pin6bdc22e and private standalone F1 proof pass. Menu schemas/engine follow
+upstream F2. Additive protocol draft reviewed locally, held off main for migration.
 
-Last accepted default lifecycle: bar/first-warm/third-closed MiB H 22.17/53.07/23.45,
-N 23.53/51.25/24.39; every close within bar + 5. Sound guard is below published-Rust
-control. No allocator policy change. Auto uses direct opaque composition; alpha
-fades stay cached. Active-view lifecycle also passes both: preparation/query preservation, three
-closes within bar + 5 MiB, real feedback and cleanup.
+Cropped lifecycle: H bar22.31 → third warm48.42/closed21.91 MiB; N23.72 →
+46.50/19.40. All hover/preparation/three closes within bar+5, query RAM and cleanup
+pass. Matched first/warm/closed show no regression. No allocator
+policy change. Auto uses direct opaque composition; alpha fades stay cached.
 
-Next: publish validated active-view fix, profile remaining changed-result typing,
+Next: verify crop CI, measure avoiding full-model serialization for counts,
 then canonical engine prefixes/activation and end-to-end comparison. Finalize
-Gate D estimate/owner decision afterward. No Feature 11 or live/install/release.
-Backends frozen. Existing 6b pacing/idle, input/IME/hardware and name clash stay open.
+Gate D estimate/owner decision afterward. No Feature11 or live/install/release.
+Backends frozen. Existing6b pacing/idle, input/IME/hardware and name clash stay open.
 
 ## Accepted Gate C and optimization baseline
 

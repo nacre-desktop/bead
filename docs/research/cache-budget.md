@@ -159,3 +159,12 @@ origin, rather than a large eager map. Attribution is not an allocation trace.
 Verdict: record the bounded cost/variation and move on. The next checkpoint
 compares direct versus cached opaque composition. Raw runs use per-case atomic
 summaries so an interrupted measurement cannot masquerade as complete.
+
+## Text ink storage — 2026-10-16
+
+Retained text rasters now crop transparent padding and carry an integer pixel
+origin. The existing64MiB raster budget charges actual cropped bytes; no new
+persistent cache or font/shaping mechanism is introduced. CPU/GL placement and
+damage use the origin. Exact fractional/clip/alpha/partial-repaint checks and
+existing goldens pass; changed-result fixture typed-list memory falls3.7–3.8MiB.
+See the [measured comparison](feature9-gate-d.md#tight-text-rasters--2026-10-16).

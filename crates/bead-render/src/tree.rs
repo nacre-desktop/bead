@@ -13,6 +13,8 @@ use tiny_skia::{FillRule, Mask, Paint, Pixmap, PixmapMut, PixmapPaint, Stroke, T
 #[derive(Clone)]
 pub struct Raster {
     pub pixels: Arc<Pixmap>,
+    /// Integer pixels trimmed from the original raster's left/top edges.
+    pub origin: (u32, u32),
     pub key: u64,
     pub base_key: Option<u64>,
     pub changed: Damage,
@@ -128,6 +130,31 @@ fn pixel_difference(before: &Pixmap, after: &Pixmap) -> Damage {
         h: bottom.saturating_sub(top),
     }
 }
+fn trim_text(pixels: Pixmap) -> Result<(Pixmap, (u32, u32))> {
+    let (mut left, mut top, mut right, mut bottom) = (pixels.width(), pixels.height(), 0, 0);
+    for (index, pixel) in pixels.pixels().iter().enumerate() {
+        if pixel.alpha() != 0 {
+            let x = index as u32 % pixels.width();
+            let y = index as u32 / pixels.width();
+            left = left.min(x);
+            top = top.min(y);
+            right = right.max(x + 1);
+            bottom = bottom.max(y + 1);
+        }
+    }
+    if right == 0 {
+        return Ok((Pixmap::new(1, 1).ok_or("empty text raster")?, (0, 0)));
+    }
+    if left == 0 && top == 0 && right == pixels.width() && bottom == pixels.height() {
+        return Ok((pixels, (0, 0)));
+    }
+    let bounds = tiny_skia::IntRect::from_xywh(left as i32, top as i32, right - left, bottom - top)
+        .ok_or("text ink bounds")?;
+    Ok((
+        pixels.clone_rect(bounds).ok_or("trimmed text raster")?,
+        (left, top),
+    ))
+}
 impl TreeCache {
     /// Keep finished active rasters, release scratch and offscreen cache entries.
     pub fn trim_idle(&mut self) {
@@ -205,12 +232,17 @@ impl TreeCache {
                     content.offset = (0., 0.);
                     content.opacity = 1.;
                     self.raster.prepare(&content, scale)?;
-                    let pixels = Arc::new(
-                        self.raster
-                            .textures
-                            .remove(&crate::key(&content.primitives[0], scale))
-                            .ok_or("missing prepared raster")?,
-                    );
+                    let pixels = self
+                        .raster
+                        .textures
+                        .remove(&crate::key(&content.primitives[0], scale))
+                        .ok_or("missing prepared raster")?;
+                    let (pixels, origin) = if kind == "text" {
+                        trim_text(pixels)?
+                    } else {
+                        (pixels, (0, 0))
+                    };
+                    let pixels = Arc::new(pixels);
                     let previous = self.entries.get(&slot);
                     let changed = previous.map_or_else(
                         || Damage::full(pixels.width(), pixels.height()),
@@ -245,6 +277,7 @@ impl TreeCache {
                     let raster = Arc::new(Raster {
                         _charge: charge,
                         pixels,
+                        origin,
                         key,
                         base_key: previous.map(|old| old.raster.key),
                         changed,
@@ -451,10 +484,12 @@ pub fn paint(
     if damage.w == 0 || damage.h == 0 {
         return Ok(());
     }
+    let clear_profile = bead_core::profile::Span::new("paint_clear");
     for y in damage.y..damage.y + damage.h {
         let i = (y * width + damage.x) as usize * 4;
         bytes[i..i + damage.w as usize * 4].fill(0);
     }
+    drop(clear_profile);
     let begin = damage.y as usize * width as usize * 4;
     let end = (damage.y + damage.h) as usize * width as usize * 4;
     let mut target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
@@ -463,6 +498,12 @@ pub fn paint(
     let mut mask_clip = None;
     let mut painted = false;
     for item in &frame.items {
+        let _item_profile = bead_core::profile::Span::new(match item.primitive {
+            Primitive::Rounded { .. } => "paint_rounded",
+            Primitive::Text { .. } => "paint_text",
+            Primitive::Image { .. } => "paint_image",
+            Primitive::Shadow { .. } => "paint_shadow",
+        });
         if item.raster.is_none()
             && matches!(&item.primitive,Primitive::Rounded{fill,border,..} if fill[3]==0 && border.as_ref().is_none_or(|(color,_)|color[3]==0))
         {
@@ -525,8 +566,8 @@ pub fn paint(
             // Damage was cleared above. Source-over onto zero is an exact copy,
             // including partial alpha; avoid blending a full shadow-sized image.
             let r = rect(&item.primitive);
-            let dx = ((r.x + offset.0) * scale).round() as i32;
-            let dy = ((r.y + offset.1) * scale).round() as i32;
+            let dx = ((r.x + offset.0) * scale).round() as i32 + raster.origin.0 as i32;
+            let dy = ((r.y + offset.1) * scale).round() as i32 + raster.origin.1 as i32;
             let x = clip.x.max(dx.max(0) as u32);
             let y = clip.y.max(dy.max(0) as u32);
             let right = (clip.x + clip.w)
@@ -550,8 +591,8 @@ pub fn paint(
         }
         let r = rect(&item.primitive);
         let mask_needed = if let Some(raster) = &item.raster {
-            let x = ((r.x + offset.0) * scale).round() as i64;
-            let y = ((r.y + offset.1) * scale).round() as i64;
+            let x = ((r.x + offset.0) * scale).round() as i64 + i64::from(raster.origin.0);
+            let y = ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1);
             !(x >= i64::from(clip.x)
                 && y >= i64::from(clip.y)
                 && x + i64::from(raster.pixels.width()) <= i64::from(clip.x + clip.w)
@@ -585,8 +626,9 @@ pub fn paint(
         if let Some(raster) = &item.raster {
             painted = true;
             target.draw_pixmap(
-                ((r.x + offset.0) * scale).round() as i32,
-                ((r.y + offset.1) * scale).round() as i32 - damage.y as i32,
+                ((r.x + offset.0) * scale).round() as i32 + raster.origin.0 as i32,
+                ((r.y + offset.1) * scale).round() as i32 + raster.origin.1 as i32
+                    - damage.y as i32,
                 raster.pixels.as_ref().as_ref(),
                 &PixmapPaint::default(),
                 Transform::identity(),
@@ -627,6 +669,7 @@ pub fn paint(
             }
         }
     }
+    let _format_profile = bead_core::profile::Span::new("paint_format");
     if format == PixelFormat::Bgra {
         for y in damage.y..damage.y + damage.h {
             for x in damage.x..damage.x + damage.w {
@@ -790,6 +833,167 @@ impl Renderer for TreeCpuRenderer {
 mod tests {
     use super::*;
     #[test]
+    fn trimmed_ink_preserves_fractional_pose_clips_alpha_and_partial_damage() {
+        let mut original = Pixmap::new(30, 18).unwrap();
+        for y in 3..11 {
+            for x in 5..17 {
+                original.pixels_mut()[y * 30 + x] =
+                    tiny_skia::Color::from_rgba8(40, 180, 90, if x % 3 == 0 { 1 } else { 128 })
+                        .premultiply()
+                        .to_color_u8();
+            }
+        }
+        let (trimmed, origin) = trim_text(original.clone()).unwrap();
+        assert_eq!(origin, (5, 3));
+        assert_eq!((trimmed.width(), trimmed.height()), (12, 8));
+        assert!(trimmed.data().len() < original.data().len() / 4);
+        let (empty, empty_origin) = trim_text(Pixmap::new(30, 18).unwrap()).unwrap();
+        assert_eq!(
+            (empty.width(), empty.height(), empty_origin),
+            (1, 1, (0, 0))
+        );
+        assert!(empty.data().iter().all(|byte| *byte == 0));
+        let budget = bead_core::cache::Budget::new("trimmed-text-test", 65536);
+        for scale in [1., 1.25, 1.5] {
+            for offset in [(0., 0.), (0.3333, -0.5), (-0.6667, 0.25)] {
+                for background in [false, true] {
+                    let frame = |pixels: &Pixmap, origin| {
+                        let mut items = Vec::new();
+                        if background {
+                            items.push(Item {
+                                id: "background".into(),
+                                primitive: Primitive::Rounded {
+                                    rect: Rect::new(0., 0., 48., 40.),
+                                    radius: 0.,
+                                    fill: [20, 30, 40, 255],
+                                    border: None,
+                                },
+                                clip: None,
+                                raster: None,
+                            });
+                        }
+                        items.push(Item {
+                            id: "text".into(),
+                            primitive: Primitive::Text {
+                                rect: Rect::new(2.25, 3.75, 30., 18.),
+                                text: "fixture".into(),
+                                family: "unused".into(),
+                                size: 12.,
+                                color: [40, 180, 90, 128],
+                                align: Some(crate::TextAlign::Left),
+                            },
+                            clip: Some(Rect::new(4., 3., 20., 14.)),
+                            raster: Some(Arc::new(Raster {
+                                pixels: Arc::new(pixels.clone()),
+                                origin,
+                                key: 1,
+                                base_key: None,
+                                changed: Damage::full(pixels.width(), pixels.height()),
+                                _charge: budget.reserve(pixels.data().len()).unwrap(),
+                            })),
+                        });
+                        Frame {
+                            items,
+                            scale,
+                            key: 1,
+                            layer_count: 0,
+                            layers: vec![],
+                            _accounting: None,
+                        }
+                    };
+                    let full = frame(&original, (0, 0));
+                    let cropped = frame(&trimmed, origin);
+                    for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
+                        for damage in [
+                            Damage::full(48, 40),
+                            Damage {
+                                x: 7,
+                                y: 5,
+                                w: 20,
+                                h: 16,
+                            },
+                        ] {
+                            let mut a = vec![31; 48 * 40 * 4];
+                            let mut b = a.clone();
+                            paint(
+                                &full,
+                                offset,
+                                ShmTarget {
+                                    bytes: &mut a,
+                                    width: 48,
+                                    height: 40,
+                                    scale,
+                                    format,
+                                },
+                                damage,
+                            )
+                            .unwrap();
+                            paint(
+                                &cropped,
+                                offset,
+                                ShmTarget {
+                                    bytes: &mut b,
+                                    width: 48,
+                                    height: 40,
+                                    scale,
+                                    format,
+                                },
+                                damage,
+                            )
+                            .unwrap();
+                            assert!(
+                                a == b,
+                                "cropped text changed pixels at {scale}/{offset:?}/{background}/{damage:?}"
+                            );
+                        }
+                        let moved = frame(&trimmed, (8, 4));
+                        let mut tracker = crate::damage::FrameDamage::default();
+                        tracker.update(&cropped, offset, 1., 48, 40).unwrap();
+                        let dirty = tracker
+                            .update(&moved, offset, 1., 48, 40)
+                            .unwrap()
+                            .into_iter()
+                            .fold(Damage::full(0, 0), Damage::union);
+                        let mut repaired = vec![0; 48 * 40 * 4];
+                        let mut expected = repaired.clone();
+                        for (frame, bytes, damage) in [
+                            (&cropped, &mut repaired, Damage::full(48, 40)),
+                            (&moved, &mut expected, Damage::full(48, 40)),
+                        ] {
+                            paint(
+                                frame,
+                                offset,
+                                ShmTarget {
+                                    bytes,
+                                    width: 48,
+                                    height: 40,
+                                    scale,
+                                    format,
+                                },
+                                damage,
+                            )
+                            .unwrap();
+                        }
+                        paint(
+                            &moved,
+                            offset,
+                            ShmTarget {
+                                bytes: &mut repaired,
+                                width: 48,
+                                height: 40,
+                                scale,
+                                format,
+                            },
+                            dirty,
+                        )
+                        .unwrap();
+                        assert!(repaired == expected, "ink-origin change left stale pixels");
+                    }
+                }
+            }
+        }
+    }
+    #[test]
     fn opaque_interior_partial_damage_preserves_edges_and_border() {
         let scene = Scene {
             opacity: 1.,
@@ -927,6 +1131,7 @@ mod tests {
                 clip: None,
                 raster: Some(Arc::new(Raster {
                     pixels: Arc::new(image),
+                    origin: (0, 0),
                     key: 0,
                     base_key: None,
                     changed: Damage::full(10, 6),

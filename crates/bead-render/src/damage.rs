@@ -64,7 +64,17 @@ impl FrameDamage {
         let mut dirty = Vec::new();
         let changed_size = self.dimensions != Some((width, height, frame.scale.to_bits()));
         for item in &frame.items {
-            let source = rect(&item.primitive);
+            let source = if let Some(raster) = &item.raster {
+                let original = rect(&item.primitive);
+                Rect::new(
+                    original.x + raster.origin.0 as f32 / frame.scale,
+                    original.y + raster.origin.1 as f32 / frame.scale,
+                    raster.pixels.width() as f32 / frame.scale,
+                    raster.pixels.height() as f32 / frame.scale,
+                )
+            } else {
+                rect(&item.primitive)
+            };
             let geometry = source.translated(offset.0, offset.1);
             let pad = if let crate::Primitive::Rounded { border, .. } = item.primitive {
                 border.map_or(1., |(_, w)| w / 2. + 1.)

@@ -436,6 +436,10 @@ impl GlRenderer {
                 (r.y + offset.1) * frame.scale,
             );
             if let Some(raster) = &item.raster {
+                let (x, y) = (
+                    x.round() + raster.origin.0 as f32,
+                    y.round() + raster.origin.1 as f32,
+                );
                 let texture = images
                     .get(&(item.id.clone(), frame.scale.to_bits()))
                     .ok_or("GL layer image missing")?;

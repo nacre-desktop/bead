@@ -1,5 +1,30 @@
 # Feasibility
 
+## 2026-10-16 — crop transparent text padding without changing pixels
+
+Text rasters retained the whole layout width; blending transparent pixels was costly.
+Store only ink and an integer origin, applied after the original position rounds.
+CPU/native GL and damage use that origin; layout, shaping and font handling stay intact.
+Matched pairs reduce composition and memory; typing targets remain unaccepted.
+
+|200 changed-result keys, nested | Before H /N | Cropped H /N |
+| --- | ---: | ---: |
+|UI CPU mean ms/key |24.946 /25.691|18.454 /18.774|
+|Presented p99 ms |33.525 /41.354|30.426 /29.015|
+|Typed-list PSS+DRM MiB,3s idle |42.517 /46.243|38.821 /42.459|
+|Text composition CPU ms/key |6.799 /7.808|0.560 /0.617|
+|Whole composition CPU ms/key |12.314 /13.990|6.229 /6.550|
+
+Active-view bundle, same numeric spans;320 apps/disjoint160-row exact replies.
+H virtual120/N nested60,2880×1800/scale1.5; no own build overlap, external load uncontrolled.
+Single sequential pair each;3s memory diagnostic, not idle invariance/physical proof.
+136tests/fmt/clippy/release and fractional/clip/alpha/moving-ink pixel checks pass.
+Lifecycle guards pass both; third warm H51.20→48.42/N50.21→46.50MiB.
+Every close <=bar+5 incl swap; first/warm/closed show no matched regression.
+Native-GL grid/list feedback/cleanup smokes pass both. CPU8ms/presented16.7ms
+budgets still fail; helper CPU/end-to-end unmeasured.
+[Full method](docs/research/feature9-gate-d.md#tight-text-rasters--2026-10-16).
+
 ## 2026-10-16 — changed launcher results expose hidden-view work
 
 Identical a/ap rows measured a best-case reuse path, not real result changes.
