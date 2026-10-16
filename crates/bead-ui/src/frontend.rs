@@ -23,19 +23,30 @@ pub trait FrontEnd {
 }
 const INSTALL: &str = r#"
 return function(ui)
-    local function check(value, schema, path)
-        value = ui.resolve_for_check(value)
-        if type(schema) == "string" then
-            if type(value) ~= schema then error(path .. " must be " .. schema, 3) end
-        else
-            if type(value) ~= "table" then error(path .. " must be a record", 3) end
-            for key, expected in schema do check(value[key], expected, path .. "." .. key) end
+    local function check(value, schema)
+        -- Ordinary row scalars/records need no Rust callback. Bind markers keep
+        -- the same resolution and every property still receives its type check.
+        if type(value) == "table" and value.__bind ~= nil then
+            value = ui.resolve_for_check(value)
         end
+        if type(schema) == "string" then
+            if type(value) ~= schema then return " must be " .. schema end
+        else
+            if type(value) ~= "table" then return " must be a record" end
+            for key, expected in schema do
+                local suffix = check(value[key], expected)
+                if suffix then return "." .. key .. suffix end
+            end
+        end
+        return nil
     end
     ui.component = function(name, schema, render)
         return function(props)
             for key in props do if schema[key] == nil then error(name .. ": unknown property " .. key, 2) end end
-            for key, expected in schema do check(props[key], expected, name .. "." .. key) end
+            for key, expected in schema do
+                local suffix = check(props[key], expected)
+                if suffix then error(name .. "." .. key .. suffix, 2) end
+            end
             return render(props)
         end
     end

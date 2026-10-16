@@ -1,5 +1,22 @@
 # Feasibility
 
+## 2026-10-16 — preserve validation while fixing CI markup timeout
+
+CI caught the320-app headless view crossing the unchanged50ms markup limit.
+Component checks made needless Rust calls for ordinary row scalars and records.
+The fast path still resolves bindings and rejects unknown/wrong nested properties.
+Error paths are assembled on failure; no execution limit or fixture was reduced.
+
+| Local debug diagnostic, initial populated markup | Before | Candidate |
+| --- | ---: | ---: |
+|Lua evaluation ms |37.40|25.00|
+|Whole markup ms |51.49|39.75|
+|Nested error path /valid bound string /invalid bound number |N/A|pass|
+|Workspace /fmt /all-features clippy |135 /pass /pass|pass|
+
+Different diagnostic executions, not a release CPU or timing-gate acceptance.
+CI38825928964 failure is retained; the corrective checkpoint must pass fresh CI.
+
 ## 2026-10-16 — unchanged QML launcher view versus Source fixtures
 
 Both views receive320 ordered app rows, icons, labels and a/ap queries.

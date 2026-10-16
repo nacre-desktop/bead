@@ -203,7 +203,23 @@ return function(p)return Card{item={id=p.item.id,name=42}}end"#).unwrap();
             .err()
             .unwrap()
             .message
-            .contains("must be string")
+            .contains("Card.item.name must be string")
+    );
+    fs::write(f.0.join("ui/components/card.luau"),r#"local ui=require('bead.ui')
+local Card=ui.component('Card',{item={id='string',name='string'}},function(p)return ui.Button{id='tile',text=p.item.name,on_activate=ui.action('select',p.item.id)}end)
+return function(p)return Card{item={id=p.item.id,name=ui.bind('query')}}end"#).unwrap();
+    let scene = session.reload().unwrap();
+    session.commit(scene);
+    fs::write(f.0.join("ui/components/card.luau"),r#"local ui=require('bead.ui')
+local Card=ui.component('Card',{item={id='string',name='string'}},function(p)return ui.Button{id='tile',text=p.item.name,on_activate=ui.action('select',p.item.id)}end)
+return function(p)return Card{item={id=p.item.id,name=ui.bind('scroll')}}end"#).unwrap();
+    assert!(
+        session
+            .reload()
+            .err()
+            .unwrap()
+            .message
+            .contains("Card.item.name must be string")
     );
 }
 #[test]
