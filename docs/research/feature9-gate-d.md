@@ -32,6 +32,35 @@ with measurements/core forecast. Full parity is an estimate-only alternative.
 Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
 release. QML stays daily driver. No live run/install/release is authorized.
 
+### Closed-panel residency audit — candidate, 2026-10-17
+
+The loader scopes Luau sources/assets to the selected entry's directory. The
+bar does not import calendar, sound or launcher bundles; a new headless check
+loads the actual core bar and asserts their absence from tracked sources.
+Panel factories retain only configuration/palette/placeholder geometry, not
+compiled modules, decoded icons, view stores or catalog results. Those belong
+to the selected worker and are dropped with it. The shared Desktop and menu
+connection belong to the bar/daemon and remain necessary for the bar itself.
+
+The existing close grace is2200 ms (quick reopen reuses the worker); unused
+hover preparation expires after2s. Retirement joins the worker and drops its
+VM, Source subscriptions, scene/raster ownership and surface buffers. The bar
+cache trims and a second allocator trim follows100 ms later for queued rasters.
+
+One genuine extra retention path was the launcher's bounded scalar-state mirror
+owned by the bar. The cleanup candidate clears every mirrored value on launcher
+worker retirement, including search, selection, mode/route and scroll. A test
+uses the maximum64 KiB query and proves retirement clears the map; dropping the
+bar does not prematurely clear a live panel. No extra timer/thread/cache is added.
+Immediate named-view switching retires state too; quick close/reopen within the
+existing grace retains it. After idle, reopening starts fresh unless a new launch
+command supplies a query. This intentionally supersedes indefinite query retention.
+
+Before/after memory is pending. The accepted feature's mapped code pages are
+not retained panel data; they cannot be unloaded by dropping a view. No unsafe
+code-page discard or allocator/font-engine rewrite is introduced. No new panel
+is added until the cleanup has its matched measurements.
+
 ### Calendar and named views — memory decision, 2026-10-17
 
 The owner accepted this combined feature cost on 2026-10-17; service views remain incomplete.

@@ -415,3 +415,52 @@ fn legacy_state_distinguishes_calendar_sound_and_launcher_on_one_host() -> Resul
     }
     Ok(())
 }
+
+#[test]
+fn panel_retirement_releases_launcher_mirror_but_bar_does_not() -> Result<()> {
+    let memory = crate::launcher::Memory::default();
+    let h = calendar(2026, 10, 0, 1.)?;
+    let panel = crate::reload::Runtime::new(h.session)
+        .with_launcher(None)?
+        .with_launcher_memory(memory.clone())?;
+    memory.lock().unwrap().insert(
+        "launcher.search.text".into(),
+        bead::core::Value::Text("x".repeat(65536)),
+    );
+    let h = calendar(2026, 10, 0, 1.)?;
+    let bar = crate::reload::Runtime::new(h.session).with_launcher_trigger(memory.clone())?;
+    drop(bar);
+    assert_eq!(
+        memory.lock().unwrap().len(),
+        1,
+        "bar does not own panel state"
+    );
+    drop(panel);
+    assert!(
+        memory.lock().unwrap().is_empty(),
+        "worker retirement releases all mirrored values"
+    );
+    Ok(())
+}
+
+#[test]
+fn bar_bundle_does_not_load_closed_panel_modules_or_assets() -> Result<()> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let mut values = super::initial_models()?;
+    values.insert("bar.popouts".into(), Value::Bool(true));
+    values.insert("bar.launcher".into(), Value::Bool(true));
+    let stores = bead::core::Stores::default().reconcile(&values)?;
+    let (bar, _) =
+        bead::ui::Generation::load(&root, std::path::Path::new("bar/main.luau"), &stores, 1)?;
+    for path in bar.sources.keys() {
+        assert!(
+            !["popouts", "sound", "ui"]
+                .iter()
+                .any(|prefix| path.starts_with(prefix)),
+            "closed panel content eagerly loaded: {}",
+            path.display()
+        );
+    }
+    assert!(!bar.sources.is_empty());
+    Ok(())
+}

@@ -11,7 +11,8 @@ use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 
 pub type Memory = Arc<std::sync::Mutex<BTreeMap<String, Value>>>;
-/// Retain only bounded view state; never catalogs, results, rasters or font pools.
+/// Mirror only bounded live view state; Runtime drops it with the panel worker.
+/// Never retain catalogs, results, rasters or font pools.
 pub fn remember(stores: &Stores) -> BTreeMap<String, Value> {
     let mut result = BTreeMap::new();
     for (key, limit) in [
@@ -833,7 +834,7 @@ mod tests {
         assert_eq!(engine.called.lock().unwrap().len(), 1);
     }
     #[test]
-    fn idle_memory_retains_only_bounded_scalar_view_state() {
+    fn live_memory_mirrors_only_bounded_scalar_view_state() {
         let stores = Stores::default()
             .reconcile(&BTreeMap::from([
                 (

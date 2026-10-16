@@ -21,6 +21,8 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     log=raw/'launcher.log';client=pointer=keeper=None
     engine_socket=env.get('BEAD_LAUNCHER_ENGINE_SOCKET')
     core_views=os.environ.get('BEAD_CORE_VIEWS_PROOF')=='1'
+    release_state=os.environ.get('BEAD_PANEL_IDLE_STATE')=='release'
+    query_on_open=os.environ.get('BEAD_LAUNCHER_QUERY_ON_OPEN')=='1'
     source_args=['--daemon-socket',engine_socket]if engine_socket else['--menu-fixture',str(fixture)]
     command=[binary,'--bar','--core-views'if core_views else'--launcher-panel',*source_args,'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','300'if core_views else'180']
     if os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1':
@@ -52,13 +54,26 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             presented=re.search(r'UI_PRESENTED generation='+match[1]+r' monotonic_ns=(\d+)[^\n]*companion=true update='+match[2]+r'\b',text[match.end():])
             if presented:return int(presented[1])
         return False
+    def query_presented(text,query):
+        # Join the requested state to a following companion commit/presentation,
+        # rather than accepting an unrelated earlier frame in the same window.
+        for match in re.finditer(r'^UI_STATE (.+)$',text,re.M):
+            data=json.loads(match[1])
+            if data.get('launcher.search.text')==query and (not engine_socket or (not data.get('launcher.error') and data.get('launcher.apps'))):
+                stamp=committed_and_presented(text[match.end():])
+                if stamp:return stamp
+        return False
     closed_samples=[]
-    def closed_guard():
+    def closed_guard(closed_at=None):
         state_wait(lambda s:not s['resident']and not s['target_open']and s['surfaces']==0)
+        released_at=time.monotonic_ns()
         time.sleep(.4)
         sample=matrix.idle(client.pid,1)
+        if closed_at is not None:sample['closed_idle_observed_after_ms']=(released_at-closed_at)/1e6
         if observe:sample['external']=observe()
         sample['cache_bytes']=call('state').get('cache_bytes')
+        if release_state:
+            assert json.loads(call('state',target='nacre'))['query']=='','closed-idle launcher retained its view state'
         sample['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
         index=len(closed_samples);closed_samples.append(sample)
         (raw/f'closed-{index}.json').write_text(json.dumps(sample,indent=2)+'\n')
@@ -98,11 +113,17 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             assert not state['target_open']and state['surfaces']==0,'hover mapped launcher'
             pointer.command('move 1000 600','POINTER_DONE')
             result['unused_hover']=closed_guard()
-            for cycle in range(3):
+            if query_on_open:
                 call('prepare');state_wait(lambda s:s['prepared'])
-                offset=len(matrix.log_text(log));began=time.monotonic_ns();call('open')
+                result['unused_explicit_prepare']=closed_guard()
+            for cycle in range(3):
+                if not query_on_open:
+                    call('prepare');state_wait(lambda s:s['prepared'])
+                offset=len(matrix.log_text(log));began=time.monotonic_ns()
+                if query_on_open:call('launcher','a',target='nacre')
+                else:call('open')
                 matrix.wait_log(log,lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* .*companion=true',t[offset:])is not None)
-                if cycle==0:call('launcher','a',target='nacre')
+                if not query_on_open and (cycle==0 or release_state):call('launcher','a',target='nacre')
                 matrix.wait_log(log,lambda t:ui_query(t[offset:],'a'))
                 time.sleep(.3)
                 warm=matrix.idle(client.pid,1)
@@ -111,10 +132,19 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 warm['cache_bytes']=current.get('cache_bytes')
                 assert current['target_open']
                 assert all(abs(a-b)<=2 for a,b in zip(current['size'],[1164,654])), 'content-sized launcher geometry fed back into percentage limits'
-                call('close');closed=closed_guard()
+                if cycle==0 and os.environ.get('BEAD_PANEL_QUICK_REOPEN')=='1':
+                    offset=len(matrix.log_text(log))
+                    call('close');call('open')
+                    state_wait(lambda s:s['prepared'] and s['target_open'])
+                    matrix.wait_log(log,lambda t:query_presented(t[offset:],'a'))
+                    assert json.loads(call('state',target='nacre'))['query']=='a'
+                    assert 'PANEL_VIEW_STATE_RELEASED'not in matrix.log_text(log)[offset:]
+                    result['quick_reopen_retains_state']=True
+                closed_at=time.monotonic_ns();call('close');closed=closed_guard(closed_at)
+                closed['close_to_guard_ms']=(time.monotonic_ns()-closed_at)/1e6
                 result['cycles'].append({'cycle':cycle,'warm':warm,'closed':closed,'command_started_ns':began})
             state=json.loads(call('state',target='nacre'))
-            assert state['query']=='a'and not state['launcher']and 'launcher'in state['bead']['available']
+            assert state['query']==(''if release_state else'a')and not state['launcher']and 'launcher'in state['bead']['available']
             if core_views:
                 result['service_views']={'hover':{},'cycles':[]}
                 for view in ['calendar','sound']:
@@ -175,7 +205,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 for view in ['calendar','sound','calendar','launcher']:
                     call('open',view)
                 state_wait(lambda s:s['view']=='launcher' and s['target_open'] and s['prepared'])
-                matrix.wait_log(log,lambda t:ui_query(t[offset:],'a') and committed_and_presented(t[offset:]))
+                matrix.wait_log(log,lambda t:query_presented(t[offset:],''if release_state else'a'))
                 call('close');result['service_views']['after_rapid_switch']=closed_guard()
             else:
                 call('controls','sound',target='nacre',ok=False)
@@ -202,6 +232,6 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 if keeper:stop(keeper)
     assert client.returncode==0,'launcher did not exit cleanly'
     assert 'STOP surfaces=0'in log.read_text()
-    result.update(valid=True,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=True,query_not_on_disk=True)
+    result.update(valid=True,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=not release_state,query_released_after_idle=release_state,query_on_open=query_on_open,query_not_on_disk=True)
     (raw/'launcher-proof.json').write_text(json.dumps(result,indent=2)+'\n')
-    print('LAUNCHER_SOURCE_PROOF compositor='+compositor+' cycles=3 hover_timeout=true prepare=true query_preserved=true closed_bar_plus5=true clean=true',flush=True)
+    print('LAUNCHER_SOURCE_PROOF compositor='+compositor+' cycles=3 hover_timeout=true prepare=true query_released_after_idle='+str(release_state).lower()+' closed_bar_plus5=true clean=true',flush=True)

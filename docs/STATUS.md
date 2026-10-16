@@ -1,5 +1,16 @@
 # Status
 
+## 2026-10-17 — Closed-panel audit: cleanup candidate under validation
+
+Panel modules/assets are already scoped to their own bundles; a new headless
+assertion proves the core bar loads none of the closed view bundles. Workers,
+Source subscriptions and rasters retire after2.2s closed (unused hover:2s).
+The launcher scalar-state mirror was retained by the bar. The candidate clears
+it on worker retirement; quick reopen inside the grace keeps the live state.
+193 tests, fmt, all-feature clippy and CPU-only build pass.
+No cleanup memory saving is claimed yet. Next: matched old/new settled memory,
+plus native quick-reopen/idle-reset checks, before adding another panel.
+
 ## 2026-10-17 — Calendar/sound/routing cost accepted; idle audit next
 
 Owner accepts the combined feature cost: five paired settled increases

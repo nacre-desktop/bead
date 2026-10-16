@@ -31,6 +31,24 @@ pub struct Runtime {
     actions: bead::core::capabilities::Registry,
     wakeup: Option<std::sync::Arc<dyn Fn(UiEvent) + Send + Sync>>,
 }
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        // The bar mirrors legacy state while the launcher is alive. Release it
+        // after the panel's 2200 ms close grace or a named-view retirement.
+        // Worker drop joins the actor before another factory can replace it;
+        // an old epoch cannot clear a new launcher's state. Quick reopen keeps
+        // the live worker and its view state.
+        if self.launcher.is_some()
+            && let Some(memory) = &self.launcher_memory
+            && let Ok(mut saved) = memory.lock()
+        {
+            saved.clear();
+            if self.trace {
+                println!("PANEL_VIEW_STATE_RELEASED view=launcher entries=0");
+            }
+        }
+    }
+}
 impl Runtime {
     pub fn new(mut session: bead::ui::Session) -> Self {
         if let Ok(path) = crate::state::File::path()
