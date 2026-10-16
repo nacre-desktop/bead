@@ -59,7 +59,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
         # rather than accepting an unrelated earlier frame in the same window.
         for match in re.finditer(r'^UI_STATE (.+)$',text,re.M):
             data=json.loads(match[1])
-            if data.get('launcher.search.text')==query and (not engine_socket or (not data.get('launcher.error') and data.get('launcher.apps'))):
+            if data.get('launcher.search.text')==query and data.get('panel.open') is True and (not engine_socket or (not data.get('launcher.error') and data.get('launcher.apps'))):
                 stamp=committed_and_presented(text[match.end():])
                 if stamp:return stamp
         return False
