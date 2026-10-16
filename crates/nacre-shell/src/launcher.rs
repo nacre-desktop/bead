@@ -4,7 +4,9 @@ use bead::core::{
     Stores, Value,
     source::{self, Source},
 };
-use nacre_protocol::menu::{MenuActivate, MenuActivated, MenuQuery, MenuQueryResult};
+use nacre_protocol::menu::{
+    MenuActivate, MenuActivated, MenuConversion, MenuQuery, MenuQueryResult,
+};
 use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 
@@ -33,6 +35,22 @@ pub fn remember(stores: &Stores) -> BTreeMap<String, Value> {
     }
     result
 }
+#[derive(Clone, Default)]
+pub struct SourceChoice {
+    pub fixture: Option<std::path::PathBuf>,
+    pub socket: Option<std::path::PathBuf>,
+    pub shared: Option<Arc<dyn Source>>,
+}
+impl SourceChoice {
+    pub fn connect(&self) -> Result<Option<Arc<dyn Source>>, Box<dyn std::error::Error>> {
+        if let Some(source) = &self.shared {
+            Ok(Some(source.clone()))
+        } else {
+            source(self.fixture.as_deref(), self.socket.as_deref())
+        }
+    }
+}
+
 pub fn source(
     fixture: Option<&Path>,
     socket: Option<&Path>,
@@ -59,6 +77,8 @@ struct Prepared {
     rows: Vec<Json>,
     actions: BTreeMap<String, String>,
     catalog_rev: u64,
+    conversion: Option<MenuConversion>,
+    message: String,
 }
 fn invalid_menu() -> source::Error {
     source::Error::new("validation", "Invalid menu method payload", false)
@@ -103,6 +123,8 @@ fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared
         rows,
         actions,
         catalog_rev: result.catalog_rev,
+        conversion: result.conversion,
+        message: result.message.unwrap_or_default(),
     })
 }
 pub fn rows(reply: Json) -> source::Result<Vec<Json>> {
@@ -264,6 +286,8 @@ struct View {
     stamp: Option<(String, u64, bool)>,
     rows: Arc<Vec<Json>>,
     error: String,
+    conversion: Option<MenuConversion>,
+    message: String,
 }
 #[derive(Clone, Copy)]
 pub struct NavigationGeometry {
@@ -503,6 +527,8 @@ impl Menu {
                     view.rows = Arc::new(prepared.rows);
                     view.actions = prepared.actions;
                     view.catalog_rev = prepared.catalog_rev;
+                    view.conversion = prepared.conversion;
+                    view.message = prepared.message;
                     view.error.clear();
                 }
                 Err(e) => {
@@ -550,6 +576,28 @@ impl Menu {
             ("launcher.selection".into(), Value::Text(selection)),
             ("launcher.error".into(), Value::Text(view.error.clone())),
         ]);
+        let conversion = view.conversion.as_ref();
+        for (key, value) in [
+            (
+                "launcher.conversion.value",
+                conversion.and_then(|v| v.value.clone()).unwrap_or_default(),
+            ),
+            (
+                "launcher.conversion.description",
+                conversion
+                    .and_then(|v| v.description.clone())
+                    .unwrap_or_default(),
+            ),
+            (
+                "launcher.conversion.error",
+                conversion.and_then(|v| v.error.clone()).unwrap_or_default(),
+            ),
+            ("launcher.message", view.message.clone()),
+        ] {
+            if stores.get(key) != Some(&Value::Text(value.clone())) {
+                delta.insert(key.into(), Value::Text(value));
+            }
+        }
         if reset_scroll {
             delta.insert("launcher.scroll.y".into(), Value::Number(0.));
         }
@@ -645,6 +693,47 @@ mod tests {
             assert_eq!(source.attempts.load(Ordering::SeqCst), 1);
         }
     }
+    #[test]
+    fn conversion_and_guidance_are_engine_owned_and_clear_with_the_next_reply() {
+        let mut conversion = fixture_reply("= 10 km to miles", vec![]);
+        conversion["conversion"] =
+            json!({"ok":true,"value":"10 km = 6.213711922 mi","description":"Engine description"});
+        let mut guidance = fixture_reply("= units", vec![]);
+        guidance["message"] = json!("Install qalc for unit conversion");
+        let mut failure = fixture_reply("= invalid", vec![]);
+        failure["conversion"] = json!({"ok":false,"error":"Engine conversion error"});
+        let source = Arc::new(
+            Fixture::new(json!({"queries":{
+                "= 10 km to miles":conversion,"= units":guidance,"= invalid":failure,
+                "plain":fixture_reply("plain",vec![json!({"id":"app","name":"Application"})])
+            }}))
+            .unwrap(),
+        );
+        let menu = Menu::new(Some(source)).unwrap();
+        let mut stores = Stores::default();
+        for (query, value, message, error) in [
+            ("= 10 km to miles", "10 km = 6.213711922 mi", "", ""),
+            ("= units", "", "Install qalc for unit conversion", ""),
+            ("= invalid", "", "", "Engine conversion error"),
+            ("plain", "", "", ""),
+        ] {
+            let edit = BTreeMap::from([("launcher.search.text".into(), Value::Text(query.into()))]);
+            stores = stores.reconcile(&edit).unwrap();
+            stores.commit(edit).unwrap();
+            let projection = menu.project(&stores).unwrap();
+            stores = stores.reconcile(&projection).unwrap();
+            stores.commit(projection).unwrap();
+            for (key, expected) in [
+                ("launcher.conversion.value", value),
+                ("launcher.message", message),
+                ("launcher.conversion.error", error),
+            ] {
+                assert_eq!(stores.get(key), Some(&Value::Text(expected.into())));
+            }
+            assert!(!stores.values().keys().any(|k| k.contains("activation")));
+        }
+    }
+
     #[test]
     fn published_menu_payloads_preserve_order_and_keep_activation_out_of_luau() {
         use nacre_protocol::{Message, Reply, framing};

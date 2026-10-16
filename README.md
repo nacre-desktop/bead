@@ -15,6 +15,28 @@ unless an upstream notice specifies otherwise. Framework code and shell assets h
 
 The repository is public by owner request. Do not publish crates/packages/releases.
 
+Foundation preview (bar, engine-backed launcher and private notifications):
+
+```sh
+python3 scripts/try-bead.py --daemon /path/to/nacre-helper --bead /path/to/bead/target/release/nacre-shell
+```
+
+Run from a Wayland terminal with already built executables. It opens a separate
+niri window and builds or installs nothing. Click the bar's launcher icon/lip,
+type, and use Escape to close the panel; close the nested window or use Ctrl+C
+in the launching terminal to stop.
+Temporary HOME/XDG directories, compositor sockets, daemon and buses keep it
+separate from the daily session. The system application catalog is read-only;
+personal file/history data starts empty. Explicit binary paths avoid the existing
+`nacre-shell` control-script name clash.
+
+Launcher results and UI commands use the real standalone daemon. Notification
+hosting/history still use Bead's transitional service on its own private bus;
+notification controls travel through the daemon's UI-provider link. This preview
+does not claim daemon notification hosting or full Nacre parity. The automated
+`--headless-smoke` variant checks both compositors (Hyprland uses a virtual output);
+the interactive window uses niri. See [current status](docs/STATUS.md) for gates.
+
 Feature 2 development preview (from a Wayland terminal):
 
 ```sh
@@ -52,12 +74,14 @@ error, then recovery. Your input/scroll/open state should survive all three.
 Close the nested window or Ctrl+C to stop. Use `hyprland` for the other compositor.
 Without `--demo`, edit `shell/ui/*.luau` or the imported component files yourself while it runs.
 
-`auto` (default) uses one native OpenGL/femtovg context shared by all surfaces,
-with tiny-skia if hardware GL initialization is unavailable. `BEAD_RENDERER=cpu`
-selects the no-GPU path; `femtovg` selects wgpu for comparison, and `vello` supports
-only the retained stress fixture. The CPU-only build is
-`cargo build -p nacre-shell --no-default-features`; it creates no GPU context.
-GPU content is currently CPU-baked once and uploaded, then composited on GPU.
+Bars use CPU rendering. The current sound/launcher panel specifications also
+choose CPU; explicit native GL companions can start lazily and release on idle.
+The policy is CPU for small panels and GL for large animated surfaces. Native
+contexts share their EGL transport, but Mesa can retain about20 MiB after teardown;
+closed-memory gates still apply. `BEAD_RENDERER=cpu` selects the no-GPU path;
+`femtovg` selects wgpu for comparison, and `vello` supports the retained stress
+fixture. The CPU-only build is `cargo build -j2 -p nacre-shell --no-default-features`.
+GPU content is CPU-baked and uploaded before GPU composition.
 
 The primary UI format is Luau markup (ADR0002); legacy JSON fixtures live in
 `shell/legacy-ui`. Taffy owns layout and repeaters use stable model keys. Stable
@@ -67,9 +91,9 @@ file/line/column and keep the previous UI; fixing the source clears the overlay.
 Store values (including input, open state, scroll and focused ID) outlive views.
 Computed bindings must be pure; state changes belong in named actions. Luau has
 an 8 MiB VM limit and a 50 ms action/binding-batch execution limit. Directory and
-source bounds prevent accidental unbounded bundles. Full controls, layout,
-animations, IME and accessibility remain later features. Reload still bakes on
-the UI thread; the measured 80–103 ms interruption needs reducing for larger UIs.
+source bounds prevent accidental unbounded bundles. Luau evaluation and baking
+run in workers; validated generations swap when ready. IME, accessibility and
+hardware parity remain open; current measurements and limits are in STATUS.
 
 Private measurement round (no live desktop surfaces):
 

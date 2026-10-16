@@ -649,3 +649,19 @@ async fn stop_interrupts_a_peer_that_does_not_read_a_large_call() {
     server.abort();
     let _ = server.await;
 }
+
+#[test]
+fn early_link_threads_inherit_ui_signals_without_changing_the_caller_mask() {
+    use nix::sys::signal::{SigSet, Signal};
+    let before = SigSet::thread_get_mask().unwrap();
+    let child = {
+        let _mask = super::LinkSignalMask::block().unwrap();
+        std::thread::spawn(|| SigSet::thread_get_mask().unwrap())
+    };
+    let child = child.join().unwrap();
+    assert!(child.contains(Signal::SIGINT) && child.contains(Signal::SIGTERM));
+    let after = SigSet::thread_get_mask().unwrap();
+    for signal in [Signal::SIGINT, Signal::SIGTERM] {
+        assert_eq!(before.contains(signal), after.contains(signal));
+    }
+}

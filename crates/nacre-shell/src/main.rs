@@ -11,6 +11,7 @@ mod notifications;
 mod reload;
 mod sound;
 mod state;
+mod ui_provider;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
 use std::path::{Path, PathBuf};
@@ -102,6 +103,8 @@ fn start(
     let mut ui: Option<std::path::PathBuf> = None;
     let mut menu_fixture: Option<PathBuf> = None;
     let mut daemon_socket: Option<PathBuf> = None;
+    let mut register_ui_provider = false;
+    let mut ui_notification_socket = None;
     let mut backend_enabled = false;
     if let Ok(name) = std::env::var("BEAD_RENDERER") {
         select_renderer(&mut options, &name)?;
@@ -182,6 +185,12 @@ fn start(
             "--menu-fixture" => {
                 menu_fixture = Some(args.next().ok_or("--menu-fixture needs path")?.into())
             }
+            "--ui-provider" => register_ui_provider = true,
+            "--ui-notification-socket" => {
+                ui_notification_socket = Some(PathBuf::from(
+                    args.next().ok_or("--ui-notification-socket needs path")?,
+                ))
+            }
             "--daemon-socket" => {
                 daemon_socket = Some(args.next().ok_or("--daemon-socket needs path")?.into())
             }
@@ -252,7 +261,7 @@ fn start(
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--bar [--audio-panel|--launcher-panel] [--panel-renderer cpu|femtovg-gl]] [--menu-fixture FILE|--daemon-socket SOCKET] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--audio-panel|--launcher-panel] [--panel-renderer cpu|femtovg-gl]] [--menu-fixture FILE|--daemon-socket SOCKET] [--ui-provider --command-socket SOCKET [--ui-notification-socket SOCKET]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
@@ -470,13 +479,48 @@ fn start(
             }),
         });
     }
+    if register_ui_provider && (!launcher_panel || menu_fixture.is_some()) {
+        return Err("--ui-provider requires the bar launcher with its daemon Source".into());
+    }
+    if ui_notification_socket.is_some() && !register_ui_provider {
+        return Err("--ui-notification-socket requires --ui-provider".into());
+    }
+    let _ui_provider = if register_ui_provider {
+        Some(
+            ui_provider::start(
+                daemon_socket
+                    .clone()
+                    .ok_or("--ui-provider requires --daemon-socket")?,
+                options
+                    .command_socket
+                    .clone()
+                    .ok_or("--ui-provider requires --command-socket")?,
+                ui_notification_socket,
+            )
+            .map_err(|e| e.to_string())?,
+        )
+    } else {
+        None
+    };
+    let shared_menu_source = _ui_provider
+        .as_ref()
+        .map(|client| {
+            client.topic("menu").map(|topic| {
+                std::sync::Arc::new(topic) as std::sync::Arc<dyn bead::core::source::Source>
+            })
+        })
+        .transpose()
+        .map_err(|e| e.to_string())?;
     if launcher_panel {
         options.panel_spec = Some(launcher_panel::spec(
             colors.get("surface")?,
             palette.clone(),
             colors.clone(),
-            menu_fixture.clone(),
-            daemon_socket.clone(),
+            launcher::SourceChoice {
+                fixture: menu_fixture.clone(),
+                socket: daemon_socket.clone(),
+                shared: shared_menu_source,
+            },
             panel_trace,
             launcher_memory.clone().ok_or("launcher state missing")?,
         ));

@@ -10,8 +10,7 @@ pub fn spec(
     fill: [u8; 4],
     palette: PathBuf,
     colors: Palette,
-    fixture: Option<PathBuf>,
-    socket: Option<PathBuf>,
+    source: crate::launcher::SourceChoice,
     trace: bool,
     memory: crate::launcher::Memory,
 ) -> PanelSpec {
@@ -43,8 +42,7 @@ pub fn spec(
                 colors.clone(),
                 cold.clone(),
             );
-            let source = crate::launcher::source(fixture.as_deref(), socket.as_deref())
-                .map_err(|e| e.to_string())?;
+            let source = source.connect().map_err(|e| e.to_string())?;
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
                 .with_launcher(source)

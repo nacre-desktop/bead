@@ -19,6 +19,9 @@ def sample(env,raw,compositor,stop,observe=None):
     engine_socket=env.get('BEAD_LAUNCHER_ENGINE_SOCKET')
     source_args=['--daemon-socket',engine_socket]if engine_socket else['--menu-fixture',str(fixture)]
     command=[binary,'--bar','--launcher-panel',*source_args,'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','180']
+    if os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1':
+        assert engine_socket,'shared UI provider requires the real daemon Source'
+        command+=['--ui-provider']
     if compositor=='hyprland':command+=['--output','bead-bench']
     def call(method,*args,target='bead.panel',ok=True):
         p=subprocess.run([binary,'ipc','--socket',str(sock),'--json',target,method,*args],env=env,cwd=ROOT,capture_output=True,text=True,timeout=5)
@@ -88,6 +91,7 @@ def sample(env,raw,compositor,stop,observe=None):
                 warm=matrix.idle(client.pid,1)
                 if observe:warm['external']=observe()
                 current=call('state')
+                warm['cache_bytes']=current.get('cache_bytes')
                 assert current['target_open']
                 assert all(abs(a-b)<=2 for a,b in zip(current['size'],[1164,654])), 'content-sized launcher geometry fed back into percentage limits'
                 call('close');closed=closed_guard()
@@ -112,6 +116,7 @@ def sample(env,raw,compositor,stop,observe=None):
             if pointer:pointer.close()
         finally:
             if client:stop(client)
+    assert client.returncode==0,'launcher did not exit cleanly'
     assert 'STOP surfaces=0'in log.read_text()
     result.update(valid=True,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=True,query_not_on_disk=True)
     (raw/'launcher-proof.json').write_text(json.dumps(result,indent=2)+'\n')

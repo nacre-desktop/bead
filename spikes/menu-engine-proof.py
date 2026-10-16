@@ -40,42 +40,7 @@ def sample(env, raw, compositor, stop):
     log = raw / 'engine-typing.log'
 
     def stop_engine():
-        if daemon is None:
-            return
-        owned = {}
-        if daemon.poll() is None:
-            for pid in clocks.descendants(daemon):
-                try:
-                    owned[pid] = clocks.identity(pid)[1]
-                except (FileNotFoundError, ProcessLookupError):
-                    pass  # It exited between enumeration and identity read.
-        stop(daemon)
-        def remaining():
-            live = []
-            for pid, start in owned.items():
-                try:
-                    if clocks.identity(pid)[1] == start:
-                        # Zombies have already exited and consume no execution/memory.
-                        state = pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
-                        if state != 'Z': live.append(pid)
-                except (FileNotFoundError, ProcessLookupError):
-                    pass
-            return live
-        deadline = time.monotonic() + 5
-        while remaining() and time.monotonic() < deadline:
-            time.sleep(.05)
-        for pid in remaining():
-            try:
-                if os.getpgid(pid) == pid:
-                    os.killpg(pid, signal.SIGKILL)
-                else:
-                    os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        deadline = time.monotonic() + 2
-        while remaining() and time.monotonic() < deadline:
-            time.sleep(.05)
-        assert not remaining(), 'owned engine workers left running'
+        clocks.stop_owned_tree(daemon, stop)
 
     try:
         with tempfile.TemporaryDirectory(prefix='bead-menu-engine-') as directory:

@@ -89,32 +89,7 @@ pub fn client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let target = args.next().ok_or("ipc needs target")?.clone();
     let method = args.next().ok_or("ipc needs method")?.clone();
     let values: Vec<_> = args.cloned().collect();
-    let c = catalog()?;
-    let parameters = c.route(&target, &method).map(|r| r.parameters.as_slice());
-    let mut converted = Vec::new();
-    for (i, arg) in values.into_iter().enumerate() {
-        let kind = parameters
-            .and_then(|p| p.get(i))
-            .map(|p| p.kind.as_str())
-            .unwrap_or("string");
-        converted.push(match kind {
-            "int" => Value::from(arg.parse::<i64>()?),
-            "real" => serde_json::to_value(arg.parse::<f64>()?)?,
-            "bool" => Value::from(arg.parse::<bool>()?),
-            _ => Value::String(arg),
-        });
-    }
-    let call = Call {
-        version: 1,
-        id: 1,
-        target,
-        method,
-        args: converted,
-        output: None,
-    };
-    if call.target != "bead" && call.target != "bead.panel" {
-        c.validate(&call)?;
-    }
+    let call = from_strings(target, method, &values)?;
     let reply = bead::services::ipc::call(
         &socket.ok_or("explicit --socket required")?,
         &call,
@@ -134,6 +109,43 @@ pub fn client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+/// Same typed legacy call contract for CLI and daemon UI forwarding.
+pub fn from_strings(target: String, method: String, values: &[String]) -> Result<Call, String> {
+    let c = catalog()?;
+    let parameters = c.route(&target, &method).map(|r| r.parameters.as_slice());
+    let mut converted = Vec::new();
+    for (i, arg) in values.iter().enumerate() {
+        let kind = parameters
+            .and_then(|p| p.get(i))
+            .map(|p| p.kind.as_str())
+            .unwrap_or("string");
+        converted.push(match kind {
+            "int" => Value::from(arg.parse::<i64>().map_err(|_| "invalid integer argument")?),
+            "real" => {
+                serde_json::to_value(arg.parse::<f64>().map_err(|_| "invalid real argument")?)
+                    .map_err(|_| "invalid real argument")?
+            }
+            "bool" => Value::from(
+                arg.parse::<bool>()
+                    .map_err(|_| "invalid boolean argument")?,
+            ),
+            _ => Value::String(arg.clone()),
+        });
+    }
+    let call = Call {
+        version: 1,
+        id: 1,
+        target,
+        method,
+        args: converted,
+        output: None,
+    };
+    if call.target != "bead" && call.target != "bead.panel" {
+        c.validate(&call)?;
+    }
+    Ok(call)
+}
+
 pub fn validate(call: &Call) -> Result<(), Reply> {
     let catalog = catalog().map_err(|e| Reply::error(call.id, "catalog", e))?;
     let route = catalog

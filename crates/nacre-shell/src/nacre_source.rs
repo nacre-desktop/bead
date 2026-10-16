@@ -173,6 +173,35 @@ fn check_peer(uid: u32) -> source::Result<()> {
     }
     Ok(())
 }
+/// signalfd handles these on the UI loop. Threads started before that loop must
+/// inherit the block too; otherwise SIGTERM can bypass graceful surface cleanup.
+struct LinkSignalMask(nix::sys::signal::SigSet);
+impl LinkSignalMask {
+    fn block() -> source::Result<Self> {
+        use nix::sys::signal::{SigSet, SigmaskHow, Signal, pthread_sigmask};
+        let mut handled = SigSet::empty();
+        handled.add(Signal::SIGINT);
+        handled.add(Signal::SIGTERM);
+        let mut previous = SigSet::empty();
+        pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&handled), Some(&mut previous))
+            .map_err(|_| Error::new("io", "daemon source signal mask unavailable", false))?;
+        Ok(Self(previous))
+    }
+}
+impl Drop for LinkSignalMask {
+    fn drop(&mut self) {
+        if nix::sys::signal::pthread_sigmask(
+            nix::sys::signal::SigmaskHow::SIG_SETMASK,
+            Some(&self.0),
+            None,
+        )
+        .is_err()
+        {
+            eprintln!("SOURCE_ERROR code=signal_mask_restore");
+        }
+    }
+}
+
 impl Client {
     pub fn start(mut config: Config) -> source::Result<Self> {
         if !config.socket.is_absolute() || config.topics.len() > nacre_protocol::MAX_SUBSCRIPTIONS {
@@ -229,21 +258,24 @@ impl Client {
         });
         let (tx, rx) = mpsc::channel(nacre_protocol::MAX_CALLS);
         let state = shared.clone();
-        let thread = std::thread::Builder::new()
-            .name("nacre-link".into())
-            .stack_size(512 * 1024)
-            .spawn(move || {
-                let _exit = OnExit(state.clone());
-                let runtime = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .max_blocking_threads(2)
-                    .build();
-                if let Ok(runtime) = runtime {
-                    runtime.block_on(run(config, state.clone(), rx));
-                }
-                disconnect(&state);
-            })
-            .map_err(|_| Error::new("io", "daemon source thread unavailable", true))?;
+        let thread = {
+            let _signals = LinkSignalMask::block()?;
+            std::thread::Builder::new()
+                .name("nacre-link".into())
+                .stack_size(512 * 1024)
+                .spawn(move || {
+                    let _exit = OnExit(state.clone());
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .max_blocking_threads(2)
+                        .build();
+                    if let Ok(runtime) = runtime {
+                        runtime.block_on(run(config, state.clone(), rx));
+                    }
+                    disconnect(&state);
+                })
+                .map_err(|_| Error::new("io", "daemon source thread unavailable", true))?
+        };
         Ok(Self(Arc::new(Owner {
             shared,
             tx,

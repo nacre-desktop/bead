@@ -351,6 +351,73 @@ mod tests {
     }
 
     #[test]
+    fn launcher_conversion_and_provider_guidance_have_populated_goldens()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for (name, key, value) in [
+            (
+                "launcher-conversion",
+                "launcher.conversion.value",
+                "10 km = 6.213711922 mi",
+            ),
+            (
+                "launcher-guidance",
+                "launcher.message",
+                "Install qalc for unit conversion",
+            ),
+            (
+                "launcher-conversion-error",
+                "launcher.conversion.error",
+                "Conversion is unavailable",
+            ),
+        ] {
+            let mut fixture = initial_models()?;
+            fixture.insert(
+                "launcher.search.text".into(),
+                Value::Text("= 10 km to miles".into()),
+            );
+            fixture.insert(key.into(), Value::Text(value.into()));
+            let mut h = bead_test::Harness::load(
+                &root(),
+                Path::new("ui/main.luau"),
+                &root().join("palette.json"),
+                fixture,
+                bead_test::Config {
+                    width: 1164,
+                    height: 654,
+                    scale: 1.,
+                },
+            )?;
+            let frame = h.render()?;
+            assert!(
+                h.scene()
+                    .primitives
+                    .iter()
+                    .any(|p| matches!(p,bead::render::Primitive::Text{text,..}if text==value))
+            );
+            assert!(
+                !h.scene().primitives.iter().any(
+                    |p| matches!(p,bead::render::Primitive::Text{text,..}if text=="No results")
+                )
+            );
+            assert!(
+                h.accessibility()
+                    .nodes
+                    .iter()
+                    .any(|(_, n)| n.value() == Some("= 10 km to miles"))
+            );
+            let golden = root().join("tests/goldens").join(format!("{name}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            let artifacts = std::env::temp_dir()
+                .join("bead-launcher-detail-goldens")
+                .join(name);
+            frame.compare(&golden, bead_test::Tolerance::default(), &artifacts)?;
+        }
+        Ok(())
+    }
+
+    #[test]
     fn notification_controls_follow_current_qml_visibility()
     -> Result<(), Box<dyn std::error::Error>> {
         for (body, actions, details) in [
