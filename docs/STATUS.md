@@ -1,5 +1,18 @@
 # Status
 
+## 2026-10-17 — Calendar/routing candidate held for memory decision
+
+Local named launcher/sound/calendar integration passes 191 tests, fmt, clippy and
+CPU-only checks. Twenty service-view cycles per compositor pass private input,
+presentation, hover expiry, stale-worker retirement and cleanup checks.
+Five alternating Hyprland pairs: settled median 21.990 -> 23.111 MiB; paired
+increase 1.121 MiB exceeds the owner's 0.5 MiB feature allowance. Niri: +0.753 MiB, also outside the allowance.
+Every close and the 25 MiB/settled group guards pass; they do not waive added cost.
+Implementation stopped. Candidate is preserved locally and unshipped; main and
+the preview retain the accepted runtime. QML remains the daily driver.
+Owner decision: accept this explained combined feature cost, or trim/drop it.
+[Measurements and remaining work](research/feature9-gate-d.md#calendar-and-named-views--memory-decision-2026-10-17).
+
 ## 2026-10-16 — Core switch active: recovery/static text accepted
 
 Owner accepted the measured+0.339/+0.392MiB settled H/N feature cost.

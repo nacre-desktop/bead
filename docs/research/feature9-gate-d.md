@@ -32,6 +32,94 @@ with measurements/core forecast. Full parity is an estimate-only alternative.
 Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
 release. QML stays daily driver. No live run/install/release is authorized.
 
+### Calendar and named views — memory decision, 2026-10-17
+
+This is a local candidate, not a runtime release or completion of service views.
+A bounded catalog selects one launcher, sound or calendar worker. Calendar reads
+clock/date through a Source on the bar's existing hosted service, adding no bus
+connection, timer or backend. Top-bar placement clamps to the output; the generic
+placement helper supports every edge. Named hover reuses the two-second discard
+timeout and cannot replace a visible view. Invalid views/outputs retain the old
+view; retired worker epochs cannot replace the current one. Legacy state reports
+the selected view rather than treating every open panel as the launcher.
+
+Local validation: 191 workspace tests, fmt, all-target/all-feature clippy with
+warnings denied and CPU-only build pass. Date/leap/month bounds, stable identities,
+source recovery and pixel goldens are covered. A native screenshot caught the
+clock button's default column layout, which clipped the time; explicit row layout
+fixes it, and a geometry assertion fails before/passes after. No renderer change.
+
+The corrected private proof passes 20 service-view cycles on each compositor,
+plus the existing three launcher cycles. Exact generation/update commit and
+presentation markers are required for opens/closes. Outside-pointer and Escape
+dismissal, named hover expiry, invalid-request preservation, rapid retirement,
+final launcher state/presentation and clean shutdown pass. The first virtual
+Escape attempt failed without a delivered key; the existing sound proof's 200 ms
+keyboard-registration delay restores delivery. The assertion was not loosened.
+
+Five fresh alternating memory pairs use immutable accepted runtime `b681d0` and
+candidate `5764dd`, each with its matching Luau bundle, and the same frozen Nacre
+`75157fd3` helper. The candidate is production Rust `5257032` plus the Lua-only
+clock correction in `88aa6a4`; later `d8a616d` changes the harness only. Catalogs
+contain 320 apps. Both variants have a persistent private virtual keyboard before
+the bar baseline, avoiding unequal keyboard/IME setup costs. The candidate also
+exercises its calendar/sound views after the matched launcher cycles.
+
+Sessions use the existing private headless parent, private buses/state and CPU
+rendering: scale 1.5, Hyprland configured virtual 120 Hz, niri nested 60 Hz.
+Presentation refresh is unknown; these are not physical timings. Commands run at
+nice 10, no own builds or concurrent captures; host contention is uncontrolled.
+The daemon settles 32 seconds before bar startup. UI closes use their own bar+5
+guard; the combined UI/daemon/provider guard applies only after 35 seconds idle.
+PSS+DRM includes SwapPss. Missing measurements are not treated as zero.
+
+| Settled UI MiB, five pairs | Control median [range] | Candidate median [range] | Median paired increase |
+| --- | ---: | ---: | ---: |
+| Hyprland |21.990 [21.868–22.114]|23.111 [23.079–23.202]|+1.121|
+| niri |22.840 [22.759–22.949]|23.604 [23.343–23.664]|+0.753|
+
+The Hyprland increase exceeds both its control spread (0.246 MiB) and the owner's
+0.5 MiB feature allowance. It is not noise. Niri also exceeds the allowance: +0.753 MiB paired,
+with a control spread of 0.190 MiB and candidate spread of 0.321 MiB.
+All 184 close samples fit own bar+5. Settled UI maxima are 23.202/23.844 MiB H/N;
+zero SwapPss is observed. The 25 MiB UI ceiling and settled group guards pass, but do not waive
+the added-cost gate. No further runtime work or publication is authorized by
+passing those separate guards. The unshipped work is preserved for owner review.
+
+In Hyprland's median pair, +0.879 MiB is file-backed and +0.242 MiB anonymous;
+these are components of that same pair. Accounted caches differ by 4,923 bytes,
+with the same reported totals before/after the extra service views. ELF text grows
+60,744 bytes, which alone does not explain the extra resident mapped pages.
+The allocation cause is not proved; no allocator/font rewrite or speculative
+cache clearing is offered as a measured fix. This compares frozen artifacts;
+a same-source rebuild was not used to isolate build-layout effects.
+
+Raw evidence is retained under `core-service-calendar-gates-88aa6a4-v2/`, with
+immutable binary/bundle and harness manifests. Failed exploratory input proofs
+and earlier uncorrected-clock screenshots remain separate and excluded.
+
+Decision needed under the owner's standing rule: accept the measured combined
+calendar/sound/routing feature cost as an explicit exception, or trim/drop the
+unshipped candidate. The 25 MiB UI ceiling remains in force. The published runtime
+and pinned preview stay accepted b0; this checkpoint publishes evidence only.
+
+Service views are not complete. Unbrowsed month/year following at a date rollover
+still needs parity with QML; browsed-month retention is already tested. The matched
+unchanged-calendar QML harness is prepared but not run after the memory hold.
+No full AP/audio-device/Bluetooth/power action contract is invented. Nacre
+`6a737629` / [CI38965942859](https://github.com/nacre-desktop/nacre/actions/runs/38965942859) is green; `network.watch` remains a change trigger,
+not a stable AP/action snapshot. Typed F3 activation and same-engine QML remain
+pending. The published menu API permits a ranked prefix (`limit`, full `total`);
+proper view pagination is an unimplemented typing hypothesis, not a gain claim.
+
+The core-switch estimate remains 40–81 eight-hour agent-days (320–648 task hours),
+about 16–41 active calendar days at an assumed 16–20 task hours/day, or 3–8 weeks
+including coordination/validation waits. This is not a measured timesheet.
+Always-on memory remains an estimated 90–150 MiB for the complete core stack,
+not a measured full-shell result. Typing targets and 6b pacing/idle items remain
+open. QML stays the daily driver; dashboard, live validation and Feature 11 stay
+held. Stop here for the memory decision, before resuming the service-view block.
+
 ### Five alternating memory pairs per compositor
 
 Same immutable accepted e8228d binary versus candidate b681d0, regular Nacre

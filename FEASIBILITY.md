@@ -1,5 +1,27 @@
 # Feasibility
 
+## 2026-10-17 — Named service views: functionality passes, memory decision needed
+
+One cold catalog selects launcher, sound or calendar on the shared panel lifecycle.
+Calendar reads clock/date from the existing service through a small Source.
+The local candidate passes headless and private lifecycle checks.
+Its settled increase exceeds the owner's allowance, so the runtime stays unshipped.
+
+| Check | Hyprland | niri |
+| --- | ---: | ---: |
+| Private service-view open/close cycles |20 passed|20 passed|
+| Five-pair settled UI median, control -> candidate MiB |21.990 -> 23.111|22.840 -> 23.604|
+| Median paired increase MiB |+1.121|+0.753|
+| Every UI close <= own bar+5 / settled UI <=25 MiB |Pass|Pass|
+| Workspace tests / fmt / clippy -D warnings / CPU-only |191 / pass / pass / pass|Same local source|
+
+Nested scale 1.5, virtual 120 Hz / nested 60 Hz; feedback refresh unknown.
+No own build overlap; host contention uncontrolled. PSS+DRM includes SwapPss.
+Both memory variants have a private keyboard before their bar baseline.
+Mapped pages and heap dominate the increase; accounted caches differ by about
+4.8 KiB. No exclusive allocation cause is proved. No new typing gain is claimed.
+[Method, source provenance and decision](docs/research/feature9-gate-d.md#calendar-and-named-views--memory-decision-2026-10-17).
+
 ## 2026-10-16 — UI dispatch remains responsive during activation
 
 Extend the actual-provider duplex proof from queries to published menu activation.
