@@ -5,9 +5,185 @@ No live-session test, notification-name takeover, installation or release is
 allowed. The earlier single physical Gate C authorization was consumed.
 Nacre and Orient remain read-only except additive nacre-protocol work through
 Nacre CONTRIBUTING. Owner resumed Features9–10 after Foundation F5.
-Typing targets are not accepted; this is an interim checkpoint, not Gate D.
+Gate D review is ready with typing/shared-engine comparison gaps; acceptance is the owner's decision.
 
 
+
+## Gate D review — 2026-10-16
+
+Recommendation: adjust. The framework has a useful memory advantage in these
+component tests, but the typing targets and several core integration contracts
+remain open. Keep the working daily QML shell while these are resolved. This is
+an owner review point, not acceptance of full parity or authorization for Feature11.
+
+All new captures are fresh private/nested sessions at2880×1800,scale1.5:
+Hyprland virtual120Hz and niri nested60Hz. Feedback refresh0 means unknown,
+not physical120Hz. No own build overlaps captures; shared-host contention is
+uncontrolled. CPU is process CPU across threads; it can exceed elapsed latency.
+Native UI timing starts at key receipt and joins the exact completed typed reply,
+commit and presentation. No pending/echo/error frame substitutes for a result.
+
+### Current launcher versus unchanged QML
+
+The UI-only test feeds both views the same320-app canonical fixtures, with160
+changed result IDs on a/ap edits. It performs no filtering/ranking/provider work.
+The unchanged NacreAppBrowser retains its normal details/control/delegate lifetime;
+Bead has a simpler virtualized list. These differences are part of this measured
+component comparison, not a claim of full visual parity or a renderer-only effect.
+QML source is unchanged between the reference checkout and Nacre75157fd3.
+One200-key capture per side/compositor, then60seconds idle; no significance claim.
+
+|UI-only component|Bead H /N|QML H /N|
+| --- | ---: | ---: |
+|CPU mean ms/key|9.171 /9.040|113.911 /116.460|
+|Presented p99 ms|16.311 /21.933|115.939 /102.074|
+|Typed-list PSS+DRM MiB,60s|37.448 /42.336|574.955 /555.438|
+|Observed idle CPU %,60s|0 /0|0.550 /0.533|
+
+Observed0 means no process ticks within10ms resolution, not zero work. QML
+includes actual DRM80.906/49.773MiB; CPU Bead has no DRM client. No SwapPss
+observed. Helper CPU is unmeasured in this fixture, never substituted with0.
+Raw `gate-d-final-comparisons/fixture/`; existing QML presentation probe reused,
+source-identical, no instrumentation rebuild. The shared-engine production QML
+comparison remains missing until the migration agent's official F3 adapter.
+
+### Real daemon path and typing budget
+
+Regular Nacre75157fd3 helper (CI38892933475 green) is identical on both sides.
+The catalog contains320 synthetic desktop entries; initial grid320, typed a/ap
+100 apps plus one action. Catalog invalidation to321 entries refreshes without a
+key. This one-pair native repeat compares the bounded renderer/control to the
+current client host using the same current UI bundle. It is functional/performance
+evidence, not a five-pair acceptance of a new host optimization.
+
+|Real engine,200 keys|Control H /N|Current H /N|
+| --- | ---: | ---: |
+|UI CPU mean ms/key|11.293 /11.328|10.045 /9.860|
+|Presented p99 ms|22.571 /31.083|25.425 /35.507|
+|Daemon CPU mean ms/key|4.855 /5.135|4.973 /4.870|
+|Observed provider CPU mean ms/key|1.934 /2.051|2.013 /2.091|
+
+UI8ms and presentation16.7ms budgets fail. The tail increases in these single
+pairs are not accepted latency improvements. Daemon/provider clocks bracket
+injection through observed presentation, a wider window than UI receipt→present;
+background work is included. Do not add these CPU totals as serial elapsed time.
+H raw `client-native-signals-checks/typing/`; corrected N raw
+`client-native-final-checks/typing/`. Earlier small-window N captures and a
+shutdown-failing lifecycle remain failed/diagnostic evidence, not replacements.
+
+A separate32-key stage diagnostic finds CPU medians H/N: markup3.827/2.613ms,
+view IR1.151/0.791,layout0.695/0.430,bake0.970/0.630,composition1.433/2.081.
+Markup includes setup1.035/0.729,eval1.461/0.941 and serde1.073/0.813.
+Nested spans overlap and must not be added as independent work. Text shaping
+is small in this warmed fixture (shape0.024/0.016ms). menu_query wall medians
+9.357/7.729ms include RPC work/wait; its requester CPU is0.572/0.451ms.
+The12-call native CLI diagnostic before keyboard/UI activity, excluding the
+first call, measures daemon/provider CPU medians H5.045/1.818,N5.039/1.826ms.
+Thus this host's cost is not explained solely by per-key keyboard-device churn.
+It is not a measurement isolating transport from engine work. The migration
+agent received the method/results; its desktop API numbers use another host.
+Raw `client-native-final-checks/profile/` and `gate-d-final-comparisons/api/`.
+
+### Real panel lifecycle and memory
+
+Three cycles per compositor use the real shared menu/UI-provider connection.
+Every UI close/hover/settled guard stays within its own bar+5MiB; the combined
+UI+daemon/worker group also passes after35s idle. All six warm cache reports
+have no `cpu-repair-scratch` allocation: real idle release is verified.
+Private compositor/bus infrastructure is excluded from this product group.
+
+|PSS+DRM+SwapPss MiB|H|N|
+| --- | ---: | ---: |
+|UI bar /third warm /settled|22.334 /47.240 /21.965|23.417 /45.271 /22.854|
+|UI+daemon/workers bar /warm /settled|55.195 /98.006 /55.047|56.232 /96.243 /55.858|
+
+The current warm group is about7/9MiB below Feature6's roughly105MiB figure,
+but the component and driver/service populations differ; this is context, not a
+matched saving. Current warm daemon/providers account for about51MiB; roughly33
+remains in the daemon at rest. UI-only and whole-foundation costs stay separate.
+The accepted bounded repair's first-open deltas+0.209/+0.120MiB and five-pair
+warm/closed spreads are recorded below. No memory waiver was used.
+
+### Notification/OSD comparison
+
+Current expanded notice and volume75OSD use identical visual fixtures and the
+same permissive SVG. Each side/compositor has one60-second idle capture. Native
+uses a bounded fake Source; neither side owns a notification server in this UI
+comparison. Bead retains its normal private service/watchdog retry cost. Functional
+private-bus replacement/actions/expiry/history/DND/inhibition/hover and all four
+OSDs remain covered separately, including the new daemon-routed counts/clear demo.
+
+|Populated component|Bead H /N MiB|QML H /N MiB|Bead idle CPU H /N %|
+| --- | ---: | ---: | ---: |
+|Expanded notice|20.720 /20.922|140.052 /129.480|0.183 /0.150|
+|Volume OSD|22.282 /23.359|91.997 /106.835|0.183 /0.217|
+
+QML records0 ticks at10ms resolution in all four cells. Bead's nonzero idle
+work is included. Totals are PSS+actual DRM; CPU Bead has no DRM client. No
+SwapPss observed. Presentation latency for these matched static components is
+unmeasured. Regular versus semibold summary, richer image hints/history browser,
+swipe/row-height polish and160ms stack fade versus QML230ms row transition remain
+visual gaps. Raw `gate-d-notice-comparisons/`; screenshots show populated content.
+
+### Shipped view/transport changes and limits
+
+Menu results come exclusively from the typed Source. Conversion values, errors
+and provider guidance are projected from protocol v1; three populated headless
+goldens and a clearing/replacement test cover them. No calculator/parser/catalog,
+ranking or provider was implemented in Bead. Engine basic arithmetic, conversion
+copy tokens and non-app activation remain upstream/shared-contract gaps. Copy is
+not enabled without an engine-issued item/token; descriptive text is not a token.
+
+The bar can register `ui.dispatch` and share that SDK connection with its menu
+Source. Audited legacy arguments/capabilities still pass through the existing
+peer-checked IPC path; optional notification controls target the private notice
+view. No always-on forwarding process or per-key command process was added.
+The generic provider callback is tested against bounds/private-envelope bypass.
+`ui.menu.activate` remains explicitly unsupported pending the shared contract;
+forwarding into the same worker that is awaiting an activation RPC would deadlock.
+The migration agent has that constraint. Reconnect/peer/boot/resync transcripts
+remain covered; the delayed reconnecting UI mark is still open.
+
+A real shutdown bug was caught by lifecycle, not waived: early nacre-link/Tokio
+threads had SIGINT/SIGTERM unblocked while the UI used signalfd. SIGTERM could
+terminate the whole bar (exit−15) before `STOP surfaces=0`. A scoped signal mask
+around thread creation now gives every thread the block and restores the caller.
+An inheritance/restoration test plus strict H/N preview/lifecycle exit0+STOP pass.
+All165tests/fmt/clippy warnings-denied/all-targets/all-features/CPU-only/release pass.
+Static text is currently absent from AccessKit; interactive input/button checks
+pass. This is a remaining accessibility gap, not silently claimed covered.
+
+The small lazy-strip-mask experiment f651c04 is rejected and local-only. Five
+memory pairs give warm/closed increases H0.436/0.432 versus control ranges
+0.389/0.342MiB; N0.384/0.442 versus0.239/0.291. H CPU9.125→9.201ms/key is
+neutral/slower; N typing stopped after one pair. All close+5 guards passed, but
+that does not waive warm/closed regressions. The accepted renderer was restored
+byte-for-byte; its exact rounded-pixel fix remains. Raw `lazy-mask-fivepairs/`.
+
+### Owner preview and stop point
+
+The repository command is in README: `python3 scripts/try-bead.py --daemon
+/path/to/nacre-helper --bead /path/to/nacre-shell` (one shell line). A task-local
+ready-to-run wrapper is supplied in the handoff. It builds/installs nothing and
+starts a niri window, private daemon, HOME/XDG stores and buses, bar/launcher and
+notification view. No input injection or live notification ownership. Close the
+window or use Ctrl+C in its launching terminal. Strict headless H/N smoke and a
+private compositor-disconnect test verify shutdown and no owned descendants.
+A stale socket file after compositor exit is detected by a private connect probe.
+
+Launcher queries and notification UI controls use the daemon; notification
+content/history hosting is still Bead's transitional private service. General
+daemon notification hosting is not implemented upstream. This limitation is
+stated by the preview and must not be mistaken for daemon notification parity.
+Nacre/Orient/installed state remain unchanged. Backend adapters stay frozen except
+fixes; no shell move, binary-name resolution, installation or Feature11 is started.
+
+The forecast below remains roughly99–201 focused agent-days, with uncertainty
+concentrated in managed windows, media/video, AI, input and hardware. Recommended
+next order: typing/RPC and shared-engine QML/actions/reconnect; input/hardware
+proofs; shared service panels/dashboard; Settings/Colors/Welcome/session; managed
+windows/pearls, static wallpaper then video, AI rich views, software/theme/extension/
+dev/AUR surfaces. Keep hyprlock. Owner decides whether to fund that continuation.
 
 ## Bounded rounded repair — 2026-10-16
 
@@ -40,8 +216,9 @@ First increases stay below1MiB; warm/closed increases fit control ranges,
 including paired medians. All60 close cycles plus20 hover guards pass ownbar+5.
 Second-open medians H48.102→48.369/N46.396→46.525 also fit control ranges
 6.240/0.373; the H control includes a large outlier, not precision evidence.
-Most third-warm increase is file PSS (H+0.169/N+0.197MiB), not retained anonymous
-scratch (H+0.027/N−0.061MiB). N p99 rises4.335ms inside its9.096ms control range;
+Third-warm component medians change by file PSS H+0.169/N+0.197MiB and
+anonymous H+0.027/N−0.061MiB. This is consistent with mapped-code cost, not an
+allocation trace proving the absence of allocator retention. N p99 rises4.335ms inside its9.096ms control range;
 paired median+2.222ms. This is not a latency win or proof of no pacing issue.
 CPU paired medians−0.855/−0.657ms;4000 exact receipt→present key proofs pass.
 Both8ms/16.7ms targets remain unaccepted. Hvirtual120/Nnested60, actual feedback
@@ -966,10 +1143,10 @@ for audit, and absent from accepted results. Nested Hvirtual120/N60;200 changed-
 result keys per cell, no own heavy build overlap; shared-host load is uncontrolled.
 A simpler ordered-record vector is measured separately before any decision.
 
-## Remaining-parity forecast — provisional until the engine comparison
+## Remaining-parity forecast — Gate D review
 
-Gate D is not accepted by this forecast. The engine/prefix/activation comparison
-and final matched QML measurements must be attached first. Estimates are focused
+Gate D is not accepted by this forecast. UI-only matched comparisons are attached;
+the production QML/shared-engine and full prefix/activation comparison remain open. Estimates are focused
 agent-days including implementation, fixtures, nested validation and CI, assuming
 stable daemon contracts. They are not calendar promises or an extrapolation of
 bar throughput. Recent small-panel, foundation and Source checkpoints took hours
@@ -984,7 +1161,7 @@ by the migration agent are dependencies, not a second implementation budget.
 | Remaining area | Focused agent-days | Hard unproved part |
 | --- | ---: | --- |
 | Finish engine/typing/pacing/idle rails and shell integration |4–8|Changed-result queries, cold first key, N tail, reconnect badge/UI provider, three-hour lifecycle/chaos|
-| Remaining bar/popouts and service views |6–12|Audio devices/mic, network/Bluetooth/tray/power/calendar; real service errors and multi-output dismissal|
+| Remaining bar/popouts and service views |6–12|Panel registry/lifetimes, audio devices/mic, network/Bluetooth/tray/power/calendar; real service errors and multi-output dismissal|
 | Dashboard pages |8–15|MPRIS/artwork/resource/calendar/weather, bounded decode/fetch workers, event/state consistency|
 | Settings/Colors/Welcome/control/session windows |12–24|Schema-driven edits across65 stores, revision errors, forms, shortcuts, previews and restart recovery|
 | Pearls/managed windows |10–20|xdg-toplevel lifetime, detach/dock, geometry/focus/output restoration and compositor placement limits|
@@ -1013,8 +1190,8 @@ QML rewrite. Stop for the owner's Gate D decision before any Feature 11 work.
 
 Open carry-forwards: historical typing29.61→32.66% workload, first-key/overall N
 latency,6b0a nested/shared-GL pacing and strict idle invariance; physical120Hz
-launcher/IME/screen-reader/NVIDIA validation; daemon UI-provider/reconnect mark
-integration; dependency-internal font caches bounded by teardown rather than exact
+launcher/IME/screen-reader/NVIDIA validation; non-app UI-provider activation/reconnect mark
+integration; static-text accessibility; dependency-internal font caches bounded by teardown rather than exact
 byte reports; richer notice/OSD polish; large-catalog paging beyond current virtual
 extent limits; binary/control-script name collision. The permissive framework/GPL
 product boundary and CPU-small-panel/GL-large-animation policy remain. Mesa's

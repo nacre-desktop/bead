@@ -1,28 +1,41 @@
 # Status
 
-## 2026-10-16 — Bounded rounded repairs kept; Gate D pending
+## 2026-10-16 — Gate D review: adjust
 
-The owner resumed the renderer with a two-hour time-box. Region-sized scratch
-passes: first-open median +0.209/+0.120 MiB (H/N), warm +0.228/+0.068 and
-closed +0.083/+0.130 fit their five-pair control ranges. Every hover/close
-passes own bar +5 MiB. Scratch reuses buffers, has a process-accounted 16 MiB
-cap, and is freed after 500 ms quiet or panel destruction. No canvas-sized
-output mask is added. The old full-mask WIP remains local and out of the plan.
+Renderer3bf5eff is pushed; CI38899237836 green. Bounded repair scratch passes
+6,400 exact pixel cases and five memory pairs per compositor: first-open
++0.209/+0.120 MiB; warm/closed deltas fit control spreads; every close≤bar+5.
+Scratch reuses capacity and releases after500ms quiet. The later lazy-mask
+experiment fails warm/closed spreads and stays local; accepted code restored.
 
-161 tests pass, including 6,400 exact partial/full pixel repairs and scratch
-reuse/cap/idle release. Fmt, all-target/all-feature clippy with warnings denied,
-CPU-only check and release pass. Five alternating 200-key pairs per compositor:
-UI CPU H9.958→8.914 /N10.643→9.883 ms/key. Presented p99 H22.083→21.965 /
-N20.675→25.010 ms; N increases inside its 9.096 ms control range, not a claimed
-latency win. Both typing targets remain open. Nested Hvirtual120/N60; refresh
-predictions unknown, shared-host contention uncontrolled, no own build overlap.
-[Evidence](research/feature9-gate-d.md#bounded-rounded-repair--2026-10-16).
+Client checkpoint8a15542 adds engine conversion/guidance views, shared daemon
+menu/UI-provider connection, legacy UI forwarding and a private nested preview.
+165 tests, fmt, all-target/all-feature clippy, CPU-only and release pass.
+The early-link SIGTERM bug is fixed; strict H/N exit0+STOP and compositor-loss
+cleanup tests pass. No input injection, install, live config or live bus takeover.
 
-Next: conversion/guidance views, shared daemon UI-provider link and one-command
-private nested preview. Daemon notification hosting and the official shared QML
-adapter are still upstream work; existing notification hosting is transitional.
-Keep typing, 6b pacing/idle, historical 29.61→32.66%, cache/IME/hardware and
-binary-name gaps open. Stop at Gate D; no Feature 11/live/install/release.
+|Measured current launcher, H /N|Result|
+| --- | ---: |
+|Real engine UI CPU mean ms/key|10.045 /9.860|
+|Real engine presented p99 ms|25.425 /35.507|
+|UI-only fixture CPU Bead /QML ms/key|9.171 /113.911;9.040 /116.460|
+|UI-only typed-list Bead /QML MiB|37.448 /574.955;42.336 /555.438|
+
+Typing8ms/16.7ms targets remain unaccepted. Native200-key samples are one pair,
+not a new optimization acceptance. Nested Hvirtual120/N60,scale1.5; feedback
+refresh unknown, host contention uncontrolled, no own build overlap. Real group
+UI+daemon/providers warm98.006/96.243→settled55.047/55.858MiB; UI alone returns
+21.965/22.854, every close/settled group within own bar+5. All warm reports show scratch released.
+[Method, comparisons and forecast](research/feature9-gate-d.md#gate-d-review--2026-10-16).
+
+STOP at Gate D for the owner. Recommend typing/RPC and shared-engine QML/actions
+before broad parity (roughly99–201 focused agent-days). Official F3 QML adapter,
+daemon notification hosting, engine arithmetic/copy/non-app activation, reconnect
+mark, static-text AccessKit/IME/hardware, dependency cache accounting and binary
+name clash stay open. Preserve6b pacing/idle and historical29.61→32.66% items.
+Backends frozen except fixes; Nacre/Orient read-only. No Feature11/live/release.
+README has the one-command preview; its notifications use a transitional private
+Bead host, while menu results and notification controls use the real daemon.
 
 ## Accepted Gate C and optimization baseline
 

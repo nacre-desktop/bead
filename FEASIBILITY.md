@@ -1,5 +1,37 @@
 # Feasibility
 
+## 2026-10-16 — Gate D review: adjust
+
+The shared daemon feeds the launcher; Bead keeps rendering and view state.
+The bounded rounded repair passes its original memory/pixel gates.
+Typing still misses the target, and the production QML daemon adapter is pending.
+A private nested preview makes the current bar, launcher and notices reviewable.
+
+|Nested current, H /N|Bead|Matched QML UI-only|
+| --- | ---: | ---: |
+|Fixture CPU mean ms/key|9.171 /9.040|113.911 /116.460|
+|Fixture presented p99 ms|16.311 /21.933|115.939 /102.074|
+|Fixture typed-list MiB,60s|37.448 /42.336|574.955 /555.438|
+|Real-engine UI CPU mean ms/key|10.045 /9.860|unmeasured|
+|Real-engine presented p99 ms|25.425 /35.507|unmeasured|
+
+320-app fixtures,160 changed results; QML keeps its extra details/controls.
+One200-key cell each, no full-parity/renderer-only/engine-cost attribution.
+Real engine has320 apps,100 app+1action typed results, same regular75157helper.
+Daemon/provider CPU means4.973/2.013 H,4.870/2.091 N ms/key include background
+in the wider injection→present window; do not add as serial elapsed time.
+Real group warm98.006/96.243→settled55.047/55.858MiB; UI21.965/22.854 closed.
+Every UI/group close guard passes ownbar+5; all warm scratch allocations released.
+165tests/fmt/clippy all-target/all-feature/CPU-only/release and strict H/N cleanup
+pass; early source-thread signal inheritance fixed, caller mask restored.
+Lazy-mask f651c04 stays local: warm/closed deltas exceed five-pair control spreads,
+CPU neutral/slower. Correct rounded renderer3bf5eff remains, CI38899237836 green.
+Nested Hvirtual120/N60,scale1.5, feedback refresh unknown; no own builds,
+host contention uncontrolled. Forecast99–201 focused agent-days; hard media,
+windows, AI, input/hardware parts dominate uncertainty. STOP at Gate D.
+Full [report](docs/research/feature9-gate-d.md#gate-d-review--2026-10-16) includes
+current notice/OSD comparison, missing contracts and owner preview limitations.
+
 ## 2026-10-16 — Bounded rounded repair kept
 
 Repair-sized scratch fixes exact rounded-corner partial repaint pixels.
