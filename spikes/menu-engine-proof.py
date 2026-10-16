@@ -111,20 +111,33 @@ def sample(env, raw, compositor, stop):
                     time.sleep(settle)
                 if os.environ.get('BEAD_ENGINE_LIFECYCLE_ONLY') == '1':
                     def observe():
-                        processes = []
-                        for pid in [daemon.pid, *sorted(clocks.descendants(daemon))]:
-                            memory = matrix.measure.memory(pid)
-                            drm = matrix.measure.drm_memory(pid)
-                            devices = 0
-                            for fd in pathlib.Path(f'/proc/{pid}/fd').iterdir():
-                                try:
-                                    devices += os.readlink(fd).startswith('/dev/dri/')
-                                except FileNotFoundError:
-                                    pass
-                            assert drm is not None or devices == 0, 'missing DRM measurement for an open DRM device'
-                            processes.append({'pid': pid, 'memory': memory, 'drm_mib': drm,
-                                              'drm_fds': devices, 'pss_plus_drm_swap_mib': memory['pss_mib'] + (drm or 0) + memory['swap_pss_mib']})
-                        return {'processes': processes, 'pss_plus_drm_swap_mib': sum(p['pss_plus_drm_swap_mib'] for p in processes)}
+                        # Workers expire after30s idle. Discard a partial read
+                        # and retry the WHOLE group if one exits mid-sample.
+                        # Never count a vanished/unmeasured process as zero.
+                        for attempt in range(5):
+                            assert daemon.poll() is None, 'private daemon exited during observation'
+                            members = {daemon.pid, *clocks.descendants(daemon)}
+                            processes = []
+                            try:
+                                for pid in sorted(members):
+                                    memory = matrix.measure.memory(pid)
+                                    drm = matrix.measure.drm_memory(pid)
+                                    devices = 0
+                                    for fd in pathlib.Path(f'/proc/{pid}/fd').iterdir():
+                                        try:
+                                            devices += os.readlink(fd).startswith('/dev/dri/')
+                                        except FileNotFoundError:
+                                            pass
+                                    assert drm is not None or devices == 0, 'missing DRM measurement for an open DRM device'
+                                    processes.append({'pid': pid, 'memory': memory, 'drm_mib': drm,
+                                                      'drm_fds': devices, 'pss_plus_drm_swap_mib': memory['pss_mib'] + (drm or 0) + memory['swap_pss_mib']})
+                            except (FileNotFoundError, ProcessLookupError):
+                                continue
+                            if members != {daemon.pid, *clocks.descendants(daemon)}:
+                                continue
+                            return {'processes': processes, 'pss_plus_drm_swap_mib': sum(p['pss_plus_drm_swap_mib'] for p in processes),
+                                    'membership_stable': True, 'observation_retries': attempt}
+                        raise RuntimeError('no stable daemon worker group for memory observation')
                     lifecycle = load('engine_launcher_lifecycle', ROOT / 'spikes/launcher-proof.py')
                     lifecycle.sample(dict(env, BEAD_LAUNCHER_ENGINE_SOCKET=str(endpoint)), raw, compositor, stop, observe, bundle_root=root)
                     stop_engine(); daemon = None
