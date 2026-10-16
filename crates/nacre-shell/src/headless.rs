@@ -270,7 +270,7 @@ mod tests {
         use bead::core::Value;
         use serde_json::json;
         let apps: Vec<_>=(0..320).map(|i|json!({"id":format!("app-{i:04}"),"kind":"app","label":format!("Application {i:04}"),"icon":"fixture","description":"Application fixture"})).collect();
-        let source = std::sync::Arc::new(crate::launcher::Fixture::new(json!({"queries":{
+        let mut data = json!({"queries":{
             "":{"rows":apps},"a":{"rows":apps[..160]},"ap":{"rows":apps[160..]},
             "=1+1":{"rows":[{"id":"calc-2","kind":"calculator","label":"2","description":"1 + 1"}]},
             "emoji smile":{"rows":[{"id":"emoji-smile","kind":"emoji","label":"Smiling face","emoji":"☺"}]},
@@ -278,7 +278,12 @@ mod tests {
             ": fixture":{"rows":[{"id":"file-1","kind":"file","label":"Fixture document"}]},
             "# fixture":{"rows":[{"id":"brain-1","kind":"brain","label":"Fixture note"}]},
             "> fixture":{"rows":[{"id":"action-1","kind":"action","label":"Fixture action"}]}
-        }}))?);
+        }});
+        for (query, reply) in data["queries"].as_object_mut().unwrap() {
+            let rows = reply["rows"].take().as_array().unwrap().clone();
+            *reply = crate::launcher::fixture_reply(query, rows);
+        }
+        let source = std::sync::Arc::new(crate::launcher::Fixture::new(data)?);
         let menu = std::rc::Rc::new(crate::launcher::Menu::new(Some(source))?);
         let mut h = bead_test::Harness::load_with_icons(
             &root(),

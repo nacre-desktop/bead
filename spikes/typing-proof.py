@@ -8,6 +8,8 @@ import importlib.util,json,os,pathlib,re,shutil,subprocess,tempfile,time
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 spec=importlib.util.spec_from_file_location('matrix',ROOT/'spikes/bar-matrix.py')
 matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
+spec=importlib.util.spec_from_file_location('menu_fixtures',ROOT/'spikes/menu-fixtures.py')
+menu_fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(menu_fixtures)
 def sample(env,raw,compositor,stop):
     binary=os.environ.get('BEAD_HARDENING_BINARY',str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'))
     env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_PROFILE_INPUT':'1','BEAD_MATCHED_ICONS':'1','DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
@@ -23,7 +25,7 @@ def sample(env,raw,compositor,stop):
         if changed:
             assert not legacy,'changed results require the exact-query fixture Source'
             replies['a']={'rows':rows_fixture[:160]};replies['ap']={'rows':rows_fixture[160:]}
-        catalog=bundle/'menu-fixture.json';catalog.write_text(json.dumps(rows_fixture if legacy else {'queries':replies}))
+        catalog=bundle/'menu-fixture.json';catalog.write_text(json.dumps(rows_fixture if legacy else {'queries':{q:menu_fixtures.reply(q,r['rows'])for q,r in replies.items()}}))
         path=raw/'typing.log';pointer=None;client=None;keeper=None
         command=[binary,'--renderer',os.environ.get('BEAD_TYPING_RENDERER','cpu'),'--namespace','bead-typing','--ui','ui/main.luau','--catalog' if legacy else '--menu-fixture',str(catalog),'--backend','none','--test-keyboard']
         if compositor=='hyprland':command+=['--output','bead-bench']

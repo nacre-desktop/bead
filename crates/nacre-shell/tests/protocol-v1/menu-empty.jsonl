@@ -1,0 +1,2 @@
+{"t":"call","id":2,"m":"menu.query","p":{"query":"No fixture result","mode":"search"}}
+{"t":"ret","id":2,"ok":{"query":"No fixture result","mode":"search","route":"home","catalog_rev":1,"items":{},"order":[],"total":0}}

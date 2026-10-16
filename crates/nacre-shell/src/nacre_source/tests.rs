@@ -38,6 +38,10 @@ fn text(name: &str) -> &'static str {
         "events" => include_str!("../../tests/protocol-v1/events.jsonl"),
         "restart" => include_str!("../../tests/protocol-v1/restart.jsonl"),
         "ui" => include_str!("../../tests/protocol-v1/ui.jsonl"),
+        "menu-apps" => include_str!("../../tests/protocol-v1/menu-apps.jsonl"),
+        "menu-empty" => include_str!("../../tests/protocol-v1/menu-empty.jsonl"),
+        "menu-results" => include_str!("../../tests/protocol-v1/menu-results.jsonl"),
+        "menu-activation" => include_str!("../../tests/protocol-v1/menu-activation.jsonl"),
         _ => panic!("unknown fixture"),
     }
 }
@@ -75,6 +79,103 @@ fn committed_transcripts_match_the_pinned_rust_exports() {
 
 fn welcome() -> Message {
     fixture("handshake")[1].clone()
+}
+
+#[test]
+fn committed_menu_transcripts_match_the_pinned_exports() {
+    for (path, generated) in nacre_protocol::artifacts::menu_transcripts() {
+        let name = path.rsplit('/').next().unwrap().trim_end_matches(".jsonl");
+        let actual: Vec<Value> = text(name)
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let expected: Vec<Value> = generated
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(actual, expected, "canonical menu transcript changed");
+        for message in fixture(name) {
+            assert_eq!(
+                framing::decode(&framing::encode(&message).unwrap()).unwrap(),
+                message
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn published_menu_calls_and_errors_roundtrip_through_a_fake_daemon() {
+    for name in ["menu-apps", "menu-empty", "menu-results", "menu-activation"] {
+        let lab = Lab::new();
+        let listener = lab.bind();
+        let trace = fixture(name);
+        let server_trace = trace.clone();
+        let server = tokio::spawn(async move {
+            let (mut reader, mut writer) = accepted(&listener).await;
+            for pair in server_trace.as_chunks::<2>().0 {
+                let observed = next(&mut reader).await;
+                match (&observed, &pair[0]) {
+                    (
+                        Message::Call { id, m, p, timeout },
+                        Message::Call {
+                            id: want_id,
+                            m: want_m,
+                            p: want_p,
+                            timeout: budget,
+                        },
+                    ) => {
+                        assert_eq!(id, want_id);
+                        assert_eq!(m, want_m);
+                        assert_eq!(p, want_p);
+                        assert!(
+                            timeout.is_some_and(|n| n > 0 && n <= budget.unwrap_or(1000)),
+                            "wire deadline must count down within the requested budget"
+                        );
+                    }
+                    _ => panic!("expected the canonical menu call"),
+                }
+                framing::write(&mut writer, &pair[1]).await.unwrap();
+            }
+        });
+        let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while client.status().boot.is_none() {
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+        })
+        .await
+        .unwrap();
+        for pair in trace.as_chunks::<2>().0 {
+            let Message::Call { id, m, p, timeout } = pair[0].clone() else {
+                panic!("golden request")
+            };
+            let actual = client
+                .call_id(
+                    Some(id),
+                    m,
+                    p,
+                    Duration::from_millis(u64::from(timeout.unwrap_or(1000))),
+                )
+                .await;
+            match &pair[1] {
+                Message::Ret {
+                    reply: nacre_protocol::Reply::Ok { ok },
+                    ..
+                } => assert_eq!(actual.unwrap(), *ok),
+                Message::Ret {
+                    reply: nacre_protocol::Reply::Err { err },
+                    ..
+                } => {
+                    let actual = actual.unwrap_err();
+                    assert_eq!(actual.message, err.message);
+                    assert_eq!(actual.retry, err.retry);
+                }
+                _ => panic!("golden reply"),
+            }
+        }
+        Source::stop(&client).await.unwrap();
+        server.await.unwrap();
+    }
 }
 async fn next(reader: &mut framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>) -> Message {
     tokio::time::timeout(Duration::from_secs(5), reader.next())

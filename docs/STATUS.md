@@ -1,32 +1,33 @@
 # Status
 
-## 2026-10-16 — Count-only accepted; canonical menu contract published
+## 2026-10-16 — Canonical menu Source; real engine still pending
 
-Main 351fc54 / CI38842700729 is green. Five alternating pairs per compositor
-accept count-only95862ca: CPU median H 17.46→16.16/N 19.97→17.78 ms/key;
-presented p99 median 30.30→25.13/29.82→27.20 ms. Closed deltas +0.24/+0.05 MiB
-fit baseline spreads 0.55/0.64; steady deltas also fit. All 4,000 key presentations
-and 80 closed/unused-hover guards pass. 137 tests/fmt/clippy/Luau pass; fresh CI
-is checked after push. Both 8 ms CPU /16.7 ms presentation targets still fail.
-[Methods and full comparison](research/feature9-gate-d.md#count-only-decision-five-alternating-pairs--2026-10-16).
+Main a3ab6dc / CI38844931541 is green. Canonical Source checkpoint pins Nacre
+3042f3f2: keyed items/order, opaque activation+revision in host, engine-owned
+keep-open/navigation. Four menu transcript families replay a fake Unix daemon;
+old wire/reconnect/peer/boot proofs remain. No Bead catalog/ranking/providers.
+141 isolated tests/fmt/clippy/release/CPU-only/Luau/service/license graphs pass.
+Native 12-key and QML 6-key private smokes pass H/N. Fresh CI follows the push.
+[Methods and limits](research/feature9-gate-d.md#canonical-menu-source--2026-10-16).
 
-Active-view construction and cropped text stay kept; previous 136-test code and
-native-GL/pixel/counter proofs are green. Crop typed-list memory falls 3.7–3.8 MiB;
-every lifecycle close remains within bar + 5 MiB. No allocator/font-engine rewrite.
-H virtual 120/N nested 60, not physical. Helper/end-to-end CPU unmeasured.
+Canonical lifecycle H bar 22.12→third warm 48.81/closed 22.13 MiB;
+N 23.54→46.80/22.92. Every close/hover expiry <=bar + 5 MiB including swap; query RAM,
+geometry, feedback and cleanup pass. No own build overlap; shared-host load/paging
+uncontrolled. H virtual 120/N nested 60, not physical acceptance.
 
-Reviewed menu payload/schema/transcripts are on Nacre main 3042f3f2; its eleven
-protocol tests/export/fmt/clippy pass, old wire artifacts byte-identical. Source
-CI is checked after push. Next pin this canonical revision and switch the fixture
-Source to keyed items/order and opaque activation. Nacre owns catalog/ranking/
-providers; no helper edits. Engine follows time-boxed startup work before F2 ends.
+Count-only stays kept after five alternating pairs each: CPU medians
+H 17.46→16.16/N 19.97→17.78 ms/key; p99 medians 30.30→25.13/29.82→27.20.
+Closed deltas +0.24/+0.05 MiB fit baseline spreads 0.55/0.64; all 80 guards pass.
+Both 8 ms CPU/16.7 ms presentation targets remain unaccepted. Renderer experiments
+are saved locally and measured separately; they are not in this Source checkpoint.
 
-Continue independent UI CPU work: ordered pixel-damage reuse is saved locally,
-not tested/measured yet. Then real engine/UI-provider/prefix/actions, separate UI
-and daemon CPU, matched QML comparison and final Gate D forecast. STOP at Gate D.
+Migration owns upstream helper/font CI repair 83a9a9a4 and the shared engine,
+before F2 finishes. Protocol-only 11 tests/export pass; full upstream CI is tracked.
+Next: independent UI CPU improvements, real engine/UI-provider/prefix/action
+comparison, UI and daemon CPU separately, then final Gate D forecast. STOP there.
 Keep 6b pacing/idle, historical typing CPU, IME/hardware/cache gaps and name clash
-open. No Feature 11/live/install/release work. CPU small panels/GL large animation;
-Mesa residue finding remains. No persistent warm launcher memory.
+open. No Feature 11/live/install/release work; CPU small panels/GL large animation,
+Mesa residue finding and release-on-idle policy remain.
 
 ## Accepted Gate C and optimization baseline
 

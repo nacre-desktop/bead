@@ -5,13 +5,15 @@ import importlib.util,json,os,pathlib,re,subprocess,time
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 spec=importlib.util.spec_from_file_location('matrix',ROOT/'spikes/bar-matrix.py')
 matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
+spec=importlib.util.spec_from_file_location('menu_fixtures',ROOT/'spikes/menu-fixtures.py')
+menu_fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(menu_fixtures)
 def sample(env,raw,compositor,stop):
     binary=os.environ.get('BEAD_HARDENING_BINARY',str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'))
     env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_MATCHED_ICONS':'1','BEAD_ICON_PATH':str(ROOT/'shell/tests/icon.svg'),'DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
     if os.environ.get('BEAD_LAUNCHER_MMAP_THRESHOLD'):
         env['MALLOC_MMAP_THRESHOLD_']=os.environ['BEAD_LAUNCHER_MMAP_THRESHOLD']
-    data=[{'id':f'app-{i:04}','label':f'Application {i:04}','kind':'app','description':'Application fixture','icon':'fixture'}for i in range(320)]
-    fixture=raw/'menu.json';fixture.write_text(json.dumps({'queries':{'':{'rows':data},'a':{'rows':data}}}));fixture.chmod(0o600)
+    data=[{'id':f'app-{i:04}','name':f'Application {i:04}','kind':'app','description':'Application fixture','icon':'fixture'}for i in range(320)]
+    fixture=raw/'menu.json';fixture.write_text(json.dumps({'queries':{'':menu_fixtures.reply('',data),'a':menu_fixtures.reply('a',data)}}));fixture.chmod(0o600)
     sock=pathlib.Path(env['XDG_RUNTIME_DIR'])/'launcher-command.sock'
     log=raw/'launcher.log';client=pointer=None
     command=[binary,'--bar','--launcher-panel','--menu-fixture',str(fixture),'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','180']

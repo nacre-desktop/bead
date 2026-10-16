@@ -471,6 +471,49 @@ all nine original wire artifacts remain byte-identical. No helper/registry chang
 was made. The real engine follows the time-boxed startup investigation before F2
 finishes; end-to-end UI/daemon CPU and Gate D remain unaccepted until measured.
 
+## Canonical menu Source — 2026-10-16
+
+Bead pins Nacre3042f3f2 and consumes its typed menu.query/menu.activate payloads.
+Fixture replies now use stable-ID items plus authoritative order. Validation
+rejects obsolete row-array replies, invalid ordering and oversized fields. The
+projection sends only display data into Luau; opaque activation descriptors and
+catalog_rev stay in the host. Activation echoes those fields to the engine and
+honors keep_open plus optional query/mode/opaque-route view updates. Sidebar
+navigation clears the engine route; bounded route/query/selection remain RAM-only.
+No catalog, ranking, providers or external action execution was added to Bead.
+
+Four committed menu transcripts match the pinned exports and replay calls/errors
+over a fake Unix daemon, retaining peer/path checks and the existing reconnect/
+boot-id suite. JSON object key order is compared semantically, as in the original
+wire tests; entity order arrays and request/action fields remain exact. Deadlines
+must count down within the requested budget. The fake server waits for the actual
+welcome handshake; no disconnected call is treated as success.
+
+141 isolated workspace tests, fmt/all-features clippy, release/CPU-only check,
+23-module generated Luau checks, service boundary and all independent permissive
+framework license/source graphs pass. Private native H/N smokes each present12
+changed-result edits; the unchanged QML component receives the same canonical
+items through a thin display adapter and presents6 edits each. These short runs
+verify compatibility, not typing acceptance or matched performance.
+
+|Canonical launcher lifecycle smoke, MiB | H | N |
+| --- | ---: | ---: |
+|Bar |22.115|23.541|
+|First warm /third warm |51.100 /48.810|49.091 /46.801|
+|Third closed |22.132|22.916|
+
+Every close/hover expiry remains within its own bar+5 including swap. Query RAM,
+geometry, feedback and cleanup pass. Samples are fresh private Hvirtual120/N60,
+not physical or strict idle invariance. No local heavy build overlaps captures;
+other load/paging is uncontrolled. Real engine CPU and end-to-end remain missing.
+Nacre's full3042 CI hit the same pre-existing helper/Pillow parity failure as its
+parent; migration owns that fix (83a9a9a4), and its current CI is tracked separately.
+The protocol-only eleven tests/export pass; no helper code/goldens were changed here.
+
+Renderer ID/difference experiments remain separate local work, not included in
+this Source checkpoint or its141-test count. Gate D is still pending the real
+engine/provider/input comparison and updated measured forecast.
+
 ## Remaining-parity forecast — provisional until the engine comparison
 
 Gate D is not accepted by this forecast. The engine/prefix/activation comparison

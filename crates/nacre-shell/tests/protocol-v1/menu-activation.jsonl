@@ -1,0 +1,8 @@
+{"t":"call","id":30,"m":"menu.activate","p":{"id":"app-0000","activation":"fixture-app","catalog_rev":1},"timeout":3000}
+{"t":"ret","id":30,"ok":{"keep_open":false}}
+{"t":"call","id":31,"m":"menu.activate","p":{"id":"group.fixture","activation":"fixture-group","catalog_rev":1}}
+{"t":"ret","id":31,"ok":{"keep_open":true,"view":{"query":"","mode":"apps","route":"group.fixture"}}}
+{"t":"call","id":32,"m":"menu.activate","p":{"id":"app-0000","activation":"fixture-app","catalog_rev":0}}
+{"t":"ret","id":32,"err":{"code":"stale_revision","message":"Catalog changed; query again","retry":true}}
+{"t":"call","id":33,"m":"menu.query","p":{"query":"fixture unavailable","mode":"search"}}
+{"t":"ret","id":33,"err":{"code":"unavailable","message":"Launcher service unavailable","retry":true}}

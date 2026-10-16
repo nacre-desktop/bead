@@ -489,18 +489,11 @@ impl SceneSource for Runtime {
         };
         if let (Some(menu), Some(id)) = (&self.launcher, launcher_id) {
             self.actions.authorize("select_app")?;
-            let success = menu.activate(&id).is_ok();
-            return self
-                .session
-                .update(if success {
-                    std::collections::BTreeMap::from([(
-                        "panel.open".into(),
-                        bead::core::Value::Bool(false),
-                    )])
-                } else {
-                    Default::default()
-                })
-                .map_err(Into::into);
+            let changes = menu
+                .activate(&id)
+                .map(crate::launcher::activation_changes)
+                .unwrap_or_default();
+            return self.session.update(changes).map_err(Into::into);
         }
         if let Some((_, name, arg)) = host_action.as_ref()
             && name.starts_with("notifications.")

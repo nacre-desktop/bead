@@ -1,0 +1,14 @@
+{"t":"call","id":10,"m":"menu.query","p":{"query":"a","mode":"search"}}
+{"t":"ret","id":10,"ok":{"query":"a","mode":"search","route":"home","catalog_rev":1,"items":{"result-0":{"name":"Application 0000","kind":"app","description":"Public fixture result","breadcrumb":"All apps","icon":"application-x-executable","disabled":false,"activation":"fixture-app"}},"order":["result-0"],"total":1}}
+{"t":"call","id":11,"m":"menu.query","p":{"query":"> fixture","mode":"search"}}
+{"t":"ret","id":11,"ok":{"query":"> fixture","mode":"search","route":"home","catalog_rev":1,"items":{"result-1":{"name":"Fixture action","kind":"action","description":"Public fixture result","breadcrumb":"All apps","icon":"application-x-executable","disabled":false,"activation":"fixture-action"}},"order":["result-1"],"total":1}}
+{"t":"call","id":12,"m":"menu.query","p":{"query":"=1+1","mode":"search"}}
+{"t":"ret","id":12,"ok":{"query":"=1+1","mode":"search","route":"home","catalog_rev":1,"items":{"result-2":{"name":"2","kind":"calculation","description":"Public fixture result","breadcrumb":"All apps","icon":"application-x-executable","disabled":false,"activation":"fixture-calculation"}},"order":["result-2"],"total":1}}
+{"t":"call","id":13,"m":"menu.query","p":{"query":"emoji fixture","mode":"search"}}
+{"t":"ret","id":13,"ok":{"query":"emoji fixture","mode":"search","route":"home","catalog_rev":1,"items":{"result-3":{"name":"Smiling face","kind":"emoji","description":"Public fixture result","breadcrumb":"All apps","icon":"application-x-executable","emoji":"☺","disabled":false,"activation":"fixture-emoji"}},"order":["result-3"],"total":1}}
+{"t":"call","id":14,"m":"menu.query","p":{"query":"clipboard fixture","mode":"search"}}
+{"t":"ret","id":14,"ok":{"query":"clipboard fixture","mode":"search","route":"home","catalog_rev":1,"items":{"result-4":{"name":"Public clip","kind":"clipboard","description":"Public fixture result","breadcrumb":"All apps","icon":"application-x-executable","disabled":false,"activation":"fixture-clipboard"}},"order":["result-4"],"total":1}}
+{"t":"call","id":15,"m":"menu.query","p":{"query":": fixture","mode":"search"}}
+{"t":"ret","id":15,"ok":{"query":": fixture","mode":"search","route":"home","catalog_rev":1,"items":{"result-5":{"name":"Fixture document","kind":"file","description":"Public fixture result","breadcrumb":"All apps","icon":"application-x-executable","disabled":false,"activation":"fixture-file"}},"order":["result-5"],"total":1}}
+{"t":"call","id":16,"m":"menu.query","p":{"query":"# fixture","mode":"search"}}
+{"t":"ret","id":16,"ok":{"query":"# fixture","mode":"search","route":"home","catalog_rev":1,"items":{"result-6":{"name":"Fixture note","kind":"brain","description":"Public fixture result","breadcrumb":"All apps","icon":"application-x-executable","disabled":false,"activation":"fixture-brain"}},"order":["result-6"],"total":1}}

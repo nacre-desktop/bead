@@ -3,12 +3,13 @@ return {
   stores = {
     ["panel.open"] = true, ["launcher.apps"] = {},
     ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.result_count"]=0,
-    ["launcher.selection"] = "", ["launcher.route"] = "apps",
+    ["launcher.selection"] = "", ["launcher.route"] = "apps", ["launcher.engine_route"]="",
     ["launcher.search.text"] = "", ["launcher.scroll.y"] = 0,
   },
   actions = {
     select_app = function(s,id) s["launcher.selection"] = id end,
     navigate = function(s,id)
+      s["launcher.engine_route"]=""
       s["launcher.route"]=id
       s["launcher.mode"]=id=="apps" and "apps" or "search"
       s["launcher.search.text"]=id=="actions" and "> " or ""

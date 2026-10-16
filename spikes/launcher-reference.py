@@ -5,6 +5,8 @@ import importlib.util,json,os,pathlib,re,shutil,subprocess,tempfile,time
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 spec=importlib.util.spec_from_file_location('matrix',ROOT/'spikes/bar-matrix.py')
 matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
+spec=importlib.util.spec_from_file_location('menu_fixtures',ROOT/'spikes/menu-fixtures.py')
+menu_fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(menu_fixtures)
 def sample(env,raw,compositor,stop):
     env={**env,'DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
     if compositor=='hyprland':
@@ -35,7 +37,7 @@ QtObject {
     property QtObject library:QtObject {property string message:"";property var data:({});signal completed(string operation,bool success);function work(){return false}}
     property QtObject workflows:QtObject {property string message:"";property var data:({roots:[]});property bool recording:false;signal completed(string operation,bool success);function startRecording(){}function work(){return false}}
     property QtObject previews:QtObject {property var data:({});property var preview:({image:""});property string previewPath:"";property bool busy:false;property string message:"";function inspect(value){} }
-    function content(route,query,filter,category) {return fixture.queries[query] ? fixture.queries[query].rows : []}
+    function content(route,query,filter,category) {const result=fixture.queries[query]; return result ? result.order.map(id=>Object.assign({id:id,operation:result.items[id].kind},result.items[id])) : []}
     function resolve(route){return route}
     function node(id){return rows.find(row=>row.id===id)||null}
     function prepare(){}
@@ -52,7 +54,7 @@ QtObject {
         changed=os.environ.get('BEAD_TYPING_CHANGED_RESULTS')=='1'
         if changed:
             replies['a']={'rows':data[:160]};replies['ap']={'rows':data[160:]}
-        menu=menu.replace('__FIXTURE__',json.dumps({'queries':replies}))
+        menu=menu.replace('__FIXTURE__',json.dumps({'queries':{q:menu_fixtures.reply(q,r['rows'])for q,r in replies.items()}}))
         (root/'services/NacreMenu.qml').write_text(menu)
         for name,body in {
             'NacreControlTools':'function run(){} function work(){}',

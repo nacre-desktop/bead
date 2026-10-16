@@ -1,5 +1,27 @@
 # Feasibility
 
+## 2026-10-16 — canonical menu payloads reach the fixture Source
+
+The pinned Nacre contract replaces the interim row-array transport shape.
+Entity order stays engine-owned; activation descriptors/revision stay outside Luau.
+Native and unchanged QML private smokes consume the same canonical records.
+This accepts interface compatibility, not the real engine or typing targets.
+
+|Check | Result |
+| --- | --- |
+|Pinned protocol /committed menu transcript families |3042f3f2 /4|
+|Isolated workspace /fmt /clippy /release |141 pass /pass /pass /pass|
+|CPU-only /Luau /service /permissive graphs |pass /23 modules /pass /pass|
+|Native input /QML input H,N |12,12 /6,6 exact presentations|
+|Bar→third closed PSS+DRM MiB H /N |22.115→22.132 /23.541→22.916|
+
+Three cycles, hover expiry, query RAM, geometry and cleanup pass both; close<=bar+5.
+H virtual120/N nested60, fresh private sessions, no own heavy build overlap;
+external load/paging uncontrolled. Short smokes are not timing/idle acceptance.
+Upstream full CI hit its pre-existing Pillow/helper parity failure; migration
+owns its83a9a9a4 repair. Protocol11tests/export pass; no helper changes here.
+[Method and limits](docs/research/feature9-gate-d.md#canonical-menu-source--2026-10-16).
+
 ## 2026-10-16 — keep count-only after five alternating pairs
 
 Five pairs per compositor confirm the median CPU benefit on a consistent workload.
