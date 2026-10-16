@@ -1,24 +1,21 @@
 # Status
 
-## 2026-10-16 — Gate E: stopped for memory decision
+## 2026-10-16 — Core switch active: recovery/static text accepted
 
-Local candidate d9fc758 is preserved, not pushed. Five pairs/compositor show
-settled increases+0.339/+0.392MiB H/N beyond control spreads0.138/0.293.
-H warm also regresses; all20 UI close/settled-group bar+5 guards pass.
-That separate guard does not waive the regression rule.173 local tests,
-fmt, clippy, CPU-only and release pass. Private presented bar restart recovery
-≤77/26ms and delayed reconnect mark/static-text AccessKit work, but remain local.
-Typing UI11.041/10.988ms/key, p9924.287/34.679ms H/N: targets fail.
-Official F3 actions/shared-engine QML stay open.
-[Evidence and forecasts](research/feature9-gate-d.md#gate-e--stop-for-memory-decision-2026-10-16).
-Prepared [input/hardware plan](research/gate-e-validation-plan.md): NOT RUN.
-Full parity102–207 eight-hour agent-days, planning7–18 calendar weeks; core
-switch40–81 days,3–8 weeks and90–150MiB idle estimate. Daily16–20 task-hour
-throughput is a planning assumption, not a measured average. Core QML windows
-start on demand and exit on close, sharing the daemon. No Feature11/live/install.
-QML remains daily driver. Published code5d86073 CI38915772209 green; this
-report/byte-accounting CI: [latest main run](https://github.com/nacre-desktop/bead/actions/workflows/ci.yml).
-Owner decision needed before changing the memory baseline.
+Owner accepted the measured+0.339/+0.392MiB settled H/N feature cost.
+All20 UI-close/35s-group guards pass; candidate settled maxima21.817/22.912MiB
+fit the new25MiB UI ceiling. Exact173-test source integrated; fmt/clippy/
+CPU-only/release checks pass. Feature CI: [latest main run](https://github.com/nacre-desktop/bead/actions/workflows/ci.yml).
+New policy: pure optimizations preserve warm/settled spreads; explained features
+may add≤0.5MiB settled each within close+5/25MiB limits. Record and continue.
+Next: daemon typing and activation/reconnect/provider contracts, then remaining
+bar popouts/service views. STOP after service views, before dashboard.
+Current typing UI11.041/10.988ms/key, p9924.287/34.679ms H/N; targets open.
+Official F3 actions/same-engine QML pending. Core estimate40–81 eight-hour days,
+3–8calendarweeks at assumed16–20taskh/day;90–150MiB idle estimate, not measured.
+[Evidence and forecast](research/feature9-gate-d.md#gate-e--core-switch-active-2026-10-16).
+Desktop [validation plan](research/gate-e-validation-plan.md) HOLD, NOT RUN.
+QML remains daily driver. IME/reader beyond current coverage deferred to release.
 
 ## 2026-10-16 — Gate D review: adjust
 

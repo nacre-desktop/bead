@@ -21,6 +21,8 @@ use tokio::{
     task::JoinSet,
 };
 
+mod connection;
+
 type Action = Arc<dyn Fn(String, Value) -> source::Reply<'static> + Send + Sync>;
 type Event = Arc<dyn Fn(&Message) + Send + Sync>;
 #[derive(Clone)]
@@ -49,6 +51,7 @@ pub struct Status {
 }
 struct Shared {
     link: Publisher,
+    connection: connection::Connection,
     topics: BTreeMap<String, Publisher>,
     status: Mutex<Status>,
     stop: AtomicBool,
@@ -245,10 +248,12 @@ impl Client {
             p.disconnect()?;
             topics.insert(topic.clone(), p);
         }
+        let connection = connection::Connection::new(epoch.clone(), Instant::now())?;
         let link = Publisher::new(epoch, serde_json::json!({}))?;
         link.disconnect()?;
         let shared = Arc::new(Shared {
             link,
+            connection,
             topics,
             status: Mutex::new(Status::default()),
             stop: AtomicBool::new(false),
@@ -281,6 +286,13 @@ impl Client {
             tx,
             thread: Mutex::new(Some(thread)),
         })))
+    }
+    /// Always-available local monitor, not an external daemon topic.
+    pub fn connection(&self) -> Topic {
+        Topic {
+            client: self.clone(),
+            publisher: self.0.shared.connection.publisher.clone(),
+        }
     }
     pub fn topic(&self, name: &str) -> source::Result<Topic> {
         Ok(Topic {
@@ -405,6 +417,7 @@ impl Source for Topic {
     }
 }
 fn disconnect(shared: &Shared) {
+    shared.connection.disconnected(Instant::now());
     let _ = shared.link.disconnect();
     if let Ok(mut status) = shared.status.lock() {
         *status = Status::default();
@@ -602,11 +615,13 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
     let mut backoff = source::Reconnect::default();
     let mut next = 0i64;
     'outer: while !shared.stop.load(Ordering::Acquire) {
+        let socket_watch = connection::SocketWatch::new(&config.socket);
         let handshake = tokio::time::timeout(Duration::from_secs(5), connect(&config));
         tokio::pin!(handshake);
         let mut session = loop {
             tokio::select! {
                 _=shared.notify.notified()=>break 'outer,
+                _=shared.connection.delayed_mark()=>{},
                 result=&mut handshake=>match result {Ok(Ok(s))=>break Some(s),_=>break None},
                 command=commands.recv()=>match command {
                     Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);let _=reply.send(Ok(Value::Null));break 'outer;},
@@ -625,9 +640,15 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                     methods: session.methods.clone(),
                 };
             }
+            for topic in shared.topics.values() {
+                if topic.restart(session.boot.clone()).is_err() {
+                    break 'outer;
+                }
+            }
             let _ = shared
                 .link
                 .publish(serde_json::json!({"boot":session.boot,"methods":session.methods}));
+            shared.connection.connected();
             let mut mirrors = config
                 .topics
                 .iter()
@@ -722,6 +743,8 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
             tokio::select! {
                 _=shared.notify.notified()=>break 'outer,
                 _=&mut sleep=>break,
+                _=socket_watch.changed()=>break,
+                _=shared.connection.delayed_mark()=>{},
                 command=commands.recv()=>match command {
                     Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);let _=reply.send(Ok(Value::Null));break 'outer;},
                     Some(Command::Reconnect(reply))=>{let _=reply.send(Ok(Value::Null));break;},

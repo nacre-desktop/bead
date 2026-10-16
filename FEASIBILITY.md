@@ -1,6 +1,31 @@
 # Feasibility
 
 
+
+## 2026-10-16 — Recovery/static text accepted for the core route
+
+The owner accepted the small resident increase for real recovery/accessibility features.
+The new feature allowance is0.5MiB settled each, with a25MiB UI bar ceiling.
+Pure optimizations still preserve warm/settled memory within the control spread.
+Continue typing/contracts then bar service views; stop before dashboard.
+
+|Five alternating pairs/compositor|H /N|
+| --- | ---: |
+|Settled paired increase MiB|+0.339 /+0.392|
+|Maximum candidate settled UI MiB|21.817 /22.912|
+|Remaining25MiB headroom|3.183 /2.088|
+|UI close and35s combined-group ownbar+5|20/20pass|
+|Local tests, exact recovered source|173pass,3manualbenchesignored|
+
+Source d9fc758 is unchanged; previous WIP0a77d31 retained. Existing fmt/clippy
+all-target/all-feature-Dwarnings/CPU-only/release pass; integration reruns checks.
+Strict private H/N presented restart≤77/26ms and2s mark/newboot/provider pass.
+Static AccessKit text is headless coverage; no real reader/IME acceptance.
+Prior memory stop below is historical and superseded by this owner decision.
+Nested Hvirtual120/N60,scale1.5, refreshunknown; host contention uncontrolled,
+no own builds overlapped captures. No live/install/release; desktop plan HOLD.
+Core40–81eight-hourdays/3–8weeks remains a forecast, to update after service views.
+
 ## 2026-10-16 — Gate E candidate: stop for memory decision
 
 Reconnect recovery and static-text accessibility pass functional checks.

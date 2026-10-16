@@ -146,6 +146,36 @@ impl Publisher {
             id,
         })
     }
+    /// Preserve last-good data while changing the producer's lifetime identity.
+    /// A fresh snapshot may be byte-identical after restart; the epoch must still
+    /// invalidate consumers' cached results and activation handles.
+    pub fn restart(&self, epoch: String) -> Result<()> {
+        validate_epoch(&epoch)?;
+        let (snapshot, callbacks) = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| Error::new("internal", "source state poisoned", false))?;
+            if state.snapshot.epoch == epoch {
+                return Ok(());
+            }
+            let snapshot = Arc::new(Snapshot {
+                epoch,
+                revision: 0,
+                data: state.snapshot.data.clone(),
+                connected: false,
+            });
+            state.snapshot = snapshot.clone();
+            (
+                snapshot,
+                state.callbacks.values().cloned().collect::<Vec<_>>(),
+            )
+        };
+        for callback in callbacks {
+            callback(snapshot.clone());
+        }
+        Ok(())
+    }
     pub fn publish(&self, data: Json) -> Result<()> {
         object(&data)?;
         self.change(Some(Arc::new(data)), true, None)
@@ -535,5 +565,35 @@ impl Reconnect {
         let ms = (50u64 << self.attempt.min(6)).min(2000);
         self.attempt = self.attempt.saturating_add(1);
         Duration::from_millis(ms)
+    }
+}
+
+#[cfg(test)]
+mod restart_tests {
+    use super::*;
+    #[test]
+    fn restart_changes_identity_even_when_fresh_data_is_identical() {
+        let p = Publisher::new("boot-a".into(), serde_json::json!({"rows":{}})).unwrap();
+        p.publish_revision(42, serde_json::json!({"rows":{}}))
+            .unwrap();
+        let before = p.snapshot();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let callbacks = seen.clone();
+        let _subscription = p
+            .subscribe(Arc::new(move |s| callbacks.lock().unwrap().push(s)))
+            .unwrap();
+        p.restart("boot-b".into()).unwrap();
+        assert!(!p.snapshot().connected);
+        assert_eq!(p.snapshot().data, before.data);
+        p.publish_shared(before.data.clone()).unwrap();
+        let next = p.snapshot();
+        assert!(next.connected);
+        assert_ne!(next.epoch, before.epoch);
+        assert_eq!(next.revision, 0);
+        assert_eq!(seen.lock().unwrap().len(), 3);
+        p.restart("boot-b".into()).unwrap();
+        assert_eq!(seen.lock().unwrap().len(), 3);
+        assert!(p.restart(String::new()).is_err());
+        assert_eq!(p.snapshot().epoch, "boot-b");
     }
 }

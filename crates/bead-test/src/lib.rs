@@ -253,14 +253,14 @@ impl Harness {
         &self.scene
     }
     pub fn accessibility(&self) -> accesskit::TreeUpdate {
-        bead_ui::accessibility::tree(self.session.view_nodes(), &self.session.stores)
+        self.session.accessibility_tree()
     }
     pub fn assert_accessible(&self, label: &str, role: accesskit::Role) -> Result<()> {
         if self
             .accessibility()
             .nodes
             .iter()
-            .any(|(_, n)| n.role() == role && n.label() == Some(label))
+            .any(|(_, n)| n.role() == role && n.label().or_else(|| n.value()) == Some(label))
         {
             Ok(())
         } else {

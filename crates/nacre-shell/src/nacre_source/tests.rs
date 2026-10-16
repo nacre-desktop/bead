@@ -293,12 +293,25 @@ async fn published_state_transcript_keeps_wrong_base_then_resyncs() {
 }
 #[tokio::test(flavor = "current_thread")]
 async fn restart_reconnect_resubscribes_before_accepting_sequence_zero() {
+    restart_case(false).await;
+}
+#[tokio::test(flavor = "current_thread")]
+async fn identical_topic_data_cannot_hide_a_daemon_boot_change() {
+    restart_case(true).await;
+}
+async fn restart_case(identical_data: bool) {
     let lab = Lab::new();
     let listener = lab.bind();
     let f = fixture("restart");
     let second = f[2].clone();
     let initial = f[1].clone();
-    let replacement = f[4].clone();
+    let mut replacement = f[4].clone();
+    if identical_data
+        && let (Message::Snap { data, .. }, Message::Snap { data: initial, .. }) =
+            (&mut replacement, &initial)
+    {
+        *data = initial.clone();
+    }
     let server = tokio::spawn(async move {
         let (mut r, mut w) = accepted(&listener).await;
         let sub = next(&mut r).await;
@@ -318,6 +331,10 @@ async fn restart_reconnect_resubscribes_before_accepting_sequence_zero() {
     let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
     let topic = client.topic("compositor").unwrap();
     fresh(&topic, |v| v["windows"].is_object()).await;
+    assert_eq!(
+        topic.snapshot().epoch,
+        "00000000-0000-4000-8000-000000000001"
+    );
     let started = Instant::now();
     tokio::time::timeout(Duration::from_secs(2), async {
         while client.status().boot.as_deref() != Some("00000000-0000-4000-8000-000000000002") {
@@ -327,6 +344,10 @@ async fn restart_reconnect_resubscribes_before_accepting_sequence_zero() {
     .await
     .unwrap();
     fresh(&topic, |v| v["windows"].is_object()).await;
+    assert_eq!(
+        topic.snapshot().epoch,
+        "00000000-0000-4000-8000-000000000002"
+    );
     assert!(started.elapsed() < Duration::from_secs(1));
     topic.stop().await.unwrap();
     server.await.unwrap();
@@ -664,4 +685,61 @@ fn early_link_threads_inherit_ui_signals_without_changing_the_caller_mask() {
     for signal in [Signal::SIGINT, Signal::SIGTERM] {
         assert_eq!(before.contains(signal), after.contains(signal));
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn connection_mark_keeps_last_snapshot_and_provider_registers_after_new_boot() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (drop_tx, drop_rx) = oneshot::channel();
+    let (resume_tx, resume_rx) = oneshot::channel();
+    let (finish_tx, finish_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut r, w) = accepted(&listener).await;
+        let registration = next(&mut r).await;
+        assert!(
+            matches!(&registration, Message::Register { provider, methods } if provider == "ui" && methods.get("ui.dispatch") == Some(&1))
+        );
+        drop_rx.await.unwrap();
+        drop(w);
+        drop(r);
+        resume_rx.await.unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let (r, mut w) = stream.into_split();
+        let mut r = framing::Reader::new(BufReader::new(r));
+        assert!(matches!(next(&mut r).await, Message::Hello { .. }));
+        framing::write(&mut w, &fixture("restart")[2])
+            .await
+            .unwrap();
+        assert_eq!(next(&mut r).await, registration);
+        let _ = finish_rx.await;
+    });
+    let mut config = Config::new(lab.socket(), vec![]);
+    config.provider = Some((
+        "ui".into(),
+        BTreeMap::from([("ui.dispatch".into(), 1)]),
+        Arc::new(|_, _| Box::pin(async { Ok(Value::Null) })),
+    ));
+    let client = Client::start(config).unwrap();
+    let connection = client.connection();
+    fresh(&connection, |v| v["connected"] == true).await;
+    let last = client.snapshot();
+    drop_tx.send(()).unwrap();
+    fresh(&connection, |v| v["connected"] == false).await;
+    assert_eq!(connection.snapshot().data["reconnecting"], false);
+    fresh(&connection, |v| v["reconnecting"] == true).await;
+    assert!(!client.snapshot().connected);
+    assert_eq!(client.snapshot().data, last.data);
+    resume_tx.send(()).unwrap();
+    let ready = Instant::now();
+    fresh(&connection, |v| v["connected"] == true).await;
+    assert_eq!(connection.snapshot().data["reconnecting"], false);
+    assert_eq!(
+        client.status().boot.as_deref(),
+        Some("00000000-0000-4000-8000-000000000002")
+    );
+    assert!(ready.elapsed() < Duration::from_secs(1));
+    client.stop().await.unwrap();
+    finish_tx.send(()).unwrap();
+    server.await.unwrap();
 }

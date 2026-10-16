@@ -1,20 +1,14 @@
 # Roadmap and gates
 
-Updated 2026-10-15. Feature 6b accepted with measured concerns.
-Features 7–8 are accepted through Gate C after the supervised physical check.
-See [Gate C report](research/feature8-gate-c.md) and the
-[optimization measurements](research/optimization-pass.md). Optimization is
-complete. Features9–10 are paused for Foundation F5 (owner2026-10-15).
-Typing targets are not accepted; resume only after owner approval and migration.
-Step 0a nested pacing/idle acceptance remains open. The new close-idle
-memory limit passes; niri presentation tails remain a concern.
-Automatic bars and the small sound-output panel use CPU retained rasters;
-native GL remains available for larger views. Script/baking is off-thread.
-The supervised physical Gate C check passed; its single authorization is
-consumed. Optimized source was tested nested; no installation was performed.
-Physical niri hotplug, real IME/screen-reader and NVIDIA acceptance remain
-unvalidated. Owner may veto ADR0002. General shader/allocator work remains
-in the post-Gate-C optimization pass; typing 29.6→32.7% stays on that list.
+Updated2026-10-16. Foundation F5 and Gate C are accepted. Features9–10 use the
+shared daemon; typing targets remain open. The current Gate E target is the
+core-switch route. QML stays daily driver; no live switch or installation.
+Owner accepted the recovery/static-text resident cost and revised memory policy.
+Continue daemon typing/contracts, then remaining bar popouts/service views;
+STOP after those with measurements and an updated core forecast, before dashboard.
+The desktop validation plan is on hold. IME/screen-reader work beyond existing
+coverage is deferred to public release. Historical6b nested pacing/idle concerns
+remain open; CPU small views/GL large animated surfaces remains the renderer policy.
 
 For every feature: state the smallest proof and acceptance criteria; match Nacre's
 current look; run fmt/clippy/tests plus feature checks; measure equivalent QML;
@@ -59,29 +53,34 @@ Gate D is explicitly placed **after Feature 10**, resolving the original list's
 later label placement. It must forecast difficult unbuilt pearls/video/AI/input
 work rather than extrapolate the easier bar features at a uniform rate.
 
-### Gate E — owner-directed focused block, 2026-10-16
+### Gate E — core-switch route, owner decision2026-10-16
 
-Gate D decision is adjust and continue this block, then STOP at Gate E.
-QML remains the daily driver; Feature11 is not authorized.
+QML remains daily driver until a separately accepted switch. Order:
 
-1. Real-daemon typing: separate UI/daemon/provider CPU, payload/serialization,
-   stale queries and round trip with the migration agent. Targets UI≤8ms/key and
-   presented p99≤16.7ms; after fair effort, p99≤33ms with UI≤8ms is only a candidate
-   for the owner's acceptance. Keep only measured performance improvements.
-2. Shared non-app activation without a same-worker deadlock, reconnect mark and
-   UI-provider registration; matched QML on the same engine once F3 lands.
-3. Static text in AccessKit.
-4. Prepare, do not run, the English input/basic-hardware and later IME plan,
-   with durations, exact commands and stop procedure. Live approval is separate.
+1. Integrate accepted recovery/static-text features (~0.4MiB settled increase).
+2. Daemon typing with migration: UI/daemon/provider CPU, payload/serialization,
+   stale queries and round trip; activation/reconnect/UI-provider contracts.
+   Targets UI≤8ms/key and presented p99≤16.7ms. After fair effort, p99≤33ms with
+   UI≤8ms is an owner-acceptance candidate; keep only measured improvements.
+   Match official same-engine QML when the migration F3 adapter is published.
+3. Remaining bar popouts and service views. STOP here for review with measured
+   lifecycle/memory/pacing and an updated core-switch forecast.
+4. Dashboard follows only AFTER that owner review. Do not start it now.
 
-Report remaining full parity in eight-hour agent-days and calendar time with
-explicit daily-throughput assumptions. Also cost a core switch: Bead always-on
-bar/popouts/service panels, launcher, notifications/OSD, dashboard, static wallpaper,
-hyprlock/session, hardware and packaging; QML Settings/Colors/Welcome/AI/software
-start on demand and exit on close, all on the same daemon. IME/screen-reader work
-is deferred to the later public-release phase for this core alternative.
-Keep the remaining-parity table and missing measurements current. Gate E is the
-next owner decision, not permission to start dashboard or a live core switch.
+New memory policy replaces the earlier first-open/no-regression rule. Pure
+optimizations cannot raise warm/settled beyond control spread. Feature-bearing
+changes may add≤0.5MiB settled each if explained, all UI closes≤ownbar+5MiB and
+settled UI bar PSS+DRM+SwapPss≤25MiB on both compositors. Record and continue
+inside these limits; otherwise stop. Propose a reasoned new ceiling if needed.
+Report daemon/provider totals separately, including the35s settled group guard.
+
+Core switch means Bead always-on bar/popouts/service panels, launcher, notices/OSD,
+dashboard, static wallpaper, hyprlock/session, hardware and packaging. QML Settings,
+Colors, Welcome, AI and software start on demand, share the daemon, exit on close.
+Full parity is a historical alternative, not the current target. Keep calendar
+assumptions/core forecast current. IME/reader beyond current coverage are deferred
+to public release; basic English input remains required. Desktop validation plan
+is HOLD: no execution/live test without new owner approval.
 
 Secure session lock, if included beyond the current lock-preview, is a separate
 fail-closed protocol/safety gate before any daily-session trial. It is not silently

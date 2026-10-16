@@ -59,6 +59,44 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn reconnecting_mark_is_conditional_and_does_not_capture_input()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut h = bead_test::Harness::load(
+            &root(),
+            Path::new("bar/main.luau"),
+            &root().join("palette.json"),
+            initial_models()?,
+            bead_test::Config {
+                width: 1344,
+                height: 114,
+                scale: 1.,
+            },
+        )?;
+        let has_mark = |h: &bead_test::Harness| {
+            h.scene().primitives.iter().any(
+                |p| matches!(p, bead::render::Primitive::Text{text,..} if text == "Reconnecting"),
+            )
+        };
+        assert!(!has_mark(&h));
+        h.update(std::collections::BTreeMap::from([(
+            "bar.reconnecting".into(),
+            Value::Bool(true),
+        )]))?;
+        assert!(has_mark(&h));
+        assert!(
+            !h.session
+                .view_nodes()
+                .iter()
+                .any(|node| node.id.ends_with("reconnecting"))
+        );
+        h.update(std::collections::BTreeMap::from([(
+            "bar.reconnecting".into(),
+            Value::Bool(false),
+        )]))?;
+        assert!(!has_mark(&h));
+        Ok(())
+    }
+    #[test]
     fn notification_osd_populated_goldens_and_pose_counter()
     -> Result<(), Box<dyn std::error::Error>> {
         let state = serde_json::json!({"rows":[{"id":"1","app":"Example","summary":"Foundation ready","body":"Private fixture","time_str":"now","expanded":true,"urgency":1,"actions":[{"id":"1|open","label":"Open"}]}],"popup_count":1,"history_count":1,"history_ready":true,"dnd":false,"inhibited":false,"error":"","timers":[],"osd":{"channel":"volume","value":0.75,"muted":false}});

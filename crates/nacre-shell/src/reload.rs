@@ -9,6 +9,8 @@ pub struct Runtime {
     launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
     launcher_subscription: Option<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
+    connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    connection_subscription: Option<bead::core::source::Subscription>,
     launcher_trigger: bool,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
     subscription: Option<bead::backends::Subscription>,
@@ -53,6 +55,8 @@ impl Runtime {
             launcher: None,
             launcher_subscription: None,
             launcher_memory: None,
+            connection_status: None,
+            connection_subscription: None,
             launcher_trigger: false,
             backend: None,
             subscription: None,
@@ -71,6 +75,22 @@ impl Runtime {
             actions: Default::default(),
             wakeup: None,
         }
+    }
+    pub fn with_connection_status(
+        mut self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        // Subscriptions deliver immediately, before the first UI generation.
+        // Declare this host-owned view state before any callback can update it.
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&std::collections::BTreeMap::from([(
+                "bar.reconnecting".into(),
+                bead::core::Value::Bool(source.snapshot().data["reconnecting"] == true),
+            )]))?;
+        self.connection_status = Some(source);
+        Ok(self)
     }
     pub fn panel_session(session: bead::ui::Session, open: bool) -> Self {
         let mut runtime = Self::new(session);
@@ -405,6 +425,19 @@ impl SceneSource for Runtime {
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let wakeup: std::sync::Arc<dyn Fn(UiEvent) + Send + Sync> = std::sync::Arc::from(wakeup);
         self.wakeup = Some(wakeup.clone());
+        if let Some(source) = &self.connection_status {
+            let wakeup = wakeup.clone();
+            match source.subscribe(std::sync::Arc::new(move |snapshot| {
+                let mark = snapshot.data["reconnecting"] == true;
+                wakeup(UiEvent::Model(std::collections::BTreeMap::from([(
+                    "bar.reconnecting".into(),
+                    bead::core::Value::Bool(mark),
+                )])));
+            })) {
+                Ok(subscription) => self.connection_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=connection_subscription"),
+            }
+        }
         if let Some(menu) = &self.launcher {
             let wakeup = wakeup.clone();
             match menu.subscribe(std::sync::Arc::new(move |_| {

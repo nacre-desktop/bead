@@ -522,7 +522,7 @@ impl Session {
         self.update(BTreeMap::from([(store, Value::Text(value))]))
     }
     pub fn accessibility_tree(&self) -> accesskit::TreeUpdate {
-        accessibility::tree(&self.current_nodes, &self.stores)
+        accessibility::tree_with_scene(&self.current_nodes, &self.stores, &self.current)
     }
     pub fn accessibility_action(
         &mut self,

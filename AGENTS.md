@@ -64,11 +64,14 @@
   The migration agent owns nacre-daemon / nacre-protocol; coordinate additive needs.
   No live desktop permission carries over. Local commands nice10, Cargo-j2.
 
-- Owner memory rule (2026-10-15): first-open increases under 1 MiB may proceed
-  if every close/lifecycle stays within bar+5 MiB and steady/closed memory does
-  not regress. Report the change; increases over 1 MiB or steady/closed regressions
-  still stop. Cache checkpoint215ea35 accepted with a roughly one-hour diagnostic
-  time-box and five alternating before/candidate samples per compositor.
+- Owner memory rule (2026-10-16), replacing the earlier rule: pure
+  optimizations must not raise warm or settled memory beyond the control spread.
+  Feature-bearing changes may add up to0.5MiB settled each when explained, every
+  UI close stays within its own bar+5MiB, and settled UI bar PSS+DRM+SwapPss stays
+  at or below25MiB on BOTH compositors. Record measurements and continue without
+  stopping inside those limits. Anything beyond stops for the owner; propose a
+  reasoned replacement ceiling if25MiB gets tight. Daemon/provider group memory
+  remains separately reported. Recovery/static-text~0.4MiB is explicitly accepted.
 
 - Owner update2026-10-15: migration builds the shared launcher engine after F2,
   before F3. Bead builds its launcher UI against fake menu.query meanwhile,
@@ -84,11 +87,13 @@
   Switch to published menu.query schema/transcripts, then measure UI and daemon
   CPU separately with the real engine. STOP at Gate D, not at the old dependency hold.
 
-- Owner Gate E continuation (2026-10-16) supersedes Gate D stop: one focused
-  block only, then STOP at Gate E; no Feature11 and QML remains daily driver.
-  Investigate real-daemon typing with the migration agent, shared non-app
-  activation/reconnect/provider contracts and matched F3 QML comparison, then
-  static-text AccessKit. Prepare but never run the live input/hardware plan.
-  Targets remain UI8ms/key and presented16.7ms p99; after fair effort, <=33ms
-  with UI<=8ms is only an owner-acceptance candidate. Report full-parity calendar
-  assumptions and a separately costed core switch with on-demand QML windows.
+- Owner Gate E core-switch continuation (2026-10-16) supersedes the earlier
+  Gate E stop: integrate the accepted recovery/static-text candidate, then
+  (a) daemon typing plus activation/reconnect/UI-provider contracts, then
+  (b) remaining bar popouts and service views. STOP for owner review after(b),
+  with measurements and updated core-switch forecast, BEFORE dashboard(c).
+  QML remains daily driver until a separately approved switch. IME/screen-reader
+  work beyond existing coverage is deferred to public release. The desktop
+  validation plan is HOLD; no live permission. Targets UI8ms/key/presented16.7ms;
+  after fair effort <=33ms with UI<=8ms is only an owner-acceptance candidate.
+  Do not invent launcher ranking/providers or unpublished activation contracts.

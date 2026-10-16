@@ -99,7 +99,7 @@ def sample(env, raw, compositor, stop):
                                 '--panel-renderer', 'cpu', '--daemon-socket', str(endpoint),
                                 '--command-socket', str(commands), '--ui-provider',
                                 '--ui-notification-socket', str(notice_commands),
-                                '--namespace', 'bead-preview-bar']+output_args, cwd=root, env=bar_env,
+                                '--namespace', 'bead-preview-bar']+output_args+(['--trace-state'] if os.environ.get('BEAD_PREVIEW_RECONNECT')=='1' else []), cwd=root, env=bar_env,
                                stdout=(raw / 'preview-bar.log').open('w'), stderr=subprocess.STDOUT,
                                start_new_session=True)
         wait_call('ui.dispatch', {'target': 'nacre', 'method': 'state', 'args': []})
@@ -112,6 +112,36 @@ def sample(env, raw, compositor, stop):
             tail=text[ready.end():]
             commit=re.search(r'UI_COMMIT generation=(\d+)[^\n]* update=(\d+) companion=true source_error=false',tail)
             return bool(commit and re.search(r'UI_PRESENTED generation='+commit[1]+r' [^\n]*companion=true update='+commit[2]+r'\b',tail[commit.end():]))
+        if os.environ.get('BEAD_PREVIEW_RECONNECT') == '1':
+            old_boot = call('daemon.status', {})['boot']
+            clocks.stop_owned_tree(daemon, stop)
+            assert daemon.returncode == 0
+            offset = len(matrix.log_text(raw/'preview-bar.log'))
+            offline = time.monotonic()
+            matrix.wait_log(raw/'preview-bar.log', lambda t:'"bar.reconnecting":true' in t[offset:], timeout=5)
+            delay = time.monotonic()-offline
+            assert delay >= 1.8, 'reconnecting mark appeared before the two-second delay'
+            # Joining the state to presentation proves the bar rendered the mark.
+            def state_presented(text, value):
+                state=re.search(r'UI_STATE [^\n]*"bar.reconnecting":'+value+r'[^\n]*',text)
+                if not state:return False
+                tail=text[state.end():]
+                commit=re.search(r'UI_COMMIT generation=(\d+)[^\n]* update=(\d+) companion=false source_error=false',tail)
+                return bool(commit and re.search(r'UI_PRESENTED generation='+commit[1]+r' [^\n]*companion=false update='+commit[2]+r'\b',tail[commit.end():]))
+            matrix.wait_log(raw/'preview-bar.log', lambda t:state_presented(t[offset:], 'true'))
+            restarted = time.monotonic()
+            offset = len(matrix.log_text(raw/'preview-bar.log'))
+            daemon = subprocess.Popen([str(helper),'daemon'],cwd=root,env=private,
+                stdout=(raw/'preview-daemon-restarted.log').open('w'),stderr=subprocess.STDOUT,start_new_session=True)
+            new_boot = wait_call('daemon.status', {})['boot']
+            assert old_boot != new_boot
+            wait_call('ui.dispatch', {'target':'nacre','method':'state','args':[]})
+            matrix.wait_log(raw/'preview-bar.log',lambda t:state_presented(t[offset:], 'false'))
+            fresh_upper = time.monotonic()-restarted
+            assert fresh_upper <= 1, 'bar connection recovery exceeded one second from daemon launch'
+            (raw/'preview-reconnect.json').write_text(json.dumps({'valid':True,'old_boot':old_boot,'new_boot':new_boot,
+                'mark_observed_seconds_after_stop':delay,'bar_recovered_seconds_after_launch_upper_bound':fresh_upper,
+                'ui_provider_reregistered':True,'presented_mark_and_recovery':True},indent=2)+'\n')
         offset=len(matrix.log_text(raw/'preview-bar.log'))
         call('ui.dispatch', {'target': 'nacre', 'method': 'launcher', 'args': ['']})
         if os.environ.get('BEAD_PREVIEW_SMOKE')=='1':
@@ -129,6 +159,8 @@ def sample(env, raw, compositor, stop):
         if isinstance(counts, str):
             counts = json.loads(counts)
         assert counts['retained'] >= 1
+        assert 'UI_ERROR' not in (raw/'preview-bar.log').read_text(), 'bar reported a UI error'
+        assert 'UI_ERROR' not in (raw/'preview-notices.log').read_text(), 'notices reported a UI error'
         ready = True
         if os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
             masks=[]

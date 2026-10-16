@@ -502,6 +502,9 @@ fn start(
     } else {
         None
     };
+    let connection_status = _ui_provider.as_ref().map(|client| {
+        std::sync::Arc::new(client.connection()) as std::sync::Arc<dyn bead::core::source::Source>
+    });
     let shared_menu_source = _ui_provider
         .as_ref()
         .map(|client| {
@@ -570,12 +573,16 @@ fn start(
         let fallback = scene.clone();
         let bar = options.bar;
         let trace = options.trace_state;
-        let factory: bead::wayland::worker::Factory = Box::new(move || {
-            let result =
+        let factory: bead::wayland::worker::Factory =
+            Box::new(move || {
+                let result =
                 (|| -> Result<Box<dyn bead::wayland::SceneSource>, Box<dyn std::error::Error>> {
                     let session =
                         bead::ui::Session::new("shell".into(), entry, palette, colors, fallback);
                     let runtime = reload::Runtime::new(session).with_trace(trace);
+                    let runtime = if let Some(source) = connection_status {
+                        runtime.with_connection_status(source)?
+                    } else { runtime };
                     let runtime = if launcher_panel && bar {
                         runtime.with_launcher_trigger(
                             launcher_memory.clone().ok_or("launcher state missing")?,
@@ -618,8 +625,8 @@ fn start(
                     }
                     Ok(Box::new(runtime))
                 })();
-            result.map_err(|e| e.to_string())
-        });
+                result.map_err(|e| e.to_string())
+            });
         let renderer = bead::render::renderer(options.renderer)?;
         let runtime = bead::wayland::worker::Source::new(factory, scene.clone());
         bead::wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))

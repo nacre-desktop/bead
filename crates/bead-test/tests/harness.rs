@@ -225,3 +225,151 @@ fn opaque_motion_uses_measured_paths_and_releases_panel_group() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn static_text_has_stable_accesskit_content_without_pointer_or_focus_nodes() -> Result<()> {
+    let mut h = test()?;
+    h.assert_accessible("Bead foundation", accesskit::Role::Label)?;
+    let before = h.accessibility();
+    let count = before
+        .nodes
+        .iter()
+        .find(|(_, n)| n.role() == accesskit::Role::Label && n.value() == Some("0"))
+        .ok_or("missing static count")?
+        .0;
+    let heading = h
+        .scene()
+        .primitives
+        .iter()
+        .find_map(|p| match p {
+            bead_render::Primitive::Text { rect, text, .. } if text == "Bead foundation" => {
+                Some(*rect)
+            }
+            _ => None,
+        })
+        .ok_or("missing heading")?;
+    h.script([Input::Click {
+        x: heading.x + 1.,
+        y: heading.y + 1.,
+    }])?;
+    assert_eq!(
+        h.session.stores.get("count"),
+        Some(&Value::Text("0".into()))
+    );
+    assert!(
+        !h.session
+            .view_nodes()
+            .iter()
+            .any(|n| n.label == "Bead foundation")
+    );
+    let button = h
+        .session
+        .view_nodes()
+        .iter()
+        .find(|n| n.action.is_some())
+        .ok_or("button")?;
+    let r = bead_ui::rect(&button.draw);
+    h.script([Input::Click {
+        x: r.x + 2.,
+        y: r.y + 2.,
+    }])?;
+    let after = h.accessibility();
+    assert!(
+        after
+            .nodes
+            .iter()
+            .any(|(id, n)| *id == count && n.value() == Some("1"))
+    );
+    for (_, node) in after
+        .nodes
+        .iter()
+        .filter(|(_, n)| n.role() == accesskit::Role::Label)
+    {
+        assert!(!node.supports_action(accesskit::Action::Focus));
+        assert!(!node.supports_action(accesskit::Action::Click));
+    }
+    let ids: std::collections::BTreeSet<_> = after.nodes.iter().map(|(id, _)| *id).collect();
+    assert_eq!(ids.len(), after.nodes.len());
+    let children: Vec<_> = after
+        .nodes
+        .iter()
+        .flat_map(|(_, n)| n.children().iter().copied())
+        .collect();
+    assert!(children.iter().all(|id| ids.contains(id)));
+    assert_eq!(
+        children
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        children.len()
+    );
+    Ok(())
+}
+
+#[test]
+fn static_text_bounds_follow_clip_and_offset_and_decorative_text_is_omitted() -> Result<()> {
+    let h = test()?;
+    let mut scene = h.scene().clone();
+    let (index, r) = scene
+        .primitives
+        .iter()
+        .enumerate()
+        .find_map(|(i, p)| match p {
+            bead_render::Primitive::Text { rect, text, .. } if text == "Bead foundation" => {
+                Some((i, *rect))
+            }
+            _ => None,
+        })
+        .ok_or("heading")?;
+    let clip = bead_render::Rect::new(r.x + 3., r.y + 2., r.w / 2., r.h / 2.);
+    scene.clips.insert(index, clip);
+    scene.offset = (5., 7.);
+    let tree =
+        bead_ui::accessibility::tree_with_scene(h.session.view_nodes(), &h.session.stores, &scene);
+    let label = tree
+        .nodes
+        .iter()
+        .find(|(_, n)| n.role() == accesskit::Role::Label && n.value() == Some("Bead foundation"))
+        .ok_or("label")?;
+    assert_eq!(
+        label.1.bounds(),
+        Some(accesskit::Rect {
+            x0: f64::from(clip.x + 5.),
+            y0: f64::from(clip.y + 7.),
+            x1: f64::from(clip.x + clip.w + 5.),
+            y1: f64::from(clip.y + clip.h + 7.)
+        })
+    );
+    assert!(
+        !tree
+            .nodes
+            .iter()
+            .any(|(_, n)| n.role() == accesskit::Role::Label && n.value() == Some("Apply")),
+        "control's own label duplicated"
+    );
+    for mode in 0..3 {
+        let mut hidden = scene.clone();
+        if let bead_render::Primitive::Text { color, family, .. } = &mut hidden.primitives[index] {
+            if mode == 0 {
+                color[3] = 0;
+            } else if mode == 1 {
+                *family = "Material Symbols Rounded".into();
+            }
+        }
+        if mode == 2 {
+            hidden
+                .clips
+                .insert(index, bead_render::Rect::new(r.x + r.w + 10., r.y, 1., 1.));
+        }
+        let tree = bead_ui::accessibility::tree_with_scene(
+            h.session.view_nodes(),
+            &h.session.stores,
+            &hidden,
+        );
+        assert!(!tree.nodes.iter().any(
+            |(_, n)| n.role() == accesskit::Role::Label && n.value() == Some("Bead foundation")
+        ));
+    }
+    Ok(())
+}

@@ -5,18 +5,32 @@ No live-session test, notification-name takeover, installation or release is
 allowed. The earlier single physical Gate C authorization was consumed.
 Nacre and Orient remain read-only except additive nacre-protocol work through
 Nacre CONTRIBUTING. Owner resumed Features9–10 after Foundation F5.
-Gate E is stopped for the owner's memory decision; QML remains the daily driver.
+Gate E targets the core switch; stop after remaining bar popouts/service views.
+QML remains the daily driver; dashboard and live validation are held.
 
 
 
-## Gate E — STOP for memory decision, 2026-10-16
+## Gate E — core switch active, 2026-10-16
 
-The connection/static-text candidate is functional but fails the owner's no-warm/
-closed-regression rule. **Do not merge its code.** It is preserved locally at
-0a77d31 (source d9fc758); main remains the accepted 5d86073 code. This checkpoint
-publishes evidence, corrected diagnostic byte accounting, the prepared-only plan
-and forecasts, not the failed runtime candidate.
-No Feature11, live run, installation, notification takeover or release occurred.
+Owner accepts the recovery/static-text~0.4MiB settled increase as real features.
+The exact previously tested source d9fc758 is integrated on current main;
+original WIP0a77d31 remains preserved. This supersedes the historical memory stop
+in report e15c316.173 local tests/fmt/clippy/CPU-only/release pass; original source
+and binary are unchanged. No acceptance of typing targets or a daily-shell switch.
+
+Owner's replacement memory rule: pure optimizations cannot raise warm or settled
+memory beyond control spread. Explained feature-bearing changes may add≤0.5MiB
+settled each, with every UI close≤ownbar+5MiB and settled UI bar PSS+DRM+SwapPss
+≤25MiB on both compositors. Record and continue within these limits; otherwise
+stop. Daemon/provider totals remain separately measured. Here settled UI maxima
+21.817/22.912MiB leave3.183/2.088MiB below the ceiling. The file-backed increase
+is measured below; its exclusive cause is not proved.
+
+Continue daemon typing and shared activation/reconnect/provider contracts, then
+remaining bar popouts/service views. STOP for review after those, before dashboard,
+with measurements/core forecast. Full parity is an estimate-only alternative.
+Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
+release. QML stays daily driver. No live run/install/release is authorized.
 
 ### Five alternating memory pairs per compositor
 
@@ -57,7 +71,7 @@ have a30s retirement timeout. Older abbreviated “UI/group close” wording was
 broad and is corrected here; no immediate full-group close-budget proof is claimed.
 Raw `gate-e-acceptance-v3/`; all earlier failed/interrupted captures are retained.
 
-### Functional candidate, not published
+### Accepted recovery/static-text feature checkpoint
 
 A local connection Source retains last-good external data, shows a small bar mark
 after2s and clears it after recovery. Existing-runtime inotify watches only an
@@ -78,8 +92,8 @@ clip/opacity/icon omission, pointer behavior and unchanged raster golden. The
 scene-less compatibility API remains interactive-only; TextRun geometry and real
 Orca remain unvalidated. **173 local tests**, fmt, all-target/all-feature clippy
 with warnings denied, CPU-only check and release build pass; three manual benches
-remain ignored. These checks do not override the failed memory gate. No candidate
-CI run exists because its code was deliberately not pushed.
+remain ignored. Owner explicitly accepts the memory cost. Report-only e15c316
+CI38926623678 is green; the feature integration receives its own CI run.
 
 ### Typing, transport and upstream contracts
 
@@ -154,8 +168,9 @@ syntax-checked only, **NOT RUN**. English core input remains required; IME/reade
 are deferred to public release. Full-parity/core-switch forecasts below remain
 102–207 /40–81 eight-hour agent-days; the explicit daemon-hosting allowance
 adds3–6 days to the old full-parity estimate. This evidence does not justify shrinking
-unbuilt hardware, service, managed-window, media or AI work. Owner decision is
-needed before accepting this warm/closed baseline or funding another focused fix.
+unbuilt hardware, service, managed-window, media or AI work. Owner accepted this feature-bearing
+baseline and authorized the core-route order above; no further memory prompt is
+needed for changes inside the replacement limits.
 
 ## Gate D review — 2026-10-16
 
