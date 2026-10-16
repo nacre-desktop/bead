@@ -1,5 +1,26 @@
 # Feasibility
 
+## 2026-10-16 — Native copies for plain constructor properties
+
+The plain-table constructor path uses Luau's native clone instead of per-key copies.
+It preserves caller tables, strict validation, protected metatables and diagnostics.
+Five pairs show a Hyprland CPU win; niri CPU is neutral within the measured spread.
+No typing-budget or physical acceptance is claimed.
+
+|5 typing-pair medians |Before H /N |Candidate H /N |
+| --- | ---: | ---: |
+|UI CPU ms/key |10.464 /10.012|9.658 /10.061|
+|Presented p99 ms |22.383 /19.278|22.075 /18.479|
+|Third closed MiB, separate lifecycle pair |22.282 /23.096|21.973 /23.062|
+
+151 tests/fmt/clippy ALL targets/CPU-only/release pass.4000 key proofs and all
+lifecycle guards pass. H paired CPU−0.926ms; N marginal+0.049/paired−0.027,
+baseline range1.033. Do not claim a measured N CPU gain. First/warm memory falls.
+Fresh private configured Hvirtual120/N60,scale1.5; refresh prediction unknown,
+no own build overlap, external contention uncontrolled. No physical/engine proof.
+Later keyboard-selection work is separate.
+[Method](docs/research/feature9-gate-d.md#plain-constructor-property-copies--2026-10-16).
+
 ## 2026-10-16 — Reuse existing font state for caret metrics
 
 Caret metrics now borrow the bake renderer's existing font system.

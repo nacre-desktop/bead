@@ -514,6 +514,36 @@ Renderer ID/difference experiments remain separate local work, not included in
 this Source checkpoint or its141-test count. Gate D is still pending the real
 engine/provider/input comparison and updated measured forecast.
 
+## Plain constructor property copies — 2026-10-16
+
+Keep the native Luau table-clone path for ordinary property tables. Validation
+still checks every key; caller tables are not modified. Protected/metatable
+properties retain the manual path, and child extraction uses raw accesses with
+the existing sparse-sequence behavior. Tests cover plain snapshots, frozen and
+protected tables, sparse children and the existing caller file/line diagnostics.
+No VM reuse, cache, language restriction or font change is part of this step.
+
+|5 alternating typing pairs, per-run medians |Before H /N |Candidate H /N |
+| --- | ---: | ---: |
+|UI CPU mean ms/key |10.464 /10.012|9.658 /10.061|
+|Presented p99 ms |22.383 /19.278|22.075 /18.479|
+
+H CPU gain−0.805ms (paired−0.926). N CPU is unresolved/neutral: marginal+0.049,
+paired−0.027, baseline range1.033ms. Do not claim a measured N CPU gain. P99
+medians improve−0.308/−0.799ms within baseline widths2.237/3.346. Both budgets
+remain unaccepted. This retains a clear H improvement without a resolved N
+regression.4000 exact clock-only key proofs pass.
+
+Separate three-cycle lifecycle controls/candidate each: first/third/closed H
+50.791/48.707/22.282→50.537/48.324/21.973MiB; N48.927/46.754/23.096→
+48.802/46.606/23.062. All strict bar+5/query/hover/geometry/cleanup guards pass.
+151 tests/fmt/clippy ALL targets/CPU-only/release pass. Controlab4329d2;
+candidate8f238209. Fresh private configured Hvirtual120/N60, actual scale1.5,
+unknown feedback refresh prediction; external contention uncontrolled, no own
+build overlap. No physical/engine acceptance. Later selection/navigation drafts
+are excluded. Raw: `.research/gate-d-foundation/constructor-typing-fivepairs/`
+and `constructor-clone-pair/`.
+
 ## Borrow existing font state for caret metrics — 2026-10-16
 
 Keep font-system reuse after five alternating typing pairs and five lifecycle

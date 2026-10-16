@@ -28,9 +28,12 @@ Both 8 ms CPU / 16.7 ms presentation targets remain unaccepted. This checkpoint
 keeps renderer-owned font-state reuse: five-pair CPU medians H10.64→10.09 /
 N11.31→11.14ms/key, font loads1→0. Five-pair warm/closed medians fall; known
 weak-index metadata1304 bytes, no font data retained by the index.150 tests/fmt/
-clippy ALL targets/CPU-only/release pass. Fresh CI follows this push.
+clippy ALL targets/CPU-only/release pass. Font checkpoint e12b17f / CI38867627022 is green.
 Numeric RPC/typed-result readiness and wrong-query rejection are prepared/tested;
-real-engine comparison remains missing. Constructor-copy experiment is separate.
+real-engine comparison remains missing. This checkpoint keeps the plain-table
+constructor copy: H CPU10.46→9.66ms/key; N neutral (+0.05 within1.03ms range),
+p99 medians improve both.151 local tests/fmt/clippy ALL targets/CPU-only/release
+pass; fresh CI follows this push. Selection/navigation work remains separate.
 
 Upstream 83a9a9a4 / CI 38847478920 is green. SDK3042f3f2/menu goldens are pinned;
 migration owns engine/provider/host work before F2 finishes. Then compare real

@@ -898,3 +898,36 @@ return ui.Panel{id='root',width=120,height=80,
         assert_eq!(error.line, line);
     }
 }
+
+#[test]
+fn constructors_snapshot_plain_frozen_and_protected_properties_with_sparse_children() {
+    use crate::frontend::{FrontEnd, LuauFrontEnd};
+    let entry = PathBuf::from("ui/main.luau");
+    let sources = BTreeMap::from([(
+        entry.clone(),
+        br#"local ui=require('bead.ui')
+local p={id='first',text='Before'}
+local first=ui.Text(p)
+p.id='second';p.text='After'
+local second=ui.Text(p)
+local frozen=table.freeze({id='frozen',text='Frozen'})
+local protected=setmetatable({id='protected'},{__metatable=false,__index={text='Ghost',[1]=first}})
+return ui.Panel{id='root',width=200,height=120,
+ first,second,ui.Text(frozen),ui.Text(protected),
+ ui.Box{id='sparse',[1]=ui.Text{id='kept',text='Kept'},[3]=ui.Text{id='ignored',text='Ignored'}}}
+"#
+        .to_vec(),
+    )]);
+    let frontend = LuauFrontEnd::new(&entry, &sources).unwrap();
+    let raw = frontend
+        .build(&entry, &|name| Err(Diagnostic::new(&entry, 1, 1, name)))
+        .unwrap();
+    assert_eq!(raw.children[0].props["id"], "first");
+    assert_eq!(raw.children[0].props["text"], "Before");
+    assert_eq!(raw.children[1].props["text"], "After");
+    assert_eq!(raw.children[2].props["text"], "Frozen");
+    assert!(!raw.children[3].props.contains_key("text"));
+    assert!(raw.children[3].children.is_empty());
+    assert_eq!(raw.children[4].children.len(), 1);
+    assert_eq!(raw.children[4].children[0].props["id"], "kept");
+}

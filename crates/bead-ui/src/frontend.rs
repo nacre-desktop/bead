@@ -27,19 +27,25 @@ return function(ui, constructors, allowed, arrayMarker)
     for name, kind in constructors do
         ui[name] = function(props)
             if type(props) ~= "table" then error("node properties need a table", 2) end
-            local named, indexed = {}, {}
+            local plain = getmetatable(props) == nil
+            local named = plain and table.clone(props) or {}
             for key, value in next, props do
                 if type(key) == "string" then
                     if not allowed[key] then error("unknown " .. name .. " property " .. key, 2) end
-                    named[key] = value
+                    if not plain then named[key] = value end
                 elseif type(key) == "number" and key > 0 and key % 1 == 0 then
-                    indexed[key] = value
+                    if plain then named[key] = nil end
                 else
                     error("node properties need names or ordered children", 2)
                 end
             end
             local children = setmetatable({}, arrayMarker)
-            for index, child in ipairs(indexed) do children[index] = child end
+            local index, child = 1, rawget(props, 1)
+            while child ~= nil do
+                children[index] = child
+                index += 1
+                child = rawget(props, index)
+            end
             local file, line = inspect(2, "sl")
             file = (file or ""):gsub("^@+", "")
             return {kind=kind, props=named, children=children,
