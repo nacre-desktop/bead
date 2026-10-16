@@ -1319,8 +1319,8 @@ mod tests {
                             let mut repaired = vec![0; 40 * 40 * 4];
                             let mut expected = repaired.clone();
                             for (frame, bytes, damage) in [
-                                (&*old, repaired.as_mut_slice(), Damage::full(40, 40)),
-                                (&*new, expected.as_mut_slice(), Damage::full(40, 40)),
+                                (old.as_ref(), repaired.as_mut_slice(), Damage::full(40, 40)),
+                                (new.as_ref(), expected.as_mut_slice(), Damage::full(40, 40)),
                             ] {
                                 paint(
                                     frame,
@@ -1337,7 +1337,7 @@ mod tests {
                                 .unwrap();
                             }
                             paint(
-                                &new,
+                                new.as_ref(),
                                 offset,
                                 ShmTarget {
                                     bytes: &mut repaired,

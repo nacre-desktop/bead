@@ -5,7 +5,10 @@
 Last green measurement checkpoint: e4145f5 / CI 38856389288. This checkpoint
 keeps ordered pixel damage, separate SHM repair regions, Luau node constructors,
 shared immutable result models and the redundant-caret-shape fix. Count-only a3ab6dc
-and canonical Source 4fbf629 remain kept. Fresh CI follows the push.
+and canonical Source 4fbf629 remain kept. CI 38863863203 caught test-only redundant
+borrows; the follow-up fixes them. Local clippy now includes all targets with
+warnings denied. Production behavior and measured binaries are unchanged;
+fresh CI follows this repair push.
 
 Five alternating clock-only pairs per compositor: CPU medians H 15.47→10.10 /
 N 16.96→10.83 ms/key; presented p99 medians 24.72→22.19 / 27.02→21.34 ms.
