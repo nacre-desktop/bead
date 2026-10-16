@@ -59,6 +59,30 @@ Gate D is explicitly placed **after Feature 10**, resolving the original list's
 later label placement. It must forecast difficult unbuilt pearls/video/AI/input
 work rather than extrapolate the easier bar features at a uniform rate.
 
+### Gate E — owner-directed focused block, 2026-10-16
+
+Gate D decision is adjust and continue this block, then STOP at Gate E.
+QML remains the daily driver; Feature11 is not authorized.
+
+1. Real-daemon typing: separate UI/daemon/provider CPU, payload/serialization,
+   stale queries and round trip with the migration agent. Targets UI≤8ms/key and
+   presented p99≤16.7ms; after fair effort, p99≤33ms with UI≤8ms is only a candidate
+   for the owner's acceptance. Keep only measured performance improvements.
+2. Shared non-app activation without a same-worker deadlock, reconnect mark and
+   UI-provider registration; matched QML on the same engine once F3 lands.
+3. Static text in AccessKit.
+4. Prepare, do not run, the English input/basic-hardware and later IME plan,
+   with durations, exact commands and stop procedure. Live approval is separate.
+
+Report remaining full parity in eight-hour agent-days and calendar time with
+explicit daily-throughput assumptions. Also cost a core switch: Bead always-on
+bar/popouts/service panels, launcher, notifications/OSD, dashboard, static wallpaper,
+hyprlock/session, hardware and packaging; QML Settings/Colors/Welcome/AI/software
+start on demand and exit on close, all on the same daemon. IME/screen-reader work
+is deferred to the later public-release phase for this core alternative.
+Keep the remaining-parity table and missing measurements current. Gate E is the
+next owner decision, not permission to start dashboard or a live core switch.
+
 Secure session lock, if included beyond the current lock-preview, is a separate
 fail-closed protocol/safety gate before any daily-session trial. It is not silently
 counted as done with a session menu or decorative lock widget.

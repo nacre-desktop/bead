@@ -1,5 +1,40 @@
 # Feasibility
 
+
+## 2026-10-16 — Gate E candidate: stop for memory decision
+
+Reconnect recovery and static-text accessibility pass functional checks.
+Five pairs per compositor show a small but repeatable closed-memory increase.
+The owner's separate no-regression rule stops this candidate despite bar+5 guards.
+Its code stays local; only evidence and the prepared-only desktop plan are pushed.
+
+|Nested, five alternating pairs/compositor|Before → candidate median MiB|Paired delta / control spread|
+| --- | ---: | ---: |
+|H third warm|46.789 →47.165|+0.440 /0.099|
+|H third closed|21.467 →21.828|+0.360 /0.101|
+|H settled closed|21.479 →21.811|+0.339 /0.138|
+|N third warm|44.937 →45.284|+0.413 /0.502|
+|N third closed|22.335 →22.700|+0.448 /0.240|
+|N settled closed|22.381 →22.754|+0.392 /0.293|
+
+Same320-app catalog/regular75157helper; private scale1.5, Hvirtual120/N60,
+feedback refresh unknown. No own builds/parallel captures; contention uncontrolled.
+Current source d9fc758,173tests/fmt/all-target/all-feature clippy-Dwarnings/
+CPU-only/release pass; local only, no candidate CI. Private presented bar restart
+≤77/26ms H/N, two-second mark/new-boot/provider registration verified. No real
+Orca or whole-menu cold-open claim. Closed file PSS rises while anonymous falls;
+retained cache leakage is not established. All20 UI-close/35s-group guards pass;
+N warm delta is inside its spread. No guessed allocator/font fix.
+Typing UI11.041/10.988ms/key, p9924.287/34.679ms H/N,800 exact keys.
+One pair each, no optimization claim; both8ms UI targets fail.
+Literal JSON replies25,624–26,227bytes excluding LF. Component daemon2.890/3.152
++provider1.081/1.339ms/query; RTTp998.763/10.606ms,4,000 exact calls.
+Helper unchanged; lower repeat cost is not an engine optimization.
+Full parity102–207 /core40–81 eight-hour days; calendar7–18 /3–8weeks at explicit
+16–20taskh/day scenario. Coreidle90–150MiB estimated, not combined-service proof.
+Prepared controller syntax checked, NOT RUN. No live/install/Feature11. Details,
+failed attempts, method and forecasts: docs/research/feature9-gate-d.md Gate E.
+
 ## 2026-10-16 — Gate E persistent-link component diagnostic
 
 The owner resumed a focused block, with QML still the daily shell.
@@ -12,7 +47,7 @@ This is component CPU and round trip, never presented typing acceptance.
 |Daemon CPU ms/query|3.993 /4.433|
 |Provider CPU ms/query|1.572 /1.636|
 |RTT p50 /p99 ms|6.218 /11.238;6.550 /11.526|
-|Reply bytes|25,630–26,233|
+|Python reencoded bytes (not wire)|25,630–26,233|
 
 Private Hvirtual120/Nnested60,scale1.5; actual refresh unknown. Shared-host
 contention uncontrolled; no own builds. Full-loop high-resolution process clocks,
@@ -42,7 +77,7 @@ Real engine has320 apps,100 app+1action typed results, same regular75157helper.
 Daemon/provider CPU means4.973/2.013 H,4.870/2.091 N ms/key include background
 in the wider injection→present window; do not add as serial elapsed time.
 Real group warm98.006/96.243→settled55.047/55.858MiB; UI21.965/22.854 closed.
-Every UI/group close guard passes ownbar+5; all warm scratch allocations released.
+UI closes and35s-settled group pass ownbar+5; warm scratch allocations released.
 165tests/fmt/clippy all-target/all-feature/CPU-only/release and strict H/N cleanup
 pass; early source-thread signal inheritance fixed, caller mask restored.
 Lazy-mask f651c04 stays local: warm/closed deltas exceed five-pair control spreads,

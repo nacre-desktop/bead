@@ -5,48 +5,157 @@ No live-session test, notification-name takeover, installation or release is
 allowed. The earlier single physical Gate C authorization was consumed.
 Nacre and Orient remain read-only except additive nacre-protocol work through
 Nacre CONTRIBUTING. Owner resumed Features9–10 after Foundation F5.
-Gate D review is ready with typing/shared-engine comparison gaps; acceptance is the owner's decision.
+Gate E is stopped for the owner's memory decision; QML remains the daily driver.
 
 
 
-## Gate E — active focused block, 2026-10-16
+## Gate E — STOP for memory decision, 2026-10-16
 
-Owner approved typing/RPC, shared UI contracts, static-text AccessKit and a
-prepared-only live input/hardware plan, then a Gate E decision. QML remains the
-daily driver; no Feature11, deployment or live test is authorized. The stop report
-will define agent-days in hours, translate full parity into calendar time, and
-cost a core switch separately from on-demand QML Settings/Colors/Welcome/AI/software.
-English-only core use defers IME/screen-reader validation, not basic keyboard input.
+The connection/static-text candidate is functional but fails the owner's no-warm/
+closed-regression rule. **Do not merge its code.** It is preserved locally at
+0a77d31 (source d9fc758); main remains the accepted 5d86073 code. This checkpoint
+publishes evidence, corrected diagnostic byte accounting, the prepared-only plan
+and forecasts, not the failed runtime candidate.
+No Feature11, live run, installation, notification takeover or release occurred.
 
-### Same-host persistent query diagnostic
+### Five alternating memory pairs per compositor
 
-Regular published75157fd3 helper, same320 Alpha/Application fixture as typing,
-100 warmups followed by2,000 alternating a/ap calls per compositor on one link.
-Each completed ID/query/revision and101 ordered rows is checked. No keyboard,
-UI, compilation, catalog edits or per-call CLI process runs during the capture.
-High-resolution whole-process clocks bracket the full loop; provider population
-must remain identical. RTT includes Python JSON decode/validation; CPU excludes
-that client. This is a component diagnostic, not keystroke-to-presentation latency.
+Same immutable accepted e8228d binary versus candidate b681d0, regular Nacre
+75157fd3 helper, 320 synthetic apps; fresh private sessions, scale1.5,
+Hyprland configured virtual120Hz / niri nested60Hz. Unknown feedback refresh is
+not physical120Hz. No own builds or parallel captures; host contention uncontrolled.
+Startup settles32s, then three open/close cycles and35s idle. PSS+DRM includes
+SwapPss (none observed). Median, min–max spread and paired deltas are distinct.
 
-|Persistent RPC|H virtual120 /N nested60|
+|UI MiB, five paired runs|Before median [range]|Candidate median [range]|Median paired delta|
+| --- | ---: | ---: | ---: |
+|H first open|49.511 [49.356–51.018]|49.887 [49.668–51.503]|+0.445|
+|H third warm|46.789 [46.697–46.796]|47.165 [47.092–47.454]|+0.440|
+|H third closed|21.467 [21.425–21.525]|21.828 [21.739–21.875]|+0.360|
+|H settled closed|21.479 [21.374–21.512]|21.811 [21.665–21.817]|+0.339|
+|N first open|47.518 [47.403–49.114]|47.983 [47.857–49.728]|+0.466|
+|N third warm|44.937 [44.721–45.223]|45.284 [45.121–45.357]|+0.413|
+|N third closed|22.335 [22.145–22.385]|22.700 [22.576–22.820]|+0.448|
+|N settled closed|22.381 [22.188–22.481]|22.754 [22.660–22.912]|+0.392|
+
+H warm and both compositors' closed ranges are disjoint. N warm paired+0.413
+is inside its wider control spread0.502; no separate N warm failure is claimed.
+All20 lifecycle proofs pass: maximum UI close-minus-own-bar+0.446/−0.104MiB H/N,
+settled combined-group difference+0.649/+0.120. That does not waive the separate
+regression gate. Group UI+daemon/provider H paired warm/settled deltas are
++0.486/+0.404MiB, beyond control spreads0.161/0.240. N settled group+0.470 exceeds
+control spread0.372. First-open paired medians+0.445/+0.466 are inside the much
+wider first-open spreads; no positive individual paired increase exceeds1MiB.
+Settled file-backed PSS paired deltas are+0.438/+0.481MiB H/N; anonymous
+−0.113/0.000. This points to resident mapped pages rather than a demonstrated
+cache leak; no allocation trace proves the cause. ELF text grows only55,232bytes,
+so executable size alone does not explain all resident pages. No speculative
+allocator/font rewrite or second candidate is attempted after this stop.
+The per-close bar+5 assertion covers UI PSS+DRM+SwapPss. The combined daemon/
+provider group is checked after35s idle, not immediately on every close: providers
+have a30s retirement timeout. Older abbreviated “UI/group close” wording was too
+broad and is corrected here; no immediate full-group close-budget proof is claimed.
+Raw `gate-e-acceptance-v3/`; all earlier failed/interrupted captures are retained.
+
+### Functional candidate, not published
+
+A local connection Source retains last-good external data, shows a small bar mark
+after2s and clears it after recovery. Existing-runtime inotify watches only an
+owned private directory and interrupts50ms→2s reconnect backoff when its socket
+returns; same-uid/permission checks remain. Strict private H/N restart proofs join
+exact state→commit→presentation: marks2.004/2.003s, presented bar recovery≤77/26ms
+from daemon launch, new boot/provider re-registration and owned cleanup verified.
+No whole-menu cold-open or physical scanout claim. Startup state is declared before
+immediate subscription delivery. Publisher.restart propagates the producer boot
+epoch even for identical data while retaining the last snapshot as disconnected;
+core/fake-daemon tests cover that case. Earlier failed restart/startup proofs stay
+visible; raw successful `gate-e-connection-smoke-v5/`.
+
+Static committed-scene text contributes stable AccessKit Label/value nodes with
+clipped/offset bounds; decorative symbols and controls' duplicate own text are
+omitted. Hit/focus lists are unchanged. Tests cover IDs/value changes, tree links,
+clip/opacity/icon omission, pointer behavior and unchanged raster golden. The
+scene-less compatibility API remains interactive-only; TextRun geometry and real
+Orca remain unvalidated. **173 local tests**, fmt, all-target/all-feature clippy
+with warnings denied, CPU-only check and release build pass; three manual benches
+remain ignored. These checks do not override the failed memory gate. No candidate
+CI run exists because its code was deliberately not pushed.
+
+### Typing, transport and upstream contracts
+
+One200-key before/candidate capture per compositor, 800 exact result proofs;
+32s startup settling, identical helper and320-app catalog, clocks-only tracing.
+Catalog321 invalidation without a key and owned-worker cleanup pass all four cells.
+These are final functional validation samples, not five-pair optimization evidence.
+
+|Real-engine typing|H before → candidate|N before → candidate|
+| --- | ---: | ---: |
+|UI CPU mean ms/key|10.745 →11.041|10.990 →10.988|
+|Exact presented p99 ms|25.721 →24.287|34.340 →34.679|
+|Daemon CPU mean ms/key|5.092 →4.904|4.658 →5.402|
+|Provider CPU mean ms/key|2.137 →2.053|1.994 →2.334|
+
+UI CPU still exceeds8ms on both; N p99 also exceeds33ms. This does not qualify
+for the owner's ≤33ms fallback, which requires UI≤8ms. No performance win or
+same-engine QML comparison is claimed. UI CPU brackets key receipt→presentation;
+daemon/provider clocks bracket injection→observed presentation and include
+background work. These totals are not additive serial latency. Earlier1c7c869
+samples10.865/10.981ms UI and30.419/32.656ms p99 stay in `gate-e-acceptance/`;
+they preceded startup/epoch repairs and are not the final source acceptance.
+
+Persistent-link component diagnostics use100 warmups then2,000 exact a/ap queries,
+101 ordered rows, fixed provider population and high-resolution full-loop process
+clocks. No keyboard/UI/per-call CLI; RTT includes Python decode/validation, CPU
+excludes that client. Earlier H/N daemon3.993/4.433 and provider1.572/1.636ms/query,
+RTTp9911.238/11.526ms establish that fresh connection setup is not the sole cause.
+**Correction:** earlier25,630–26,233bytes were Python-reencoded reply lengths,
+not literal received wire bytes. Keep CPU/RTT evidence, do not relabel that size.
+The published diagnostic now counts the received JSON bytes excluding its LF:
+
+|Fresh2,000-call component capture|H /N|
 | --- | ---: |
-|Daemon CPU ms/query|3.993 /4.433|
-|Provider CPU ms/query|1.572 /1.636|
-|RTT p50 /p99 ms|6.218 /11.238;6.550 /11.526|
-|Reply bytes|25,630–26,233|
+|Daemon CPU ms/query|2.890 /3.152|
+|Provider CPU ms/query|1.081 /1.339|
+|RTT p50 /p99 ms|4.249 /8.763;4.970 /10.606|
+|Literal JSON reply bytes, excluding LF|25,624–26,227 on both|
 
-This corrects the unmatched fresh-CLI diagnostic: handshake work was included
-there. The gap versus migration's other-host full-wire~1ms still exists on a
-persistent link, so neither connection setup nor keyboard churn alone explains it.
-Host/provider environment and the wider typing window remain confounders. The
-previous100-result decoder diagnostic~0.17ms is too small to explain the whole
-gap; no unsafe decoder or alternate encoding is introduced. Migration received
-the method and results plus the delta-row/stale-query questions. General daemon
-notification hosting and the final combined-service idle baseline remain upstream
-gaps; the official F3 QML adapter has not landed. Raw private artifacts:
-`gate-e-persistent-component-v2/`. The initial upstream lab attempt failed before
-measurement because its wlr-randr dependency was absent; existing Bead isolation
-was reused instead, without installing a dependency or changing its proof guards.
+The helper binary is unchanged. Lower CPU/tails than the earlier capture are not
+an engine optimization: client-side reencoding overhead changed and host load is
+uncontrolled. One component run per compositor is not a matched acceptance trial.
+All4,000 calls validate IDs/query/revision/order; all26 batch cells exit0 with
+owned-worker cleanup, no UI_ERROR or observed UI SwapPss. No task process remains.
+
+Host/provider and wider typing-window differences remain confounders. Projection
+currently awaits menu.query on its script/bake worker; same-view queries serialize.
+The exact-key benchmark waits for each result's presentation before the next key,
+so dropping stale queries cannot explain a win in that serial test. Burst typing
+needs separate cancellation/coalescing coverage. Outgoing queries are small;
+full result rows cross the link on each key. No full-row/delta/stale-query transport
+optimization is claimed without an upstream result. Migration received these
+findings; its active serve-bridge catalog work is not a menu.query measurement.
+The earlier32-key detailed diagnostic puts markup at2.6–3.8ms and composition
+at1.4–2.1ms CPU medians, versus warmed shaping0.016–0.024ms. Those overlapping
+spans are diagnostic, not additive totals or a new candidate acceptance; they
+do not justify a font-engine rewrite.
+
+The agreed non-app contract validates an engine-owned typed action, enqueues it
+on an independent UI path and acknowledges acceptance; never synchronously bounce
+into the worker waiting for menu.activate. Published typed actions/copy/arithmetic
+and official same-engine F3 QML comparison remain missing. Existing ui.dispatch
+registration works; no generic executor or guessed action is added. Nacre main
+was fetched at this checkpoint (e304430f); no relevant new F3 contract landed.
+Protocol v1 is already pinned/tested on published main; new epoch fixes above are
+local. Notifications still use the transitional private Bead host, not daemon
+hosting. Backends remain frozen except fixes; no helper/ranking/provider copy.
+
+The [desktop validation plan](gate-e-validation-plan.md) contains durations,
+prebuilt/private controller commands and exact stop/cleanup. Its controller is
+syntax-checked only, **NOT RUN**. English core input remains required; IME/reader
+are deferred to public release. Full-parity/core-switch forecasts below remain
+102–207 /40–81 eight-hour agent-days; the explicit daemon-hosting allowance
+adds3–6 days to the old full-parity estimate. This evidence does not justify shrinking
+unbuilt hardware, service, managed-window, media or AI work. Owner decision is
+needed before accepting this warm/closed baseline or funding another focused fix.
 
 ## Gate D review — 2026-10-16
 
@@ -1201,6 +1310,7 @@ by the migration agent are dependencies, not a second implementation budget.
 | --- | ---: | --- |
 | Finish engine/typing/pacing/idle rails and shell integration |4–8|Changed-result queries, cold first key, N tail, reconnect badge/UI provider, three-hour lifecycle/chaos|
 | Remaining bar/popouts and service views |6–12|Panel registry/lifetimes, audio devices/mic, network/Bluetooth/tray/power/calendar; real service errors and multi-output dismissal|
+| Daemon hosting for remaining core services |3–6|Notification ownership/history and audio/tray/power handoff; depends on a later migration phase|
 | Dashboard pages |8–15|MPRIS/artwork/resource/calendar/weather, bounded decode/fetch workers, event/state consistency|
 | Settings/Colors/Welcome/control/session windows |12–24|Schema-driven edits across65 stores, revision errors, forms, shortcuts, previews and restart recovery|
 | Pearls/managed windows |10–20|xdg-toplevel lifetime, detach/dock, geometry/focus/output restoration and compositor placement limits|
@@ -1212,7 +1322,9 @@ by the migration agent are dependencies, not a second implementation budget.
 | Hardware/long-duration validation |5–12|Physical120Hz/mixed outputs/hotplug/suspend, NVIDIA/driver variants, idle wakeups/energy and memory slopes|
 | Repository/deployment/name integration |2–4|Owner-approved shell move, pinned dependencies, control-script/binary name clash, rollback and packaging|
 
-Total roughly99–201 focused agent-days. Calendar assumptions and the narrower
+Gate E total **102–207 eight-hour agent-days**. This adds an explicit3–6-day
+daemon-hosting allowance to the earlier99–201 UI/framework estimate; that work
+is also costed in the core alternative. Service APIs are not assumed free. Calendar assumptions and the narrower
 core-switch alternative are below. There is
 large uncertainty concentrated in pearls, media, AI, input and hardware. Parallel
 work can shorten independent views; shared daemon/window/input dependencies and
@@ -1226,7 +1338,7 @@ before pearls/AI-heavy workflows. Add static wallpaper before video/effects, the
 AI rich views, then the software/theme/extension/dev/AUR surfaces. Integrate
 hyprlock when session policy needs it. Keep the working QML daily shell while
 these gates remain open; move touched features to the daemon instead of a blanket
-QML rewrite. Stop for the owner's Gate D decision before any Feature 11 work.
+QML rewrite. Stop for the owner's Gate E decision before any Feature11 work.
 
 Open carry-forwards: historical typing29.61→32.66% workload, first-key/overall N
 latency,6b0a nested/shared-GL pacing and strict idle invariance; physical120Hz
@@ -1301,13 +1413,13 @@ not been instrumented. Use **16–20 task hours per calendar day** as an explici
 planning scenario for the current mostly-all-day schedule, not a measured daily
 average or a promise that all waiting time produces progress.
 
-Full parity99–201 agent-days is792–1,608 task hours: roughly40–101 active calendar
+Full parity102–207 agent-days is816–1,656 task hours: roughly41–104 active calendar
 days at that schedule, or6–15 weeks. Allowing shared-contract and supervised
 hardware scheduling gives a practical planning window of about7–18 calendar
 weeks. Owner pauses and unavailable hardware can extend it; those waits are not
 hidden implementation hours. Migration runs in parallel, but one cannot simply
 divide the total by the number of chats. This remains a forecast of hard unbuilt
-work, not an extrapolation from quick bar checkpoints. Re-estimate at Gate E.
+work, not an extrapolation from quick bar checkpoints. Re-estimate after the next accepted integration checkpoint.
 
 ### Core switch alternative — estimate only, not implementation approval
 

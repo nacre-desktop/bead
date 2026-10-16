@@ -11,14 +11,14 @@ def sample(endpoint, revision, daemon_clock, workers, output, compositor, helper
     def receive(stream):
         line = stream.readline(1048578)
         assert line.endswith(b'\n') and len(line) <= 1048577, 'invalid/bounded frame'
-        return json.loads(line)
+        return json.loads(line), len(line) - 1
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as link:
         link.settimeout(10)
         link.connect(str(endpoint))  # endpoint belongs to the existing private lab
         with link.makefile('rb') as stream:
             link.sendall(b'{"t":"hello","proto":1,"min":1,"client":"bead-component"}\n')
-            welcome = receive(stream)
+            welcome, _ = receive(stream)
             assert welcome['t'] == 'welcome' and 'menu.query' in welcome['methods']
 
             def call(index):
@@ -27,13 +27,13 @@ def sample(endpoint, revision, daemon_clock, workers, output, compositor, helper
                                p=dict(query=query, mode='apps', route='apps'), timeout=10000)
                 started = time.perf_counter_ns()
                 link.sendall(json.dumps(message).encode() + b'\n')
-                reply = receive(stream)
+                reply, wire_bytes = receive(stream)
                 elapsed = (time.perf_counter_ns() - started) / 1e6
                 assert reply['t'] == 'ret' and reply['id'] == index and 'err' not in reply
                 result = reply['ok']
                 assert result['query'] == query and result['catalog_rev'] == revision
                 assert len(result['order']) == 101 and set(result['order']) == set(result['items'])
-                return elapsed, len(json.dumps(reply, separators=(',', ':')).encode())
+                return elapsed, wire_bytes
 
             for index in range(100):
                 call(index)

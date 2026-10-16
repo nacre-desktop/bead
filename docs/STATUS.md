@@ -1,14 +1,24 @@
 # Status
 
-## 2026-10-16 — Gate E block active
+## 2026-10-16 — Gate E: stopped for memory decision
 
-Owner resumed typing/RPC, shared UI contracts, static-text AccessKit and a
-prepared-only input/hardware plan. Persistent2,000-call diagnostics give daemon
-CPU3.993/4.433ms plus provider1.572/1.636ms per query (H/N), no UI/keyboard.
-Shared-engine QML/activation contracts await upstream F3. QML stays daily driver; no Feature11 or live
-runs. Gate E will report full-parity calendar time and a core-switch alternative
-with on-demand QML Settings/Colors/Welcome/AI/software windows.
-
+Local candidate d9fc758 is preserved, not pushed. Five pairs/compositor show
+settled increases+0.339/+0.392MiB H/N beyond control spreads0.138/0.293.
+H warm also regresses; all20 UI close/settled-group bar+5 guards pass.
+That separate guard does not waive the regression rule.173 local tests,
+fmt, clippy, CPU-only and release pass. Private presented bar restart recovery
+≤77/26ms and delayed reconnect mark/static-text AccessKit work, but remain local.
+Typing UI11.041/10.988ms/key, p9924.287/34.679ms H/N: targets fail.
+Official F3 actions/shared-engine QML stay open.
+[Evidence and forecasts](research/feature9-gate-d.md#gate-e--stop-for-memory-decision-2026-10-16).
+Prepared [input/hardware plan](research/gate-e-validation-plan.md): NOT RUN.
+Full parity102–207 eight-hour agent-days, planning7–18 calendar weeks; core
+switch40–81 days,3–8 weeks and90–150MiB idle estimate. Daily16–20 task-hour
+throughput is a planning assumption, not a measured average. Core QML windows
+start on demand and exit on close, sharing the daemon. No Feature11/live/install.
+QML remains daily driver. Published code5d86073 CI38915772209 green; this
+report/byte-accounting CI: [latest main run](https://github.com/nacre-desktop/bead/actions/workflows/ci.yml).
+Owner decision needed before changing the memory baseline.
 
 ## 2026-10-16 — Gate D review: adjust
 
@@ -35,7 +45,8 @@ Typing8ms/16.7ms targets remain unaccepted. Native200-key samples are one pair,
 not a new optimization acceptance. Nested Hvirtual120/N60,scale1.5; feedback
 refresh unknown, host contention uncontrolled, no own build overlap. Real group
 UI+daemon/providers warm98.006/96.243→settled55.047/55.858MiB; UI alone returns
-21.965/22.854, every close/settled group within own bar+5. All warm reports show scratch released.
+21.965/22.854. Every UI close and the35s-settled group pass own bar+5;
+all warm reports show scratch released.
 [Method, comparisons and forecast](research/feature9-gate-d.md#gate-d-review--2026-10-16).
 
 Gate D owner chose this focused Gate E block. Typing/RPC and shared-engine QML/actions
