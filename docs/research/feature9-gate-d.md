@@ -310,7 +310,7 @@ second engine was built to turn missing measurements into zeros.
 
 The preceding identical-row a/ap fixture is a best-case model-reuse workload,
 not evidence that newly filtered results meet the typing target. An additional
-explicit fixture keeps320 total apps, but a/ap return disjoint160-row sets.
+explicit fixture keeps320 total apps, but a/ap return disjoint 160-row sets.
 Every edit replaces visible result identities; no filtering/ranking/provider runs.
 Both UIs receive the same rows/order/icons/breadcrumbs and200 exact-generation
 key→query commit→presentation proofs. Screenshots show Application0160 and ap.
@@ -368,7 +368,7 @@ fonts and hit targets remain unchanged. Empty text retains one transparent pixel
 |Steady whole composition CPU ms/key |12.314 /13.990|6.229 /6.550|
 
 Both binaries use the active-view bundle and identical numeric spans. Before is
-59f00f1 plus diagnostic spans; candidate adds cropped text. Same320-app/disjoint
+59f00f1 plus diagnostic spans; candidate adds cropped text. Same 320-app/disjoint
 160-row a/ap fixture,200 exact receipt/commit/presentation generations. H virtual120,
 N nested60,2880×1800/scale1.5; sequential beforeH/candidateH/candidateN/beforeN,
 fresh private sessions. No own heavy build overlap; external activity/frequency
@@ -391,6 +391,46 @@ first-open/steady/closed regression; it is not strict idle invariance. Native GL
 smokes pass on both with grid↔list input, exact feedback, actual GL initialization
 and cleanup; centered grid text was inspected. Hyprland debug overlays remain in
 the short GL capture; its timing is not an acceptance measurement.
+
+## Count-only model access — measured candidate held, 2026-10-16
+
+A small native model_count(binding) accessor avoids serializing every result into
+Luau solely to calculate VirtualGrid's extent. Repeat still validates every key
+and renders only its window.137 tests/fmt/clippy/release/Luau freshness pass,
+including count-only dependency tracking through growth, empty and invalid models.
+The candidate is preserved as local 95862ca, not integrated or published.
+
+One 200-key pair each, followed by two alternating 80-key pairs per compositor,
+uses identical cropped binaries/bundles except the count API. Same 320-app/disjoint
+160-row fixture, fresh private sessions; own builds stopped, external load and
+frequency uncontrolled. CPU evaluation becomes cheaper in every trial.
+
+|Trial means, ms UI CPU/key | Before trials | Candidate trials | Median before→candidate |
+| --- | --- | --- | --- |
+|Hyprland |17.215,18.398,19.082|18.008,15.647,16.083|18.398→16.083|
+|niri |20.326,20.818,18.217|17.830,16.267,16.740|20.326→16.740|
+
+Presented p99 is not uniformly improved: H trials31.61/38.67/32.40→
+24.82/30.66/30.32ms; N27.40/29.47/30.07→26.44/36.70/38.10ms.
+The shorter samples have different tail resolution. Their phase/load effects
+were not isolated; these measurements do not establish a causal pacing regression
+or accept either typing budget. Do not hide the mixed tails behind CPU medians.
+
+All before/candidate lifecycle checks pass bar+5 including swap, hover expiry,
+query preservation, three closes and cleanup. H bar/first/third warm/closed MiB
+21.729/51.095/48.323/21.782→22.257/50.945/48.381/21.958; N
+23.314/49.120/46.562/22.825→23.768/49.005/46.607/22.887.
+The small positive steady/closed totals need confirmation before integration.
+H closed+0.176MiB includes+0.164 file-backed and+0.012 anonymous; the candidate
+ELF is3,072 bytes larger. This is not proof of an equivalent retained-heap leak,
+nor permission to waive the closed-memory rule. No new tolerance was introduced.
+The default development executable was restored to the accepted cropped build;
+all candidate sources, binaries, logs and provenance remain available locally.
+
+Canonical menu schemas/engine are still unavailable. Upstream F2 is held for a
+separate regression/priority review; the owner decision blocks end-to-end work.
+The additive menu draft remains off main with its migration owner. Stop at this
+dependency decision; Gate D is not accepted and no Feature 11 work has started.
 
 ## Remaining-parity forecast — provisional until the engine comparison
 
@@ -435,7 +475,7 @@ before pearls/AI-heavy workflows. Add static wallpaper before video/effects, the
 AI rich views, then the software/theme/extension/dev/AUR surfaces. Integrate
 hyprlock when session policy needs it. Keep the working QML daily shell while
 these gates remain open; move touched features to the daemon instead of a blanket
-QML rewrite. Stop for the owner's Gate D decision before any Feature11 work.
+QML rewrite. Stop for the owner's Gate D decision before any Feature 11 work.
 
 Open carry-forwards: historical typing29.61→32.66% workload, first-key/overall N
 latency,6b0a nested/shared-GL pacing and strict idle invariance; physical120Hz

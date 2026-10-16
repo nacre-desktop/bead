@@ -1,5 +1,26 @@
 # Feasibility
 
+## 2026-10-16 — count-only API saved; mixed tails remain unresolved
+
+Directly reading model length reduces Luau preparation and median UI CPU.
+The candidate still misses both typing budgets; niri's short-run tails are mixed.
+Small positive steady/closed PSS also needs confirmation before integration.
+The tested candidate is preserved locally; main keeps the accepted cropped path.
+
+|UI CPU mean ms/key, three trial median | Before H /N | Candidate H /N |
+| --- | ---: | ---: |
+|One 200-key plus two alternating 80-key pairs |18.398 /20.326|16.083 /16.740|
+|Presented p99 trial range ms |31.61–38.67 /27.40–30.07|24.82–30.66 /26.44–38.10|
+|Third closed PSS+DRM MiB, one pair |21.782 /22.825|21.958 /22.887|
+
+All lifecycle closes pass bar+5 incl swap; no tolerance relaxed.
+H closed+0.176MiB: file-backed+0.164/anonymous+0.012; ELF+3,072 bytes.
+No causal pacing/leak conclusion from uncontrolled single lifecycle pairs.
+H virtual120/N nested60;320 apps/disjoint 160-row exact replies, no helper engine.
+137 tests/fmt/clippy/release/Luau pass; local 95862ca held, not main/CI accepted.
+Upstream F2 priority gate now blocks real-engine work; no Gate D acceptance.
+[Methods and limits](docs/research/feature9-gate-d.md#count-only-model-access--measured-candidate-held-2026-10-16).
+
 ## 2026-10-16 — crop transparent text padding without changing pixels
 
 Text rasters retained the whole layout width; blending transparent pixels was costly.
@@ -15,7 +36,7 @@ Matched pairs reduce composition and memory; typing targets remain unaccepted.
 |Text composition CPU ms/key |6.799 /7.808|0.560 /0.617|
 |Whole composition CPU ms/key |12.314 /13.990|6.229 /6.550|
 
-Active-view bundle, same numeric spans;320 apps/disjoint160-row exact replies.
+Active-view bundle, same numeric spans;320 apps/disjoint 160-row exact replies.
 H virtual120/N nested60,2880×1800/scale1.5; no own build overlap, external load uncontrolled.
 Single sequential pair each;3s memory diagnostic, not idle invariance/physical proof.
 136tests/fmt/clippy/release and fractional/clip/alpha/moving-ink pixel checks pass.
@@ -28,7 +49,7 @@ budgets still fail; helper CPU/end-to-end unmeasured.
 ## 2026-10-16 — changed launcher results expose hidden-view work
 
 Identical a/ap rows measured a best-case reuse path, not real result changes.
-A second exact fixture swaps disjoint160-row sets from320 total apps each edit.
+A second exact fixture swaps disjoint 160-row sets from320 total apps each edit.
 The launcher built a hidden grid as well as the list; only the active view is now built.
 Preparation improves, but changed-result typing still misses both budgets.
 

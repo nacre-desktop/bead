@@ -1,32 +1,36 @@
 # Status
 
-## 2026-10-16 — Tight text rasters; Gate D pending
+## 2026-10-16 — Published typing improvements; upstream decision pending
 
-Main 59f00f1 / CI38828546515 is green. Active-view preparation fixes the
-repeated markup guard failure; the 50 ms limit and 320-app fixture stay intact.
-Cropped-text checkpoint: 136 tests, fmt, clippy and release pass. Both lifecycle
-memory and native-GL smokes pass; fresh CI is checked after push.
+Main 347bd22 / CI38829738750 and 59f00f1 / CI38828546515 are green.
+Active-view construction and cropped text are kept. 136 tests, fmt, clippy,
+release, exact pixel/counter checks and both native-GL smokes pass.
 
-Disjoint 160-row results, 200 keys: UI CPU mean H24.95/N25.69 →18.45/18.77
-ms/key; presented p99 33.52/41.35 →30.43/29.02 ms. Text blending falls from
-6.80/7.81 to0.56/0.62 ms; typed-list PSS+DRM falls by3.70/3.78 MiB.
-Both typing targets still fail. Identical-row fixtures remain a separate best case.
-H virtual120/N nested60, not physical; helper CPU/end-to-end unmeasured.
-[Methods, comparisons and forecast](research/feature9-gate-d.md#tight-text-rasters--2026-10-16).
+Matched crop pairs, 200 changed-result keys: UI CPU H24.95/N25.69 →18.45/18.77
+ms/key; presented p99 33.52/41.35 →30.43/29.02 ms. Typed-list PSS+DRM falls
+3.70/3.78 MiB. Both typing targets still fail; identical rows are a best case.
+H virtual 120 / N nested 60, not physical; helper/end-to-end unmeasured.
+[Measurements and provisional forecast](research/feature9-gate-d.md#tight-text-rasters--2026-10-16).
 
-Source calls replace local catalog/filtering; Nacre owns engine/ranking/providers.
-SDK pin6bdc22e and private standalone F1 proof pass. Menu schemas/engine follow
-upstream F2. Additive protocol draft reviewed locally, held off main for migration.
+Count-only model API is saved locally as 95862ca, held off main. Three trial CPU
+medians improve H 18.40→16.08/N 20.33→16.74 ms/key, but niri tails are mixed.
+Closed PSS +0.18/+0.06 MiB needs confirmation; no tolerance waived. 137 local
+tests/fmt/clippy/release/Luau pass. Default executable is the accepted crop build.
 
-Cropped lifecycle: H bar22.31 → third warm48.42/closed21.91 MiB; N23.72 →
-46.50/19.40. All hover/preparation/three closes within bar+5, query RAM and cleanup
-pass. Matched first/warm/closed show no regression. No allocator
-policy change. Auto uses direct opaque composition; alpha fades stay cached.
+Crop lifecycle: H bar 22.31 → third warm 48.42 / closed 21.91 MiB; N 23.72 →
+46.50/19.40. Every close stays within bar + 5 MiB; first/steady/closed controls show
+no regression. Query RAM, hover expiry, feedback and cleanup pass. No allocator
+policy change. CPU small panels/direct opaque paint; alpha groups stay cached.
 
-Next: verify crop CI, measure avoiding full-model serialization for counts,
-then canonical engine prefixes/activation and end-to-end comparison. Finalize
-Gate D estimate/owner decision afterward. No Feature11 or live/install/release.
-Backends frozen. Existing6b pacing/idle, input/IME/hardware and name clash stay open.
+Nacre owns catalog/ranking/providers; Bead uses Sources/exact fixtures. Published
+SDK pin 6bdc22e and standalone F1 adapter proofs pass. Canonical menu schemas/
+engine wait on upstream F2's regression/priority decision. Additive protocol draft
+is reviewed and held off main. End-to-end/prefix/activation acceptance waits.
+
+STOP at this owner dependency decision; Gate D is pending, no Feature 11 started.
+Resume after upstream direction: real engine/UI-provider integration, changed-result
+CPU/pacing and final Gate D comparison. Keep 6b pacing/idle, historical typing,
+IME/hardware/cache gaps and binary name clash open. No live/install/release work.
 
 ## Accepted Gate C and optimization baseline
 
