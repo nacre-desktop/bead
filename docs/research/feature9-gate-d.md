@@ -9,6 +9,45 @@ Gate D review is ready with typing/shared-engine comparison gaps; acceptance is 
 
 
 
+## Gate E — active focused block, 2026-10-16
+
+Owner approved typing/RPC, shared UI contracts, static-text AccessKit and a
+prepared-only live input/hardware plan, then a Gate E decision. QML remains the
+daily driver; no Feature11, deployment or live test is authorized. The stop report
+will define agent-days in hours, translate full parity into calendar time, and
+cost a core switch separately from on-demand QML Settings/Colors/Welcome/AI/software.
+English-only core use defers IME/screen-reader validation, not basic keyboard input.
+
+### Same-host persistent query diagnostic
+
+Regular published75157fd3 helper, same320 Alpha/Application fixture as typing,
+100 warmups followed by2,000 alternating a/ap calls per compositor on one link.
+Each completed ID/query/revision and101 ordered rows is checked. No keyboard,
+UI, compilation, catalog edits or per-call CLI process runs during the capture.
+High-resolution whole-process clocks bracket the full loop; provider population
+must remain identical. RTT includes Python JSON decode/validation; CPU excludes
+that client. This is a component diagnostic, not keystroke-to-presentation latency.
+
+|Persistent RPC|H virtual120 /N nested60|
+| --- | ---: |
+|Daemon CPU ms/query|3.993 /4.433|
+|Provider CPU ms/query|1.572 /1.636|
+|RTT p50 /p99 ms|6.218 /11.238;6.550 /11.526|
+|Reply bytes|25,630–26,233|
+
+This corrects the unmatched fresh-CLI diagnostic: handshake work was included
+there. The gap versus migration's other-host full-wire~1ms still exists on a
+persistent link, so neither connection setup nor keyboard churn alone explains it.
+Host/provider environment and the wider typing window remain confounders. The
+previous100-result decoder diagnostic~0.17ms is too small to explain the whole
+gap; no unsafe decoder or alternate encoding is introduced. Migration received
+the method and results plus the delta-row/stale-query questions. General daemon
+notification hosting and the final combined-service idle baseline remain upstream
+gaps; the official F3 QML adapter has not landed. Raw private artifacts:
+`gate-e-persistent-component-v2/`. The initial upstream lab attempt failed before
+measurement because its wlr-randr dependency was absent; existing Bead isolation
+was reused instead, without installing a dependency or changing its proof guards.
+
 ## Gate D review — 2026-10-16
 
 Recommendation: adjust. The framework has a useful memory advantage in these
@@ -1173,7 +1212,8 @@ by the migration agent are dependencies, not a second implementation budget.
 | Hardware/long-duration validation |5–12|Physical120Hz/mixed outputs/hotplug/suspend, NVIDIA/driver variants, idle wakeups/energy and memory slopes|
 | Repository/deployment/name integration |2–4|Owner-approved shell move, pinned dependencies, control-script/binary name clash, rollback and packaging|
 
-Total roughly99–201 focused agent-days (about20–40 single-worker weeks), with
+Total roughly99–201 focused agent-days. Calendar assumptions and the narrower
+core-switch alternative are below. There is
 large uncertainty concentrated in pearls, media, AI, input and hardware. Parallel
 work can shorten independent views; shared daemon/window/input dependencies and
 owner-supervised hardware gates prevent simply dividing the total by agent count.
@@ -1248,3 +1288,78 @@ full curve geometry without a full-surface mask allocation; it is unimplemented
 and needs new exact-pixel,CPU and memory proof. The alternative is to leave the
 published behavior and retain this pixel gap. Owner decision is requested under
 the explicit stop rule. Gate D is not reached; no Feature11 or live test begins.
+
+### Calendar interpretation for the Gate E decision
+
+One agent-day means **8 hours of focused task elapsed time**, including analysis,
+implementation, failed experiments, local tests and CI supervision. It is neither
+24 hours nor a promise of eight hours of code output. The old20–40 worker-week
+translation assumed five8-hour days; it does not describe this chat's long runs.
+Recent dated checkpoints span most of the day, including overnight work. Git
+cadence is evidence of sustained activity, not a time sheet; focused hours have
+not been instrumented. Use **16–20 task hours per calendar day** as an explicit
+planning scenario for the current mostly-all-day schedule, not a measured daily
+average or a promise that all waiting time produces progress.
+
+Full parity99–201 agent-days is792–1,608 task hours: roughly40–101 active calendar
+days at that schedule, or6–15 weeks. Allowing shared-contract and supervised
+hardware scheduling gives a practical planning window of about7–18 calendar
+weeks. Owner pauses and unavailable hardware can extend it; those waits are not
+hidden implementation hours. Migration runs in parallel, but one cannot simply
+divide the total by the number of chats. This remains a forecast of hard unbuilt
+work, not an extrapolation from quick bar checkpoints. Re-estimate at Gate E.
+
+### Core switch alternative — estimate only, not implementation approval
+
+Bead would own the always-on bar, popouts/service panels, launcher, notifications
+and OSD, dashboard, static wallpaper and hyprlock/session integration. The current
+QML Settings, Colors, Welcome, AI and software-library windows would start only
+when opened, use the same daemon and exit completely when closed. Bead remains
+the sole desktop UI provider; on-demand windows must not replace that registration.
+This needs small standalone entry points and tested window/process lifetimes,
+not a second launcher engine or a permanently hidden QML shell.
+
+|Core-switch remaining area|Agent-days,8h each|Included risk|
+| --- | ---: | --- |
+|Typing, pacing, reconnect and lifecycle rails|4–8|Gate E targets/candidate decision, cold key, idle/chaos|
+|Bar, popouts and service panels|6–12|Audio/tray/network/Bluetooth/power/calendar; error and multi-output dismissal|
+|Launcher/notification/OSD integration and polish|4–8|Shared activation/copy and same-engine comparison, bounds and transitions|
+|Daemon hosting for core services|3–6|Notification ownership/history and needed bead-services; migration dependency|
+|Dashboard|8–15|Data/fetch/artwork workers, weather/media and bounded idle memory|
+|Static wallpaper|3–6|Decode worker retirement, one retained output image, multi-output/reload|
+|Hyprlock/session integration|2–4|Existing lock, suspend/resume and failure paths|
+|Basic hardware and sustained validation|4–8|English input, outputs/hotplug,120Hz, suspend and memory/wakeup slope|
+|Packaging, names and on-demand QML lifecycle|4–8|Entry points, routing, close-to-exit, rollback and binary-name resolution|
+
+Total **38–75 agent-days**,304–600 task hours: roughly15–38 active calendar days
+at16–20h/day. Budget about **3–7 calendar weeks** with contract/hardware scheduling,
+conditional on the migration lane and owner-supervised tests. These are additional
+hours from the current checkpoint, not a request to start Feature11.
+
+IME and screen-reader validation move to the later public-release phase for the
+owner's English-only use. Basic key input, editing, repeat, clipboard, focus and
+reconnect remain core requirements. Managed pearls, video/effects, Bead-native
+Settings/Colors/Welcome/AI/software and public-release accessibility are excluded;
+they still appear in the full-parity table. This is a personal core switch, not
+full parity or a public-release claim.
+
+**Always-on memory estimate:** current measured UI bar+daemon is55–56MiB PSS+DRM
+(and SwapPss, none observed). Allow10–30MiB for remaining core service/notice
+state and20–60MiB for static wallpaper: roughly **90–150MiB idle** on one
+2880×1800 output. One RGBA image alone is19.8MiB; retained buffers/copies matter,
+so static wallpaper is not free. Dashboard/panel warm allowance suggests roughly
+120–200MiB while open, returning to the measured core baseline after close/idle.
+Those additions are engineering estimates, not captured combined-service totals
+or accepted budgets. Extra outputs/image dimensions can increase them. On-demand
+QML memory is additional only while its window is running; close-to-exit must be
+proved. No whole-shell QML baseline was captured here, so no savings percentage
+is claimed. Combining notices/panels in the same UI avoids assuming another
+permanent20MiB host; the existing preview's split processes are transitional.
+
+Core blockers: owner decision on Gate E typing/presentation; production F3 shared
+engine/actions and settings single-writer contracts; daemon hosting of notifications
+and required audio/tray/power/etc.; reliable standalone QML entry points without
+claiming the sole UI provider; wallpaper buffer lifetime; owner-approved physical
+validation; packaging/name collision and rollback. The migration agent has no
+measured final combined-service idle baseline yet. QML remains daily driver until
+these gates are passed; this estimate authorizes no live switch or installation.

@@ -83,3 +83,12 @@
   compositor: CPU median win, p99 no worse beyond spread, closed delta in spread.
   Switch to published menu.query schema/transcripts, then measure UI and daemon
   CPU separately with the real engine. STOP at Gate D, not at the old dependency hold.
+
+- Owner Gate E continuation (2026-10-16) supersedes Gate D stop: one focused
+  block only, then STOP at Gate E; no Feature11 and QML remains daily driver.
+  Investigate real-daemon typing with the migration agent, shared non-app
+  activation/reconnect/provider contracts and matched F3 QML comparison, then
+  static-text AccessKit. Prepare but never run the live input/hardware plan.
+  Targets remain UI8ms/key and presented16.7ms p99; after fair effort, <=33ms
+  with UI<=8ms is only an owner-acceptance candidate. Report full-parity calendar
+  assumptions and a separately costed core switch with on-demand QML windows.

@@ -1,5 +1,26 @@
 # Feasibility
 
+## 2026-10-16 — Gate E persistent-link component diagnostic
+
+The owner resumed a focused block, with QML still the daily shell.
+A persistent link removes the fresh-CLI handshake confounder.
+The same-host daemon/provider cost remains above the migration-host result.
+This is component CPU and round trip, never presented typing acceptance.
+
+|320 apps,101 results,2,000 calls after100 warmups|H /N|
+| --- | ---: |
+|Daemon CPU ms/query|3.993 /4.433|
+|Provider CPU ms/query|1.572 /1.636|
+|RTT p50 /p99 ms|6.218 /11.238;6.550 /11.526|
+|Reply bytes|25,630–26,233|
+
+Private Hvirtual120/Nnested60,scale1.5; actual refresh unknown. Shared-host
+contention uncontrolled; no own builds. Full-loop high-resolution process clocks,
+fixed provider population, exact IDs/query/revision/order checked for all4,000.
+No UI/keyboard/per-call process or measured memory claim. Existing private Bead
+lab reused after upstream lab's absent wlr-randr dependency; no install. Method,
+limits and raw artifact pointers: docs/research/feature9-gate-d.md Gate E section.
+
 ## 2026-10-16 — Gate D review: adjust
 
 The shared daemon feeds the launcher; Bead keeps rendering and view state.

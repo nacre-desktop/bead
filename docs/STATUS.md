@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-16 — Gate E block active
+
+Owner resumed typing/RPC, shared UI contracts, static-text AccessKit and a
+prepared-only input/hardware plan. Persistent2,000-call diagnostics give daemon
+CPU3.993/4.433ms plus provider1.572/1.636ms per query (H/N), no UI/keyboard.
+Shared-engine QML/activation contracts await upstream F3. QML stays daily driver; no Feature11 or live
+runs. Gate E will report full-parity calendar time and a core-switch alternative
+with on-demand QML Settings/Colors/Welcome/AI/software windows.
+
+
 ## 2026-10-16 — Gate D review: adjust
 
 Renderer3bf5eff is pushed; CI38899237836 green. Bounded repair scratch passes
@@ -28,7 +38,7 @@ UI+daemon/providers warm98.006/96.243→settled55.047/55.858MiB; UI alone return
 21.965/22.854, every close/settled group within own bar+5. All warm reports show scratch released.
 [Method, comparisons and forecast](research/feature9-gate-d.md#gate-d-review--2026-10-16).
 
-STOP at Gate D for the owner. Recommend typing/RPC and shared-engine QML/actions
+Gate D owner chose this focused Gate E block. Typing/RPC and shared-engine QML/actions
 before broad parity (roughly99–201 focused agent-days). Official F3 QML adapter,
 daemon notification hosting, engine arithmetic/copy/non-app activation, reconnect
 mark, static-text AccessKit/IME/hardware, dependency cache accounting and binary

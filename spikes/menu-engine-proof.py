@@ -143,6 +143,12 @@ def sample(env, raw, compositor, stop):
                             workers[pid] = clocks.OwnedCpuClock(clocks.OwnedDescendant(daemon, pid))
                     return {pid: clock.sample_ns() for pid, clock in workers.items()}
 
+                if os.environ.get('BEAD_ENGINE_COMPONENT_ONLY') == '1':
+                    component = load('menu_component', ROOT / 'spikes/menu-component.py')
+                    component.sample(endpoint, initial['catalog_rev'], daemon_clock, worker_samples,
+                                     raw / 'menu-component.json', compositor, helper)
+                    stop_engine(); daemon = None
+                    return
                 if os.environ.get('BEAD_ENGINE_DIAGNOSTIC') == '1':
                     diagnostic = {'idle': matrix.idle(daemon.pid, 2), 'api_rows': []}
                     # Component diagnostic only: sequential native CLI calls
