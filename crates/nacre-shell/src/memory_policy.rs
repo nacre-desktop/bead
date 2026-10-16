@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Keep large transient UI rasters out of glibc's reusable thread arenas.
+//! Bound large transient rasters without mapping ordinary paint masks per frame.
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-const MMAP_THRESHOLD: i32 = 1024 * 1024;
+const MMAP_THRESHOLD: i32 = 4 * 1024 * 1024;
 
 pub fn configure() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -62,10 +62,18 @@ mod tests {
         std::hint::black_box(&warmup);
         drop(warmup);
         super::configure();
+        // A content-sized launcher's byte mask is below4MiB: keep ordinary
+        // per-frame scratch on the reusable heap, unlike the rejected1MiB policy.
+        let before = unsafe { nix::libc::mallinfo2() };
+        let mask = vec![1_u8; 1536 * 1024];
+        std::hint::black_box(&mask);
+        let during = unsafe { nix::libc::mallinfo2() };
+        assert_eq!(during.hblkhd, before.hblkhd);
+        drop(mask);
         for _ in 0..3 {
             // SAFETY: read-only by-value glibc accounting, trace tests only.
             let before = unsafe { nix::libc::mallinfo2() };
-            let bytes = vec![1_u8; 1536 * 1024];
+            let bytes = vec![1_u8; 5 * 1024 * 1024];
             std::hint::black_box(&bytes);
             let during = unsafe { nix::libc::mallinfo2() };
             assert!(during.hblkhd >= before.hblkhd + bytes.len());

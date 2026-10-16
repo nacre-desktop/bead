@@ -10,7 +10,10 @@ But the200-key single-pair CPU screen rises11.218->12.067 /11.447->11.649ms H/N;
 p99 rises31.102->32.472 /28.752->34.356ms. No new typing acceptance or gain.
 The1 MiB policy remains local. Testing a4 MiB process-only override on the SAME
 ELF first: transient paint masks can exceed1 MiB, so the earlier threshold may
-map too many per-frame allocations. No extra rebuild until the diagnostic helps.
+map too many per-frame allocations. The same-ELF4MiB diagnostic passes the repeated-unused-preparation memory proof.
+Its CPU window slowed both UI and daemon, so it establishes no CPU improvement.
+The normal4MiB source passes193 tests, isolated trace allocator proof, fmt,
+all-feature clippy and CPU-only build; frozen paired measurements are next.
 Calendar Source-wake/rollover and bar startup-restore fixes are drafted separately,
 UNTESTED; no source or new panels mixed into these frozen captures. Dashboard held.
 
