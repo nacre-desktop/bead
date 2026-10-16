@@ -1,5 +1,29 @@
 # Feasibility
 
+## 2026-10-16 — Reuse existing font state for caret metrics
+
+Caret metrics now borrow the bake renderer's existing font system.
+The bounded weak index owns no font data; renderer teardown still releases it.
+Five typing and lifecycle pairs each show CPU wins and no memory regression.
+Niri's marginal CPU gain is small; the typing budgets remain unaccepted.
+
+|Per-run medians,5 pairs |Before H /N |Candidate H /N |
+| --- | ---: | ---: |
+|UI CPU ms/key |10.638 /11.311|10.095 /11.137|
+|Presented p99 ms |22.271 /20.732|21.903 /19.742|
+|Third warm MiB |48.297 /46.571|48.285 /46.401|
+|Third closed MiB |22.029 /22.964|21.943 /22.863|
+|Font loads per key |1 /1|0 /0|
+
+150 tests/fmt/clippy ALL targets/CPU-only/release pass. Exact fresh-font advance,
+teardown and file-stamp invalidation checks pass; weak-index report1304 bytes.
+Numeric RPC/typed-result readiness and wrong-query rejection are included; the
+real daemon engine is still missing. Later constructor-copy draft is excluded.
+Private320-app fixtures, clock-only, no own build overlap; external contention
+uncontrolled. Refresh predictor unknown, not physical acceptance. All lifecycle
+checks stay strict; no closed/steady memory waiver.
+[Method and limits](docs/research/feature9-gate-d.md#borrow-existing-font-state-for-caret-metrics--2026-10-16).
+
 ## 2026-10-16 — Keep clocked UI typing improvements
 
 Matched clock-only runs confirm the UI CPU median win on both compositors.

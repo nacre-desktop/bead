@@ -168,3 +168,16 @@ persistent cache or font/shaping mechanism is introduced. CPU/GL placement and
 damage use the origin. Exact fractional/clip/alpha/partial-repaint checks and
 existing goldens pass; changed-result fixture typed-list memory falls3.7–3.8MiB.
 See the [measured comparison](feature9-gate-d.md#tight-text-rasters--2026-10-16).
+
+## Non-owning font-system index — 2026-10-16
+
+Caret metrics can borrow the existing bake renderer's FontSystem. One entry per
+thread holds only a weak reference, with a512KiB metadata cap charged to the same
+process-wide budget. The report names it `weak-font-pool-index`; measured closed
+metadata is1304 bytes. File path/identity/length/mtime and locale form its key.
+An implicit system-font set or unsupported modification time is not indexed.
+No query text/results are cached and the index owns no font data. Tests confirm
+exact advances versus a fresh system, stamp invalidation and inability to upgrade
+the reference after renderer teardown. Existing renderer idle/close teardown still
+bounds dependency-internal font caches; their opaque internals remain a gap.
+[Matched CPU and memory checks](feature9-gate-d.md#borrow-existing-font-state-for-caret-metrics--2026-10-16).

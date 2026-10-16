@@ -514,6 +514,47 @@ Renderer ID/difference experiments remain separate local work, not included in
 this Source checkpoint or its141-test count. Gate D is still pending the real
 engine/provider/input comparison and updated measured forecast.
 
+## Borrow existing font state for caret metrics — 2026-10-16
+
+Keep font-system reuse after five alternating typing pairs and five lifecycle
+pairs per compositor. The baseline loads fonts once per key for caret metrics,
+although the bake renderer already holds the same explicit font set. A bounded
+weak index shares that renderer-owned state; it does not retain another pool.
+Fresh-system output/teardown/stamp-invalidation tests pass. Native shaping,
+font selection, scale and sandbox behavior remain unchanged.
+
+|Per-run medians,5 pairs each |Before H /N |Candidate H /N |
+| --- | ---: | ---: |
+|UI CPU mean ms/key |10.638 /11.311|10.095 /11.137|
+|Presented p99 ms |22.271 /20.732|21.903 /19.742|
+|First warm MiB |50.557 /48.733|50.396 /48.671|
+|Third warm MiB |48.297 /46.571|48.285 /46.401|
+|Third closed MiB |22.029 /22.964|21.943 /22.863|
+
+Paired CPU median differences−0.543/−0.649ms; marginal differences−0.543/−0.174.
+N's marginal CPU gain is small versus its1.641ms baseline range: report the
+variation, not a large speed claim. P99 median differences−0.368/−0.989ms fit
+baseline ranges0.804/5.930. Per-key font-load records1→0 in both compositor probes.
+Initial three-pair H memory was borderline; completing five yields lower first/
+steady/closed medians. All closure/hover/query/geometry/cleanup guards pass, no
+threshold changed. Known index bytes1304; dependency font internals remain opaque
+and use the existing renderer teardown. No new strong font ownership or thread.
+
+The checkpoint also validates that a menu reply belongs to the requested query,
+keeping the last good view on mismatch. Optional numeric `MENU_RPC_SENT/RETURN`
+request IDs/revision/count and typed `MENU_RESULT` markers prepare the real-engine
+readiness chain without logging query text or rows. Fake-daemon/transcript tests
+continue working. This is readiness instrumentation, not an end-to-end engine proof.
+
+150 tests/fmt/clippy ALL targets with warnings denied/CPU-only/release pass.
+Control27ec2fec/UI147; candidateab4329d2. Exact fixtures,320-app catalog,200 keys
+per typing run, clock-only;3-cycle separate memory cells. Fresh private Hvirtual120/
+N60 configured, scale1.5; no own build overlap, external load/frequency/paging
+uncontrolled. Refresh predictions unknown. No physical acceptance; both typing
+targets and real-engine CPU remain open. Later constructor-copy experiment excluded.
+Raw: `.research/gate-d-foundation/font-typing-fivepairs/`,
+`font-lifecycle-threepairs/`, `font-lifecycle-finish5/`.
+
 ## Clocked UI typing improvements — 2026-10-16
 
 Keep the UI candidate after a matched clock-only comparison. Ordered paint records

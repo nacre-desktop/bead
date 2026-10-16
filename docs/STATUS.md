@@ -2,13 +2,12 @@
 
 ## 2026-10-16 — Keep measured UI typing improvements; targets still open
 
-Last green measurement checkpoint: e4145f5 / CI 38856389288. This checkpoint
+Last green UI checkpoint: cdf157e / CI 38864333734. This checkpoint
 keeps ordered pixel damage, separate SHM repair regions, Luau node constructors,
 shared immutable result models and the redundant-caret-shape fix. Count-only a3ab6dc
 and canonical Source 4fbf629 remain kept. CI 38863863203 caught test-only redundant
-borrows; the follow-up fixes them. Local clippy now includes all targets with
-warnings denied. Production behavior and measured binaries are unchanged;
-fresh CI follows this repair push.
+borrows; cdf157e fixes them and CI is green. Local clippy now includes all targets
+with warnings denied. Production behavior and measured binaries are unchanged.
 
 Five alternating clock-only pairs per compositor: CPU medians H 15.47→10.10 /
 N 16.96→10.83 ms/key; presented p99 medians 24.72→22.19 / 27.02→21.34 ms.
@@ -25,9 +24,13 @@ reply/client-status capture is added. Do not describe the original series as fla
 
 Both paths use scale 1.5 and 1746×981 CPU buffers. Nested H virtual120 / N60 are
 configured rates; feedback refresh prediction is unknown, not physical validation.
-Both 8 ms CPU / 16.7 ms presentation targets remain unaccepted. Next measure the
-font-system reuse prototype and validate numeric real-engine result readiness.
-Those drafts are separate from this checkpoint; no catalog/ranking/providers here.
+Both 8 ms CPU / 16.7 ms presentation targets remain unaccepted. This checkpoint
+keeps renderer-owned font-state reuse: five-pair CPU medians H10.64→10.09 /
+N11.31→11.14ms/key, font loads1→0. Five-pair warm/closed medians fall; known
+weak-index metadata1304 bytes, no font data retained by the index.150 tests/fmt/
+clippy ALL targets/CPU-only/release pass. Fresh CI follows this push.
+Numeric RPC/typed-result readiness and wrong-query rejection are prepared/tested;
+real-engine comparison remains missing. Constructor-copy experiment is separate.
 
 Upstream 83a9a9a4 / CI 38847478920 is green. SDK3042f3f2/menu goldens are pinned;
 migration owns engine/provider/host work before F2 finishes. Then compare real

@@ -60,9 +60,12 @@ struct Prepared {
 fn invalid_menu() -> source::Error {
     source::Error::new("validation", "Invalid menu method payload", false)
 }
-fn prepare(reply: Json) -> source::Result<Prepared> {
+fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared> {
     let mut result: MenuQueryResult = serde_json::from_value(reply).map_err(|_| invalid_menu())?;
     result.validate().map_err(|_| invalid_menu())?;
+    if expected_query.is_some_and(|query| result.query.as_str() != query) {
+        return Err(invalid_menu());
+    }
     let mut rows = Vec::with_capacity(result.order.len());
     let mut actions = BTreeMap::new();
     for id in result.order {
@@ -100,7 +103,7 @@ fn prepare(reply: Json) -> source::Result<Prepared> {
     })
 }
 pub fn rows(reply: Json) -> source::Result<Vec<Json>> {
-    Ok(prepare(reply)?.rows)
+    Ok(prepare(reply, None)?.rows)
 }
 
 pub fn activation_changes(result: MenuActivated) -> BTreeMap<String, Value> {
@@ -338,7 +341,7 @@ impl Menu {
                         json!({"query":request.0,"mode":request.1,"route":if request.2.is_empty(){Json::Null}else{json!(request.2)}}),
                         Duration::from_secs(3),
                     ))
-                    .and_then(prepare)
+                    .and_then(|reply| prepare(reply, Some(request.0.as_str())))
             } else {
                 Err(source::Error::new(
                     "unavailable",
@@ -348,12 +351,22 @@ impl Menu {
             };
             match result {
                 Ok(prepared) => {
+                    if bead::core::profile::enabled() {
+                        println!(
+                            "MENU_RESULT ok=true catalog_rev={} count={}",
+                            prepared.catalog_rev,
+                            prepared.rows.len()
+                        );
+                    }
                     view.rows = Arc::new(prepared.rows);
                     view.actions = prepared.actions;
                     view.catalog_rev = prepared.catalog_rev;
                     view.error.clear();
                 }
                 Err(e) => {
+                    if bead::core::profile::enabled() {
+                        println!("MENU_RESULT ok=false");
+                    }
                     view.error = e.message;
                 }
             }
@@ -420,7 +433,7 @@ mod tests {
                     && ok.get("items").is_some()
                 {
                     let expected: MenuQueryResult = serde_json::from_value(ok.clone()).unwrap();
-                    let prepared = prepare(ok).unwrap();
+                    let prepared = prepare(ok, None).unwrap();
                     assert_eq!(
                         prepared
                             .rows
@@ -583,6 +596,36 @@ mod tests {
         assert!(
             matches!(&menu.project(&stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["name"]=="New")
         );
+    }
+    #[test]
+    fn response_for_another_query_cannot_replace_the_view() {
+        let source = Arc::new(
+            Fixture::new(json!({"queries":{
+                "":fixture_reply("",vec![json!({"id":"a","name":"Original"})]),
+                "next":fixture_reply("wrong",vec![json!({"id":"b","name":"Wrong query"})])
+            }}))
+            .unwrap(),
+        );
+        let menu = Menu::new(Some(source)).unwrap();
+        let initial = menu.project(&Stores::default()).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&initial)
+            .unwrap()
+            .reconcile(&BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text(String::new()),
+            )]))
+            .unwrap();
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("next".into()),
+            )]))
+            .unwrap();
+        let changes = menu.project(&stores).unwrap();
+        assert!(matches!(&changes["launcher.error"],Value::Text(error)if !error.is_empty()));
+        assert!(!changes.contains_key("launcher.apps"));
+        assert_eq!(menu.view.borrow().rows[0]["name"], "Original");
     }
     #[test]
     fn projection_shares_rows_without_mutating_previous_selection_snapshots() {

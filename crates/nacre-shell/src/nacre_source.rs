@@ -97,6 +97,7 @@ pub struct Topic {
 struct Pending {
     reply: oneshot::Sender<source::Result<Value>>,
     deadline: Instant,
+    trace_menu: bool,
 }
 enum Command {
     Call {
@@ -537,7 +538,29 @@ fn resolve(pending: &mut BTreeMap<Id, Pending>, id: &Id, reply: Reply) {
                 Reply::Err { err } => Err(failure(err)),
             }
         };
+        if call.trace_menu {
+            trace_menu_return(id, &result);
+        }
         let _ = call.reply.send(result);
+    }
+}
+// Numeric method readiness only: never query text or result contents.
+fn trace_menu_return(id: &Id, result: &source::Result<Value>) {
+    let Id::Integer(id) = id else {
+        return;
+    };
+    match result {
+        Ok(value) => match (
+            value.get("catalog_rev").and_then(Value::as_u64),
+            value.get("order").and_then(Value::as_array),
+        ) {
+            (Some(revision), Some(order)) => println!(
+                "MENU_RPC_RETURN id={id} ok=true catalog_rev={revision} count={}",
+                order.len()
+            ),
+            _ => println!("MENU_RPC_RETURN id={id} ok=true payload=false"),
+        },
+        Err(_) => println!("MENU_RPC_RETURN id={id} ok=false"),
     }
 }
 async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<Command>) {
@@ -605,10 +628,12 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                             let id=id.unwrap_or(Id::Integer(next));
                             if pending.contains_key(&id){let _=reply.send(Err(Error::new("validation","duplicate call id",false)));continue;}
                             let remaining=deadline.saturating_duration_since(Instant::now());
+                            let trace_menu=bead::core::profile::enabled() && method=="menu.query";
                             let message=Message::Call{id:id.clone(),m:method,p:params,timeout:Some(remaining.as_millis().clamp(1,120000) as u32)};
                             if let Err(e)=framing::encode(&message){let _=reply.send(Err(failure(e)));continue;}
-                            pending.insert(id.clone(),Pending{reply,deadline});
+                            pending.insert(id.clone(),Pending{reply,deadline,trace_menu});
                             if !tokio::time::timeout(remaining.min(Duration::from_secs(10)),send(&shared,&mut session.writer,&message)).await.is_ok_and(|r|r.is_ok()){break;}
+                            if trace_menu && let Id::Integer(id)=&id { println!("MENU_RPC_SENT id={id}"); }
                         },
                         #[cfg(test)] Some(Command::Wire(message,reply))=>{let result=send(&shared,&mut session.writer,&message).await.map(|_|Value::Null);let _=reply.send(result);},
                         None=>break,

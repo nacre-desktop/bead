@@ -262,7 +262,7 @@ pub trait Renderer {
 }
 
 pub struct CpuRenderer {
-    fonts: Option<FontSystem>,
+    fonts: Option<SharedFontSystem>,
     glyphs: SwashCache,
     textures: bead_core::cache::Lru<String, Pixmap>,
     glyph_budget: bead_core::cache::Budget,
@@ -330,7 +330,82 @@ impl CpuRenderer {
         Ok(())
     }
 }
-fn scene_fonts(scene: &Scene) -> Result<FontSystem> {
+type SharedFontSystem = std::sync::Arc<std::sync::Mutex<FontSystem>>;
+#[derive(PartialEq, Eq)]
+struct FontStamp {
+    path: std::path::PathBuf,
+    length: u64,
+    modified: std::time::SystemTime,
+    #[cfg(unix)]
+    identity: (u64, u64),
+}
+struct FontPoolIndex {
+    stamp: Vec<FontStamp>,
+    locale: String,
+    fonts: std::sync::Weak<std::sync::Mutex<FontSystem>>,
+    _charge: bead_core::cache::Charge,
+}
+std::thread_local! {
+    static FONT_POOL_INDEX: std::cell::RefCell<Option<FontPoolIndex>> = const { std::cell::RefCell::new(None) };
+}
+fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
+    let fresh =
+        || load_scene_fonts(scene).map(|fonts| std::sync::Arc::new(std::sync::Mutex::new(fonts)));
+    // Do not cache an implicit system font database whose file set is unknown.
+    if scene.font_files.is_empty() {
+        return fresh();
+    }
+    let locale = scene_locale();
+    let mut stamp = Vec::with_capacity(scene.font_files.len());
+    for path in &scene.font_files {
+        let metadata = std::fs::metadata(path)?;
+        let Ok(modified) = metadata.modified() else {
+            return fresh();
+        };
+        stamp.push(FontStamp {
+            path: path.clone(),
+            length: metadata.len(),
+            modified,
+            #[cfg(unix)]
+            identity: {
+                use std::os::unix::fs::MetadataExt;
+                (metadata.dev(), metadata.ino())
+            },
+        });
+    }
+    if let Some(fonts) = FONT_POOL_INDEX.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .filter(|cached| cached.stamp == stamp && cached.locale == locale)
+            .and_then(|cached| cached.fonts.upgrade())
+    }) {
+        return Ok(fonts);
+    }
+    let fonts = fresh()?;
+    let bytes = std::mem::size_of::<FontPoolIndex>()
+        + stamp.capacity() * std::mem::size_of::<FontStamp>()
+        + stamp.iter().map(|item| item.path.capacity()).sum::<usize>()
+        + locale.capacity()
+        + std::mem::size_of::<std::sync::Mutex<FontSystem>>()
+        + 2 * std::mem::size_of::<usize>();
+    let budget = bead_core::cache::Budget::new("weak-font-pool-index", 512 * 1024);
+    FONT_POOL_INDEX.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        *slot = None;
+        if let Ok(charge) = budget.reserve(bytes) {
+            *slot = Some(FontPoolIndex {
+                stamp,
+                locale,
+                fonts: std::sync::Arc::downgrade(&fonts),
+                _charge: charge,
+            });
+        }
+    });
+    // Only the renderer/caller owns font data; the bounded index cannot keep it
+    // alive after the existing idle/close teardown drops the renderer's pool.
+    Ok(fonts)
+}
+fn load_scene_fonts(scene: &Scene) -> Result<FontSystem> {
     let start = Instant::now();
     if scene.font_files.is_empty() {
         return Ok(FontSystem::new());
@@ -348,10 +423,12 @@ fn scene_fonts(scene: &Scene) -> Result<FontSystem> {
         scene.font_files.len(),
         db.len()
     );
-    let locale = std::env::var("LC_ALL")
+    Ok(FontSystem::new_with_locale_and_db(scene_locale(), db))
+}
+fn scene_locale() -> String {
+    std::env::var("LC_ALL")
         .or_else(|_| std::env::var("LANG"))
-        .unwrap_or_else(|_| "en-US".into());
-    Ok(FontSystem::new_with_locale_and_db(locale, db))
+        .unwrap_or_else(|_| "en-US".into())
 }
 fn key(p: &Primitive, scale: f32) -> String {
     match p {
@@ -441,7 +518,9 @@ impl Renderer for CpuRenderer {
                 } => {
                     let (w, h) = dimensions(*rect, scale);
                     let mut pix = Pixmap::new(w, h).ok_or("text allocation")?;
-                    let fonts = self.fonts.as_mut().unwrap();
+                    let shared = self.fonts.as_ref().ok_or("font system unavailable")?;
+                    let mut guard = shared.lock().map_err(|_| "font system poisoned")?;
+                    let fonts: &mut FontSystem = &mut guard;
                     let mut buf =
                         Buffer::new(fonts, Metrics::new(size * scale, size * scale * 1.4));
                     buf.set_size(Some(w as f32), Some(h as f32));
@@ -874,8 +953,20 @@ pub fn text_boundary_x(
     size: f32,
     width: f32,
 ) -> Result<f32> {
-    let mut fonts = scene_fonts(scene)?;
-    let mut buffer = Buffer::new(&mut fonts, Metrics::new(size, size * 1.4));
+    let shared = scene_fonts(scene)?;
+    let mut guard = shared.lock().map_err(|_| "font system poisoned")?;
+    let fonts: &mut FontSystem = &mut guard;
+    boundary_x(fonts, text, boundary, family, size, width)
+}
+fn boundary_x(
+    fonts: &mut FontSystem,
+    text: &str,
+    boundary: usize,
+    family: &str,
+    size: f32,
+    width: f32,
+) -> Result<f32> {
+    let mut buffer = Buffer::new(fonts, Metrics::new(size, size * 1.4));
     buffer.set_size(Some(width), Some(size * 2.));
     buffer.set_text(
         text,
@@ -883,7 +974,7 @@ pub fn text_boundary_x(
         Shaping::Advanced,
         None,
     );
-    buffer.shape_until_scroll(&mut fonts, false);
+    buffer.shape_until_scroll(fonts, false);
     let Some(run) = buffer.layout_runs().next() else {
         return Ok(0.);
     };
@@ -901,6 +992,95 @@ pub fn text_boundary_x(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn font_pool_scene() -> Scene {
+        let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../bead-test/fonts/IBMPlexSans.ttf");
+        Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![font],
+            width: 240.,
+            slide: None,
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 240., 40.),
+            primitives: vec![Primitive::Text {
+                rect: Rect::new(0., 0., 240., 32.),
+                text: "office café".into(),
+                family: "IBM Plex Sans".into(),
+                size: 17.,
+                color: [13, 27, 41, 255],
+                align: None,
+            }],
+        }
+    }
+    #[test]
+    fn caret_uses_existing_font_pool_with_exact_advances_and_no_strong_index_owner() {
+        let scene = font_pool_scene();
+        let mut renderer = CpuRenderer::default();
+        renderer.prepare(&scene, 1.).unwrap();
+        let held = renderer.fonts.as_ref().unwrap().clone();
+        let weak = std::sync::Arc::downgrade(&held);
+        assert!(std::sync::Arc::ptr_eq(&held, &scene_fonts(&scene).unwrap()));
+        let mut fresh = load_scene_fonts(&scene).unwrap();
+        let text = "office café";
+        for boundary in text
+            .char_indices()
+            .map(|(i, _)| i)
+            .chain(std::iter::once(text.len()))
+        {
+            assert_eq!(
+                text_boundary_x(&scene, text, boundary, "IBM Plex Sans", 17., 240.).unwrap(),
+                boundary_x(&mut fresh, text, boundary, "IBM Plex Sans", 17., 240.).unwrap()
+            );
+        }
+        FONT_POOL_INDEX
+            .with(|slot| assert!(slot.borrow().as_ref().unwrap()._charge.bytes() <= 512 * 1024));
+        drop(held);
+        drop(renderer);
+        assert!(
+            weak.upgrade().is_none(),
+            "the index must not retain the font system after renderer teardown"
+        );
+    }
+    #[test]
+    fn font_pool_index_invalidates_changed_file_metadata() {
+        struct Temp(std::path::PathBuf);
+        impl Drop for Temp {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("bead-font-index-{}-{nonce}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let guard = Temp(dir);
+        let mut scene = font_pool_scene();
+        let path = guard.0.join("fixture.ttf");
+        std::fs::copy(&scene.font_files[0], &path).unwrap();
+        scene.font_files = vec![path.clone()];
+        let first = scene_fonts(&scene).unwrap();
+        assert!(std::sync::Arc::ptr_eq(
+            &first,
+            &scene_fonts(&scene).unwrap()
+        ));
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        let second = scene_fonts(&scene).unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&first, &second));
+    }
     #[test]
     fn clipped_primitives_leave_pixels_outside_the_scroll_viewport_intact() {
         let scene = Scene {
