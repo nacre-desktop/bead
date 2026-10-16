@@ -1,5 +1,30 @@
 # Feasibility
 
+## 2026-10-16 — Stop: exact rounded repair exceeds memory budget
+
+The expanded pixel test found a baseline antialias mismatch in cropped repairs.
+Full-canvas rounded geometry plus masking fixes it; no tolerance was widened.
+Conservative shortcuts pass the exact corpus but add too much anonymous memory.
+The candidate is preserved locally and rejected from main under the owner's stop rule.
+
+|First A/B pair, MiB|Before H /N|Candidate H /N|
+| --- | ---: | ---: |
+|First open|50.909 /48.638|51.885 /50.109|
+|Third warm|48.515 /46.538|49.639 /47.769|
+|Third closed|22.310 /22.950|22.121 /23.075|
+|UI CPU ms/key|9.887 /9.581|9.536 /9.514|
+
+160 tests/fmt/clippy ALL targets/CPU-only/release pass. N first+1.471MiB and
+warm+1.231 violate the standing rule; second H pair first+1.195/warm+1.220.
+N SHM stays7.455MiB; anonymous first+1.230/warm+0.992 points to full-canvas
+mask/allocator retention. This attribution is an inference, not allocation tracing.
+All completed close guards pass bar+5, without waiving the steady-memory limit.
+Continuation stopped, partial evidence retained, private processes cleaned up.
+Local WIP7271a86 is not pushed; accepted code/binary4d9aa45 restored. No larger
+run or performance acceptance is claimed. Nested Hvirtual120/N60,scale1.5,
+unknown refresh predictor,shared-host contention uncontrolled,no own build overlap.
+[Evidence](docs/research/feature9-gate-d.md#rounded-repair-memory-stop--2026-10-16).
+
 ## 2026-10-16 — Native Luau value constructors
 
 Brushes, binding markers and action records now use Luau data constructors.

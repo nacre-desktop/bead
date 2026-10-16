@@ -979,11 +979,53 @@ product boundary and CPU-small-panel/GL-large-animation policy remain. Mesa's
 roughly20MiB post-EGL residue remains a reason to measure GL lifecycle, not to
 unmap driver memory or silently waive the closed bar+5MiB condition.
 
-## Open rounded-repair regression — 2026-10-16
+## Rounded-repair memory stop — 2026-10-16
 
-A new exact pixel property test fails against the unchanged renderer: partial
-sub-strip rasterization of a translucent rounded corner differs from a full
-repaint by1–2 RGB levels. The prospective opaque-coverage optimization has not
-been applied. The failing test is preserved locally and will be repaired before
-that optimization or Gate D acceptance; no tolerance is widened. This is separate
-from the159-test SDK checkpoint and its unchanged renderer.
+A new exact property test fails against the accepted renderer: at scale1,RGBA,
+zero offset,damage(24,22,12,8),pixel(30,22),partial[50,58,110,255] differs from
+full[52,57,111,255]. The antialiased rounded curve is clipped differently when
+translated into a sub-strip. Full-canvas geometry with an output repair mask
+passes the complete new corpus: scale1/1.5,fractional offsets,RGBA/BGRA,
+clipped/corner/translucent content, and unchanged bytes outside damage.
+No tolerance is widened. The published SDK changes do not alter this renderer.
+
+The correctness control791a50…2007 and conservative fast candidate250c01…9548
+pass160 tests/fmt/all-target warnings-denied clippy/CPU-only/release. The candidate
+also rejects rounded bounds outside damage, uses exact constant interiors and
+starts at the last fully covering opaque fill. The test asserts both coverage
+and corner fallback. No new retained raster/cache or layout/raster animation work.
+
+One complete200-key typing/lifecycle A/B per compositor compares the fast correct
+candidate against accepted SDK230dc7…6715, not just the slower correct control:
+CPU H9.887→9.536/N9.581→9.514ms/key,p9922.128→22.381/21.999→18.567.
+These short CPU results are not five-pair acceptance. Memory is disqualifying:
+
+|MiB|Before H /N|Candidate H /N|Delta H /N|
+| --- | ---: | ---: | ---: |
+|First open|50.909 /48.638|51.885 /50.109|+0.976 /+1.471|
+|Third warm|48.515 /46.538|49.639 /47.769|+1.124 /+1.231|
+|Third closed|22.310 /22.950|22.121 /23.075|−0.189 /+0.125|
+
+The continuation completed a second H pair before interruption:
+first50.869→52.064,warm48.521→49.741,closed22.298→22.353. Its first-open
+increase also exceeds1MiB. These are preserved short samples, not noise estimates.
+N SHM is unchanged at7.455MiB; first anonymous24.875→26.105 and warm
+23.008→24.000. H first anonymous+1.055/warm+1.168. The full-canvas mask and
+allocator retention are the likely cause; no allocation trace proves exclusivity.
+
+The owner's rule requires stopping for first-open>1MiB or steady/closed regression.
+No exception is inferred from all close/lifecycle guards still passing ownbar+5.
+Further runs were interrupted in the exact owned tmux session. A leftover private
+parent compositor was identified by its exact runtime in retained logs, stopped,
+and only its generated runtime removed. No daily desktop process was touched.
+Accepted code and shared release binary were restored; no bad renderer published.
+Local WIP branch wip/gate-d-rounded-aa-memory-stop-20261016,commit
+7271a8605f1cb93e41d746b03136fd5c0c738455 preserves the full fix/test/shortcuts.
+Raw `rounded-correct-fast-pair/`, interrupted`rounded-correct-fast-finish5/`,
+`rounded-memory-stop-checkpoint.json`,all immutable binaries/source patches remain.
+
+Recommended next direction is a bounded scratch representation that preserves
+full curve geometry without a full-surface mask allocation; it is unimplemented
+and needs new exact-pixel,CPU and memory proof. The alternative is to leave the
+published behavior and retain this pixel gap. Owner decision is requested under
+the explicit stop rule. Gate D is not reached; no Feature11 or live test begins.
