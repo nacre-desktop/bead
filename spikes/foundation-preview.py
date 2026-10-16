@@ -43,7 +43,7 @@ def sample(env, raw, compositor, stop):
     directory = tempfile.TemporaryDirectory(prefix="bead-preview-ui-")
     try:
         root = Path(directory.name)
-        shutil.copytree(ROOT / 'shell', root / 'shell')
+        shutil.copytree(Path(os.environ.get('BEAD_PREVIEW_SHELL', str(ROOT / 'shell'))), root / 'shell')
         for name in ['home', 'data', 'config', 'state', 'bar-state', 'notice-state', 'cache', 'runtime', 'bin']:
             (root / name).mkdir(mode=0o700)
         endpoint = root / 'runtime/nacre/daemon.sock'

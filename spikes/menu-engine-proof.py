@@ -45,7 +45,7 @@ def sample(env, raw, compositor, stop):
     try:
         with tempfile.TemporaryDirectory(prefix='bead-menu-engine-') as directory:
             root = pathlib.Path(directory)
-            shutil.copytree(ROOT / 'shell', root / 'shell')
+            shutil.copytree(pathlib.Path(os.environ.get('BEAD_MENU_ENGINE_BUNDLE', str(ROOT / 'shell'))), root / 'shell')
             for name in ['home', 'config', 'state', 'cache', 'data/applications', 'empty', 'bin', 'runtime']:
                 (root / name).mkdir(parents=True, exist_ok=True)
             (root / 'runtime').chmod(0o700)
@@ -126,7 +126,7 @@ def sample(env, raw, compositor, stop):
                                               'drm_fds': devices, 'pss_plus_drm_swap_mib': memory['pss_mib'] + (drm or 0) + memory['swap_pss_mib']})
                         return {'processes': processes, 'pss_plus_drm_swap_mib': sum(p['pss_plus_drm_swap_mib'] for p in processes)}
                     lifecycle = load('engine_launcher_lifecycle', ROOT / 'spikes/launcher-proof.py')
-                    lifecycle.sample(dict(env, BEAD_LAUNCHER_ENGINE_SOCKET=str(endpoint)), raw, compositor, stop, observe)
+                    lifecycle.sample(dict(env, BEAD_LAUNCHER_ENGINE_SOCKET=str(endpoint)), raw, compositor, stop, observe, bundle_root=root)
                     stop_engine(); daemon = None
                     (raw / 'engine-lifecycle-proof.json').write_text(json.dumps({
                         'compositor': compositor, 'valid': True, 'owned_workers_cleaned': True,

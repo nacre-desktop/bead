@@ -16,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--daemon', type=Path, required=True, help='built nacre-helper; never an installed control script')
     parser.add_argument('--bead', type=Path, default=Path(os.environ.get('CARGO_TARGET_DIR', ROOT / 'target')) / 'release/nacre-shell')
+    parser.add_argument('--shell', type=Path, default=ROOT / 'shell', help='matching shell source bundle for the selected Bead binary')
     parser.add_argument('--compositor', choices=['niri', 'hyprland'], default='niri')
     parser.add_argument('--headless-smoke', action='store_true', help='private compositor test, closes automatically')
     args = parser.parse_args()
@@ -26,6 +27,8 @@ def main():
     for path in [args.daemon, args.bead]:
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error('Provide explicit built executable paths; this preview installs and builds nothing')
+    if not (args.shell / 'ui/main.luau').is_file() or not (args.shell / 'bar/main.luau').is_file():
+        parser.error('--shell needs a matching Bead shell bundle')
     env = {key:value for key,value in os.environ.items() if not key.startswith('BEAD_') or key in ['BEAD_RESEARCH_TOOLS','BEAD_RAW_DIR']}
     display = env.get('WAYLAND_DISPLAY', '')
     if display and not display.startswith('/'):
@@ -38,6 +41,7 @@ def main():
         env.update(HOME=str(private / 'home'), WAYLAND_DISPLAY=display,
                    BEAD_HARDENING='foundation-preview',
                    BEAD_PREVIEW_DAEMON=str(args.daemon.resolve()),
+                   BEAD_PREVIEW_SHELL=str(args.shell.resolve()),
                    BEAD_HARDENING_BINARY=str(args.bead.resolve()),
                    BEAD_PREVIEW_SMOKE='1' if args.headless_smoke else '0',
                    BEAD_RAW_DIR=env.get('BEAD_RAW_DIR', str(private / 'logs')),

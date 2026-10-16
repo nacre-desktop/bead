@@ -172,6 +172,50 @@ unbuilt hardware, service, managed-window, media or AI work. Owner accepted this
 baseline and authorized the core-route order above; no further memory prompt is
 needed for changes inside the replacement limits.
 
+### Rejected visible-dependency cache pre-screen —2026-10-16
+
+Local b06c3b9 preserves a narrower count/window dependency prototype; it is not
+pushed or carried forward.177tests/fmt/clippy/CPU-only/release pass. It reuses
+raw views for offscreen-only changes while validating all keys and full reads,
+but does not show a CPU win on both compositors in the real-engine pre-screen.
+One alternating200-key pair and lifecycle pair each, same75157helper/320apps:
+
+|Single-pair pre-screen|H before → candidate|N before → candidate|
+| --- | ---: | ---: |
+|UI CPU ms/key|11.012 →10.274|11.370 →11.582|
+|Presented p99 ms|26.414 →26.616|33.605 →34.828|
+|Third warm UI MiB|47.427 →47.872|45.661 →45.938|
+|Settled UI MiB|22.159 →22.457|23.113 →23.411|
+
+All eight proof cells pass functional/cleanup guards, but the small positive
+memory deltas are unaccepted and no five-pair optimization acceptance is claimed.
+No failed optimization cost is added to the accepted baseline. Data in
+`core-window-screen/`; source/immutable binary retained off main. Existing stage
+profiles still identify markup construction as the large repeat cost. Next probe
+is declarative row instantiation, preserving the fresh Lua sandbox and UI output.
+
+## Row-template pre-screen — unaccepted local work
+
+The first template prototype defines one Luau row and expands keyed data in
+Rust. One native200-key pair, same320-app daemon75157, Hvirtual120/Nnested60,
+scale1.5, no own build overlap: UI10.866→8.592/10.965→8.751ms/key and presented
+p9927.381→24.112/30.940→30.878ms. Targets remain open; no acceptance yet.
+One lifecycle pair per compositor passes every UI-close/35s-group guard.
+First/warm/settled paired MiB deltas: H+.103/+.117/−.104; N+.321/+.312/+.269.
+These are screening values, not five-pair pure-optimization memory acceptance.
+A revised local path bounds expansion before cloning and reuses the old raw
+identity only for exactly identical visible output, after all keys validate.
+178tests/fmt/clippy/CPU-only/release pass, including exact scale1.5 pixels,
+actions/identity, expansion/cache stress and correct top/middle/bottom overscan.
+The top window previously prepared an unnecessary second row below the viewport.
+V2 traced32-key diagnostic warm markup0.510/0.608ms, composition1.472/2.192ms;
+per-key sums then medians, overlapping spans are not added. Not native timing.
+Five native alternating pairs per compositor are pending for the revised path.
+Control binaries now use a pinned matching markup bundle in both typing and
+lifecycle branches. Two failed control setups (unsupported candidate API)
+are excluded, preserved, and fixed by starting lifecycle in its private bundle;
+no proof assertion was weakened. Preview can likewise pin matching markup.
+
 ## Gate D review — 2026-10-16
 
 Recommendation: adjust. The framework has a useful memory advantage in these
