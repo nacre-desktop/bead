@@ -82,6 +82,51 @@ impl Drop for Fixture {
     }
 }
 #[test]
+fn external_projector_refreshes_without_local_edits_and_keeps_atomic_failure() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    let external = std::rc::Rc::new(std::cell::RefCell::new("default".to_owned()));
+    let current = external.clone();
+    session.set_projector(Box::new(move |_| {
+        let value = current.borrow().clone();
+        if value == "broken" {
+            return Err(Diagnostic::new(
+                Path::new("external"),
+                1,
+                1,
+                "service failure",
+            ));
+        }
+        Ok(BTreeMap::from([("search.text".into(), Value::Text(value))]))
+    }));
+    assert!(session.update(BTreeMap::new()).unwrap().is_none());
+    *external.borrow_mut() = "fresh".into();
+    let scene = session.update(BTreeMap::new()).unwrap().unwrap();
+    assert_eq!(
+        session.stores.get("search.text"),
+        Some(&Value::Text("default".into()))
+    );
+    assert!(
+        scene
+            .primitives
+            .iter()
+            .any(|p| matches!(p, Primitive::Text { text, .. } if text == "fresh"))
+    );
+    session.commit(scene);
+    assert_eq!(
+        session.stores.get("search.text"),
+        Some(&Value::Text("fresh".into()))
+    );
+    assert!(session.update(BTreeMap::new()).unwrap().is_none());
+    *external.borrow_mut() = "broken".into();
+    assert!(session.update(BTreeMap::new()).is_err());
+    assert_eq!(
+        session.stores.get("search.text"),
+        Some(&Value::Text("fresh".into()))
+    );
+    assert!(session.pending.is_none());
+}
+#[test]
 fn normalized_entry_and_final_palette_and_watch_race_checks() {
     let fixture = Fixture::new();
     let (generation, stores) =

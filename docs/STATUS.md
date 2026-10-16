@@ -1,33 +1,37 @@
 # Status
 
-## 2026-10-16 — Launcher input parity; typing targets still open
+## 2026-10-16 — Real engine integrated; typing budgets not accepted
 
-Published constructor checkpoint3a9dd0f /CI38869424491 is green. This checkpoint
-adds first-enabled selection on query edits, geometry-based arrow navigation,
-scroll containment and visible activation errors over the unchanged engine order.
-153 tests/fmt/clippy ALL targets/CPU-only/release pass. Both private nested input
-proofs pass13 states:12 exact presentations plus one no-change acknowledgment.
-The reconnect test now synchronizes event-socket readiness; backend code stays frozen.
+Last published input checkpointcc66051 /CI38874364939 is green. This checkpoint
+pins engine SDKb44d1afb /upstream CI38874838563 green and replays five menu
+transcript families. Menu topic changes refresh the view without input. Empty
+Source wakeups now project before the no-change check; busy reads back off within
+one3s deadline. Activation never retries.155 tests/fmt/clippy ALL targets/
+CPU-only/release and both native lifecycle proofs pass; fresh CI follows this push.
 
-Five alternating lifecycle pairs each: warm H48.17→48.57/N46.15→46.37MiB;
-closed21.92→22.19/22.58→22.77. Deltas fit control ranges1.48/0.95MiB;
-all60 cycle checks and hover guards pass bar+5. First-open+0.33MiB each fits
-control spreads too. Mixed typing checks show no optimization; CPU8ms/key and
-p99≤16.7ms remain unaccepted. Configured Hvirtual120/N60,scale1.5; feedback
-refresh prediction unknown. External contention is uncontrolled, not physical proof.
-[Method and limits](research/feature9-gate-d.md#launcher-input-parity--2026-10-16).
+Three200-key runs each:1200 exact RPC→typed revision/count→commit→presentation
+proofs, no busy retry during timed keys. CPU mean medians H/N: UI12.230/12.047,
+daemon8.332/8.101,provider1.944/1.856ms/key-window. Presented p99 medians
+31.559/30.360ms. Both8ms UI and16.7ms presentation targets remain unaccepted.
+32s daemon settling,320 apps/101 results,scale1.5; configured Hvirtual120/N60,
+feedback refresh prediction unknown. Shared-host contention uncontrolled, no
+own build overlap. Detailed API/idle/stage diagnostic is separate, not a CPU win.
+[Method, spreads and preserved failures](research/feature9-gate-d.md#real-engine-source-and-refresh-checkpoint--2026-10-16).
 
-Kept: count-onlya3ab6dc, canonical Source4fbf629, measured pixel/SHM/Luau/model
-changes3e3bb4e+clippy repaircdf157e, font reusee12b17f, constructor3a9dd0f.
-Font loads/key1→0; index owns no font data. Prior4000-key/ten-lifecycle series
-and one unclassified niri IPC failure remain recorded in the research report.
-SDK-only optlevel2 is rejected; level1 stays. Bake-copy experiment is separate.
+Memory H10/N5 alternating fixture pairs: warm/closed deltas fit control spreads;
+all90 cycle checks and hover guards pass bar+5, first-open increases below1MiB.
+The original17KiB borderline H5 result remains, followed by one fixed confirmation.
+Real warm UI+daemon/workers H96.96/N95.85MiB;35s closed53.19/55.12 versus
+matched bar groups51.62/54.50, both within+5 including SwapPss. The daemon's
+retained index is included; compositor/private-bus infrastructure is excluded.
 
-Upstream83a9a9a4 /CI38847478920 green; SDK3042f3f2/menu goldens pinned.
-Next: reduce fixture UI CPU; migration owns engine/provider/host work before F2
-finishes. Once hosted, compare real UI/owned-daemon CPU separately vs matched QML.
-STOP at Gate D. Keep6b pacing/idle, historical29.61→32.66% typing CPU,
-IME/hardware/cache gaps and binary name clash open. No live/install/release work.
+Next: measured fixture UI CPU improvements; repeat native proof on migration's
+coalesced-load engine build. Shared QML adapter is F3 work, no parallel client.
+Optional conversion/guidance visuals, UI-provider actions/reconnect mark remain
+open. STOP at Gate D; no Feature11/live/install/release work. Keep6b pacing/
+idle, historical29.61→32.66% workload, IME/hardware/cache gaps and name clash.
+Count-onlya3ab6dc, canonical Source4fbf629, UI147+clippy repaircdf157e,
+fonte12b17f and constructors3a9dd0f stay kept. Bake-copy/SDKopt2 rejected.
 
 ## Accepted Gate C and optimization baseline
 

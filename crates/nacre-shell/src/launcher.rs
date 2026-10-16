@@ -43,9 +43,12 @@ pub fn source(
     if let Some(path) = fixture {
         Ok(Some(Arc::new(Fixture::read(path)?)))
     } else if let Some(socket) = socket {
-        Ok(Some(Arc::new(crate::nacre_source::Client::start(
-            crate::nacre_source::Config::new(socket.into(), vec![]),
-        )?)))
+        let client = crate::nacre_source::Client::start(crate::nacre_source::Config::new(
+            socket.into(),
+            vec!["menu".into()],
+        ))?;
+        // Catalog generations must invalidate the view even without a query edit.
+        Ok(Some(Arc::new(client.topic("menu")?)))
     } else {
         Ok(None)
     }
@@ -104,6 +107,29 @@ fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared
 }
 pub fn rows(reply: Json) -> source::Result<Vec<Json>> {
     Ok(prepare(reply, None)?.rows)
+}
+
+async fn query(source: &dyn Source, params: Json, timeout: Duration) -> source::Result<Json> {
+    let deadline = std::time::Instant::now() + timeout;
+    let mut delay = Duration::from_millis(25);
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        let result = source
+            .call("menu.query".into(), params.clone(), remaining)
+            .await;
+        match result {
+            Err(error) if error.code == "busy" && error.retry => {
+                if deadline.saturating_duration_since(std::time::Instant::now()) <= delay {
+                    return Err(error);
+                }
+                // Only retry this idempotent read, within its original deadline.
+                // Activation is deliberately never routed through this helper.
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(Duration::from_millis(400));
+            }
+            result => return result,
+        }
+    }
 }
 
 pub fn activation_changes(result: MenuActivated) -> BTreeMap<String, Value> {
@@ -452,8 +478,8 @@ impl Menu {
             let result = if let Some(source) = &self.source {
                 let _query = bead::core::profile::Span::new("menu_query");
                 self.runtime
-                    .block_on(source.call(
-                        "menu.query".into(),
+                    .block_on(query(
+                        source.as_ref(),
                         json!({"query":request.0,"mode":request.1,"route":if request.2.is_empty(){Json::Null}else{json!(request.2)}}),
                         Duration::from_secs(3),
                     ))
@@ -481,7 +507,7 @@ impl Menu {
                 }
                 Err(e) => {
                     if bead::core::profile::enabled() {
-                        println!("MENU_RESULT ok=false");
+                        println!("MENU_RESULT ok=false code={} retry={}", e.code, e.retry);
                     }
                     view.error = e.message;
                 }
@@ -545,6 +571,79 @@ impl Menu {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test(flavor = "current_thread")]
+    async fn query_busy_retry_is_bounded_and_honors_retry_flag_code_and_deadline() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        struct Busy {
+            fixture: Fixture,
+            attempts: AtomicUsize,
+            failures: usize,
+            retry: bool,
+            code: &'static str,
+        }
+        impl Source for Busy {
+            fn snapshot(&self) -> Arc<source::Snapshot> {
+                self.fixture.snapshot()
+            }
+            fn subscribe(&self, cb: source::Callback) -> source::Result<source::Subscription> {
+                self.fixture.subscribe(cb)
+            }
+            fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+                Box::pin(async move {
+                    if self.attempts.fetch_add(1, Ordering::SeqCst) < self.failures {
+                        Err(source::Error::new(
+                            self.code,
+                            "provider occupied",
+                            self.retry,
+                        ))
+                    } else {
+                        self.fixture.invoke(method, params).await
+                    }
+                })
+            }
+            fn reconnect(&self) -> source::Reply<'_> {
+                self.fixture.reconnect()
+            }
+            fn stop(&self) -> source::Reply<'_> {
+                self.fixture.stop()
+            }
+        }
+        let make = |failures, retry, code| Busy {
+            fixture: Fixture::new(
+                json!({"queries":{"a":fixture_reply("a",vec![json!({"id":"one","name":"One"})])}}),
+            )
+            .unwrap(),
+            attempts: AtomicUsize::new(0),
+            failures,
+            retry,
+            code,
+        };
+        let params = json!({"query":"a","mode":"apps"});
+        let success = make(2, true, "busy");
+        let result = query(&success, params.clone(), Duration::from_secs(1))
+            .await
+            .unwrap();
+        assert_eq!(result["order"], json!(["one"]));
+        assert_eq!(success.attempts.load(Ordering::SeqCst), 3);
+        let busy = make(usize::MAX, true, "busy");
+        assert_eq!(
+            query(&busy, params.clone(), Duration::from_millis(250))
+                .await
+                .unwrap_err()
+                .code,
+            "busy"
+        );
+        assert_eq!(busy.attempts.load(Ordering::SeqCst), 4);
+        for (retry, code, timeout) in [
+            (false, "busy", Duration::from_secs(1)),
+            (true, "unavailable", Duration::from_secs(1)),
+            (true, "busy", Duration::from_millis(10)),
+        ] {
+            let source = make(usize::MAX, retry, code);
+            assert!(query(&source, params.clone(), timeout).await.is_err());
+            assert_eq!(source.attempts.load(Ordering::SeqCst), 1);
+        }
+    }
     #[test]
     fn published_menu_payloads_preserve_order_and_keep_activation_out_of_luau() {
         use nacre_protocol::{Message, Reply, framing};

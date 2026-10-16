@@ -22,7 +22,7 @@ fontconfig = "=0.11.0"
 fontdb = "=0.23.0"
 skrifa = "=0.44.0"
 
-nacre-protocol = { git = "https://github.com/nacre-desktop/nacre", rev = "3042f3f2f43921faaa858be36b3013a0a68c962c" }
+nacre-protocol = { git = "https://github.com/nacre-desktop/nacre", rev = "b44d1afb6fe6370121d51cf6e09ea6778a4610c5" }
 tokio = { version = "1", features = ["rt", "sync", "net", "io-util", "time", "macros"] }
 
 [features]

@@ -560,7 +560,10 @@ fn trace_menu_return(id: &Id, result: &source::Result<Value>) {
             ),
             _ => println!("MENU_RPC_RETURN id={id} ok=true payload=false"),
         },
-        Err(_) => println!("MENU_RPC_RETURN id={id} ok=false"),
+        Err(error) => println!(
+            "MENU_RPC_RETURN id={id} ok=false code={} retry={}",
+            error.code, error.retry
+        ),
     }
 }
 async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<Command>) {

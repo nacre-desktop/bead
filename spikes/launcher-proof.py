@@ -7,7 +7,7 @@ spec=importlib.util.spec_from_file_location('matrix',ROOT/'spikes/bar-matrix.py'
 matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
 spec=importlib.util.spec_from_file_location('menu_fixtures',ROOT/'spikes/menu-fixtures.py')
 menu_fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(menu_fixtures)
-def sample(env,raw,compositor,stop):
+def sample(env,raw,compositor,stop,observe=None):
     binary=os.environ.get('BEAD_HARDENING_BINARY',str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'))
     env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_MATCHED_ICONS':'1','BEAD_ICON_PATH':str(ROOT/'shell/tests/icon.svg'),'DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
     if os.environ.get('BEAD_LAUNCHER_MMAP_THRESHOLD'):
@@ -16,7 +16,9 @@ def sample(env,raw,compositor,stop):
     fixture=raw/'menu.json';fixture.write_text(json.dumps({'queries':{'':menu_fixtures.reply('',data),'a':menu_fixtures.reply('a',data)}}));fixture.chmod(0o600)
     sock=pathlib.Path(env['XDG_RUNTIME_DIR'])/'launcher-command.sock'
     log=raw/'launcher.log';client=pointer=None
-    command=[binary,'--bar','--launcher-panel','--menu-fixture',str(fixture),'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','180']
+    engine_socket=env.get('BEAD_LAUNCHER_ENGINE_SOCKET')
+    source_args=['--daemon-socket',engine_socket]if engine_socket else['--menu-fixture',str(fixture)]
+    command=[binary,'--bar','--launcher-panel',*source_args,'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','180']
     if compositor=='hyprland':command+=['--output','bead-bench']
     def call(method,*args,target='bead.panel',ok=True):
         p=subprocess.run([binary,'ipc','--socket',str(sock),'--json',target,method,*args],env=env,cwd=ROOT,capture_output=True,text=True,timeout=5)
@@ -35,13 +37,15 @@ def sample(env,raw,compositor,stop):
         for line in reversed(text.splitlines()):
             if line.startswith('UI_STATE '):
                 data=json.loads(line.removeprefix('UI_STATE '))
-                if data.get('launcher.search.text')==query:return True
+                if data.get('launcher.search.text')==query:
+                    return not engine_socket or (not data.get('launcher.error') and bool(data.get('launcher.apps')))
         return False
     closed_samples=[]
     def closed_guard():
         state_wait(lambda s:not s['resident']and not s['target_open']and s['surfaces']==0)
         time.sleep(.4)
         sample=matrix.idle(client.pid,1)
+        if observe:sample['external']=observe()
         sample['cache_bytes']=call('state').get('cache_bytes')
         sample['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
         index=len(closed_samples);closed_samples.append(sample)
@@ -54,7 +58,7 @@ def sample(env,raw,compositor,stop):
             (raw/f'closed-{index}-later.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
         assert sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']<=bar['pss_plus_drm_mib']+5, 'launcher close exceeds bar+5 MiB' 
         return sample
-    result={'compositor':compositor,'fixture_results':320,'engine':False,'cycles':[]}
+    result={'compositor':compositor,'fixture_results':None if engine_socket else 320,'engine':bool(engine_socket),'cycles':[]}
     try:
         with log.open('w')as stream:
             client=subprocess.Popen(command,cwd=ROOT,env=env,stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
@@ -62,6 +66,7 @@ def sample(env,raw,compositor,stop):
             assert 'PRESENTATION clock_id=1'in matrix.log_text(log)
             call('state',target='nacre')
             bar=matrix.idle(client.pid,2);result['bar']=bar
+            if observe:bar['external']=observe()
             bar['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
             (raw/'bar.json').write_text(json.dumps(bar,indent=2)+'\n')
             (raw/'bar.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
@@ -81,6 +86,7 @@ def sample(env,raw,compositor,stop):
                 matrix.wait_log(log,lambda t:ui_query(t[offset:],'a'))
                 time.sleep(.3)
                 warm=matrix.idle(client.pid,1)
+                if observe:warm['external']=observe()
                 current=call('state')
                 assert current['target_open']
                 assert all(abs(a-b)<=2 for a,b in zip(current['size'],[1164,654])), 'content-sized launcher geometry fed back into percentage limits'
@@ -92,9 +98,20 @@ def sample(env,raw,compositor,stop):
             saved=json.loads((pathlib.Path(env['XDG_STATE_HOME'])/'bead/panels.json').read_text())['values']
             assert 'launcher.search.text'not in saved,'typed query reached disk state'
             assert 'UI_ERROR'not in log.read_text()
+            if engine_socket and observe:
+                time.sleep(35)
+                sample=matrix.idle(client.pid,1);sample['external']=observe()
+                result['settled_closed']=sample
+                (raw/'settled-closed.json').write_text(json.dumps(sample,indent=2)+'\n')
+                assert sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']<=bar['pss_plus_drm_mib']+5
+                baseline=bar['pss_plus_drm_mib']+bar['memory']['swap_pss_mib']+bar['external']['pss_plus_drm_swap_mib']
+                total=sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']+sample['external']['pss_plus_drm_swap_mib']
+                assert total<=baseline+5, 'settled UI + daemon/workers exceeds matched bar group+5 MiB'
     finally:
-        if pointer:pointer.close()
-        if client:stop(client)
+        try:
+            if pointer:pointer.close()
+        finally:
+            if client:stop(client)
     assert 'STOP surfaces=0'in log.read_text()
     result.update(valid=True,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=True,query_not_on_disk=True)
     (raw/'launcher-proof.json').write_text(json.dumps(result,indent=2)+'\n')

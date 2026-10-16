@@ -42,6 +42,7 @@ fn text(name: &str) -> &'static str {
         "menu-empty" => include_str!("../../tests/protocol-v1/menu-empty.jsonl"),
         "menu-results" => include_str!("../../tests/protocol-v1/menu-results.jsonl"),
         "menu-activation" => include_str!("../../tests/protocol-v1/menu-activation.jsonl"),
+        "menu-conversion" => include_str!("../../tests/protocol-v1/menu-conversion.jsonl"),
         _ => panic!("unknown fixture"),
     }
 }
@@ -105,7 +106,13 @@ fn committed_menu_transcripts_match_the_pinned_exports() {
 
 #[tokio::test]
 async fn published_menu_calls_and_errors_roundtrip_through_a_fake_daemon() {
-    for name in ["menu-apps", "menu-empty", "menu-results", "menu-activation"] {
+    for name in [
+        "menu-apps",
+        "menu-empty",
+        "menu-results",
+        "menu-activation",
+        "menu-conversion",
+    ] {
         let lab = Lab::new();
         let listener = lab.bind();
         let trace = fixture(name);

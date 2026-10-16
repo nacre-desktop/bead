@@ -358,9 +358,6 @@ impl Session {
         scene
     }
     pub(super) fn stage_state(&mut self, stores: Stores) -> Result<Option<Scene>, Diagnostic> {
-        if stores.revision() == self.stores.revision() {
-            return Ok(None);
-        }
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
@@ -369,6 +366,11 @@ impl Session {
             stores
                 .commit(projector(&stores)?)
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
+        // A service notification may carry no local store edits. Consult the
+        // external projector before deciding that its wakeup changed nothing.
+        if stores.revision() == self.stores.revision() {
+            return Ok(None);
         }
         let (mut scene, mut nodes) =
             generation.materialize(&stores, &self.palette, self.viewport)?;

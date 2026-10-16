@@ -9,6 +9,110 @@ Typing targets are not accepted; this is an interim checkpoint, not Gate D.
 
 
 
+## Real-engine Source and refresh checkpoint — 2026-10-16
+
+Nacre engineb44d1afb /CI38874838563 is green. Bead pins its protocol and replays
+all five menu transcripts, including conversion/guidance. The launcher observes
+menu topic changes. A generic Session bug skipped external projection on empty
+Source wakeups; the no-change check now follows projection. A regression test
+proves no-op, staged refresh, atomic commit and last-good failure preservation.
+Only idempotent menu.query busy+retry=true replies retry,25ms doubling to400ms,
+inside the original3s absolute deadline; activation never retries. Tests cover
+flag/code/deadline limits.155 tests/fmt/clippy ALL targets/CPU-only/release pass.
+
+Three fresh200-key runs per compositor,320 synthetic apps,101 populated results
+for a/ap:1200 exact RPC ID→typed revision/count→committed/presented update proofs.
+No busy retry during timed keys. Every run also presents a321-entry catalog
+invalidation without a key and stops its owned workers.32s daemon settling
+retires startup workers; the first typed key still starts a cold emoji worker.
+Native CPU medians of per-run means and presentation p99 medians:
+
+| |Hyprland|niri|
+| --- | ---: | ---: |
+|UI CPU ms/key|12.230|12.047|
+|Daemon CPU ms/key-window|8.332|8.101|
+|Provider CPU ms/key-window|1.944|1.856|
+|Presented p99 ms|31.559|30.360|
+
+Neither8ms UI nor16.7ms presentation target is accepted. CPU is high-resolution
+process time: UI input receipt→exact feedback callback; daemon/workers bracket
+injection→observed feedback, including background work. These are not pure RPC
+costs or directly comparable to upstream's different-host/send→reply benchmark.
+UI CPU run ranges0.406/0.472ms. Cold-first values remain separate in the raw
+summary. Actual nested backend selection and private socket guards are explicit.
+Configured Hvirtual120/N60,scale1.5; feedback refresh prediction unknown, not
+physical validation. No own build overlaps; shared-host contention uncontrolled.
+Raw `engine-typing-three-runs-v2/{manifest,summary}.json`.
+
+Fixture memory A/B: H10 pairs (one fixed five-pair confirmation of a17KiB
+borderline warm result),N5 pairs. First/warm/closed MiB medians:
+H50.545→50.770/48.205→48.291/21.838→21.994;
+N48.663→49.088/46.206→46.658/22.782→23.124.
+H warm/closed deltas0.086/0.156 fit control ranges0.747/0.789;
+N0.452/0.342 fit0.605/0.594. First-open increases stay below1MiB. All90cycle
+checks plus hover guards pass ownbar+5; original five-pair H result is retained,
+not replaced. This establishes no delta outside the measured ranges, not exactzero.
+Raw `engine-adapter-lifecycle-{deadline-fivepairs,confirm5}/` and ten-H summary.
+
+One real-engine lifecycle each compositor adds external process observations to
+the existing three-open/hover/query/no-durable-query proof. Warm UI+daemon/workers
+H47.745+49.217=96.962MiB/N45.609+50.237=95.846MiB. After35s idle,
+UI+external H22.205+30.980=53.185/N23.052+32.063=55.115;
+bar baselines21.492+30.128=51.620/23.246+31.252=54.498. Both combined
+settled groups and every UI close pass matchedbar+5 including SwapPss. External
+DRM devices are checked; absent counters are accepted only with no DRM device
+open. Provider process retirement explains the warm→idle reduction. This is not
+a matched memory comparison against Feature6's different~105MiB sound workload.
+Raw `engine-lifecycle-candidate/`; compositor/private-bus infrastructure excluded.
+
+Separate16-key detailed diagnostic after startup-only sequential CLI queries:
+H/N daemon observed0ticks over2s (quantized, not exactzero). Later11 broad a/ap
+API calls average daemon6.991/10.073ms,worker1.958/1.926. High cost therefore
+persists without repeated keyboard-device injection or a long presentation
+window. Detailed markup CPU3.575/3.734ms,IR0.980/1.101,layout0.592/0.633,
+bake1.347/1.390,compose2.442/3.070; thread menu-query wall11.184/12.615 versus
+CPU0.522/0.558 excludes other UI threads' CPU. Inclusive spans are not additive;
+this diagnostic warms the provider and adds tracing, so it is not a before/after
+optimization result. Raw `engine-component-diagnostic/`.
+
+Preserved failures v1–v7: wrong pointer environment/interrupted cleanup fixed;
+empty Source wakeup fixed; provider busy with a concurrent diagnostic query;
+explicit-backend refresh still busy without it;175ms retry exhaustion after200
+valid typing updates. All cleanup now runs even on a helper assertion. The final
+3s deadline retry passes the unchanged catalog proof. Migration confirmed
+repeated filesystem events queue overlapping metadata loads and is coalescing
+them, reserving interactive capacity. No helper code is edited in Bead. Engine
+SHA58014d70…b18d remains immutable; repeat the native proof after the new build.
+Matched production QML on this engine remains unavailable until migration F3;
+there is no attach/serve forwarding and no parallel client substitutes. Optional
+conversion/guidance visuals and UI-provider integration remain open. No Gate D
+acceptance, physical/live test, install or release is claimed.
+
+## Rejected duplicate bake serialization/copies — 2026-10-16
+
+A prototype hashed only pose after the existing local primitive signature and
+prepared each raster without cloning unrelated scene contents. Pixel/clip/pose/
+raster-reuse tests, fmt, all-target clippy,153 workspace tests, CPU-only check and
+release build passed. It is nevertheless rejected: the CPU win did not repeat.
+
+Five alternating clock-only typing pairs each,200 keys/cell:
+
+|Per-run medians|Before H /N|Candidate H /N|
+| --- | ---: | ---: |
+|UI CPU ms/key|9.719 /10.200|10.030 /10.146|
+|Presented p99 ms|22.466 /18.560|21.896 /21.561|
+
+H paired CPU+0.513ms; N−0.059ms, marginal gain inside control width0.446.
+N p99+3.001ms is inside the3.465ms control range, but CPU still lacks a robust
+benefit on both compositors. One separate lifecycle pair reduced first/warm/
+closed memory on both; that does not rescue a candidate without its CPU win.
+All4000 exact key proofs and lifecycle guards pass. The source patch and immutable
+binary remain private for audit; the patch is reversed, absent from kept code.
+Raw `bake-copy-fivepairs/summary.json`, `bake-copy-pair/`,
+`bake-copy-rejected-source.patch`. Same private Hvirtual120/N60,scale1.5,
+unknown refresh prediction; no own builds during capture, external contention
+uncontrolled. A static-property borrow prototype is unbuilt and separate.
+
 ## Launcher input parity — 2026-10-16
 
 Result selection and navigation are view state over the engine's unchanged order.

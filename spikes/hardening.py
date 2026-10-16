@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get("BEAD_HARDENING") == "menu-engine":
+        spec=importlib.util.spec_from_file_location('menu_engine_proof',ROOT/'spikes/menu-engine-proof.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        return module.sample(env,raw,compositor,stop)
     if os.environ.get("BEAD_HARDENING") == "launcher-input":
         spec=importlib.util.spec_from_file_location('launcher_input_proof',ROOT/'spikes/launcher-input-proof.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)

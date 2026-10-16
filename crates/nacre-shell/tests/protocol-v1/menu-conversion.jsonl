@@ -1,0 +1,4 @@
+{"t":"call","id":40,"m":"menu.query","p":{"query":"= 10 km to miles","mode":"search"}}
+{"t":"ret","id":40,"ok":{"query":"= 10 km to miles","mode":"search","route":"home","catalog_rev":1,"items":{},"order":[],"total":0,"conversion":{"ok":true,"value":"10 km = 6.213711922 mi","description":"Enter to copy"}}}
+{"t":"call","id":41,"m":"menu.query","p":{"query":": fixture","mode":"search"}}
+{"t":"ret","id":41,"ok":{"query":": fixture","mode":"search","route":"home","catalog_rev":1,"items":{},"order":[],"total":0,"message":"Install fd to search files"}}

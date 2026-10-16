@@ -1,5 +1,57 @@
 # Feasibility
 
+## 2026-10-16 — Real engine Source, catalog refresh and separate CPU clocks
+
+The launcher now observes daemon menu generations and refreshes without a key.
+Empty service wakeups consult projection; only retryable busy reads retry within3s.
+Activation never retries. Native typing and idle-release proofs pass on both compositors.
+The typing budgets fail; same-engine QML comparison remains unavailable until F3.
+
+|3 runs×200 keys, medians|Hyprland|niri|
+| --- | ---: | ---: |
+|UI CPU ms/key|12.230|12.047|
+|Daemon CPU ms/key-window|8.332|8.101|
+|Provider CPU ms/key-window|1.944|1.856|
+|Presented p99 ms|31.559|30.360|
+|Real lifecycle warm UI+external MiB|96.962|95.846|
+|35s settled UI+external MiB|53.185|55.115|
+|Matched bar group MiB|51.620|54.498|
+
+1200 exact RPC/typed-result/commit/presentation proofs pass; no timed busy retry.
+155 tests/fmt/clippy ALL targets/CPU-only/release and five canonical transcript
+families pass. Native catalog invalidation and owned-worker cleanup pass. H10/N5
+fixture memory pairs: first/warm/closed deltas fit control spreads;90 cycle and
+hover guards pass ownbar+5. Original borderline H5 set retained, one fixed
+confirmation only. Native settled combined groups also pass bar+5 with SwapPss.
+32s daemon settling,320 apps/101 results, actual nested backend,scale1.5;
+Hvirtual120/N60 configured, feedback refresh prediction unknown. No own builds;
+shared-host contention uncontrolled. Daemon/provider clocks include background
+work in the injection→observed-feedback window, not pure RPC CPU. Detailed
+API/idle/stage diagnostic is separate from performance acceptance. Prior failed
+catalog/busy/cleanup runs remain; migration is coalescing background metadata
+loads. No helper implementation, physical/live test, install or release change.
+[Method](docs/research/feature9-gate-d.md#real-engine-source-and-refresh-checkpoint--2026-10-16).
+
+## 2026-10-16 — Drop duplicate bake serialization/copy prototype
+
+The bake prototype passed pixel, clip, pose and raster-reuse correctness checks.
+Its first-pair CPU gain did not survive five alternating pairs on both compositors.
+The patch is saved for audit and reversed; it is absent from accepted source.
+Memory fell in a separate pair, but that does not establish the intended CPU win.
+
+|5 typing-pair medians|Before H /N|Candidate H /N|
+| --- | ---: | ---: |
+|UI CPU ms/key|9.719 /10.200|10.030 /10.146|
+|Presented p99 ms|22.466 /18.560|21.896 /21.561|
+
+H paired CPU+0.513ms; N−0.059 inside control spread0.446. N tail+3.001ms
+fits control spread3.465, but no robust CPU benefit on both compositors.4000
+exact key proofs pass. fmt/clippy ALL targets/153 tests/CPU-only/release pass;
+the initial CPU-check command used a nonexistent feature, then the corrected
+no-default-features command passed. Fresh private Hvirtual120/N60,scale1.5,
+unknown refresh prediction; no own build overlap, external contention uncontrolled.
+[Method](docs/research/feature9-gate-d.md#rejected-duplicate-bake-serializationcopies--2026-10-16).
+
 ## 2026-10-16 — Launcher input parity over ordered engine results
 
 Query edits select the first enabled result and reset scroll; arrows use layout geometry.
