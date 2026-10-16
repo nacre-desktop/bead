@@ -1,8 +1,9 @@
 # Status
 
-## 2026-10-16 — Published typing improvements; upstream decision pending
+## 2026-10-16 — UI typing resumed; five-pair count study running
 
-Main 347bd22 / CI38829738750 and 59f00f1 / CI38828546515 are green.
+Main 3cf413c / CI38830981182 is green; renderer checkpoints347bd22 and
+59f00f1 are also green. Owner resumed independent UI typing work.
 Active-view construction and cropped text are kept. 136 tests, fmt, clippy,
 release, exact pixel/counter checks and both native-GL smokes pass.
 
@@ -24,13 +25,16 @@ policy change. CPU small panels/direct opaque paint; alpha groups stay cached.
 
 Nacre owns catalog/ranking/providers; Bead uses Sources/exact fixtures. Published
 SDK pin 6bdc22e and standalone F1 adapter proofs pass. Canonical menu schemas/
-engine wait on upstream F2's regression/priority decision. Additive protocol draft
-is reviewed and held off main. End-to-end/prefix/activation acceptance waits.
+engine follow a time-boxed upstream cold-start investigation, before F2 finishes.
+Additive protocol draft is reviewed and held off main until migration publishes
+its schema/transcripts. End-to-end/prefix/activation acceptance still waits.
 
-STOP at this owner dependency decision; Gate D is pending, no Feature 11 started.
-Resume after upstream direction: real engine/UI-provider integration, changed-result
-CPU/pacing and final Gate D comparison. Keep 6b pacing/idle, historical typing,
-IME/hardware/cache gaps and binary name clash open. No live/install/release work.
+Owner resumed work: five alternating before/candidate pairs per compositor,
+200 keys plus three lifecycle closes each. Keep count-only only if CPU median
+wins and presentation/closed-memory deltas fit the measured spread. Continue
+independent UI CPU work; adopt published menu schema then measure UI/daemon CPU
+separately. STOP at Gate D. Keep 6b pacing/idle, historical typing, IME/hardware,
+cache gaps and name clash open. No Feature 11 or live/install/release work.
 
 ## Accepted Gate C and optimization baseline
 

@@ -75,3 +75,11 @@
   using published nacre-protocol schema (current QML result shape until then).
   Fixture UI typing is measured separately; end-to-end typing waits real engine.
   Pin published protocol v1/goldens; never implement ranking in Bead.
+
+- Owner update2026-10-16 supersedes the earlier engine ordering: migration
+  time-boxes the niri cold-launcher investigation, then builds the menu engine
+  before finishing F2. Bead continues fixture UI CPU work independently. Decide
+  count-only95862ca with at least five alternating before/candidate pairs per
+  compositor: CPU median win, p99 no worse beyond spread, closed delta in spread.
+  Switch to published menu.query schema/transcripts, then measure UI and daemon
+  CPU separately with the real engine. STOP at Gate D, not at the old dependency hold.
