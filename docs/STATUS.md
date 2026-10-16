@@ -2,10 +2,10 @@
 
 ## 2026-10-16 — Source launcher fixture checkpoint; Gate D pending
 
-Main30804a7 reference checkpoint: CI38825928964 failed its50ms markup guard.
-The component-check fast path preserves validation/binding resolution; local
-135tests/fmt/clippy and nested/bound-property checks pass. Limit unchanged.
-Previous684b922 / CI38823402035 green; fix CI is checked after push.
+Main e2ba01d is green: CI38827038558. The preceding reference checkpoint
+failed its50ms markup guard; the component-check fast path fixes its actual cost.
+135tests/fmt/clippy and nested/bound-property checks pass; limit unchanged.
+Matched QML launcher comparison and provisional Gate D forecast are published.
 Launcher now uses Source calls/exact fixtures; local catalog/filter removed.
 Nacre owns engine/schema/ranking/providers. Engine follows F2; real typing waits.
 [Methods, measurements and limits](research/feature9-gate-d.md#feature-10-source-fixture-checkpoint--2026-10-16).

@@ -15,7 +15,7 @@ Error paths are assembled on failure; no execution limit or fixture was reduced.
 |Workspace /fmt /all-features clippy |135 /pass /pass|pass|
 
 Different diagnostic executions, not a release CPU or timing-gate acceptance.
-CI38825928964 failure is retained; the corrective checkpoint must pass fresh CI.
+CI38825928964 failure is retained; corrective e2ba01d /CI38827038558 is green.
 
 ## 2026-10-16 — unchanged QML launcher view versus Source fixtures
 
