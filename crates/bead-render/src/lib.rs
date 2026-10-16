@@ -234,6 +234,15 @@ pub enum ResourceTarget<'a> {
     },
 }
 pub trait Renderer {
+    /// Arm one transient-resource timer after rendering starts using scratch.
+    fn take_transient_timer(&mut self) -> bool {
+        false
+    }
+    /// Release quiet scratch, or return the delay until the next idle check.
+    fn trim_transient_idle(&mut self) -> Option<std::time::Duration> {
+        None
+    }
+
     /// Per-surface presentation hint, not global activity on another surface.
     fn presentation_motion(&mut self, _active: bool) {}
     fn prepared_frame(&self) -> Option<std::sync::Arc<tree::Frame>> {

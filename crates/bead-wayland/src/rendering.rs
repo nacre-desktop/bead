@@ -758,6 +758,35 @@ impl App {
                 .frame_ms
                 .push(frame_started.elapsed().as_secs_f64() * 1000.);
         }
+        let companion = self.surfaces[index].companion;
+        let arm_transient = if companion {
+            self.companion
+                .as_mut()
+                .is_some_and(|(_, r, _)| r.take_transient_timer())
+        } else {
+            self.renderer.take_transient_timer()
+        };
+        if arm_transient {
+            let epoch = self.panel_epoch;
+            if let Err(error) = self.loop_handle.insert_source(
+                Timer::from_duration(Duration::from_millis(500)),
+                move |_, _, app| {
+                    let remaining = if companion {
+                        if app.panel_epoch != epoch {
+                            return TimeoutAction::Drop;
+                        }
+                        app.companion
+                            .as_mut()
+                            .and_then(|(_, r, _)| r.trim_transient_idle())
+                    } else {
+                        app.renderer.trim_transient_idle()
+                    };
+                    remaining.map_or(TimeoutAction::Drop, TimeoutAction::ToDuration)
+                },
+            ) {
+                self.fail(error);
+            }
+        }
         if let Err(e) = result {
             #[cfg(any(feature = "native-gl", feature = "wgpu"))]
             if self.options.auto_fallback

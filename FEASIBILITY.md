@@ -1,5 +1,30 @@
 # Feasibility
 
+## 2026-10-16 — Bounded rounded repair kept
+
+Repair-sized scratch fixes exact rounded-corner partial repaint pixels.
+It includes the curve guard, reuses capacity and releases after500ms quiet.
+Five alternating pairs each fit the unchanged memory gates; no waiver needed.
+Niri p99 is higher inside the control spread; typing targets stay open.
+
+|Five-pair medians|Before H /N|Candidate H /N|
+| --- | ---: | ---: |
+|First-open MiB|50.540 /48.675|50.749 /48.795|
+|Third warm MiB|48.098 /46.406|48.325 /46.475|
+|Third closed MiB|21.924 /22.812|22.007 /22.942|
+|UI CPU ms/key|9.958 /10.643|8.914 /9.883|
+|Presented p99 ms|22.083 /20.675|21.965 /25.010|
+
+Warm/closed deltas fit control ranges H0.292/0.245,N0.399/0.323MiB.
+Every60 cycle plus20 hover guards pass ownbar+5; first deltas<1MiB.
+N p99 +4.335ms fits9.096ms control range, not a claimed latency improvement.
+161tests (6,400 exact repairs, scratch reuse/cap/idle), fmt, all-target clippy,
+CPU-only and release pass.16MiB admission limit; no eager canvas allocation.
+The8MiB prototype failed on a near-full fractional-scale repair; preserved.
+Nested Hvirtual120/N60, feedback refresh unknown; no own build overlap,
+shared-host contention uncontrolled. Raw `bounded-scratch-fivepairs/`.
+Full method/results: [Gate D report](docs/research/feature9-gate-d.md#bounded-rounded-repair--2026-10-16).
+
 ## 2026-10-16 — Stop: exact rounded repair exceeds memory budget
 
 The expanded pixel test found a baseline antialias mismatch in cropped repairs.

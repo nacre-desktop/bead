@@ -9,6 +9,48 @@ Typing targets are not accepted; this is an interim checkpoint, not Gate D.
 
 
 
+## Bounded rounded repair — 2026-10-16
+
+Owner resumed a roughly two-hour experiment; the accepted solution took under
+one hour including full checks and five alternating pairs per compositor.
+Repair-sized RGBA/mask scratch includes a corner/stroke guard, reuses capacity,
+reserves at most16MiB in the process budget and releases after500ms quiet or
+surface destruction. Full repairs reuse the existing target/mask. Conservative
+opaque-interior/covered-prefix/bounds shortcuts remain exact. Uniform masked
+rounded painting also fixes a1-alpha partial/full rounding mismatch found in
+the old full-canvas WIP by the expanded test. No pixel tolerance changed.
+
+161tests/fmt/clippy all-targets/all-features denied warnings/CPU-only/release pass.
+Exact corpus:6,400 repairs, four scales and fractional poses, RGBA/BGRA, clipping,
+shadow, stroke and alpha; every outside-repair byte is unchanged. Separate
+scratch test checks capacity reuse, cap rejection and deterministic idle release.
+The initial8MiB cap failed on a nearly full1.7Mpixel repair (pixels+mask≈8.5MiB);
+that aborted proof is preserved, no threshold was relaxed.16MiB is an admission
+limit, not an eager allocation. All five pairs below use the corrected binary.
+
+|Five-pair medians|Before H /N|Candidate H /N|Control range H /N|
+| --- | ---: | ---: | ---: |
+|First-open MiB|50.540 /48.675|50.749 /48.795|0.312 /0.186|
+|Third warm MiB|48.098 /46.406|48.325 /46.475|0.292 /0.399|
+|Third closed MiB|21.924 /22.812|22.007 /22.942|0.245 /0.323|
+|UI CPU ms/key|9.958 /10.643|8.914 /9.883|0.634 /0.599|
+|Presented p99 ms|22.083 /20.675|21.965 /25.010|7.232 /9.096|
+
+First increases stay below1MiB; warm/closed increases fit control ranges,
+including paired medians. All60 close cycles plus20 hover guards pass ownbar+5.
+Second-open medians H48.102→48.369/N46.396→46.525 also fit control ranges
+6.240/0.373; the H control includes a large outlier, not precision evidence.
+Most third-warm increase is file PSS (H+0.169/N+0.197MiB), not retained anonymous
+scratch (H+0.027/N−0.061MiB). N p99 rises4.335ms inside its9.096ms control range;
+paired median+2.222ms. This is not a latency win or proof of no pacing issue.
+CPU paired medians−0.855/−0.657ms;4000 exact receipt→present key proofs pass.
+Both8ms/16.7ms targets remain unaccepted. Hvirtual120/Nnested60, actual feedback
+refresh0 means unknown. Original per-key wtype, clock-only profiling, fresh
+private sessions, no own builds; host contention uncontrolled. Raw immutable
+artifacts/patches and `bounded-scratch-fivepairs/{memory,typing}-summary.json`
+are preserved locally. Old7271a86 and both failed compact prototypes stay local;
+only the bounded, budget-passing renderer is integrated.
+
 ## Native Luau value constructors — 2026-10-16
 
 The SDK builds alpha/tint brushes, binding markers and action records in Luau.
