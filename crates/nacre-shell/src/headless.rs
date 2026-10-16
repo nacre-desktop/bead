@@ -4,6 +4,9 @@ use std::path::Path;
 #[cfg(test)]
 #[path = "launcher_pixels_tests.rs"]
 mod launcher_pixels_tests;
+#[cfg(test)]
+#[path = "service_views_tests.rs"]
+mod service_views_tests;
 pub fn check(file: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let file = file.canonicalize()?;
     let root = file

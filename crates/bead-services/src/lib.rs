@@ -57,12 +57,37 @@ pub struct TrayItem {
     pub attention: bool,
     pub menu: Vec<MenuEntry>,
 }
+/// Local civil date from the existing clock service, published with the same snapshot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalDate {
+    pub year: u16,
+    pub month: u8,
+    pub day: u8,
+}
+impl LocalDate {
+    pub fn is_valid(&self) -> bool {
+        let days = match self.month {
+            2 if self.year.is_multiple_of(4)
+                && (!self.year.is_multiple_of(100) || self.year.is_multiple_of(400)) =>
+            {
+                29
+            }
+            2 => 28,
+            4 | 6 | 9 | 11 => 30,
+            1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+            _ => return false,
+        };
+        (1..=9999).contains(&self.year) && self.day >= 1 && self.day <= days
+    }
+}
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
     /// Origin order survives concurrent audio/bus callback delivery.
     #[serde(default)]
     pub revision: u64,
     pub clock: String,
+    #[serde(default)]
+    pub date: Option<LocalDate>,
     pub audio: Audio,
     pub battery: Battery,
     pub network: Network,

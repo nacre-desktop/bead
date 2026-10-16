@@ -16,6 +16,10 @@ spec.loader.exec_module(matrix)
 
 
 def sample(env, raw, compositor, stop):
+    if os.environ.get("BEAD_HARDENING") == "calendar-reference":
+        spec=importlib.util.spec_from_file_location('calendar_reference',ROOT/'spikes/calendar-reference.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        return module.sample(env,raw,compositor,stop)
     if os.environ.get("BEAD_HARDENING") == "foundation-preview":
         spec=importlib.util.spec_from_file_location('foundation_preview',ROOT/'spikes/foundation-preview.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)

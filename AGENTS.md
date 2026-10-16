@@ -72,6 +72,13 @@
   stopping inside those limits. Anything beyond stops for the owner; propose a
   reasoned replacement ceiling if25MiB gets tight. Daemon/provider group memory
   remains separately reported. Recovery/static-text~0.4MiB is explicitly accepted.
+  Clarification2026-10-17: allowance is per explained FEATURE, not per commit;
+  combined changes receive0.5MiB times their explained feature count. Owner accepts
+  calendar/sound/routing settled+1.121/+0.753MiB H/N. Before more panels, audit
+  closed residency: panel Luau modules, view state, icons and data load on first
+  open and release after closed+idle. Report settled before/after cleanup. Closed
+  panels must not grow the settled bar. If25MiB still blocks after cleanup, propose
+  a reasoned ceiling rather than stopping for each panel.
 
 - Owner update2026-10-15: migration builds the shared launcher engine after F2,
   before F3. Bead builds its launcher UI against fake menu.query meanwhile,

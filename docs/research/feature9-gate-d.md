@@ -34,7 +34,7 @@ release. QML stays daily driver. No live run/install/release is authorized.
 
 ### Calendar and named views — memory decision, 2026-10-17
 
-This is a local candidate, not a runtime release or completion of service views.
+The owner accepted this combined feature cost on 2026-10-17; service views remain incomplete.
 A bounded catalog selects one launcher, sound or calendar worker. Calendar reads
 clock/date through a Source on the bar's existing hosted service, adding no bus
 connection, timer or backend. Top-bar placement clamps to the output; the generic
@@ -78,13 +78,11 @@ PSS+DRM includes SwapPss. Missing measurements are not treated as zero.
 | Hyprland |21.990 [21.868–22.114]|23.111 [23.079–23.202]|+1.121|
 | niri |22.840 [22.759–22.949]|23.604 [23.343–23.664]|+0.753|
 
-The Hyprland increase exceeds both its control spread (0.246 MiB) and the owner's
-0.5 MiB feature allowance. It is not noise. Niri also exceeds the allowance: +0.753 MiB paired,
-with a control spread of 0.190 MiB and candidate spread of 0.321 MiB.
-All 184 close samples fit own bar+5. Settled UI maxima are 23.202/23.844 MiB H/N;
-zero SwapPss is observed. The 25 MiB UI ceiling and settled group guards pass, but do not waive
-the added-cost gate. No further runtime work or publication is authorized by
-passing those separate guards. The unshipped work is preserved for owner review.
+The increase is outside the control spreads (0.246/0.190 MiB H/N); it is not
+noise. The owner accepts this specific calendar/sound/routing cost and clarifies
+that the 0.5 MiB allowance is per explained feature, not per commit. All 184
+close samples fit own bar+5. Settled UI maxima are23.202/23.844 MiB H/N;
+zero SwapPss is observed. The25 MiB ceiling and settled group guards pass.
 
 In Hyprland's median pair, +0.879 MiB is file-backed and +0.242 MiB anonymous;
 these are components of that same pair. Accounted caches differ by 4,923 bytes,
@@ -98,10 +96,15 @@ Raw evidence is retained under `core-service-calendar-gates-88aa6a4-v2/`, with
 immutable binary/bundle and harness manifests. Failed exploratory input proofs
 and earlier uncorrected-clock screenshots remain separate and excluded.
 
-Decision needed under the owner's standing rule: accept the measured combined
-calendar/sound/routing feature cost as an explicit exception, or trim/drop the
-unshipped candidate. The 25 MiB UI ceiling remains in force. The published runtime
-and pinned preview stay accepted b0; this checkpoint publishes evidence only.
+The accepted source is now integrated. The pinned preview still uses the earlier
+accepted b0 runtime. New owner rule: closed panels must not grow the settled bar.
+Panel modules, view state, icons and data must load on first open and release
+after closed+idle. Audit/clean this implementation before adding more panels and
+report settled before/after. Existing panel workers release after2200 ms, with a
+queued-raster allocator trim100 ms later; the shared launcher scalar-state map
+still outlives its worker. No cleanup saving has been measured yet. If25 MiB
+remains a blocker after cleanup, propose a reasoned ceiling instead of repeated
+panel stops. Pure optimization spread guards remain unchanged.
 
 Service views are not complete. Unbrowsed month/year following at a date rollover
 still needs parity with QML; browsed-month retention is already tested. The matched
@@ -118,7 +121,7 @@ including coordination/validation waits. This is not a measured timesheet.
 Always-on memory remains an estimated 90–150 MiB for the complete core stack,
 not a measured full-shell result. Typing targets and 6b pacing/idle items remain
 open. QML stays the daily driver; dashboard, live validation and Feature 11 stay
-held. Stop here for the memory decision, before resuming the service-view block.
+held. Continue the idle audit, then the service-view block; STOP before dashboard.
 
 ### Five alternating memory pairs per compositor
 

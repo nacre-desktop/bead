@@ -144,6 +144,71 @@ impl Source for Notifications {
         })
     }
 }
+/// Read-only clock projection from a host's existing desktop service.
+/// Tray pixmaps and unrelated sensor state never enter this Source.
+pub struct Clock {
+    publisher: Publisher,
+    _service: Arc<bead_services::Desktop>,
+    subscription: Mutex<Option<bead_services::Subscription>>,
+}
+fn clock_data(snapshot: &bead_services::Snapshot) -> Json {
+    serde_json::json!({"clock":snapshot.clock,"date":snapshot.date})
+}
+impl Clock {
+    pub fn attach(service: Arc<bead_services::Desktop>) -> Result<Self> {
+        let initial = service.snapshot();
+        let publisher = Publisher::at(
+            format!("clock-{}", EPOCH.fetch_add(1, Ordering::Relaxed)),
+            initial.revision,
+            clock_data(&initial),
+        )?;
+        let changed = publisher.clone();
+        let subscription = service.subscribe(move |snapshot| {
+            if changed
+                .publish_revision(snapshot.revision, clock_data(&snapshot))
+                .is_err()
+            {
+                let _ = changed.disconnect();
+            }
+        });
+        Ok(Self {
+            publisher,
+            _service: service,
+            subscription: Mutex::new(Some(subscription)),
+        })
+    }
+}
+impl Source for Clock {
+    fn snapshot(&self) -> Arc<Snapshot> {
+        self.publisher.snapshot()
+    }
+    fn subscribe(&self, callback: Callback) -> Result<Subscription> {
+        self.publisher.subscribe(callback)
+    }
+    fn invoke(&self, _method: String, _params: Json) -> Reply<'_> {
+        Box::pin(async {
+            Err(Error::new(
+                "unknown_method",
+                "clock source is read-only",
+                false,
+            ))
+        })
+    }
+    fn reconnect(&self) -> Reply<'_> {
+        Box::pin(async { Ok(Json::Null) })
+    }
+    fn stop(&self) -> Reply<'_> {
+        Box::pin(async {
+            self.subscription
+                .lock()
+                .map_err(|_| Error::new("internal", "clock subscription unavailable", false))?
+                .take();
+            self.publisher.disconnect()?;
+            Ok(Json::Null)
+        })
+    }
+}
+
 /// Existing composite service as a Source. The default bar retains its typed path;
 /// this adapter is also usable by other in-process shells and headless hosts.
 pub struct Desktop {
@@ -320,5 +385,59 @@ impl Drop for HostedNotifications {
         {
             task.abort();
         }
+    }
+}
+
+#[cfg(test)]
+mod clock_projection_tests {
+    use super::*;
+    #[test]
+    fn clock_source_excludes_bulk_tray_payloads() {
+        let snapshot = bead_services::Snapshot {
+            clock: "12:34".into(),
+            date: Some(bead_services::LocalDate {
+                year: 2024,
+                month: 2,
+                day: 29,
+            }),
+            tray: vec![bead_services::TrayItem {
+                icon_pixmap: vec![(1024, 1024, vec![255; 4 * 1024 * 1024])],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let data = clock_data(&snapshot);
+        assert_eq!(data["date"]["day"], 29);
+        assert!(serde_json::to_vec(&data).unwrap().len() < 128);
+        assert!(data.get("tray").is_none());
+    }
+    #[test]
+    fn stopping_clock_detaches_only_its_subscription() {
+        let host = bead_services::Desktop::start_config(bead_services::Config {
+            audio: false,
+            bus: false,
+        });
+        let source = Clock::attach(host.clone()).unwrap();
+        assert_eq!(host.subscription_count(), 1);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        assert_eq!(
+            runtime
+                .block_on(source.invoke("audio.volume".into(), Json::Null))
+                .unwrap_err()
+                .code,
+            "unknown_method"
+        );
+        runtime.block_on(source.stop()).unwrap();
+        assert_eq!(host.subscription_count(), 0);
+        assert!(!source.snapshot().connected);
+        // A sibling view can still acquire and release its own subscription.
+        let sibling = Clock::attach(host.clone()).unwrap();
+        assert_eq!(host.subscription_count(), 1);
+        drop(sibling);
+        assert_eq!(host.subscription_count(), 0);
+        host.stop();
     }
 }

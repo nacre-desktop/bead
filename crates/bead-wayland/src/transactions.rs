@@ -3,6 +3,31 @@
 use super::*;
 impl App {
     pub(super) fn ui(&mut self, mut event: UiEvent) {
+        if let UiEvent::CompanionSelect {
+            view,
+            output,
+            toggle,
+            center,
+        } = event
+        {
+            let result = if self.options.panels.is_none() {
+                Err("named panels are not configured".into())
+            } else {
+                self.requested_panel_differs(Some(&view))
+                    .and_then(|changed| {
+                        if toggle && self.panel_target && !changed {
+                            self.close_panel();
+                            Ok(())
+                        } else {
+                            self.request_panel_at(Some(&view), output.as_deref(), true, center)
+                        }
+                    })
+            };
+            if let Err(error) = result {
+                eprintln!("COMPANION_ERROR {error}");
+            }
+            return;
+        }
         if let UiEvent::CompanionModel(values) = event {
             if self.panel_runtime.is_some() {
                 self.panel_ui(UiEvent::Model(values));
@@ -12,7 +37,10 @@ impl App {
 
         if let UiEvent::CompanionVisibility(open) = event {
             if open {
-                if !self.panel_target
+                let default_changed = self.options.panels.as_ref().is_some_and(|panels| {
+                    self.panel_name.as_deref() != Some(panels.default_name())
+                });
+                if (!self.panel_target || default_changed)
                     && let Err(e) = self.open_panel(None)
                 {
                     eprintln!("COMPANION_ERROR {e}");
@@ -58,6 +86,7 @@ impl App {
                 context: CommandContext {
                     panel_open: self.panel_target,
                     panel_configured: self.options.panel_spec.is_some(),
+                    panel_view: self.panel_name.clone(),
                 },
             }));
         }
@@ -330,7 +359,15 @@ impl App {
                         .iter()
                         .filter(|s| s.companion == self.processing_panel)
                     {
-                        surface.layer.set_anchor(anchor);
+                        if self.processing_panel {
+                            self.position_panel_surface(
+                                &surface.layer,
+                                &surface.output,
+                                &self.scene,
+                            );
+                        } else {
+                            surface.layer.set_anchor(anchor);
+                        }
                         surface.layer.commit();
                     }
                 }

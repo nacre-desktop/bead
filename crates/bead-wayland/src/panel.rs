@@ -17,6 +17,9 @@ impl App {
         let result = match call.method.as_str() {
             "state" => {
                 let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count()});
+                if let Some(name) = &self.panel_name {
+                    value["view"] = serde_json::Value::String(name.clone());
+                }
                 if self.options.trace_state {
                     value["cache_bytes"] =
                         serde_json::to_value(bead_core::cache::report()).unwrap_or_default();
@@ -31,6 +34,7 @@ impl App {
                                 .collect::<Vec<_>>())
                             .unwrap_or_default()
                     );
+                    value["prepare_views"] = serde_json::json!(self.runtime.as_ref().map(|r| r.input_regions().into_iter().filter(|r| r.prepare_panel).map(|r| serde_json::json!({"id":r.id,"view":r.prepare_view,"center":r.prepare_center,"rect":[r.rect.x,r.rect.y,r.rect.w,r.rect.h]})).collect::<Vec<_>>()).unwrap_or_default());
                     value["regions"] = serde_json::json!(
                         self.panel_runtime
                             .as_ref()
@@ -50,25 +54,31 @@ impl App {
                 }
                 Ok(value)
             }
-            "prepare" => {
-                if self.options.panel_spec.is_none() {
-                    Err("dynamic panel not configured".into())
+            "prepare" | "open" | "toggle" => {
+                let name = call.args.first().and_then(serde_json::Value::as_str);
+                let output = call
+                    .output
+                    .as_deref()
+                    .or_else(|| call.args.get(1).and_then(|v| v.as_str()));
+                let center = call.args.get(1).and_then(|v| v.as_f64()).map(|v| v as f32);
+                if self.options.panels.is_some() && !call.args.is_empty() && name.is_none() {
+                    Err("panel view needs a string".into())
+                } else if call.method == "prepare" {
+                    self.request_panel_at(name, output, false, center)
+                        .map(|()| serde_json::Value::Null)
                 } else {
-                    self.prepare_panel(call.output.as_deref());
-                    Ok(serde_json::Value::Null)
-                }
-            }
-            "open" | "toggle" => {
-                if call.method == "toggle" && self.panel_target {
-                    self.close_panel();
-                    Ok(serde_json::Value::Null)
-                } else {
-                    self.open_panel(
-                        call.output
-                            .as_deref()
-                            .or_else(|| call.args.get(1).and_then(|v| v.as_str())),
-                    )
-                    .map(|_| serde_json::Value::Null)
+                    self.requested_panel_differs(name)
+                        .and_then(|changed| {
+                            panels::validate_center(center)?;
+                            if call.method == "toggle" && self.panel_target && !changed {
+                                self.validate_panel_output(output)?;
+                                self.close_panel();
+                                Ok(())
+                            } else {
+                                self.request_panel_at(name, output, true, center)
+                            }
+                        })
+                        .map(|()| serde_json::Value::Null)
                 }
             }
             "close" => {
@@ -84,17 +94,120 @@ impl App {
         let _ = request.reply.send(reply);
         true
     }
-    pub(super) fn open_panel(&mut self, output: Option<&str>) -> Result<(), String> {
-        self.start_panel(output, true)
-    }
-    pub(super) fn prepare_panel(&mut self, output: Option<&str>) {
-        if self.options.panel_spec.is_none() || self.panel_runtime.is_some() {
-            return;
+    pub(super) fn requested_panel_differs(&self, name: Option<&str>) -> Result<bool, String> {
+        match &self.options.panels {
+            Some(panels) => panels
+                .resolve(name)
+                .map(|(name, _)| self.panel_name.as_deref() != Some(name)),
+            None => Ok(false),
         }
-        if let Err(error) = self.start_panel(output, false) {
-            eprintln!("PANEL_PREPARE_ERROR {error}");
+    }
+    fn validate_panel_output(&self, name: Option<&str>) -> Result<(), String> {
+        if self.output.outputs().any(|output| {
+            name.map_or_else(
+                || {
+                    self.surfaces
+                        .iter()
+                        .any(|s| !s.companion && s.output == output)
+                },
+                |name| {
+                    self.output
+                        .info(&output)
+                        .and_then(|info| info.name)
+                        .as_deref()
+                        == Some(name)
+                },
+            )
+        }) {
+            Ok(())
+        } else {
+            Err("panel output not available".into())
+        }
+    }
+    // Resolve before retirement: an unknown view must leave the current one intact.
+    fn select_panel(&mut self, name: Option<&str>) -> Result<(), String> {
+        let Some(panels) = &self.options.panels else {
+            return Ok(());
+        };
+        let (name, spec) = panels.resolve(name)?;
+        if self.panel_name.as_deref() == Some(name) {
+            return Ok(());
+        }
+        let name = name.to_owned();
+        let mut spec = spec.clone();
+        spec.initial_open = false;
+        if self.panel_runtime.is_some() {
             self.release_panel();
         }
+        self.options.panel_spec = Some(spec);
+        self.panel_name = Some(name);
+        Ok(())
+    }
+    pub(super) fn request_panel(
+        &mut self,
+        name: Option<&str>,
+        output: Option<&str>,
+        open: bool,
+    ) -> Result<(), String> {
+        self.request_panel_at(name, output, open, None)
+    }
+    pub(super) fn request_panel_at(
+        &mut self,
+        name: Option<&str>,
+        output: Option<&str>,
+        open: bool,
+        center: Option<f32>,
+    ) -> Result<(), String> {
+        panels::validate_center(center)?;
+        let changed = self.requested_panel_differs(name)?;
+        // Preparation never replaces a visible view or restarts an already warm one.
+        if !open && (self.panel_target || (self.panel_runtime.is_some() && !changed)) {
+            return Ok(());
+        }
+        // A missing output must fail before retiring the old worker/surface.
+        self.validate_panel_output(output)?;
+        self.select_panel(name)?;
+        self.panel_center = center;
+        self.start_panel(output, open)
+    }
+    pub(super) fn open_panel(&mut self, output: Option<&str>) -> Result<(), String> {
+        self.request_panel(None, output, true)
+    }
+    pub(super) fn prepare_panel(&mut self, output: Option<&str>) {
+        self.prepare_named_panel(None, output, None);
+    }
+    pub(super) fn prepare_named_panel(
+        &mut self,
+        name: Option<&str>,
+        output: Option<&str>,
+        center: Option<f32>,
+    ) {
+        if self.options.panel_spec.is_none() {
+            return;
+        }
+        if let Err(error) = self.request_panel_at(name, output, false, center) {
+            eprintln!("PANEL_PREPARE_ERROR {error}");
+        }
+    }
+    pub(super) fn position_panel_surface(
+        &self,
+        layer: &LayerSurface,
+        output: &wl_output::WlOutput,
+        scene: &Scene,
+    ) {
+        let width = scene.bounds.w.ceil().max(1.) as u32;
+        let height =
+            (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
+                .ceil()
+                .max(1.) as u32;
+        let (anchor, [top, right, bottom, left]) = panels::placement(
+            scene.motion.as_ref().map_or(self.options.edge, |m| m.edge),
+            self.panel_center,
+            (width, height),
+            self.output.info(output).and_then(|i| i.logical_size),
+        );
+        layer.set_anchor(anchor);
+        layer.set_margin(top, right, bottom, left);
     }
     fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         let spec = self
@@ -129,6 +242,12 @@ impl App {
                 }
                 let qh = self.qh.clone();
                 self.add_output(&qh, output);
+            }
+            if let Some((scene, _, _)) = &self.companion {
+                for surface in self.surfaces.iter().filter(|s| s.companion) {
+                    self.position_panel_surface(&surface.layer, &surface.output, scene);
+                    surface.layer.commit();
+                }
             }
             self.panel_ui(UiEvent::PanelVisibility(true));
             return Ok(());
@@ -332,6 +451,7 @@ impl App {
     }
     pub(super) fn release_panel(&mut self) {
         self.panel_target = false;
+        self.panel_center = None;
         self.panel_epoch = self.panel_epoch.wrapping_add(1);
         drop(self.dismiss.take());
         drop(self.panel_runtime.take());

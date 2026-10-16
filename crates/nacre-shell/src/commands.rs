@@ -180,6 +180,19 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
+pub fn map_views(mut call: Call) -> Result<Call, Reply> {
+    if call.target == "nacre"
+        && call.method == "popout"
+        && call.args.first().and_then(Value::as_str) == Some("calendar")
+    {
+        validate(&call)?;
+        call.target = "bead.panel".into();
+        call.method = "toggle".into();
+        call.args = vec![Value::String("calendar".into()), call.args[1].clone()];
+        return Ok(call);
+    }
+    map(call)
+}
 pub fn map_launcher(call: Call) -> Result<Call, Reply> {
     let call = map(call)?;
     if call.target == "bead.panel"
@@ -230,6 +243,31 @@ fn fixture_catalog() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn calendar_view_keeps_the_audited_legacy_center_and_launcher_routes() {
+        let call = from_strings(
+            "nacre".into(),
+            "popout".into(),
+            &["calendar".into(), "1812.5".into()],
+        )
+        .unwrap();
+        let mapped = map_views(call).unwrap();
+        assert_eq!(
+            (mapped.target.as_str(), mapped.method.as_str()),
+            ("bead.panel", "toggle")
+        );
+        assert_eq!(
+            mapped.args,
+            vec![Value::String("calendar".into()), Value::from(1812.5)]
+        );
+        let launcher = from_strings("nacre".into(), "launcher".into(), &["a".into()]).unwrap();
+        assert_eq!(map_views(launcher).unwrap().target, "nacre");
+        let sound = from_strings("nacre".into(), "controls".into(), &["sound".into()]).unwrap();
+        assert_eq!(
+            map_views(sound).unwrap().args,
+            vec![Value::String("sound".into())]
+        );
+    }
     #[test]
     fn a_launcher_host_never_routes_sound_commands_into_its_panel() {
         let call = Call {

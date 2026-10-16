@@ -4,6 +4,8 @@ mod accessibility;
 mod background;
 mod clipboard;
 mod panel;
+mod panels;
+pub use panels::Panels;
 mod policy;
 mod protocols;
 mod rendering;
@@ -79,16 +81,23 @@ pub struct Remote {
     pub reply: std::sync::mpsc::SyncSender<bead_services::ipc::Reply>,
     pub context: CommandContext,
 }
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CommandContext {
     pub panel_open: bool,
     pub panel_configured: bool,
+    pub panel_view: Option<String>,
 }
 #[derive(Clone, Debug)]
 pub enum UiEvent {
     Panel(u64, Box<UiEvent>),
     PanelVisibility(bool),
     CompanionVisibility(bool),
+    CompanionSelect {
+        view: String,
+        output: Option<String>,
+        toggle: bool,
+        center: Option<f32>,
+    },
     CompanionModel(std::collections::BTreeMap<String, bead_core::Value>),
     ClipboardSet(String),
     ClipboardRead,
@@ -166,6 +175,9 @@ pub struct InputRegion {
     pub dismiss: bool,
     /// Start bounded preparation when the pointer enters this host-selected region.
     pub prepare_panel: bool,
+    /// Optional configured view; None retains the default preparation target.
+    pub prepare_view: Option<String>,
+    pub prepare_center: Option<f32>,
 }
 pub trait SceneSource {
     fn set_idle(&mut self, _idle: bool) {}
@@ -238,6 +250,8 @@ pub struct Options {
     pub background_blur: bool,
     pub namespace: String,
     pub panel_spec: Option<PanelSpec>,
+    /// Optional named views sharing the existing one-resident-panel lifecycle.
+    pub panels: Option<Panels>,
     pub command_map: Option<CommandMap>,
     pub report: Option<std::path::PathBuf>,
     pub command_socket: Option<std::path::PathBuf>,
@@ -276,6 +290,7 @@ impl Default for Options {
             background_blur: false,
             namespace: "bead-dev".into(),
             panel_spec: None,
+            panels: None,
             command_map: None,
             command_socket: None,
             report: None,

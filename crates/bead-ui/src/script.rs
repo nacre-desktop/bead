@@ -123,6 +123,7 @@ impl Script {
             "services.audio.volume",
             "services.tray",
             "services.menu",
+            "view.open",
             "backend.workspace.switch",
             "backend.window.focus",
             "backend.window.close",

@@ -98,7 +98,7 @@ async fn connect(
     let mut tray_events = tray.subscribe();
     refresh_sensors(shared, &system).await;
     refresh_tray(shared, &tray);
-    shared.change(|s| s.clock = clock());
+    shared.change(update_clock);
     loop {
         if shared.stop.load(Ordering::SeqCst) {
             return Ok(());
@@ -110,7 +110,7 @@ async fn connect(
                 .as_secs()
                 % 60;
         tokio::select! {
-            _=tokio::time::sleep(Duration::from_secs(delay))=>shared.change(|s|s.clock=clock()),
+            _=tokio::time::sleep(Duration::from_secs(delay))=>shared.change(update_clock),
             command=receiver.recv()=>match command {
                 Some(Command::Stop)|None=>return Ok(()),
                 Some(Command::Tasks(reply))=>{ let retained=tray.retained_watcher_tasks().await.unwrap_or(0); let _=reply.send((tokio::runtime::Handle::current().metrics().num_alive_tasks(),retained)); },
@@ -134,21 +134,46 @@ async fn connect(
         }
     }
 }
-fn clock() -> String {
+fn update_clock(snapshot: &mut crate::Snapshot) {
+    let (text, date) = clock();
+    snapshot.clock = text;
+    snapshot.date = date;
+}
+fn clock() -> (String, Option<crate::LocalDate>) {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as libc::time_t;
+        .ok()
+        .and_then(|value| libc::time_t::try_from(value.as_secs()).ok());
+    let Some(seconds) = seconds else {
+        return ("--:--".into(), None);
+    };
     let mut tm = std::mem::MaybeUninit::<libc::tm>::uninit();
     // SAFETY: valid distinct pointers; localtime_r initializes tm on success.
     unsafe {
         if libc::localtime_r(&seconds, tm.as_mut_ptr()).is_null() {
-            return "--:--".into();
+            return ("--:--".into(), None);
         }
         let tm = tm.assume_init();
-        format!("{:02}:{:02}", tm.tm_hour, tm.tm_min)
+        (
+            format!("{:02}:{:02}", tm.tm_hour, tm.tm_min),
+            civil_date(&tm),
+        )
     }
 }
+fn civil_date(tm: &libc::tm) -> Option<crate::LocalDate> {
+    let year = tm.tm_year.checked_add(1900)?;
+    let month = tm.tm_mon.checked_add(1)?;
+    if !(1..=9999).contains(&year) || !(1..=12).contains(&month) || !(1..=31).contains(&tm.tm_mday)
+    {
+        return None;
+    }
+    Some(crate::LocalDate {
+        year: year as u16,
+        month: month as u8,
+        day: tm.tm_mday as u8,
+    })
+}
+
 async fn properties(
     connection: &Connection,
     name: &str,
@@ -411,5 +436,41 @@ async fn tray_action(
             .call::<_, _, ()>("Activate", &(x, y))
             .await
             .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::*;
+    #[test]
+    fn civil_date_preserves_calendar_fields_without_changing_process_timezone() {
+        // SAFETY: libc::tm has integer fields and a nullable timezone pointer.
+        let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+        tm.tm_year = 124;
+        tm.tm_mon = 1;
+        tm.tm_mday = 29;
+        assert_eq!(
+            civil_date(&tm),
+            Some(crate::LocalDate {
+                year: 2024,
+                month: 2,
+                day: 29
+            })
+        );
+        tm.tm_mon = 12;
+        assert!(civil_date(&tm).is_none());
+        tm.tm_mon = 0;
+        tm.tm_mday = 0;
+        assert!(civil_date(&tm).is_none());
+        tm.tm_mday = 1;
+        tm.tm_year = i32::MAX;
+        assert!(civil_date(&tm).is_none());
+    }
+    #[test]
+    fn existing_snapshot_json_without_date_still_decodes() {
+        let mut old = serde_json::to_value(crate::Snapshot::default()).unwrap();
+        old.as_object_mut().unwrap().remove("date");
+        let decoded: crate::Snapshot = serde_json::from_value(old).unwrap();
+        assert!(decoded.date.is_none());
     }
 }

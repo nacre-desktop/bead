@@ -2,6 +2,7 @@
 local ui=require("bead.ui")
 local kit=require("bead.kit")
 local launcher=ui.resolve_for_check(ui.bind("bar.launcher"))
+local popouts=ui.resolve_for_check(ui.bind("bar.popouts"))
 local function glyph(id,text,color)
     return ui.Text{id=id,text=text,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color=color or "secondary",text_align="center"}
 end
@@ -41,7 +42,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
             ui.Text{id="count",text="0",width=10,height=24,font_size=16,color="primary"},
         },
         ui.Row{id="status",height=34,gap=7,shrink=0,padding_left=10,padding_right=10,align="center",fill="surfaceContainer",radius=17,
-            kit.Button{id="audio",width=24,height=28,padding=0,fill="surfaceContainer",aria_label="Audio: click mute, scroll volume",on_activate=ui.action("services.audio"),
+            kit.Button{id="audio",width=24,height=28,padding=0,fill="surfaceContainer",aria_label=popouts and "Open sound panel" or "Audio: click mute, scroll volume",on_activate=popouts and ui.action("view.open","sound") or ui.action("services.audio"),
                 glyph("glyph",ui.bind("bead.desktop.audio")),
             },
             glyph("network",ui.bind("bead.desktop.network")),
@@ -49,7 +50,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
             glyph("battery",ui.bind("bead.desktop.battery")),
             ui.Text{id="battery-value",text=ui.bind("bead.desktop.battery.value"),height=20,width=24,shrink=0,font_size=13,color="secondary"},
         },
-        ui.Row{id="clock",height=30,gap=7,align="center",
+        (popouts and kit.Button or ui.Row){id="clock",height=30,direction=popouts and "row" or nil,gap=7,align="center",padding=popouts and 0 or nil,fill=popouts and "transparent" or nil,aria_label=popouts and "Open calendar" or nil,on_activate=popouts and ui.action("view.open","calendar") or nil,
             glyph("calendar","calendar_month","tertiary"),
             ui.Text{id="time",text=ui.bind("bead.desktop.clock"),width=48,shrink=0,font_size=16,height=24,family="IBM Plex Sans",color="tertiary"},
         },

@@ -487,9 +487,11 @@ impl PointerHandler for App {
             let configured = surface.configured;
             let hovered_output = self.output.info(&surface.output).and_then(|i| i.name);
             if !panel {
-                let hovering = !matches!(event.kind, PointerEventKind::Leave { .. })
-                    && self.runtime.as_ref().is_some_and(|r| {
-                        r.input_regions().iter().any(|r| {
+                let hovered = if matches!(event.kind, PointerEventKind::Leave { .. }) {
+                    None
+                } else {
+                    self.runtime.as_ref().and_then(|r| {
+                        r.input_regions().into_iter().find(|r| {
                             r.prepare_panel
                                 && event.position.0 >= f64::from(r.rect.x)
                                 && event.position.1 >= f64::from(r.rect.y)
@@ -502,11 +504,23 @@ impl PointerHandler for App {
                                         && event.position.1 < f64::from(c.y + c.h)
                                 })
                         })
-                    });
-                let entered = hovering && !self.panel_hovered;
-                self.panel_hovered = hovering;
-                if entered {
-                    self.prepare_panel(hovered_output.as_deref());
+                    })
+                };
+                let target = hovered
+                    .as_ref()
+                    .map(|r| r.prepare_view.clone().unwrap_or_default());
+                let entered = target.is_some() && target != self.panel_hovered;
+                self.panel_hovered = target;
+                if entered && let Some(region) = hovered {
+                    if let Some(name) = region.prepare_view.as_deref() {
+                        self.prepare_named_panel(
+                            Some(name),
+                            hovered_output.as_deref(),
+                            region.prepare_center,
+                        );
+                    } else {
+                        self.prepare_panel(hovered_output.as_deref());
+                    }
                 }
             }
             // Some compositors route all pointer events to an exclusive keyboard

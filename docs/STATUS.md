@@ -1,17 +1,19 @@
 # Status
 
-## 2026-10-17 — Calendar/routing candidate held for memory decision
+## 2026-10-17 — Calendar/sound/routing cost accepted; idle audit next
 
-Local named launcher/sound/calendar integration passes 191 tests, fmt, clippy and
-CPU-only checks. Twenty service-view cycles per compositor pass private input,
-presentation, hover expiry, stale-worker retirement and cleanup checks.
-Five alternating Hyprland pairs: settled median 21.990 -> 23.111 MiB; paired
-increase 1.121 MiB exceeds the owner's 0.5 MiB feature allowance. Niri: +0.753 MiB, also outside the allowance.
-Every close and the 25 MiB/settled group guards pass; they do not waive added cost.
-Implementation stopped. Candidate is preserved locally and unshipped; main and
-the preview retain the accepted runtime. QML remains the daily driver.
-Owner decision: accept this explained combined feature cost, or trim/drop it.
-[Measurements and remaining work](research/feature9-gate-d.md#calendar-and-named-views--memory-decision-2026-10-17).
+Owner accepts the combined feature cost: five paired settled increases
++1.121/+0.753 MiB Hyprland/niri. The allowance is per explained feature, not
+per commit. All 184 UI closes fit own bar+5; settled maxima 23.202/23.844 MiB
+remain below25. Named views, native input/presentation and cleanup pass;
+191 tests, fmt, all-feature clippy and CPU-only build pass on this exact source.
+The implementation is integrated; the pinned preview still uses the earlier runtime.
+Next, before more panels: make closed view data/state lazy and release after idle;
+report settled before/after. Existing workers/modules/rasters release after2.2s;
+a shared launcher-state map still persists. No cleanup saving claimed yet.
+Calendar rollover-follow and matched QML remain; no new service contract assumed.
+QML stays daily driver. STOP after service views, BEFORE dashboard; no live tests.
+[Measurements](research/feature9-gate-d.md#calendar-and-named-views--memory-decision-2026-10-17).
 
 ## 2026-10-16 — Core switch active: recovery/static text accepted
 

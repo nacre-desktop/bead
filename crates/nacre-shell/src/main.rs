@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod backends;
+mod calendar;
 mod commands;
 mod desktop;
 mod font_sources;
@@ -8,6 +9,7 @@ mod launcher;
 mod launcher_panel;
 mod nacre_source;
 mod notifications;
+mod popouts;
 mod reload;
 mod sound;
 mod state;
@@ -86,6 +88,7 @@ fn start(
     let mut bar_panel = false;
     let mut audio_panel = false;
     let mut launcher_panel = false;
+    let mut core_views = false;
     let mut notification_bus = None;
     let mut notification_history = None;
     let mut panel_edge = bead::core::Edge::Right;
@@ -135,6 +138,7 @@ fn start(
             }
             "--audio-panel" => audio_panel = true,
             "--launcher-panel" => launcher_panel = true,
+            "--core-views" => core_views = true,
             "--report" => {
                 options.report = Some(args.next().ok_or("--report needs FILE")?.into());
             }
@@ -261,15 +265,22 @@ fn start(
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--bar [--audio-panel|--launcher-panel] [--panel-renderer cpu|femtovg-gl]] [--menu-fixture FILE|--daemon-socket SOCKET] [--ui-provider --command-socket SOCKET [--ui-notification-socket SOCKET]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--audio-panel|--launcher-panel|--core-views] [--panel-renderer cpu|femtovg-gl]] [--menu-fixture FILE|--daemon-socket SOCKET] [--ui-provider --command-socket SOCKET [--ui-notification-socket SOCKET]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
+    if core_views {
+        launcher_panel = true;
+    }
     if launcher_panel {
-        options.command_map = Some(std::sync::Arc::new(commands::map_launcher));
+        options.command_map = Some(std::sync::Arc::new(if core_views {
+            commands::map_views
+        } else {
+            commands::map_launcher
+        }));
     }
     let launcher_memory = launcher_panel.then(launcher::Memory::default);
     if options.report.is_some() && options.seconds.is_none() {
@@ -445,7 +456,7 @@ fn start(
     }
     let desktop_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     let panel_trace = options.trace_state;
-    if audio_panel {
+    if audio_panel || core_views {
         let owner = desktop_owner.clone();
         let panel_palette = palette.clone();
         let panel_colors = colors.clone();
@@ -479,6 +490,11 @@ fn start(
             }),
         });
     }
+    let core_sound = if core_views {
+        options.panel_spec.take()
+    } else {
+        None
+    };
     if register_ui_provider && (!launcher_panel || menu_fixture.is_some()) {
         return Err("--ui-provider requires the bar launcher with its daemon Source".into());
     }
@@ -528,6 +544,23 @@ fn start(
             launcher_memory.clone().ok_or("launcher state missing")?,
         ));
     }
+    if core_views {
+        let launcher = options.panel_spec.clone().ok_or("launcher view missing")?;
+        let calendar = popouts::calendar(
+            palette.clone(),
+            colors.clone(),
+            desktop_owner.clone(),
+            panel_trace,
+        )?;
+        options.panels = Some(bead::wayland::Panels::new(
+            "launcher".into(),
+            std::collections::BTreeMap::from([
+                ("launcher".into(), launcher),
+                ("sound".into(), core_sound.ok_or("sound view missing")?),
+                ("calendar".into(), calendar),
+            ]),
+        )?);
+    }
     let notification_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     if notification_bus.is_some() {
         let owner = notification_owner.clone();
@@ -573,20 +606,26 @@ fn start(
         let fallback = scene.clone();
         let bar = options.bar;
         let trace = options.trace_state;
-        let factory: bead::wayland::worker::Factory =
-            Box::new(move || {
-                let result =
+        let factory: bead::wayland::worker::Factory = Box::new(move || {
+            let result =
                 (|| -> Result<Box<dyn bead::wayland::SceneSource>, Box<dyn std::error::Error>> {
                     let session =
                         bead::ui::Session::new("shell".into(), entry, palette, colors, fallback);
                     let runtime = reload::Runtime::new(session).with_trace(trace);
                     let runtime = if let Some(source) = connection_status {
                         runtime.with_connection_status(source)?
-                    } else { runtime };
+                    } else {
+                        runtime
+                    };
                     let runtime = if launcher_panel && bar {
                         runtime.with_launcher_trigger(
                             launcher_memory.clone().ok_or("launcher state missing")?,
                         )?
+                    } else {
+                        runtime
+                    };
+                    let runtime = if core_views && bar {
+                        runtime.with_popout_trigger()?
                     } else {
                         runtime
                     };
@@ -625,8 +664,8 @@ fn start(
                     }
                     Ok(Box::new(runtime))
                 })();
-                result.map_err(|e| e.to_string())
-            });
+            result.map_err(|e| e.to_string())
+        });
         let renderer = bead::render::renderer(options.renderer)?;
         let runtime = bead::wayland::worker::Source::new(factory, scene.clone());
         bead::wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))

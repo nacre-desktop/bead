@@ -9,10 +9,12 @@ pub(super) struct App {
     pub(super) dismiss: Option<panel::Dismiss>,
     pub(super) panel_runtime: Option<Box<dyn SceneSource>>,
     pub(super) panel_epoch: u64,
+    pub(super) panel_name: Option<String>,
+    pub(super) panel_center: Option<f32>,
     pub(super) panel_close_epoch: u64,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
-    pub(super) panel_hovered: bool,
+    pub(super) panel_hovered: Option<String>,
     pub(super) panel_output: Option<wl_output::WlOutput>,
     pub(super) processing_panel: bool,
     pub(super) runtime: Option<Box<dyn SceneSource>>,
@@ -66,7 +68,7 @@ pub(super) struct App {
     pub(super) animations: bead_core::animation::Animations,
 }
 pub fn run_runtime(
-    options: Options,
+    mut options: Options,
     scene: Scene,
     renderer: Box<dyn Renderer>,
     runtime: Option<Box<dyn SceneSource>>,
@@ -77,6 +79,13 @@ pub fn run_runtime(
     {
         return Err("invalid layer namespace".into());
     }
+    let panel_name = if let Some(panels) = &options.panels {
+        let (name, spec) = panels.resolve(None)?;
+        options.panel_spec = Some(spec.clone());
+        Some(name.to_owned())
+    } else {
+        None
+    };
     let started = options.started;
     let conn = Connection::connect_to_env()?;
     let (globals, events) = registry_queue_init(&conn)?;
@@ -114,10 +123,12 @@ pub fn run_runtime(
         dismiss: None,
         panel_runtime: None,
         panel_epoch: 0,
+        panel_name,
+        panel_center: None,
         panel_close_epoch: 0,
         panel_reload_pending: false,
         panel_target: false,
-        panel_hovered: false,
+        panel_hovered: None,
         panel_output: None,
         processing_panel: false,
         runtime,
@@ -482,7 +493,7 @@ impl App {
                 );
             }
             if companion {
-                layer.set_margin(70, 0, 0, 0);
+                self.position_panel_surface(&layer, &output, scene);
             }
             layer.set_exclusive_zone(if self.options.test_passive {
                 -1

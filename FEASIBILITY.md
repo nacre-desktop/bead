@@ -1,11 +1,11 @@
 # Feasibility
 
-## 2026-10-17 — Named service views: functionality passes, memory decision needed
+## 2026-10-17 — Named service views: measured combined feature cost accepted
 
 One cold catalog selects launcher, sound or calendar on the shared panel lifecycle.
 Calendar reads clock/date from the existing service through a small Source.
 The local candidate passes headless and private lifecycle checks.
-Its settled increase exceeds the owner's allowance, so the runtime stays unshipped.
+Owner accepts its combined feature cost; the allowance is per explained feature.
 
 | Check | Hyprland | niri |
 | --- | ---: | ---: |

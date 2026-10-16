@@ -8,6 +8,8 @@ pub struct Runtime {
     pending: Option<Scene>,
     launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
     launcher_subscription: Option<bead::core::source::Subscription>,
+    calendar: Option<std::rc::Rc<crate::calendar::Calendar>>,
+    calendar_subscription: Option<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
@@ -54,6 +56,8 @@ impl Runtime {
             pending: None,
             launcher: None,
             launcher_subscription: None,
+            calendar: None,
+            calendar_subscription: None,
             launcher_memory: None,
             connection_status: None,
             connection_subscription: None,
@@ -129,6 +133,20 @@ impl Runtime {
         self.launcher = Some(menu);
         Ok(self)
     }
+    pub fn with_calendar(
+        mut self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.launcher.is_some() {
+            return Err("one data projector per panel".into());
+        }
+        let calendar = std::rc::Rc::new(crate::calendar::Calendar::new(source));
+        let projector = calendar.clone();
+        self.session
+            .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+        self.calendar = Some(calendar);
+        Ok(self)
+    }
     pub fn with_launcher_memory(
         mut self,
         memory: crate::launcher::Memory,
@@ -157,6 +175,34 @@ impl Runtime {
                 bead::core::Value::Bool(true),
             )]))?;
         Ok(self)
+    }
+    pub fn with_popout_trigger(mut self) -> Result<Self, Box<dyn Error>> {
+        self.actions.register("view.open", "ui.popouts")?;
+        self.actions.grant("ui.popouts");
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&std::collections::BTreeMap::from([(
+                "bar.popouts".into(),
+                bead::core::Value::Bool(true),
+            )]))?;
+        Ok(self)
+    }
+    fn popout_center(&self, id: &str, view: &str) -> Option<f32> {
+        // The existing sound view remains a side panel. The top-bar calendar
+        // is a popout centered on its invoking control, including keyboard use.
+        (self.bar && view == "calendar")
+            .then(|| {
+                self.session
+                    .view_nodes()
+                    .iter()
+                    .find(|n| n.id == id)
+                    .map(|node| {
+                        let rect = bead::ui::rect(&node.draw);
+                        rect.x + rect.w / 2.
+                    })
+            })
+            .flatten()
     }
     pub fn with_trace(mut self, trace: bool) -> Self {
         self.trace = trace;
@@ -438,6 +484,12 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=connection_subscription"),
             }
         }
+        if let Some(calendar) = &self.calendar {
+            match calendar.subscribe(wakeup.clone()) {
+                Ok(subscription) => self.calendar_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=calendar_subscription"),
+            }
+        }
         if let Some(menu) = &self.launcher {
             let wakeup = wakeup.clone();
             match menu.subscribe(std::sync::Arc::new(move |_| {
@@ -479,12 +531,31 @@ impl SceneSource for Runtime {
                 bead::wayland::InputRegion {
                     id: node.id.clone(),
                     prepare_panel: self.bar
-                        && node.action.as_deref()
-                            == Some(if self.launcher_trigger {
-                                "launcher.open"
-                            } else {
-                                "services.audio"
-                            }),
+                        && (node.action.as_deref() == Some("view.open")
+                            || node.action.as_deref()
+                                == Some(if self.launcher_trigger {
+                                    "launcher.open"
+                                } else {
+                                    "services.audio"
+                                })),
+                    prepare_view: if self.bar && node.action.as_deref() == Some("view.open") {
+                        if let Some(bead::core::Value::Text(view)) = &node.action_arg {
+                            Some(view.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    },
+                    prepare_center: if node.action.as_deref() == Some("view.open") {
+                        if let Some(bead::core::Value::Text(view)) = &node.action_arg {
+                            self.popout_center(&node.id, view)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    },
                     dismiss: node.action.as_deref() == Some("close")
                         && self.session.stores.get("panel.open").is_some(),
                     rect,
@@ -541,7 +612,7 @@ impl SceneSource for Runtime {
                 }
             }
         }
-        let host_action = match &event {
+        let mut host_action = match &event {
             UiEvent::Click { x, y }
             | UiEvent::ContextMenu { x, y }
             | UiEvent::Scroll { x, y, .. } => self.session.action_at(*x, *y),
@@ -552,6 +623,29 @@ impl SceneSource for Runtime {
             UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
             _ => None,
         };
+        if let Some((_, name, arg)) = &mut host_action
+            && name == "view.open"
+            && *arg == bead::core::Value::Text("sound".into())
+            && matches!(&event, UiEvent::Scroll { .. })
+        {
+            *name = "services.audio".into();
+        }
+        if let Some((id, name, bead::core::Value::Text(view))) = &host_action
+            && name == "view.open"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command {command,..} if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            self.wakeup
+                .as_ref()
+                .ok_or("view event channel unavailable")?(UiEvent::CompanionSelect {
+                view: view.clone(),
+                output: None,
+                toggle: true,
+                center: self.popout_center(id, view),
+            });
+            return Ok(None);
+        }
         if let Some((_, name, _)) = &host_action
             && name == "launcher.open"
             && self.launcher_trigger
@@ -725,7 +819,7 @@ impl SceneSource for Runtime {
             UiEvent::CompanionModel(_) => {
                 return Err("companion model reached primary script".into());
             }
-            UiEvent::CompanionVisibility(_) => {
+            UiEvent::CompanionVisibility(_) | UiEvent::CompanionSelect { .. } => {
                 return Err("companion visibility reached script".into());
             }
             UiEvent::Panel(_, _) => return Err("panel envelope reached script".into()),
@@ -835,7 +929,24 @@ impl SceneSource for Runtime {
                                 Some(bead::core::Value::Text(s)) => s.as_str(),
                                 _ => "",
                             };
-                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":if request.context.panel_open && !self.launcher_trigger {"sound"}else{""},"clickEdgeMenus":false,"tab":0,"launcher":self.launcher_trigger && request.context.panel_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
+                            let active_view = request.context.panel_view.as_deref().unwrap_or(
+                                if self.launcher_trigger {
+                                    "launcher"
+                                } else {
+                                    "sound"
+                                },
+                            );
+                            let launcher_open =
+                                request.context.panel_open && active_view == "launcher";
+                            let edge_menu =
+                                if request.context.panel_open && active_view != "launcher" {
+                                    active_view
+                                } else {
+                                    ""
+                                };
+                            let core_views = self.session.stores.get("bar.popouts")
+                                == Some(&bead::core::Value::Bool(true));
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":0,"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
                             #[cfg(all(feature = "trace", target_os = "linux", target_env = "gnu"))]
                             let state = {
                                 let mut state = state;
