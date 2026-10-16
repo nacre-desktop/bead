@@ -9,6 +9,75 @@ Typing targets are not accepted; this is an interim checkpoint, not Gate D.
 
 
 
+## Native Luau value constructors — 2026-10-16
+
+The SDK builds alpha/tint brushes, binding markers and action records in Luau.
+It preserves the existing numeric/string coercions, shared action arguments,
+nil versus false, caller diagnostics, fresh sandbox,8MiB limit and50ms deadline.
+Both API contract tests pass before/after; no bind resolution or action execution
+moves into Luau.159 tests/fmt/clippy ALL targets/CPU-only/release pass.
+
+Five alternating200-key fixture pairs each use identical per-key injection and
+clock-only flags. CPU medians H11.243→10.727/N11.309→10.695ms/key;
+paired medians−0.976/−1.268, control ranges2.382/0.824. Presented p99 medians
+22.514→22.360/24.149→21.145ms, no tail regression.4000 exact key proofs pass.
+These are paired-run wins, not a comparison against an earlier quieter run set
+or a claim that either typing target is accepted. Private Hvirtual120/N60,
+scale1.5, unknown refresh predictor; no own build overlap, shared-host contention
+uncontrolled. Raw `luau-value-helpers-fivepairs/summary.json`.
+
+Five lifecycle pairs each: Hfirst49.586→49.624,warm47.414→47.456,
+closed21.080→21.200MiB;N47.732→47.745/45.558→45.569/21.974→21.950.
+H warm/closed deltas0.042/0.120 fit control ranges0.347/0.183; N0.012/−0.023
+fit0.221/0.200. First-open is effectively unchanged and below the1MiB rule.
+All60 cycle plus hover guards pass ownbar+5. No memory waiver or new retained
+cache; compiled SDK bytes remain charged to the existing markup budget.
+Raw `luau-value-helpers-lifecycle-{finish5,fivepairs-summary.json}`; pair1 in
+the typing directory. One separate native A/B pair each on the same published9374bc8d helper gives
+UI CPU H11.898→11.363/N12.109→11.728ms/key; p9927.854→28.930/
+31.270→30.094ms. This is a functional repeat and a limited CPU check, not
+five-pair native tail acceptance: H tail is higher in this single pair. Targets
+remain open. Raw `luau-values-native-pair-v2/`. V1 completed200 keys but failed
+cleanup on a worker exiting between enumeration and /proc read; finally cleanup
+passed. V1 remains failed evidence, v2 tolerates only expected process-exit races
+and still verifies no owned live worker remains.
+
+## Diagnostic exclusions — 2026-10-16
+
+The headless `menu-codec-profile` example uses golden-derived100/320-item replies,
+64-byte opaque descriptors and ordinary display fields. Three1000-iteration
+trials on one thread measure process CPU including destruction. Full decode
+averages0.170/0.919ms for24,014/76,594bytes; raw JSON parse0.063/0.255,
+DOM clone0.041/0.154, clone→typed Message0.158/0.690. Validation is below0.001ms,
+not measured zero. Raw JSON is only a diagnostic lower bound: no duplicate-key,
+size or other protocol check is removed. No alternate decoder is built on this
+small100-result cost. Raw `codec-profile-current/profile.json`.
+
+A16-key per-compositor same-binary wire-traced diagnostic compares per-key
+wtype with one persistent fixed250ms keyboard. H10.832→11.833ms/key,
+N13.372→13.288; no consistent CPU benefit. H has16 keymap events after input,
+Nnone; batch hasnone. Different gaps and wire tracing are confounders. It is not
+an optimization or physical validation. The experimental batch driver is dropped,
+its exact harness source preserved privately; default injection stays unchanged.
+Raw `keyboard-device-diagnostic/`, not mixed with budget measurements.
+
+Owned thread accounting is an optional external harness diagnostic, not production
+thread tracing. It checks thread start times and never counts disappeared threads as
+zero. Over200 keys on9374bc8d, all threads remain accounted: full-trial CPU
+H14.20/N13.20ms/key versus exact input→feedback H12.535/N12.860. Two UI
+threads contribute H7.75/5.15,N7.65/4.10; link thread1.30/1.45. Whole-trial
+figures include gaps and keyboard management, with0.05ms/key tick resolution,
+and cannot replace the exact-window budget. Raw `native-thread-diagnostic/`.
+
+Migration confirms F3 is already authorized, not a new approval gate. It will
+finish remaining F2, then the shared QML adapter and F4; no duplicate Bead client.
+CLDR/base catalogs are embedded, no separate local staging is missing. Basic
+arithmetic remains an engine completeness gap before F3, not a client math-parser
+request. Published9374bc8d /CI38883651768 is green; the private query-cache audit
+candidate is not yet published or accepted here. Cold first query~18.3ms on the
+migration host remains open even after warm-cache improvements. Host/provider
+populations differ; do not substitute those numbers for this host's measurements.
+
 ## Rejected static-property borrowing — 2026-10-16
 
 Copy-on-write borrowing avoided cloning RawNode properties without bindings.
@@ -909,3 +978,12 @@ extent limits; binary/control-script name collision. The permissive framework/GP
 product boundary and CPU-small-panel/GL-large-animation policy remain. Mesa's
 roughly20MiB post-EGL residue remains a reason to measure GL lifecycle, not to
 unmap driver memory or silently waive the closed bar+5MiB condition.
+
+## Open rounded-repair regression — 2026-10-16
+
+A new exact pixel property test fails against the unchanged renderer: partial
+sub-strip rasterization of a translucent rounded corner differs from a full
+repaint by1–2 RGB levels. The prospective opaque-coverage optimization has not
+been applied. The failing test is preserved locally and will be repaired before
+that optimization or Gate D acceptance; no tolerance is widened. This is separate
+from the159-test SDK checkpoint and its unchanged renderer.

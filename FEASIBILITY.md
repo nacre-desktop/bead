@@ -1,5 +1,29 @@
 # Feasibility
 
+## 2026-10-16 — Native Luau value constructors
+
+Brushes, binding markers and action records now use Luau data constructors.
+Existing coercions, shared arguments, nil/false and caller diagnostics are preserved.
+Five pairs show CPU wins on both compositors; five memory pairs fit control spreads.
+Both typing budgets remain unaccepted; no end-to-end gain is inferred from fixtures.
+
+|5 typing-pair medians|Before H /N|Candidate H /N|
+| --- | ---: | ---: |
+|UI CPU ms/key|11.243 /11.309|10.727 /10.695|
+|Presented p99 ms|22.514 /24.149|22.360 /21.145|
+|Third warm MiB,5 lifecycle pairs|47.414 /45.558|47.456 /45.569|
+|Third closed MiB|21.080 /21.974|21.200 /21.950|
+
+159 tests/fmt/clippy ALL targets/CPU-only/release,4000 key proofs and60 lifecycle
+cycle plus hover guards pass. H warm/closed deltas0.042/0.120 fit ranges0.347/
+0.183;N0.012/−0.023 fit0.221/0.200. First-open+0.038/+0.013MiB; no waiver.
+No new retained cache; existing compiled-markup cap accounts for SDK bytes.
+Fresh private Hvirtual120/N60,scale1.5,unknown refresh predictor,no own builds;
+external contention uncontrolled. Decoder profiling and keyboard-batch diagnostic
+are separate: no parser replacement or input-method speedup is claimed. Exact
+native comparison on the same published helper is recorded separately.
+[Method](docs/research/feature9-gate-d.md#native-luau-value-constructors--2026-10-16).
+
 ## 2026-10-16 — Drop static property-map borrowing
 
 The copy-on-write prototype preserved rendered pixels and all existing behavior checks.

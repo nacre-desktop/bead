@@ -42,7 +42,13 @@ def sample(env, raw, compositor, stop):
     def stop_engine():
         if daemon is None:
             return
-        owned = {pid: clocks.identity(pid)[1] for pid in clocks.descendants(daemon)} if daemon.poll() is None else {}
+        owned = {}
+        if daemon.poll() is None:
+            for pid in clocks.descendants(daemon):
+                try:
+                    owned[pid] = clocks.identity(pid)[1]
+                except (FileNotFoundError, ProcessLookupError):
+                    pass  # It exited between enumeration and identity read.
         stop(daemon)
         def remaining():
             live = []
@@ -52,17 +58,20 @@ def sample(env, raw, compositor, stop):
                         # Zombies have already exited and consume no execution/memory.
                         state = pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
                         if state != 'Z': live.append(pid)
-                except FileNotFoundError:
+                except (FileNotFoundError, ProcessLookupError):
                     pass
             return live
         deadline = time.monotonic() + 5
         while remaining() and time.monotonic() < deadline:
             time.sleep(.05)
         for pid in remaining():
-            if os.getpgid(pid) == pid:
-                os.killpg(pid, signal.SIGKILL)
-            else:
-                os.kill(pid, signal.SIGKILL)
+            try:
+                if os.getpgid(pid) == pid:
+                    os.killpg(pid, signal.SIGKILL)
+                else:
+                    os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         deadline = time.monotonic() + 2
         while remaining() and time.monotonic() < deadline:
             time.sleep(.05)
@@ -206,6 +215,7 @@ def sample(env, raw, compositor, stop):
                     pointer.wait('POINTER_READY')
                     pointer.command('move 1000 300', 'POINTER_DONE')
                     time.sleep(.3)
+                    thread_before = clocks.thread_snapshot(client) if os.environ.get('BEAD_ENGINE_THREAD_PROFILE') == '1' else None
                     for index in range(int(os.environ.get('BEAD_TYPING_KEYS', '200'))):
                         offset = len(matrix.log_text(log))
                         before_workers = worker_samples()
@@ -245,6 +255,7 @@ def sample(env, raw, compositor, stop):
                                          refresh_ns=int(refresh) or None, profiles=profiles))
                         time.sleep(.04)
                     assert 'PRESENTATION clock_id=1' in matrix.log_text(log)
+                    thread_profile = clocks.thread_delta(thread_before, clocks.thread_snapshot(client), len(rows)) if thread_before is not None else None
                     subprocess.run(['grim', str(raw / 'engine-typing.png')], env=env, capture_output=True, check=True, timeout=8)
                     memory = {'ui': matrix.measure.memory(client.pid), 'daemon': matrix.measure.memory(daemon.pid),
                               'workers': [matrix.measure.memory(pid) for pid in workers]}
@@ -276,7 +287,7 @@ def sample(env, raw, compositor, stop):
                       helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(), memory=memory,
                       cpu_method='UI: input receipt to exact presentation, process CPU; daemon/workers: high-resolution process clocks bracketing injection through presentation, includes background work',
                       worker_count=len(workers), catalog_invalidated_without_key=True,
-                      settle_seconds=settle, profile_mode=profile_mode, diagnostic=diagnostic,
+                      settle_seconds=settle, profile_mode=profile_mode, diagnostic=diagnostic, thread_profile=thread_profile,
                       owned_workers_cleaned=True, unknown_refresh_predictions=sum(row['refresh_ns'] is None for row in rows), valid=True)
         for metric in ['latency_ms', 'ui_cpu_ms', 'daemon_cpu_ms', 'worker_cpu_ms']:
             values = [row[metric] for row in rows]

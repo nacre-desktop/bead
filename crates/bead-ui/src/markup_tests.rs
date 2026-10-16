@@ -84,6 +84,49 @@ fn sdk_brush_helpers_preserve_values_coercion_and_reject_bad_arguments() {
     }
 }
 #[test]
+fn sdk_bind_action_helpers_keep_markers_shared_arguments_and_nil_false_distinct() {
+    use crate::frontend::{FrontEnd, LuauFrontEnd, Sources};
+    let entry = Path::new("ui/main.luau");
+    let build = |body: &str| {
+        let sources = Sources::from([(
+            entry.to_path_buf(),
+            format!("local ui=require(\"bead.ui\")\n{body}").into_bytes(),
+        )]);
+        LuauFrontEnd::new(entry, &sources)
+            .unwrap()
+            .build(entry, &|_| {
+                Err(Diagnostic::new(entry, 1, 1, "unexpected binding"))
+            })
+    };
+    let raw=build("local argument={flag=false,values={1,'two',true}};local action=ui.action(17,argument);argument.flag=true;return ui.Box{id='test',text=ui.bind(42),on_activate=action}").unwrap();
+    assert_eq!(raw.props["text"], serde_json::json!({"__bind":"42"}));
+    assert_eq!(
+        raw.props["on_activate"],
+        serde_json::json!({"name":"17","argument":{"flag":true,"values":[1,"two",true]}})
+    );
+    for (expression, expected) in [
+        ("ui.action('toggle')", serde_json::json!({"name":"toggle"})),
+        (
+            "ui.action('toggle',false)",
+            serde_json::json!({"name":"toggle","argument":false}),
+        ),
+    ] {
+        assert_eq!(
+            build(&format!(
+                "return ui.Box{{id='test',on_activate={expression}}}"
+            ))
+            .unwrap()
+            .props["on_activate"],
+            expected
+        );
+    }
+    for (field, expression) in [("text", "ui.bind({})"), ("on_activate", "ui.action(false)")] {
+        let error = build(&format!("return ui.Box{{id='test',{field}={expression}}}")).unwrap_err();
+        assert!(error.file.ends_with("ui/main.luau"));
+        assert_eq!(error.line, 2);
+    }
+}
+#[test]
 fn luau_components_imports_taffy_and_relative_sizes() {
     let f = fixture();
     let session = session(&f);

@@ -1,40 +1,38 @@
 # Status
 
-## 2026-10-16 — Real engine integrated; typing budgets not accepted
+## 2026-10-16 — Measured Luau helpers; real typing targets still open
 
-Published Source checkpointf664941 /CI38881989088 is green. It
-pins engine SDKb44d1afb /upstream CI38874838563 green and replays five menu
-transcript families. Menu topic changes refresh the view without input. Empty
-Source wakeups now project before the no-change check; busy reads back off within
-one3s deadline. Activation never retries.156 tests/fmt/clippy ALL targets/
-CPU-only/release and both native lifecycle proofs pass; Source CI is green.
+Published Sourcef664941 /CI38881989088 and catalog fixefacf80 /
+CI38885455648 are green. This checkpoint moves only value constructors (brushes,
+bind/action markers) into Luau.159 tests/fmt/clippy ALL targets/CPU-only/release
+pass; coercions, shared args, nil/false, diagnostics and fresh sandbox remain.
 
-Three200-key runs each:1200 exact RPC→typed revision/count→commit→presentation
-proofs, no busy retry during timed keys. CPU mean medians H/N: UI12.230/12.047,
-daemon8.332/8.101,provider1.944/1.856ms/key-window. Presented p99 medians
-31.559/30.360ms. Both8ms UI and16.7ms presentation targets remain unaccepted.
-32s daemon settling,320 apps/101 results,scale1.5; configured Hvirtual120/N60,
-feedback refresh prediction unknown. Shared-host contention uncontrolled, no
-own build overlap. Detailed API/idle/stage diagnostic is separate, not a CPU win.
-[Method, spreads and preserved failures](research/feature9-gate-d.md#real-engine-source-and-refresh-checkpoint--2026-10-16).
+Five typing pairs each: UI CPU H11.243→10.727/N11.309→10.695ms/key;
+p99 medians22.514→22.360/24.149→21.145ms. Five memory pairs: warm deltas
++0.042/+0.012MiB,closed+0.120/−0.023,inside control spreads. All4000 exact
+key and60 lifecycle/hover checks pass; first-open unchanged, no threshold waiver.
+This is a fixture win, not an accepted8ms/16.7ms target or cross-run-set speedup.
+[Method and exclusions](research/feature9-gate-d.md#native-luau-value-constructors--2026-10-16).
 
-Memory H10/N5 alternating fixture pairs: warm/closed deltas fit control spreads;
-all90 cycle checks and hover guards pass bar+5, first-open increases below1MiB.
-The original17KiB borderline H5 result remains, followed by one fixed confirmation.
-Real warm UI+daemon/workers H96.96/N95.85MiB;35s closed53.19/55.12 versus
-matched bar groups51.62/54.50, both within+5 including SwapPss. The daemon's
-retained index is included; compositor/private-bus infrastructure is excluded.
+Prior real-engine1200-key medians remain UI12.230/12.047,daemon8.332/8.101,
+worker1.944/1.856ms/key-window,p9931.559/30.360ms. Real35s settled groups
+53.19/55.12MiB fit bar51.62/54.50+5. Native A/B on9374bc8d gives UI11.90→11.36/12.11→11.73ms/key in one pair
+each; H p99 is higher once, so no native tail acceptance. Nested Hvirtual120/N60,scale1.5,refresh prediction unknown;
+no physical validation, external host contention uncontrolled, no own build overlap.
 
-Static-property borrowing is rejected after five pairs (N CPU9.88→10.66ms/key).
-Catalog-removal fallback selection now also resets scroll.158 tests/full local
-checks pass, including the existing brush value/coercion/caller-error contract.
-Next: measure native Luau brush helpers; repeat native proof on migration's
-coalesced-load engine build. Shared QML adapter is F3 work, no parallel client.
-Optional conversion/guidance visuals, UI-provider actions/reconnect mark remain
-open. STOP at Gate D; no Feature11/live/install/release work. Keep6b pacing/
-idle, historical29.61→32.66% workload, IME/hardware/cache gaps and name clash.
-Count-onlya3ab6dc, canonical Source4fbf629, UI147+clippy repaircdf157e,
-fonte12b17f and constructors3a9dd0f stay kept. Bake-copy/SDKopt2 rejected.
+Codec100-result decode~0.17ms: no replacement decoder justified. Keyboard-batch
+diagnostic has no consistent win; dropped, original driver retained. Thread profile
+accounts for whole-trial work separately from exact input→feedback CPU. No missing
+measurement is zero. Property-map borrowing/duplicate bake copy/SDKopt2 rejected.
+
+Migration F3 is ALREADY authorized after remaining F2; no extra owner gate and no
+parallel QML adapter. Basic arithmetic is an engine gap; no client parser. Next:
+fix the exact rounded-repair pixel regression found on the unchanged renderer
+before its coverage optimization; then further measured UI work and QML on its shared
+adapter and Gate D report. Keep6b pacing/idle,29.61→32.66% workload,conversion/
+guidance visuals,UI-provider/reconnect,IME/hardware/cache/name-clash gaps open.
+STOP at Gate D; no Feature11/live/install/release work. SDKb44d1afb/menu goldens
+pinned; upstream9374bc8d /CI38883651768 green, query-cache candidate not published.
 
 ## Accepted Gate C and optimization baseline
 

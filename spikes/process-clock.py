@@ -22,13 +22,48 @@ def descendants(process):
         parent = pending.pop()
         try:
             children = Path(f"/proc/{parent}/task/{parent}/children").read_text()
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             continue
         for pid in map(int, children.split()):
             if pid not in found:
                 found.add(pid)
                 pending.append(pid)
     return found
+
+
+def thread_snapshot(process):
+    if process.poll() is not None:
+        raise RuntimeError("owned thread-profile child exited")
+    result = {}
+    for path in Path(f"/proc/{process.pid}/task").glob("*/stat"):
+        try:
+            line = path.read_text()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        left, right = line.index("("), line.rindex(")")
+        fields = line[right + 2:].split()
+        result[int(path.parent.name)] = {"name": line[left + 1:right],
+            "start_ticks": int(fields[19]), "cpu_ticks": int(fields[11]) + int(fields[12])}
+    return result
+
+
+def thread_delta(before, after, keys):
+    quantum_ms = 1000 / os.sysconf("SC_CLK_TCK")
+    lost = [pid for pid, value in before.items()
+            if pid not in after or after[pid]["start_ticks"] != value["start_ticks"]]
+    rows = []
+    for pid, value in after.items():
+        previous = before.get(pid)
+        same = previous is not None and previous["start_ticks"] == value["start_ticks"]
+        ticks = value["cpu_ticks"] - (previous["cpu_ticks"] if same else 0)
+        if ticks < 0:
+            raise RuntimeError("thread CPU clock went backwards")
+        rows.append({"tid": pid, "name": value["name"], "new": not same,
+                     "cpu_ms_per_key_full_trial": ticks * quantum_ms / keys})
+    return {"complete": not lost, "exited_or_reused": lost, "tick_ms": quantum_ms,
+            "scope": "Whole scripted trial including gaps and keyboard management; not exact input-to-present CPU",
+            "threads": rows,
+            "sum_cpu_ms_per_key_full_trial": sum(row["cpu_ms_per_key_full_trial"] for row in rows) if not lost else None}
 
 
 class OwnedDescendant:
@@ -43,7 +78,7 @@ class OwnedDescendant:
             return 1
         try:
             return None if identity(self.pid)[1] == self.start else 1
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             return 1
 
 class OwnedCpuClock:

@@ -23,6 +23,29 @@ pub trait FrontEnd {
 }
 const INSTALL: &str = r#"
 return function(ui, constructors, allowed, arrayMarker)
+    local function string_arg(value, label)
+        if type(value) == "number" then return tostring(value) end
+        if type(value) ~= "string" or utf8.len(value) == nil then error(label .. " must be a UTF-8 string", 3) end
+        return value
+    end
+    local function number_arg(value, label)
+        if type(value) == "number" then return value end
+        local result = type(value) == "string" and tonumber(value) or nil
+        if result == nil then error(label .. " must be a number", 3) end
+        return result
+    end
+    ui.alpha = function(role, alpha)
+        return {role=string_arg(role, "alpha role"), alpha=number_arg(alpha, "alpha")}
+    end
+    ui.tint = function(base, over, alpha)
+        return {base=string_arg(base, "tint base"), over=string_arg(over, "tint over"), alpha=number_arg(alpha, "tint alpha")}
+    end
+    ui.bind = function(name)
+        return {__bind=string_arg(name, "bind name")}
+    end
+    ui.action = function(name, argument)
+        return {name=string_arg(name, "action name"), argument=argument}
+    end
     local inspect = debug.info
     for name, kind in constructors do
         ui[name] = function(props)
@@ -189,25 +212,6 @@ impl FrontEnd for LuauFrontEnd {
                     crate::layout::PROPERTIES.iter().map(|name| (*name, true)),
                 )?;
                 sdk.set(
-                    "alpha",
-                    scope.create_function(|lua, (role, alpha): (String, f64)| {
-                        let t = lua.create_table()?;
-                        t.set("role", role)?;
-                        t.set("alpha", alpha)?;
-                        Ok(t)
-                    })?,
-                )?;
-                sdk.set(
-                    "tint",
-                    scope.create_function(|lua, (base, over, alpha): (String, String, f64)| {
-                        let t = lua.create_table()?;
-                        t.set("base", base)?;
-                        t.set("over", over)?;
-                        t.set("alpha", alpha)?;
-                        Ok(t)
-                    })?,
-                )?;
-                sdk.set(
                     "resolve_for_check",
                     scope.create_function(|lua, value: mlua::Value| {
                         if let mlua::Value::Table(table) = &value
@@ -233,25 +237,6 @@ impl FrontEnd for LuauFrontEnd {
                     .set_name("@bead.ui")
                     .eval()?;
                 install.call::<()>((sdk.clone(), constructors, allowed, lua.array_metatable()))?;
-                sdk.set(
-                    "bind",
-                    scope.create_function(|lua, name: String| {
-                        let marker = lua.create_table()?;
-                        marker.set("__bind", name)?;
-                        Ok(marker)
-                    })?,
-                )?;
-                sdk.set(
-                    "action",
-                    scope.create_function(|lua, (name, arg): (String, Option<mlua::Value>)| {
-                        let action = lua.create_table()?;
-                        action.set("name", name)?;
-                        if let Some(arg) = arg {
-                            action.set("argument", arg)?;
-                        }
-                        Ok(action)
-                    })?,
-                )?;
                 let group: Function = sdk.get("Group")?;
                 sdk.set(
                     "Repeat",
