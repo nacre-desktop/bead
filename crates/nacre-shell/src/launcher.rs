@@ -239,6 +239,13 @@ struct View {
     rows: Arc<Vec<Json>>,
     error: String,
 }
+#[derive(Clone, Copy)]
+pub struct NavigationGeometry {
+    pub columns: usize,
+    pub pitch: f64,
+    pub row_height: f64,
+    pub viewport_height: f64,
+}
 pub struct Menu {
     source: Option<Arc<dyn Source>>,
     runtime: tokio::runtime::Runtime,
@@ -264,6 +271,103 @@ impl Menu {
             .as_ref()
             .map(|s| s.subscribe(callback))
             .transpose()
+    }
+    /// View-only navigation through the engine's existing order, never ranking.
+    pub fn navigate(
+        &self,
+        stores: &Stores,
+        key: &str,
+        geometry: NavigationGeometry,
+    ) -> Option<BTreeMap<String, Value>> {
+        let view = self.view.borrow();
+        let query = matches!(stores.get("launcher.search.text"),Some(Value::Text(text))if !text.trim().is_empty());
+        let grid = !query
+            && stores
+                .get("launcher.mode")
+                .is_none_or(|value| matches!(value,Value::Text(mode)if mode=="apps"));
+        let direction = match key {
+            "up" => -1,
+            "down" => 1,
+            "left" if grid => -1,
+            "right" if grid => 1,
+            _ => return None,
+        };
+        let current = match stores.get("launcher.selection") {
+            Some(Value::Text(id)) => view
+                .rows
+                .iter()
+                .position(|row| row["id"].as_str() == Some(id.as_str())),
+            _ => None,
+        };
+        let count = view.rows.len();
+        let mut next = current.map_or(
+            if direction > 0 {
+                0
+            } else {
+                count.saturating_sub(1)
+            },
+            |index| {
+                if grid && matches!(key, "up" | "down") {
+                    (index as i64 + direction * geometry.columns.max(1) as i64)
+                        .clamp(0, count.saturating_sub(1) as i64) as usize
+                } else {
+                    (index as i64 + direction).rem_euclid(count.max(1) as i64) as usize
+                }
+            },
+        );
+        let mut selected = None;
+        for _ in 0..count {
+            if view.rows[next]["disabled"] != true {
+                selected = Some(next);
+                break;
+            }
+            let candidate = next as i64 + direction;
+            if grid && matches!(key, "up" | "down") && !(0..count as i64).contains(&candidate) {
+                selected = current.filter(|index| view.rows[*index]["disabled"] != true);
+                break;
+            }
+            next = candidate.rem_euclid(count as i64) as usize;
+        }
+        let mut scroll = match stores.get("launcher.scroll.y") {
+            Some(Value::Number(value)) => *value,
+            _ => 0.,
+        };
+        if let Some(index) = selected {
+            let columns = if grid { geometry.columns.max(1) } else { 1 };
+            if geometry.pitch.is_finite()
+                && geometry.pitch > 0.
+                && geometry.row_height > 0.
+                && geometry.viewport_height > 0.
+            {
+                let top = (index / columns) as f64 * geometry.pitch;
+                let bottom = top + geometry.row_height;
+                if top < scroll {
+                    scroll = top;
+                } else if bottom > scroll + geometry.viewport_height {
+                    scroll = bottom - geometry.viewport_height;
+                }
+                let rows = count.div_ceil(columns);
+                let maximum = (rows.saturating_sub(1) as f64 * geometry.pitch
+                    + geometry.row_height
+                    - geometry.viewport_height)
+                    .max(0.);
+                scroll = scroll.clamp(0., maximum);
+            }
+        } else {
+            scroll = 0.;
+        }
+        Some(BTreeMap::from([
+            (
+                "launcher.selection".into(),
+                Value::Text(
+                    selected
+                        .and_then(|index| view.rows[index]["id"].as_str())
+                        .unwrap_or("")
+                        .into(),
+                ),
+            ),
+            ("launcher.scroll.y".into(), Value::Number(scroll)),
+        ]))
     }
     pub fn activate(&self, id: &str) -> source::Result<MenuActivated> {
         let view = self.view.borrow();
@@ -291,15 +395,21 @@ impl Menu {
         let source = self.source.as_ref().ok_or_else(|| {
             source::Error::new("unavailable", "Launcher service unavailable", true)
         })?;
-        match self.runtime.block_on(source.call(
-            "menu.activate".into(),
-            serde_json::to_value(request).map_err(|_| invalid_menu())?,
-            Duration::from_secs(3),
-        )) {
-            Ok(reply) => {
+        let result = self
+            .runtime
+            .block_on(source.call(
+                "menu.activate".into(),
+                serde_json::to_value(request).map_err(|_| invalid_menu())?,
+                Duration::from_secs(3),
+            ))
+            .and_then(|reply| {
                 let result: MenuActivated =
                     serde_json::from_value(reply).map_err(|_| invalid_menu())?;
                 result.validate().map_err(|_| invalid_menu())?;
+                Ok(result)
+            });
+        match result {
+            Ok(result) => {
                 if result.keep_open {
                     self.view.borrow_mut().request = None;
                 }
@@ -327,11 +437,17 @@ impl Menu {
             text("launcher.engine_route"),
         );
         let selection = text("launcher.selection");
+        let choose_first =
+            !request.0.trim().is_empty() || request.1 != "apps" || !request.2.is_empty();
         let stamp = self.source.as_ref().map(|s| {
             let snap = s.snapshot();
             (snap.epoch.clone(), snap.revision, snap.connected)
         });
         let mut view = self.view.borrow_mut();
+        let query_changed = view
+            .request
+            .as_ref()
+            .is_some_and(|previous| previous.0 != request.0);
         if view.request.as_ref() != Some(&request) || view.stamp != stamp {
             let result = if let Some(source) = &self.source {
                 let _query = bead::core::profile::Span::new("menu_query");
@@ -373,18 +489,24 @@ impl Menu {
             view.request = Some(request);
             view.stamp = stamp;
         }
-        let selection = if view
-            .rows
-            .iter()
-            .any(|r| r["id"].as_str() == Some(selection.as_str()))
+        let reset_selection = query_changed && view.error.is_empty();
+        let selection = if !view.error.is_empty()
+            || (!reset_selection
+                && view
+                    .rows
+                    .iter()
+                    .any(|r| r["id"].as_str() == Some(selection.as_str()) && r["disabled"] != true))
         {
             selection
-        } else {
+        } else if choose_first {
             view.rows
-                .first()
+                .iter()
+                .find(|row| row["disabled"] != true)
                 .and_then(|r| r["id"].as_str())
                 .unwrap_or("")
                 .to_string()
+        } else {
+            String::new()
         };
         if view.rows.iter().any(|row| {
             row["selected"].as_bool() != Some(row["id"].as_str() == Some(selection.as_str()))
@@ -401,6 +523,9 @@ impl Menu {
             ("launcher.selection".into(), Value::Text(selection)),
             ("launcher.error".into(), Value::Text(view.error.clone())),
         ]);
+        if reset_selection {
+            delta.insert("launcher.scroll.y".into(), Value::Number(0.));
+        }
         // A query may change while the ordered engine result stays identical.
         // Retain the store's immutable model instead of cloning it just to compare.
         match stores.get("launcher.apps") {
@@ -598,6 +723,133 @@ mod tests {
         );
     }
     #[test]
+    fn ordered_keyboard_navigation_skips_disabled_wraps_and_contains_scroll() {
+        let rows = vec![
+            json!({"id":"disabled","name":"Disabled","disabled":true}),
+            json!({"id":"a","name":"Alpha"}),
+            json!({"id":"b","name":"Beta"}),
+            json!({"id":"c","name":"Gamma"}),
+        ];
+        let source =
+            Arc::new(Fixture::new(json!({"queries":{"a":fixture_reply("a",rows)}})).unwrap());
+        let menu = Menu::new(Some(source)).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text("a".into())),
+                ("launcher.scroll.y".into(), Value::Number(0.)),
+            ]))
+            .unwrap();
+        let initial = menu.project(&stores).unwrap();
+        stores = stores.reconcile(&initial).unwrap();
+        stores.commit(initial).unwrap();
+        let geometry = NavigationGeometry {
+            columns: 1,
+            pitch: 58.,
+            row_height: 55.,
+            viewport_height: 116.,
+        };
+        let next = menu.navigate(&stores, "down", geometry).unwrap();
+        assert_eq!(next["launcher.selection"], Value::Text("b".into()));
+        assert_eq!(next["launcher.scroll.y"], Value::Number(55.));
+        stores.commit(next).unwrap();
+        stores
+            .commit(menu.navigate(&stores, "up", geometry).unwrap())
+            .unwrap();
+        assert_eq!(
+            stores.get("launcher.selection"),
+            Some(&Value::Text("a".into()))
+        );
+        let wrapped = menu.navigate(&stores, "up", geometry).unwrap();
+        assert_eq!(wrapped["launcher.selection"], Value::Text("c".into()));
+        assert!(
+            menu.navigate(&stores, "left", geometry).is_none(),
+            "left must remain text editing in a query"
+        );
+    }
+    #[test]
+    fn grid_keyboard_navigation_uses_rendered_column_geometry() {
+        let rows: Vec<_> = (0..20)
+            .map(|id| json!({"id":id.to_string(),"name":format!("Fixture{id}"),"disabled":id==0}))
+            .collect();
+        let source =
+            Arc::new(Fixture::new(json!({"queries":{"":fixture_reply("",rows)}})).unwrap());
+        let menu = Menu::new(Some(source)).unwrap();
+        let initial = menu.project(&Stores::default()).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&initial)
+            .unwrap()
+            .reconcile(&BTreeMap::from([
+                ("launcher.scroll.y".into(), Value::Number(0.)),
+                ("launcher.mode".into(), Value::Text("apps".into())),
+            ]))
+            .unwrap();
+        let geometry = NavigationGeometry {
+            columns: 4,
+            pitch: 81.,
+            row_height: 76.,
+            viewport_height: 162.,
+        };
+        for (key, expected) in [
+            ("down", "1"),
+            ("right", "2"),
+            ("down", "6"),
+            ("up", "2"),
+            ("left", "1"),
+            ("up", "1"),
+            ("left", "19"),
+        ] {
+            let next = menu.navigate(&stores, key, geometry).unwrap();
+            assert_eq!(next["launcher.selection"], Value::Text(expected.into()));
+            stores.commit(next).unwrap();
+        }
+        assert_eq!(stores.get("launcher.scroll.y"), Some(&Value::Number(238.)));
+    }
+    #[test]
+    fn query_edit_selects_first_enabled_and_resets_scroll_but_initial_restore_survives() {
+        let rows = vec![
+            json!({"id":"disabled","name":"Disabled","disabled":true}),
+            json!({"id":"a","name":"Alpha"}),
+            json!({"id":"b","name":"Beta"}),
+        ];
+        let source = Arc::new(
+            Fixture::new(json!({"queries":{
+                "a":fixture_reply("a",rows.clone()),"ab":fixture_reply("ab",rows.clone()),
+                "":fixture_reply("",rows)
+            }}))
+            .unwrap(),
+        );
+        let menu = Menu::new(Some(source)).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text("a".into())),
+                ("launcher.selection".into(), Value::Text("b".into())),
+                ("launcher.scroll.y".into(), Value::Number(123.)),
+            ]))
+            .unwrap();
+        let initial = menu.project(&stores).unwrap();
+        assert_eq!(initial["launcher.selection"], Value::Text("b".into()));
+        stores = stores.reconcile(&initial).unwrap();
+        stores.commit(initial).unwrap();
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("ab".into()),
+            )]))
+            .unwrap();
+        let changed = menu.project(&stores).unwrap();
+        assert_eq!(changed["launcher.selection"], Value::Text("a".into()));
+        assert_eq!(changed["launcher.scroll.y"], Value::Number(0.));
+        stores.commit(changed).unwrap();
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text(String::new()),
+            )]))
+            .unwrap();
+        let grid = menu.project(&stores).unwrap();
+        assert_eq!(grid["launcher.selection"], Value::Text(String::new()));
+    }
+    #[test]
     fn response_for_another_query_cannot_replace_the_view() {
         let source = Arc::new(
             Fixture::new(json!({"queries":{
@@ -636,7 +888,13 @@ mod tests {
             .unwrap(),
         );
         let menu = Menu::new(Some(source)).unwrap();
-        let initial = menu.project(&Stores::default()).unwrap();
+        let restored = Stores::default()
+            .reconcile(&BTreeMap::from([(
+                "launcher.selection".into(),
+                Value::Text("a".into()),
+            )]))
+            .unwrap();
+        let initial = menu.project(&restored).unwrap();
         let Value::List(before) = &initial["launcher.apps"] else {
             panic!("missing model")
         };

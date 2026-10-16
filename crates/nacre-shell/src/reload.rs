@@ -345,6 +345,62 @@ impl Runtime {
         Ok(())
     }
 }
+impl Runtime {
+    fn finish_scene(
+        &mut self,
+        mut scene: Option<Scene>,
+        reload: bool,
+    ) -> Result<Option<Scene>, Box<dyn Error>> {
+        if let Some(scene) = &mut scene {
+            if let Some(desktop) = &self.desktop {
+                crate::desktop::icons(scene, &desktop.snapshot())?;
+            }
+            let asset_profile = bead::core::profile::Span::new("assets");
+            for draw in &mut scene.primitives {
+                if let bead::render::Primitive::Image { path, .. } = draw
+                    && let Some(icon) = path.to_str().and_then(|s| s.strip_prefix("@icon:"))
+                {
+                    *path = if std::env::var_os("BEAD_MATCHED_ICONS").is_some() {
+                        std::env::var_os("BEAD_ICON_PATH")
+                            .map(std::path::PathBuf::from)
+                            .unwrap_or_else(|| "shell/sample.svg".into())
+                    } else {
+                        freedesktop_icons::lookup(icon)
+                            .with_size(48)
+                            .find()
+                            .unwrap_or_else(|| "shell/sample.svg".into())
+                    };
+                    let data = if !reload {
+                        if let Some(data) = self.session.asset_snapshot(path) {
+                            data
+                        } else {
+                            std::sync::Arc::from(std::fs::read(&*path)?)
+                        }
+                    } else {
+                        std::sync::Arc::from(std::fs::read(&*path)?)
+                    };
+                    scene.asset_data.insert(path.clone(), data);
+                }
+            }
+            drop(asset_profile);
+            // Service text can introduce a family/codepoint after an initially empty title.
+            scene.font_files = self.fonts.select(scene)?;
+        }
+        if let Some(scene) = &mut scene {
+            if self.bar {
+                scene.offset = (0., 0.);
+                scene.slide = None;
+                scene.bounds = bead::render::Rect::new(0., 0., scene.width, 50.);
+            }
+            let editor_profile = bead::core::profile::Span::new("editor_shape");
+            self.session.decorate_inputs(scene)?;
+            drop(editor_profile);
+        }
+        self.session.check_sources()?;
+        self.pending = scene.clone();
+        Ok(scene)
+    }
+}
 impl SceneSource for Runtime {
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let wakeup: std::sync::Arc<dyn Fn(UiEvent) + Send + Sync> = std::sync::Arc::from(wakeup);
@@ -475,6 +531,55 @@ impl SceneSource for Runtime {
             );
             return Ok(None);
         }
+        if let (Some(menu), UiEvent::Command { command, .. }) = (&self.launcher, &event)
+            && (self.session.surrounding_text().is_some()
+                || host_action
+                    .as_ref()
+                    .is_some_and(|(_, name, _)| name == "select_app"))
+            && matches!(command.as_str(), "up" | "down" | "left" | "right")
+        {
+            let buttons: Vec<_> = self
+                .session
+                .view_nodes()
+                .iter()
+                .filter(|node| node.action.as_deref() == Some("select_app"))
+                .collect();
+            if let Some(first) = buttons.first() {
+                let first_rect = bead::ui::rect(&first.draw);
+                let columns = buttons
+                    .iter()
+                    .filter(|node| (bead::ui::rect(&node.draw).y - first_rect.y).abs() < 0.5)
+                    .count()
+                    .max(1);
+                let pitch = buttons
+                    .iter()
+                    .map(|node| f64::from(bead::ui::rect(&node.draw).y - first_rect.y))
+                    .filter(|distance| *distance > 0.5)
+                    .min_by(f64::total_cmp)
+                    .unwrap_or(f64::from(first_rect.h));
+                let viewport_height = self
+                    .session
+                    .view_nodes()
+                    .iter()
+                    .find(|node| node.scroll_store.as_deref() == Some("launcher.scroll.y"))
+                    .map(|node| bead::ui::rect(&node.draw).h)
+                    .unwrap_or_else(|| first.clip.map_or(first_rect.h, |clip| clip.h));
+                let geometry = crate::launcher::NavigationGeometry {
+                    columns,
+                    pitch,
+                    row_height: f64::from(first_rect.h),
+                    viewport_height: f64::from(viewport_height),
+                };
+                if let Some(changes) = menu.navigate(&self.session.stores, command, geometry) {
+                    let scene = self.session.update(changes)?;
+                    let scene = self.finish_scene(scene, false)?;
+                    if bead::core::profile::enabled() {
+                        println!("MENU_NAV_DONE changed={}", scene.is_some());
+                    }
+                    return Ok(scene);
+                }
+            }
+        }
         let launcher_id = if let Some((_, name, bead::core::Value::Text(id))) = &host_action {
             (name == "select_app").then(|| id.clone())
         } else if matches!(&event,UiEvent::Command{command,..} if command=="enter")
@@ -489,11 +594,15 @@ impl SceneSource for Runtime {
         };
         if let (Some(menu), Some(id)) = (&self.launcher, launcher_id) {
             self.actions.authorize("select_app")?;
-            let changes = menu
-                .activate(&id)
-                .map(crate::launcher::activation_changes)
-                .unwrap_or_default();
-            return self.session.update(changes).map_err(Into::into);
+            let changes = match menu.activate(&id) {
+                Ok(result) => crate::launcher::activation_changes(result),
+                Err(error) => std::collections::BTreeMap::from([(
+                    "launcher.error".into(),
+                    bead::core::Value::Text(error.message),
+                )]),
+            };
+            let scene = self.session.update(changes)?;
+            return self.finish_scene(scene, false);
         }
         if let Some((_, name, arg)) = host_action.as_ref()
             && name.starts_with("notifications.")
@@ -538,8 +647,7 @@ impl SceneSource for Runtime {
             self.backend_action(&name, arg)?;
             if !self.bar {
                 let scene = self.session.focus_id(&id)?;
-                self.pending = scene.clone();
-                return Ok(scene);
+                return self.finish_scene(scene, false);
             }
             event = UiEvent::Relayout;
         }
@@ -547,7 +655,7 @@ impl SceneSource for Runtime {
         if reload {
             self.fonts.clear();
         }
-        let mut scene = match event {
+        let scene = match event {
             UiEvent::Model(values) => {
                 if self.launcher.is_some() {
                     self.session.update(values)?
@@ -814,54 +922,7 @@ impl SceneSource for Runtime {
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
             UiEvent::Key { text, backspace } => self.session.key(&text, backspace)?,
         };
-        if let Some(scene) = &mut scene {
-            if let Some(desktop) = &self.desktop {
-                crate::desktop::icons(scene, &desktop.snapshot())?;
-            }
-            let asset_profile = bead::core::profile::Span::new("assets");
-            for draw in &mut scene.primitives {
-                if let bead::render::Primitive::Image { path, .. } = draw
-                    && let Some(icon) = path.to_str().and_then(|s| s.strip_prefix("@icon:"))
-                {
-                    *path = if std::env::var_os("BEAD_MATCHED_ICONS").is_some() {
-                        std::env::var_os("BEAD_ICON_PATH")
-                            .map(std::path::PathBuf::from)
-                            .unwrap_or_else(|| "shell/sample.svg".into())
-                    } else {
-                        freedesktop_icons::lookup(icon)
-                            .with_size(48)
-                            .find()
-                            .unwrap_or_else(|| "shell/sample.svg".into())
-                    };
-                    let data = if !reload {
-                        if let Some(data) = self.session.asset_snapshot(path) {
-                            data
-                        } else {
-                            std::sync::Arc::from(std::fs::read(&*path)?)
-                        }
-                    } else {
-                        std::sync::Arc::from(std::fs::read(&*path)?)
-                    };
-                    scene.asset_data.insert(path.clone(), data);
-                }
-            }
-            drop(asset_profile);
-            // Service text can introduce a family/codepoint after an initially empty title.
-            scene.font_files = self.fonts.select(scene)?;
-        }
-        if let Some(scene) = &mut scene {
-            if self.bar {
-                scene.offset = (0., 0.);
-                scene.slide = None;
-                scene.bounds = bead::render::Rect::new(0., 0., scene.width, 50.);
-            }
-            let editor_profile = bead::core::profile::Span::new("editor_shape");
-            self.session.decorate_inputs(scene)?;
-            drop(editor_profile);
-        }
-        self.session.check_sources()?;
-        self.pending = scene.clone();
-        Ok(scene)
+        self.finish_scene(scene, reload)
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         self.session.check_sources()?;

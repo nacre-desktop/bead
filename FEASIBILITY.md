@@ -1,5 +1,28 @@
 # Feasibility
 
+## 2026-10-16 — Launcher input parity over ordered engine results
+
+Query edits select the first enabled result and reset scroll; arrows use layout geometry.
+The empty apps grid starts unselected; disabled boundaries and activation errors are tested.
+This is correctness work, with no measured typing improvement claimed.
+Memory deltas fit the five-pair control ranges; all close/hover guards pass.
+
+|5 lifecycle-pair medians|Before H /N|Candidate H /N|
+| --- | ---: | ---: |
+|First-open MiB|50.748 /48.464|51.082 /48.792|
+|Third-warm MiB|48.171 /46.146|48.567 /46.367|
+|Third-closed MiB|21.923 /22.582|22.187 /22.768|
+|Closed control range width MiB|1.482 /0.953|—|
+
+153 tests/fmt/clippy ALL targets/CPU-only/release pass. Nested input proof13
+states each:12 exact presentations plus one unchanged-boundary acknowledgment.
+60 cycle checks and hover guards pass bar+5MiB. Mixed typing results and full
+spreads are in the linked report; neither typing budget is accepted. No real
+engine or physical measurement. SDK optlevel2 rejected; SDK level1 retained.
+Fresh private Hvirtual120/N60,scale1.5; refresh prediction unknown, no own build
+overlap; external contention uncontrolled. No closed/steady threshold waiver.
+[Method](docs/research/feature9-gate-d.md#launcher-input-parity--2026-10-16).
+
 ## 2026-10-16 — Native copies for plain constructor properties
 
 The plain-table constructor path uses Luau's native clone instead of per-key copies.

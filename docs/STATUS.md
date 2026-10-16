@@ -1,46 +1,33 @@
 # Status
 
-## 2026-10-16 — Keep measured UI typing improvements; targets still open
+## 2026-10-16 — Launcher input parity; typing targets still open
 
-Last green UI checkpoint: cdf157e / CI 38864333734. This checkpoint
-keeps ordered pixel damage, separate SHM repair regions, Luau node constructors,
-shared immutable result models and the redundant-caret-shape fix. Count-only a3ab6dc
-and canonical Source 4fbf629 remain kept. CI 38863863203 caught test-only redundant
-borrows; cdf157e fixes them and CI is green. Local clippy now includes all targets
-with warnings denied. Production behavior and measured binaries are unchanged.
+Published constructor checkpoint3a9dd0f /CI38869424491 is green. This checkpoint
+adds first-enabled selection on query edits, geometry-based arrow navigation,
+scroll containment and visible activation errors over the unchanged engine order.
+153 tests/fmt/clippy ALL targets/CPU-only/release pass. Both private nested input
+proofs pass13 states:12 exact presentations plus one no-change acknowledgment.
+The reconnect test now synchronizes event-socket readiness; backend code stays frozen.
 
-Five alternating clock-only pairs per compositor: CPU medians H 15.47→10.10 /
-N 16.96→10.83 ms/key; presented p99 medians 24.72→22.19 / 27.02→21.34 ms.
-Ten lifecycle pairs each: third warm H 48.51→47.95 / N 46.20→45.60 MiB;
-closed 21.87→21.64 / 22.29→22.03. First-open also falls. Every current close/
-hover check stays within its own bar + 5 MiB; no memory threshold was waived.
-[Method, spreads and limits](research/feature9-gate-d.md#clocked-ui-typing-improvements--2026-10-16).
+Five alternating lifecycle pairs each: warm H48.17→48.57/N46.15→46.37MiB;
+closed21.92→22.19/22.58→22.77. Deltas fit control ranges1.48/0.95MiB;
+all60 cycle checks and hover guards pass bar+5. First-open+0.33MiB each fits
+control spreads too. Mixed typing checks show no optimization; CPU8ms/key and
+p99≤16.7ms remain unaccepted. Configured Hvirtual120/N60,scale1.5; feedback
+refresh prediction unknown. External contention is uncontrolled, not physical proof.
+[Method and limits](research/feature9-gate-d.md#launcher-input-parity--2026-10-16).
 
-4000 exact typing proofs and 160 successful lifecycle/hover guards. One initial
-niri IPC state call failed; original evidence is retained, its exact diagnostic
-retest and 20 extra lifecycle sessions pass. Cause remains unclassified; failure
-reply/client-status capture is added. Do not describe the original series as flawless.
-147 tests/fmt/clippy/CPU-only/release pass; native GL functional smoke passes (6 keys each compositor).
+Kept: count-onlya3ab6dc, canonical Source4fbf629, measured pixel/SHM/Luau/model
+changes3e3bb4e+clippy repaircdf157e, font reusee12b17f, constructor3a9dd0f.
+Font loads/key1→0; index owns no font data. Prior4000-key/ten-lifecycle series
+and one unclassified niri IPC failure remain recorded in the research report.
+SDK-only optlevel2 is rejected; level1 stays. Bake-copy experiment is separate.
 
-Both paths use scale 1.5 and 1746×981 CPU buffers. Nested H virtual120 / N60 are
-configured rates; feedback refresh prediction is unknown, not physical validation.
-Both 8 ms CPU / 16.7 ms presentation targets remain unaccepted. This checkpoint
-keeps renderer-owned font-state reuse: five-pair CPU medians H10.64→10.09 /
-N11.31→11.14ms/key, font loads1→0. Five-pair warm/closed medians fall; known
-weak-index metadata1304 bytes, no font data retained by the index.150 tests/fmt/
-clippy ALL targets/CPU-only/release pass. Font checkpoint e12b17f / CI38867627022 is green.
-Numeric RPC/typed-result readiness and wrong-query rejection are prepared/tested;
-real-engine comparison remains missing. This checkpoint keeps the plain-table
-constructor copy: H CPU10.46→9.66ms/key; N neutral (+0.05 within1.03ms range),
-p99 medians improve both.151 local tests/fmt/clippy ALL targets/CPU-only/release
-pass; fresh CI follows this push. Selection/navigation work remains separate.
-
-Upstream 83a9a9a4 / CI 38847478920 is green. SDK3042f3f2/menu goldens are pinned;
-migration owns engine/provider/host work before F2 finishes. Then compare real
-engine UI and owned-daemon CPU separately against matched QML, and STOP at Gate D.
-Keep 6b pacing/idle, historical 29.61→32.66% typing CPU, IME/hardware/cache gaps
-and the binary name clash open. No Feature 11/live/install/release work.
-CPU small panels / GL large animation; Mesa residue and idle-release policy remain.
+Upstream83a9a9a4 /CI38847478920 green; SDK3042f3f2/menu goldens pinned.
+Next: reduce fixture UI CPU; migration owns engine/provider/host work before F2
+finishes. Once hosted, compare real UI/owned-daemon CPU separately vs matched QML.
+STOP at Gate D. Keep6b pacing/idle, historical29.61→32.66% typing CPU,
+IME/hardware/cache gaps and binary name clash open. No live/install/release work.
 
 ## Accepted Gate C and optimization baseline
 

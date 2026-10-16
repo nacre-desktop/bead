@@ -9,6 +9,51 @@ Typing targets are not accepted; this is an interim checkpoint, not Gate D.
 
 
 
+## Launcher input parity — 2026-10-16
+
+Result selection and navigation are view state over the engine's unchanged order.
+A successful query edit selects the first enabled result and resets scrolling;
+the empty apps grid retains its unselected initial state. Arrows use actual
+rendered column/row/viewport geometry, skip disabled rows and keep selection in
+view. Enter uses the opaque engine descriptor; rejected activation stays visible.
+No catalog, ranking, provider or real external action is added. Every early
+scene-return path now runs common asset/font/editor preparation before commit.
+
+153 tests/fmt/clippy ALL targets/CPU-only/release pass. New tests cover query
+reset versus restored state, disabled rows, list wrap/scroll and grid boundaries.
+The existing backend reconnect fixture now waits for its event socket to be
+accepted before disconnecting it; production backend code is frozen. Private
+nested input proofs pass on both compositors:13 states each,12 exact generation/
+update presentations plus one acknowledged unchanged boundary action. The
+no-change action correctly does not demand a new frame. A fixture activation
+error is presented, keeps selection and leaves the client alive.
+
+Five alternating lifecycle pairs per compositor use the constructor checkpoint
+as control and fresh private sessions. PSS+DRM MiB medians:
+
+| |Before H /N|Input candidate H /N|Control range width H /N|
+| --- | ---: | ---: | ---: |
+|First open|50.748 /48.464|51.082 /48.792|1.260 /1.145|
+|Third warm|48.171 /46.146|48.567 /46.367|1.467 /0.991|
+|Third closed|21.923 /22.582|22.187 /22.768|1.482 /0.953|
+
+All60 cycle checks plus hover/idle guards pass bar+5MiB. Positive memory deltas
+are inside the control ranges, not evidence of an exact zero delta. Paired closed
+medians are+0.044/+0.128MiB. No confirmed closed/steady regression is resolved by
+waiving a threshold. First-open increases remain below1MiB. Raw evidence:
+`.research/gate-d-foundation/navigation-lifecycle-{threepairs,finish5}/` and
+`navigation-lifecycle-fivepairs-summary.json`.
+
+Typing checks show mixed changes within the recent run spread, not an
+optimization: reverse-order H clocks9.188→9.444ms/key, p9922.204→21.900;
+N10.129→10.847,p9923.038→17.047. The earlier order has H9.531→10.826,
+N10.522→10.355. Raw `navigation-final-pair/`, `navigation-reverse-profile/` and
+`launcher-input-navigation-v6/`. CPU8ms/p99≤16.7ms targets remain unaccepted.
+Configured nested Hvirtual120/N60,scale1.5; presentation refresh prediction
+unknown. No own build overlaps; external load, frequency and paging uncontrolled.
+SDK-only optlevel2 was separately rejected: mixed tails/resident SHM lifecycle;
+SDK level1 remains. An unmeasured bake-copy experiment is excluded here.
+
 ## Feature 10 Source fixture checkpoint — 2026-10-16
 
 The view consumes ordered menu.query results through the neutral Source call API.

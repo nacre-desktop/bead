@@ -166,6 +166,7 @@ fn both_transports_reconnect_after_recorded_socket_sessions_and_output_hotplug()
             std::env::temp_dir().join(format!("bead-reconnect-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let sockets = Arc::new(Mutex::new(Vec::<UnixStream>::new()));
+        let (event_ready, event_started) = std::sync::mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let (path, event_path) = if name == "hyprland" {
             (
@@ -188,6 +189,7 @@ fn both_transports_reconnect_after_recorded_socket_sessions_and_output_hotplug()
             let stop = stop.clone();
             let records = shared_records.clone();
             let name = name.to_owned();
+            let event_ready = event_ready.clone();
             thread::spawn(move || {
                 while !stop.load(Ordering::SeqCst) {
                     match listener.accept() {
@@ -198,8 +200,10 @@ fn both_transports_reconnect_after_recorded_socket_sessions_and_output_hotplug()
                             let records = records.clone();
                             let name = name.clone();
                             let stop = stop.clone();
+                            let event_ready = event_ready.clone();
                             thread::spawn(move || {
                                 if name == "hyprland" && event {
+                                    let _ = event_ready.send(());
                                     while !stop.load(Ordering::SeqCst) {
                                         thread::sleep(Duration::from_millis(10));
                                     }
@@ -241,6 +245,7 @@ fn both_transports_reconnect_after_recorded_socket_sessions_and_output_hotplug()
                                         serde_json::from_str(&line).unwrap();
                                     line.clear();
                                     if matches!(request, niri_ipc::Request::EventStream) {
+                                        let _ = event_ready.send(());
                                         let _ =
                                             reader.get_mut().write_all(b"{\"Ok\":\"Handled\"}\n");
                                         for kind in ["WorkspacesChanged", "WindowsChanged"] {
@@ -302,6 +307,10 @@ fn both_transports_reconnect_after_recorded_socket_sessions_and_output_hotplug()
                 count.fetch_add(1, Ordering::SeqCst);
             }
         }));
+        // Initial snapshot readiness can precede event-stream connection.
+        // Drop a stream that the fixture has actually accepted, not just a
+        // completed command socket. The disconnect assertion stays strict.
+        event_started.recv_timeout(Duration::from_secs(8)).unwrap();
         for socket in sockets.lock().unwrap().drain(..) {
             let _ = socket.shutdown(std::net::Shutdown::Both);
         }
