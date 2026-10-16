@@ -1,18 +1,18 @@
 # Status
 
-## 2026-10-17 — Closed-panel audit: allocator retention exposed
+## 2026-10-17 — Idle audit: 1 MiB policy stays unshipped; CPU check worsens
 
-Modules/assets already load per view; retirement now clears the launcher's
-scalar-state mirror too (2.2s close grace, quick reopen keeps the live worker).
-A stronger test discards two unused preparations: accepted/candidate both reach
-28.66/28.84 MiB from about22 MiB bar, failing the unchanged close+5 guard.
-Accounted caches return to164 KiB; diagnostic heap counters and a UI-only mmap
-threshold trial point to allocator retention of a large transient raster.
-An application-only1 MiB mmap policy is a candidate, respecting explicit allocator
-settings. Framework allocation/font code is unchanged. 193 workspace tests,
-isolated trace allocation proof, fmt/clippy/CPU-only pass. Native and five-pair
-old/new memory validation remain; no cleanup saving or new acceptance claimed.
-No next panel is added until this audit is resolved.
+Named-view source e8a02ae is accepted and CI green. The scalar mirror cleanup
+and application-only1 MiB mmap candidate pass both20-cycle native checks and
+five alternating memory pairs/compositor. Paired warm deltas -1.845/-1.823 MiB;
+settled +0.159/+0.110 fit control spreads0.269/0.740. Allclose/25/group guards pass.
+But the200-key single-pair CPU screen rises11.218->12.067 /11.447->11.649ms H/N;
+p99 rises31.102->32.472 /28.752->34.356ms. No new typing acceptance or gain.
+The1 MiB policy remains local. Testing a4 MiB process-only override on the SAME
+ELF first: transient paint masks can exceed1 MiB, so the earlier threshold may
+map too many per-frame allocations. No extra rebuild until the diagnostic helps.
+Calendar Source-wake/rollover and bar startup-restore fixes are drafted separately,
+UNTESTED; no source or new panels mixed into these frozen captures. Dashboard held.
 
 ## 2026-10-17 — Calendar/sound/routing cost accepted; idle audit next
 

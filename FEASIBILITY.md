@@ -5,7 +5,7 @@
 Closed modules already load on demand; worker retirement now clears mirrored
 launcher view state. Two consecutive unused preparations expose an older
 resident-memory failure in both normal accepted and cleanup binaries.
-An application-only mmap policy is under validation; no saving accepted yet.
+The1 MiB policy passes memory pairs but worsens a typing CPU screen; unshipped.
 
 | Hyprland diagnostic, UI MiB | Bar | After second unused discard | Settled |
 | --- | ---: | ---: | ---: |
@@ -17,7 +17,8 @@ Nested/private, scale1.5, frozen75157 daemon,320 apps; host contention uncontrol
 No own build overlap. Trace-only heap accounting shows freed bytes can remain
 reserved; it changes allocation layout and is not an acceptance substitute.
 193 workspace tests plus the isolated trace allocation proof, fmt/clippy/CPU-only
-pass. Five alternating memory pairs, normal native stress and typing remain.
+pass. Both20-cycle checks and five memory pairs/compositor pass; the200-key CPU
+screen rises11.218->12.067 /11.447->11.649ms. Same-ELF4 MiB diagnostic next.
 [Audit and method](docs/research/feature9-gate-d.md#closed-panel-residency-audit--candidate-2026-10-17).
 
 ## 2026-10-17 — Named service views: measured combined feature cost accepted

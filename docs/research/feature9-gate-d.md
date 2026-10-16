@@ -84,7 +84,24 @@ An isolated trace-only test raises the adaptive threshold, applies the policy,
 and proves three1.5 MiB allocations each return their mapping on drop; CI runs it.
 No allocator rewrite, cache-ledger tolerance or relaxed close assertion is added.
 
-Five alternating before/after memory pairs remain pending. The accepted feature's mapped code pages are
+Five alternating pairs/compositor now pass the memory gate: paired warm
+-1.845/-1.823 MiB H/N; paired settled+0.159/+0.110 stay within control spreads
+0.269/0.740. Both normal20-cycle native checks pass the two-unused stress,
+quick reopen and idle reset. H/N settled native23.487/23.655 MiB remain below25.
+N observation attempts1/2 are invalid: an expired child remained a zombie in the
+process list. The repaired observer records stat-confirmed exited children and
+requires every live process measured with stable membership, not a zero substitute.
+
+The200-key single-pair CPU screen is not clean: UI11.218->12.067 /11.447->11.649
+ms/key H/N; presentedp9931.102->32.472 /28.752->34.356ms. No statistical gain or
+typing acceptance is claimed. The1 MiB candidate remains unshipped. The paint
+path creates fresh masks that can exceed1 MiB; forcing more mappings may cost
+CPU. A same-ELF, UI-only4 MiB environment override is the next diagnostic before
+rebuilding another policy candidate. A global allocator/font rewrite is avoided.
+The following calendar-wake/rollover and bar startup-restore fixes remain separate
+unbuilt drafts; current frozen073 captures contain none of them.
+
+The accepted feature's mapped code pages are
 not retained panel data; they cannot be unloaded by dropping a view. No unsafe
 code-page discard or allocator/font-engine rewrite is introduced. No new panel
 is added until the cleanup has its matched measurements.
