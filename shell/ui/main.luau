@@ -18,8 +18,9 @@ return kit.Panel {edge="top",id="launcher",width=1100,height=590,max_width="90%"
             ui.Text{text=ui.bind("launcher.subtitle"),color="onSurfaceVariant",font_size=13.333,height=20},
             ui.Text{id="source-error",text=ui.bind("launcher.error"),visible=ui.bind("launcher.failed"),color="error",font_size=13.333,height=20},
             ui.Text{id="no-results",text="No results",visible=ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
-            ui.Box{id="grid-host",grow=1,visible=ui.bind("launcher.grid"),AppGrid{}},
-            ui.Box{id="results-host",grow=1,visible=ui.bind("launcher.results"),Results{}},
+            ui.resolve_for_check(ui.bind("launcher.grid"))
+                and ui.Box{id="grid-host",grow=1,AppGrid{}}
+                or ui.Box{id="results-host",grow=1,Results{}},
             ui.Box{height=10},
         },
     },

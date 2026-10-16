@@ -1,5 +1,26 @@
 # Feasibility
 
+## 2026-10-16 — changed launcher results expose hidden-view work
+
+Identical a/ap rows measured a best-case reuse path, not real result changes.
+A second exact fixture swaps disjoint160-row sets from320 total apps each edit.
+The launcher built a hidden grid as well as the list; only the active view is now built.
+Preparation improves, but changed-result typing still misses both budgets.
+
+|200 keys, nested fixture | Before H /N | Candidate H /N | QML H /N |
+| --- | ---: | ---: | ---: |
+|UI CPU mean ms/key |36.568 /35.595|23.897 /26.059|133.780 /135.558|
+|Presented p99 ms |48.053 /50.516|38.966 /40.492|110.741 /111.242|
+|Typed-list PSS+DRM MiB,3s idle |43.72 /47.50|42.42 /46.44|502.09 /488.93|
+
+H virtual120/N nested60,2880×1800/scale1.5, exact200 feedback generations each.
+Same30804a7 release, candidate bundle only; unchanged QML retains extra controls.
+Sequential fresh sessions; no own build, migration diagnostic/external load uncontrolled.
+H markup CPU16.22→5.95ms; composition11.85→12.42ms remains expensive.
+No engine/ranking/helper CPU; no physical/full-parity/timing acceptance.
+5a7f548 docs-only CI repeated the50ms guard failure; limit stays unchanged.
+See [method and limitations](docs/research/feature9-gate-d.md#changed-result-typing-and-active-view-preparation--2026-10-16).
+
 ## 2026-10-16 — preserve validation while fixing CI markup timeout
 
 CI caught the320-app headless view crossing the unchanged50ms markup limit.

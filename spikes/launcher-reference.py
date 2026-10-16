@@ -48,7 +48,11 @@ QtObject {
     function work(){return false}
 }
 """
-        menu=menu.replace('__FIXTURE__',json.dumps({'queries':{'':{'rows':data},'a':{'rows':data},'ap':{'rows':data}}}))
+        replies={'':{'rows':data},'a':{'rows':data},'ap':{'rows':data}}
+        changed=os.environ.get('BEAD_TYPING_CHANGED_RESULTS')=='1'
+        if changed:
+            replies['a']={'rows':data[:160]};replies['ap']={'rows':data[160:]}
+        menu=menu.replace('__FIXTURE__',json.dumps({'queries':replies}))
         (root/'services/NacreMenu.qml').write_text(menu)
         for name,body in {
             'NacreControlTools':'function run(){} function work(){}',
@@ -112,7 +116,7 @@ ShellRoot {
                         ns,end=exact[0];rows.append({'index':index,'generation':generation,'latency_ms':(ns-stamp)/1e6,'cpu_ms':(end-cpu)/1e6})
                         time.sleep(.04)
                     assert 'QML_PRESENTATION clock_id=1'in log.read_text()
-                    summary={'compositor':compositor,'keys':len(rows),'catalog_size':320,'source':'exact fixture replies; no engine','helper_cpu_ms':None,'rows':rows}
+                    summary={'compositor':compositor,'keys':len(rows),'catalog_size':320,'source':'exact fixture replies; no engine','helper_cpu_ms':None,'changed_result_ids':changed,'fixture_result_counts':{q:len(r['rows'])for q,r in replies.items()},'rows':rows}
                     for metric in ['cpu_ms','latency_ms']:
                         values=[r[metric]for r in rows];summary[metric]={**matrix.percentiles(values),'mean':sum(values)/len(values),'max':max(values)}
                     (raw/'qml-typing-proof.json').write_text(json.dumps(summary,indent=2)+'\n')

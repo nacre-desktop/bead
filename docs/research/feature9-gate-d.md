@@ -306,6 +306,50 @@ Predecessor684b922 CI38823402035 green.
 Canonical daemon menu schemas/engine are still pending after upstream F2; no
 second engine was built to turn missing measurements into zeros.
 
+## Changed-result typing and active-view preparation — 2026-10-16
+
+The preceding identical-row a/ap fixture is a best-case model-reuse workload,
+not evidence that newly filtered results meet the typing target. An additional
+explicit fixture keeps320 total apps, but a/ap return disjoint160-row sets.
+Every edit replaces visible result identities; no filtering/ranking/provider runs.
+Both UIs receive the same rows/order/icons/breadcrumbs and200 exact-generation
+key→query commit→presentation proofs. Screenshots show Application0160 and ap.
+
+The Luau launcher constructed both AppGrid and Results before hiding one. A new
+model therefore rebuilt the hidden grid too. Selecting the active branch before
+construction removes that work without retaining another prepared view. Existing
+store-owned query/selection/scroll survive; headless coverage switches disjoint
+results, provider fixtures, reload and back to the full320-app grid.
+
+|Nested changed-result fixture | Before H /N | Active view H /N | QML H /N |
+| --- | ---: | ---: | ---: |
+|UI CPU mean ms/key |36.568 /35.595|23.897 /26.059|133.780 /135.558|
+|Presented p99 ms |48.053 /50.516|38.966 /40.492|110.741 /111.242|
+|Typed-list PSS+DRM MiB,3s idle |43.72 /47.50|42.42 /46.44|502.09 /488.93|
+
+Hyprland virtual120/niri nested60,2880×1800/scale1.5. Same release binary
+30804a7 (SHA-256 dbaee209120c8e0bc087d546b3f190e3fc9e484e53a88c51cf34950df245738a),
+only candidate Luau bundle differs. Original unchanged QML browser retains its
+extra details/controls and normal delegate/model lifecycle; this is no claim of
+full visual parity or an engine-cost comparison. QML initially missed an explicit
+reference-path environment setting; that failed setup was rejected and corrected.
+Native H→QML H→QML N→native N→candidate H/N, sequential fresh private sessions;
+no own heavy build overlap. Migration compilation was paused, but its desktop
+comparison/diagnostic and other activity were uncontrolled. One cell per side,
+not an alternating five-pair significance proof. No SwapPss observed. Three-second
+memory samples are diagnostics, not replacements for60-second idle acceptance.
+
+H steady-profile CPU: markup16.22→5.95ms; worker23.55→10.57ms, composition
+11.85→12.42ms. Nested spans overlap and must not be added as independent work.
+This is a real preparation improvement, but both8ms CPU/16.7ms presentation
+budgets still fail for changed results. Composition and remaining markup need
+work; helper CPU/end-to-end remain unmeasured until the canonical engine lands.
+The docs-only5a7f548 CI repeated the50ms markup failure after e2ba01d had passed;
+the active-view candidate must pass a fresh full CI run without raising that limit.
+Local135tests/fmt/all-features clippy/Luau pass. The default launcher lifecycle
+proof passes both: hover expiry, explicit preparation, preserved query, three
+closes within bar+5MiB including swap, exact feedback and process cleanup.
+
 ## Remaining-parity forecast — provisional until the engine comparison
 
 Gate D is not accepted by this forecast. The engine/prefix/activation comparison

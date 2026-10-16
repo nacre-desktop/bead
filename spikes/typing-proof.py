@@ -18,7 +18,12 @@ def sample(env,raw,compositor,stop):
         env['BEAD_ICON_PATH']=str(bundle/'shell/sample.svg')
         rows_fixture=[{'id':f'proof-{i:04}','name':f'Application {i:04}','label':f'Application {i:04}','icon':str(ROOT/'shell/sample.svg'),'kind':'app','description':'Application fixture','breadcrumb':'All apps','operation':'app','disabled':False} for i in range(320)]
         legacy=os.environ.get('BEAD_TYPING_LEGACY')=='1'
-        catalog=bundle/'menu-fixture.json';catalog.write_text(json.dumps(rows_fixture if legacy else {'queries':{'':{'rows':rows_fixture},'a':{'rows':rows_fixture},'ap':{'rows':rows_fixture}}}))
+        replies={'':{'rows':rows_fixture},'a':{'rows':rows_fixture},'ap':{'rows':rows_fixture}}
+        changed=os.environ.get('BEAD_TYPING_CHANGED_RESULTS')=='1'
+        if changed:
+            assert not legacy,'changed results require the exact-query fixture Source'
+            replies['a']={'rows':rows_fixture[:160]};replies['ap']={'rows':rows_fixture[160:]}
+        catalog=bundle/'menu-fixture.json';catalog.write_text(json.dumps(rows_fixture if legacy else {'queries':replies}))
         path=raw/'typing.log';pointer=None;client=None;keeper=None
         command=[binary,'--renderer',os.environ.get('BEAD_TYPING_RENDERER','cpu'),'--namespace','bead-typing','--ui','ui/main.luau','--catalog' if legacy else '--menu-fixture',str(catalog),'--backend','none','--test-keyboard']
         if compositor=='hyprland':command+=['--output','bead-bench']
@@ -63,7 +68,7 @@ def sample(env,raw,compositor,stop):
                 if os.environ.get('BEAD_TYPING_IDLE_SECONDS'):
                     idle=matrix.idle(client.pid,float(os.environ['BEAD_TYPING_IDLE_SECONDS']))
                     subprocess.run(['grim',str(raw/'typing-native.png')],env=env,capture_output=True,check=True,timeout=8)
-                result={'compositor':compositor,'catalog_size':320,'idle':idle,'source':'legacy catalog fixture' if legacy else 'exact menu.query fixtures; no engine','workload':'first grid-to-list key, then a/ap populated list'if steady else'alternating empty/a grid-list transitions','helper_cpu_ms':None,'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
+                result={'compositor':compositor,'catalog_size':320,'idle':idle,'source':'legacy catalog fixture' if legacy else 'exact menu.query fixtures; no engine','workload':'first grid-to-list key, then a/ap populated list'if steady else'alternating empty/a grid-list transitions','helper_cpu_ms':None,'changed_result_ids':changed,'fixture_result_counts':{q:len(r['rows'])for q,r in replies.items()},'keys':len(rows),'latency_ms':matrix.percentiles([r['latency_ms'] for r in rows]),'cpu_ms':matrix.percentiles([r['cpu_ms'] for r in rows]),'memory':matrix.measure.memory(client.pid),'drm_mib':matrix.measure.drm_memory(client.pid),'rows':rows}
 
         finally:
             if pointer:pointer.close()

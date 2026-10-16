@@ -271,7 +271,7 @@ mod tests {
         use serde_json::json;
         let apps: Vec<_>=(0..320).map(|i|json!({"id":format!("app-{i:04}"),"kind":"app","label":format!("Application {i:04}"),"icon":"fixture","description":"Application fixture"})).collect();
         let source = std::sync::Arc::new(crate::launcher::Fixture::new(json!({"queries":{
-            "":{"rows":apps},"a":{"rows":apps},
+            "":{"rows":apps},"a":{"rows":apps[..160]},"ap":{"rows":apps[160..]},
             "=1+1":{"rows":[{"id":"calc-2","kind":"calculator","label":"2","description":"1 + 1"}]},
             "emoji smile":{"rows":[{"id":"emoji-smile","kind":"emoji","label":"Smiling face","emoji":"☺"}]},
             "clipboard item":{"rows":[{"id":"clip-1","kind":"clipboard","label":"Copied fixture"}]},
@@ -306,6 +306,8 @@ mod tests {
         h.assert_accessible("Application 0000", accesskit::Role::Button)?;
         for (query, label) in [
             ("a", "Application 0000"),
+            ("ap", "Application 0160"),
+            ("a", "Application 0000"),
             ("=1+1", "2"),
             ("emoji smile", "Smiling face"),
             ("clipboard item", "Copied fixture"),
@@ -330,6 +332,16 @@ mod tests {
             menu.activate("action-1").is_err(),
             "fixture must never invoke external actions"
         );
+        h.update(std::collections::BTreeMap::from([(
+            "launcher.search.text".into(),
+            Value::Text(String::new()),
+        )]))?;
+        h.render()?;
+        h.assert_accessible("Application 0000", accesskit::Role::Button)?;
+        assert!(matches!(
+            h.session.stores.get("launcher.result_count"),
+            Some(Value::Number(count)) if *count == 320.
+        ));
         Ok(())
     }
 
