@@ -75,13 +75,11 @@ Current tracked harness identities at `08370ef`:
 | `spikes/dashboard-residency.py` | `771e7dc0dd865d99831f01c35fa0fc2535f8e1eb` | `010cfec909aed2425b1e1b37923e83ceedbcfae62dc7f1fcc3ca744336f24feb` |
 | `spikes/menu-fixtures.py` | `4000962e9389363132ea4a7b5e8ca5df34cb6e36` | `691301658c7799223bdd29e97e2dfe06212c336db7abb90d13e2ad63f162a835` |
 
-These harness sources and dashboard fixtures are unchanged across the B1/B4
-test/docs commits. The residency sampler currently targets 35/55/75/65 seconds
-per phase and asserts only 30 seconds idle. It has no verified flag for a full
-60-second idle window or a 600-second per-arm warmup. Before any granted capture,
-the harness needs only the spec-authorized wait/sample-duration adjustment and
-an assertion that each phase idles for at least 60 seconds; no such edit was
-made during this preflight.
+These harness sources and dashboard fixtures were unchanged across the B1/B4
+test/docs commits. At preflight head `08370ef`, the residency sampler targeted
+35/55/75/65 seconds per phase and asserted only 30 seconds idle. B0005 commit
+`46b2a99` adds the explicit full-window acceptance mode described below; it
+changes harness timing only and does not certify binaries or authorize capture.
 
 ## Proposed nested method and duration
 
@@ -139,10 +137,9 @@ legacy phase; invalid modes or warmup values fail before the launcher starts.
 
 The outer scheduler alternates control/candidate arms and records the exact
 bundle/helper hashes for each cell. It must not use different runtime flags for
-the two arms when B1/B4 runtime inputs are identical. A 600-second warmup is not
-implemented by this current command template; the existing 32-second engine
-settle flag is not a substitute. If that warmup mode is needed, its timing hook
-must be reviewed before requesting the slot.
+the two arms when B1/B4 runtime inputs are identical. The existing 32-second
+engine settle remains separate from the acceptance warmup; only the explicit
+0- or 600-second option controls that phase.
 
 The existing runner uses a private D-Bus session and mode-0700 temporary XDG
 roots; the launcher proof refuses the live runtime/display. Its cleanup tracks
