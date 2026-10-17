@@ -5,7 +5,7 @@ use bead::core::{
     source::{self, Source},
 };
 use nacre_protocol::menu::{
-    MenuActivate, MenuActivated, MenuConversion, MenuQuery, MenuQueryResult,
+    MAX_ITEMS, MenuActivate, MenuActivated, MenuConversion, MenuQuery, MenuQueryResult,
 };
 use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, path::Path, sync::Arc, time::Duration};
@@ -76,6 +76,8 @@ pub fn source(
 /// Only display data crosses into Luau; opaque activation stays in the host.
 struct Prepared {
     rows: Vec<Json>,
+    total: usize,
+    total_known: bool,
     actions: BTreeMap<String, String>,
     catalog_rev: u64,
     conversion: Option<MenuConversion>,
@@ -90,6 +92,8 @@ fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared
     if expected_query.is_some_and(|query| result.query.as_str() != query) {
         return Err(invalid_menu());
     }
+    // Preserve the engine's order and current2048-row response ceiling.
+    let total = result.total.map(|n| (n as usize).min(MAX_ITEMS));
     let mut rows = Vec::with_capacity(result.order.len());
     let mut actions = BTreeMap::new();
     for id in result.order {
@@ -121,6 +125,8 @@ fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared
         rows.push(row);
     }
     Ok(Prepared {
+        total: total.unwrap_or(rows.len()).max(rows.len()),
+        total_known: total.is_some(),
         rows,
         actions,
         catalog_rev: result.catalog_rev,
@@ -258,14 +264,45 @@ impl Source for Fixture {
             let request: MenuQuery = serde_json::from_value(params).map_err(|_| invalid_menu())?;
             request.validate().map_err(|_| invalid_menu())?;
             let query = &request.query;
-            snapshot
+            let reply = snapshot
                 .data
                 .get("queries")
                 .and_then(|q| q.get(query))
-                .cloned()
                 .ok_or_else(|| {
                     source::Error::new("unavailable", "query absent from fixture", false)
-                })
+                })?;
+            if let Some(limit) = request.limit {
+                // Fixture results are already ordered: only mimic the wire prefix.
+                // Never clone the full item map, filter, interpret or rank a query.
+                let mut result = reply
+                    .as_object()
+                    .ok_or_else(invalid_menu)?
+                    .iter()
+                    .filter(|(key, _)| !matches!(key.as_str(), "items" | "order"))
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect::<serde_json::Map<_, _>>();
+                let order = reply["order"].as_array().ok_or_else(invalid_menu)?;
+                let prefix = order
+                    .iter()
+                    .take(limit as usize)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let items = prefix
+                    .iter()
+                    .map(|id| {
+                        let key = id.as_str().ok_or_else(invalid_menu)?;
+                        Ok((
+                            key.to_owned(),
+                            reply["items"].get(key).cloned().ok_or_else(invalid_menu)?,
+                        ))
+                    })
+                    .collect::<source::Result<serde_json::Map<_, _>>>()?;
+                result.insert("order".into(), Json::Array(prefix));
+                result.insert("items".into(), Json::Object(items));
+                Ok(Json::Object(result))
+            } else {
+                Ok(reply.clone())
+            }
         })
     }
     fn reconnect(&self) -> source::Reply<'_> {
@@ -286,6 +323,9 @@ struct View {
     catalog_rev: u64,
     stamp: Option<(String, u64, bool)>,
     rows: Arc<Vec<Json>>,
+    total: usize,
+    force_full: bool,
+    last_scroll: f64,
     error: String,
     conversion: Option<MenuConversion>,
     message: String,
@@ -330,7 +370,6 @@ impl Menu {
         key: &str,
         geometry: NavigationGeometry,
     ) -> Option<BTreeMap<String, Value>> {
-        let view = self.view.borrow();
         let query = matches!(stores.get("launcher.search.text"),Some(Value::Text(text))if !text.trim().is_empty());
         let grid = !query
             && stores
@@ -343,6 +382,38 @@ impl Menu {
             "right" if grid => 1,
             _ => return None,
         };
+        let needs_full = {
+            let view = self.view.borrow();
+            let current = match stores.get("launcher.selection") {
+                Some(Value::Text(id)) => view
+                    .rows
+                    .iter()
+                    .position(|row| row["id"].as_str() == Some(id.as_str())),
+                _ => None,
+            };
+            view.total > view.rows.len()
+                && if direction > 0 {
+                    !view
+                        .rows
+                        .iter()
+                        .skip(current.map_or(0, |i| i + 1))
+                        .any(|row| row["disabled"] != true)
+                } else {
+                    current
+                        .is_none_or(|i| !view.rows[..i].iter().any(|row| row["disabled"] != true))
+                }
+        };
+        let mut expanded = BTreeMap::new();
+        if needs_full {
+            // First visible selections stay local. Fetch before crossing an
+            // unloaded boundary or wrapping, including disabled-row tails.
+            self.view.borrow_mut().force_full = true;
+            expanded = self.project(stores).ok()?;
+            if !self.view.borrow().error.is_empty() {
+                return Some(expanded);
+            }
+        }
+        let view = self.view.borrow();
         let current = match stores.get("launcher.selection") {
             Some(Value::Text(id)) => view
                 .rows
@@ -407,7 +478,7 @@ impl Menu {
         } else {
             scroll = 0.;
         }
-        Some(BTreeMap::from([
+        expanded.extend(BTreeMap::from([
             (
                 "launcher.selection".into(),
                 Value::Text(
@@ -418,7 +489,8 @@ impl Menu {
                 ),
             ),
             ("launcher.scroll.y".into(), Value::Number(scroll)),
-        ]))
+        ]));
+        Some(expanded)
     }
     pub fn activate(&self, id: &str) -> source::Result<MenuActivated> {
         let view = self.view.borrow();
@@ -511,16 +583,51 @@ impl Menu {
             .request
             .as_ref()
             .is_some_and(|previous| previous.0 != request.0);
-        if view.request.as_ref() != Some(&request) || view.stamp != stamp {
+        let scroll = match stores.get("launcher.scroll.y") {
+            Some(Value::Number(n)) => *n,
+            _ => 0.,
+        };
+        let expand = view.force_full
+            || (view.request.as_ref() == Some(&request)
+                && view.total > view.rows.len()
+                && scroll > 0.);
+        view.force_full = false;
+        if view.request.as_ref() != Some(&request) || view.stamp != stamp || expand {
+            // Only edited queries use a ranked prefix. Initial/restored state,
+            // catalog changes, navigation and scrolling still load the full reply.
+            // Missing optional store means an older recovery bundle: stay compatible.
+            let limited = query_changed
+                && !request.0.trim().is_empty()
+                && view.stamp == stamp
+                && !expand
+                && view
+                    .request
+                    .as_ref()
+                    .is_some_and(|old| old.1 == request.1 && old.2 == request.2)
+                && matches!(stores.get("launcher.total_count"), Some(Value::Number(_)));
             let result = if let Some(source) = &self.source {
                 let _query = bead::core::profile::Span::new("menu_query");
+                let mut params = json!({"query":request.0,"mode":request.1,
+                    "route":if request.2.is_empty(){Json::Null}else{json!(request.2)}});
+                if limited {
+                    params["limit"] = json!(64);
+                }
                 self.runtime
                     .block_on(query(
                         source.as_ref(),
-                        json!({"query":request.0,"mode":request.1,"route":if request.2.is_empty(){Json::Null}else{json!(request.2)}}),
+                        params,
                         Duration::from_secs(3),
                     ))
                     .and_then(|reply| prepare(reply, Some(request.0.as_str())))
+                    .and_then(|prepared| {
+                        if limited && (!prepared.total_known || (prepared.total > prepared.rows.len()
+                            && !prepared.rows.iter().any(|row| row["disabled"] != true))) {
+                            self.runtime.block_on(query(source.as_ref(),
+                                json!({"query":request.0,"mode":request.1,"route":if request.2.is_empty(){Json::Null}else{json!(request.2)}}),
+                                Duration::from_secs(3)))
+                                .and_then(|reply| prepare(reply, Some(request.0.as_str())))
+                        } else { Ok(prepared) }
+                    })
             } else {
                 Err(source::Error::new(
                     "unavailable",
@@ -537,6 +644,7 @@ impl Menu {
                             prepared.rows.len()
                         );
                     }
+                    view.total = prepared.total;
                     view.rows = Arc::new(prepared.rows);
                     view.actions = prepared.actions;
                     view.catalog_rev = prepared.catalog_rev;
@@ -592,6 +700,12 @@ impl Menu {
         if let Some(mode) = restore_mode {
             delta.insert("launcher.mode".into(), Value::Text(mode));
         }
+        if stores.get("launcher.total_count").is_some() {
+            delta.insert(
+                "launcher.total_count".into(),
+                Value::Number(view.total as f64),
+            );
+        }
         let conversion = view.conversion.as_ref();
         for (key, value) in [
             (
@@ -614,8 +728,14 @@ impl Menu {
                 delta.insert(key.into(), Value::Text(value));
             }
         }
-        if reset_scroll {
+        if !view.error.is_empty() && scroll != view.last_scroll {
+            // Failed expansion keeps the last good viewport, never an unloaded region.
+            delta.insert("launcher.scroll.y".into(), Value::Number(view.last_scroll));
+        } else if reset_scroll {
+            view.last_scroll = 0.;
             delta.insert("launcher.scroll.y".into(), Value::Number(0.));
+        } else {
+            view.last_scroll = scroll;
         }
         // A query may change while the ordered engine result stays identical.
         // Retain the store's immutable model instead of cloning it just to compare.
@@ -636,6 +756,297 @@ impl Menu {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct PrefixSource {
+        fixture: Fixture,
+        calls: std::sync::Mutex<Vec<Json>>,
+        fail_full: std::sync::atomic::AtomicBool,
+        omit_total: bool,
+    }
+    impl Source for PrefixSource {
+        fn snapshot(&self) -> Arc<source::Snapshot> {
+            self.fixture.snapshot()
+        }
+        fn subscribe(&self, callback: source::Callback) -> source::Result<source::Subscription> {
+            self.fixture.subscribe(callback)
+        }
+        fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(params.clone());
+                if params.get("limit").is_none()
+                    && self.fail_full.load(std::sync::atomic::Ordering::SeqCst)
+                {
+                    return Err(source::Error::new(
+                        "unavailable",
+                        "fixture expansion unavailable",
+                        true,
+                    ));
+                }
+                let mut reply = self.fixture.invoke(method, params).await?;
+                if self.omit_total {
+                    reply.as_object_mut().unwrap().remove("total");
+                }
+                Ok(reply)
+            })
+        }
+        fn reconnect(&self) -> source::Reply<'_> {
+            self.fixture.reconnect()
+        }
+        fn stop(&self) -> source::Reply<'_> {
+            self.fixture.stop()
+        }
+    }
+    fn prefix_source(disabled_prefix: bool, omit_total: bool) -> Arc<PrefixSource> {
+        let rows = (0..320).map(|i| json!({"id":format!("app{i}"),"name":format!("App {i}"),"disabled":disabled_prefix && i < 64})).collect::<Vec<_>>();
+        Arc::new(PrefixSource {
+            fixture: Fixture::new(json!({"queries":{
+                "":fixture_reply("",rows.clone()), "a":fixture_reply("a",rows.clone()), "ap":fixture_reply("ap",rows)
+            }})).unwrap(),
+            calls: Default::default(), fail_full: false.into(), omit_total,
+        })
+    }
+    fn prefix_stores() -> Stores {
+        Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.total_count".into(), Value::Number(0.)),
+                ("launcher.search.text".into(), Value::Text(String::new())),
+                ("launcher.selection".into(), Value::Text(String::new())),
+                ("launcher.scroll.y".into(), Value::Number(0.)),
+            ]))
+            .unwrap()
+    }
+    fn apply_projection(menu: &Menu, stores: &mut Stores) {
+        let delta = menu.project(stores).unwrap();
+        *stores = stores.reconcile(&delta).unwrap();
+        stores.commit(delta).unwrap();
+    }
+    fn edit_prefix(menu: &Menu, stores: &mut Stores) {
+        apply_projection(menu, stores);
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("a".into()),
+            )]))
+            .unwrap();
+        apply_projection(menu, stores);
+    }
+    #[test]
+    fn ranked_prefix_preserves_full_extent_and_up_navigation_reaches_last_row() {
+        let source = prefix_source(false, false);
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = prefix_stores();
+        edit_prefix(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(64.))
+        );
+        assert_eq!(
+            stores.get("launcher.total_count"),
+            Some(&Value::Number(320.))
+        );
+        assert_eq!(source.calls.lock().unwrap()[1]["limit"], 64);
+        let geometry = NavigationGeometry {
+            columns: 4,
+            pitch: 58.,
+            row_height: 55.,
+            viewport_height: 400.,
+        };
+        assert!(
+            menu.navigate(&stores, "left", geometry).is_none(),
+            "caret motion must not expand results"
+        );
+        assert_eq!(source.calls.lock().unwrap().len(), 2);
+        let down = menu.navigate(&stores, "down", geometry).unwrap();
+        stores.commit(down).unwrap();
+        apply_projection(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.selection"),
+            Some(&Value::Text("app1".into()))
+        );
+        assert_eq!(
+            source.calls.lock().unwrap().len(),
+            2,
+            "visible navigation stays local"
+        );
+        let up = menu.navigate(&stores, "up", geometry).unwrap();
+        stores.commit(up).unwrap();
+        apply_projection(&menu, &mut stores);
+        assert_eq!(source.calls.lock().unwrap().len(), 2);
+        let delta = menu.navigate(&stores, "up", geometry).unwrap();
+        assert_eq!(delta["launcher.result_count"], Value::Number(320.));
+        assert_eq!(delta["launcher.selection"], Value::Text("app319".into()));
+        assert!(source.calls.lock().unwrap()[2].get("limit").is_none());
+        assert_eq!(menu.view.borrow().rows[319]["id"], "app319");
+    }
+    #[test]
+    fn disabled_prefix_tail_expands_before_wrapping_to_a_visible_row() {
+        let source = prefix_source(false, false);
+        let mut data = source.fixture.snapshot().data.as_ref().clone();
+        for i in 1..64 {
+            data["queries"]["a"]["items"][format!("app{i}")]["disabled"] = Json::Bool(true);
+        }
+        source.fixture.publisher.publish(data).unwrap();
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = prefix_stores();
+        edit_prefix(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(64.))
+        );
+        let geometry = NavigationGeometry {
+            columns: 4,
+            pitch: 58.,
+            row_height: 55.,
+            viewport_height: 400.,
+        };
+        let down = menu.navigate(&stores, "down", geometry).unwrap();
+        assert_eq!(down["launcher.selection"], Value::Text("app64".into()));
+        assert_eq!(down["launcher.result_count"], Value::Number(320.));
+        assert_eq!(source.calls.lock().unwrap().len(), 3);
+    }
+    #[test]
+    fn scrolling_expands_prefix_before_materializing_an_unloaded_region() {
+        let source = prefix_source(false, false);
+        let menu = Menu::new(Some(source)).unwrap();
+        let mut stores = prefix_stores();
+        edit_prefix(&menu, &mut stores);
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.scroll.y".into(),
+                Value::Number(12000.),
+            )]))
+            .unwrap();
+        let delta = menu.project(&stores).unwrap();
+        assert_eq!(delta["launcher.result_count"], Value::Number(320.));
+        assert!(
+            !delta.contains_key("launcher.scroll.y"),
+            "valid scrolling must not reset"
+        );
+    }
+    #[test]
+    fn prefix_with_no_enabled_row_and_missing_total_both_fall_back_to_full_reply() {
+        for (disabled, unknown) in [(true, false), (false, true)] {
+            let source = prefix_source(disabled, unknown);
+            let menu = Menu::new(Some(source.clone())).unwrap();
+            let mut stores = prefix_stores();
+            edit_prefix(&menu, &mut stores);
+            assert_eq!(
+                stores.get("launcher.result_count"),
+                Some(&Value::Number(320.))
+            );
+            assert_eq!(
+                stores.get("launcher.selection"),
+                Some(&Value::Text(if disabled { "app64" } else { "app0" }.into()))
+            );
+            assert_eq!(source.calls.lock().unwrap().len(), 3);
+        }
+    }
+    #[test]
+    fn failed_prefix_expansion_keeps_old_rows_selection_and_last_good_viewport() {
+        let source = prefix_source(false, false);
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = prefix_stores();
+        edit_prefix(&menu, &mut stores);
+        source
+            .fail_full
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.scroll.y".into(),
+                Value::Number(12000.),
+            )]))
+            .unwrap();
+        let delta = menu.project(&stores).unwrap();
+        assert_eq!(delta["launcher.scroll.y"], Value::Number(0.));
+        assert_eq!(delta["launcher.result_count"], Value::Number(64.));
+        assert_eq!(delta["launcher.selection"], Value::Text("app0".into()));
+        assert!(matches!(&delta["launcher.error"],Value::Text(message)if !message.is_empty()));
+        let geometry = NavigationGeometry {
+            columns: 4,
+            pitch: 58.,
+            row_height: 55.,
+            viewport_height: 400.,
+        };
+        let failed_navigation = menu.navigate(&stores, "up", geometry).unwrap();
+        assert_eq!(
+            failed_navigation["launcher.selection"],
+            Value::Text("app0".into())
+        );
+    }
+    #[test]
+    fn initial_restore_old_bundle_and_catalog_wake_keep_the_full_result() {
+        let source = prefix_source(false, false);
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = prefix_stores();
+        stores
+            .commit(BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text("a".into())),
+                ("launcher.selection".into(), Value::Text("app319".into())),
+                ("launcher.scroll.y".into(), Value::Number(12000.)),
+            ]))
+            .unwrap();
+        apply_projection(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.selection"),
+            Some(&Value::Text("app319".into()))
+        );
+        assert!(source.calls.lock().unwrap()[0].get("limit").is_none());
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("ap".into()),
+            )]))
+            .unwrap();
+        apply_projection(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(64.))
+        );
+        let mut fixture_data = source.fixture.snapshot().data.as_ref().clone();
+        fixture_data["queries"]["ap"]["catalog_rev"] = json!(2);
+        source.fixture.publisher.publish(fixture_data).unwrap();
+        apply_projection(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(320.))
+        );
+        assert!(
+            source
+                .calls
+                .lock()
+                .unwrap()
+                .last()
+                .unwrap()
+                .get("limit")
+                .is_none()
+        );
+        let legacy = Menu::new(Some(source.clone())).unwrap();
+        let mut old = Stores::default()
+            .reconcile(&BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text(String::new()),
+            )]))
+            .unwrap();
+        apply_projection(&legacy, &mut old);
+        old.commit(BTreeMap::from([(
+            "launcher.search.text".into(),
+            Value::Text("a".into()),
+        )]))
+        .unwrap();
+        apply_projection(&legacy, &mut old);
+        assert_eq!(old.get("launcher.result_count"), Some(&Value::Number(320.)));
+        assert!(
+            source
+                .calls
+                .lock()
+                .unwrap()
+                .last()
+                .unwrap()
+                .get("limit")
+                .is_none()
+        );
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn query_busy_retry_is_bounded_and_honors_retry_flag_code_and_deadline() {
         use std::sync::atomic::{AtomicUsize, Ordering};

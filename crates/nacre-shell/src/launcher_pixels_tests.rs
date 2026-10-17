@@ -151,3 +151,32 @@ fn restored_launcher_route_reopens_with_matching_mode_and_results_layout() -> Re
     }
     Ok(())
 }
+
+#[test]
+fn ranked_prefix_keeps_actual_visible_pixels_and_actions_exact() -> Result<()> {
+    for scroll in [0., 500.] {
+        let mut h = harness("a", scroll)?;
+        let full = h.render()?;
+        let action_ids = |h: &Harness| {
+            h.session
+                .view_nodes()
+                .iter()
+                .filter(|node| node.action.as_deref() == Some("select_app"))
+                .map(|node| format!("{:?}", node.action_arg))
+                .collect::<Vec<_>>()
+        };
+        let expected = action_ids(&h);
+        let Some(Value::List(rows)) = h.session.stores.get("launcher.apps") else {
+            panic!("fixture rows")
+        };
+        let prefix = rows[..64].to_vec();
+        h.update(BTreeMap::from([
+            ("launcher.apps".into(), Value::list(prefix)),
+            ("launcher.result_count".into(), Value::Number(64.)),
+            ("launcher.total_count".into(), Value::Number(320.)),
+        ]))?;
+        assert_eq!(h.render()?.pixels, full.pixels);
+        assert_eq!(action_ids(&h), expected);
+    }
+    Ok(())
+}

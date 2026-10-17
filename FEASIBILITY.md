@@ -1,5 +1,31 @@
 # Feasibility
 
+## 2026-10-17 — Keep ranked prefixes; typing target remains open
+
+Edited queries request a bounded prefix from Nacre's existing engine.
+Scrolling and selection expand before reaching unloaded results.
+Five alternating pairs show a modest UI CPU win on both compositors.
+Warm/settled memory stays within control spreads; no renderer change.
+
+| Five-pair medians, Hyprland / niri | Control → prefix |
+| --- | --- |
+| UI CPU, ms/key |10.172→9.793 /11.025→10.560|
+| Presented p99, ms |30.198→30.914 /32.781→32.953|
+| Third warm UI MiB |48.867→48.917 /47.073→47.083|
+| Settled UI MiB |23.219→23.039 /23.852→23.711|
+
+4,000 exact key→result→commit→presentation proofs, 320 apps, frozen75157 engine.
+Ranked replies contain101 rows full/64 limited; initial/catalog wakes stay full.
+UI paired −0.583/−0.575 ms; tails fit spreads8.155/7.588 ms. UI8 ms/key and
+p9916.7 ms remain unaccepted; UI>8 prevents the two-frame candidate rule.
+Both native20 proofs pass; all168 candidate close/settled observations fitbar+5,
+max settled23.251/23.988<25. Caps/group/cleanup pass; all controls valid.
+Warm anonymous-page ranges vary widely; paired-spread pass is not a peak reduction
+or settled saving. 204 tests, trace proof, fmt/clippy/CPU-only pass. Nested CPU
+scale1.5, Hvirtual120/N60, refresh unknown; shared host/light editing concurrent,
+no own build/test/capture overlap. No physical or full-service parity claim.
+[Ranges, separate daemon/provider CPU and method](docs/research/feature9-gate-d.md#ranked-prefixes-for-edited-queries--2026-10-17).
+
 ## 2026-10-17 — Calendar Source wakes and transient route restoration
 
 Calendar follows the clock until browsed, including Source-only wakes.

@@ -2,7 +2,7 @@
 return {
   stores = {
     ["panel.open"] = true, ["launcher.apps"] = {},
-    ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.result_count"]=0,
+    ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.result_count"]=0, ["launcher.total_count"]=0,
     ["launcher.selection"] = "", ["launcher.route"] = "apps", ["launcher.engine_route"]="",
     ["launcher.search.text"] = "", ["launcher.scroll.y"] = 0,
     ["launcher.conversion.value"]="", ["launcher.conversion.description"]="",

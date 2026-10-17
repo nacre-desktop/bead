@@ -32,6 +32,78 @@ with measurements/core forecast. Full parity is an estimate-only alternative.
 Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
 release. QML stays daily driver. No live run/install/release is authorized.
 
+### Ranked prefixes for edited queries — 2026-10-17
+
+Keep the measured prefix adapter. Edited nonempty queries request the existing
+engine's `limit=64`; no ranking, catalog or provider moves into Bead. Initial and
+restored views, mode/route changes and catalog wakes still fetch the full reply.
+The view preserves total scroll extent and fetches the full reply before crossing
+an unloaded selection boundary or scrolling. Failed expansion retains the last
+good viewport/selection; missing totals and disabled-only prefixes fall back to
+full replies. Older recovery bundles without the optional store keep full replies.
+
+Normal immutable control `d54df4fe` (accepted Source fixes) versus `eb2aff8e`,
+matching bundles, protocol pin unchanged, frozen `75157fd3` daemon. Catalog has
+320 apps; the full ranked search reply has 101 rows, not 320. Each edited-query
+candidate reply has exactly 64 (37 fewer rows, about 37%; not a wire-byte claim).
+All 4,000 sequential key proofs join their RPC, result count, exact committed
+update and monotonic presentation feedback; catalog wakes still refresh without
+a key. Query serialization remains; stale-query cancellation is not implemented
+or credited by this sequential test. Actual UI visible pixels/actions, full extent,
+local navigation, disabled tails and failed expansion are tested. 204 workspace
+tests, isolated trace proof, fmt, all-feature clippy and CPU-only build pass.
+
+| Five alternating typing pairs; H / N | Control → prefix medians | Paired delta / control spread |
+| --- | --- | --- |
+| UI CPU ms/key |10.172→9.793 /11.025→10.560|−0.583/0.876; −0.575/0.762|
+| Daemon CPU ms/key |4.629→4.265 /4.888→4.608|−0.502/0.213; −0.197/0.500|
+| Provider CPU ms/key |2.026→1.892 /2.066→2.133|−0.076/0.092; +0.083/0.183|
+| Presented p99 ms |30.198→30.914 /32.781→32.953|+0.513/8.155; −2.431/7.588|
+
+UI CPU improves in 4/5 H and 5/5 N pairs. Tails remain inside control spread;
+no consistent p99 improvement is claimed. CPU windows include background work
+between key receipt and observed feedback; daemon/provider values are separate
+process accounting, not engine-only costs or additive wall-latency components.
+A separate four-cell 40-key stage diagnostic still has markup around 3 ms and
+composition around 2 ms, versus warmed shaping much smaller. Spans overlap and
+instrumentation adds overhead; do not add them or treat them as acceptance data.
+**Typing remains unaccepted:** UI 8 ms/key and presented p99 16.7 ms are not met.
+UI above 8 also prevents treating this as the owner's two-frame candidate.
+
+Both candidate native 20-cycle proofs and five alternating lifecycle pairs per
+compositor pass. The memory workload opens the initial catalog THEN edits its
+query; an exact row-count/state→commit→presentation guard proves all three query
+cycles exercise 64 rows (controls 101). A query supplied before initial preparation
+would miss this optimization and is not substituted. Two unused preparations,
+quick reopen, named views, invalid requests and rapid retirement remain strict.
+
+| UI MiB, H / N | Control → prefix medians | Paired delta / control spread |
+| --- | --- | --- |
+| First warm |42.366→42.392 /46.949→46.839|−0.014/7.056; −0.072/6.870|
+| Third warm |48.867→48.917 /47.073→47.083|+0.050/6.954; −0.019/0.389|
+| Third closed |22.557→22.438 /23.514→23.271|−0.163/0.453; −0.223/0.469|
+| Settled |23.219→23.039 /23.852→23.711|−0.183/0.442; −0.257/0.689|
+
+Settled control ranges H22.956–23.398/N23.311–24.000; candidate ranges
+H22.908–23.204/N23.546–23.795 MiB. Third warm ranges H42.141–49.095→
+47.769–48.973 and N46.887–47.275→46.965–47.160. First warm ranges
+H41.922–48.978→42.104–48.964/N40.115–46.985→40.194–46.960.
+One H control has roughly 6.5 MiB fewer anonymous pages at third warm; SHM
+is similar. No exclusive allocation-site cause is proved. The paired-median
+spread gate passes; this is not a uniform warm/peak reduction or settled saving.
+All 168 candidate close/settled observations (278 total, 22 cells) fit own bar+5;
+max candidate settled H23.251/N23.988 is below25. All controls remain valid;
+no failure-observation mode. Cache totals 162,367–310,806 bytes remain within
+owner/process caps; stable process-group/35-second idle and owned cleanup pass.
+
+Nested CPU, 2880×1800/scale1.5, H virtual120/N nested60; feedback refresh unknown.
+Shared-host contention uncontrolled, light editing/Git/brain work concurrent;
+no own builds/tests/other captures overlap native samples. Not physical scanout.
+Raw `core-typing-prefix-677fc67-{typing-five,memory-five,screen,stages}/` includes
+all runs and an independent numeric/cap/cleanup verification. The stronger
+harness copy/hash is retained; no raw sample was silently dropped or relabeled.
+Typed-contract and read-only status-view drafts remain outside these binaries.
+
 ### Calendar Source and restored launcher modes — 2026-10-17
 
 Source wakes now reach external projectors even when a view has no used Model

@@ -23,6 +23,10 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     core_views=os.environ.get('BEAD_CORE_VIEWS_PROOF')=='1'
     release_state=os.environ.get('BEAD_PANEL_IDLE_STATE')=='release'
     query_on_open=os.environ.get('BEAD_LAUNCHER_QUERY_ON_OPEN')=='1'
+    expected_query_rows=os.environ.get('BEAD_EXPECT_QUERY_ROWS')
+    if expected_query_rows is not None:
+        expected_query_rows=int(expected_query_rows)
+        assert 1<=expected_query_rows<=2048,'invalid expected query row count'
     restored_mode=os.environ.get('BEAD_EXPECT_RESTORED_MODE')
     if restored_mode is not None:
         assert restored_mode in ['search','actions']
@@ -67,12 +71,12 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             presented=re.search(r'UI_PRESENTED generation='+match[1]+r' monotonic_ns=(\d+)[^\n]*companion=true update='+match[2]+r'\b',text[match.end():])
             if presented:return int(presented[1])
         return False
-    def query_presented(text,query):
+    def query_presented(text,query,expected_rows=None):
         # Join the requested state to a following companion commit/presentation,
         # rather than accepting an unrelated earlier frame in the same window.
         for match in re.finditer(r'^UI_STATE (.+)$',text,re.M):
             data=json.loads(match[1])
-            if data.get('launcher.search.text')==query and data.get('panel.open') is True and (not engine_socket or (not data.get('launcher.error') and data.get('launcher.apps'))):
+            if data.get('launcher.search.text')==query and data.get('panel.open') is True and (not engine_socket or (not data.get('launcher.error') and data.get('launcher.apps'))) and (expected_rows is None or len(data.get('launcher.apps',[]))==expected_rows):
                 stamp=committed_and_presented(text[match.end():])
                 if stamp:return stamp
         return False
@@ -164,6 +168,9 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 matrix.wait_log(log,lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* .*companion=true',t[offset:])is not None)
                 if not query_on_open and (cycle==0 or release_state):call('launcher','a',target='nacre')
                 matrix.wait_log(log,lambda t:ui_query(t[offset:],'a'))
+                if expected_query_rows is not None:
+                    matrix.wait_log(log,lambda t:query_presented(t[offset:],'a',expected_query_rows))
+                    result['expected_query_rows']=expected_query_rows
                 time.sleep(.3)
                 warm=matrix.idle(client.pid,1)
                 if observe:warm['external']=observe()
