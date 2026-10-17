@@ -77,6 +77,13 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             presented=re.search(r'UI_PRESENTED generation='+match[1]+r' monotonic_ns=(\d+)[^\n]*companion=true update='+match[2]+r'\b',text[match.end():])
             if presented:return int(presented[1])
         return False
+    def dashboard_presented(text,page):
+        for match in re.finditer(r'^UI_STATE (.+)$',text,re.M):
+            data=json.loads(match[1])
+            if data.get('dashboard.page')==page and data.get('panel.open') is True:
+                stamp=committed_and_presented(text[match.end():])
+                if stamp:return stamp
+        return False
     def query_presented(text,query,expected_rows=None):
         # Join the requested state to a following companion commit/presentation,
         # rather than accepting an unrelated earlier frame in the same window.
@@ -227,7 +234,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     else:
                         call('open',view)
                     state_wait(lambda s:s['view']==view and s['target_open'] and s['prepared'])
-                    presented=matrix.wait_log(log,lambda t:committed_and_presented(t[offset:]))
+                    presented=matrix.wait_log(log,lambda t:dashboard_presented(t[offset:],view.removeprefix('dashboard-'))if view.startswith('dashboard-')else committed_and_presented(t[offset:]))
                     legacy=json.loads(call('state',target='nacre'))
                     assert legacy['launcher']==(view=='launcher')
                     assert legacy['edgeMenu']==(''if view=='launcher'else view)

@@ -95,11 +95,13 @@ def sample(env, raw, compositor, stop):
                                     '--namespace', 'bead-preview-notices']+output_args, cwd=root, env=notice_env,
                                    stdout=(raw / 'preview-notices.log').open('w'), stderr=subprocess.STDOUT,
                                    start_new_session=True)
+        dashboard_fixtures = os.environ.get('BEAD_PREVIEW_DASHBOARD_FIXTURES') == '1'
+        dashboard_args = ['--dashboard-fixtures', str(root / 'shell/tests/fixtures/dashboard')] if dashboard_fixtures else []
         bar = subprocess.Popen([str(binary), '--bar', '--core-views', '--renderer', 'cpu',
                                 '--panel-renderer', 'cpu', '--daemon-socket', str(endpoint),
                                 '--command-socket', str(commands), '--ui-provider',
                                 '--ui-notification-socket', str(notice_commands),
-                                '--namespace', 'bead-preview-bar']+output_args+(['--trace-state'] if os.environ.get('BEAD_PREVIEW_RECONNECT')=='1' else []), cwd=root, env=bar_env,
+                                '--namespace', 'bead-preview-bar']+dashboard_args+output_args+(['--trace-state'] if os.environ.get('BEAD_PREVIEW_RECONNECT')=='1' or (dashboard_fixtures and os.environ.get('BEAD_PREVIEW_SMOKE')=='1') else []), cwd=root, env=bar_env,
                                stdout=(raw / 'preview-bar.log').open('w'), stderr=subprocess.STDOUT,
                                start_new_session=True)
         state = wait_call('ui.dispatch', {'target': 'nacre', 'method': 'state', 'args': []})
@@ -164,6 +166,23 @@ def sample(env, raw, compositor, stop):
         assert counts['retained'] >= 1
         assert 'UI_ERROR' not in (raw/'preview-bar.log').read_text(), 'bar reported a UI error'
         assert 'UI_ERROR' not in (raw/'preview-notices.log').read_text(), 'notices reported a UI error'
+        if dashboard_fixtures and os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
+            def page_call(method, *args):
+                result=subprocess.run([str(binary),'ipc','--socket',str(commands),'--json','bead.panel',method,*args],cwd=root,env=bar_env,capture_output=True,text=True,timeout=5)
+                if result.returncode:raise RuntimeError('private dashboard panel IPC failed: '+method)
+            for page in ['weather', 'media', 'system']:
+                offset=len(matrix.log_text(raw/'preview-bar.log'))
+                page_call('open','dashboard-'+page)
+                def page_presented(text):
+                    for state in re.finditer(r'^UI_STATE (.+)$',text,re.M):
+                        values=json.loads(state[1])
+                        if values.get('dashboard.page')!=page or values.get('panel.open') is not True:continue
+                        tail=text[state.end():]
+                        for commit in re.finditer(r'UI_COMMIT generation=(\d+)[^\n]* update=(\d+) companion=true source_error=false',tail):
+                            if re.search(r'UI_PRESENTED generation='+commit[1]+r' [^\n]*companion=true update='+commit[2]+r'\b',tail[commit.end():]):return True
+                    return False
+                matrix.wait_log(raw/'preview-bar.log',lambda t:page_presented(t[offset:]))
+            page_call('close')
         ready = True
         if os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
             masks=[]

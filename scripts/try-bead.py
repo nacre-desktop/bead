@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--bead', type=Path, default=Path(os.environ.get('CARGO_TARGET_DIR', ROOT / 'target')) / 'release/nacre-shell')
     parser.add_argument('--shell', type=Path, default=ROOT / 'shell', help='matching shell source bundle for the selected Bead binary')
     parser.add_argument('--compositor', choices=['niri', 'hyprland'], default='niri')
+    parser.add_argument('--dashboard-fixtures', action='store_true', help='show clearly labeled artificial dashboard data; no dashboard backend calls')
     parser.add_argument('--headless-smoke', action='store_true', help='private compositor test, closes automatically')
     args = parser.parse_args()
     if args.compositor=='hyprland' and not args.headless_smoke:
@@ -30,6 +31,8 @@ def main():
     entries = ['ui/main.luau', 'bar/main.luau', 'popouts/main.luau', 'sound/main.luau', 'status/main.luau']
     if any(not (args.shell / entry).is_file() for entry in entries):
         parser.error('--shell needs a matching Bead core-views bundle')
+    if args.dashboard_fixtures and not (args.shell / 'tests/fixtures/dashboard/weather.json').is_file():
+        parser.error('--dashboard-fixtures needs the matching dashboard bundle')
     env = {key:value for key,value in os.environ.items() if not key.startswith('BEAD_') or key in ['BEAD_RESEARCH_TOOLS','BEAD_RAW_DIR']}
     display = env.get('WAYLAND_DISPLAY', '')
     if display and not display.startswith('/'):
@@ -45,6 +48,7 @@ def main():
                    BEAD_PREVIEW_SHELL=str(args.shell.resolve()),
                    BEAD_HARDENING_BINARY=str(args.bead.resolve()),
                    BEAD_PREVIEW_SMOKE='1' if args.headless_smoke else '0',
+                   BEAD_PREVIEW_DASHBOARD_FIXTURES='1' if args.dashboard_fixtures else '0',
                    BEAD_RAW_DIR=env.get('BEAD_RAW_DIR', str(private / 'logs')),
                    DBUS_SYSTEM_BUS_ADDRESS='unix:path=' + str(private / 'no-system-bus'))
         for key in ['NIRI_SOCKET', 'HYPRLAND_INSTANCE_SIGNATURE', 'NACRE_DAEMON_SOCKET',
@@ -58,6 +62,8 @@ def main():
             command += ['--virtual120']
         print('Private nested preview: click the bar launcher icon/lip, type, Escape to close. Close the window or Ctrl+C to stop.', flush=True)
         print('Launcher queries and UI controls use the daemon. Notifications are hosted by the transitional Bead service on a private bus; daemon notification hosting/history is still pending.', flush=True)
+        if args.dashboard_fixtures:
+            print('Dashboard values are artificial preview fixtures; player controls and live service hosting remain unavailable.', flush=True)
         # Reuse the established private-session harness and its owned-process reaper.
         spec = importlib.util.spec_from_file_location('preview_owned', ROOT / 'spikes/process-clock.py')
         clocks = importlib.util.module_from_spec(spec)
