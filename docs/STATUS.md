@@ -1,6 +1,16 @@
 # Status
 
-## 2026-10-17 — Ranked prefixes measured; typing remains open
+## 2026-10-17 — Typed contract replay verified
+
+Protocol pin `1e2d6755` and 19 supplementary frames pass typed bounds/roundtrip.
+A bounded injected provider ACKs the exact provider ID before a held outbound
+activation reply. Production advertises only `ui.dispatch`; no executor added.
+206 tests, trace, fmt, clippy and CPU-only pass. One native compatibility pair
+per compositor passes all 44 close/settled observations, caps/group/cleanup;
+settled UI 23.161/23.808 MiB stays below 25 and inside prior control spreads.
+No typing gain or real non-app execution is implied. [Scope](research/feature9-gate-d.md#typed-ui-action-contract-replay--2026-10-17).
+
+## Ranked prefixes — 97d743a, CI 38996873307 green
 
 Edited queries request 64 rows from the existing Nacre engine. Initial/restored
 views and catalog wakes stay full; navigation/scrolling expand before unloaded
@@ -43,8 +53,8 @@ and rasters release after the 2.2-second close grace; unused preparation expires
 after 2 seconds. Launcher scalar mirror clears too. App-only 4 MiB mmap policy
 fixes older large-raster retention. No allocator/font rewrite. No settled saving.
 
-Next: check this checkpoint's CI; integrate the green typed-contract replay draft,
-then validate the lazy read-only network/Bluetooth/battery drafts. Those drafts
+Next: check this checkpoint's CI; validate the lazy read-only network/Bluetooth/
+battery drafts. Those drafts, including selected-field Source lifetime tests,
 are outside the measured binary. Full device controls still require contracts.
 
 ## Core-switch boundaries

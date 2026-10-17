@@ -1,5 +1,27 @@
 # Feasibility
 
+## 2026-10-17 — Replay the green typed UI-action contract
+
+Pin Nacre's green protocol revision and its supplementary action transcript.
+An injected provider queues a typed action and ACKs before the held reply.
+The real shell keeps only its existing dispatch capability advertised.
+No executor, backend or launcher provider is added.
+
+| Check | Result |
+| --- | --- |
+| Supplementary transcript / internal provider calls |19 frames /5|
+| Workspace tests / trace / fmt / clippy / CPU-only |206 /pass /pass /pass /pass|
+| One-pair settled UI MiB, H /N |22.900→23.161 /23.618→23.808|
+| Strict closed/settled observations |44 passed|
+
+Typed bounds/roundtrip and bounded queue ACK ordering pass against a fake daemon.
+Normal immutable binaries, same75157 engine; all close+5/25/cap/group/cleanup guards
+pass. Settled +0.261/+0.189 fits prior spreads0.442/0.689; no extra allowance.
+One native pair/compositor is compatibility coverage, not new typing acceptance.
+Nested scale1.5 Hvirtual120/N60, unknown refresh/shared-host contention, no own
+build/test/capture overlap. Executor and same-engine QML remain upstream.
+[Contract and measurement scope](docs/research/feature9-gate-d.md#typed-ui-action-contract-replay--2026-10-17).
+
 ## 2026-10-17 — Keep ranked prefixes; typing target remains open
 
 Edited queries request a bounded prefix from Nacre's existing engine.

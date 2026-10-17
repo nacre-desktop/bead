@@ -43,6 +43,7 @@ fn text(name: &str) -> &'static str {
         "menu-results" => include_str!("../../tests/protocol-v1/menu-results.jsonl"),
         "menu-activation" => include_str!("../../tests/protocol-v1/menu-activation.jsonl"),
         "menu-conversion" => include_str!("../../tests/protocol-v1/menu-conversion.jsonl"),
+        "menu-ui-actions" => include_str!("../../tests/protocol-v1/menu-ui-actions.jsonl"),
         _ => panic!("unknown fixture"),
     }
 }
@@ -102,6 +103,134 @@ fn committed_menu_transcripts_match_the_pinned_exports() {
             );
         }
     }
+}
+
+#[test]
+fn committed_typed_action_transcript_matches_pinned_exports_and_validates_rows() {
+    let mut frames = 0;
+    let mut provider_calls = 0;
+    for (path, generated) in nacre_protocol::artifacts::menu_action_transcripts() {
+        let name = path.rsplit('/').next().unwrap().trim_end_matches(".jsonl");
+        let expected = generated
+            .lines()
+            .map(|line| framing::decode(line.as_bytes()).unwrap())
+            .collect::<Vec<_>>();
+        let actual = fixture(name);
+        assert_eq!(actual, expected, "supplementary action transcript changed");
+        for message in actual {
+            assert_eq!(
+                framing::decode(&framing::encode(&message).unwrap()).unwrap(),
+                message
+            );
+            frames += 1;
+            if let Message::Call {
+                id: Id::Text(id),
+                m,
+                p,
+                ..
+            } = message
+                && m == "ui.menu.activate"
+            {
+                assert!(id.starts_with("provider-"));
+                let request: nacre_protocol::menu::MenuUiActivate =
+                    serde_json::from_value(p).unwrap();
+                request.validate().unwrap();
+                let mut invalid = request.clone();
+                invalid.row.operation.clear();
+                assert!(invalid.validate().is_err());
+                invalid = request;
+                invalid.catalog_rev = nacre_protocol::MAX_SAFE_INTEGER + 1;
+                assert!(invalid.validate().is_err());
+                provider_calls += 1;
+            }
+        }
+    }
+    assert_eq!((frames, provider_calls), (19, 5));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn typed_provider_enqueues_and_acks_before_its_pending_activation_reply() {
+    // This is an injected test provider, not an advertised product executor.
+    // Deliberately do not consume/execute its bounded queue until the outbound
+    // activation has completed: an ACK that waits for execution would deadlock.
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let golden = fixture("menu-ui-actions");
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        assert_eq!(next(&mut reader).await, golden[0]);
+        let Message::Call { id, m, p, .. } = next(&mut reader).await else {
+            panic!("activation expected")
+        };
+        let Message::Call {
+            id: expected,
+            m: method,
+            p: params,
+            ..
+        } = &golden[3]
+        else {
+            panic!("golden activation")
+        };
+        assert_eq!((&id, &m, &p), (expected, method, params));
+        framing::write(&mut writer, &golden[4]).await.unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            golden[5],
+            "exact provider-N acceptance ACK must precede reply"
+        );
+        framing::write(&mut writer, &golden[6]).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    });
+    let (queue, mut pending) = tokio::sync::mpsc::channel(1);
+    let mut config = Config::new(lab.socket(), vec![]);
+    let Message::Register { provider, methods } = fixture("menu-ui-actions")[0].clone() else {
+        panic!("golden registration")
+    };
+    config.provider = Some((
+        provider,
+        methods,
+        Arc::new(move |method, params| {
+            let queue = queue.clone();
+            Box::pin(async move {
+                assert_eq!(method, "ui.menu.activate");
+                let request: nacre_protocol::menu::MenuUiActivate = serde_json::from_value(params)
+                    .map_err(|_| Error::new("validation", "Invalid typed UI action", false))?;
+                request.validate().map_err(failure)?;
+                queue
+                    .try_send(request)
+                    .map_err(|_| Error::new("busy", "Test UI queue full", true))?;
+                Ok(serde_json::json!({"keep_open":false}))
+            })
+        }),
+    ));
+    let provider = Client::start(config).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while provider.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let Message::Call { id, m, p, .. } = fixture("menu-ui-actions")[3].clone() else {
+        panic!("golden request")
+    };
+    assert_eq!(
+        provider
+            .call_id(Some(id), m, p, Duration::from_secs(5))
+            .await
+            .unwrap(),
+        serde_json::json!({"keep_open":false})
+    );
+    let queued = pending
+        .try_recv()
+        .expect("accepted action remains queued, unexecuted");
+    let Message::Call { p, .. } = fixture("menu-ui-actions")[4].clone() else {
+        panic!("golden typed row")
+    };
+    assert_eq!(serde_json::to_value(queued).unwrap(), p);
+    assert!(pending.try_recv().is_err());
+    provider.control(true).await.unwrap();
+    server.await.unwrap();
 }
 
 #[tokio::test]

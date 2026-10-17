@@ -1,0 +1,19 @@
+{"t":"register","provider":"ui","methods":{"ui.dispatch":1,"ui.menu.activate":1}}
+{"t":"call","id":70,"m":"menu.query","p":{"query":"=1+1","mode":"search"}}
+{"t":"ret","id":70,"ok":{"query":"=1+1","mode":"search","route":"home","catalog_rev":7,"items":{"nacre-menu:calculation":{"name":"2","kind":"calculation","description":"Enter to copy the result","disabled":false,"activation":"fixture-calculation-7"}},"order":["nacre-menu:calculation"],"total":1,"conversion":{"ok":true,"value":"2","error":""}}}
+{"t":"call","id":71,"m":"menu.activate","p":{"id":"nacre-menu:calculation","activation":"fixture-calculation-7","catalog_rev":7}}
+{"t":"call","id":"provider-1","m":"ui.menu.activate","p":{"row":{"id":"calculation","kind":"calculation","name":"2","operation":"copy","value":"2","disabled":false,"icon":"calculate"},"catalog_rev":7}}
+{"t":"ret","id":"provider-1","ok":{"keep_open":false}}
+{"t":"ret","id":71,"ok":{"keep_open":false}}
+{"t":"call","id":72,"m":"ui.menu.activate","p":{"row":{"id":"actions.fixture-command","kind":"action","name":"Literal arguments","operation":"command","arguments":["fixture-app","space & literal","$(literal)"],"directory":"/fixture","disabled":false},"catalog_rev":7}}
+{"t":"ret","id":72,"err":{"code":"permission_denied","message":"Use menu.activate with an engine-issued ticket","retry":false,"dispatched":false}}
+{"t":"call","id":73,"m":"menu.activate","p":{"id":"nacre-menu:power.reboot","activation":"fixture-power-7","catalog_rev":7,"confirmed":true,"row":{"operation":"copy","value":"Untrusted replacement"}}}
+{"t":"call","id":"provider-2","m":"ui.menu.activate","p":{"row":{"id":"power.reboot","kind":"action","name":"Restart","operation":"power","value":"reboot","disabled":false,"confirm":"Restart the computer?"},"catalog_rev":7}}
+{"t":"ret","id":"provider-2","ok":{"keep_open":true}}
+{"t":"ret","id":73,"ok":{"keep_open":true}}
+{"t":"call","id":"provider-3","m":"ui.menu.activate","p":{"row":{"id":"actions.clipboard.fixture","kind":"clipboard","name":"Public clip","operation":"copy-clip","value":"fixture-image-1","disabled":false},"catalog_rev":7}}
+{"t":"ret","id":"provider-3","ok":{"keep_open":false}}
+{"t":"call","id":"provider-4","m":"ui.menu.activate","p":{"row":{"id":"actions.fixture-command","kind":"action","name":"Literal arguments","operation":"command","arguments":["fixture-app","space & literal","$(literal)"],"directory":"/fixture","disabled":false},"catalog_rev":7}}
+{"t":"ret","id":"provider-4","ok":{"keep_open":false}}
+{"t":"call","id":"provider-5","m":"ui.menu.activate","p":{"row":{"id":"actions.future","kind":"action","name":"Future operation","operation":"future.fixture","value":"fixture","disabled":false},"catalog_rev":7}}
+{"t":"ret","id":"provider-5","err":{"code":"unavailable","message":"Launcher action is not supported by this UI","retry":false}}

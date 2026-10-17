@@ -32,6 +32,45 @@ with measurements/core forecast. Full parity is an estimate-only alternative.
 Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
 release. QML stays daily driver. No live run/install/release is authorized.
 
+### Typed UI-action contract replay — 2026-10-17
+
+Pin the official CI-green Nacre `1e2d6755df9a1d5e45c26b7a7e301d9761c65e9a`
+protocol revision. The supplementary `menu-ui-actions` transcript contributes
+19 frames and five internal provider calls. Rust decoding/encoding matches the
+committed export; typed rows validate their bounds and catalog revision. The
+public direct-row refusal remains in the transcript. Public activation still
+uses an engine-issued opaque ticket; no client row-execution API is invented.
+
+A fake daemon withholds the outgoing `menu.activate` result until this same
+client sends the exact `provider-N` typed-action ACK. The injected provider puts
+the validated row into a bounded one-slot queue, replies, and only the test then
+consumes that queue. No command, clipboard or power action executes. Existing
+actual `ui.dispatch` duplex proofs during query/activation remain green.
+**Production still advertises only `ui.dispatch`:** the executor and shared QML
+adapter are upstream work, not implied by a transport fixture passing.
+
+206 workspace tests, isolated trace proof, fmt, all-feature warnings-denied clippy
+and CPU-only build pass. Normal immutable prior-prefix `eb2aff8e` versus typed-pin
+`52c0f93e`, matching bundles and frozen `75157fd3` engine pass one native
+compatibility pair per compositor. Both variants require 64 edited-query rows
+with following commit/presentation, two unused preparations, quick reopen,
+three launcher/two named-view cycles and the normal 35-second idle group guard.
+
+| UI MiB, control → typed pin | Hyprland | niri |
+| --- | ---: | ---: |
+| Third warm |48.774 → 39.925|46.960 → 46.901|
+| Third closed |22.217 → 22.593|23.322 → 23.238|
+| Settled |22.900 → 23.161|23.618 → 23.808|
+
+All 44 closed/settled observations fit own bar+5; both settled ceilings, cache,
+stable process-group and owned-cleanup guards pass. Settled +0.261/+0.189 MiB
+fits preceding control spreads 0.442/0.689; no extra feature allowance or settled
+saving is claimed. The large one-pair H warm difference is not credited as an
+optimization. This is compatibility coverage, not a new five-pair memory/typing
+acceptance. Nested CPU scale1.5, Hvirtual120/N60, refresh unknown, shared host
+uncontrolled/light edits concurrent; no own builds/tests/other capture overlap.
+No physical or real non-app execution test. Raw `core-protocol-typed-2dadb61-smoke/`.
+
 ### Ranked prefixes for edited queries — 2026-10-17
 
 Keep the measured prefix adapter. Edited nonempty queries request the existing
