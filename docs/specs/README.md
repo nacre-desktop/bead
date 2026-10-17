@@ -10,6 +10,7 @@ must not infer permission from an old roadmap or reserve a measurement slot.
 | 1a | B0004 | [Dashboard review coverage fixes](0004-dashboard-review-coverage-fixes.md) | Done | reviewedef5406f; CI39075073594green |
 | 2 | B0002 | [Dashboard lifecycle/memory](0002-dashboard-lifecycle-memory-gate.md) | Review | early artifact/preflight report submitted; captures gated |
 | 2a | B0005 | [Capture-window correctness](0005-dashboard-capture-window-correctness.md) | Review | seven fake-clock tests pass locally and in hosted CI; no capture grant or artifact certification |
+| 2b | B0006 | [Keyboard keeper lifetime](0006-dashboard-keyboard-keeper-lifetime.md) | Ready | B0005 Review; mocks only |
 | 3 | B0003 | [Typing dominant-cost investigation](0003-launcher-typing-investigation.md) | Review | source-only checkpoint; remaining steps gated |
 
 First Ready assignment is authorized after its listed prerequisites pass. Existing
@@ -37,3 +38,6 @@ artifact/preflight request (45min, existing files/docs only), not measurement.
 
 B0002 preflight accepted atbb75590; next eligible B0005 harness correctness
 (fake-clock Python tests only), no binaries/builds or measurements granted.
+
+B0005 timing/CI reviewed; closure waits for B0006 keyboard-keeper lifetime fix.
+Next eligible B0006 (90min, mocks only). Neither implementer holds capture grant.

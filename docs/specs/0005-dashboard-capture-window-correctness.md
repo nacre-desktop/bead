@@ -142,3 +142,10 @@ Keep tests fake-clock/no subprocess/display/bus/proc/real sleep. Include this st
 before the existing runtime service proof; do not weaken or replace other steps.
 Do not commit bytecode. Report local seven-case result separately, and final
 exact-head CI including the new step. No capture/build grant is implied.
+
+## Review disposition — 2026-10-18
+
+Timing/window implementation and hostedCI39079511622/39079931459 accepted as
+scoped. Status remains Review for B0006: existing600s keyboard keeper can expire
+at the end of optional600s warmup before baseline60s. Preserve inputs throughout
+an acceptance arm and reject early exit; do not run a measurement to diagnose it.
