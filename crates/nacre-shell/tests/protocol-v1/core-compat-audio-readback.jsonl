@@ -1,0 +1,6 @@
+{"t":"snap","topic":"audio","seq":0,"data":{"health":{"available":true,"stale":false},"default_output":"output-1","nodes":{"items":{"output-1":{"name":"Speakers","kind":"output","volume":0.0,"muted":false,"ready":false,"readback":{}}},"order":["output-1"]}}}
+{"t":"patch","topic":"audio","base":0,"seq":1,"data":{"nodes":{"items":{"output-1":{"volume":0.125,"ready":true,"readback":{"linear_volume":0.125,"perceptual_volume":0.5,"muted":false}}}}}}
+{"t":"patch","topic":"audio","base":1,"seq":2,"data":{"nodes":{"items":{"output-1":{"ready":false,"readback":{"perceptual_volume":null}}}}}}
+{"t":"patch","topic":"audio","base":2,"seq":3,"data":{"nodes":{"items":{"output-1":{"readback":{"linear_volume":null}}}}}}
+{"t":"patch","topic":"audio","base":3,"seq":4,"data":{"nodes":{"items":{"output-1":{"readback":{"muted":null}}}}}}
+{"t":"patch","topic":"audio","base":4,"seq":5,"data":{"nodes":{"items":{"output-1":{"readback":{"muted":true}}}}}}

@@ -1,0 +1,3 @@
+{"t":"snap","topic":"network","seq":0,"data":{"health":{"available":true,"stale":false},"wireless_enabled":true,"devices":{"items":{},"order":[]},"access_points":{"items":{},"order":[]},"connections":{"items":{"connection-wired":{"name":"Wired fixture","kind":"ethernet","active":true},"connection-wireless":{"name":"Wireless fixture","kind":"wifi","active":true}},"order":["connection-wired","connection-wireless"]},"primary_connection":"connection-wired"}}
+{"t":"patch","topic":"network","base":0,"seq":1,"data":{"primary_connection":"connection-wireless","connections":{"items":{"connection-wired":{"active":false}}}}}
+{"t":"patch","topic":"network","base":1,"seq":2,"data":{"primary_connection":null,"connections":{"items":{"connection-wireless":{"active":false}}}}}

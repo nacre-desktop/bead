@@ -1,5 +1,35 @@
 # Feasibility
 
+## 2026-10-17 — Published compatibility protocol passes consumer gates
+
+Adopt full-green Nacre5f4c0bf3; reserved schemas do not advertise runtime hosting.
+Seven unchanged upstream examples replay through the real store Mirror.
+Production view sources and concrete per-page decoding are unchanged.
+Nested lifecycle gates fit the existing ceiling; no speed or optimization claim.
+
+| Check / UI MiB H /N | Result |
+| --- | ---: |
+| Rust workspace / Luau modules |236 /52 pass|
+| Typed positive / negative / semantic |100 /7 /32 pass|
+| Original fixtures / new snapshots+patches |30 exact /7+29|
+| Final settled / max closed |23.756/24.258 /23.760/24.289|
+| Settled file / anonymous |15.859/15.973 /7.203/7.180|
+| Settled shared / SwapPss |0.693/1.105 /0/0|
+| Close/settled samples / process audit |76 pass /0|
+
+Settled endpoints <24.5, all close/lifecycle <=ownbar+5 and <=25MiB.
+Relative to prior separate native runs H+0.070MiB is file+0.074/anon−0.004;
+N−0.197 is file−0.018/anon−0.180, shared unchanged. Not paired attribution.
+Release24,548,576B (+38,728; text+15,104/rodata+192/data+bss unchanged).
+Decoration SHM542,592B unchanged; tracked caches197,559/195,440B after idle.
+Single nested run/compositor, same frozen75157 helper/4pages/20cycles and final
+idle; no own build/test overlap, shared host. DRM/refresh unknown, not physical.
+Fmt, all-feature Clippy-Dwarnings, trace, CPU-only/release and service boundary
+pass. Seven expected Luau rejections include the corrected popup_order ID type;
+old failing proof is preserved. All eight page PNGs remain unchanged.
+No new runtime backend, action executor, UI control or helper is claimed.
+Typing targets, Reader application trimming and optional-page scope stay open.
+
 ## 2026-10-17 — Four core dashboard tabs fit the unchanged ceiling
 
 Today adds a lazy calendar/clock/agenda using concrete published page types.

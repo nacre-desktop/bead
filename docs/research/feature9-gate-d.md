@@ -13,6 +13,57 @@ daily driver; live validation is held.
 
 
 
+## Green compatibility protocol pin — 2026-10-17
+
+Pin published Nacre `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57` after independent
+[full-green CI39052564401 verification](https://github.com/nacre-desktop/nacre/actions/runs/39052564401).
+This supersedes the c2/revised-schema publication holds in the historical
+sections below. Reserved core topics/methods still have no runtime hosting;
+no generic native non-app executor is advertised. The measured daemon helper
+stays immutable `75157fd3`; no new helper/engine performance claim follows.
+
+Seven byte-exact published transcripts cover 7 snapshots and 29 RFC7396 patches.
+Two consumer tests compare upstream exports, round-trip wire frames, replay the
+real Mirror, validate typed states and assert null deletion/unknown semantics.
+Published generated Luau passes 64 old + 36 new positive states, seven expected
+negative type rejections, and 32 runtime semantic assertions. Numeric popup IDs
+now reject; the first failing draft proof stays preserved. All 30 original
+upstream fixtures remain byte-exact. This consumer proof is not independent
+full JSONSchema validation. Full 236 workspace tests, isolated trace, fmt,
+all-target/all-feature Clippy with warnings denied, CPU-only/release, service
+boundary and 52 UI Luau modules pass; all eight existing PNGs are unchanged.
+Only the dependency and test data/code change: production consumer/UI sources
+and narrow per-page decoding are unchanged. The Reader trim API is now published;
+application use and retained-buffer/cache work remain open, with no RSS promise.
+
+The release is 24,548,576 B, SHA `5a7e7dde`, versus accepted Today `5e8ef1d8` at
+24,509,848 B: +38,728 B (text +15,104, rodata +192; data/bss unchanged).
+Both full native20 checks use the same 4pages, legacy routes, unused preparations,
+20view cycles, exact presentation feedback and final idle on a shared laptop:
+2880×1800 scale1.5; nested Hyprland virtual120/niri configured60, no own build,
+test or second capture overlap. DRM/feedback refresh unknown is not zero or
+physical timing. No new matched QML/typing comparison or optimization is claimed.
+
+| UI MiB / count | Hyprland | niri |
+| --- | ---: | ---: |
+| Settled |23.7559|24.2578|
+| Maximum closed |23.7598|24.2891|
+| Maximum above own bar, close/settled |1.6689|1.3955|
+| Settled file / anonymous / shared |15.8594 /7.2031 /0.6934|15.9727 /7.1797 /1.1055|
+| SwapPss |0|0|
+| Close/settled observations |38|38|
+| Tracked cache bytes after idle |197559|195440|
+
+All 76 observations fit ownbar+5/25MiB, settled <24.5; decoration SHM542,592B
+is unchanged. UI/helper and exact task-environment process audit is0. Relative
+to the previous separate native runs, H settled +0.0703 is file +0.0742 and
+anonymous −0.0039; N −0.1973 is file −0.0176 and anonymous −0.1797, shared unchanged.
+File-backed executable/readonly working-set variation is consistent with changed
+protocol code; no allocation site or causal memory gain is inferred from these
+unpaired runs. No new anonymous retention is demonstrated. The ceiling stays25
+and stop line24.5. Core-page scope/remaining parity forecast and typing targets
+remain open as below; QML stays daily driver and no live validation is run.
+
 ## Four core dashboard tabs — measured continuation, 2026-10-17
 
 Owner reviewed the first pages at 8558bd6 and authorized the remainder under

@@ -1,54 +1,52 @@
 # Status
 
-## 2026-10-17 — Four core dashboard tabs measured
+## 2026-10-17 — Green compatibility protocol adopted
 
-Today/calendar completes the four core tab presentations and navigation.
-Clock shares the bar's hosted Source; events use concrete CalendarState and
-Weather a scoped Source. Page bundles, state, subscriptions and rasters release
-after closed + idle. Legacy tab 0–3 / drawer toggle and dashboard state work.
+Nacre protocol is pinned to published 5f4c0bf3, independently verified fully green
+[Source CI39052564401](https://github.com/nacre-desktop/nacre/actions/runs/39052564401).
+Seven exact compatibility transcripts replay through Bead's Mirror; two new
+consumer tests cover 7 snapshots / 29 patches. Published Luau checks pass 100
+positive cases, 7 negative guards and 32 semantic assertions; original 30
+fixtures stay byte-exact. Reserved contracts are not runtime capabilities.
+No production consumer, UI, backend or helper behavior is changed.
+
+236 workspace tests, trace, fmt/all-feature Clippy, CPU-only/release, service
+boundary and 52 Luau modules pass. Both full native20 proofs pass: settled
+H 23.756 / N 24.258 MiB, max closed 23.760 / 24.289; all 76 close/settled samples
+fit own-bar + 5 MiB / 25 MiB and settled < 24.5. SwapPss 0; process audit 0.
+File/anonymous/shared H 15.859/7.203/0.693, N 15.973/7.180/1.105 MiB.
+Decoration SHM stays 542,592 B; executable +38,728 B (text +15,104 B).
+Single fresh nested run/compositor with frozen75157 helper, no own build/test
+overlap. Differences from earlier runs are not a paired regression or speed
+claim. DRM/refresh remain unknown. [Report](research/feature9-gate-d.md#green-compatibility-protocol-pin--2026-10-17).
+Published-head CI: [Actions](https://github.com/nacre-desktop/bead/actions).
+
+## Four core dashboard tabs and stop point
+
+Today/calendar, Weather, enrichment-only Media, and System with Updates have
+lazy presentations, navigation and legacy tab/drawer routing. Page bundles,
+state, subscriptions and rasters release after closed + idle. Concrete per-page
+decoding stays in place. Eight PNG goldens are unchanged by this pin update.
 Explicit labeled fixtures supply preview data; unadvertised real topics remain
-unavailable. No player/backend or extra daemon capability is invented.
-[Measured report](research/feature9-gate-d.md#four-core-dashboard-tabs--measured-continuation-2026-10-17).
-
-Five alternating pairs per compositor pass never-opened, once-opened and
-repeated-open phases. Repeated settled medians H 22.098 → 22.742 / N 22.672 →
-23.264 MiB; paired increases +0.644 / +0.592 MiB. File +0.339 / +0.367 and
-anonymous +0.223 / +0.156 MiB paired component medians, shared unchanged.
-Components need not add. Clean executable pages explain most file growth;
-exact smaller anonymous allocation attribution is unproved, below 1 MiB.
-Startup paired changes fit control spread; no eager page bundle remains.
-
-Full native20 settles H 23.686 / N 24.455 MiB. All 376 close/settled samples
-fit own-bar + 5 MiB / 25 MiB, all settled endpoints below 24.5; SwapPss 0.
-The ceiling stays 25 MiB; niri has only 46 KiB before the stop line. Closed
-state returns to 5 sources / 1 watcher / 1 subscription / 502,024 Luau bytes.
-Caches: 194,403 / 195,628 B; joined-frame SHM 542,592 B unchanged. Nested CPU,
-shared host; DRM null and refresh 0 are unknown, not physical 120 Hz evidence.
-Owned UI/helper and exact task-environment process audits return zero.
-
-234 workspace tests, trace, fmt/Clippy, CPU-only/release and 52 Luau modules
-pass. Eight scale-1/1.5 page PNGs include the unchanged prior six. Source
-1eb5cb0 fixes an undeclared Today-only field caught by the exact native proof;
-tests now project from declared defaults. Invalid first run stays preserved.
-Runtime source equals validated 1eb5cb0; harness 6cd8d53. No brush optimization
-ships: its exact-pixel typing screen had mixed CPU direction. Typing 8 ms/key /
-presented p99 16.7 ms remains unaccepted. Published-head CI: [Actions](https://github.com/nacre-desktop/bead/actions).
-
-## Stop point and dependencies
+unavailable. No MPRIS/player, backend or extra capability is invented.
+The earlier five alternating pairs pass never/once/repeated-open phases;
+repeated settled medians H 22.098 → 22.742 / N 22.672 → 23.264 MiB.
+[Core-page report](research/feature9-gate-d.md#four-core-dashboard-tabs--measured-continuation-2026-10-17).
 
 Stop at this completed core-page checkpoint / optional-extras scope decision.
 Optional tabs, customization/QML behavior and real provider hosting are not
 claimed complete. QML stays daily driver; no later feature, live test, install,
-config/unit/keybinding change or desktop job/slot. One-command private preview
-is prepared with the immutable bundle and explicit fixtures; not run live.
-Protocol c2b26d98 stays pinned: revised compatibility/OSD schemas and Reader trim
-remain unpublished. Adopt only published full-green revisions. Runtime hosting
-follows F4. helper.execute is the actual method; no guessed RPC/player/sampler.
+config/unit/keybinding change or desktop job/slot. Private preview remains
+prepared with immutable artifacts and explicit fixtures, not run live.
+Revised compatibility/OSD schemas are adopted; Reader trim API is now published
+but its application/cache gap stays open. Runtime hosting follows Nacre F4;
+helper.execute is the actual compatibility method, with no guessed RPC.
 
-Keep typing regression 29.61 → 32.66%, 6b pacing/idle, long chaos, reader/cache
-gaps, matched QML dashboard comparison and binary-name clash open. CPU small
-views / GL large animation keeps the ~20 MiB Mesa-residue policy. Core forecast
-remains 40–81 eight-hour agent-days (320–648 task hours), practical 3–8 calendar
-weeks at 16–20 task hours/day availability plus contract/hardware gates.
-Providers/workers, hardware, session/wallpaper and packaging dominate risk;
-full-core idle 90–150 MiB is an estimate. Further IME/reader work is deferred.
+Keep typing targets, CPU regression 29.61 → 32.66%, 6b pacing/idle, long chaos,
+remaining caches, matched QML dashboard comparison and binary-name clash open.
+No brush optimization ships: the prior exact-pixel screen had mixed CPU direction.
+CPU small views / GL large animation keeps the ~20 MiB Mesa-residue policy.
+Core forecast stays 40–81 eight-hour agent-days (320–648 task hours), practical
+3–8 calendar weeks at 16–20 task hours/day availability plus contract/hardware
+gates. Full-core idle 90–150 MiB is an estimate. Further IME/reader work and live
+validation remain deferred/held; the 25 MiB ceiling / 24.5 MiB stop are unchanged.

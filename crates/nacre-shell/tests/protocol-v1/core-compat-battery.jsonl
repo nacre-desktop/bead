@@ -1,0 +1,4 @@
+{"t":"snap","topic":"battery","seq":0,"data":{"health":{"available":false,"stale":false}}}
+{"t":"patch","topic":"battery","base":0,"seq":1,"data":{"health":{"available":true,"stale":false},"percentage":62.5,"charging":false}}
+{"t":"patch","topic":"battery","base":1,"seq":2,"data":{"percentage":63.0,"charging":true}}
+{"t":"patch","topic":"battery","base":2,"seq":3,"data":{"health":{"available":false,"stale":true},"percentage":null,"charging":null}}

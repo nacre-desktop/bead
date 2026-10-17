@@ -1,0 +1,11 @@
+{"t":"snap","topic":"osd","seq":0,"data":{"health":{"available":true,"stale":false}}}
+{"t":"patch","topic":"osd","base":0,"seq":1,"data":{"current":{"serial":1,"channel":"volume","unit":"perceptual","value":0.5,"muted":false,"expires_ms":1800000002000}}}
+{"t":"patch","topic":"osd","base":1,"seq":2,"data":{"current":{"serial":2,"expires_ms":1800000003000}}}
+{"t":"patch","topic":"osd","base":2,"seq":3,"data":{"current":{"serial":3,"channel":"brightness","unit":"fraction","value":0.75,"muted":null,"expires_ms":1800000005000}}}
+{"t":"patch","topic":"osd","base":3,"seq":4,"data":{"current":{"serial":4,"channel":"microphone","unit":"linear","value":null,"muted":true,"expires_ms":1800000007000}}}
+{"t":"patch","topic":"osd","base":4,"seq":5,"data":{"current":null}}
+{"t":"patch","topic":"osd","base":5,"seq":6,"data":{"current":{"serial":5,"channel":"capslock","unit":"boolean","value":1.0,"expires_ms":1800000009000}}}
+{"t":"patch","topic":"osd","base":6,"seq":7,"data":{"current":null}}
+{"t":"patch","topic":"osd","base":7,"seq":8,"data":{"current":{"serial":6,"channel":"volume","unit":"linear","value":0.125,"muted":false,"expires_ms":1800000011000}}}
+{"t":"patch","topic":"osd","base":8,"seq":9,"data":{"current":{"serial":6,"expires_ms":1800000011000}}}
+{"t":"patch","topic":"osd","base":9,"seq":10,"data":{"current":null}}

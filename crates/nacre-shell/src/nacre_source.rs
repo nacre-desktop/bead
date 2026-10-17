@@ -930,3 +930,6 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
 }
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod core_compatibility_tests;
