@@ -11,6 +11,36 @@ reviewed; remaining lazy pages and typing work continue under the same memory
 policy. Stop at dashboard completion or a needed decision. QML remains the
 daily driver; live validation is held.
 
+## B0001 — core dashboard completion audit
+
+The 41-file QML inventory is at
+[dashboard-core-coverage.md](dashboard-core-coverage.md), measured at the exact
+Nacre reference `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57` (41 QML files plus
+two JavaScript helpers). It maps each source component to its Bead equivalent,
+test proof and covered/deferred/provider-blocked disposition. The five named
+tests verify declared state defaults, current and legacy navigation, unknown
+versus stale data, reachable last rows in clipped long lists, and page resource
+release. The retirement test keeps fake providers alive, verifies their Arc
+counts return to baseline and confirms post-drop publishes invoke no callbacks;
+it covers Today calendar/weather/clock, Weather, Media, and System/Updates.
+Session state and the CPU scene are owned by and drop with Runtime. This is not
+a GPU/raster-residency or elapsed 2.2-second timer measurement. The outer
+`close_panel()` timer/token guards remain in Bead source `04c492a`; the separate
+service-view test proves ownership only, not elapsed retirement timing.
+
+No dashboard product defect was demonstrated, so B0001 changes tests and this
+coverage document only; no image golden changed. No measurement was authorized
+or run. Media/player discovery and GPU metrics lack published runtime providers;
+the reserved dashboard schemas still do not advertise hosted topics. Optional
+extras, Focus mutations, customization, photography/video and player controls
+remain deferred. Validation and Bead CI for this checkpoint are pending.
+
+Local checks pass: 241 workspace tests (0 failed, 3 ignored), the trace memory
+test (1 passed, 1 ignored), fmt, warning-denied workspace Clippy, service
+dependency boundary, CPU-only and all-feature checks, minimal facade, shell UI
+check, generated Luau analysis (52 modules), private service-owner proof, and
+workspace plus framework cargo-deny. No measurement was run; CI remains pending.
+
 
 
 ## Green compatibility protocol pin — 2026-10-17

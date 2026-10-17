@@ -1,5 +1,23 @@
 # Status
 
+## 2026-10-17 — B0001 core dashboard completion
+
+B0001 adds the five named deterministic dashboard proofs and a 41-file QML
+coverage inventory at Nacre `5f4c0bf3`. Tests cover page defaults, four-tab and
+legacy routing, unknown/stale source behavior, reachable clipped rows, and page
+Runtime retirement. Retirement restores fake-source `Arc` counts and stops
+callbacks while providers remain alive; Session state and CPU scene drop with
+Runtime. GPU/raster memory is not measured. No page behavior or golden changed.
+Media/player discovery, GPU metrics and reserved dashboard topics lack runtime
+providers; unsupported optional cards remain deferred. No measurements run.
+Validation: workspace tests 241 passed / 0 failed (3 ignored), trace memory tests
+1 passed (1 ignored), fmt, warning-denied Clippy, service boundary, CPU-only and
+all-feature checks, minimal facade, generated Luau (52 modules), UI check,
+private service-owner proof and workspace/framework cargo-deny all pass. CI is
+pending.
+
+Coverage inventory: [dashboard-core-coverage.md](research/dashboard-core-coverage.md).
+
 ## 2026-10-17 — Scoped zbus advisory exceptions green
 
 Nacre protocol remains pinned to published 5f4c0bf3, fully green in
@@ -41,8 +59,9 @@ The earlier five alternating pairs pass never/once/repeated-open phases;
 repeated settled medians H 22.098 → 22.742 / N 22.672 → 23.264 MiB.
 [Core-page report](research/feature9-gate-d.md#four-core-dashboard-tabs--measured-continuation-2026-10-17).
 
-Advisory policy is resolved. Future dashboard implementation waits for a Ready
-spec from the spec agent; optional tabs remain incomplete and unclaimed.
+Advisory policy is resolved. Dashboard B0001 is in progress under its published
+spec; later lifecycle/memory and typing work still require their own grants.
+Optional tabs remain incomplete and unclaimed.
 Optional tabs, customization/QML behavior and real provider hosting are not
 claimed complete. QML stays daily driver; no later feature, live test, install,
 config/unit/keybinding change or desktop job/slot. Private preview remains

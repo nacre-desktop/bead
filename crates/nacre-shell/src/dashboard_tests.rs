@@ -171,6 +171,381 @@ fn unknown_weather_updates_and_hardware_values_never_become_zero() -> Result<()>
 }
 
 #[test]
+fn dashboard_four_tabs_have_complete_state_defaults() -> Result<()> {
+    for page in Page::ALL {
+        let projected =
+            Dashboard::new(page, Arc::new(ReadOnly::unavailable()?), None, false).project();
+        let harness = Harness::load(
+            &root(),
+            Path::new(&format!("dashboard/{}/main.luau", page.name())),
+            &root().join("palette.json"),
+            BTreeMap::new(),
+            Config {
+                width: 1048,
+                height: 714,
+                scale: 1.,
+            },
+        )?;
+        let defaults = harness.session.stores.values();
+        for key in projected.keys() {
+            assert!(
+                defaults.contains_key(key),
+                "{} projects undeclared state key {key}",
+                page.name()
+            );
+        }
+        if page == Page::Today {
+            assert!(defaults.contains_key("dashboard.clock"));
+        } else {
+            assert!(
+                !projected.contains_key("dashboard.clock"),
+                "{} must not project Today-only clock state",
+                page.name()
+            );
+            assert!(!defaults.contains_key("dashboard.clock"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn dashboard_navigation_routes_every_core_tab() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+
+    for (index, page) in Page::ALL.into_iter().enumerate() {
+        let route = format!("dashboard-{}", page.name());
+        assert_eq!(Page::from_view(&route), Some(page));
+        assert_eq!(page.tab(), index);
+
+        let legacy =
+            crate::commands::from_strings("nacre".into(), "tab".into(), &[index.to_string()])?;
+        let mapped = crate::commands::map_views(legacy).expect("valid core dashboard tab route");
+        assert_eq!(mapped.target, "bead.panel");
+        assert_eq!(mapped.method, "open");
+        assert_eq!(mapped.args, vec![json!(route.clone())]);
+        assert_eq!(
+            Page::from_view(mapped.args[0].as_str().unwrap()),
+            Some(page)
+        );
+
+        let model = Dashboard::new(page, Arc::new(ReadOnly::unavailable()?), None, false).project();
+        let harness = Harness::load(
+            &root(),
+            Path::new(&format!("dashboard/{}/main.luau", page.name())),
+            &root().join("palette.json"),
+            model,
+            Config {
+                width: 1048,
+                height: 714,
+                scale: 1.,
+            },
+        )?;
+        for tab in Page::ALL {
+            if tab == page {
+                assert!(
+                    harness.scene().primitives.iter().any(|primitive| {
+                        matches!(primitive, bead::render::Primitive::Text { text, .. } if text == tab.title())
+                    }),
+                    "selected {} tab must render its label",
+                    tab.name()
+                );
+                assert!(
+                    !harness.session.view_nodes().iter().any(|node| {
+                        node.action.as_deref() == Some("view.open")
+                            && node.action_arg == Some(Value::Text(route.clone()))
+                    }),
+                    "selected tab is not an action"
+                );
+            } else {
+                assert!(
+                    harness.session.view_nodes().iter().any(|node| {
+                        node.action.as_deref() == Some("view.open")
+                            && node.action_arg
+                                == Some(Value::Text(format!("dashboard-{}", tab.name())))
+                    }),
+                    "unselected {} tab must open its dashboard route",
+                    tab.name()
+                );
+            }
+        }
+
+        let mut runtime = crate::reload::Runtime::new(harness.session);
+        if let Some(scene) = runtime.stage(UiEvent::PanelVisibility(false))? {
+            runtime.session.commit(scene);
+        }
+        assert_eq!(
+            runtime.session.stores.get("panel.open"),
+            Some(&Value::Bool(false)),
+            "closing a core tab hides the panel and returns to the bar"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn dashboard_disconnect_keeps_last_good_stale() -> Result<()> {
+    let unavailable = Dashboard::new(
+        Page::Weather,
+        Arc::new(ReadOnly::unavailable()?),
+        None,
+        false,
+    )
+    .project();
+    assert_eq!(unavailable["dashboard.ready"], Value::Bool(false));
+    assert_eq!(unavailable["dashboard.stale"], Value::Bool(false));
+    assert_eq!(unavailable["dashboard.metric"], Value::Text("—".into()));
+
+    let source = Arc::new(FakeSource::new(fixture("weather"))?);
+    let dashboard = Dashboard::new(Page::Weather, source.clone(), None, true);
+    let before = dashboard.project();
+    assert_eq!(before["dashboard.ready"], Value::Bool(true));
+    assert_eq!(before["dashboard.stale"], Value::Bool(false));
+
+    source.disconnect()?;
+    let after = dashboard.project();
+    assert_eq!(after["dashboard.ready"], Value::Bool(true));
+    assert_eq!(after["dashboard.stale"], Value::Bool(true));
+    for key in [
+        "dashboard.heading",
+        "dashboard.summary",
+        "dashboard.detail",
+        "dashboard.metric",
+        "dashboard.rows",
+        "dashboard.secondary",
+    ] {
+        assert_eq!(after[key], before[key], "last-good field {key} was lost");
+    }
+    Ok(())
+}
+
+#[test]
+fn dashboard_long_rows_scroll_without_clipping() -> Result<()> {
+    use bead_test::Input;
+
+    let mut calendar = fixture("calendar");
+    calendar["events"]["items"] = json!({});
+    calendar["events"]["order"] = json!([]);
+    for index in 0..24 {
+        let id = format!("event-{index}");
+        calendar["events"]["items"][&id] = json!({
+            "title": format!("Event {index}"),
+            "start": 1_800_000_000 + index,
+            "time": "08:00",
+            "date": "2027-01-15"
+        });
+        calendar["events"]["order"]
+            .as_array_mut()
+            .ok_or("calendar event order must be an array")?
+            .push(json!(id));
+    }
+    let mut model = view(Page::Today, calendar, Some(fixture("weather"))).project();
+    model.extend(BTreeMap::from([
+        ("calendar.initialized".into(), Value::Bool(true)),
+        ("calendar.ready".into(), Value::Bool(true)),
+        ("calendar.today".into(), Value::Text("2024-02-29".into())),
+        ("calendar.year".into(), Value::Number(2024.)),
+        ("calendar.month".into(), Value::Number(2.)),
+    ]));
+    let mut today = Harness::load(
+        &root(),
+        Path::new("dashboard/today/main.luau"),
+        &root().join("palette.json"),
+        model,
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.,
+        },
+    )?;
+    today.render()?;
+    let scroll = today
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.scroll_store.as_deref() == Some("dashboard.agenda.scroll.y"))
+        .ok_or("Today agenda scroll region missing")?;
+    let rect = bead::ui::rect(&scroll.draw);
+    today.script((0..3).map(|_| Input::Scroll {
+        x: rect.x + rect.w / 2.,
+        y: rect.y + rect.h / 2.,
+        delta: 400.,
+    }))?;
+    let (event_index, event_rect) = today
+        .scene()
+        .primitives
+        .iter()
+        .enumerate()
+        .find_map(|(index, primitive)| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } if text == "Event 23" => {
+                Some((index, rect))
+            }
+            _ => None,
+        })
+        .ok_or("last bounded agenda event is not rendered after scrolling")?;
+    let clip = *today
+        .scene()
+        .clips
+        .get(&event_index)
+        .ok_or("agenda row must carry its viewport clip")?;
+    assert!(
+        event_rect.y < clip.y + clip.h && event_rect.y + event_rect.h > clip.y,
+        "last agenda event must intersect the scrolled viewport"
+    );
+
+    let mut system_data = fixture("system");
+    for index in 0..5 {
+        system_data["processes"]["items"][format!("process-{index}")]["name"] =
+            json!(format!("Process {index}"));
+    }
+    let system_model = view(Page::System, system_data, Some(fixture("updates"))).project();
+    let mut system = Harness::load(
+        &root(),
+        Path::new("dashboard/system/main.luau"),
+        &root().join("palette.json"),
+        system_model,
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.,
+        },
+    )?;
+    system.render()?;
+    let process_rect = system
+        .scene()
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } if text == "Process 4" => Some(rect),
+            _ => None,
+        })
+        .ok_or("last bounded process row is absent")?;
+    assert!(process_rect.y >= 342. && process_rect.y + process_rect.h <= 554.);
+
+    let weather_model = view(Page::Weather, fixture("weather"), None).project();
+    let mut weather = Harness::load(
+        &root(),
+        Path::new("dashboard/weather/main.luau"),
+        &root().join("palette.json"),
+        weather_model,
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.,
+        },
+    )?;
+    weather.render()?;
+    let forecast_rect = weather
+        .scene()
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } if text == "2024-03-06" => Some(rect),
+            _ => None,
+        })
+        .ok_or("last bounded daily forecast row is absent")?;
+    assert!(forecast_rect.y >= 68. && forecast_rect.y + forecast_rect.h <= 630.);
+    Ok(())
+}
+
+#[test]
+fn dashboard_closed_page_releases_sources() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    for page in Page::ALL {
+        let main = Arc::new(FakeSource::new(fixture(page.name()))?);
+        let secondary = match page {
+            Page::Today => Some(Arc::new(FakeSource::new(fixture("weather"))?)),
+            Page::System => Some(Arc::new(FakeSource::new(fixture("updates"))?)),
+            Page::Weather | Page::Media => None,
+        };
+        let clock = (page == Page::Today)
+            .then(|| Arc::new(FakeSource::new(json!({"clock":"10:00"})).unwrap()));
+        let retained_before = (
+            Arc::strong_count(&main),
+            secondary.as_ref().map(Arc::strong_count),
+            clock.as_ref().map(Arc::strong_count),
+        );
+        let mut harness = Harness::load(
+            &root(),
+            Path::new(&format!("dashboard/{}/main.luau", page.name())),
+            &root().join("palette.json"),
+            BTreeMap::new(),
+            Config {
+                width: 1048,
+                height: 714,
+                scale: 1.,
+            },
+        )?;
+        harness.render()?;
+        let mut runtime = crate::reload::Runtime::new(harness.session).with_dashboard(
+            page,
+            main.clone(),
+            secondary
+                .as_ref()
+                .map(|source| source.clone() as Arc<dyn Source>),
+            clock
+                .as_ref()
+                .map(|source| source.clone() as Arc<dyn Source>),
+            false,
+        )?;
+        let events = Arc::new(AtomicUsize::new(0));
+        let callback_events = events.clone();
+        runtime.services(Box::new(move |_: UiEvent| {
+            callback_events.fetch_add(1, Ordering::Relaxed);
+        }));
+        let scene = runtime
+            .session
+            .update_model(BTreeMap::new())?
+            .ok_or("page Sources must materialize the page state")?;
+        runtime.session.commit(scene);
+        assert_eq!(
+            runtime.session.stores.get("dashboard.ready"),
+            Some(&Value::Bool(true)),
+            "{page:?} fixture state must be live before retirement"
+        );
+        let subscribed = events.load(Ordering::Relaxed);
+        assert!(
+            subscribed > 0,
+            "{page:?} page acquired source subscriptions"
+        );
+
+        // Keep every source alive while explicitly retiring the view. A shared
+        // provider therefore cannot be mistaken for a leaked page owner.
+        drop(runtime);
+        assert_eq!(
+            Arc::strong_count(&main),
+            retained_before.0,
+            "{page:?} page must release its primary Source lease"
+        );
+        assert_eq!(
+            secondary.as_ref().map(Arc::strong_count),
+            retained_before.1,
+            "{page:?} page must release its secondary Source lease"
+        );
+        assert_eq!(
+            clock.as_ref().map(Arc::strong_count),
+            retained_before.2,
+            "{page:?} page must release its clock Source lease"
+        );
+        main.publish(fixture(page.name()))?;
+        if let Some(source) = &secondary {
+            source.publish(source.snapshot().data.as_ref().clone())?;
+        }
+        if let Some(source) = &clock {
+            source.publish(json!({"clock":"10:01"}))?;
+        }
+        assert_eq!(
+            events.load(Ordering::Relaxed),
+            subscribed,
+            "{page:?} page callbacks must stop after Runtime retirement"
+        );
+        assert_eq!(main.calls(), 0, "dashboard pages are read-only");
+    }
+    Ok(())
+}
+
+#[test]
 fn process_projection_preserves_ids_and_uses_memory_not_fake_cpu_percent() {
     let mut data = fixture("system");
     data["processes"]["order"] = json!([
@@ -264,7 +639,7 @@ fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Re
                 .iter()
                 .find_map(|p| match p {
                     bead::render::Primitive::Text { text, rect, .. } if text == "Preview data" => {
-                        Some(*rect)
+                        Some(rect)
                     }
                     _ => None,
                 })
@@ -440,8 +815,8 @@ fn today_clock_and_secondary_source_drop_with_page_and_preserve_browsed_month() 
 
 #[test]
 fn today_calendar_navigation_and_agenda_scrolling_use_real_input() -> Result<()> {
-    use bead_test::Input;
     let mut data = fixture("calendar");
+    use bead_test::Input;
     data["events"]["items"] = json!({});
     data["events"]["order"] = json!([]);
     for i in 0..40 {
