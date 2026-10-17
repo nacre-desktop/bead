@@ -1,5 +1,12 @@
 # Status
 
+## 2026-10-18 — B0004 dashboard review coverage fixes
+
+B0004 is in progress after exact-head CI39073205633 passed on `3da4856`.
+It closes ready-state default and primary-source disconnect evidence gaps from
+B0001 without runtime changes. No fixtures, PNG goldens or measurements are in
+scope.
+
 ## 2026-10-17 — B0001 core dashboard completion
 
 B0001 adds the five named deterministic dashboard proofs and a 41-file QML
