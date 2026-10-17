@@ -818,6 +818,71 @@ instrumentation adds overhead; do not add them or treat them as acceptance data.
 **Typing remains unaccepted:** UI 8 ms/key and presented p99 16.7 ms are not met.
 UI above 8 also prevents treating this as the owner's two-frame candidate.
 
+## B0003 source-only preparation — 2026-10-18
+
+Reviewed Bead source at `be774a4c3f9b61de213f863fb9b6a2ca6b10943d` (runtime
+files unchanged from `5fb1831437891938d265ddba4b817064fe45d677`). No builds,
+captures or product edits. Path: `protocols::press_key` records input →
+`transactions::App::ui` enqueues `Job::Stage` → `worker::Source` runs
+`reload::Runtime::stage` and `LauncherView::project` → Source calls `menu.query`
+and `launcher::prepare` validates/decodes rows → Session evaluates Luau and
+materializes/layouts the active view → worker bakes shaped/rasterized scene →
+Wayland thread accepts the worker packet and logs `UI_COMMIT update` → renderer
+prepares/composes → `wp_presentation` feedback logs the exact presented update.
+Luau does not rank/filter results; the Nacre engine owns that work. Luau computes
+grid/list visibility and builds the selected launcher view.
+
+| Span / boundary | Clock and ownership | What it measures / gap |
+| --- | --- | --- |
+| `INPUT_RECEIVED` | `CLOCK_MONOTONIC` + `CLOCK_PROCESS_CPUTIME_ID`; Wayland thread | Key callback receipt. No enqueue timestamp or worker-queue wait. |
+| `menu_query` / `source_projection` | Span uses monotonic wall + `CLOCK_THREAD_CPUTIME_ID`; script worker | Query, return and `prepare()` are inside `menu_query`; decode and transport are not split. `MENU_RPC_SENT/RETURN` IDs give order/revision/count, no elapsed clock. |
+| `markup_eval`, `computed`, `view_ir`, `layout`, `editor_shape` | Per-span monotonic + current-thread CPU | Luau/IR/layout/editor work has spans, but nested spans overlap; not additive. |
+| `worker` / `bake` | Per-span monotonic + current-thread CPU; worker thread | Runtime stage and tree-cache preparation; no input/update ID on the spans. `WORKER_PREPARE total_ms` is wall only. Shaping has no independent span. |
+| `UI_COMMIT` | `CLOCK_MONOTONIC`; Wayland thread | `update` joins to presentation. `prepare_ms` starts when the worker packet is handled, not at key receipt. |
+| `present_prepare`, `compose`, `UI_PRESENTED` | Stage spans as above; presentation timestamp is compositor feedback | `PRESENTATION clock_id=1` verifies monotonic time. `UI_PRESENTED cpu_ns` samples process CPU when feedback is handled; it includes all UI threads and unrelated concurrent UI work. Feedback is nested-compositor presentation, not physical scanout. |
+
+The key-to-present wall interval is `UI_PRESENTED.monotonic_ns -
+INPUT_RECEIVED.monotonic_ns`; process CPU is the difference between their
+`cpu_ns` values. That is whole-process CPU across the interval, not injector CPU
+or a sum of measured stages. Daemon/provider CPU is reported separately. Existing
+stage-calibration runs varied by host/load: detailed-vs-clocks-only median UI CPU
+differed by 1.912 ms/key on Hyprland and 1.501 ms/key on niri; future acceptance
+must use clocks-only timing, with detailed spans treated as diagnosis only.
+
+Evidence ranking is provisional. **(1) UI-side active-view preparation and
+composition** has the strongest direct CPU evidence: the historical 32-key
+diagnostic measured markup at 2.6–3.8 ms and composition at 1.4–2.1 ms CPU per
+key, while warmed shaping was 0.016–0.024 ms. These spans overlap and are not a
+complete attribution of the roughly 10 ms/key UI total. **(2) row decode/copy and
+result payload work** is plausible: `prepare()` deserializes and walks each row;
+the 64-row prefix lowered five-pair median UI CPU by 0.583/0.575 ms (H/N), but
+did not improve p99 beyond control spread and reports no wire-byte saving. It
+does not skip upstream ranking. **(3) source/daemon queueing** can explain wall
+time without equivalent UI CPU: one worker processes Stage jobs serially and the
+script waits for the query; query/row preparation is one combined span. The
+serial key proof waits for each exact presentation before sending the next key,
+so it says nothing about stale-query bursts or cancellation. **(4) compositor
+pacing** remains a possible tail cause: current p99 is about 30.9/33.0 ms
+(H/N), but refresh prediction is unknown, so a missed 120 Hz deadline is not
+proven.
+
+Cold and steady values are not a matched current-engine split. The older
+fixture-only 200-key run showed first-key CPU/presentation of 31.307/39.059 ms
+(H) and 24.572/28.931 ms (N), versus steady-199 CPU means 4.961/4.912 ms and
+p99 13.884/16.485 ms; its helper/engine cost was explicitly unmeasured. The
+latest recorded engine-backed prefix series reports candidate median UI CPU 9.793/10.560
+ms and p99 30.914/32.953 ms (H/N); targets remain unmet and these figures are
+historical, not a new baseline.
+
+Proposed next experiment, only after the queue dependencies and a separate
+exact-hash/window grant: one 200-key, 320-app, real-`menu.query` diagnostic on
+one compositor with every query changing populated result IDs, preserving
+input→RPC ID→result→commit→presentation order. This should determine whether
+the active-view spans or query/row preparation dominate before the full paired
+capture. Missing evidence is per-key stage linkage and a current-engine
+cold-versus-steady split; a separate burst workload is required to test stale
+queries. No source edit or capture is authorized by this proposal.
+
 Both candidate native 20-cycle proofs and five alternating lifecycle pairs per
 compositor pass. The memory workload opens the initial catalog THEN edits its
 query; an exact row-count/state→commit→presentation guard proves all three query

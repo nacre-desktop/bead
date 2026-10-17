@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-18 — B0003 source-only preparation
+
+The typed query path and clock boundaries are mapped in
+[the source report](research/feature9-gate-d.md).
+UI active-view work is the best-supported CPU candidate; transport, row decode
+and compositor tails remain unresolved. No builds, product edits or measurements.
+Capture requires B0001/B0002 completion and a separate exact-hash/window grant.
+B0001 publication remains blocked on the owner ruling for inherited RUSTSEC-2026-0192.
+
 ## 2026-10-18 — B0004 dashboard review coverage fixes
 
 B0004 closes ready-state default and primary disconnect evidence gaps from
