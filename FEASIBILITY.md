@@ -1,5 +1,33 @@
 # Feasibility
 
+## 2026-10-17 — Dashboard code cost resolved within the existing ceiling
+
+Lazy page payloads already release after closed+idle; the broad protocol decoder
+also linked parsers for unrelated services into the view. Decode only the four
+dashboard payload types and keep the same validation. Five alternating pairs
+pass every warm/closed gate; the original lifecycle now fits the24.5 MiB line.
+
+|Measure|Hyprland / niri|
+|---|---|
+|Never-opened medians, before → after MiB|21.689 → 21.796 /23.098 → 23.113; inside control spread|
+|Once per page medians|22.198 → 21.942 /23.020 → 22.640|
+|Three times per page medians|22.376 → 22.142 /23.179 → 22.815|
+|Median paired post-use change MiB|-0.443 /-0.325; marginal medians differ|
+|Paired file /anon /shared MiB|-0.489/-0.027/0 ;-0.345/-0.008/0|
+|Original full 20-cycle final MiB|23.603 /24.158; below 24.5, keep 25 ceiling|
+|Full20 closed max /ownbar delta MiB|23.657/+2.124 ;24.139/+1.125|
+|Guards|240 focused+66 full close/settled samples pass; SwapPss 0|
+|Release file /text|−666,848 B /−518,272 B; data/bss unchanged|
+|Checks|230 workspace, trace, fmt/Clippy, CPU-only/release, Luau (47 modules); six unchanged PNGs|
+
+Matched35/45/60 s phases leave>=30 s idle, same320 apps/frozen75157 and no own build
+or test overlap; shared local nested host, not physical/quiet. CPU DRM is null,
+refresh 0 unknown. Five-pair comparison decides the narrow decoder; full 20-cycle is a
+confirmation, not another five-pair comparison. No typing/QML saving claim.
+Core c2 schema stays latestgreen; revised OSD/core additions await publication+CI.
+First pages stop for review. No dependency or live installation; process audit0.
+[Method and caveats](docs/research/feature9-gate-d.md#first-dashboard-pages--memory-resolved-2026-10-17).
+
 ## 2026-10-17 — First dashboard pages reach the headroom stop
 
 Three lazy dashboard pages compile and render against reserved schema fixtures.

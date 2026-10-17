@@ -11,6 +11,104 @@ the daily driver; live validation is held.
 
 
 
+## First dashboard pages — memory resolved, 2026-10-17
+
+The bounded investigation took about 1 h 50 min. Keep the25 MiB UI ceiling and24.5 MiB
+stop line: the original full lifecycle now settles at23.603 MiB Hyprland and
+24.158 MiB niri. No conditional27 MiB increase was needed. Every close remains
+within its own bar+5 MiB. This completes the first fixture pages; stop for review.
+
+The page lifetimes were already scoped correctly. Sources are loaded on first
+open; after closed+idle the bar returns to5 sources/1 watcher/1 subscription and
+502,024 Luau bytes. Page font mappings, workers, rasters and SHM release. The
+remaining bar caches are192,609/195,632 B H/N; permanent joined-decoration storage
+is542,592 raw bytes. Minimal panel factories remain registered, not page bundles.
+Report mode retains numeric timing history; its diagnostic overhead is included.
+No long-soak or exact-zero allocator-residue claim is made.
+
+The concrete excess was code footprint: decoding four dashboard topics through
+`CoreSnapshot` instantiated unrelated service deserializers. Decode the four
+published payload types directly, then keep the identical `CoreSnapshot::valid()`
+checks. The release file shrinks666,848 B; `.text` shrinks518,272 B, with data/bss
+unchanged. This fixes the measured cost without an allocator/font rewrite or
+renderer change. Integrated source a818efe equals validated3666f8b byte-for-byte
+for Rust/UI/scripts/proofs/lockfile; the original e944/e6 and all trials remain.
+
+Five alternating original-dashboard/narrow-decoder pairs per nested compositor
+use the same320-app catalog and immutable75157 helper. Both arms measure never
+opened, each page once, and each page three times, at matched35/45/60 s phase
+windows with at least 30 s idle. No builds/tests or concurrent owned captures;
+shared local host, not a quiet or physical run. Both arms start the daemon without
+the earlier extra32 s delay; the initial35 s phase covers worker expiry. Do not
+compare that setup's absolute totals with the earlier native20 cohort as pairs.
+Numbers below are median UI PSS+SwapPss MiB; DRM is recorded null for these CPU
+runs, not a measuredzero. Refresh feedback is0/unknown, not proven 120 Hz pacing.
+
+|Settled phase|Hyprland original → narrow|niri original → narrow|
+|---|---:|---:|
+|Never opened|21.689  → 21.796|23.098  → 23.113|
+|Each page once|22.198  → 21.942|23.020  → 22.640|
+|Each page three times|22.376  → 22.142|23.179  → 22.815|
+
+Median paired post-use changes are-0.443/-0.325 MiB H/N; paired medians need not
+equal differences of marginal medians. Original post-use spreads are.370/0.396 MiB.
+Never-opened marginal increases are inside their.306/0.149 MiB control spreads.
+Paired component medians after repeated opens: file-0.489/-0.345 MiB, anonymous
+-0.027/-0.008 MiB, shared0/0; component medians need not sum. All never/opened/warm
+and closed no-regression gates pass against the corresponding control spread.
+Matched warm sample medians (0.2 s observation after 0.3 s open) are:
+
+|Page|Hyprland original → narrow|niri original → narrow|
+|---|---:|---:|
+|Weather|43.131  → 42.776|43.596  → 43.260|
+|Media|44.389  → 42.579|43.313  → 42.941|
+|System|43.961  → 43.098|43.524  → 43.181|
+
+The original full 20-cycle-cycle proof then passes on each compositor: unused hover,
+quick reopen,64 launcher results, all 9 views, pointer/Escape/IPC close, rapid
+switch retirement and exact page state/commit/presentation joins. Settled
+file/anonymous/shared MiB are H 15.745/7.164/0.693 and N 16.111/6.941/1.105.
+The earlier failing e944 samples were24.423/24.768; these single confirmation
+samples are not a five-pair full-lifecycle performance comparison. Focused
+comparisons above decide the optimization. Full-proof maximum closed values
+are23.657/24.139 MiB, maximum deltas2.124/1.125 MiB;64 closes+2 final samples pass.
+Together with 240 focused close/settled samples, all 306 pass; SwapPss 0 throughout.
+Settled UI+daemon/workers are55.442/56.198 MiB, excluding separate notice UI,
+wallpaper and compositor. No whole-core or QML saving is claimed.
+
+All 230 workspace tests, isolated trace, fmt, Clippy with warnings denied, CPU-only
+and normal release builds, Luau (47 modules) checks and Python compilation pass. Six
+scale 1/1.5 PNG goldens remain unchanged, including fixture-label ink assertions.
+The explicit private preview smoke already covers launcher, private notices and
+all 3pages; repeated native presentation proofs now validate the narrower decoder.
+No live desktop, config, installation, real service action or notification
+ownership changed. Owned UI/helper/worker process audit is0 after captures.
+
+First pages are lazy Weather, enrichment-only Media, and process/disk System
+with Updates; fixtures are labeled. Real unadvertised capabilities stay
+unavailable: no MPRIS/player, system sampler, provider or ranking is invented.
+Pin c2b26d98 is the latest published fully green core schema; reserved topics
+are not runtime hosting. Revised compatibility/OSD schemas remain unpublished
+and are NOT adopted; wait publication plus green CI, then replay/typecheck.
+
+Typing remains unaccepted (UI9.963/10.922ms/key; presentedp99 30.886/31.562ms
+H/N from the prior compatibility run). This change is not a typing optimization.
+Keep29.61 → 32.66% CPU regression,6b pacing/idle invariance, long chaos, Reader/cache
+trim gaps, matched QML dashboard data comparison and binary-name clash open.
+Core forecast remains40–81 eight-hour agent-days,320–648 task hours/3–8 calendar
+weeks at assumed16–20 taskhours/day including waits. Fixture presentation is done;
+real providers/workers, hosting, hardware, session/wallpaper and packaging still
+dominate uncertainty. The remaining-parity/core tables below remain applicable.
+QML stays daily driver; IME/reader work beyond existing coverage and live testing
+stay deferred. No more dashboard pages or Feature 11 are started.
+
+Raw evidence under `.research/gate-d-foundation`: `dashboard-narrow-five`
+(assessment.json and COMPLETE), `dashboard-native20-narrow-3666f8b`
+(review-summary.json/process-audit.json and COMPLETE). Initial two matched feature
+pairs, the interrupted pilot and partial third pair are preserved in
+`dashboard-residency-e944b8f-five[-v2]`; none is represented as five pairs.
+Local build log `bead-dashboard-narrow-build.log` ends0; no dependency added.
+
 ## First dashboard pages — headroom stop, 2026-10-17
 
 Owner accepts placement and authorizes the first dashboard subset, adopting the
