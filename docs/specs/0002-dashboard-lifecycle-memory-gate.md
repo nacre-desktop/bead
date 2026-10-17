@@ -4,9 +4,35 @@
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
 - Status: Ready
-- Depends on: B0001 Done; exact measurement-slot grant before capture
+- Depends on: source-only preflight eligible after B0004 Done; captures require B0001 Done and exact slot grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours including capture after grant
+
+## Early artifact/preflight request — authorized 2026-10-18
+
+With B0004 Done and B0003 source phase accepted, prepare ONLY this request now,
+maximum45minutes. B0001 policy blocker remains; no capture/build is authorized.
+
+- Inspect already-existing private local artifacts/receipts without running the
+  desktop, helper, compositor or benchmark. Supply available baseline/candidate
+  full source and binary hashes, helper75157 exact existing hash/provenance,
+  harness revision and whether runtime inputs are byte-identical across the
+  tests/docs-only B0001/B0004 series. Never assume binary identity from a branch
+  name or relabel an old artifact. If required artifact is absent/stale, report
+  it missing; do not build or fetch dependencies to fill the gap.
+- Propose private host scope, actual commands/flags and process cleanup plan from
+  the existing harness; no remote probing of Nacre's host or live display.
+  Calculate duration for5alternating pairs EACH compositor and full60s idle
+  windows at every phase; include600s warmups per arm if noisy-baseline mode is
+  needed. Identify if the total exceeds the current4h session; propose splitting
+  into independently granted compositor windows, without silently reducing
+  sample counts/warmups. Request review before changing the method/harness.
+- Report the inherited0192policy dependency and absent exact grant as blockers.
+  Do not start captures, CI-triggering source changes, builds, previews or product
+  edits; docs/report only. No new hardware inventory/credential disclosure.
+- This request does not complete B0002 or waive B0001. The spec agent will decide
+  exact artifacts/method/window after dependencies are resolved. An idle host or
+  a Ready spec is not a grant; neither implementer currently holds one.
 
 ## Goal
 

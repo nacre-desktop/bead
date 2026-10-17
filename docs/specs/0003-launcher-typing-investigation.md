@@ -3,7 +3,7 @@
 - ID: B0003
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review (source-only preparation; B0003 incomplete and capture steps remain gated)
+- Status: Blocked (source-only phase accepted; capture prerequisites/grant absent)
 - Depends on: source-only preparation eligible now after B0004 Done; captures require B0001/B0002 Done and exclusive grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
@@ -127,3 +127,15 @@ locations (never commit private paths). For captures include per-run numbers,
 medians/min/max/peaks, quiet counters, attribution and owned-PID cleanup. Missing
 is unknown. Ask the spec thread directly; do not improvise or ask the owner for
 routine design. Submit Review, then start the next eligible Ready spec.
+
+## Source-only phase review — 2026-10-18
+
+Accepted source-preparation checkpoint at214b0f0bda7107192a304669fa9de8b61623f832.
+Exact-head CI39076370494 independently verified success; source clock/span sites
+spot-checked. Report correctly distinguishes process/thread CPU, nested overlapping
+spans, unmeasured enqueue/transport/decode attribution, serial-versus-burst proof,
+historical data and nested presentation. Ranking is provisional, no dominant-cost
+or target acceptance. Docs-only delta; no build/capture/product change.
+B0003 remains incomplete/Blocked for capture dependencies and explicit grant.
+No further static report polishing requested. Next eligible work is B0002's
+limited artifact/preflight request phase, not a measurement.

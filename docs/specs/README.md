@@ -8,7 +8,7 @@ must not infer permission from an old roadmap or reserve a measurement slot.
 | --- | --- | --- | --- | --- |
 | 1 | B0001 | [Continue core dashboard](0001-dashboard-core-completion-audit.md) | Blocked | functional accepted; owner0192 policy ruling |
 | 1a | B0004 | [Dashboard review coverage fixes](0004-dashboard-review-coverage-fixes.md) | Done | reviewedef5406f; CI39075073594green |
-| 2 | B0002 | [Dashboard lifecycle/memory](0002-dashboard-lifecycle-memory-gate.md) | Ready | B0001/B0004 Done; measurement grant |
+| 2 | B0002 | [Dashboard lifecycle/memory](0002-dashboard-lifecycle-memory-gate.md) | Ready | artifact/preflight only now; captures gated |
 | 3 | B0003 | [Typing dominant-cost investigation](0003-launcher-typing-investigation.md) | Review | source-only checkpoint; remaining steps gated |
 
 First Ready assignment is authorized after its listed prerequisites pass. Existing
@@ -30,3 +30,6 @@ this index. No live/physical testing is authorized.
 Beyond this queue: device controls after published implemented Nacre capabilities,
 then hosted notifications, session/hyprlock and static wallpaper. Hardware and
 packaging remain owner-held. Optional dashboard extras require scope review.
+
+B0003 source phase accepted at214b0f0; next eligible action is B0002 early
+artifact/preflight request (45min, existing files/docs only), not measurement.
