@@ -81,12 +81,14 @@ QML remains daily driver until a separately accepted switch. Order:
    remainder or later features. Optional preview system-bus device reads are
    read-only, not live UI testing or a write/installation permission.
 
-New memory policy replaces the earlier first-open/no-regression rule. Pure
-optimizations cannot raise warm/settled beyond control spread. Feature-bearing
-changes may add≤0.5MiB settled each if explained, all UI closes≤ownbar+5MiB and
-settled UI bar PSS+DRM+SwapPss≤25MiB on both compositors. Record and continue
-inside these limits; otherwise stop. Propose a reasoned new ceiling if needed.
-Report daemon/provider totals separately, including the35s settled group guard.
+Owner memory policy (2026-10-17) replaces the per-feature0.5MiB allowance.
+All UI closes must fit ownbar+5MiB; settled UI PSS+DRM+SwapPss must stay≤25MiB.
+Explain every increase by file-backed, anonymous and frame-buffer residency.
+STOP at settled≥24.5MiB, anonymous growth>1MiB in one change without a clear
+reason, or a pure optimization that raises memory. Placement/joined-frame
+candidate d88e94e is explicitly accepted. Report daemon/provider totals
+separately, including the35s settled group guard. Pages remain lazy and release
+closed+idle; QML remains daily driver.
 
 Core switch means Bead always-on bar/popouts/service panels, launcher, notices/OSD,
 dashboard, static wallpaper, hyprlock/session, hardware and packaging. QML Settings,

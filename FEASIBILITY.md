@@ -1,5 +1,23 @@
 # Feasibility
 
+## 2026-10-17 — Placement and joined frame accepted
+
+The owner accepts the exact measured d88e94e placement candidate.
+Its source is unchanged; only integration history and current documentation differ.
+The per-feature allowance is replaced, while close and absolute budgets remain.
+Dashboard pages continue next, with a stop before24.5MiB settled UI.
+
+| Nested/local evidence, H / N | Result |
+| --- | --- |
+| Five pairs plus native20 |424 close/settled observations pass ownbar+5MiB|
+| Maximum final settled UI MiB |23.096 /23.648|
+| Paired settled increase MiB |+0.729 /+0.861, explicitly accepted|
+| File / frame-shared / anonymous medians MiB |+.313/+.260/+.098 /+.428/+.260/+.109|
+| Source identity |integration code equals d88e94e; prior220 tests+trace/fmt/clippy/CPU/release pass|
+
+Historical allowance failure below remains evidence, not the current owner gate.
+No physical measurement, dashboard result or typing improvement is claimed.
+
 ## 2026-10-17 — Attached placement and joined-frame candidate
 
 The joined frame matches canonical Nacre placement, including flush popouts.

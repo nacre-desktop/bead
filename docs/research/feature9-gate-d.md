@@ -11,6 +11,24 @@ the daily driver; live validation is held.
 
 
 
+## Placement accepted — 2026-10-17
+
+Owner accepts exact d88e94e placement plus joined rim at paired settled
++0.729/+0.861MiB H/N. The code is integrated unchanged; fresh220 workspace tests, isolated trace,
+fmt, warnings-denied Clippy and CPU-only build pass. All424 close/settled
+observations pass ownbar+5MiB. Final settled maxima23.096/23.648MiB; earlier
+closed-idle maxima23.149/23.711. File-backed paired medians+.313/+.428,
+shared frame buffers about+.260 both, anonymous+.098/+.109MiB explain the
+resident increase; component medians do not sum to the total. No saving claim.
+
+This decision supersedes the old0.5MiB allowance failure documented below.
+New policy keeps close≤ownbar+5MiB and settled≤25MiB hard; report all increases.
+Stop at settled≥24.5MiB, unexplained anonymous growth>1MiB in one change, or
+memory growth from a pure optimization. Continue first dashboard pages with
+full-green c2b26d98 schema pin and fixtures/unavailable runtime capabilities.
+Reader trim is pending upstream publication; no new runtime hosting implied.
+The first-page review, QML daily driver and no-live-test boundaries remain.
+
 ## Dashboard C authorized; placement candidate — 2026-10-17
 
 The owner parks remaining B device controls for published schemas before Nacre
