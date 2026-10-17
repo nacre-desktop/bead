@@ -3,7 +3,7 @@
 - ID: B0001
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Blocked
 - Depends on: exact scoped zbus advisory exception committed; published-head CI green
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
@@ -141,3 +141,17 @@ locations (never commit private paths). For captures include per-run numbers,
 medians/min/max/peaks, quiet counters, attribution and owned-PID cleanup. Missing
 is unknown. Ask the spec thread directly; do not improvise or ask the owner for
 routine design. Submit Review, then start the next eligible Ready spec.
+
+## Spec-agent review — 2026-10-18
+
+Functional scope accepted after B0004:41-row tree inventory exact; page/default /
+navigation/disconnect/scroll/Runtime-release evidence checked; no runtime/golden
+changes. Original989bfbe CI39072672938 and B0004ef5406f CI39075073594 verified
+green. Runtime release is source/callback ownership, not2200ms/GPU proof.
+
+Remaining blocker is policy only: deny files retain pre-existing0192 in addition
+to the three approved zbus IDs, while this spec/standing rules permit only those
+three and require others fail. Owner decision/original authorization requested;
+no extension/removal is authorized by green CI. B0001 cannot be marked Done
+until that explicit criterion is reconciled. Do not change dependency policy or
+stall authorized source-only preparation while awaiting the owner decision.

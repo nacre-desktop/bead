@@ -4,9 +4,34 @@
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
 - Status: Ready
-- Depends on: B0002 Done; exclusive measurement grant for profiling/captures
+- Depends on: source-only preparation eligible now after B0004 Done; captures require B0001/B0002 Done and exclusive grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
+
+## Early source-only phase — authorized 2026-10-18
+
+B0004 is Done and B0001 functional evidence accepted; B0001's inherited0192
+policy criterion and B0002 capture gate remain open. To keep the queue useful,
+start ONLY Steps1–2 and the static portions of Step5 now, maximum3hours.
+Read existing source and immutable historical traces; no builds, profiling runs,
+input injection, previews, benchmarks, memory captures or product edits.
+
+Write one concise report section mapping each typing stage to exact source
+file/function and clock/counter provenance, ownership/queue boundary, and existing
+trace evidence or UNKNOWN. Rank the four hypotheses from existing evidence;
+explicitly distinguish serial populated-result edits from bursts/stale queries,
+and changed-result presentation from key receipt/commit. End with one proposed
+bounded next experiment and the missing evidence that would change that choice.
+Historical timing values stay historical, not a fresh baseline or gain claim.
+If existing evidence cannot rank causes, explain the gap rather than inventing
+CPU attribution. Do not implement an optimization or relax a target.
+
+Submit a source-preparation checkpoint for review; this does not complete B0003.
+Capture Steps3–4 remain prohibited without a separate exact-hash/host/window
+spec-agent grant and the listed capture prerequisites. No active grant exists to
+either implementer; Nacre is doing correctness-only N0004 work, not holding a
+capture slot. The owner grants physical/live tests, the spec agent grants private
+nested slots. No automatic prerequisite/measurement waiver is implied here.
 
 ## Goal
 

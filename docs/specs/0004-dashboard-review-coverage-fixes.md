@@ -3,7 +3,7 @@
 - ID: B0004
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Done
 - Depends on: B0001 submitted Review at989bfbea4e70cd6b875d3b417f3922717d984b55
 - Date: 2026-10-17
 - Size: one focused session, maximum90minutes
@@ -97,3 +97,14 @@ except fixes; no launcher engines in Bead. Preserve immutable fixtures. Extras
 are report-only. Any new security advisory goes to the spec agent; vulnerabilities
 go to the owner. Measurement requires an explicit exclusive slot grant.
 
+
+## Spec-agent review — 2026-10-18
+
+Done. Reviewed full3da4856→ef5406f diff, including197fe51 and56210a6 code;
+all four ready/unknown default checks, Today clock/stores and all four primary
+last-good/stale disconnect cases meet the requested fixes. Inventory proof links
+now match assertions. Only test/docs files changed; fixtures/goldens/runtime
+unchanged. Independently verified code CI39074426606 and final-docs
+CI39075073594 success at their exact commits. Implementer clarified validation
+was CI-only (local Cargo absent); no local-test claim is accepted for B0004.
+No new memory/timer/GPU proof or measurement grant.
