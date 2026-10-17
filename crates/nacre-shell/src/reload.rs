@@ -10,6 +10,8 @@ pub struct Runtime {
     launcher_subscription: Option<bead::core::source::Subscription>,
     calendar: Option<std::rc::Rc<crate::calendar::Calendar>>,
     calendar_subscription: Option<bead::core::source::Subscription>,
+    status: Option<std::rc::Rc<crate::status_views::Status>>,
+    status_subscription: Option<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
@@ -76,6 +78,8 @@ impl Runtime {
             launcher_subscription: None,
             calendar: None,
             calendar_subscription: None,
+            status: None,
+            status_subscription: None,
             launcher_memory: None,
             connection_status: None,
             connection_subscription: None,
@@ -155,7 +159,7 @@ impl Runtime {
         mut self,
         source: std::sync::Arc<dyn bead::core::source::Source>,
     ) -> Result<Self, Box<dyn Error>> {
-        if self.launcher.is_some() {
+        if self.launcher.is_some() || self.status.is_some() {
             return Err("one data projector per panel".into());
         }
         let calendar = std::rc::Rc::new(crate::calendar::Calendar::new(source));
@@ -163,6 +167,21 @@ impl Runtime {
         self.session
             .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
         self.calendar = Some(calendar);
+        Ok(self)
+    }
+    pub fn with_status(
+        mut self,
+        kind: crate::status_views::Kind,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.launcher.is_some() || self.calendar.is_some() || self.status.is_some() {
+            return Err("one data projector per panel".into());
+        }
+        let status = std::rc::Rc::new(crate::status_views::Status::new(kind, source));
+        let projector = status.clone();
+        self.session
+            .set_projector(Box::new(move |_| Ok(projector.project())));
+        self.status = Some(status);
         Ok(self)
     }
     pub fn with_launcher_memory(
@@ -207,9 +226,9 @@ impl Runtime {
         Ok(self)
     }
     fn popout_center(&self, id: &str, view: &str) -> Option<f32> {
-        // The existing sound view remains a side panel. The top-bar calendar
-        // is a popout centered on its invoking control, including keyboard use.
-        (self.bar && view == "calendar")
+        // Sound remains a side panel. Top-bar popouts center on their own
+        // invoking control, including keyboard activation.
+        (self.bar && matches!(view, "calendar" | "network" | "bluetooth" | "battery"))
             .then(|| {
                 self.session
                     .view_nodes()
@@ -512,6 +531,12 @@ impl SceneSource for Runtime {
             match calendar.subscribe(wakeup.clone()) {
                 Ok(subscription) => self.calendar_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=calendar_subscription"),
+            }
+        }
+        if let Some(status) = &self.status {
+            match status.subscribe(wakeup.clone()) {
+                Ok(subscription) => self.status_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=status_subscription"),
             }
         }
         if let Some(menu) = &self.launcher {
@@ -970,7 +995,7 @@ impl SceneSource for Runtime {
                                 };
                             let core_views = self.session.stores.get("bar.popouts")
                                 == Some(&bead::core::Value::Bool(true));
-                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":0,"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":0,"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar","network-status","bluetooth-status","battery-status"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
                             #[cfg(all(feature = "trace", target_os = "linux", target_env = "gnu"))]
                             let state = {
                                 let mut state = state;

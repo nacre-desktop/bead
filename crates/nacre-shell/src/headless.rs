@@ -7,6 +7,9 @@ mod launcher_pixels_tests;
 #[cfg(test)]
 #[path = "service_views_tests.rs"]
 mod service_views_tests;
+#[cfg(test)]
+#[path = "status_views_tests.rs"]
+mod status_views_tests;
 pub fn check(file: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let file = file.canonicalize()?;
     let root = file

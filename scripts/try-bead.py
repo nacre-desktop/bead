@@ -27,8 +27,9 @@ def main():
     for path in [args.daemon, args.bead]:
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error('Provide explicit built executable paths; this preview installs and builds nothing')
-    if not (args.shell / 'ui/main.luau').is_file() or not (args.shell / 'bar/main.luau').is_file():
-        parser.error('--shell needs a matching Bead shell bundle')
+    entries = ['ui/main.luau', 'bar/main.luau', 'popouts/main.luau', 'sound/main.luau', 'status/main.luau']
+    if any(not (args.shell / entry).is_file() for entry in entries):
+        parser.error('--shell needs a matching Bead core-views bundle')
     env = {key:value for key,value in os.environ.items() if not key.startswith('BEAD_') or key in ['BEAD_RESEARCH_TOOLS','BEAD_RAW_DIR']}
     display = env.get('WAYLAND_DISPLAY', '')
     if display and not display.startswith('/'):

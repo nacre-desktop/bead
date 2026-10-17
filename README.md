@@ -21,6 +21,11 @@ Foundation preview (bar, engine-backed launcher and private notifications):
 python3 scripts/try-bead.py --daemon /path/to/nacre-helper --bead /path/to/bead/target/release/nacre-shell
 ```
 
+The core preview also opens calendar and sound panels, plus read-only network,
+Bluetooth and battery status from the bar. Panel modules and data load on demand
+and retire after 2.2 seconds closed; unused hover preparation expires after 2 seconds.
+Device actions still require the daemon service contracts.
+
 Run from a Wayland terminal with already built executables. It opens a separate
 niri window and builds or installs nothing. Click the bar's launcher icon/lip,
 type, and use Escape to close the panel; close the nested window or use Ctrl+C

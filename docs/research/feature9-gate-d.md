@@ -32,6 +32,143 @@ with measurements/core forecast. Full parity is an estimate-only alternative.
 Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
 release. QML stays daily driver. No live run/install/release is authorized.
 
+### Lazy read-only service views — 2026-10-17
+
+Network, Bluetooth and battery popouts use a Source over the bar's existing
+hosted `Desktop`. The MIT `DesktopView` projects only the selected service before
+serialization; a 4 MiB unrelated tray fixture is excluded. It creates no backend,
+connection or pool. Calls are explicitly read-only. Stop/drop detaches its own
+subscription without stopping the shared service or a sibling subscriber.
+
+Cold factories retain fallback geometry and shared palette/path references.
+Luau, view state, selected payloads, icons and rasters load on open or hover;
+closed workers retire after 2.2 seconds, unused preparation after 2 seconds.
+Across 48 status open/close pairs, compiled-markup and materialized-view cache
+owners go from two to one. Each panel's 14,887 compiled bytes and about 9.8 KiB
+materialized view disappear; the remaining bar owns 19,666 compiled bytes and
+52,921–52,945 materialized bytes. Payload/source weak-reference tests also pass.
+The maximum closed cache report includes transient bar repair scratch; it does
+not establish retained panel data. Dependency cache bounds remain documented
+in [the cache audit](cache-budget.md); no allocator/font-engine rewrite.
+
+Shared tokens drive the top-edge popouts. Source updates, unchanged wakes,
+disconnection/last data, malformed numbers, bounded labels and powered-off states
+have headless tests. Six populated PNG goldens cover scale 1 and 1.5. The existing
+legacy route/state expectation now includes the explicit `*-status` capabilities.
+213 workspace tests, the isolated trace proof, fmt, all-feature warnings-denied
+clippy, CPU-only build and normal release pass. The recovered missing `computed`
+table and stale exact route-list expectation were fixed; failed runs are retained.
+
+Normal immutable typed-pin control `52c0f93e` versus status `118fe902f9`, matching
+bundles, frozen `75157fd3` daemon. Five alternating pairs per compositor: both
+versions close six named views, control repeating its old three, candidate opening
+all six; the candidate also exercises three extra unused hover preparations.
+Three initial launcher cycles edit after opening and require exactly 64 results
+with following commit/presentation. Native 20-cycle proofs rotate outside-click,
+Escape and IPC for every status family. All controls remain valid; no waivers.
+
+| UI MiB; five pairs, H / N | Control → candidate medians | Median paired delta / control spread |
+| --- | --- | --- |
+| First warm |42.335→42.489 /46.970→47.016|+0.090/6.490; +0.244/6.630|
+| Third warm launcher |48.932→49.113 /47.049→47.278|+0.237/6.695; +0.293/6.679|
+| Third closed |22.425→22.592 /23.346→23.498|+0.163/0.276; +0.151/0.191|
+| Settled |23.205→23.354 /23.756→23.952|+0.069/0.294; +0.090/0.188|
+
+Paired medians use each matched pair; they differ from subtracting the two overall
+medians. Settled ranges control H23.081–23.375/N23.674–23.862, candidate
+H23.205–23.511/N23.820–24.018. Warm ranges include roughly 6.5 MiB variation;
+there is no uniform peak or settled saving. First-pair final-close mappings show
+executable-backed +0.102/+0.219 MiB, with heap/shared memory close to control;
+this is a contribution, not an exclusive explanation of every run's difference.
+
+Independent verification passes all 394 close/settled observations, including
+244 candidate observations, cache owner/process caps, stable process-group sums
+and owned cleanup. Maximum candidate settled UI H23.831/N24.482 MiB stays below
+25; every close fits own bar+5. Closed cache reports are 162,367–329,658 bytes.
+No extra feature exception or new ceiling is needed. Native20 settled UI+daemon/
+workers is 56.219/56.404 MiB; this excludes a combined notification host/wallpaper.
+
+Six 60-second QML references use the same unavailable status text, geometry,
+scale, palette and tokens plus actual `NacreHeader`/`NacreSurface`. Their copied
+visual dependency directories at `54a9e5d6` are unchanged through Nacre `e0a81ce7`.
+Two native runs click the actual three bar controls, then join semantic status
+state to commit and presentation and assert content geometry. Both pass, including
+36 further close/settled observations; settled UI is 23.354/23.799 MiB.
+
+| 60-second UI PSS+DRM+SwapPss MiB | Bead H / N | QML fixture H / N |
+| --- | ---: | ---: |
+| Network status |26.088 /27.052|184.521 /178.562|
+| Bluetooth status |27.568 /26.980|190.371 /180.194|
+| Battery status |26.877 /27.006|187.767 /176.366|
+
+This is a read-only **unavailable-state** component comparison, not the
+full production network/Bluetooth/battery panels. Populated device states have
+headless goldens only. Header fixtures, shadows and service activity differ;
+QML time is static, Bead's bar/clock/services continue. No idle CPU, whole-shell
+or full hardware parity claim. Initial H screenshots include private compositor
+startup notices; endpoint memory after 60 seconds measures the QML client and
+excludes the compositor. No QML runtime/undefined-assignment errors occurred.
+
+One alternating 200-key typing compatibility pair per compositor passes all 800
+exact result/commit/presentation proofs and catalog invalidation without a key.
+This is the **standalone CPU launcher**, backend `none`, with 320 apps and the
+same frozen daemon; the earlier five-pair typing series uses this same scope.
+It does not measure the full bar+panel UI process.
+
+| One-pair check, control → status | Hyprland | niri |
+| --- | ---: | ---: |
+| UI CPU mean, ms/key |9.220→9.963|11.318→10.922|
+| Daemon CPU mean, ms/key |4.232→4.038|4.573→4.342|
+| Provider CPU mean, ms/key |1.964→1.918|2.128→2.044|
+| Presented p99, ms |24.664→30.886|30.543→31.562|
+
+The directions vary and this one-pair check establishes no typing gain or absence
+of a small regression. H differences fit the preceding five-pair control spreads;
+that is context, not a fresh significance test. UI remains above 8 ms/key, so
+neither the 16.7 ms target nor the owner's two-frame acceptance candidate passes.
+The earlier measured prefix gain remains separate; stale queries still serialize.
+
+Nested CPU at 2880×1800, scale1.5; H virtual120/N nested60, feedback refresh unknown.
+Shared host/light editing, Git and brain updates concurrent; no own builds/tests/
+other captures overlap. These are not physical results. Raw immutable artifacts,
+all trials, hashed harness and independent verifications remain under
+`core-status-views-117d66b-{memory-five,reference,typing-screen,preview,smoke}/`.
+
+The updated one-command private preview exposes core views and checks the matching
+bundle/capability list. H/N headless smokes pass daemon menu/UI controls, private
+notification injection and clean bar/notices/daemon shutdown. No input injection,
+installation or live configuration change. Notification content/history remains
+in a separate transitional Bead host, not the daemon; its memory is not included
+in the UI+daemon figures above. Closing the nested window or Ctrl+C stops it.
+
+### Service-view review boundary — 2026-10-17
+
+The safe currently-backed view subset is integrated; **B remains incomplete**.
+Full AP controls, Bluetooth pairing, mic/device/routing, power policy and daemon
+tray/notification hosting need published service state/action contracts. Existing
+tray handling and output volume remain transitional. Updates/session completeness,
+shared typed action execution and the same-engine QML launcher comparison remain
+open too. Published Nacre main was fetched at `e0a81ce7`; no new full service
+contract or production QML adapter landed. `network.watch` is only a trigger.
+
+The frozen-backend rule prevents filling those gaps with another local backend.
+The next dependency decision is the migration agent's post-F4 service-contract/
+hosting phase, or an explicit narrower definition of B. Stop here for owner review,
+before dashboard. QML stays daily driver; the desktop validation plan stays HOLD.
+No live/install/config/unit/keybinding action, Feature11 or release was performed.
+Typing 8 ms/16.7 ms, historical 29.61→32.66%, 6b pacing/strict idle invariance,
+long-duration chaos/idle rails, full services and the binary-name clash stay open.
+
+The core forecast remains **40–81 eight-hour agent-days**, 320–648 task hours:
+16–41 active calendar days at the explicit 16–20 task-hours/day scenario, roughly
+3–8 calendar weeks with contract/hardware scheduling. These are planning hours,
+not a measured timesheet. The refreshed core table below makes its 2–6-day
+integration contingency explicit; small read-only cards do not retire the hard
+service workflows. Full parity remains 102–207 days (7–18 calendar weeks with
+scheduling), including the unbuilt managed windows/media/AI/input/software work.
+Complete-core idle 90–150 MiB remains an estimate; current measured group is
+56.2–56.4 MiB before combined notices, remaining services and wallpaper.
+
 ### Typed UI-action contract replay — 2026-10-17
 
 Pin the official CI-green Nacre `1e2d6755df9a1d5e45c26b7a7e301d9761c65e9a`
@@ -1815,10 +1952,10 @@ for audit, and absent from accepted results. Nested Hvirtual120/N60;200 changed-
 result keys per cell, no own heavy build overlap; shared-host load is uncontrolled.
 A simpler ordered-record vector is measured separately before any decision.
 
-## Remaining-parity forecast — Gate D review
+## Remaining-parity forecast — refreshed 2026-10-17
 
-Gate D is not accepted by this forecast. UI-only matched comparisons are attached;
-the production QML/shared-engine and full prefix/activation comparison remain open. Estimates are focused
+Full parity remains an estimate-only alternative to the approved core-switch target.
+The production QML/shared-engine and full prefix/activation comparison remain open. Estimates are focused
 agent-days including implementation, fixtures, nested validation and CI, assuming
 stable daemon contracts. They are not calendar promises or an extrapolation of
 bar throughput. Recent small-panel, foundation and Source checkpoints took hours
@@ -1832,15 +1969,15 @@ by the migration agent are dependencies, not a second implementation budget.
 
 | Remaining area | Focused agent-days | Hard unproved part |
 | --- | ---: | --- |
-| Finish engine/typing/pacing/idle rails and shell integration |4–8|Changed-result queries, cold first key, N tail, reconnect badge/UI provider, three-hour lifecycle/chaos|
-| Remaining bar/popouts and service views |6–12|Panel registry/lifetimes, audio devices/mic, network/Bluetooth/tray/power/calendar; real service errors and multi-output dismissal|
+| Finish engine/typing/pacing/idle rails and shell integration |4–8|Prefix queries/reconnect/static text tested; UI CPU/p99, stale queries, N pacing and three-hour lifecycle/chaos remain|
+| Remaining bar/popouts and service views |6–12|Lazy registry/calendar/read-only status tested; full audio/mic/routing/AP/Bluetooth/tray/power contracts, errors and multi-output dismissal remain|
 | Daemon hosting for remaining core services |3–6|Notification ownership/history and audio/tray/power handoff; depends on a later migration phase|
 | Dashboard pages |8–15|MPRIS/artwork/resource/calendar/weather, bounded decode/fetch workers, event/state consistency|
 | Settings/Colors/Welcome/control/session windows |12–24|Schema-driven edits across65 stores, revision errors, forms, shortcuts, previews and restart recovery|
 | Pearls/managed windows |10–20|xdg-toplevel lifetime, detach/dock, geometry/focus/output restoration and compositor placement limits|
 | Static wallpaper/video/effects |10–22|libmpv GPL boundary, decode/GPU copies, frame synchronization, transparency/effects and multi-output cost|
 | AI/sidebar/Brain rich views |15–30|Streaming markdown/code/selection, attachments, cancellation, credentials/capabilities and large histories|
-| Input/IME/accessibility |10–20|Composition/candidate windows, complex scripts/font fallback, selections, clipboard and real screen-reader flow|
+| Input/IME/accessibility |10–20|Static text tested; composition/candidate windows, complex scripts/font fallback, selections, clipboard and real reader flow remain; deferred from personal core|
 | Software/themes/extensions/dev environments/AUR review |15–30|Catalog/detail/install/review/progress/error flows, root operations and existing permission policy parity|
 | Hyprlock integration and session policy |2–4|Keep hyprlock; daemon handoff, failure/resume behavior, no native lock implementation|
 | Hardware/long-duration validation |5–12|Physical120Hz/mixed outputs/hotplug/suspend, NVIDIA/driver variants, idle wakeups/energy and memory slopes|
@@ -1945,7 +2082,7 @@ hidden implementation hours. Migration runs in parallel, but one cannot simply
 divide the total by the number of chats. This remains a forecast of hard unbuilt
 work, not an extrapolation from quick bar checkpoints. Re-estimate after the next accepted integration checkpoint.
 
-### Core switch alternative — estimate only, not implementation approval
+### Core-switch forecast — refreshed 2026-10-17; daily switch not approved
 
 Bead would own the always-on bar, popouts/service panels, launcher, notifications
 and OSD, dashboard, static wallpaper and hyprlock/session integration. The current
@@ -1958,7 +2095,7 @@ not a second launcher engine or a permanently hidden QML shell.
 |Core-switch remaining area|Agent-days,8h each|Included risk|
 | --- | ---: | --- |
 |Typing, pacing, reconnect and lifecycle rails|4–8|Gate E targets/candidate decision, cold key, idle/chaos|
-|Bar, popouts and service panels|6–12|Audio/tray/network/Bluetooth/power/calendar; error and multi-output dismissal|
+|Bar, popouts and service panels|6–12|Registry/calendar/read-only status done; full device actions, service errors and multi-output dismissal remain|
 |Launcher/notification/OSD integration and polish|4–8|Shared activation/copy and same-engine comparison, bounds and transitions|
 |Daemon hosting for core services|3–6|Notification ownership/history and needed bead-services; migration dependency|
 |Dashboard|8–15|Data/fetch/artwork workers, weather/media and bounded idle memory|
@@ -1966,9 +2103,10 @@ not a second launcher engine or a permanently hidden QML shell.
 |Hyprlock/session integration|2–4|Existing lock, suspend/resume and failure paths|
 |Basic hardware and sustained validation|4–8|English input, outputs/hotplug,120Hz, suspend and memory/wakeup slope|
 |Packaging, names and on-demand QML lifecycle|4–8|Entry points, routing, close-to-exit, rollback and binary-name resolution|
+|Integration and measurement contingency|2–6|Shared-service transitions, memory/pacing interactions and repeated validation; not an extra feature|
 
-Total **38–75 agent-days**,304–600 task hours: roughly15–38 active calendar days
-at16–20h/day. Budget about **3–7 calendar weeks** with contract/hardware scheduling,
+Total **40–81 agent-days**,320–648 task hours: roughly16–41 active calendar days
+at16–20h/day. Budget about **3–8 calendar weeks** with contract/hardware scheduling,
 conditional on the migration lane and owner-supervised tests. These are additional
 hours from the current checkpoint, not a request to start Feature11.
 

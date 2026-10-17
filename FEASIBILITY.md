@@ -1,5 +1,44 @@
 # Feasibility
 
+## 2026-10-17 — Lazy read-only service popouts
+
+Network, Bluetooth and battery share the existing hosted service through Sources.
+Factories keep small configuration; modules/data load on open or hover.
+Closed workers retire after 2.2 seconds; unused hover expires after 2 seconds.
+Device actions/backends and daemon hosting are not invented to fill contract gaps.
+
+| Nested measurement, H / N | Result |
+| --- | --- |
+| Five-pair settled UI medians, control → candidate MiB |23.205→23.354 /23.756→23.952|
+| Paired settled delta / control spread MiB |+0.069/0.294 /+0.090/0.188|
+| Max settled UI, including native20 MiB |23.831 /24.482, both ≤25|
+| Close/cap/group/cleanup checks |394 samples,244 candidate, all pass bar+5; controls valid|
+| Lazy compiled/view owners |48 status pairs,2→1 on every close; only bar remains|
+| 60s Bead open-status UI MiB |26.088–27.568 /26.980–27.052|
+| Matched QML unavailable status/header MiB |184.521–190.371 /176.366–180.194|
+| One typing pair, UI ms/key /presented p99 ms |9.963/30.886 /10.922/31.562; targets not accepted|
+| Checks |213 workspace + trace; fmt/clippy-Dwarnings/CPU-only/release pass|
+
+All totals are PSS+DRM+SwapPss. Pair deltas are medians of matched differences,
+not differences of overall medians. No settled/peak saving or extra exception.
+Closed cache reports162,367–329,658B fit caps; transient bar scratch explains
+large reports. Payload/source weak-reference and unrelated4MiB tray tests pass.
+Six populated scale1/1.5 goldens; unchanged Source wakes stage no scene.
+
+QML copied visual dependencies54a9 unchanged through e0a81ce7. Same popup text,
+geometry/tokens/palette, unavailable state; header fixtures/shadows/service activity
+vary. No full service/hardware/CPU parity claim. Both native real bar-click references
+pass36 further closes. Both updated headless private previews stop all owned clients.
+Typing uses standalone CPU launcher/backendnone,320apps,frozen75157;800 exact
+key/result/presentation proofs pass. One pair proves no typing improvement;
+UI>8 prevents the two-frame candidate. Shared QML/executor/full services pending.
+
+2880×1800/scale1.5,Hvirtual120/Nnested60,refreshunknown;shared host/light work
+concurrent,no own build/test/capture overlap;not physical. B is incomplete pending
+service contracts/hosting; stop review before dashboard. QML remains daily driver.
+Raw core-status-views-117d66b-{memory-five,reference,typing-screen,preview,smoke}.
+[Full scope/forecast](docs/research/feature9-gate-d.md#lazy-read-only-service-views--2026-10-17).
+
 ## 2026-10-17 — Replay the green typed UI-action contract
 
 Pin Nacre's green protocol revision and its supplementary action transcript.

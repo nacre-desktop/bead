@@ -95,14 +95,17 @@ def sample(env, raw, compositor, stop):
                                     '--namespace', 'bead-preview-notices']+output_args, cwd=root, env=notice_env,
                                    stdout=(raw / 'preview-notices.log').open('w'), stderr=subprocess.STDOUT,
                                    start_new_session=True)
-        bar = subprocess.Popen([str(binary), '--bar', '--launcher-panel', '--renderer', 'cpu',
+        bar = subprocess.Popen([str(binary), '--bar', '--core-views', '--renderer', 'cpu',
                                 '--panel-renderer', 'cpu', '--daemon-socket', str(endpoint),
                                 '--command-socket', str(commands), '--ui-provider',
                                 '--ui-notification-socket', str(notice_commands),
                                 '--namespace', 'bead-preview-bar']+output_args+(['--trace-state'] if os.environ.get('BEAD_PREVIEW_RECONNECT')=='1' else []), cwd=root, env=bar_env,
                                stdout=(raw / 'preview-bar.log').open('w'), stderr=subprocess.STDOUT,
                                start_new_session=True)
-        wait_call('ui.dispatch', {'target': 'nacre', 'method': 'state', 'args': []})
+        state = wait_call('ui.dispatch', {'target': 'nacre', 'method': 'state', 'args': []})
+        if isinstance(state, str):
+            state = json.loads(state)
+        assert {'calendar', 'sound-output', 'network-status', 'bluetooth-status', 'battery-status'} <= set(state['bead']['available']), 'preview needs the matching core-views binary and bundle'
         wait_call('ui.dispatch', {'target': 'notifs', 'method': 'counts', 'args': []})
         matrix.wait_log(raw/'preview-bar.log',lambda t:'READY output=' in t)
         matrix.wait_log(raw/'preview-notices.log',lambda t:'READY output=' in t)
@@ -168,7 +171,7 @@ def sample(env, raw, compositor, stop):
                 fields=dict(line.split(':',1) for line in (task/'status').read_text().splitlines() if ':' in line)
                 masks.append({'name':fields['Name'].strip(),'blocked':fields['SigBlk'].strip()})
             (raw/'preview-thread-masks.json').write_text(json.dumps(masks,indent=2)+'\n')
-        print('PREVIEW_READY daemon_menu=true daemon_ui_controls=true private_notification_host=bead no_input_injection=true', flush=True)
+        print('PREVIEW_READY core_views=true daemon_menu=true daemon_ui_controls=true private_notification_host=bead no_input_injection=true', flush=True)
         smoke = os.environ.get('BEAD_PREVIEW_SMOKE') == '1'
         if smoke:
             offset=len(matrix.log_text(raw/'preview-bar.log'))

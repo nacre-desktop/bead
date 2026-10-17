@@ -14,6 +14,7 @@ mod popouts;
 mod reload;
 mod sound;
 mod state;
+mod status_views;
 mod ui_provider;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
@@ -554,14 +555,32 @@ fn start(
             desktop_owner.clone(),
             panel_trace,
         )?;
-        options.panels = Some(bead::wayland::Panels::new(
-            "launcher".into(),
-            std::collections::BTreeMap::from([
-                ("launcher".into(), launcher),
-                ("sound".into(), core_sound.ok_or("sound view missing")?),
-                ("calendar".into(), calendar),
-            ]),
-        )?);
+        let mut views = std::collections::BTreeMap::from([
+            ("launcher".into(), launcher),
+            ("sound".into(), core_sound.ok_or("sound view missing")?),
+            ("calendar".into(), calendar),
+        ]);
+        let status_colors = std::sync::Arc::new(colors.clone());
+        let status_palette = std::sync::Arc::new(palette.clone());
+        let status_scale: serde_json::Value =
+            serde_json::from_str(include_str!("../../bead-ui/assets/size-scale.json"))?;
+        let status_radius = status_scale["radii"]["medium"]
+            .as_f64()
+            .ok_or("status radius missing from shared scale")? as f32;
+        for kind in status_views::Kind::ALL {
+            views.insert(
+                kind.name().into(),
+                popouts::status(
+                    kind,
+                    status_palette.clone(),
+                    status_colors.clone(),
+                    desktop_owner.clone(),
+                    status_radius,
+                    panel_trace,
+                )?,
+            );
+        }
+        options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
     }
     let notification_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     if notification_bus.is_some() {

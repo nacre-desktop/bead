@@ -21,6 +21,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     log=raw/'launcher.log';client=pointer=keeper=None
     engine_socket=env.get('BEAD_LAUNCHER_ENGINE_SOCKET')
     core_views=os.environ.get('BEAD_CORE_VIEWS_PROOF')=='1'
+    status_views=os.environ.get('BEAD_CORE_STATUS_PROOF')=='1'
     release_state=os.environ.get('BEAD_PANEL_IDLE_STATE')=='release'
     query_on_open=os.environ.get('BEAD_LAUNCHER_QUERY_ON_OPEN')=='1'
     expected_query_rows=os.environ.get('BEAD_EXPECT_QUERY_ROWS')
@@ -192,8 +193,10 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             state=json.loads(call('state',target='nacre'))
             assert state['query']==(''if release_state else'a')and not state['launcher']and 'launcher'in state['bead']['available']
             if core_views:
-                result['service_views']={'hover':{},'cycles':[]}
-                for view in ['calendar','sound']:
+                result['service_views']={'hover':{},'cycles':[],'status_bar_click_open':os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1'}
+                hover_views=['calendar','sound']+(['network','bluetooth','battery']if status_views else[])
+                sequence=['calendar','sound','launcher']+(['network','bluetooth','battery']if status_views else[])
+                for view in hover_views:
                     regions=call('state')['prepare_views']
                     r=next(r for r in regions if r['view']==view)
                     x,y,w,h=r['rect']
@@ -203,10 +206,16 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     pointer.command('move 1000 600','POINTER_DONE')
                     result['service_views']['hover'][view]=closed_guard()
                 for cycle in range(int(os.environ.get('BEAD_CORE_VIEW_CYCLES','20'))):
-                    view=['calendar','sound','launcher'][cycle%3]
+                    view=sequence[cycle%len(sequence)]
                     offset=len(matrix.log_text(log));began=time.monotonic_ns()
-                    if view=='calendar':
-                        call('popout',view,str([20,960,1900][(cycle//3)%3]),target='nacre')
+                    if view in ['network','bluetooth','battery'] and os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1':
+                        regions=call('state')['prepare_views']
+                        region=next(r for r in regions if r['view']==view)
+                        x,y,w,h=region['rect']
+                        pointer.command(f'move {round(x+w/2)} {round(y+h/2)}','POINTER_DONE')
+                        pointer.command('click','POINTER_DONE')
+                    elif view in ['calendar','network','bluetooth','battery']:
+                        call('popout',view,str([20,960,1900][(cycle//len(sequence))%3]),target='nacre')
                     else:
                         call('open',view)
                     state_wait(lambda s:s['view']==view and s['target_open'] and s['prepared'])
@@ -214,7 +223,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     legacy=json.loads(call('state',target='nacre'))
                     assert legacy['launcher']==(view=='launcher')
                     assert legacy['edgeMenu']==(''if view=='launcher'else view)
-                    if cycle<3:
+                    if cycle<len(sequence):
                         time.sleep(.3)  # Inspect the settled visual, not an animation's first pose.
                         subprocess.run(['grim',str(raw/(view+'.png'))],env=env,capture_output=True,check=True,timeout=10)
                     if view=='calendar':
@@ -226,21 +235,42 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                             after=call('state')
                             for key in ['view','target_open','resident','surfaces']:
                                 assert after[key]==before[key],'invalid request retired a current view'
+                    if view in ['network','bluetooth','battery']:
+                        title={'network':'Network','bluetooth':'Bluetooth','battery':'Battery'}[view]
+                        def status_presented(text):
+                            for match in re.finditer(r'^UI_STATE (.+)$',text[offset:],re.M):
+                                data=json.loads(match[1])
+                                if data.get('status.kind')==view and data.get('status.heading')==title and isinstance(data.get('status.ready'),bool) and data.get('panel.open')is True:
+                                    stamp=committed_and_presented(text[offset:][match.end():])
+                                    if stamp:return stamp
+                            return False
+                        presented=matrix.wait_log(log,status_presented)
+                        geometry=call('state')
+                        assert all(abs(a-b)<=2 for a,b in zip(geometry['size'],[374,286])),'status popout geometry differs from content+shadow'
+                        (raw/(view+'-geometry.json')).write_text(json.dumps(geometry,indent=2)+'\n')
                     reference_seconds=os.environ.get('BEAD_CALENDAR_REFERENCE_SECONDS') if view=='calendar' else None
+                    if view in ['network','bluetooth','battery']:reference_seconds=os.environ.get('BEAD_STATUS_REFERENCE_SECONDS')
                     if reference_seconds is not None:
                         duration=float(reference_seconds)
-                        assert 1<=duration<=60,'calendar reference duration outside bounded sample'
+                        assert 1<=duration<=60,'reference duration outside bounded sample'
                         time.sleep(4)  # Match the static QML reference's warmup.
                     else:duration=.2
                     warm=matrix.idle(client.pid,duration)
+                    if status_views:
+                        warm['cache_bytes']=call('state').get('cache_bytes')
+                        if view in ['network','bluetooth','battery']:
+                            states=[json.loads(m[1]) for m in re.finditer(r'^UI_STATE (.+)$',matrix.log_text(log)[offset:],re.M)]
+                            data=next(d for d in reversed(states)if d.get('status.kind')==view and d.get('panel.open')is True)
+                            warm['status_data']={key:value for key,value in data.items()if key.startswith('status.')}
                     if reference_seconds is not None:warm['reference_seconds']=duration
                     if observe:warm['external']=observe()
                     offset=len(matrix.log_text(log))
-                    if cycle==0:
-                        pointer.command('move 1000 600','POINTER_DONE')
+                    close_index=(cycle+cycle//len(sequence))%3 if status_views else cycle
+                    if close_index==0:
+                        pointer.command('move 1000 1000'if status_views else'move 1000 600','POINTER_DONE')
                         pointer.command('click','POINTER_DONE')
                         close_method='outside pointer'
-                    elif cycle==1:
+                    elif close_index==1:
                         # A newly registered virtual keyboard needs the same
                         # seat/focus handshake as the accepted sound proof.
                         subprocess.run(['wtype','-s','200','-k','Escape'],env=env,capture_output=True,check=True,timeout=5)
@@ -250,12 +280,13 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     state_wait(lambda s:not s['target_open'])
                     closed_presented=matrix.wait_log(log,lambda t:committed_and_presented(t[offset:]))
                     closed=closed_guard()
-                    result['service_views']['cycles'].append({'cycle':cycle,'view':view,'warm':warm,'closed':closed,'command_to_first_present_ms':(presented-began)/1e6,'close_presented_ns':closed_presented,'close_method':close_method})
+                    result['service_views']['cycles'].append({'cycle':cycle,'view':view,'warm':warm,'closed':closed,'command_to_first_present_ms':(presented-began)/1e6,'close_presented_ns':closed_presented,'close_method':close_method,'open_method':'bar pointer'if view in ['network','bluetooth','battery']and os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1'else'private IPC'})
                     (raw/'service-view-progress.json').write_text(json.dumps(result['service_views'],indent=2)+'\n')
                 # Deliberately retire an unprepared worker; only the final epoch
                 # may commit. No stale-result acceptance or relaxed marker test.
                 offset=len(matrix.log_text(log))
-                for view in ['calendar','sound','calendar','launcher']:
+                rapid=['calendar','sound','network','bluetooth','battery','calendar','launcher']if status_views else['calendar','sound','calendar','launcher']
+                for view in rapid:
                     call('open',view)
                 state_wait(lambda s:s['view']=='launcher' and s['target_open'] and s['prepared'])
                 matrix.wait_log(log,lambda t:query_presented(t[offset:],''if release_state else'a'))

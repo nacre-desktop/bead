@@ -367,7 +367,7 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
 }
 
 #[test]
-fn legacy_state_distinguishes_calendar_sound_and_launcher_on_one_host() -> Result<()> {
+fn legacy_state_distinguishes_named_views_on_one_host() -> Result<()> {
     use bead::wayland::{CommandContext, Remote, SceneSource, UiEvent};
     let h = calendar(2024, 2, 1, 1.)?;
     let mut runtime = crate::reload::Runtime::new(h.session)
@@ -377,6 +377,9 @@ fn legacy_state_distinguishes_calendar_sound_and_launcher_on_one_host() -> Resul
         ("calendar", true, false, "calendar"),
         ("sound", true, false, "sound"),
         ("launcher", true, true, ""),
+        ("network", true, false, "network"),
+        ("bluetooth", true, false, "bluetooth"),
+        ("battery", true, false, "battery"),
         ("calendar", false, false, ""),
     ] {
         let (reply, received) = std::sync::mpsc::sync_channel(1);
@@ -410,7 +413,15 @@ fn legacy_state_distinguishes_calendar_sound_and_launcher_on_one_host() -> Resul
         assert_eq!(state["bead"]["panelOpen"], open);
         assert_eq!(
             state["bead"]["available"],
-            serde_json::json!(["bar", "launcher", "sound-output", "calendar"])
+            serde_json::json!([
+                "bar",
+                "launcher",
+                "sound-output",
+                "calendar",
+                "network-status",
+                "bluetooth-status",
+                "battery-status"
+            ])
         );
     }
     Ok(())
@@ -454,7 +465,7 @@ fn bar_bundle_does_not_load_closed_panel_modules_or_assets() -> Result<()> {
         bead::ui::Generation::load(&root, std::path::Path::new("bar/main.luau"), &stores, 1)?;
     for path in bar.sources.keys() {
         assert!(
-            !["popouts", "sound", "ui"]
+            !["popouts", "sound", "ui", "status"]
                 .iter()
                 .any(|prefix| path.starts_with(prefix)),
             "closed panel content eagerly loaded: {}",

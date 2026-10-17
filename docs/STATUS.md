@@ -1,80 +1,66 @@
 # Status
 
-## 2026-10-17 — Typed contract replay verified
+## 2026-10-17 — Read-only service views measured; review boundary
 
-Protocol pin `1e2d6755` and 19 supplementary frames pass typed bounds/roundtrip.
-A bounded injected provider ACKs the exact provider ID before a held outbound
-activation reply. Production advertises only `ui.dispatch`; no executor added.
-206 tests, trace, fmt, clippy and CPU-only pass. One native compatibility pair
-per compositor passes all 44 close/settled observations, caps/group/cleanup;
-settled UI 23.161/23.808 MiB stays below 25 and inside prior control spreads.
-No typing gain or real non-app execution is implied. [Scope](research/feature9-gate-d.md#typed-ui-action-contract-replay--2026-10-17).
+Network, Bluetooth and battery popouts share existing hosted state through a
+selected-field Source. No new backend or device action. Modules, payloads and
+rasters load on demand; closed workers retire after 2.2 seconds, unused hover
+preparation after 2 seconds. All 48 checked status closes drop their module/view
+cache owners, leaving only the bar. Six populated scale 1/1.5 goldens pass.
 
-## Ranked prefixes — 97d743a, CI 38996873307 green
-
-Edited queries request 64 rows from the existing Nacre engine. Initial/restored
-views and catalog wakes stay full; navigation/scrolling expand before unloaded
-rows. Failed expansion keeps the last good viewport. No ranking/provider copy.
-
-| Five alternating typing pairs | Hyprland | niri |
+| Five memory pairs + native 20 cycles | Hyprland | niri |
 | --- | ---: | ---: |
-| UI CPU median, ms/key |10.172 → 9.793|11.025 → 10.560|
-| Paired UI reduction, ms/key |0.583|0.575|
-| Presented p99 medians, ms |30.198 → 30.914|32.781 → 32.953|
+| Settled UI medians, control → candidate MiB |23.205 → 23.354|23.756 → 23.952|
+| Median paired delta / control spread MiB |+0.069 /0.294|+0.090 /0.188|
+| Maximum candidate settled UI MiB |23.831|24.482|
 
-All 4,000 exact key/result/commit/presentation proofs pass with 320 apps and the
-frozen 75157 engine. Search replies contain 101 full / 64 limited rows. Tails fit
-control spreads; no consistent p99 improvement. UI 8 ms/key and p99 16.7 ms remain
-unaccepted. UI above 8 also excludes the two-frame candidate rule. The historical
-29.61 → 32.66% typing regression remains open. Stale queries still serialize.
+All 394 close/settled observations (244 candidate) fit bar + 5 MiB. Both 25 MiB
+ceilings, cache caps, stable process groups and cleanup pass. Total differences
+fit control spreads; no saving or extra memory exception is claimed. Native20
+UI + daemon/workers is 56.219/56.404 MiB, before combined notices/wallpaper.
+213 workspace tests, isolated trace proof, fmt, warnings-denied clippy, CPU-only
+and normal release pass. [CI](https://github.com/nacre-desktop/bead/actions/workflows/ci.yml).
+[Measurements and scope](research/feature9-gate-d.md#lazy-read-only-service-views--2026-10-17).
 
-Five memory pairs and both native 20-cycle proofs pass. Paired warm deltas
-+0.050/−0.019 MiB and settled −0.183/−0.257 fit control spreads. All 168 candidate
-close/settled observations fit bar + 5 MiB; maximum settled UI is 23.251/23.988,
-below 25 MiB. Caps, group and cleanup checks pass. Warm ranges vary; no peak
-reduction or settled saving is claimed. 204 tests, trace proof, fmt, warnings-denied
-clippy and CPU-only build pass. [Full measurements](research/feature9-gate-d.md#ranked-prefixes-for-edited-queries--2026-10-17).
+Six matched 60-second QML status/header references and both native bar-click runs
+pass. Bead open-status UI is 26.088–27.568 /26.980–27.052 MiB H/N; QML fixture
+184.521–190.371 /176.366–180.194. Same unavailable panel text/geometry/tokens;
+header data, shadows and service activity differ. Full service/hardware parity
+is unmeasured. Both updated private preview smokes stop bar/notices/daemon cleanly.
 
-Nested CPU at scale 1.5, Hyprland virtual 120 Hz / niri nested 60 Hz; feedback
-refresh unknown. Shared host and light editing concurrent; no own builds, tests
-or other captures overlap. These are not physical measurements.
+## Typing remains unaccepted
 
-## Published correctness and cleanup
+The latest 800-key compatibility check uses the standalone CPU launcher, not the
+bar+panel process: UI 9.963/10.922 ms/key, presented p99 30.886/31.562 ms H/N.
+One pair establishes no gain or absence of a small regression. UI exceeds 8 ms,
+so the two-frame candidate rule also does not pass. The earlier five-pair prefix
+optimization reduced UI CPU by paired 0.583/0.575 ms; p99 16.7 ms remains open.
+Stale queries still serialize. Keep the historical 29.61 → 32.66% regression.
 
-Source/restoration c13f2c9: [CI 38992602004 green](https://github.com/nacre-desktop/bead/actions/runs/38992602004).
-Calendar follows today until browsed, preserves that choice on reload and releases
-transient state on retirement. Source-only wakes work; unchanged data stages no
-scene. Search/Actions reconstruct their mode from the saved route without queries.
-The bar no longer keeps two unused startup-state copies. 197 tests and native
-restore proofs pass. [Source/QML scope](research/feature9-gate-d.md#calendar-source-and-restored-launcher-modes--2026-10-17).
+Protocol 94b86fe: [CI 38997728436 green](https://github.com/nacre-desktop/bead/actions/runs/38997728436).
+Pin 1e2d6755 and 19 typed frames pass; exact provider ACK precedes a held outbound
+reply. Production advertises only ui.dispatch; actual executor/shared QML pending.
+Source/restoration c13f2c9 and closed-panel cleanup 3fb011a are green. Calendar
+follows today until browsed; unchanged Source wakes stage no scene. Transient
+queries/month selection release on retirement. No settled saving was measured.
 
-Cleanup 3fb011a, CI 38989066777 green: panel modules, icons, stores, subscriptions
-and rasters release after the 2.2-second close grace; unused preparation expires
-after 2 seconds. Launcher scalar mirror clears too. App-only 4 MiB mmap policy
-fixes older large-raster retention. No allocator/font rewrite. No settled saving.
+## Stop for service-contract review, before dashboard
 
-Next: check this checkpoint's CI; validate the lazy read-only network/Bluetooth/
-battery drafts. Those drafts, including selected-field Source lifetime tests,
-are outside the measured binary. Full device controls still require contracts.
+The safe view subset is integrated; B remains incomplete. Full AP/pairing,
+mic/device/routing, power and daemon tray/notification hosting need contracts.
+Updates/session completeness and same-engine QML remain open. Nacre main was
+fetched at e0a81ce7; network.watch is a trigger, not an AP/action model. Backends
+stay frozen. The next dependency decision is post-F4 service contracts/hosting,
+or an explicit narrower B. [Review and forecast](research/feature9-gate-d.md#service-view-review-boundary--2026-10-17).
 
-## Core-switch boundaries
+Core forecast: 40–81 eight-hour agent-days (320–648 task hours), 16–41 active days
+at the assumed 16–20 task-hours/day scenario; roughly 3–8 calendar weeks including
+coordination/hardware waits. Full parity remains 102–207 days, roughly 7–18 weeks.
+Complete-core idle 90–150 MiB is an estimate, not a measured combined shell.
 
-Continue typing/contracts, then remaining bar popouts/service views. STOP for
-review after those, BEFORE dashboard. QML remains daily driver. Typed action
-contract is upstream green; executor and same-engine QML remain pending. No new
-backend, launcher catalog, ranking or provider; network.watch is only a trigger.
-Full AP/audio/Bluetooth/power/tray contracts/hosting remain unavailable.
-
-Allowance is 0.5 MiB per explained feature, not commit. Pure optimizations preserve
-warm/settled control spreads; every close fits bar + 5 and settled UI stays ≤25 MiB
-on both compositors. Demand-load panels and release their data after idle.
-No new ceiling requested. Forecast remains 40–81 eight-hour agent-days, 320–648
-hours, roughly 3–8 weeks at an assumed 16–20 task-hours/day including waits.
-Always-on 90–150 MiB is an estimate; update after service views, including on-demand
-QML windows. [Forecast](research/feature9-gate-d.md#gate-e--core-switch-active-2026-10-16).
-
-Keep 6b niri pacing/strict idle invariance open. CPU for small panels; GL only for
-large animated surfaces (~20 MiB Mesa residue). Preview still pins the earlier
-runtime until updated/smoked. [Desktop plan](research/gate-e-validation-plan.md)
-is HOLD. No live/install/config/unit/keybinding changes, Feature 11 or release.
-Further IME/reader work deferred; binary/control-script name clash remains open.
+Allowance is 0.5 MiB per explained feature. Every close stays within bar + 5 and
+settled UI ≤25 MiB on both compositors. Panels remain lazy; no new ceiling needed.
+QML stays daily driver. Keep 6b niri pacing/strict idle and long-run chaos open.
+CPU for small panels; GL for large animation (~20 MiB Mesa residue). Desktop plan
+is HOLD; no live/install/config/unit/keybinding action, dashboard or Feature 11.
+Further IME/reader work is deferred; the binary/control-script name clash remains.

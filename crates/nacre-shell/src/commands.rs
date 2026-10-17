@@ -182,13 +182,22 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     if call.target == "nacre"
-        && call.method == "popout"
-        && call.args.first().and_then(Value::as_str) == Some("calendar")
+        && matches!(call.method.as_str(), "popout" | "controls")
+        && call
+            .args
+            .first()
+            .and_then(Value::as_str)
+            .is_some_and(|name| matches!(name, "calendar" | "network" | "bluetooth" | "battery"))
     {
         validate(&call)?;
+        let view = call.args[0].clone();
+        let center = (call.method == "popout").then(|| call.args[1].clone());
         call.target = "bead.panel".into();
-        call.method = "toggle".into();
-        call.args = vec![Value::String("calendar".into()), call.args[1].clone()];
+        call.method = if center.is_some() { "toggle" } else { "open" }.into();
+        call.args = vec![view];
+        if let Some(center) = center {
+            call.args.push(center);
+        }
         return Ok(call);
     }
     map(call)
@@ -267,6 +276,30 @@ mod tests {
             map_views(sound).unwrap().args,
             vec![Value::String("sound".into())]
         );
+    }
+    #[test]
+    fn read_only_status_routes_keep_named_views_and_their_popout_centers() {
+        for view in ["network", "bluetooth", "battery"] {
+            let call = from_strings(
+                "nacre".into(),
+                "popout".into(),
+                &[view.into(), "1512.5".into()],
+            )
+            .unwrap();
+            let mapped = map_views(call).unwrap();
+            assert_eq!(
+                (mapped.target.as_str(), mapped.method.as_str()),
+                ("bead.panel", "toggle")
+            );
+            assert_eq!(
+                mapped.args,
+                vec![Value::String(view.into()), Value::from(1512.5)]
+            );
+            let call = from_strings("nacre".into(), "controls".into(), &[view.into()]).unwrap();
+            let mapped = map_views(call).unwrap();
+            assert_eq!(mapped.method, "open");
+            assert_eq!(mapped.args, vec![Value::String(view.into())]);
+        }
     }
     #[test]
     fn a_launcher_host_never_routes_sound_commands_into_its_panel() {

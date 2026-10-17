@@ -209,6 +209,74 @@ impl Source for Clock {
     }
 }
 
+/// Read-only projection of an existing hosted Desktop. Select fields before
+/// serialization so a small view does not copy or retain unrelated tray/menu data.
+/// Dropping this handle removes its subscription; it never starts/stops a backend.
+pub struct DesktopView {
+    publisher: Publisher,
+    _service: Arc<bead_services::Desktop>,
+    subscription: Mutex<Option<bead_services::Subscription>>,
+}
+impl DesktopView {
+    pub fn attach(
+        service: Arc<bead_services::Desktop>,
+        project: fn(&bead_services::Snapshot) -> Json,
+    ) -> Result<Self> {
+        let initial = service.snapshot();
+        let publisher = Publisher::at(
+            format!("desktop-view-{}", EPOCH.fetch_add(1, Ordering::Relaxed)),
+            initial.revision,
+            project(&initial),
+        )?;
+        let changed = publisher.clone();
+        let subscription = service.subscribe(move |snapshot| {
+            if changed
+                .publish_revision(snapshot.revision, project(&snapshot))
+                .is_err()
+            {
+                let _ = changed.disconnect();
+            }
+        });
+        Ok(Self {
+            publisher,
+            _service: service,
+            subscription: Mutex::new(Some(subscription)),
+        })
+    }
+}
+impl Source for DesktopView {
+    fn snapshot(&self) -> Arc<Snapshot> {
+        self.publisher.snapshot()
+    }
+    fn subscribe(&self, callback: Callback) -> Result<Subscription> {
+        self.publisher.subscribe(callback)
+    }
+    fn invoke(&self, _method: String, _params: Json) -> Reply<'_> {
+        Box::pin(async {
+            Err(Error::new(
+                "unknown_method",
+                "desktop view is read-only",
+                false,
+            ))
+        })
+    }
+    fn reconnect(&self) -> Reply<'_> {
+        Box::pin(async { Ok(Json::Null) })
+    }
+    fn stop(&self) -> Reply<'_> {
+        Box::pin(async {
+            self.subscription
+                .lock()
+                .map_err(|_| {
+                    Error::new("internal", "desktop view subscription unavailable", false)
+                })?
+                .take();
+            self.publisher.disconnect()?;
+            Ok(Json::Null)
+        })
+    }
+}
+
 /// Existing composite service as a Source. The default bar retains its typed path;
 /// this adapter is also usable by other in-process shells and headless hosts.
 pub struct Desktop {
@@ -437,6 +505,51 @@ mod clock_projection_tests {
         let sibling = Clock::attach(host.clone()).unwrap();
         assert_eq!(host.subscription_count(), 1);
         drop(sibling);
+        assert_eq!(host.subscription_count(), 0);
+        host.stop();
+    }
+}
+
+#[cfg(test)]
+mod desktop_view_tests {
+    use super::*;
+    #[test]
+    fn stopping_a_read_only_projection_detaches_only_its_own_subscription() {
+        let host = bead_services::Desktop::start_config(bead_services::Config {
+            audio: false,
+            bus: false,
+        });
+        let source =
+            DesktopView::attach(host.clone(), |s| serde_json::json!({"battery":s.battery}))
+                .unwrap();
+        let sibling =
+            DesktopView::attach(host.clone(), |s| serde_json::json!({"network":s.network}))
+                .unwrap();
+        assert_eq!(host.subscription_count(), 2);
+        assert_eq!(source.snapshot().data.as_object().unwrap().len(), 1);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        assert_eq!(
+            runtime
+                .block_on(source.invoke("audio.volume".into(), Json::Null))
+                .unwrap_err()
+                .code,
+            "unknown_method"
+        );
+        runtime.block_on(source.stop()).unwrap();
+        assert!(!source.snapshot().connected);
+        assert_eq!(host.subscription_count(), 1);
+        drop(sibling);
+        assert_eq!(host.subscription_count(), 0);
+        let fresh = DesktopView::attach(
+            host.clone(),
+            |s| serde_json::json!({"bluetooth":s.bluetooth}),
+        )
+        .unwrap();
+        assert!(fresh.snapshot().connected);
+        drop(fresh);
         assert_eq!(host.subscription_count(), 0);
         host.stop();
     }
