@@ -102,7 +102,9 @@ outer cell runner sets `BEAD_BAR_MATRIX=1`, a unique private `BEAD_RAW_DIR`,
 `BEAD_PANEL_IDLE_STATE=release`, `BEAD_DASHBOARD_RESIDENCY=1`,
 `BEAD_DASHBOARD_PAGES=today,weather,media,system`,
 `BEAD_DASHBOARD_RESIDENCY_SLOTS=4`, and
-`BEAD_DASHBOARD_RESIDENCY_LEGACY=1`. All commands run under `nice -n 10`.
+`BEAD_DASHBOARD_RESIDENCY_LEGACY=1`. Acceptance cells additionally set
+`BEAD_DASHBOARD_ACCEPTANCE=1` and explicitly choose
+`BEAD_DASHBOARD_WARMUP_SECONDS=0` or `600`. All commands run under `nice -n 10`.
 
 Proposed one-cell command template (not run; `BUNDLE`, `ENGINE_BIN`,
 `ENGINE_BUNDLE`, and `CELL_RAW` must resolve to reviewed exact artifacts):
@@ -127,8 +129,13 @@ nice -n 10 env \
   BEAD_PANEL_IDLE_STATE=release BEAD_DASHBOARD_RESIDENCY=1 \
   BEAD_DASHBOARD_PAGES=today,weather,media,system \
   BEAD_DASHBOARD_RESIDENCY_SLOTS=4 BEAD_DASHBOARD_RESIDENCY_LEGACY=1 \
+  BEAD_DASHBOARD_ACCEPTANCE=1 BEAD_DASHBOARD_WARMUP_SECONDS=0 \
   python3 spikes/measure.py --compositor "$COMP" --bar-ui --modes bead --runs 1 "${extra[@]}"
 ```
+
+Use `BEAD_DASHBOARD_WARMUP_SECONDS=600` instead for the warmup variant. The
+acceptance runner requires the full current page set, four slots and combined
+legacy phase; invalid modes or warmup values fail before the launcher starts.
 
 The outer scheduler alternates control/candidate arms and records the exact
 bundle/helper hashes for each cell. It must not use different runtime flags for
@@ -145,19 +152,21 @@ The proposed operator cleanup is to let the harness finish normally, inspect its
 owned-process audit, and only signal a still-running PID recorded by that cell;
 never use a process-name kill.
 
-The prior ten cells took about 43 minutes total (roughly 4m17s per cell). Requiring
-60 seconds idle at all four phases is estimated at 94–124 minutes for 20 cells,
-including the prior per-cell setup overhead. If 600-second warmups are needed,
-that adds 200 minutes (ten arms per compositor); total becomes about 4h54–5h24,
-before additional recovery margin. Request two independent three-hour private
-windows, one per compositor, each retaining all five pairs and any full warmups.
-Without warmups the estimated method fits one four-hour block, but the compositor
-windows should still be separately granted. No grant or reservation is active.
+The prior ten cells took about 43 minutes total (roughly 4m17s per cell). The
+acceptance phase budgets add 120 seconds per cell over the old 35/55/75/65s
+windows; the measured baseline adds 58 seconds per cell over its old 2s sample.
+For 20 cells, that projects to about 145 minutes total before recovery margin.
+This supersedes the earlier 94–124-minute planning estimate, which omitted the
+baseline window and the final fixed phase-budget arithmetic. A 600-second warmup
+adds 200 minutes (ten arms per compositor), for about 345 minutes total (5h45).
+That is about 2h53 per compositor, so two separate three-hour private windows
+nominally fit but leave little recovery margin. Without warmups the estimate is
+about 1h13 per compositor. Keep all five pairs per compositor and request exact
+windows from the spec agent; no grant or reservation is active.
 
 ## Blockers and disposition
 
 `RUSTSEC-2026-0192` remains an owner-policy dependency. Intended source-linked
 baseline/candidate binaries and a certified helper binary/source pairing are
-missing. The existing sampler also needs the narrow 60-second-idle adjustment
-before it can implement the requested method. This is a preflight request only;
-there are no B0002 memory results or acceptance claims.
+missing. The harness correction implements timing only; it certifies no artifact
+and grants no capture. There are no B0002 memory results or acceptance claims.

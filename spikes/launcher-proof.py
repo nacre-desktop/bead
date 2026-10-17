@@ -7,7 +7,10 @@ spec=importlib.util.spec_from_file_location('matrix',ROOT/'spikes/bar-matrix.py'
 matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
 spec=importlib.util.spec_from_file_location('menu_fixtures',ROOT/'spikes/menu-fixtures.py')
 menu_fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(menu_fixtures)
+spec=importlib.util.spec_from_file_location('dashboard_residency',ROOT/'spikes/dashboard-residency.py')
+dashboard_residency=importlib.util.module_from_spec(spec);spec.loader.exec_module(dashboard_residency)
 def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
+    acceptance=dashboard_residency.acceptance_config(os.environ)
     runtime=pathlib.Path(env['XDG_RUNTIME_DIR']).resolve()
     assert runtime!=pathlib.Path(f'/run/user/{os.getuid()}'),'live runtime refused'
     assert pathlib.Path(env['WAYLAND_DISPLAY']).resolve().is_relative_to(runtime),'live display refused'
@@ -144,15 +147,19 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             matrix.wait_log(log,lambda t:'UI_PRESENTED generation=1'in t and 'source_error=false'in t)
             assert 'PRESENTATION clock_id=1'in matrix.log_text(log)
             call('state',target='nacre')
-            bar=matrix.idle(client.pid,2);result['bar']=bar
+            if acceptance:
+                bar,baseline_timing=dashboard_residency.acceptance_baseline(client.pid,matrix.idle,acceptance['warmup_seconds'],time.monotonic,time.sleep)
+                result['acceptance_baseline']=baseline_timing
+                (raw/'dashboard-residency-baseline.json').write_text(json.dumps(baseline_timing,indent=2)+'\n')
+            else:
+                bar=matrix.idle(client.pid,2)
+            result['bar']=bar
             if observe:bar['external']=observe()
             bar['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
             (raw/'bar.json').write_text(json.dumps(bar,indent=2)+'\n')
             (raw/'bar.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
             if os.environ.get('BEAD_DASHBOARD_RESIDENCY') == '1':
-                spec=importlib.util.spec_from_file_location('dashboard_residency',ROOT/'spikes/dashboard-residency.py')
-                probe=importlib.util.module_from_spec(spec);spec.loader.exec_module(probe)
-                result=probe.sample(client,raw,bar,matrix,call,state_wait,log,dashboard_presented,committed_and_presented,observe,dashboard_views)
+                result=dashboard_residency.sample(client,raw,bar,matrix,call,state_wait,log,dashboard_presented,committed_and_presented,observe,dashboard_views,result.get('acceptance_baseline'))
                 stop(client)
                 assert client.returncode==0,'residency UI did not exit cleanly'
                 assert 'STOP surfaces=0' in log.read_text()
