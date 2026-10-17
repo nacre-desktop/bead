@@ -17,6 +17,18 @@ daily driver; live validation is held.
 
 Pin published Nacre `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57` after independent
 [full-green CI39052564401 verification](https://github.com/nacre-desktop/nacre/actions/runs/39052564401).
+Own [CI39056831629](https://github.com/nacre-desktop/bead/actions/runs/39056831629)
+passes all stages except cargo-deny: new informational unmaintained advisories
+RUSTSEC-2026-0370 (`zvariant`5.15.0),0371 (`zbus_names`4.3.4),0372
+(`zvariant_derive`5.15.0). All three versions match the earlier accepted lock;
+this pin changes no registry dependency. [Upstream merged them into zbus6](https://github.com/z-galaxy/zbus/issues/2043).
+Latest AccessKit0.24 requireszbus^5.19; tray0.8.9 requires^5; latest AT-SPI0.30
+also requires^5.5. No small compatible release removes the old crates. No
+ignore, feature removal or policy weakening is applied. STOP for owner decision:
+three narrow informational-advisory exceptions pending upstream migration, or
+separate authorization of the broader zbus6/consumer port. Local validation and
+memory gates below pass; own CI is explicitly RED.
+
 This supersedes the c2/revised-schema publication holds in the historical
 sections below. Reserved core topics/methods still have no runtime hosting;
 no generic native non-app executor is advertised. The measured daemon helper

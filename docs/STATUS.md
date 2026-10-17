@@ -4,6 +4,12 @@
 
 Nacre protocol is pinned to published 5f4c0bf3, independently verified fully green
 [Source CI39052564401](https://github.com/nacre-desktop/nacre/actions/runs/39052564401).
+Bead [CI39056831629](https://github.com/nacre-desktop/bead/actions/runs/39056831629)
+passes every stage except cargo-deny: new informational unmaintained advisories
+RUSTSEC-2026-0370/0371/0372 affect unchanged zbus5 dependencies. Latest AccessKit,
+AT-SPI and tray still require zbus5. STOP for owner policy/migration decision;
+no exception, feature removal or advisory policy change has been applied.
+
 Seven exact compatibility transcripts replay through Bead's Mirror; two new
 consumer tests cover 7 snapshots / 29 patches. Published Luau checks pass 100
 positive cases, 7 negative guards and 32 semantic assertions; original 30
@@ -33,7 +39,7 @@ The earlier five alternating pairs pass never/once/repeated-open phases;
 repeated settled medians H 22.098 → 22.742 / N 22.672 → 23.264 MiB.
 [Core-page report](research/feature9-gate-d.md#four-core-dashboard-tabs--measured-continuation-2026-10-17).
 
-Stop at this completed core-page checkpoint / optional-extras scope decision.
+Stop for the advisory decision and completed core-page / optional-extras scope.
 Optional tabs, customization/QML behavior and real provider hosting are not
 claimed complete. QML stays daily driver; no later feature, live test, install,
 config/unit/keybinding change or desktop job/slot. Private preview remains

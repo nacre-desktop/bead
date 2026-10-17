@@ -28,6 +28,9 @@ Fmt, all-feature Clippy-Dwarnings, trace, CPU-only/release and service boundary
 pass. Seven expected Luau rejections include the corrected popup_order ID type;
 old failing proof is preserved. All eight page PNGs remain unchanged.
 No new runtime backend, action executor, UI control or helper is claimed.
+CI39056831629 passes all but new unmaintained advisories0370/0371/0372 for
+unchanged zbus5 dependencies. No policy waiver; latest AccessKit/AT-SPI/tray
+still usezbus5. STOP for owner exception vs broader migration decision.
 Typing targets, Reader application trimming and optional-page scope stay open.
 
 ## 2026-10-17 — Four core dashboard tabs fit the unchanged ceiling
