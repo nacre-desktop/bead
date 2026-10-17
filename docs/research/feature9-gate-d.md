@@ -18,9 +18,10 @@ The 41-file QML inventory is at
 Nacre reference `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57` (41 QML files plus
 two JavaScript helpers). It maps each source component to its Bead equivalent,
 test proof and covered/deferred/provider-blocked disposition. The five named
-tests verify declared state defaults, current and legacy navigation, unknown
-versus stale data, reachable last rows in clipped long lists, and page resource
-release. The retirement test keeps fake providers alive, verifies their Arc
+tests verify ready and unavailable defaults, current and legacy navigation,
+unknown versus stale data, all four primary-page disconnect projections,
+reachable last rows in clipped long lists, and page resource release. The
+retirement test keeps fake providers alive, verifies their Arc
 counts return to baseline and confirms post-drop publishes invoke no callbacks;
 it covers Today calendar/weather/clock, Weather, Media, and System/Updates.
 Session state and the CPU scene are owned by and drop with Runtime. This is not

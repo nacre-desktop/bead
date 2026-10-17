@@ -173,8 +173,6 @@ fn unknown_weather_updates_and_hardware_values_never_become_zero() -> Result<()>
 #[test]
 fn dashboard_four_tabs_have_complete_state_defaults() -> Result<()> {
     for page in Page::ALL {
-        let projected =
-            Dashboard::new(page, Arc::new(ReadOnly::unavailable()?), None, false).project();
         let harness = Harness::load(
             &root(),
             Path::new(&format!("dashboard/{}/main.luau", page.name())),
@@ -187,18 +185,69 @@ fn dashboard_four_tabs_have_complete_state_defaults() -> Result<()> {
             },
         )?;
         let defaults = harness.session.stores.values();
-        for key in projected.keys() {
-            assert!(
-                defaults.contains_key(key),
-                "{} projects undeclared state key {key}",
-                page.name()
+
+        let unavailable =
+            Dashboard::new(page, Arc::new(ReadOnly::unavailable()?), None, false).project();
+        assert_eq!(unavailable["dashboard.ready"], Value::Bool(false));
+        assert_eq!(unavailable["dashboard.stale"], Value::Bool(false));
+        for key in unavailable.keys().filter(|key| key.starts_with("dashboard.")) {
+            assert!(defaults.contains_key(key), "{} unavailable state key {key}", page.name());
+        }
+
+        let primary_data = fixture(page.name());
+        assert!(checked(&page.topic(), &primary_data)?.valid());
+        let secondary = match page {
+            Page::Today => {
+                let data = fixture("weather");
+                assert!(checked("dashboard.weather", &data)?.valid());
+                Some(Arc::new(FakeSource::new(data)?) as Arc<dyn Source>)
+            }
+            Page::System => {
+                let data = fixture("updates");
+                assert!(checked("dashboard.updates", &data)?.valid());
+                Some(Arc::new(FakeSource::new(data)?) as Arc<dyn Source>)
+            }
+            _ => None,
+        };
+        let dashboard = Dashboard::new(
+            page,
+            Arc::new(FakeSource::new(primary_data)?),
+            secondary,
+            true,
+        );
+        let projected = if page == Page::Today {
+            let clock = Arc::new(FakeSource::new(
+                json!({"clock":"10:00","date":{"year":2024,"month":2,"day":29}}),
+            )?);
+            let stores = bead::core::Stores::default().reconcile(&BTreeMap::from([
+                ("calendar.initialized".into(), Value::Bool(true)),
+                ("calendar.follow_today".into(), Value::Bool(false)),
+                ("calendar.year".into(), Value::Number(2023.)),
+                ("calendar.month".into(), Value::Number(12.)),
+            ]))?;
+            let projected = dashboard
+                .with_clock(Some(clock))
+                .project_with_stores(&stores);
+            assert_eq!(projected["dashboard.clock"], Value::Text("10:00".into()));
+            assert_eq!(
+                projected["calendar.today"],
+                Value::Text("2024-02-29".into())
             );
+            projected
+        } else {
+            dashboard.project()
+        };
+        assert_eq!(projected["dashboard.ready"], Value::Bool(true));
+        assert_eq!(projected["dashboard.stale"], Value::Bool(false));
+        for key in projected.keys().filter(|key| key.starts_with("dashboard.")) {
+            assert!(defaults.contains_key(key), "{} ready state key {key}", page.name());
         }
         if page == Page::Today {
             assert!(defaults.contains_key("dashboard.clock"));
         } else {
             assert!(
-                !projected.contains_key("dashboard.clock"),
+                !unavailable.contains_key("dashboard.clock")
+                    && !projected.contains_key("dashboard.clock"),
                 "{} must not project Today-only clock state",
                 page.name()
             );
@@ -295,25 +344,33 @@ fn dashboard_disconnect_keeps_last_good_stale() -> Result<()> {
     assert_eq!(unavailable["dashboard.stale"], Value::Bool(false));
     assert_eq!(unavailable["dashboard.metric"], Value::Text("—".into()));
 
-    let source = Arc::new(FakeSource::new(fixture("weather"))?);
-    let dashboard = Dashboard::new(Page::Weather, source.clone(), None, true);
-    let before = dashboard.project();
-    assert_eq!(before["dashboard.ready"], Value::Bool(true));
-    assert_eq!(before["dashboard.stale"], Value::Bool(false));
+    for page in Page::ALL {
+        let data = fixture(page.name());
+        assert!(checked(&page.topic(), &data)?.valid());
+        let source = Arc::new(FakeSource::new(data)?);
+        let secondary = match page {
+            Page::Today => {
+                let data = fixture("weather");
+                assert!(checked("dashboard.weather", &data)?.valid());
+                Some(Arc::new(FakeSource::new(data)?) as Arc<dyn Source>)
+            }
+            Page::System => {
+                let data = fixture("updates");
+                assert!(checked("dashboard.updates", &data)?.valid());
+                Some(Arc::new(FakeSource::new(data)?) as Arc<dyn Source>)
+            }
+            _ => None,
+        };
+        let dashboard = Dashboard::new(page, source.clone(), secondary, true);
+        let before = dashboard.project();
+        assert_eq!(before["dashboard.ready"], Value::Bool(true), "{} ready", page.name());
+        assert_eq!(before["dashboard.stale"], Value::Bool(false), "{} fresh", page.name());
 
-    source.disconnect()?;
-    let after = dashboard.project();
-    assert_eq!(after["dashboard.ready"], Value::Bool(true));
-    assert_eq!(after["dashboard.stale"], Value::Bool(true));
-    for key in [
-        "dashboard.heading",
-        "dashboard.summary",
-        "dashboard.detail",
-        "dashboard.metric",
-        "dashboard.rows",
-        "dashboard.secondary",
-    ] {
-        assert_eq!(after[key], before[key], "last-good field {key} was lost");
+        source.disconnect()?;
+        let after = dashboard.project();
+        let mut expected = before;
+        expected.insert("dashboard.stale".into(), Value::Bool(true));
+        assert_eq!(after, expected, "{} lost last-good projection", page.name());
     }
     Ok(())
 }

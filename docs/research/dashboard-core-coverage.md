@@ -15,7 +15,7 @@ Nacre pages. Reserved protocol schemas do not imply runtime providers.
 | `NacreDashboardCustomizeSection.qml` | Customization section grouping | — | — | deferred optional |
 | `NacreDashboardExtrasOptions.qml` | Configure optional cards | — | — | deferred optional |
 | `NacreDashboardHero.qml` | Main summary/hero content | `shell/dashboard/components.luau`, page layouts | `dashboard_pages_have_deterministic_pixels_and_only_navigation_actions` | current-core covered |
-| `NacreDashboardMetric.qml` | Shared metric display | `shell/dashboard/components.luau`, System/Weather pages | `dashboard_four_tabs_have_complete_state_defaults` | current-core covered |
+| `NacreDashboardMetric.qml` | Weather display; system hardware readings remain unavailable | `shell/dashboard/components.luau`, Weather page; System unknown values | `dashboard_pages_have_deterministic_pixels_and_only_navigation_actions`; `unknown_weather_updates_and_hardware_values_never_become_zero` | current-core covered; system readings provider-blocked |
 | `NacreDashboardNavigation.qml` | Switch core dashboard tabs | `shell/dashboard/main.luau` | `dashboard_navigation_routes_every_core_tab` | current-core covered |
 | `NacreDashboardNetworkCard.qml` | Network status card | — | — | deferred optional |
 | `NacreDashboardPanel.qml` | Dashboard panel and page host | `shell/dashboard/main.luau` | `dashboard_pages_have_deterministic_pixels_and_only_navigation_actions` | current-core covered |
@@ -27,9 +27,9 @@ Nacre pages. Reserved protocol schemas do not imply runtime providers.
 | `NacreGpuMemory.qml` | GPU memory detail | Unknown GPU readings remain unavailable | `unknown_weather_updates_and_hardware_values_never_become_zero` | blocked by published runtime provider |
 | `NacreMediaPage.qml` | Lyrics and palette enrichment | `shell/dashboard/media/main.luau` | `dashboard_four_tabs_have_complete_state_defaults`; `dashboard_disconnect_keeps_last_good_stale` | current-core covered |
 | `NacreMiniPlayer.qml` | Playback controls and progress | — | — | deferred optional |
-| `NacreSystemPage.qml` | Process/filesystem rows and updates | `shell/dashboard/system/main.luau` | `dashboard_long_rows_scroll_without_clipping`; existing system projection tests | current-core covered |
-| `NacreTodayPage.qml` | Clock/date, calendar agenda and weather summary | `shell/dashboard/today/main.luau` | `dashboard_four_tabs_have_complete_state_defaults`; `today_calendar_navigation_and_agenda_scrolling_use_real_input` | current-core covered |
-| `NacreWeatherPage.qml` | Current, hourly and daily weather | `shell/dashboard/weather/main.luau` | `dashboard_long_rows_scroll_without_clipping`; deterministic page pixels | current-core covered |
+| `NacreSystemPage.qml` | Process/filesystem rows and updates | `shell/dashboard/system/main.luau` | `dashboard_four_tabs_have_complete_state_defaults`; `dashboard_disconnect_keeps_last_good_stale`; `process_projection_preserves_ids_and_uses_memory_not_fake_cpu_percent`; `dashboard_long_rows_scroll_without_clipping` | current-core covered |
+| `NacreTodayPage.qml` | Clock/date, calendar agenda and weather summary | `shell/dashboard/today/main.luau` | `dashboard_four_tabs_have_complete_state_defaults`; `dashboard_disconnect_keeps_last_good_stale`; `today_clock_and_secondary_source_drop_with_page_and_preserve_browsed_month`; `today_calendar_navigation_and_agenda_scrolling_use_real_input` | current-core covered |
+| `NacreWeatherPage.qml` | Current, hourly and daily weather | `shell/dashboard/weather/main.luau` | `dashboard_four_tabs_have_complete_state_defaults`; `dashboard_disconnect_keeps_last_good_stale`; `dashboard_long_rows_scroll_without_clipping`; `dashboard_pages_have_deterministic_pixels_and_only_navigation_actions` | current-core covered |
 | `NacreWeatherSky.qml` | Weather photography/sky effects | — | — | deferred optional |
 | `extras/NacreAiUsageExtra.qml` | AI usage card | — | — | deferred optional |
 | `extras/NacreBrainExtra.qml` | Brain card | — | — | deferred optional |
@@ -57,6 +57,15 @@ topics; live daemon-backed data remains unavailable until a provider is
 published. Nacre's `media.js` and `overview.js` are helper scripts, not QML rows;
 they are outside the requested 41-file inventory and no ranking or player
 behavior is ported here.
+
+The B0004 review follow-up validates every ready fixture with the page's existing
+`checked()` decoder. The defaults test checks both unavailable and ready
+projections for all four pages, including Today's clock and stored-month
+projection. The disconnect test covers each primary page Source with its
+secondary Weather/Updates fixture present where applicable, and compares the
+entire last-good projection except for `dashboard.stale`. Numeric process-row
+evidence comes from `process_projection_preserves_ids_and_uses_memory_not_fake_cpu_percent`,
+not from state-default coverage; system hardware readings remain unavailable.
 
 The lifecycle test holds each fake source alive, subscribes through an actual
 page `Runtime`, explicitly drops that Runtime, then publishes again and proves
