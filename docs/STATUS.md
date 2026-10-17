@@ -1,5 +1,11 @@
 # Status
 
+## 2026-10-18 — B0005 capture-window harness
+
+Implementing the acceptance-mode idle and warmup schedule with fake-clock tests.
+No real process, sleep, probe, preview, build or capture is authorized or run.
+Measurement remains ungranted; cached artifact provenance and `0192` remain open.
+
 ## 2026-10-18 — B0002 artifact/preflight submitted
 
 The current B1/B4 production runtime inputs are byte-identical. Available old

@@ -3,7 +3,7 @@
 - ID: B0005
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Ready
+- Status: In progress
 - Depends on: B0002 early preflight accepted atbb75590; NO capture grant
 - Date: 2026-10-18
 - Size: one focused session, maximum2hours

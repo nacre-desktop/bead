@@ -9,7 +9,7 @@ must not infer permission from an old roadmap or reserve a measurement slot.
 | 1 | B0001 | [Continue core dashboard](0001-dashboard-core-completion-audit.md) | Blocked | functional accepted; owner0192 policy ruling |
 | 1a | B0004 | [Dashboard review coverage fixes](0004-dashboard-review-coverage-fixes.md) | Done | reviewedef5406f; CI39075073594green |
 | 2 | B0002 | [Dashboard lifecycle/memory](0002-dashboard-lifecycle-memory-gate.md) | Review | early artifact/preflight report submitted; captures gated |
-| 2a | B0005 | [Capture-window correctness](0005-dashboard-capture-window-correctness.md) | Ready | B0002 preflight accepted; fake clocks only |
+| 2a | B0005 | [Capture-window correctness](0005-dashboard-capture-window-correctness.md) | In progress | acceptance-mode full-window harness; fake clocks only |
 | 3 | B0003 | [Typing dominant-cost investigation](0003-launcher-typing-investigation.md) | Review | source-only checkpoint; remaining steps gated |
 
 First Ready assignment is authorized after its listed prerequisites pass. Existing
