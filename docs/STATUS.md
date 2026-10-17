@@ -1,28 +1,23 @@
 # Status
 
-## 2026-10-17 — Idle audit: 1 MiB policy stays unshipped; CPU check worsens
+## 2026-10-17 — Closed-panel audit: niri paired validation running
 
-The normal4MiB candidate passes20-cycle H/N native checks (settled23.024/23.924MiB)
-and five CPU pairs: paired UI-.075/+1.364ms, inside controlspreads4.153/3.033;
-no typing-target acceptance. The first accepted-control memory run fails its
-unchanged close+5 guard:28.587MiB vs21.290bar; still28.608after another4s.
-Preserve that failure. A pinned-control data-only mode will finish collecting
-failing baselines while marking valid=false and exiting nonzero; candidate gates
-stay strict. Resume five pairs without selecting away failing control samples.
-Named-view source e8a02ae is accepted and CI green. The scalar mirror cleanup
-and application-only1 MiB mmap candidate pass both20-cycle native checks and
-five alternating memory pairs/compositor. Paired warm deltas -1.845/-1.823 MiB;
-settled +0.159/+0.110 fit control spreads0.269/0.740. Allclose/25/group guards pass.
-But the200-key single-pair CPU screen rises11.218->12.067 /11.447->11.649ms H/N;
-p99 rises31.102->32.472 /28.752->34.356ms. No new typing acceptance or gain.
-The1 MiB policy remains local. Testing a4 MiB process-only override on the SAME
-ELF first: transient paint masks can exceed1 MiB, so the earlier threshold may
-map too many per-frame allocations. The same-ELF4MiB diagnostic passes the repeated-unused-preparation memory proof.
-Its CPU window slowed both UI and daemon, so it establishes no CPU improvement.
-The normal4MiB source passes193 tests, isolated trace allocator proof, fmt,
-all-feature clippy and CPU-only build; frozen paired measurements are next.
-Calendar Source-wake/rollover and bar startup-restore fixes are drafted separately,
-UNTESTED; no source or new panels mixed into these frozen captures. Dashboard held.
+Main e8a02ae is accepted; CI38974187010 is green. The local cleanup releases the
+launcher scalar mirror after the existing 2.2-second grace. Panel bundles,
+workers, subscriptions and rasters already load lazily and release on idle.
+The application-only 4 MiB mmap policy passes 193 tests, isolated trace allocator
+proof, fmt, all-feature clippy and CPU-only build. It remains unshipped.
+Both 20-cycle native proofs pass, including two unused preparations and quick
+reopen; settled UI is 23.024/23.924 MiB H/N. All candidate close guards pass.
+Five Hyprland memory pairs: warm third-open paired -9.562 MiB; settled +0.147
+within the 0.300 MiB control spread. Five niri pairs are running. One H control
+fails close budgets; data collection preserves valid=false/exit1, not a pass.
+Five CPU pairs give paired UI -0.075/+1.364 ms H/N, inside spreads 4.153/3.033.
+The current window is slower for both UI and daemon; no typing gain is claimed.
+Calendar Source/date/reload and bar startup-state fixes are drafted separately,
+as is a ranked-prefix typing candidate. Both are untested and outside captures.
+Next: finish the memory matrix and verify all caps/guards before integration.
+No new panels yet. QML stays daily driver; dashboard and live validation held.
 
 ## 2026-10-17 — Calendar/sound/routing cost accepted; idle audit next
 
