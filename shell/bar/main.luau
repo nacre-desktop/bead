@@ -20,7 +20,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
                 }
             end},
         },
-        popouts and kit.Button{id="dashboard",width=30,height=30,padding=0,fill="transparent",aria_label="Open dashboard",on_activate=ui.action("view.open","dashboard-system"),
+        popouts and kit.Button{id="dashboard",width=30,height=30,padding=0,fill="transparent",aria_label="Open dashboard",on_activate=ui.action("view.open","dashboard-today"),
             glyph("glyph","dashboard","primary"),
         } or nil,
     },

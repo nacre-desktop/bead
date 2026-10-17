@@ -210,6 +210,7 @@ impl Runtime {
         page: crate::dashboard::Page,
         source: std::sync::Arc<dyn bead::core::source::Source>,
         updates: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+        clock: Option<std::sync::Arc<dyn bead::core::source::Source>>,
         preview: bool,
     ) -> Result<Self, Box<dyn Error>> {
         if self.launcher.is_some()
@@ -219,12 +220,13 @@ impl Runtime {
         {
             return Err("one data projector per panel".into());
         }
-        let dashboard = std::rc::Rc::new(crate::dashboard::Dashboard::new(
-            page, source, updates, preview,
-        ));
+        let dashboard = std::rc::Rc::new(
+            crate::dashboard::Dashboard::new(page, source, updates, preview).with_clock(clock),
+        );
         let projector = dashboard.clone();
-        self.session
-            .set_projector(Box::new(move |_| Ok(projector.project())));
+        self.session.set_projector(Box::new(move |stores| {
+            Ok(projector.project_with_stores(stores))
+        }));
         self.actions.register("view.open", "ui.popouts")?;
         self.actions.grant("ui.popouts");
         if let Some(chrome) = &mut self.chrome {
@@ -1000,6 +1002,36 @@ impl SceneSource for Runtime {
                                 bead::services::ipc::Reply::error(call.id, "notifications", e)
                             }
                         },
+                        ("drawers", "toggle")
+                            if call.args.first().and_then(serde_json::Value::as_str)
+                                == Some("dashboard")
+                                && self.session.stores.get("bar.popouts")
+                                    == Some(&bead::core::Value::Bool(true)) =>
+                        {
+                            self.actions.authorize("view.open")?;
+                            let wakeup = self
+                                .wakeup
+                                .as_ref()
+                                .ok_or("dashboard event channel unavailable")?;
+                            if request.context.panel_open
+                                && request
+                                    .context
+                                    .panel_view
+                                    .as_deref()
+                                    .and_then(crate::dashboard::Page::from_view)
+                                    .is_some()
+                            {
+                                wakeup(UiEvent::CompanionVisibility(false));
+                            } else {
+                                wakeup(UiEvent::CompanionSelect {
+                                    view: "dashboard-today".into(),
+                                    output: call.output.clone(),
+                                    toggle: false,
+                                    center: None,
+                                });
+                            }
+                            bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                        }
                         ("nacre", "launcher") if self.launcher_trigger => {
                             let values = std::collections::BTreeMap::from([
                                 (
@@ -1059,17 +1091,20 @@ impl SceneSource for Runtime {
                                     "sound"
                                 },
                             );
+                            let dashboard_page = crate::dashboard::Page::from_view(active_view);
                             let launcher_open =
                                 request.context.panel_open && active_view == "launcher";
-                            let edge_menu =
-                                if request.context.panel_open && active_view != "launcher" {
-                                    active_view
-                                } else {
-                                    ""
-                                };
+                            let edge_menu = if request.context.panel_open
+                                && active_view != "launcher"
+                                && dashboard_page.is_none()
+                            {
+                                active_view
+                            } else {
+                                ""
+                            };
                             let core_views = self.session.stores.get("bar.popouts")
                                 == Some(&bead::core::Value::Bool(true));
-                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":false,"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":0,"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar","network-status","bluetooth-status","battery-status"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":request.context.panel_open && dashboard_page.is_some(),"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":dashboard_page.map(|page| page.tab()).unwrap_or(0),"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar","network-status","bluetooth-status","battery-status","dashboard"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
                             #[cfg(all(feature = "trace", target_os = "linux", target_env = "gnu"))]
                             let state = {
                                 let mut state = state;

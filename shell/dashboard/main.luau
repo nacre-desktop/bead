@@ -8,7 +8,7 @@ local content=require("./page")
 local nav={}
 for _,tab in ipairs({{"today","Today","dashboard"},{"weather","Weather","partly_cloudy_day"},{"media","Media","music_note"},{"system","System","monitoring"}}) do
     local selected=tab[1]==page
-    local interactive=tab[1]~="today" and not selected
+    local interactive=not selected
     local Button=interactive and kit.Button or ui.Row
     table.insert(nav,Button{id=tab[1],width=234,height=44,padding=0,radius=12,justify="center",align="center",
         fill=selected and ui.alpha("primary",0.12) or "transparent",

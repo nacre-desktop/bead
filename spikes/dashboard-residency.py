@@ -8,6 +8,8 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
     def total(row):
         return row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
 
+    pages = os.environ.get("BEAD_DASHBOARD_PAGES", "weather,media,system").split(",")
+    assert pages and len(set(pages)) == len(pages) and all(p in ["today", "weather", "media", "system"] for p in pages)
     samples = []
     closed = []
     warm = []
@@ -31,7 +33,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         began = time.monotonic()
         for index in range(count):
             if enabled or legacy:
-                view = (["calendar", "sound", "network", "bluetooth", "battery", "launcher"][index % 6] if legacy else ["dashboard-weather", "dashboard-media", "dashboard-system"][index % 3])
+                view = (["calendar", "sound", "network", "bluetooth", "battery", "launcher"][index % 6] if legacy else ["dashboard-" + page for page in pages][index % len(pages)])
                 offset = len(matrix.log_text(log))
                 began_ns = time.monotonic_ns()
                 call("open", view)
@@ -51,17 +53,18 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         assert elapsed <= duration - 30, "phase leaves less than30s idle"
         time.sleep(duration - elapsed)
         row = capture(label)
+        assert total(row) < 24.5, "settled reaches owner stop line"
         row["phase_seconds"] = time.monotonic() - began
         (raw / "dashboard-residency-progress.json").write_text(json.dumps(samples, indent=2) + "\n")
         print("DASHBOARD_RESIDENCY", label, total(row), flush=True)
         return row
 
     never = phase("never-opened", 0, 35)
-    once = phase("opened-once", 3, 45)
-    several = phase("opened-several", 6, 60)
+    once = phase("opened-once", len(pages), 55)
+    several = phase("opened-several", len(pages) * 2, 75)
     legacy = os.environ.get("BEAD_DASHBOARD_RESIDENCY_LEGACY", "1") == "1"
     combined = phase("combined-legacy", 6, 65, legacy=True) if legacy else several
-    result = {"valid": True, "dashboard_enabled": enabled, "bar": bar,
+    result = {"valid": True, "dashboard_enabled": enabled, "pages": pages, "bar": bar,
               "never": never, "once": once, "several": several,
               "combined": combined, "combined_legacy": legacy, "closed": closed, "warm": warm, "method": "same process: never; once each page; three times each page; fixed matched-age endpoints with >=30s idle; control opens only legacy panels in final phase"}
     (raw / "dashboard-residency.json").write_text(json.dumps(result, indent=2) + "\n")

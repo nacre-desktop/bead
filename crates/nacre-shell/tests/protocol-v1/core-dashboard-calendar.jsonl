@@ -1,0 +1,4 @@
+{"t":"snap","topic":"dashboard.calendar","seq":0,"data":{"health":{"available":true,"stale":false},"configured":true,"events":{"items":{"event-1":{"title":"Fixture event","start":1800000000,"time":"08:00","date":"2027-01-15"}},"order":["event-1"]}}}
+{"t":"call","id":0,"m":"dashboard.calendar.refresh","p":{},"timeout":10000}
+{"t":"ret","id":0,"ok":{"changed":false}}
+{"t":"patch","topic":"dashboard.calendar","base":0,"seq":1,"data":{"health":{"available":false,"stale":true,"error":{"code":"unavailable","message":"Service unavailable","retry":true}}}}

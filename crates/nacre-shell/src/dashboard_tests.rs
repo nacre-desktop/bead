@@ -6,6 +6,7 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
 }
 fn fixture(name: &str) -> Json {
+    let name = if name == "today" { "calendar" } else { name };
     serde_json::from_slice(
         &std::fs::read(root().join(format!("tests/fixtures/dashboard/{name}.json"))).unwrap(),
     )
@@ -28,6 +29,10 @@ fn published_dashboard_frames_match_and_merge_to_valid_typed_states() -> Result<
     let generated = nacre_protocol::artifacts::generate();
     let mut count = 0;
     for (name, text) in [
+        (
+            "calendar",
+            include_str!("../tests/protocol-v1/core-dashboard-calendar.jsonl"),
+        ),
         (
             "weather",
             include_str!("../tests/protocol-v1/core-dashboard-weather.jsonl"),
@@ -98,7 +103,7 @@ fn published_dashboard_frames_match_and_merge_to_valid_typed_states() -> Result<
             count += 1;
         }
     }
-    assert_eq!(count, 12);
+    assert_eq!(count, 16);
     Ok(())
 }
 
@@ -190,16 +195,27 @@ fn process_projection_preserves_ids_and_uses_memory_not_fake_cpu_percent() {
 fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Result<()> {
     for page in Page::ALL {
         for scale in [1., 1.5] {
-            let model = view(
+            let mut model = view(
                 page,
                 fixture(page.name()),
-                if page == Page::System {
-                    Some(fixture("updates"))
-                } else {
-                    None
+                match page {
+                    Page::Today => Some(fixture("weather")),
+                    Page::System => Some(fixture("updates")),
+                    _ => None,
                 },
             )
             .project();
+            if page == Page::Today {
+                let source = Arc::new(FakeSource::new(
+                    json!({"clock":"10:00","date":{"year":2024,"month":2,"day":29}}),
+                )?);
+                let stores = bead::core::Stores::default().reconcile(&BTreeMap::from([(
+                    "calendar.initialized".into(),
+                    Value::Bool(false),
+                )]))?;
+                model.extend(crate::calendar::Calendar::new(source).project(&stores));
+                model.insert("dashboard.clock".into(), Value::Text("10:00".into()));
+            }
             let mut h = Harness::load(
                 &root(),
                 Path::new(&format!("dashboard/{}/main.luau", page.name())),
@@ -212,22 +228,33 @@ fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Re
                 },
             )?;
             for node in h.session.view_nodes() {
-                assert_eq!(
-                    node.action.as_deref(),
-                    Some("view.open"),
+                assert!(
+                    matches!(
+                        node.action.as_deref(),
+                        None | Some("view.open" | "calendar_month")
+                    ),
                     "no hidden device/update/playback executor"
                 );
             }
             assert_eq!(
-                h.session.view_nodes().len(),
-                2,
-                "two other available pages; Today is unimplemented"
+                h.session
+                    .view_nodes()
+                    .iter()
+                    .filter(|node| node.action.is_some())
+                    .count(),
+                if page == Page::Today { 5 } else { 3 },
+                "three other core pages, plus two calendar controls on Today"
             );
             assert!(
                 h.session
                     .resource_counts()
                     .split_whitespace()
-                    .any(|part| part == "sources=6"),
+                    .any(|part| part
+                        == if page == Page::Today {
+                            "sources=7"
+                        } else {
+                            "sources=6"
+                        }),
                 "four selected-page modules plus two shared root image snapshots"
             );
             let frame = h.render()?;
@@ -296,6 +323,7 @@ fn dashboard_source_wakes_keep_last_good_data_and_drop_with_page() -> Result<()>
             page,
             source.clone(),
             None,
+            None,
             true,
         )?;
         let (tx, rx) = mpsc::channel();
@@ -329,5 +357,177 @@ fn dashboard_source_wakes_keep_last_good_data_and_drop_with_page() -> Result<()>
             "page/projector/subscription must not keep source alive"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn today_uses_published_calendar_identity_and_keeps_unknown_and_empty_distinct() -> Result<()> {
+    let mut data = fixture("calendar");
+    let original = data["events"]["order"].as_array().unwrap().clone();
+    let projection = view(Page::Today, data.clone(), Some(fixture("weather"))).project();
+    let Value::List(rows) = &projection["dashboard.rows"] else {
+        panic!("agenda rows")
+    };
+    assert_eq!(
+        rows.iter().map(|r| r["id"].clone()).collect::<Vec<_>>(),
+        original
+    );
+    assert_eq!(
+        projection["dashboard.heading"],
+        Value::Text("Upcoming events".into())
+    );
+    data["events"] = json!({"items":{},"order":[]});
+    data["configured"] = json!(false);
+    let projection = view(Page::Today, data.clone(), None).project();
+    assert_eq!(
+        projection["dashboard.detail"],
+        Value::Text("Calendar is not configured".into())
+    );
+    data["configured"] = json!(true);
+    let projection = view(Page::Today, data.clone(), None).project();
+    assert_eq!(
+        projection["dashboard.detail"],
+        Value::Text("No upcoming events".into())
+    );
+    data["events"]["order"] = json!(["missing"]);
+    assert!(checked("dashboard.calendar", &data).is_err());
+    Ok(())
+}
+
+#[test]
+fn today_clock_and_secondary_source_drop_with_page_and_preserve_browsed_month() -> Result<()> {
+    let clock = Arc::new(FakeSource::new(
+        json!({"clock":"10:00","date":{"year":2024,"month":2,"day":29}}),
+    )?);
+    let weather = Arc::new(FakeSource::new(fixture("weather"))?);
+    let weak_clock = Arc::downgrade(&clock);
+    let weak_weather = Arc::downgrade(&weather);
+    let page = Dashboard::new(
+        Page::Today,
+        Arc::new(FakeSource::new(fixture("calendar"))?),
+        Some(weather.clone()),
+        true,
+    )
+    .with_clock(Some(clock.clone()));
+    let stores = bead::core::Stores::default().reconcile(&BTreeMap::from([
+        ("calendar.initialized".into(), Value::Bool(true)),
+        ("calendar.follow_today".into(), Value::Bool(false)),
+        ("calendar.year".into(), Value::Number(2023.)),
+        ("calendar.month".into(), Value::Number(12.)),
+    ]))?;
+    let values = page.project_with_stores(&stores);
+    assert_eq!(values["dashboard.clock"], Value::Text("10:00".into()));
+    assert_eq!(values["calendar.today"], Value::Text("2024-02-29".into()));
+    assert!(
+        !values.contains_key("calendar.month"),
+        "clock cannot reset a browsed month"
+    );
+    assert!(!values.contains_key("calendar.year"));
+    weather.disconnect()?;
+    assert_eq!(
+        page.project_with_stores(&stores)["dashboard.stale"],
+        Value::Bool(true)
+    );
+    let subscriptions = page.subscribe(Arc::new(|_| {}))?;
+    drop(clock);
+    drop(weather);
+    drop(subscriptions);
+    drop(page);
+    assert!(weak_clock.upgrade().is_none());
+    assert!(weak_weather.upgrade().is_none());
+    Ok(())
+}
+
+#[test]
+fn today_calendar_navigation_and_agenda_scrolling_use_real_input() -> Result<()> {
+    use bead_test::Input;
+    let mut data = fixture("calendar");
+    data["events"]["items"] = json!({});
+    data["events"]["order"] = json!([]);
+    for i in 0..40 {
+        let id = format!("event-{i}");
+        data["events"]["items"][&id] = json!({"title":format!("Event {i}"),"start":1800000000+i,"time":"08:00","date":"2027-01-15"});
+        data["events"]["order"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(id));
+    }
+    let mut model = view(Page::Today, data, None).project();
+    model.extend(BTreeMap::from([
+        ("calendar.initialized".into(), Value::Bool(true)),
+        ("calendar.ready".into(), Value::Bool(true)),
+        ("calendar.today".into(), Value::Text("2024-02-29".into())),
+        ("calendar.year".into(), Value::Number(2024.)),
+        ("calendar.month".into(), Value::Number(2.)),
+    ]));
+    let mut h = Harness::load(
+        &root(),
+        Path::new("dashboard/today/main.luau"),
+        &root().join("palette.json"),
+        model,
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.,
+        },
+    )?;
+    h.render()?;
+    let next = h
+        .session
+        .view_nodes()
+        .iter()
+        .find(|n| n.label == "Next month")
+        .ok_or("next month")?;
+    let r = bead::ui::rect(&next.draw);
+    h.script([Input::Click {
+        x: r.x + r.w / 2.,
+        y: r.y + r.h / 2.,
+    }])?;
+    assert_eq!(
+        h.session.stores.get("calendar.month"),
+        Some(&Value::Number(3.))
+    );
+    assert_eq!(
+        h.session.stores.get("calendar.today"),
+        Some(&Value::Text("2024-02-29".into()))
+    );
+    let previous = h
+        .session
+        .view_nodes()
+        .iter()
+        .find(|n| n.label == "Previous month")
+        .ok_or("previous month")?;
+    let r = bead::ui::rect(&previous.draw);
+    h.script([Input::Click {
+        x: r.x + r.w / 2.,
+        y: r.y + r.h / 2.,
+    }])?;
+    assert_eq!(
+        h.session.stores.get("calendar.month"),
+        Some(&Value::Number(2.))
+    );
+    let scroll = h
+        .session
+        .view_nodes()
+        .iter()
+        .find(|n| n.scroll_store.as_deref() == Some("dashboard.agenda.scroll.y"))
+        .ok_or("agenda scrolling")?;
+    let r = bead::ui::rect(&scroll.draw);
+    h.script([Input::Scroll {
+        x: r.x + r.w / 2.,
+        y: r.y + r.h / 2.,
+        delta: 200.,
+    }])?;
+    assert!(
+        matches!(h.session.stores.get("dashboard.agenda.scroll.y"),Some(Value::Number(value)) if *value>0.)
+    );
+    // Calendar/date/palette is presentation only; events cannot execute labels.
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .filter_map(|n| n.action.as_deref())
+            .all(|a| matches!(a, "view.open" | "calendar_month"))
+    );
     Ok(())
 }

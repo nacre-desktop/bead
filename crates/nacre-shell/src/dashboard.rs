@@ -15,24 +15,41 @@ use std::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
+    Today,
     Weather,
     Media,
     System,
 }
 impl Page {
-    pub const ALL: [Self; 3] = [Self::Weather, Self::Media, Self::System];
+    pub const ALL: [Self; 4] = [Self::Today, Self::Weather, Self::Media, Self::System];
     pub fn name(self) -> &'static str {
         match self {
+            Self::Today => "today",
             Self::Weather => "weather",
             Self::Media => "media",
             Self::System => "system",
         }
     }
     pub fn topic(self) -> String {
-        format!("dashboard.{}", self.name())
+        format!(
+            "dashboard.{}",
+            if self == Self::Today {
+                "calendar"
+            } else {
+                self.name()
+            }
+        )
+    }
+    pub fn from_view(view: &str) -> Option<Self> {
+        let name = view.strip_prefix("dashboard-")?;
+        Self::ALL.into_iter().find(|page| page.name() == name)
+    }
+    pub fn tab(self) -> usize {
+        Self::ALL.iter().position(|page| *page == self).unwrap_or(0)
     }
     pub fn title(self) -> &'static str {
         match self {
+            Self::Today => "Today",
             Self::Weather => "Weather",
             Self::Media => "Media",
             Self::System => "System",
@@ -48,7 +65,14 @@ pub struct Choice {
 }
 impl Choice {
     pub fn open(&self, page: Page) -> source::Result<Arc<dyn Source>> {
-        self.open_named(&page.topic(), page.name())
+        self.open_named(
+            &page.topic(),
+            if page == Page::Today {
+                "calendar"
+            } else {
+                page.name()
+            },
+        )
     }
     fn open_named(&self, topic: &str, fixture: &str) -> source::Result<Arc<dyn Source>> {
         if let Some(directory) = &self.fixtures {
@@ -69,6 +93,7 @@ pub fn spec(
     palette: Arc<PathBuf>,
     colors: Arc<bead::render::Palette>,
     choice: Choice,
+    owner: Arc<std::sync::OnceLock<Arc<bead::services::Desktop>>>,
     trace: bool,
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
     use bead::render::{Primitive, Rect};
@@ -99,11 +124,18 @@ pub fn spec(
         renderer: bead::render::RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let source = choice.open(page).map_err(|e| e.to_string())?;
-            let updates = if page == Page::System {
+            let secondary = match page {
+                Page::Today => Some(choice.open_named("dashboard.weather", "weather")),
+                Page::System => Some(choice.open_named("dashboard.updates", "updates")),
+                _ => None,
+            }
+            .transpose()
+            .map_err(|e| e.to_string())?;
+            let clock = if page == Page::Today {
+                let desktop = owner.get().cloned().ok_or("bar services not ready")?;
                 Some(
-                    choice
-                        .open_named("dashboard.updates", "updates")
-                        .map_err(|e| e.to_string())?,
+                    Arc::new(bead::source::Clock::attach(desktop).map_err(|e| e.to_string())?)
+                        as Arc<dyn Source>,
                 )
             } else {
                 None
@@ -119,7 +151,13 @@ pub fn spec(
                 .with_trace(trace)
                 .with_frame(attachment, &colors)
                 .and_then(|runtime| {
-                    runtime.with_dashboard(page, source, updates, choice.fixtures.is_some())
+                    runtime.with_dashboard(
+                        page,
+                        source,
+                        secondary,
+                        clock,
+                        choice.fixtures.is_some(),
+                    )
                 })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
@@ -182,9 +220,12 @@ fn invalid() -> source::Error {
     source::Error::new("validation", "invalid dashboard snapshot", false)
 }
 fn checked(topic: &str, data: &Json) -> source::Result<CoreSnapshot> {
-    // Decode only these four published topic payloads. Deserializing the whole
+    // Decode only the selected published dashboard payload types. Deserializing the whole
     // service enum links unrelated device/notification parsers into this view.
     let snapshot = match topic {
+        "dashboard.calendar" => {
+            CoreSnapshot::Calendar(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
         "dashboard.weather" => {
             CoreSnapshot::Weather(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
         }
@@ -208,7 +249,8 @@ fn checked(topic: &str, data: &Json) -> source::Result<CoreSnapshot> {
 pub struct Dashboard {
     page: Page,
     source: Arc<dyn Source>,
-    updates: Option<Arc<dyn Source>>,
+    secondary: Option<Arc<dyn Source>>,
+    clock: Option<Arc<dyn Source>>,
     preview: bool,
 }
 impl Dashboard {
@@ -221,9 +263,31 @@ impl Dashboard {
         Self {
             page,
             source,
-            updates,
+            secondary: updates,
+            clock: None,
             preview,
         }
+    }
+    pub fn with_clock(mut self, clock: Option<Arc<dyn Source>>) -> Self {
+        self.clock = clock;
+        self
+    }
+    pub fn project_with_stores(&self, stores: &bead::core::Stores) -> BTreeMap<String, Value> {
+        let mut values = self.project();
+        if let Some(clock) = &self.clock {
+            values.extend(crate::calendar::Calendar::new(clock.clone()).project(stores));
+            let snapshot = clock.snapshot();
+            let clock = snapshot
+                .data
+                .get("clock")
+                .and_then(Json::as_str)
+                .unwrap_or("—");
+            text(&mut values, "clock", clock, 16);
+            if !snapshot.connected {
+                values.insert("dashboard.stale".into(), Value::Bool(true));
+            }
+        }
+        values
     }
     pub fn subscribe(
         &self,
@@ -232,8 +296,11 @@ impl Dashboard {
         let callback: Callback =
             Arc::new(move |_| notify(bead::wayland::UiEvent::Model(BTreeMap::new())));
         let mut subscriptions = vec![self.source.subscribe(callback.clone())?];
-        if let Some(updates) = &self.updates {
-            subscriptions.push(updates.subscribe(callback)?);
+        if let Some(secondary) = &self.secondary {
+            subscriptions.push(secondary.subscribe(callback.clone())?);
+        }
+        if let Some(clock) = &self.clock {
+            subscriptions.push(clock.subscribe(callback)?);
         }
         Ok(subscriptions)
     }
@@ -261,6 +328,7 @@ impl Dashboard {
             ),
             ("dashboard.detail".into(), Value::Text(String::new())),
             ("dashboard.metric".into(), Value::Text("—".into())),
+            ("dashboard.clock".into(), Value::Text("—".into())),
             ("dashboard.rows".into(), Value::list(Vec::new())),
             ("dashboard.secondary".into(), Value::list(Vec::new())),
             (
@@ -272,7 +340,9 @@ impl Dashboard {
                 Value::Text(String::new()),
             ),
         ]);
-        if let Some(updates) = &self.updates {
+        if self.page == Page::System
+            && let Some(updates) = &self.secondary
+        {
             let update = updates.snapshot();
             if let Ok(CoreSnapshot::Updates(s)) = checked("dashboard.updates", &update.data) {
                 if s.health.available
@@ -301,10 +371,43 @@ impl Dashboard {
                 );
             }
         }
+        if self.page == Page::Today {
+            if let Some(source) = &self.secondary {
+                let weather = source.snapshot();
+                if let Ok(CoreSnapshot::Weather(s)) = checked("dashboard.weather", &weather.data) {
+                    if s.health.available
+                        && let Some(c) = s.current
+                    {
+                        text(
+                            &mut out,
+                            "summary",
+                            &format!(
+                                "{}  {} · {}",
+                                number(c.temperature, "°"),
+                                c.description,
+                                c.location
+                            ),
+                            96,
+                        );
+                    } else {
+                        text(&mut out, "summary", "Weather unavailable", 96);
+                    }
+                    out.insert(
+                        "dashboard.stale".into(),
+                        Value::Bool(s.health.stale || !weather.connected),
+                    );
+                } else {
+                    text(&mut out, "summary", "Weather unavailable", 96);
+                }
+            } else {
+                text(&mut out, "summary", "Weather unavailable", 96);
+            }
+        }
         let Ok(data) = checked(&self.page.topic(), &snapshot.data) else {
             return out;
         };
         let health = match &data {
+            CoreSnapshot::Calendar(s) => &s.health,
             CoreSnapshot::Weather(s) => &s.health,
             CoreSnapshot::Media(s) => &s.health,
             CoreSnapshot::System(s) => &s.health,
@@ -313,12 +416,37 @@ impl Dashboard {
         out.insert("dashboard.ready".into(), Value::Bool(health.available));
         out.insert(
             "dashboard.stale".into(),
-            Value::Bool(health.stale || !snapshot.connected),
+            Value::Bool(
+                health.stale
+                    || !snapshot.connected
+                    || out.get("dashboard.stale") == Some(&Value::Bool(true)),
+            ),
         );
         if !health.available {
             return out;
         }
         match data {
+            CoreSnapshot::Calendar(s) => {
+                text(&mut out, "heading", "Upcoming events", 48);
+                text(
+                    &mut out,
+                    "detail",
+                    if s.configured {
+                        if s.events.order.is_empty() {
+                            "No upcoming events"
+                        } else {
+                            ""
+                        }
+                    } else {
+                        "Calendar is not configured"
+                    },
+                    80,
+                );
+                let rows = s.events.order.iter().filter_map(|id| s.events.items.get(id).map(|e| json!({
+                    "id":id,"label":line(&e.title,64),"value":line(&e.time,24),"detail":line(&e.date,24)
+                }))).collect();
+                out.insert("dashboard.rows".into(), Value::list(rows));
+            }
             CoreSnapshot::Weather(s) => {
                 let Some(current) = s.current else {
                     out.insert("dashboard.ready".into(), Value::Bool(false));

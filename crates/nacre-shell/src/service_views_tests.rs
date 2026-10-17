@@ -381,6 +381,11 @@ fn legacy_state_distinguishes_named_views_on_one_host() -> Result<()> {
         ("bluetooth", true, false, "bluetooth"),
         ("battery", true, false, "battery"),
         ("calendar", false, false, ""),
+        ("dashboard-today", true, false, ""),
+        ("dashboard-weather", true, false, ""),
+        ("dashboard-media", true, false, ""),
+        ("dashboard-system", true, false, ""),
+        ("dashboard-media", false, false, ""),
     ] {
         let (reply, received) = std::sync::mpsc::sync_channel(1);
         runtime.stage(UiEvent::Remote(std::sync::Arc::new(Remote {
@@ -408,6 +413,9 @@ fn legacy_state_distinguishes_named_views_on_one_host() -> Result<()> {
                 .and_then(serde_json::Value::as_str)
                 .ok_or("legacy state should be JSON text")?,
         )?;
+        let page = crate::dashboard::Page::from_view(view);
+        assert_eq!(state["dashboard"], open && page.is_some());
+        assert_eq!(state["tab"], page.map(|p| p.tab()).unwrap_or(0));
         assert_eq!(state["launcher"], launcher);
         assert_eq!(state["edgeMenu"], edge);
         assert_eq!(state["bead"]["panelOpen"], open);
@@ -420,7 +428,8 @@ fn legacy_state_distinguishes_named_views_on_one_host() -> Result<()> {
                 "calendar",
                 "network-status",
                 "bluetooth-status",
-                "battery-status"
+                "battery-status",
+                "dashboard"
             ])
         );
     }

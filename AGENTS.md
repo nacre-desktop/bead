@@ -111,3 +111,9 @@
   Continue typing between independent work. STOP for review after the first
   dashboard pages or a needed decision. Optional preview system-bus reads for
   network/Bluetooth/battery are authorized READ-ONLY; no live UI/writes/install.
+
+- Owner continuation2026-10-17: first dashboard pages accepted at8558bd6.
+  Continue remaining lazy dashboard pages with concrete per-page decoding;
+  same25MiB ceiling/24.5MiB stop line. Adopt revised migration schemas only
+  after publication and green CI. Keep typing work between independent work.
+  STOP when dashboard is complete or a needed owner decision; no live permission.

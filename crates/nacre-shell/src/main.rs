@@ -623,6 +623,7 @@ fn start(
                         client: _ui_provider.clone(),
                         fixtures: dashboard_fixtures.clone(),
                     },
+                    desktop_owner.clone(),
                     panel_trace,
                 )?,
             );

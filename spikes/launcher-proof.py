@@ -23,6 +23,10 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     core_views=os.environ.get('BEAD_CORE_VIEWS_PROOF')=='1'
     status_views=os.environ.get('BEAD_CORE_STATUS_PROOF')=='1'
     dashboard_views=os.environ.get('BEAD_DASHBOARD_VIEWS_PROOF')=='1'
+    dashboard_pages=os.environ.get('BEAD_DASHBOARD_PAGES','weather,media,system').split(',')
+    assert dashboard_pages and len(set(dashboard_pages))==len(dashboard_pages) and all(p in ['today','weather','media','system'] for p in dashboard_pages)
+    dashboard_default=os.environ.get('BEAD_DASHBOARD_DEFAULT_VIEW','system')
+    assert dashboard_default in dashboard_pages
     release_state=os.environ.get('BEAD_PANEL_IDLE_STATE')=='release'
     query_on_open=os.environ.get('BEAD_LAUNCHER_QUERY_ON_OPEN')=='1'
     expected_query_rows=os.environ.get('BEAD_EXPECT_QUERY_ROWS')
@@ -218,8 +222,8 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 hover_views=['calendar','sound']+(['network','bluetooth','battery']if status_views else[])
                 sequence=['calendar','sound','launcher']+(['network','bluetooth','battery']if status_views else[])
                 if dashboard_views:
-                    hover_views+=['dashboard-system']
-                    sequence+=['dashboard-weather','dashboard-media','dashboard-system']
+                    hover_views+=['dashboard-'+dashboard_default]
+                    sequence+=['dashboard-'+page for page in dashboard_pages]
                 for view in hover_views:
                     regions=call('state')['prepare_views']
                     r=next(r for r in regions if r['view']==view)
@@ -246,7 +250,11 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     presented=matrix.wait_log(log,lambda t:dashboard_presented(t[offset:],view.removeprefix('dashboard-'))if view.startswith('dashboard-')else committed_and_presented(t[offset:]))
                     legacy=json.loads(call('state',target='nacre'))
                     assert legacy['launcher']==(view=='launcher')
-                    assert legacy['edgeMenu']==(''if view=='launcher'else view)
+                    if view.startswith('dashboard-') and os.environ.get('BEAD_DASHBOARD_LEGACY_STATE')=='1':
+                        assert legacy['dashboard'] and legacy['edgeMenu']==''
+                        assert legacy['tab']==['today','weather','media','system'].index(view.removeprefix('dashboard-'))
+                    else:
+                        assert legacy['edgeMenu']==(''if view=='launcher'else view)
                     if cycle<len(sequence):
                         time.sleep(.3)  # Inspect the settled visual, not an animation's first pose.
                         subprocess.run(['grim',str(raw/(view+'.png'))],env=env,capture_output=True,check=True,timeout=10)
@@ -306,11 +314,29 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     closed=closed_guard()
                     result['service_views']['cycles'].append({'cycle':cycle,'view':view,'warm':warm,'closed':closed,'command_to_first_present_ms':(presented-began)/1e6,'close_presented_ns':closed_presented,'close_method':close_method,'open_method':'bar pointer'if view in ['network','bluetooth','battery']and os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1'else'private IPC'})
                     (raw/'service-view-progress.json').write_text(json.dumps(result['service_views'],indent=2)+'\n')
+                if dashboard_views and os.environ.get('BEAD_DASHBOARD_LEGACY_STATE')=='1':
+                    result['dashboard_legacy']=[]
+                    for index,page in enumerate(['today','weather','media','system']):
+                        offset=len(matrix.log_text(log))
+                        call('tab',str(index),target='nacre')
+                        state_wait(lambda state:state['view']=='dashboard-'+page and state['target_open'] and state['prepared'])
+                        matrix.wait_log(log,lambda text:dashboard_presented(text[offset:],page))
+                        state=json.loads(call('state',target='nacre'))
+                        assert state['dashboard'] and state['tab']==index and state['edgeMenu']==''
+                        call('toggle','dashboard',target='drawers')
+                        result['dashboard_legacy'].append({'tab':index,'page':page,'closed':closed_guard()})
+                    offset=len(matrix.log_text(log));call('toggle','dashboard',target='drawers')
+                    state_wait(lambda state:state['view']=='dashboard-today' and state['target_open'] and state['prepared'])
+                    matrix.wait_log(log,lambda text:dashboard_presented(text[offset:],'today'))
+                    call('toggle','dashboard',target='drawers');result['dashboard_toggle_closed']=closed_guard()
+                    call('tab','4',target='nacre',ok=False)
+                    call('tab','-1',target='nacre',ok=False)
+                    assert not call('state')['target_open'],'unsupported tab changed visibility'
                 # Deliberately retire an unprepared worker; only the final epoch
                 # may commit. No stale-result acceptance or relaxed marker test.
                 offset=len(matrix.log_text(log))
                 rapid=['calendar','sound','network','bluetooth','battery','calendar','launcher']if status_views else['calendar','sound','calendar','launcher']
-                if dashboard_views:rapid[-1:-1]=['dashboard-weather','dashboard-media','dashboard-system']
+                if dashboard_views:rapid[-1:-1]=['dashboard-'+page for page in dashboard_pages]
                 for view in rapid:
                     call('open',view)
                 state_wait(lambda s:s['view']=='launcher' and s['target_open'] and s['prepared'])

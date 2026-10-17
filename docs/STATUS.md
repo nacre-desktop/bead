@@ -1,6 +1,13 @@
 # Status
 
-## 2026-10-17 — First dashboard pages ready for review
+## 2026-10-17 — Today dashboard candidate under memory validation
+
+Local draft adds lazy Today/calendar, all four core tab links and legacy tab/
+drawer routing. Concrete CalendarState decoding keeps unrelated services out.
+234 workspace tests, fmt/Clippy, CPU-only/release and52 Luau modules pass.
+The two Today goldens are new; the prior six remain byte-identical.
+Native lifecycle/memory acceptance is PENDING; do not publish this draft yet.
+
 
 The 1 h 50 min investigation resolved the memory stop. Keep the 25 MiB UI
 ceiling and 24.5 MiB stop line: full 20-cycle proofs settle at 23.603 MiB on
@@ -32,8 +39,10 @@ not physical 120 Hz evidence. Report-mode timing history adds diagnostic bytes.
 
 ## Stop point and dependencies
 
-STOP after these first pages for owner review. QML remains the daily driver.
-No more pages, Feature 11, live tests, config/unit/keybinding changes or deployment.
+Owner accepts first pages at8558bd6 and authorizes remaining lazy dashboard
+pages plus typing work between. Today/calendar is the next bounded page.
+STOP at completed dashboard or a needed decision. QML remains daily driver;
+no live tests, config/unit/keybinding changes or deployment.
 Owned captures are stopped; no desktop job/slot. Core pin c2b26d98 is published
 and fully green; reserved topics are not hosting. Revised compatibility/OSD
 additions remain unpublished and unadopted; wait for publication and green CI.

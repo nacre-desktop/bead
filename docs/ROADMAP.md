@@ -6,8 +6,8 @@ core-switch route. QML stays daily driver; no live switch or installation.
 Owner accepted the recovery/static-text resident cost and revised memory policy.
 The owner parks remaining device controls for migration schemas before F4 and
 implementation after F4. Dashboard C is authorized now: exact attached/popout
-placement and joined frame first, then first lazy pages, with typing between.
-STOP after those first pages with measurements and an updated core forecast.
+placement and joined frame first, then lazy dashboard pages, with typing between. First pages accepted at8558bd6;
+continue the remaining dashboard, stopping at completion or a needed decision.
 The desktop validation plan is on hold. IME/screen-reader work beyond existing
 coverage is deferred to public release. Historical6b nested pacing/idle concerns
 remain open; CPU small views/GL large animated surfaces remains the renderer policy.
@@ -76,9 +76,11 @@ QML remains daily driver until a separately accepted switch. Order:
    media/system from advertised daemon contracts, other unavailable contracts
    through explicitly selected fixtures shaped like upcoming schemas. Each
    page loads lazily and releases after close, including payloads/subscriptions.
-   Keep typing work going between independent work. STOP after the first pages
-   for review or a needed decision; this does not authorize the full Feature11
-   remainder or later features. Optional preview system-bus device reads are
+   First pages accepted at8558bd6: continue remaining lazy dashboard pages,
+   using concrete page payload decoders and revised schemas only when green.
+   Keep typing work going between independent work. STOP at dashboard completion
+   or a needed decision; later features remain unauthorized. Optional preview
+   system-bus device reads are
    read-only, not live UI testing or a write/installation permission.
 
 Owner memory policy (2026-10-17) replaces the per-feature0.5MiB allowance.

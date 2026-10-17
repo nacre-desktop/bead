@@ -181,6 +181,20 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
+    if call.target == "nacre" && call.method == "tab" {
+        validate(&call)?;
+        let page = call.args[0]
+            .as_u64()
+            .and_then(|index| usize::try_from(index).ok())
+            .and_then(|index| crate::dashboard::Page::ALL.get(index))
+            .ok_or_else(|| {
+                Reply::error(call.id, "unavailable", "dashboard tab is not implemented")
+            })?;
+        call.target = "bead.panel".into();
+        call.method = "open".into();
+        call.args = vec![Value::String(format!("dashboard-{}", page.name()))];
+        return Ok(call);
+    }
     if call.target == "nacre"
         && matches!(call.method.as_str(), "popout" | "controls")
         && call
@@ -252,6 +266,29 @@ fn fixture_catalog() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn core_dashboard_tab_routes_keep_canonical_indices_and_refuse_extras() {
+        for (index, page) in crate::dashboard::Page::ALL.into_iter().enumerate() {
+            let call = from_strings("nacre".into(), "tab".into(), &[index.to_string()]).unwrap();
+            let mapped = map_views(call).unwrap();
+            assert_eq!(mapped.target, "bead.panel");
+            assert_eq!(mapped.method, "open");
+            assert_eq!(
+                mapped.args,
+                vec![Value::String(format!("dashboard-{}", page.name()))]
+            );
+            assert_eq!(
+                crate::dashboard::Page::from_view(mapped.args[0].as_str().unwrap()),
+                Some(page)
+            );
+            assert_eq!(page.tab(), index);
+        }
+        for index in ["-1", "4", "12", "9223372036854775807"] {
+            let call = from_strings("nacre".into(), "tab".into(), &[index.into()]).unwrap();
+            assert!(map_views(call).is_err());
+        }
+        assert_eq!(crate::dashboard::Page::from_view("dashboard-unknown"), None);
+    }
     #[test]
     fn calendar_view_keeps_the_audited_legacy_center_and_launcher_routes() {
         let call = from_strings(
