@@ -1,62 +1,54 @@
 # Status
 
-## 2026-10-17 — Today dashboard candidate under memory validation
+## 2026-10-17 — Four core dashboard tabs measured
 
-Local draft adds lazy Today/calendar, all four core tab links and legacy tab/
-drawer routing. Concrete CalendarState decoding keeps unrelated services out.
-234 workspace tests, fmt/Clippy, CPU-only/release and52 Luau modules pass.
-The two Today goldens are new; the prior six remain byte-identical.
-Native lifecycle/memory acceptance is PENDING; do not publish this draft yet.
+Today/calendar completes the four core tab presentations and navigation.
+Clock shares the bar's hosted Source; events use concrete CalendarState and
+Weather a scoped Source. Page bundles, state, subscriptions and rasters release
+after closed + idle. Legacy tab 0–3 / drawer toggle and dashboard state work.
+Explicit labeled fixtures supply preview data; unadvertised real topics remain
+unavailable. No player/backend or extra daemon capability is invented.
+[Measured report](research/feature9-gate-d.md#four-core-dashboard-tabs--measured-continuation-2026-10-17).
 
+Five alternating pairs per compositor pass never-opened, once-opened and
+repeated-open phases. Repeated settled medians H 22.098 → 22.742 / N 22.672 →
+23.264 MiB; paired increases +0.644 / +0.592 MiB. File +0.339 / +0.367 and
+anonymous +0.223 / +0.156 MiB paired component medians, shared unchanged.
+Components need not add. Clean executable pages explain most file growth;
+exact smaller anonymous allocation attribution is unproved, below 1 MiB.
+Startup paired changes fit control spread; no eager page bundle remains.
 
-The 1 h 50 min investigation resolved the memory stop. Keep the 25 MiB UI
-ceiling and 24.5 MiB stop line: full 20-cycle proofs settle at 23.603 MiB on
-Hyprland / 24.158 MiB on niri. All 306 focused/full close and settled samples
-fit own bar + 5 MiB; SwapPss is zero. No live desktop or installation changed.
-[Measured report](research/feature9-gate-d.md#first-dashboard-pages--memory-resolved-2026-10-17).
+Full native20 settles H 23.686 / N 24.455 MiB. All 376 close/settled samples
+fit own-bar + 5 MiB / 25 MiB, all settled endpoints below 24.5; SwapPss 0.
+The ceiling stays 25 MiB; niri has only 46 KiB before the stop line. Closed
+state returns to 5 sources / 1 watcher / 1 subscription / 502,024 Luau bytes.
+Caches: 194,403 / 195,628 B; joined-frame SHM 542,592 B unchanged. Nested CPU,
+shared host; DRM null and refresh 0 are unknown, not physical 120 Hz evidence.
+Owned UI/helper and exact task-environment process audits return zero.
 
-Page lifetimes already release correctly. Decode four dashboard payload types
-directly, keeping identical validation, instead of linking every service parser.
-The binary shrinks 666,848 B; text shrinks 518,272 B. Five alternating pairs per
-compositor pass never-opened, first-open, warm and closed memory gates. Median
-paired post-use changes are -0.443 / -0.325 MiB; no typing gain is claimed.
-Source a818efe matches validated 3666f8b for Rust/UI/scripts/proofs/lockfile.
-Original prototypes and unsuccessful/interrupted trials remain preserved.
-
-Lazy Weather, enrichment-only Media, and process/disk System with Updates use
-explicit labeled fixtures; unadvertised real capabilities stay unavailable.
-All 230 workspace tests, trace, fmt/Clippy, CPU-only/release and Luau (47 modules)
-checks pass; six scale-1/1.5 PNG goldens are unchanged. Private preview covers
-launcher/notices/pages; native proofs join exact state/commit/presentation.
-Published-head CI: [Actions](https://github.com/nacre-desktop/bead/actions).
-
-Closed state returns to 5 sources, 1 watcher, 1 subscription, 502,024 Luau bytes.
-Cache bytes are 192,609 / 195,632 H/N; panel workers, rasters and SHM release.
-Final file/anonymous/shared MiB: H 15.745/7.164/0.693; N 16.111/6.941/1.105.
-UI + daemon/workers settle at 55.442 / 56.198 MiB, excluding notice UI,
-wallpaper and compositor. Nested shared host; DRM null and refresh 0 are unknown,
-not physical 120 Hz evidence. Report-mode timing history adds diagnostic bytes.
+234 workspace tests, trace, fmt/Clippy, CPU-only/release and 52 Luau modules
+pass. Eight scale-1/1.5 page PNGs include the unchanged prior six. Source
+1eb5cb0 fixes an undeclared Today-only field caught by the exact native proof;
+tests now project from declared defaults. Invalid first run stays preserved.
+Runtime source equals validated 1eb5cb0; harness 6cd8d53. No brush optimization
+ships: its exact-pixel typing screen had mixed CPU direction. Typing 8 ms/key /
+presented p99 16.7 ms remains unaccepted. Published-head CI: [Actions](https://github.com/nacre-desktop/bead/actions).
 
 ## Stop point and dependencies
 
-Owner accepts first pages at8558bd6 and authorizes remaining lazy dashboard
-pages plus typing work between. Today/calendar is the next bounded page.
-STOP at completed dashboard or a needed decision. QML remains daily driver;
-no live tests, config/unit/keybinding changes or deployment.
-Owned captures are stopped; no desktop job/slot. Core pin c2b26d98 is published
-and fully green; reserved topics are not hosting. Revised compatibility/OSD
-additions remain unpublished and unadopted; wait for publication and green CI.
-helper.execute dashboard-data ["read"] is observational; Media needs caller
-metadata and System is standalone. No player, sampler or backend is invented.
-Device hosting is post-F4; the Reader trim API remains unpublished.
+Stop at this completed core-page checkpoint / optional-extras scope decision.
+Optional tabs, customization/QML behavior and real provider hosting are not
+claimed complete. QML stays daily driver; no later feature, live test, install,
+config/unit/keybinding change or desktop job/slot. One-command private preview
+is prepared with the immutable bundle and explicit fixtures; not run live.
+Protocol c2b26d98 stays pinned: revised compatibility/OSD schemas and Reader trim
+remain unpublished. Adopt only published full-green revisions. Runtime hosting
+follows F4. helper.execute is the actual method; no guessed RPC/player/sampler.
 
-Typing stays unaccepted: prior UI 9.963 / 10.922 ms/key, presented p99
-30.886 / 31.562 ms H/N; targets 8 ms / 16.7 ms. Keep the 29.61 → 32.66%
-regression, 6b pacing/idle invariance, long chaos, reader/cache gaps, matched
-QML dashboard comparison and binary-name clash open. CPU for small panels;
-GL for large animation (~20 MiB Mesa residue). Core forecast remains 40–81
-eight-hour agent-days (320–648 task hours), practical 3–8 calendar weeks at
-assumed 16–20 task hours/day including waits. Providers/workers, hardware,
-session/wallpaper and packaging dominate uncertainty; complete-core idle
-90–150 MiB is an estimate. Full-parity historical range: 102–207 days / 7–18
-weeks. IME/screen-reader work beyond current coverage remains deferred.
+Keep typing regression 29.61 → 32.66%, 6b pacing/idle, long chaos, reader/cache
+gaps, matched QML dashboard comparison and binary-name clash open. CPU small
+views / GL large animation keeps the ~20 MiB Mesa-residue policy. Core forecast
+remains 40–81 eight-hour agent-days (320–648 task hours), practical 3–8 calendar
+weeks at 16–20 task hours/day availability plus contract/hardware gates.
+Providers/workers, hardware, session/wallpaper and packaging dominate risk;
+full-core idle 90–150 MiB is an estimate. Further IME/reader work is deferred.

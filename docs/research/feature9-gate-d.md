@@ -6,10 +6,145 @@ allowed. The earlier single physical Gate C authorization was consumed.
 Nacre and Orient remain read-only except additive nacre-protocol work through
 Nacre CONTRIBUTING. Owner resumed Features9–10 after Foundation F5.
 Gate E targets the core switch. The owner's 2026-10-17 update parks remaining
-device controls and authorizes the first dashboard subset below. QML remains
-the daily driver; live validation is held.
+device controls and authorizes dashboard work. First pages at 8558bd6 are
+reviewed; remaining lazy pages and typing work continue under the same memory
+policy. Stop at dashboard completion or a needed decision. QML remains the
+daily driver; live validation is held.
 
 
+
+## Four core dashboard tabs — measured continuation, 2026-10-17
+
+Owner reviewed the first pages at 8558bd6 and authorized the remainder under
+unchanged 25 MiB UI / 24.5 MiB stop / own-bar + 5 MiB close limits. Today now adds the
+existing hosted Clock Source, calendar month navigation and a scrollable agenda.
+Events decode only the published CalendarState; Weather is a scoped secondary
+Source. Both release with the page after the existing 2.2 s closed grace. No new
+backend, polling timer, settings writer, parser/ranker or dependency is added.
+All four core tabs navigate; the bar opens Today. Existing nacre tab 0..3 and
+drawers toggle dashboard routes now select/close those views, and state reports
+the actual dashboard/tab instead of constant false/0. Unsupported extras remain
+unavailable. This is UI capability, not a daemon topic/hosting advertisement.
+
+Calendar, Weather, Media enrichment, System and Updates use explicitly selected,
+visibly labeled fixtures or capability-gated unavailable Sources. Published c2
+still advertises none of these reserved dashboard topics. Clock shares the bar's
+existing provider; it creates no second service. Media is enrichment-only, not
+MPRIS/player discovery or transport. Real helpers remain helper.execute, not
+helper.run; no current-player source or standalone system sampler is invented.
+Revised compatibility/OSD schemas remain unpublished at the final pin check.
+
+Validated source 1eb5cb0; harness 6cd8d53. CPU release 5e8ef1d, 24,509,848 B versus
+accepted narrow 3666f8b 24,472,376 B: +37,472 B (text +30,080 B, rodata +576 B;
+data/bss unchanged). Concrete per-page decoding remains in place. The first
+native 61cec90 trial correctly failed Weather's exact presentation proof because
+its shared projection emitted an undeclared Today-only clock field. Fix 1eb
+emits it only for Today; source-wakeup tests now start from declared page defaults,
+so injected fixture keys cannot mask this class of error. No timeout, marker,
+source_error or expected-output relaxation. The invalid trial remains preserved.
+
+### Five alternating residency pairs on each compositor
+
+Both arms use the same frozen 75157 helper/320-app catalog and output/scale.
+Fixed 35/55/75 s endpoints cover never opened, four open/close slots and eight
+reopen/close slots, with at least 30 s idle per phase. Control visits Weather,
+Media, System, Weather; candidate visits Weather, Media, System, Today. This
+matches open counts/ages while explicitly measuring a new page's feature cost.
+The shared pages retain identical fixtures. No pure-optimization claim follows.
+
+| UI MiB; before → candidate marginal medians | Hyprland | niri |
+| --- | ---: | ---: |
+| Never opened |21.800 → 21.826|22.968 → 22.957|
+| Opened/closed once |21.930 → 22.509|22.604 → 23.080|
+| Repeated opens/closes |22.098 → 22.742|22.672 → 23.264|
+| Repeated: paired median delta / control spread |+0.644 /0.243|+0.592 /0.503|
+| Never: paired median delta / control spread |−0.013 /0.270|−0.029 /0.325|
+
+There is no demonstrated startup increase beyond control spread. Post-use paired
+component medians are file +0.339 / +0.367 MiB, anonymous +0.223 / +0.156 MiB, shared 0/0
+H/N. Component medians need not sum to total paired medians. First-pair mapping
+analysis identifies clean executable-backed pages as most of the file increase;
+writable executable residency is unchanged. Additional existing code/data gets
+touched by the page and routing, so resident growth can exceed binary growth.
+Exact allocation/callsite attribution for the smaller anonymous residual is
+unproved; it remains below 1 MiB. Tracked page bundles, subscriptions, caches and
+buffers release; kernel residency is reported separately rather than declared0.
+Candidate settled ranges after repeated opens H 22.615–22.781 / N 23.166–23.392 MiB.
+
+### Full lifecycle proof and limits
+
+The original native20 workload also includes two unused preparations, three
+64-row launcher edits, quick reopen, all service views, pointer/Escape/IPC close,
+rapid stale retirement and now all four legacy tab/toggle routes. Each requested
+page joins its state, committed update and presentation feedback. Two complete
+candidate confirmations, not another five-pair workload:
+
+| UI memory, MiB | Hyprland | niri |
+| --- | ---: | ---: |
+| Final settled |23.686|24.455|
+| Maximum closed |23.744|24.437|
+| Maximum close/settled over own bar |2.267|1.539|
+| Final file /anonymous /shared |15.785 /7.207 /0.693|15.990 /7.359 /1.105|
+
+All 300 matrix and 76 native close/settled observations pass (376 total); every
+settled endpoint is below 24.5 MiB, every close fits own-bar + 5 MiB and 25 MiB, SwapPss 0.
+The 25 MiB ceiling is unchanged; niri has only 46 KiB before the stop line in the
+heavier workload. Final tracked caches 194,403 / 195,628 B H/N and unchanged joined
+frame SHM 542,592 B remain; bar returns 5 sources / 1 watcher / 1 subscription / 502,024 Luau B.
+No page-owned warm bundle, worker, raster, lease or panel SHM stays resident.
+Owned UI/helper and inherited task-environment process audits return 0.
+
+Nested CPU, 2880×1800/scale 1.5, H virtual 120 / N configured 60. DRM counter is null and feedback
+refresh 0 is unknown; this is not physical 120 Hz acceptance. Shared host contention
+is uncontrolled; only light editing/Git/brain work overlaps, no own builds/tests
+or second capture. Warm content is different for the new Today slot, not a QML
+parity/performance comparison. Matched QML dashboard measurement remains open.
+Raw ignored dashboard-today-five (assessment/ELF/smaps/process audit) and
+dashboard-today-native20 preserve all valid cells; invalid-clock v1 is separate.
+
+234 workspace tests, isolated trace checks, fmt/all-feature Clippy, CPU-only and
+release builds and 52-module Luau check pass. Eight scale 1/1.5 PNG goldens include
+two new Today images; the prior six are byte-identical. Tests cover canonical
+calendar transcripts, stable IDs, unknown/configured/empty states, source release,
+real month clicks / 40-event scrolling, stale secondary data and legacy tab state.
+The separate same-ELF typing probe below is rejected; no brush change ships.
+
+The four core page presentations are the completed checkpoint. Optional Focus,
+Notifications, Clipboard, Devices, Network, AI usage, Screenshots and Brain tabs,
+customization/remaining QML behavior and real provider hosting are not claimed
+complete; optional-extras scope was asked while the core work proceeded. QML
+stays daily driver, physical validation is held, and later features do not start.
+Forecast remains 40–81 eight-hour agent-days / 320–648 task hours, practical 3–8
+calendar weeks at assumed 16–20 h/day availability plus contract/hardware gates.
+The remaining-parity table counts provider/worker and optional-page work rather
+than extrapolating the quick view port. Prepared one-command nested preview is
+available with the immutable bundle and labeled fixtures; it was not run live.
+
+## Launcher brush reuse — rejected screen 2026-10-17
+
+Continue typing work between dashboard checkpoints. This GPL Luau-only probe
+hoists two immutable selected/hover tint records from each row constructor to
+its module. All component/property validation remains. The same immutable
+Today executable 5e8ef1d and frozen 75157 engine run both bundles; no renderer,
+ranking, payload, native API or persistent cache changes. Grid/results/scrolled
+fixtures remain byte-exact against all three accepted PNGs before timing.
+
+| One 200-key screen pair per compositor | Hyprland before → probe | niri before → probe |
+| --- | ---: | ---: |
+| UI process CPU mean, ms/key |9.306→9.191|10.478→10.625|
+| Presented p99, ms |25.070→30.490|34.447→30.580|
+| Daemon CPU mean, ms/key |4.235→4.449|4.581→4.586|
+| Provider CPU mean, ms/key |1.958→1.934|2.235→2.199|
+
+All 800 key/state/commit/presentation proofs and owned cleanup pass. 320 synthetic
+apps, 64-row ranked replies, same engine; nested Hvirtual 120 / N configured 60 at 2880×1800,
+scale 1.5. Feedback refresh is unknown, not physical 120 Hz. Shared host contention
+uncontrolled; no own builds/tests/other captures overlap. CPU windows include
+background work and are not additive latency components. One pair cannot prove
+spread, a tail regression or a durable CPU gain. Reject the mixed signal before
+five-pair acceptance trials; no optimization is shipped and no memory benefit
+is claimed. Typing 8 ms / 16.7 ms remains unmet. Raw ignored dashboard-brush-screen,
+dashboard-brush-pixels and the immutable candidate are preserved.
 
 ## First dashboard pages — memory resolved, 2026-10-17
 
@@ -2285,7 +2420,7 @@ by the migration agent are dependencies, not a second implementation budget.
 | Finish engine/typing/pacing/idle rails and shell integration |4–8|Prefix queries/reconnect/static text tested; UI CPU/p99, stale queries, N pacing and three-hour lifecycle/chaos remain|
 | Remaining bar/popouts and service views |6–12|Lazy registry/calendar/read-only status tested; full audio/mic/routing/AP/Bluetooth/tray/power contracts, errors and multi-output dismissal remain|
 | Daemon hosting for remaining core services |3–6|Notification ownership/history and audio/tray/power handoff; depends on a later migration phase|
-| Dashboard pages |8–15|MPRIS/artwork/resource/calendar/weather, bounded decode/fetch workers, event/state consistency|
+| Dashboard pages |8–15|Core fixture-backed tab presentations prototyped; live MPRIS/artwork/resource/calendar/weather, optional extras, bounded workers and event consistency remain|
 | Settings/Colors/Welcome/control/session windows |12–24|Schema-driven edits across65 stores, revision errors, forms, shortcuts, previews and restart recovery|
 | Pearls/managed windows |10–20|xdg-toplevel lifetime, detach/dock, geometry/focus/output restoration and compositor placement limits|
 | Static wallpaper/video/effects |10–22|libmpv GPL boundary, decode/GPU copies, frame synchronization, transparency/effects and multi-output cost|
@@ -2411,7 +2546,7 @@ not a second launcher engine or a permanently hidden QML shell.
 |Bar, popouts and service panels|6–12|Registry/calendar/read-only status done; full device actions, service errors and multi-output dismissal remain|
 |Launcher/notification/OSD integration and polish|4–8|Shared activation/copy and same-engine comparison, bounds and transitions|
 |Daemon hosting for core services|3–6|Notification ownership/history and needed bead-services; migration dependency|
-|Dashboard|8–15|Data/fetch/artwork workers, weather/media and bounded idle memory|
+|Dashboard|8–15|Four core tab presentations prototyped; live MPRIS/data/fetch/artwork workers, calendar/weather/updates hosting, optional extras and matched QML remain|
 |Static wallpaper|3–6|Decode worker retirement, one retained output image, multi-output/reload|
 |Hyprlock/session integration|2–4|Existing lock, suspend/resume and failure paths|
 |Basic hardware and sustained validation|4–8|English input, outputs/hotplug,120Hz, suspend and memory/wakeup slope|
@@ -2421,7 +2556,9 @@ not a second launcher engine or a permanently hidden QML shell.
 Total **40–81 agent-days**,320–648 task hours: roughly16–41 active calendar days
 at16–20h/day. Budget about **3–8 calendar weeks** with contract/hardware scheduling,
 conditional on the migration lane and owner-supervised tests. These are additional
-hours from the current checkpoint, not a request to start Feature11.
+hours from the current checkpoint, not authorization for later features or
+a daily-driver switch. The fourth core tab has passed final memory validation;
+the wide range remains because provider/worker integration is still unbuilt.
 
 IME and screen-reader validation move to the later public-release phase for the
 owner's English-only use. Basic key input, editing, repeat, clipboard, focus and

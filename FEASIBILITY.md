@@ -1,5 +1,50 @@
 # Feasibility
 
+## 2026-10-17 — Four core dashboard tabs fit the unchanged ceiling
+
+Today adds a lazy calendar/clock/agenda using concrete published page types.
+All page resources release after closed+idle; kernel residency is measured too.
+Five alternating pairs and both full native proofs pass; keep the25MiB ceiling.
+The smaller typing brush-hoist screen is rejected separately, with no code kept.
+
+| UI MiB; H /N | Before → candidate medians |
+| --- | ---: |
+| Never opened |21.800 → 21.826 /22.968 → 22.957|
+| Once opened/closed |21.930 → 22.509 /22.604 → 23.080|
+| Repeated opens/closes |22.098 → 22.742 /22.672 → 23.264|
+| Repeated paired delta |+0.644 /+0.592|
+| Full native20 final settled |23.686 /24.455|
+
+All376 close/settled observations pass ownbar+5/25 and settled<24.5; SwapPss0.
+Post-use paired file+0.339/+0.367, anonymous+0.223/+0.156MiB, shared unchanged;
+component medians do not add. Clean executable pages explain most file growth;
+exact smaller anonymous attribution remains unproved, below1MiB. Binary+37,472B
+(text+30,080B). Root5sources/Luau502,024B, caches194,403/195,628B, frame SHM542,592B.
+234 tests/fmt/Clippy/CPU-only/release/Luau52 pass; two Today PNGs, prior six exact.
+A real undeclared-field failure is fixed and preserved; no proof relaxation.
+Nested/shared host, no own build/test/capture overlap; DRM/refresh unknown, no
+physical120Hz claim. Real topics/updated schemas unadvertised/unpublished; c2
+pin stays. Optional extras/QML comparison/providers remain. [Report](docs/research/feature9-gate-d.md).
+
+## 2026-10-17 — Launcher brush hoist rejected
+
+A small Luau-only typing probe reused two immutable tint records per module.
+It retained all row/property validation and matched three accepted PNGs exactly.
+The first matched screen has mixed CPU direction, so keep production unchanged.
+
+| One 200-key pair per compositor | Hyprland before → probe | niri before → probe |
+| --- | ---: | ---: |
+| UI CPU mean, ms/key |9.306 → 9.191|10.478 → 10.625|
+| Presented p99, ms |25.070 → 30.490|34.447 → 30.580|
+
+All 800 exact key presentations and owned cleanup pass; same executable and
+frozen 75157 helper, 320 apps / 64-row replies. One pair is neither a spread
+estimate nor evidence of a tail regression. Reject before longer acceptance
+trials; no memory gain or shipped optimization. UI 8 ms / presented 16.7 ms
+remain unmet. Nested H virtual 120 / N 60, scale 1.5; feedback refresh unknown,
+shared-host contention uncontrolled, no own builds/tests/capture overlap.
+Raw ignored dashboard-brush-screen / dashboard-brush-pixels; [report](docs/research/feature9-gate-d.md).
+
 ## 2026-10-17 — Dashboard code cost resolved within the existing ceiling
 
 Lazy page payloads already release after closed+idle; the broad protocol decoder
