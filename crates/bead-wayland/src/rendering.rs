@@ -142,7 +142,12 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
-        if let Err(error) = self.sync_decorations(index) {
+        let decoration_result = if self.surfaces[index].companion {
+            self.sync_all_decorations()
+        } else {
+            self.sync_decorations(index)
+        };
+        if let Err(error) = decoration_result {
             self.fail(error);
             return;
         }

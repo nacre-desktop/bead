@@ -44,6 +44,41 @@ fn tile(canvas: &mut Pixels, rect: Rect, svg: &[u8], scale: f32) -> Result<()> {
     }
     Ok(())
 }
+fn assert_interior(qml: &Pixels, bead: &Pixels, fill: [u8; 4], name: &str) -> Result<()> {
+    let desktop = [0x34, 0x37, 0x3f, 255];
+    let mut wrong = 0usize;
+    for (i, (a, b)) in qml
+        .pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(bead.pixels.as_chunks::<4>().0.iter())
+        .enumerate()
+    {
+        if a == b || (*a != fill && *a != desktop) {
+            continue;
+        }
+        let x = i % qml.width as usize;
+        let y = i / qml.width as usize;
+        if x < 2 || y < 2 || x + 2 >= qml.width as usize || y + 2 >= qml.height as usize {
+            continue;
+        }
+        // A 5x5 solid neighbourhood excludes antialiasing/stroke boundaries.
+        // No amount of whole-output tolerance may hide a stale corner inside it.
+        if (-2..=2).all(|dy| {
+            (-2..=2).all(|dx| {
+                let n = (i as isize + dy * qml.width as isize + dx) as usize;
+                qml.pixels[n * 4..n * 4 + 4] == a[..]
+            })
+        }) {
+            wrong += 1;
+        }
+    }
+    if wrong > 0 {
+        return Err(format!("{name}: {wrong} stable-interior pixels differ from QML").into());
+    }
+    Ok(())
+}
 #[test]
 fn all_popout_and_launcher_placement_masks_match_qml() -> Result<()> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
@@ -141,8 +176,15 @@ fn all_popout_and_launcher_placement_masks_match_qml() -> Result<()> {
                 *pixel = fill;
             }
             let factory = Chrome::new(Attachment::Attached(Edge::Top), &palette)?.decorations();
-            for decoration in factory((1920, 1200), chrome.engaged)
-                .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?
+            for decoration in factory(
+                (1920, 1200),
+                chrome.engaged,
+                Some(bead::wayland::DecorationPanel {
+                    scene: &scene,
+                    origin: (x, y),
+                }),
+            )
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?
             {
                 tile(&mut pixels, decoration.rect, &decoration.svg, scale)?;
             }
@@ -173,8 +215,9 @@ fn all_popout_and_launcher_placement_masks_match_qml() -> Result<()> {
                 },
                 &artifacts.join(format!("qml-{name}")),
             )?;
+            let qml = Pixels::load(&golden.join(format!("qml-{name}-{scale}.png")))?;
+            assert_interior(&qml, &pixels, fill, name)?;
             if update {
-                let qml = Pixels::load(&golden.join(format!("qml-{name}-{scale}.png")))?;
                 let mut pair = Pixels {
                     width: width * 2,
                     height,

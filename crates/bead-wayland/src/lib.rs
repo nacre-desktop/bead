@@ -247,8 +247,16 @@ pub struct Decoration {
     pub rect: Rect,
     pub svg: std::sync::Arc<[u8]>,
 }
-pub type DecorationFactory =
-    std::sync::Arc<dyn Fn((u32, u32), bool) -> Result<Vec<Decoration>, String> + Send + Sync>;
+#[derive(Clone, Copy)]
+pub struct DecorationPanel<'a> {
+    pub scene: &'a Scene,
+    pub origin: (i32, i32),
+}
+pub type DecorationFactory = std::sync::Arc<
+    dyn for<'a> Fn((u32, u32), bool, Option<DecorationPanel<'a>>) -> Result<Vec<Decoration>, String>
+        + Send
+        + Sync,
+>;
 /// Application-owned surface origin in output logical coordinates. The framework
 /// does not know a shell's frame, bar, shadow insets or attachment policy.
 pub type PanelPositioner =

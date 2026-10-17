@@ -250,7 +250,6 @@ impl App {
             .ok_or("panel output not available")?;
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
-        self.sync_all_decorations()?;
         if let Some(source) = &mut self.panel_runtime {
             source.panel_center(self.panel_center);
         }
@@ -276,6 +275,7 @@ impl App {
                     surface.layer.commit();
                 }
             }
+            self.sync_all_decorations()?;
             self.panel_ui(UiEvent::PanelVisibility(true));
             return Ok(());
         }
@@ -303,6 +303,7 @@ impl App {
             bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?,
             RendererKind::Cpu,
         ));
+        self.sync_all_decorations()?;
         let factory = spec.factory.clone();
         let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
             Box::new(move || factory(open)),

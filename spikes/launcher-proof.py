@@ -193,7 +193,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             state=json.loads(call('state',target='nacre'))
             assert state['query']==(''if release_state else'a')and not state['launcher']and 'launcher'in state['bead']['available']
             if core_views:
-                result['service_views']={'hover':{},'cycles':[],'status_bar_click_open':os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1'}
+                result['service_views']={'hover':{},'cycles':[],'status_bar_click_open':os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1','placement_bar_click_open':os.environ.get('BEAD_PLACEMENT_BAR_CLICK_PROOF')=='1'}
                 hover_views=['calendar','sound']+(['network','bluetooth','battery']if status_views else[])
                 sequence=['calendar','sound','launcher']+(['network','bluetooth','battery']if status_views else[])
                 for view in hover_views:
@@ -208,7 +208,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 for cycle in range(int(os.environ.get('BEAD_CORE_VIEW_CYCLES','20'))):
                     view=sequence[cycle%len(sequence)]
                     offset=len(matrix.log_text(log));began=time.monotonic_ns()
-                    if view in ['network','bluetooth','battery'] and os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1':
+                    if (view in ['network','bluetooth','battery'] and os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1') or (view=='calendar' and os.environ.get('BEAD_PLACEMENT_BAR_CLICK_PROOF')=='1'):
                         regions=call('state')['prepare_views']
                         region=next(r for r in regions if r['view']==view)
                         x,y,w,h=region['rect']

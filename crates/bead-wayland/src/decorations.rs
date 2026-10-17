@@ -14,8 +14,20 @@ impl Drop for Child {
         self.surface.destroy();
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct PanelKey {
+    origin: (i32, i32),
+    bounds: (u32, u32),
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Key {
+    viewport: (u32, u32),
+    scale120: u32,
+    engaged: bool,
+    panel: Option<PanelKey>,
+}
 pub(super) struct Tiles {
-    key: (u32, u32, u32, bool),
+    key: Key,
     pub bytes: usize,
     _children: Vec<Child>,
     _pool: SlotPool,
@@ -43,13 +55,37 @@ impl App {
         else {
             return Ok(());
         };
+        let on_output = self.panel_output.as_ref() == Some(&surface.output);
         let engaged = self.panel_target
+            && on_output
             && self
                 .options
                 .panel_spec
                 .as_ref()
                 .is_some_and(|s| s.engages_decorations);
-        let key = (width as u32, height as u32, surface.scale120, engaged);
+        let panel = if self.panel_target && on_output {
+            self.companion
+                .as_ref()
+                .zip(self.options.panel_spec.as_ref())
+                .and_then(|((scene, _, _), spec)| {
+                    spec.position.as_ref().map(|position| DecorationPanel {
+                        scene,
+                        origin: position(scene, self.panel_center, (width, height)),
+                    })
+                })
+        } else {
+            None
+        };
+        let shape = panel.map(|p| PanelKey {
+            origin: p.origin,
+            bounds: (p.scene.bounds.w.to_bits(), p.scene.bounds.h.to_bits()),
+        });
+        let key = Key {
+            viewport: (width as u32, height as u32),
+            scale120: surface.scale120,
+            engaged,
+            panel: shape,
+        };
         if surface.decorations.as_ref().is_some_and(|d| d.key == key) {
             return Ok(());
         }
@@ -61,11 +97,11 @@ impl App {
             .viewporter
             .as_ref()
             .ok_or("Static decorations need wp_viewporter")?;
-        let specs = factory((width as u32, height as u32), engaged)?;
+        let specs = factory((width as u32, height as u32), engaged, panel)?;
         if specs.len() > 16 {
             return Err("Too many static decorations".into());
         }
-        let scale = key.2 as f32 / 120.;
+        let scale = key.scale120 as f32 / 120.;
         let mut sizes = Vec::new();
         let mut total = 0usize;
         for spec in &specs {
@@ -84,8 +120,14 @@ impl App {
                 .checked_mul(h as usize)
                 .and_then(|n| n.checked_mul(4))
                 .ok_or("Static decoration overflow")?;
+            // SlotPool rounds each slot to64 bytes. Reserve that amount now;
+            // a tiny final-slot shortfall otherwise doubles the entire pool.
+            let reserved = bytes
+                .checked_add(63)
+                .map(|n| n & !63)
+                .ok_or("Static decoration overflow")?;
             total = total
-                .checked_add(bytes)
+                .checked_add(reserved)
                 .ok_or("Static decoration overflow")?;
             if total > 2 * 1024 * 1024 {
                 return Err("Static decoration SHM budget exceeded".into());

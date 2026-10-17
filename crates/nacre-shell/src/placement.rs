@@ -170,17 +170,23 @@ impl Chrome {
         ))
     }
     pub fn decorations(self) -> bead::wayland::DecorationFactory {
-        Arc::new(move |(w, h), engaged| {
+        Arc::new(move |(w, h), engaged, panel| {
             let (w, h) = (w as f32, h as f32);
             let radius = 25_f32
                 .min((w - 20.).max(0.) / 2.)
                 .min((h - 60.).max(0.) / 2.);
-            let material = [
+            let mut material = vec![
                 Rect::new(0., 0., w, 50.),
                 Rect::new(0., 0., 10., h),
                 Rect::new(w - 10., 0., 10., h),
                 Rect::new(0., h - 10., w, 10.),
             ];
+            if let Some(panel) = panel {
+                material.push(body(panel.scene).translated(
+                    panel.origin.0 as f32 - panel.scene.bounds.x,
+                    panel.origin.1 as f32 - panel.scene.bounds.y,
+                ));
+            }
             let crops = [
                 // Disjoint crops include the rim's half-pixel on BOTH sides.
                 // Even logical coordinates map exactly at1x and1.5x.
@@ -335,8 +341,8 @@ impl Frame {
             // Surface pixels include the scene's shadow/contour inset. Align the
             // visible body, never that padded surface rectangle.
             (
-                (panel.x - body.x - scene.offset.0).round() as i32,
-                (panel.y - body.y - scene.offset.1).round() as i32,
+                (panel.x - body.x + scene.bounds.x).round() as i32,
+                (panel.y - body.y + scene.bounds.y).round() as i32,
             )
         })
     }
@@ -373,6 +379,20 @@ mod tests {
         let mut cache = bead::render::tree::TreeCache::default();
         cache.prepare(&scene, 1.5).unwrap();
         let builds = cache.builds;
+        let position = Frame::default().positioner(Attachment::Popout);
+        let origin = position(&scene, None, (1920, 1200));
+        let factory = Chrome::new(Attachment::Popout, &colors)
+            .unwrap()
+            .decorations();
+        let static_tiles = factory(
+            (1920, 1200),
+            true,
+            Some(bead::wayland::DecorationPanel {
+                scene: &scene,
+                origin,
+            }),
+        )
+        .unwrap();
         for offset in [1., 4., 8., 16.] {
             let mut moving = scene.clone();
             moving.offset.1 += offset;
@@ -382,11 +402,29 @@ mod tests {
                 cache.builds, builds,
                 "Transform/opacity must reuse the baked contour"
             );
+            assert_eq!(
+                position(&moving, None, (1920, 1200)),
+                origin,
+                "Animation must not move the layer's attachment"
+            );
+            let tiles = factory(
+                (1920, 1200),
+                true,
+                Some(bead::wayland::DecorationPanel {
+                    scene: &moving,
+                    origin,
+                }),
+            )
+            .unwrap();
+            assert!(
+                tiles.iter().zip(&static_tiles).all(|(a, b)| a.svg == b.svg),
+                "Transform/opacity must not invalidate static frame geometry"
+            );
         }
         let factory = Chrome::new(Attachment::Attached(Edge::Top), &colors)
             .unwrap()
             .decorations();
-        let tiles = factory((1920, 1200), false).unwrap();
+        let tiles = factory((1920, 1200), false, None).unwrap();
         assert_eq!(tiles.len(), 8);
         let bytes: usize = tiles
             .iter()
@@ -403,7 +441,7 @@ mod tests {
                 .iter()
                 .all(|t| String::from_utf8_lossy(&t.svg).contains("opacity=\"0.16\""))
         );
-        let active = factory((1920, 1200), true).unwrap();
+        let active = factory((1920, 1200), true, None).unwrap();
         assert!(
             active
                 .iter()
