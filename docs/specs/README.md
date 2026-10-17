@@ -19,10 +19,12 @@ dependency or decision. Start the first Ready row whose dependencies are Done.
 Report completion to the spec agent and continue to the next eligible Ready row.
 Only the spec agent marks Done. Ask before deviating from scope.
 
-Measurement slot: **NACRE current frozen F4 continuation only** (N0002;
-source receipt44ba7afa/helperabdfc528, baseline5f4c0bf3). Full hashes/host/window
-confirmation is required before new arms. Bead has no slot. No concurrent
-measurements, live/physical testing or capture-host build/test overlap.
+Measurement slot: **released; no active grant**. The former F4 capture was
+stopped and owned-worker cleanup confirmed. Partial evidence is preserved;
+incomplete cells do not count. N0001 source audit may proceed. N0002 requires
+source-ready review plus exact full artifact hashes, host scope and time window,
+then a separate explicit grant. Neither implementer may start measurements from
+this index. No live/physical testing is authorized.
 
 Beyond this queue: device controls after published implemented Nacre capabilities,
 then hosted notifications, session/hyprlock and static wallpaper. Hardware and
