@@ -3,7 +3,7 @@
 - ID: B0001
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress
+- Status: Review
 - Depends on: exact scoped zbus advisory exception committed; published-head CI green
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours

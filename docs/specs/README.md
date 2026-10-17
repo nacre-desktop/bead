@@ -6,7 +6,7 @@ must not infer permission from an old roadmap or reserve a measurement slot.
 
 | Order | ID | Assignment | Status | Dependencies |
 | --- | --- | --- | --- | --- |
-| 1 | B0001 | [Continue core dashboard](0001-dashboard-core-completion-audit.md) | Ready | scoped advisory exception; green CI |
+| 1 | B0001 | [Continue core dashboard](0001-dashboard-core-completion-audit.md) | Review | scoped advisory exception; green CI |
 | 2 | B0002 | [Dashboard lifecycle/memory](0002-dashboard-lifecycle-memory-gate.md) | Ready | B0001 Done; measurement grant |
 | 3 | B0003 | [Typing dominant-cost investigation](0003-launcher-typing-investigation.md) | Ready | B0002 Done; measurement grant |
 

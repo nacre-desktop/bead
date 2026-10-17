@@ -13,8 +13,9 @@ providers; unsupported optional cards remain deferred. No measurements run.
 Validation: workspace tests 241 passed / 0 failed (3 ignored), trace memory tests
 1 passed (1 ignored), fmt, warning-denied Clippy, service boundary, CPU-only and
 all-feature checks, minimal facade, generated Luau (52 modules), UI check,
-private service-owner proof and workspace/framework cargo-deny all pass. CI is
-pending.
+private service-owner proof and workspace/framework cargo-deny all pass.
+[CI39072111811](https://github.com/nacre-desktop/bead/actions/runs/39072111811)
+is green.
 
 Coverage inventory: [dashboard-core-coverage.md](research/dashboard-core-coverage.md).
 

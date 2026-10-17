@@ -33,13 +33,15 @@ coverage document only; no image golden changed. No measurement was authorized
 or run. Media/player discovery and GPU metrics lack published runtime providers;
 the reserved dashboard schemas still do not advertise hosted topics. Optional
 extras, Focus mutations, customization, photography/video and player controls
-remain deferred. Validation and Bead CI for this checkpoint are pending.
+remain deferred. Local validation and CI status follow.
 
 Local checks pass: 241 workspace tests (0 failed, 3 ignored), the trace memory
 test (1 passed, 1 ignored), fmt, warning-denied workspace Clippy, service
 dependency boundary, CPU-only and all-feature checks, minimal facade, shell UI
 check, generated Luau analysis (52 modules), private service-owner proof, and
-workspace plus framework cargo-deny. No measurement was run; CI remains pending.
+workspace plus framework cargo-deny. No measurement was run; Bead
+[CI39072111811](https://github.com/nacre-desktop/bead/actions/runs/39072111811)
+is green.
 
 
 
