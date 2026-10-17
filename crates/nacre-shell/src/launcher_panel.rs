@@ -30,6 +30,11 @@ pub fn spec(
     }
     let cold = fallback.clone();
     PanelSpec {
+        position: Some(
+            crate::placement::Frame::default()
+                .positioner(crate::placement::Attachment::Attached(Edge::Top)),
+        ),
+        engages_decorations: false,
         passive: false,
         initial_open: false,
         fallback,
@@ -45,7 +50,8 @@ pub fn spec(
             let source = source.connect().map_err(|e| e.to_string())?;
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_launcher(source)
+                .with_frame(crate::placement::Attachment::Attached(Edge::Top), &colors)
+                .and_then(|r| r.with_launcher(source))
                 .and_then(|r| r.with_launcher_memory(memory.clone()))
                 .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())

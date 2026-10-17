@@ -142,6 +142,10 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        if let Err(error) = self.sync_decorations(index) {
+            self.fail(error);
+            return;
+        }
         let frame_started = Instant::now();
         if let Err(error) = self.update_companion_policy(index, qh) {
             self.fail(error);

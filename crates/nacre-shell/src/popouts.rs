@@ -30,6 +30,10 @@ pub fn calendar(
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
+        position: Some(
+            crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+        ),
+        engages_decorations: true,
         passive: false,
         initial_open: false,
         fallback,
@@ -46,7 +50,8 @@ pub fn calendar(
             let source = Arc::new(bead::source::Clock::attach(desktop).map_err(|e| e.to_string())?);
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_calendar(source)
+                .with_frame(crate::placement::Attachment::Popout, &colors)
+                .and_then(|runtime| runtime.with_calendar(source))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),
@@ -79,6 +84,10 @@ pub fn status(
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
+        position: Some(
+            crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+        ),
+        engages_decorations: true,
         passive: false,
         initial_open: false,
         fallback,
@@ -98,7 +107,8 @@ pub fn status(
             );
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_status(kind, source)
+                .with_frame(crate::placement::Attachment::Popout, &colors)
+                .and_then(|runtime| runtime.with_status(kind, source))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),

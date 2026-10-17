@@ -339,6 +339,14 @@ impl Default for Tolerance {
     }
 }
 impl Frame {
+    pub fn load(path: &Path) -> Result<Self> {
+        let image = image::open(path)?.into_rgba8();
+        Ok(Self {
+            width: image.width(),
+            height: image.height(),
+            pixels: image.into_raw(),
+        })
+    }
     pub fn save(&self, path: &Path) -> Result<()> {
         image::save_buffer_with_format(
             path,

@@ -63,6 +63,7 @@ impl Packet {
     }
 }
 enum Job {
+    PanelCenter(Option<f32>),
     Presented(u64),
     Idle(bool),
     Stage(UiEvent, Vec<f32>),
@@ -188,6 +189,7 @@ impl SceneSource for Source {
                         }
                     };
                     match job {
+                        Job::PanelCenter(center) => source.panel_center(center),
                         Job::Stop => break,
                         Job::Presented(revision) => source.presented(revision),
                         Job::Idle(value) => {
@@ -324,6 +326,9 @@ impl SceneSource for Source {
     }
     fn set_idle(&mut self, idle: bool) {
         let _ = self.send(Job::Idle(idle));
+    }
+    fn panel_center(&mut self, center: Option<f32>) {
+        let _ = self.send(Job::PanelCenter(center));
     }
     fn scales(&mut self, scales: Vec<f32>) {
         self.scales = scales;

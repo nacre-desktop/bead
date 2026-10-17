@@ -116,6 +116,8 @@ mod tests {
     }
     fn spec(calls: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> PanelSpec {
         PanelSpec {
+            position: None,
+            engages_decorations: false,
             passive: false,
             initial_open: false,
             factory: std::sync::Arc::new(move |_| {

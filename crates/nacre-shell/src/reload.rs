@@ -6,6 +6,7 @@ use std::error::Error;
 pub struct Runtime {
     pub session: bead::ui::Session,
     pending: Option<Scene>,
+    chrome: Option<crate::placement::Chrome>,
     launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
     launcher_subscription: Option<bead::core::source::Subscription>,
     calendar: Option<std::rc::Rc<crate::calendar::Calendar>>,
@@ -74,6 +75,7 @@ impl Runtime {
         Self {
             session,
             pending: None,
+            chrome: None,
             launcher: None,
             launcher_subscription: None,
             calendar: None,
@@ -455,6 +457,14 @@ impl Runtime {
     }
 }
 impl Runtime {
+    pub fn with_frame(
+        mut self,
+        attachment: crate::placement::Attachment,
+        colors: &bead::render::Palette,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.chrome = Some(crate::placement::Chrome::new(attachment, colors)?);
+        Ok(self)
+    }
     fn finish_scene(
         &mut self,
         mut scene: Option<Scene>,
@@ -504,6 +514,9 @@ impl Runtime {
             let editor_profile = bead::core::profile::Span::new("editor_shape");
             self.session.decorate_inputs(scene)?;
             drop(editor_profile);
+            if let Some(chrome) = &self.chrome {
+                chrome.decorate(scene)?;
+            }
         }
         self.session.check_sources()?;
         self.pending = scene.clone();
@@ -511,6 +524,11 @@ impl Runtime {
     }
 }
 impl SceneSource for Runtime {
+    fn panel_center(&mut self, center: Option<f32>) {
+        if let Some(chrome) = &mut self.chrome {
+            chrome.center = center;
+        }
+    }
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let wakeup: std::sync::Arc<dyn Fn(UiEvent) + Send + Sync> = std::sync::Arc::from(wakeup);
         self.wakeup = Some(wakeup.clone());
@@ -628,6 +646,9 @@ impl SceneSource for Runtime {
         self.session.surrounding_text()
     }
     fn viewport(&mut self, width: u32, height: u32) -> bool {
+        if let Some(chrome) = &mut self.chrome {
+            chrome.output = (width, height);
+        }
         self.session.set_viewport(width, height)
     }
     fn watch(

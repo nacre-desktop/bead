@@ -2,6 +2,7 @@
 //! Actor state, worker transactions and per-surface drawing lifecycle.
 use super::*;
 pub(super) struct App {
+    pub(super) subcompositor: Option<wl_subcompositor::WlSubcompositor>,
     pub(super) background: smithay_client_toolkit::background_effect::BackgroundEffectState,
     pub(super) clipboard: clipboard::Clipboard,
     pub(super) last_input_serial: u32,
@@ -116,6 +117,7 @@ pub fn run_runtime(
         background.ext_background_effect_manager_v1().is_ok()
     );
     let mut app = App {
+        subcompositor: globals.bind(&qh, 1..=1, ()).ok(),
         background,
         clipboard: clipboard::Clipboard::new(&globals, &qh),
         last_input_serial: 0,
@@ -522,6 +524,7 @@ impl App {
                 .info(&output)
                 .map_or(120, |i| i.scale_factor.max(1) as u32 * 120);
             Ok(Surface {
+                decorations: None,
                 background: None,
                 background_size: None,
                 logical_size: (0, 0),

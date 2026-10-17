@@ -885,6 +885,67 @@ fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
     );
     Ok(pix)
 }
+/// Rasterize a static vector directly into borrowed compositor memory. This
+/// deliberately retains no decoded tree, texture, font pool or second bitmap.
+pub fn svg_into(data: &[u8], target: ShmTarget<'_>) -> Result<()> {
+    let tree = resvg::usvg::Tree::from_data(data, &resvg::usvg::Options::default())?;
+    target.bytes.fill(0);
+    let mut pix = PixmapMut::from_bytes(target.bytes, target.width, target.height)
+        .ok_or("invalid SVG target")?;
+    let size = tree.size();
+    resvg::render(
+        &tree,
+        Transform::from_scale(
+            target.width as f32 / size.width(),
+            target.height as f32 / size.height(),
+        ),
+        &mut pix,
+    );
+    if matches!(target.format, PixelFormat::Bgra) {
+        for pixel in target.bytes.as_chunks_mut::<4>().0 {
+            pixel.swap(0, 2);
+        }
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod borrowed_svg_tests {
+    use super::*;
+    #[test]
+    fn borrowed_svg_respects_pixel_format_and_target_boundaries() {
+        let svg=br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="rgb(40,80,160)"/></svg>"#;
+        for (format, expected) in [
+            (PixelFormat::Rgba, [40, 80, 160, 255]),
+            (PixelFormat::Bgra, [160, 80, 40, 255]),
+        ] {
+            let mut guarded = [231u8; 96];
+            svg_into(
+                svg,
+                ShmTarget {
+                    bytes: &mut guarded[16..80],
+                    width: 4,
+                    height: 4,
+                    scale: 1.,
+                    format,
+                },
+            )
+            .unwrap();
+            assert!(
+                guarded[..16]
+                    .iter()
+                    .chain(&guarded[80..])
+                    .all(|&b| b == 231)
+            );
+            assert!(
+                guarded[16..80]
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|p| *p == expected)
+            );
+        }
+    }
+}
 /// Validate an immutable asset snapshot with the same decoder used for drawing.
 pub fn validate_asset(path: &Path, bytes: &[u8]) -> Result<()> {
     load_image(path, Rect::new(0., 0., 4., 4.), 1., Some(bytes)).map(|_| ())

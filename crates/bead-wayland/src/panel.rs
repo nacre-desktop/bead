@@ -159,6 +159,17 @@ impl App {
         center: Option<f32>,
     ) -> Result<(), String> {
         panels::validate_center(center)?;
+        // IPC and keybindings use the same live trigger as pointer activation.
+        // View names remain application-defined; no shell geometry lives here.
+        let center = center.or_else(|| {
+            let name = name?;
+            self.runtime
+                .as_ref()?
+                .input_regions()
+                .into_iter()
+                .find(|region| region.prepare_view.as_deref() == Some(name))?
+                .prepare_center
+        });
         let changed = self.requested_panel_differs(name)?;
         // Preparation never replaces a visible view or restarts an already warm one.
         if !open && (self.panel_target || (self.panel_runtime.is_some() && !changed)) {
@@ -195,6 +206,18 @@ impl App {
         output: &wl_output::WlOutput,
         scene: &Scene,
     ) {
+        if let Some(position) = self
+            .options
+            .panel_spec
+            .as_ref()
+            .and_then(|s| s.position.as_ref())
+            && let Some(size) = self.output.info(output).and_then(|i| i.logical_size)
+        {
+            let (x, y) = position(scene, self.panel_center, size);
+            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
+            layer.set_margin(y, 0, 0, x);
+            return;
+        }
         let width = scene.bounds.w.ceil().max(1.) as u32;
         let height =
             (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
@@ -227,6 +250,10 @@ impl App {
             .ok_or("panel output not available")?;
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
+        self.sync_all_decorations()?;
+        if let Some(source) = &mut self.panel_runtime {
+            source.panel_center(self.panel_center);
+        }
         if open && let Some(source) = &mut self.runtime {
             source.set_idle(false);
         }
@@ -289,6 +316,7 @@ impl App {
         source.services(Box::new(move |event| {
             let _ = notify.send(UiEvent::Panel(epoch, Box::new(event)));
         }));
+        source.panel_center(self.panel_center);
         source
             .watch(Box::new(move |result| {
                 let event = match result {
@@ -424,6 +452,9 @@ impl App {
         }
         self.panel_target = false;
         drop(self.dismiss.take());
+        if let Err(error) = self.sync_all_decorations() {
+            self.fail(error);
+        }
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         let token = self.panel_close_epoch;
         if let Some((scene, _, _)) = &mut self.companion

@@ -1,0 +1,11 @@
+{
+  "revision": "e0a81ce76758de4831f008b90cb37b54dacc0baf",
+  "license": "GPL-3.0-only",
+  "files": {
+    "layout.js": "13b266b82ee80b3194180e3ea44da072d8f3fd431748180d9fc7aba8f771655f",
+    "contour.js": "fe65c86cc2860bb9eed25f46689a5a64fe0d3c17ee6933973747ff41100454b3",
+    "NacreFrameRim.qml": "7d2877db246b698c4716d2ce681f469deb9fdf4a876ee1a6887f56c1dec3195a",
+    "NacreFrameLips.qml": "8dba10296ba5bbd931e2291dc3507b25723f5392836462ab6fc7cfe6f5e51fa3",
+    "NacreFrame.qml": "2668abcbcc47dcc09e83f15fe0f441bdaa2c2ec65b311032f2ba3c6fe9d63918"
+  }
+}

@@ -2,6 +2,7 @@
 mod backends;
 mod calendar;
 mod commands;
+mod contour;
 mod desktop;
 mod font_sources;
 mod headless;
@@ -10,6 +11,7 @@ mod launcher_panel;
 mod memory_policy;
 mod nacre_source;
 mod notifications;
+mod placement;
 mod popouts;
 mod reload;
 mod sound;
@@ -459,6 +461,15 @@ fn start(
     }
     let desktop_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     let panel_trace = options.trace_state;
+    if core_views && options.bar {
+        options.decorations = Some(
+            placement::Chrome::new(
+                placement::Attachment::Attached(bead::core::Edge::Top),
+                &colors,
+            )?
+            .decorations(),
+        );
+    }
     if audio_panel || core_views {
         let owner = desktop_owner.clone();
         let panel_palette = palette.clone();
@@ -466,6 +477,11 @@ fn start(
         let fallback = sound::fallback(colors.get("surface")?);
         let cold = fallback.clone();
         options.panel_spec = Some(bead::wayland::PanelSpec {
+            position: Some(
+                placement::Frame::default()
+                    .positioner(placement::Attachment::Attached(bead::core::Edge::Right)),
+            ),
+            engages_decorations: true,
             passive: false,
             initial_open: state::File::path()
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
@@ -487,7 +503,11 @@ fn start(
                 let desktop = owner.get().cloned().ok_or("bar services not ready")?;
                 reload::Runtime::panel_session(session, open)
                     .with_trace(panel_trace)
-                    .with_shared_desktop(desktop, false)
+                    .with_frame(
+                        placement::Attachment::Attached(bead::core::Edge::Right),
+                        &panel_colors,
+                    )
+                    .and_then(|runtime| runtime.with_shared_desktop(desktop, false))
                     .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
                     .map_err(|e| e.to_string())
             }),
@@ -597,6 +617,8 @@ fn start(
         }
         let cold = fallback.clone();
         options.panel_spec = Some(bead::wayland::PanelSpec {
+            position: None,
+            engages_decorations: false,
             passive: true,
             initial_open: false,
             fallback,

@@ -3,6 +3,7 @@
 mod accessibility;
 mod background;
 mod clipboard;
+mod decorations;
 mod panel;
 mod panels;
 pub use panels::Panels;
@@ -54,7 +55,10 @@ use std::{
 use wayland_client::{
     Connection, Dispatch, Proxy, QueueHandle, delegate_noop,
     globals::registry_queue_init,
-    protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
+    protocol::{
+        wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_subcompositor, wl_subsurface,
+        wl_surface,
+    },
 };
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1::{self, WpCursorShapeDeviceV1},
@@ -180,6 +184,8 @@ pub struct InputRegion {
     pub prepare_center: Option<f32>,
 }
 pub trait SceneSource {
+    /// Invocation coordinate along the panel's edge, in output logical pixels.
+    fn panel_center(&mut self, _center: Option<f32>) {}
     fn set_idle(&mut self, _idle: bool) {}
     fn focused_dismiss(&self) -> bool {
         false
@@ -235,17 +241,33 @@ pub type CommandMap = std::sync::Arc<
 >;
 pub type PanelFactory =
     std::sync::Arc<dyn Fn(bool) -> Result<Box<dyn SceneSource>, String> + Send + Sync>;
+/// Small static, input-transparent vector tiles outside a bar's own rectangle.
+/// The application supplies policy; Wayland only owns bounded SHM/subsurfaces.
+pub struct Decoration {
+    pub rect: Rect,
+    pub svg: std::sync::Arc<[u8]>,
+}
+pub type DecorationFactory =
+    std::sync::Arc<dyn Fn((u32, u32), bool) -> Result<Vec<Decoration>, String> + Send + Sync>;
+/// Application-owned surface origin in output logical coordinates. The framework
+/// does not know a shell's frame, bar, shadow insets or attachment policy.
+pub type PanelPositioner =
+    std::sync::Arc<dyn Fn(&Scene, Option<f32>, (i32, i32)) -> (i32, i32) + Send + Sync>;
 #[derive(Clone)]
 pub struct PanelSpec {
+    /// Application-selected active decoration state; no view names in the framework.
+    pub engages_decorations: bool,
     /// Passive notices never create a dismissal layer or request keyboard focus.
     pub passive: bool,
     pub initial_open: bool,
     pub factory: PanelFactory,
     pub fallback: Scene,
     pub renderer: RendererKind,
+    pub position: Option<PanelPositioner>,
 }
 #[derive(Clone)]
 pub struct Options {
+    pub decorations: Option<DecorationFactory>,
     /// Standard compositor blur, only if advertised with the blur capability.
     pub background_blur: bool,
     pub namespace: String,
@@ -287,6 +309,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            decorations: None,
             background_blur: false,
             namespace: "bead-dev".into(),
             panel_spec: None,
@@ -341,6 +364,7 @@ struct Reusable {
     pending: Vec<Damage>,
 }
 struct Surface {
+    decorations: Option<decorations::Tiles>,
     background:Option<wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1>,
     background_size:Option<(i32,i32)>,
     logical_size:(u32,u32),
