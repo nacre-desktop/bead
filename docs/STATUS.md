@@ -1,11 +1,11 @@
 # Status
 
-## 2026-10-18 — B0005 capture-window harness
+## 2026-10-18 — B0005 review submitted
 
-Acceptance timing is published at `46b2a99`; seven fake-clock tests and syntax
-checks pass. The final CI workflow step is now being added. No capture ran and
-no measurement is granted. B0002 still lacks source-proven artifacts, the `0192`
-ruling and an explicit slot grant.
+Acceptance timing and hosted regression tests are published at `bb98474`; CI
+`39079511622` is green. Seven fake-clock tests and syntax checks pass. No capture
+ran and no measurement is granted. B0002 still lacks source-proven artifacts,
+the `0192` ruling and an explicit slot grant.
 
 ## 2026-10-18 — B0002 artifact/preflight submitted
 

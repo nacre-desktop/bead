@@ -1,9 +1,11 @@
 # B0005 capture-window correctness
 
-Status: In progress. Harness implementation commit
-`46b2a9924e6dced7a35e630dc73c525958a25fbe` is published; fake-clock and syntax
-checks pass. Its CI `39078889419` succeeded before the test step was added. The
-final hosted regression step is pending; no measurement permission is implied.
+Status: Review. Harness commit `46b2a9924e6dced7a35e630dc73c525958a25fbe` and
+hosted regression-workflow commit `bb984745d2db95b91759451a4f1df19ea1529b54`
+are published. Exact-head CI
+[39079511622](https://github.com/nacre-desktop/bead/actions/runs/39079511622)
+succeeded, including the named Python regression step. No measurement permission
+is implied.
 
 ## Changes and checks
 
@@ -34,10 +36,11 @@ PYTHONDONTWRITEBYTECODE=1 nice -n 10 python3 -m py_compile spikes/dashboard-resi
 The tests cover full idle versus sleep-plus-one-second, warmup order, phase
 overrun, identical arm schedules, legacy timing, invalid prelaunch values and
 the existing swap/memory rails. Syntax compilation and `git diff --check` pass.
-No measurement-path sleep, launcher, compositor, helper, `/proc` sample, preview,
-benchmark, Rust build, remote probe or memory capture was run. The minimal CI
-change adds these same unittest and `py_compile` commands before the existing
-service lifecycle proof; the exact-head run will be reported after it completes.
+No measurement-path sleep, Bead launcher, compositor, helper, `/proc` sample,
+preview, benchmark, remote probe or memory capture was run. No manual local or
+remote Rust build was run; hosted CI ran the unchanged repository Rust checks.
+The minimal CI change adds the unittest and `py_compile` commands before the
+existing service lifecycle proof.
 
 ## Identity and schedule
 
