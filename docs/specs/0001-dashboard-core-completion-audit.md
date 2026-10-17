@@ -57,8 +57,8 @@ new protocols, measurements. Do not port all41 as41 separate Bead components.
    (unavailable without data stays unknown; disconnect with data marks stale),
    dashboard_long_rows_scroll_without_clipping (bounded long event/process/forecast
    fixtures have reachable last row), dashboard_closed_page_releases_sources
-   (after existing2s retirement, no page subscriptions/state/raster leases).
-   Reuse existing bead-test Harness/Source and fake clock, no generic new harness.
+   (on explicit Runtime retirement/drop, no page subscriptions/state/raster leases).
+   Reuse existing bead-test Harness/Source; no fake-clock or generic harness API.
 4. Fix failures only in dashboard.rs, dashboard_tests.rs and shell/dashboard
    modules; nacre_source source-lease/reload integration only when a named failing
    lifecycle test proves necessity. Keep per-page concrete decoding and selective
@@ -67,6 +67,31 @@ new protocols, measurements. Do not port all41 as41 separate Bead components.
 5. Update STATUS and feature9 report with bounded results, coverage and unresolved
    providers. If tests reveal no product defect, tests + coverage is sufficient:
    do not add ornament, new optional pages or invented values to fill scope.
+
+## Clarification: separate resource release from retirement timing
+
+The2200ms close grace belongs to crates/bead-wayland/src/panel.rs close_panel(),
+not Runtime or bead-test::Harness. B0001 does not require a fake clock, worker
+scheduler hook, wall-clock sleep or framework change.
+
+- Implement dashboard_closed_page_releases_sources by creating the actual page
+  Runtime with counting/fake sources, observing acquired subscriptions/leases,
+  then explicitly dropping/retiring it and checking they return to baseline.
+  Cover Today secondary weather/clock and System secondary updates as well as
+  Weather/Media. Weak-reference/drop counters may prove page state/source release;
+  keep the bar/shared client alive so a shared owner is not falsely called a leak.
+  Do not assert driver-memory reclamation from Rust object drop.
+- Existing service_views_tests::panel_retirement_releases_launcher_mirror_but_bar_does_not
+  remains the analogous launcher/bar resource-ownership test. It is NOT an
+  integration test of elapsed2200ms. Cite it accurately in the coverage report.
+- Cite close_panel()'s2200ms Timer and epoch/token/reopen guards as source wiring,
+  with the exact source revision. If an already-recorded native lifecycle proof
+  covers matching source bytes, link it as historical end-to-end evidence; do
+  not claim a new timing run. Fresh actual close-delay/lifecycle acceptance is
+  B0002 under its own measurement grant, not a prerequisite for this unit test.
+- No bead-test/framework/backend edits are authorized just to expose time. If
+  dashboard Runtime resources fail release, fix that demonstrated dashboard /
+  reload ownership path only, preserving the current worker grace.
 
 ## Measurements
 
