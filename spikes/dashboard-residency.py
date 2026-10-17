@@ -12,6 +12,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
     assert pages and len(set(pages)) == len(pages) and all(p in ["today", "weather", "media", "system"] for p in pages)
     slots = int(os.environ.get("BEAD_DASHBOARD_RESIDENCY_SLOTS", str(len(pages))))
     assert len(pages) <= slots <= 12
+    page_slots = [pages[index % len(pages)] for index in range(slots)]
     samples = []
     closed = []
     warm = []
@@ -35,7 +36,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         began = time.monotonic()
         for index in range(count):
             if enabled or legacy:
-                view = (["calendar", "sound", "network", "bluetooth", "battery", "launcher"][index % 6] if legacy else ["dashboard-" + page for page in pages][index % len(pages)])
+                view = (["calendar", "sound", "network", "bluetooth", "battery", "launcher"][index % 6] if legacy else ["dashboard-" + page for page in page_slots][index % slots])
                 offset = len(matrix.log_text(log))
                 began_ns = time.monotonic_ns()
                 call("open", view)
@@ -66,7 +67,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
     several = phase("opened-several", slots * 2, 75)
     legacy = os.environ.get("BEAD_DASHBOARD_RESIDENCY_LEGACY", "1") == "1"
     combined = phase("combined-legacy", 6, 65, legacy=True) if legacy else several
-    result = {"valid": True, "dashboard_enabled": enabled, "pages": pages, "page_slots": slots, "bar": bar,
+    result = {"valid": True, "dashboard_enabled": enabled, "pages": pages, "page_slots": page_slots, "bar": bar,
               "never": never, "once": once, "several": several,
               "combined": combined, "combined_legacy": legacy, "closed": closed, "warm": warm, "method": "same process: never; one pass over fixed page slots; three passes over fixed page slots; fixed matched-age endpoints with >=30s idle; control opens only legacy panels in final phase"}
     (raw / "dashboard-residency.json").write_text(json.dumps(result, indent=2) + "\n")
