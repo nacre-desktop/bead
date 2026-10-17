@@ -130,3 +130,13 @@ locations (never commit private paths). For captures include per-run numbers,
 medians/min/max/peaks, quiet counters, attribution and owned-PID cleanup. Missing
 is unknown. Ask the spec thread directly; do not improvise or ask the owner for
 routine design. Submit Review, then start the next eligible Ready spec.
+
+## Early preflight review — 2026-10-18
+
+Accepted reportbb75590128cbf85b57a416ea881b3482ae802729 and exact green
+CI39077628859. Correctly identifies runtime-input identity, uncertified cached
+artifacts/helper pairing, historical harness/exit130 limits and absent actual60s
+observation. Missing provenance is NOT resolved. Counts are10pairs/20cells total;
+600s per-cell adds200min. Additional baseline60s must be included in schedule.
+Next eligible assignment is B0005 harness correctness with mocked clocks only.
+No artifact build/capture grant,0192exception approval or B0002completion.
