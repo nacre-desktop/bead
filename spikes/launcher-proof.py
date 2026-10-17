@@ -145,6 +145,15 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             bar['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
             (raw/'bar.json').write_text(json.dumps(bar,indent=2)+'\n')
             (raw/'bar.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
+            if os.environ.get('BEAD_DASHBOARD_RESIDENCY') == '1':
+                spec=importlib.util.spec_from_file_location('dashboard_residency',ROOT/'spikes/dashboard-residency.py')
+                probe=importlib.util.module_from_spec(spec);spec.loader.exec_module(probe)
+                result=probe.sample(client,raw,bar,matrix,call,state_wait,log,dashboard_presented,committed_and_presented,observe,dashboard_views)
+                stop(client)
+                assert client.returncode==0,'residency UI did not exit cleanly'
+                assert 'STOP surfaces=0' in log.read_text()
+                client=None
+                return result
             pointer=matrix.services.Probe([str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/examples/private-pointer')],env,raw/'pointer.log');pointer.wait('POINTER_READY')
             pointer.command('move 1000 600','POINTER_DONE')
             x,y,w,h=call('state')['prepare_regions'][0]

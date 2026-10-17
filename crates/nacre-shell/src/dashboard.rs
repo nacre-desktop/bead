@@ -182,8 +182,23 @@ fn invalid() -> source::Error {
     source::Error::new("validation", "invalid dashboard snapshot", false)
 }
 fn checked(topic: &str, data: &Json) -> source::Result<CoreSnapshot> {
-    let snapshot: CoreSnapshot =
-        serde_json::from_value(json!({"topic":topic,"data":data})).map_err(|_| invalid())?;
+    // Decode only these four published topic payloads. Deserializing the whole
+    // service enum links unrelated device/notification parsers into this view.
+    let snapshot = match topic {
+        "dashboard.weather" => {
+            CoreSnapshot::Weather(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
+        "dashboard.media" => {
+            CoreSnapshot::Media(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
+        "dashboard.system" => {
+            CoreSnapshot::System(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
+        "dashboard.updates" => {
+            CoreSnapshot::Updates(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
+        _ => return Err(invalid()),
+    };
     if !snapshot.valid() {
         return Err(invalid());
     }
