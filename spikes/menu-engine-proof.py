@@ -160,11 +160,12 @@ def sample(env, raw, compositor, stop):
                                     'membership_stable': True, 'observation_retries': attempt, 'exited_children': exited + exited_after}
                         raise RuntimeError('no stable daemon worker group for memory observation')
                     lifecycle = load('engine_launcher_lifecycle', ROOT / 'spikes/launcher-proof.py')
-                    lifecycle.sample(dict(env, BEAD_LAUNCHER_ENGINE_SOCKET=str(endpoint)), raw, compositor, stop, observe, bundle_root=root)
+                    result = lifecycle.sample(dict(env, BEAD_LAUNCHER_ENGINE_SOCKET=str(endpoint)), raw, compositor, stop, observe, bundle_root=root)
                     stop_engine(); daemon = None
                     (raw / 'engine-lifecycle-proof.json').write_text(json.dumps({
-                        'compositor': compositor, 'valid': True, 'owned_workers_cleaned': True,
+                        'compositor': compositor, 'valid': result['valid'], 'owned_workers_cleaned': True,
                         'helper_sha256': hashlib.sha256(helper.read_bytes()).hexdigest()}, indent=2) + '\n')
+                    assert result['valid'], 'control budget observation failed; result is NOT a passing proof'
                     return
                 daemon_clock = clocks.OwnedCpuClock(daemon)
 

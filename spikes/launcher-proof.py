@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 """Fixture launcher on the existing bounded panel lifecycle; nested only."""
-import importlib.util,json,os,pathlib,re,subprocess,time
+import hashlib,importlib.util,json,os,pathlib,re,subprocess,time
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 spec=importlib.util.spec_from_file_location('matrix',ROOT/'spikes/bar-matrix.py')
 matrix=importlib.util.module_from_spec(spec);spec.loader.exec_module(matrix)
@@ -63,6 +63,16 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 stamp=committed_and_presented(text[match.end():])
                 if stamp:return stamp
         return False
+    # A failing CONTROL may finish collecting data, but can NEVER pass the proof.
+    # Pin this mode to the immutable accepted baseline; candidates remain strict.
+    record_control=os.environ.get('BEAD_OBSERVE_FAILED_CONTROL')=='1'
+    if record_control:
+        assert not release_state and hashlib.sha256(pathlib.Path(binary).read_bytes()).hexdigest()=='5764dd202c8034c777cbf86fa989d0124613c08b8fe26d2a5806c94d6b4510cb'
+    budget_failures=[]
+    def budget(actual,limit,code):
+        if actual>limit:
+            if not record_control:raise AssertionError(code)
+            budget_failures.append({'code':code,'actual_mib':actual,'limit_mib':limit})
     closed_samples=[]
     def closed_guard(closed_at=None):
         state_wait(lambda s:not s['resident']and not s['target_open']and s['surfaces']==0)
@@ -83,7 +93,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             later=matrix.idle(client.pid,1)
             (raw/f'closed-{index}-later.json').write_text(json.dumps(later,indent=2)+'\n')
             (raw/f'closed-{index}-later.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
-        assert sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']<=bar['pss_plus_drm_mib']+5, 'launcher close exceeds bar+5 MiB' 
+        budget(sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib'],bar['pss_plus_drm_mib']+5,'launcher close exceeds bar+5 MiB')
         return sample
     result={'compositor':compositor,'fixture_results':None if engine_socket else 320,'engine':bool(engine_socket),'cycles':[]}
     try:
@@ -217,11 +227,11 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 sample=matrix.idle(client.pid,1);sample['external']=observe()
                 result['settled_closed']=sample
                 (raw/'settled-closed.json').write_text(json.dumps(sample,indent=2)+'\n')
-                assert sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']<=bar['pss_plus_drm_mib']+5
-                assert sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']<=25,'settled UI exceeds owner25MiB ceiling'
+                budget(sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib'],bar['pss_plus_drm_mib']+5,'settled UI exceeds bar+5 MiB')
+                budget(sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib'],25,'settled UI exceeds owner25MiB ceiling')
                 baseline=bar['pss_plus_drm_mib']+bar['memory']['swap_pss_mib']+bar['external']['pss_plus_drm_swap_mib']
                 total=sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']+sample['external']['pss_plus_drm_swap_mib']
-                assert total<=baseline+5, 'settled UI + daemon/workers exceeds matched bar group+5 MiB'
+                budget(total,baseline+5,'settled UI + daemon/workers exceeds matched bar group+5 MiB')
     finally:
         try:
             if pointer:pointer.close()
@@ -232,6 +242,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 if keeper:stop(keeper)
     assert client.returncode==0,'launcher did not exit cleanly'
     assert 'STOP surfaces=0'in log.read_text()
-    result.update(valid=True,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=not release_state,query_released_after_idle=release_state,query_on_open=query_on_open,query_not_on_disk=True)
+    result.update(valid=not budget_failures,budget_failures=budget_failures,observed_failed_control=record_control,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=not release_state,query_released_after_idle=release_state,query_on_open=query_on_open,query_not_on_disk=True)
     (raw/'launcher-proof.json').write_text(json.dumps(result,indent=2)+'\n')
-    print('LAUNCHER_SOURCE_PROOF compositor='+compositor+' cycles=3 hover_timeout=true prepare=true query_released_after_idle='+str(release_state).lower()+' closed_bar_plus5=true clean=true',flush=True)
+    print('LAUNCHER_SOURCE_PROOF compositor='+compositor+' cycles=3 hover_timeout=true prepare=true query_released_after_idle='+str(release_state).lower()+' valid='+str(not budget_failures).lower()+' clean=true',flush=True)
+    return result

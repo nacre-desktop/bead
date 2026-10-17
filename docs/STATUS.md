@@ -2,6 +2,13 @@
 
 ## 2026-10-17 — Idle audit: 1 MiB policy stays unshipped; CPU check worsens
 
+The normal4MiB candidate passes20-cycle H/N native checks (settled23.024/23.924MiB)
+and five CPU pairs: paired UI-.075/+1.364ms, inside controlspreads4.153/3.033;
+no typing-target acceptance. The first accepted-control memory run fails its
+unchanged close+5 guard:28.587MiB vs21.290bar; still28.608after another4s.
+Preserve that failure. A pinned-control data-only mode will finish collecting
+failing baselines while marking valid=false and exiting nonzero; candidate gates
+stay strict. Resume five pairs without selecting away failing control samples.
 Named-view source e8a02ae is accepted and CI green. The scalar mirror cleanup
 and application-only1 MiB mmap candidate pass both20-cycle native checks and
 five alternating memory pairs/compositor. Paired warm deltas -1.845/-1.823 MiB;
