@@ -8,7 +8,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
     def total(row):
         return row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
 
-    pages = os.environ.get("BEAD_DASHBOARD_PAGES", "weather,media,system").split(",")
+    pages = os.environ.get("BEAD_DASHBOARD_PAGES", "today,weather,media,system").split(",")
     assert pages and len(set(pages)) == len(pages) and all(p in ["today", "weather", "media", "system"] for p in pages)
     slots = int(os.environ.get("BEAD_DASHBOARD_RESIDENCY_SLOTS", str(len(pages))))
     assert len(pages) <= slots <= 12

@@ -34,7 +34,10 @@ MPRIS/player discovery or transport. Real helpers remain helper.execute, not
 helper.run; no current-player source or standalone system sampler is invented.
 Revised compatibility/OSD schemas remain unpublished at the final pin check.
 
-Validated source 1eb5cb0; harness 6cd8d53. CPU release 5e8ef1d, 24,509,848 B versus
+Validated source 1eb5cb0; measurement harness 6cd8d53. Current proof defaults
+select the four core tabs and Today hover; old controls explicitly select their
+three supported tabs. These are the same settings used in the recorded trials.
+CPU release 5e8ef1d, 24,509,848 B versus
 accepted narrow 3666f8b 24,472,376 B: +37,472 B (text +30,080 B, rodata +576 B;
 data/bss unchanged). Concrete per-page decoding remains in place. The first
 native 61cec90 trial correctly failed Weather's exact presentation proof because
