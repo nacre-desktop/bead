@@ -27,8 +27,8 @@ then captures. Sleeping60s and measuring1s would not provide a60s observation.
 
 ## Scope
 
-In: two existing Python harness files, one stdlib fake-clock test file and report /
-spec docs. Out: Rust/QML/runtime, deps/advisory policy, new framework/general
+In: two existing Python harness files, one stdlib fake-clock test file, one
+minimal .github/workflows/ci.yml verification step and report/spec docs. Out: Rust/QML/runtime, deps/advisory policy, new framework/general
 scheduler, source-linked binary builds, new remote/host setup, real benchmark /
 preview/compositor/helper launches, measurement or live access.
 
@@ -125,3 +125,20 @@ are report-only. Any new security advisory goes to the spec agent; vulnerabiliti
 go to the owner. Measurement requires an explicit exclusive slot grant.
 
 
+
+## Hosted regression coverage clarification — 2026-10-18
+
+The new timing tests must run in hosted CI; generic green jobs that omit them are
+not evidence for this acceptance criterion. Authorize one minimal step in the
+existing .github/workflows/ci.yml check job, using already-available Python:
+
+```sh
+nice -n 10 python3 -m unittest discover -s spikes/tests -p test_dashboard_capture_windows.py
+nice -n 10 python3 -m py_compile spikes/dashboard-residency.py spikes/launcher-proof.py spikes/tests/test_dashboard_capture_windows.py
+```
+
+No new packages, actions, toolchain, permissions, triggers, jobs or remote access.
+Keep tests fake-clock/no subprocess/display/bus/proc/real sleep. Include this step
+before the existing runtime service proof; do not weaken or replace other steps.
+Do not commit bytecode. Report local seven-case result separately, and final
+exact-head CI including the new step. No capture/build grant is implied.
