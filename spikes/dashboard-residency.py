@@ -10,6 +10,8 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
 
     pages = os.environ.get("BEAD_DASHBOARD_PAGES", "weather,media,system").split(",")
     assert pages and len(set(pages)) == len(pages) and all(p in ["today", "weather", "media", "system"] for p in pages)
+    slots = int(os.environ.get("BEAD_DASHBOARD_RESIDENCY_SLOTS", str(len(pages))))
+    assert len(pages) <= slots <= 12
     samples = []
     closed = []
     warm = []
@@ -60,12 +62,12 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         return row
 
     never = phase("never-opened", 0, 35)
-    once = phase("opened-once", len(pages), 55)
-    several = phase("opened-several", len(pages) * 2, 75)
+    once = phase("opened-once", slots, 55)
+    several = phase("opened-several", slots * 2, 75)
     legacy = os.environ.get("BEAD_DASHBOARD_RESIDENCY_LEGACY", "1") == "1"
     combined = phase("combined-legacy", 6, 65, legacy=True) if legacy else several
-    result = {"valid": True, "dashboard_enabled": enabled, "pages": pages, "bar": bar,
+    result = {"valid": True, "dashboard_enabled": enabled, "pages": pages, "page_slots": slots, "bar": bar,
               "never": never, "once": once, "several": several,
-              "combined": combined, "combined_legacy": legacy, "closed": closed, "warm": warm, "method": "same process: never; once each page; three times each page; fixed matched-age endpoints with >=30s idle; control opens only legacy panels in final phase"}
+              "combined": combined, "combined_legacy": legacy, "closed": closed, "warm": warm, "method": "same process: never; one pass over fixed page slots; three passes over fixed page slots; fixed matched-age endpoints with >=30s idle; control opens only legacy panels in final phase"}
     (raw / "dashboard-residency.json").write_text(json.dumps(result, indent=2) + "\n")
     return result

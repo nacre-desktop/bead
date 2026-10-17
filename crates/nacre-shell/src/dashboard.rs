@@ -281,6 +281,7 @@ impl Dashboard {
                 .data
                 .get("clock")
                 .and_then(Json::as_str)
+                .filter(|clock| !clock.is_empty())
                 .unwrap_or("—");
             text(&mut values, "clock", clock, 16);
             if !snapshot.connected {
@@ -328,7 +329,6 @@ impl Dashboard {
             ),
             ("dashboard.detail".into(), Value::Text(String::new())),
             ("dashboard.metric".into(), Value::Text("—".into())),
-            ("dashboard.clock".into(), Value::Text("—".into())),
             ("dashboard.rows".into(), Value::list(Vec::new())),
             ("dashboard.secondary".into(), Value::list(Vec::new())),
             (
@@ -372,6 +372,7 @@ impl Dashboard {
             }
         }
         if self.page == Page::Today {
+            text(&mut out, "clock", "—", 16);
             if let Some(source) = &self.secondary {
                 let weather = source.snapshot();
                 if let Ok(CoreSnapshot::Weather(s)) = checked("dashboard.weather", &weather.data) {

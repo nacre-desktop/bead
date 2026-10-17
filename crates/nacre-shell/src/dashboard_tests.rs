@@ -311,7 +311,7 @@ fn dashboard_source_wakes_keep_last_good_data_and_drop_with_page() -> Result<()>
             &root(),
             Path::new(&format!("dashboard/{}/main.luau", page.name())),
             &root().join("palette.json"),
-            view(page, fixture(page.name()), None).project(),
+            BTreeMap::new(),
             Config {
                 width: 1048,
                 height: 714,
