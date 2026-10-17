@@ -2,6 +2,8 @@
 
 ## 2026-10-17 — Read-only service views measured; review boundary
 
+Source f1d66af: [CI 39003597141 green](https://github.com/nacre-desktop/bead/actions/runs/39003597141).
+
 Network, Bluetooth and battery popouts share existing hosted state through a
 selected-field Source. No new backend or device action. Modules, payloads and
 rasters load on demand; closed workers retire after 2.2 seconds, unused hover
@@ -19,7 +21,7 @@ ceilings, cache caps, stable process groups and cleanup pass. Total differences
 fit control spreads; no saving or extra memory exception is claimed. Native20
 UI + daemon/workers is 56.219/56.404 MiB, before combined notices/wallpaper.
 213 workspace tests, isolated trace proof, fmt, warnings-denied clippy, CPU-only
-and normal release pass. [CI](https://github.com/nacre-desktop/bead/actions/workflows/ci.yml).
+and normal release pass.
 [Measurements and scope](research/feature9-gate-d.md#lazy-read-only-service-views--2026-10-17).
 
 Six matched 60-second QML status/header references and both native bar-click runs
@@ -55,7 +57,7 @@ or an explicit narrower B. [Review and forecast](research/feature9-gate-d.md#ser
 
 Core forecast: 40–81 eight-hour agent-days (320–648 task hours), 16–41 active days
 at the assumed 16–20 task-hours/day scenario; roughly 3–8 calendar weeks including
-coordination/hardware waits. Full parity remains 102–207 days, roughly 7–18 weeks.
+coordination/hardware waits. Full parity remains 102–207 agent-days, roughly 7–18 calendar weeks.
 Complete-core idle 90–150 MiB is an estimate, not a measured combined shell.
 
 Allowance is 0.5 MiB per explained feature. Every close stays within bar + 5 and

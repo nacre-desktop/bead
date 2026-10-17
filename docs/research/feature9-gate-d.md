@@ -58,6 +58,7 @@ legacy route/state expectation now includes the explicit `*-status` capabilities
 213 workspace tests, the isolated trace proof, fmt, all-feature warnings-denied
 clippy, CPU-only build and normal release pass. The recovered missing `computed`
 table and stale exact route-list expectation were fixed; failed runs are retained.
+Published source f1d66af: [CI 39003597141 green](https://github.com/nacre-desktop/bead/actions/runs/39003597141).
 
 Normal immutable typed-pin control `52c0f93e` versus status `118fe902f9`, matching
 bundles, frozen `75157fd3` daemon. Five alternating pairs per compositor: both
@@ -164,7 +165,7 @@ The core forecast remains **40–81 eight-hour agent-days**, 320–648 task hour
 3–8 calendar weeks with contract/hardware scheduling. These are planning hours,
 not a measured timesheet. The refreshed core table below makes its 2–6-day
 integration contingency explicit; small read-only cards do not retire the hard
-service workflows. Full parity remains 102–207 days (7–18 calendar weeks with
+service workflows. Full parity remains 102–207 eight-hour agent-days (7–18 calendar weeks with
 scheduling), including the unbuilt managed windows/media/AI/input/software work.
 Complete-core idle 90–150 MiB remains an estimate; current measured group is
 56.2–56.4 MiB before combined notices, remaining services and wallpaper.

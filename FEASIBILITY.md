@@ -37,7 +37,7 @@ UI>8 prevents the two-frame candidate. Shared QML/executor/full services pending
 concurrent,no own build/test/capture overlap;not physical. B is incomplete pending
 service contracts/hosting; stop review before dashboard. QML remains daily driver.
 Raw core-status-views-117d66b-{memory-five,reference,typing-screen,preview,smoke}.
-[Full scope/forecast](docs/research/feature9-gate-d.md#lazy-read-only-service-views--2026-10-17).
+[Full scope/forecast](docs/research/feature9-gate-d.md#lazy-read-only-service-views--2026-10-17). [CI 39003597141 green](https://github.com/nacre-desktop/bead/actions/runs/39003597141).
 
 ## 2026-10-17 — Replay the green typed UI-action contract
 
