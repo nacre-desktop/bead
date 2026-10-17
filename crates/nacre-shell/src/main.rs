@@ -3,6 +3,7 @@ mod backends;
 mod calendar;
 mod commands;
 mod contour;
+mod dashboard;
 mod desktop;
 mod font_sources;
 mod headless;
@@ -110,6 +111,7 @@ fn start(
     select_renderer(&mut options, "auto")?;
     let mut ui: Option<std::path::PathBuf> = None;
     let mut menu_fixture: Option<PathBuf> = None;
+    let mut dashboard_fixtures: Option<PathBuf> = None;
     let mut daemon_socket: Option<PathBuf> = None;
     let mut register_ui_provider = false;
     let mut ui_notification_socket = None;
@@ -194,6 +196,13 @@ fn start(
             "--menu-fixture" => {
                 menu_fixture = Some(args.next().ok_or("--menu-fixture needs path")?.into())
             }
+            "--dashboard-fixtures" => {
+                dashboard_fixtures = Some(
+                    args.next()
+                        .ok_or("--dashboard-fixtures needs directory")?
+                        .into(),
+                )
+            }
             "--ui-provider" => register_ui_provider = true,
             "--ui-notification-socket" => {
                 ui_notification_socket = Some(PathBuf::from(
@@ -270,12 +279,15 @@ fn start(
             "--palette" => palette = args.next().ok_or("--palette needs path")?.into(),
             "--help" | "-h" => {
                 println!(
-                    "nacre-shell [--bar [--audio-panel|--launcher-panel|--core-views] [--panel-renderer cpu|femtovg-gl]] [--menu-fixture FILE|--daemon-socket SOCKET] [--ui-provider --command-socket SOCKET [--ui-notification-socket SOCKET]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
+                    "nacre-shell [--bar [--audio-panel|--launcher-panel|--core-views] [--panel-renderer cpu|femtovg-gl]] [--menu-fixture FILE|--daemon-socket SOCKET] [--dashboard-fixtures DIR] [--ui-provider --command-socket SOCKET [--ui-notification-socket SOCKET]] [--ui ui/main.json|--panel|--animate] [--renderer cpu|femtovg-gl|femtovg|vello|auto] [--test-passive] [--memory-usage] [--surfaces 1..3] [--content-size] [--start-open] [--output NAME] [--background-blur] [--no-damage] [--argb] [--seconds N] [--palette PATH] [--namespace NAME]\nFeature 3 stateful UI preview. Auto keeps bars on CPU and warms panel GL lazily; other views use native GL with CPU fallback. UI accepts focus on demand; stress panels are click-through. Stop with Ctrl+C or SIGTERM."
                 );
                 return Ok(());
             }
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
+    }
+    if dashboard_fixtures.is_some() && !core_views {
+        return Err("--dashboard-fixtures requires --core-views".into());
     }
     if core_views {
         launcher_panel = true;
@@ -596,6 +608,21 @@ fn start(
                     status_colors.clone(),
                     desktop_owner.clone(),
                     status_radius,
+                    panel_trace,
+                )?,
+            );
+        }
+        for page in dashboard::Page::ALL {
+            views.insert(
+                format!("dashboard-{}", page.name()),
+                dashboard::spec(
+                    page,
+                    status_palette.clone(),
+                    status_colors.clone(),
+                    dashboard::Choice {
+                        client: _ui_provider.clone(),
+                        fixtures: dashboard_fixtures.clone(),
+                    },
                     panel_trace,
                 )?,
             );

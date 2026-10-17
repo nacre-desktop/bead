@@ -1,0 +1,2 @@
+{"t":"snap","topic":"dashboard.system","seq":0,"data":{"health":{"available":true,"stale":false},"processes":{"items":{"process-1":{"pid":123,"name":"Fixture worker","start":"1000","uid":1000,"memory":4096,"cpu_seconds":1.5,"parent":1}},"order":["process-1"]},"disks":{"items":{"disk-1":{"path":"/","total":1000000,"used":250000}},"order":["disk-1"]}}}
+{"t":"patch","topic":"dashboard.system","base":0,"seq":1,"data":{"health":{"available":false,"stale":true,"error":{"code":"unavailable","message":"Service unavailable","retry":true}}}}

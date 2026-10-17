@@ -22,6 +22,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     engine_socket=env.get('BEAD_LAUNCHER_ENGINE_SOCKET')
     core_views=os.environ.get('BEAD_CORE_VIEWS_PROOF')=='1'
     status_views=os.environ.get('BEAD_CORE_STATUS_PROOF')=='1'
+    dashboard_views=os.environ.get('BEAD_DASHBOARD_VIEWS_PROOF')=='1'
     release_state=os.environ.get('BEAD_PANEL_IDLE_STATE')=='release'
     query_on_open=os.environ.get('BEAD_LAUNCHER_QUERY_ON_OPEN')=='1'
     expected_query_rows=os.environ.get('BEAD_EXPECT_QUERY_ROWS')
@@ -43,6 +44,10 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
         path.chmod(0o600)
     source_args=['--daemon-socket',engine_socket]if engine_socket else['--menu-fixture',str(fixture)]
     command=[binary,'--bar','--core-views'if core_views else'--launcher-panel',*source_args,'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','300'if core_views else'180']
+    if dashboard_views:
+        assert core_views and status_views,'dashboard proof requires full core views'
+        fixtures=os.environ.get('BEAD_DASHBOARD_FIXTURES')
+        if fixtures:command+=['--dashboard-fixtures',fixtures]
     if os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1':
         assert engine_socket,'shared UI provider requires the real daemon Source'
         command+=['--ui-provider']
@@ -196,6 +201,9 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 result['service_views']={'hover':{},'cycles':[],'status_bar_click_open':os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1','placement_bar_click_open':os.environ.get('BEAD_PLACEMENT_BAR_CLICK_PROOF')=='1'}
                 hover_views=['calendar','sound']+(['network','bluetooth','battery']if status_views else[])
                 sequence=['calendar','sound','launcher']+(['network','bluetooth','battery']if status_views else[])
+                if dashboard_views:
+                    hover_views+=['dashboard-system']
+                    sequence+=['dashboard-weather','dashboard-media','dashboard-system']
                 for view in hover_views:
                     regions=call('state')['prepare_views']
                     r=next(r for r in regions if r['view']==view)
@@ -286,6 +294,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 # may commit. No stale-result acceptance or relaxed marker test.
                 offset=len(matrix.log_text(log))
                 rapid=['calendar','sound','network','bluetooth','battery','calendar','launcher']if status_views else['calendar','sound','calendar','launcher']
+                if dashboard_views:rapid[-1:-1]=['dashboard-weather','dashboard-media','dashboard-system']
                 for view in rapid:
                     call('open',view)
                 state_wait(lambda s:s['view']=='launcher' and s['target_open'] and s['prepared'])

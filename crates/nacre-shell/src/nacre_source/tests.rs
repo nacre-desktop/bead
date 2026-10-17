@@ -349,6 +349,292 @@ async fn fresh(topic: &Topic, predicate: impl Fn(&Value) -> bool) {
     .await
     .unwrap();
 }
+
+async fn fresh_lease(topic: &LeasedTopic, value: &str) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !topic.snapshot().connected || topic.snapshot().data["page"] != value {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+async fn accepted_dashboard(
+    listener: &UnixListener,
+    boot: &str,
+    version: u16,
+) -> (
+    framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>,
+    tokio::net::unix::OwnedWriteHalf,
+) {
+    let (stream, _) = listener.accept().await.unwrap();
+    let (r, mut w) = stream.into_split();
+    let mut r = framing::Reader::new(BufReader::new(r));
+    assert!(matches!(next(&mut r).await, Message::Hello { .. }));
+    let mut welcome = welcome();
+    if let Message::Welcome {
+        topics, boot: id, ..
+    } = &mut welcome
+    {
+        *id = boot.into();
+        topics.insert("dashboard.system".into(), version);
+    }
+    framing::write(&mut w, &welcome).await.unwrap();
+    (r, w)
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn last_page_lease_unsubscribes_releases_payload_and_preserves_link() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let unsubscribed = Arc::new(Notify::new());
+    let done = Arc::new(Notify::new());
+    let observed = unsubscribed.clone();
+    let finished = done.clone();
+    let server = tokio::spawn(async move {
+        let (mut r, mut w) = accepted_dashboard(&listener, "page-boot", 1).await;
+        assert_eq!(
+            next(&mut r).await,
+            Message::Sub {
+                topics: vec!["compositor".into()]
+            }
+        );
+        assert_eq!(
+            next(&mut r).await,
+            Message::Sub {
+                topics: vec!["dashboard.system".into()]
+            }
+        );
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "dashboard.system".into(),
+                seq: 0,
+                data: serde_json::json!({"page":"first", "large": "x".repeat(128 * 1024)}),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut r).await,
+            Message::Resync {
+                topics: vec!["dashboard.system".into()]
+            }
+        );
+        // A queued delta cannot revive a page awaiting its requested snapshot.
+        framing::write(
+            &mut w,
+            &Message::Patch {
+                topic: "dashboard.system".into(),
+                base: 0,
+                seq: 1,
+                data: serde_json::json!({"page":"should-not-display"}),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut r).await,
+            Message::Resync {
+                topics: vec!["dashboard.system".into()]
+            }
+        );
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "dashboard.system".into(),
+                seq: 1,
+                data: serde_json::json!({"page":"second", "large": "y".repeat(128 * 1024)}),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut r).await,
+            Message::Unsub {
+                topics: vec!["dashboard.system".into()]
+            }
+        );
+        framing::write(
+            &mut w,
+            &Message::Ping {
+                id: Id::Integer(701),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut r).await,
+            Message::Pong {
+                id: Id::Integer(701)
+            }
+        );
+        observed.notify_one();
+        finished.notified().await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+    assert!(client.lease_topic("compositor").is_err());
+    let first = client.lease_topic("dashboard.system").unwrap();
+    let first_clone = first.clone();
+    let second = client.lease_topic("dashboard.system").unwrap();
+    fresh_lease(&first, "first").await;
+    first.stop().await.unwrap();
+    assert!(!first_clone.snapshot().connected);
+    assert!(first_clone.snapshot().data.as_object().unwrap().is_empty());
+    assert!(
+        first_clone
+            .invoke("unused".into(), Value::Null)
+            .await
+            .is_err()
+    );
+    second.reconnect().await.unwrap();
+    fresh_lease(&second, "second").await;
+    let snapshot = second.snapshot();
+    let weak = Arc::downgrade(&snapshot.data);
+    drop(snapshot);
+    // Retaining a subscription token must not retain the page's last snapshot.
+    let _subscription = second.subscribe(Arc::new(|_| {})).unwrap();
+    second.stop().await.unwrap();
+    second.stop().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), unsubscribed.notified())
+        .await
+        .unwrap();
+    assert!(
+        weak.upgrade().is_none(),
+        "JSON released from publisher and merge mirror"
+    );
+    assert_eq!(client.status().boot.as_deref(), Some("page-boot"));
+    assert!(!client.0.shared.stop.load(Ordering::Acquire));
+    done.notify_one();
+    client.stop().await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn page_lease_resubscribes_on_boot_and_drop_unsubscribes() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let restart = Arc::new(Notify::new());
+    let go = restart.clone();
+    let done = Arc::new(Notify::new());
+    let finished = done.clone();
+    let server = tokio::spawn(async move {
+        let (mut r, mut w) = accepted_dashboard(&listener, "first-boot", 1).await;
+        let sub = Message::Sub {
+            topics: vec!["dashboard.system".into()],
+        };
+        assert_eq!(next(&mut r).await, sub);
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "dashboard.system".into(),
+                seq: 0,
+                data: serde_json::json!({"page":"first"}),
+            },
+        )
+        .await
+        .unwrap();
+        go.notified().await;
+        drop(r);
+        drop(w);
+        let (mut r, mut w) = accepted_dashboard(&listener, "next-boot", 1).await;
+        assert_eq!(next(&mut r).await, sub);
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "dashboard.system".into(),
+                seq: 0,
+                data: serde_json::json!({"page":"second"}),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut r).await,
+            Message::Unsub {
+                topics: vec!["dashboard.system".into()]
+            }
+        );
+        finished.notify_one();
+        let _ = r.next().await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let page = client.lease_topic("dashboard.system").unwrap();
+    fresh_lease(&page, "first").await;
+    assert_eq!(page.snapshot().epoch, "first-boot");
+    restart.notify_one();
+    fresh_lease(&page, "second").await;
+    assert_eq!(page.snapshot().epoch, "next-boot");
+    drop(page);
+    tokio::time::timeout(Duration::from_secs(5), done.notified())
+        .await
+        .unwrap();
+    client.stop().await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn page_lease_does_not_subscribe_to_unadvertised_version() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let pong = Arc::new(Notify::new());
+    let received = pong.clone();
+    let server = tokio::spawn(async move {
+        let (mut r, mut w) = accepted_dashboard(&listener, "unsupported-page", 2).await;
+        framing::write(
+            &mut w,
+            &Message::Ping {
+                id: Id::Integer(702),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut r).await,
+            Message::Pong {
+                id: Id::Integer(702)
+            }
+        );
+        received.notify_one();
+        assert!(
+            r.next().await.unwrap().is_none(),
+            "no sub for unsupported topic version"
+        );
+    });
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let page = client.lease_topic("dashboard.system").unwrap();
+    tokio::time::timeout(Duration::from_secs(5), pong.notified())
+        .await
+        .unwrap();
+    assert!(!page.snapshot().connected);
+    page.stop().await.unwrap();
+    client.stop().await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn page_leases_share_the_protocol_subscription_cap_and_reuse_released_slots() {
+    let lab = Lab::new();
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+    assert!(client.lease_topic("bad\0topic").is_err());
+    let mut pages = (0..nacre_protocol::MAX_SUBSCRIPTIONS - 1)
+        .map(|i| client.lease_topic(&format!("page-{i}")).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(client.lease_topic("overflow").err().unwrap().code, "busy");
+    let shared = client.lease_topic("page-0").unwrap();
+    drop(pages.remove(0));
+    assert!(
+        client.lease_topic("overflow").is_err(),
+        "independent user still owns the slot"
+    );
+    drop(shared);
+    let reused = client.lease_topic("replacement").unwrap();
+    drop(reused);
+    drop(pages);
+    assert!(client.0.shared.leases.wanted().is_empty());
+    client.stop().await.unwrap();
+}
 #[tokio::test(flavor = "current_thread")]
 async fn permissions_and_peer_identity_are_required() {
     let lab = Lab::new();

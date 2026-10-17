@@ -113,6 +113,9 @@ pub struct Chrome {
     secondary: [u8; 4],
 }
 impl Chrome {
+    pub fn set_engaged(&mut self, engaged: bool) {
+        self.engaged = engaged;
+    }
     pub fn new(
         attachment: Attachment,
         colors: &bead::render::Palette,

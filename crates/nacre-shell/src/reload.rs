@@ -13,6 +13,8 @@ pub struct Runtime {
     calendar_subscription: Option<bead::core::source::Subscription>,
     status: Option<std::rc::Rc<crate::status_views::Status>>,
     status_subscription: Option<bead::core::source::Subscription>,
+    dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
+    dashboard_subscription: Vec<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
@@ -82,6 +84,8 @@ impl Runtime {
             calendar_subscription: None,
             status: None,
             status_subscription: None,
+            dashboard: None,
+            dashboard_subscription: Vec::new(),
             launcher_memory: None,
             connection_status: None,
             connection_subscription: None,
@@ -135,6 +139,13 @@ impl Runtime {
         mut self,
         source: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     ) -> Result<Self, Box<dyn Error>> {
+        if self.launcher.is_some()
+            || self.calendar.is_some()
+            || self.status.is_some()
+            || self.dashboard.is_some()
+        {
+            return Err("one data projector per panel".into());
+        }
         let menu = std::rc::Rc::new(crate::launcher::Menu::new(source)?);
         let projector = menu.clone();
         self.session
@@ -161,7 +172,11 @@ impl Runtime {
         mut self,
         source: std::sync::Arc<dyn bead::core::source::Source>,
     ) -> Result<Self, Box<dyn Error>> {
-        if self.launcher.is_some() || self.status.is_some() {
+        if self.launcher.is_some()
+            || self.calendar.is_some()
+            || self.status.is_some()
+            || self.dashboard.is_some()
+        {
             return Err("one data projector per panel".into());
         }
         let calendar = std::rc::Rc::new(crate::calendar::Calendar::new(source));
@@ -176,7 +191,11 @@ impl Runtime {
         kind: crate::status_views::Kind,
         source: std::sync::Arc<dyn bead::core::source::Source>,
     ) -> Result<Self, Box<dyn Error>> {
-        if self.launcher.is_some() || self.calendar.is_some() || self.status.is_some() {
+        if self.launcher.is_some()
+            || self.calendar.is_some()
+            || self.status.is_some()
+            || self.dashboard.is_some()
+        {
             return Err("one data projector per panel".into());
         }
         let status = std::rc::Rc::new(crate::status_views::Status::new(kind, source));
@@ -184,6 +203,34 @@ impl Runtime {
         self.session
             .set_projector(Box::new(move |_| Ok(projector.project())));
         self.status = Some(status);
+        Ok(self)
+    }
+    pub fn with_dashboard(
+        mut self,
+        page: crate::dashboard::Page,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+        updates: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+        preview: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.launcher.is_some()
+            || self.calendar.is_some()
+            || self.status.is_some()
+            || self.dashboard.is_some()
+        {
+            return Err("one data projector per panel".into());
+        }
+        let dashboard = std::rc::Rc::new(crate::dashboard::Dashboard::new(
+            page, source, updates, preview,
+        ));
+        let projector = dashboard.clone();
+        self.session
+            .set_projector(Box::new(move |_| Ok(projector.project())));
+        self.actions.register("view.open", "ui.popouts")?;
+        self.actions.grant("ui.popouts");
+        if let Some(chrome) = &mut self.chrome {
+            chrome.set_engaged(true);
+        }
+        self.dashboard = Some(dashboard);
         Ok(self)
     }
     pub fn with_launcher_memory(
@@ -555,6 +602,12 @@ impl SceneSource for Runtime {
             match status.subscribe(wakeup.clone()) {
                 Ok(subscription) => self.status_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=status_subscription"),
+            }
+        }
+        if let Some(dashboard) = &self.dashboard {
+            match dashboard.subscribe(wakeup.clone()) {
+                Ok(subscription) => self.dashboard_subscription = subscription,
+                Err(_) => eprintln!("SOURCE_ERROR code=dashboard_subscription"),
             }
         }
         if let Some(menu) = &self.launcher {

@@ -22,6 +22,9 @@ use tokio::{
 };
 
 mod connection;
+mod leases;
+#[cfg(test)]
+use leases::LeasedTopic;
 
 type Action = Arc<dyn Fn(String, Value) -> source::Reply<'static> + Send + Sync>;
 type Event = Arc<dyn Fn(&Message) + Send + Sync>;
@@ -53,11 +56,27 @@ struct Shared {
     link: Publisher,
     connection: connection::Connection,
     topics: BTreeMap<String, Publisher>,
+    leases: leases::Registry,
     status: Mutex<Status>,
     stop: AtomicBool,
     notify: Notify,
     ended: AtomicBool,
     closed: Notify,
+}
+impl Shared {
+    fn publisher(&self, name: &str) -> Option<Publisher> {
+        self.topics
+            .get(name)
+            .cloned()
+            .or_else(|| self.leases.publisher(name))
+    }
+    fn publishers(&self) -> Vec<Publisher> {
+        self.topics
+            .values()
+            .cloned()
+            .chain(self.leases.publishers())
+            .collect()
+    }
 }
 struct OnExit(Arc<Shared>);
 impl Drop for OnExit {
@@ -66,7 +85,7 @@ impl Drop for OnExit {
             *status = Status::default();
         }
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.0.link.disconnect()));
-        for publisher in self.0.topics.values() {
+        for publisher in self.0.publishers() {
             let _ =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| publisher.disconnect()));
         }
@@ -255,6 +274,7 @@ impl Client {
             link,
             connection,
             topics,
+            leases: leases::Registry::default(),
             status: Mutex::new(Status::default()),
             stop: AtomicBool::new(false),
             notify: Notify::new(),
@@ -422,7 +442,7 @@ fn disconnect(shared: &Shared) {
     if let Ok(mut status) = shared.status.lock() {
         *status = Status::default();
     }
-    for publisher in shared.topics.values() {
+    for publisher in shared.publishers() {
         let _ = publisher.disconnect();
     }
 }
@@ -432,6 +452,72 @@ struct Session {
     boot: String,
     methods: BTreeMap<String, nacre_protocol::Method>,
     available: Vec<String>,
+    advertised: BTreeMap<String, u16>,
+    leased: BTreeMap<String, u64>,
+}
+async fn sync_leases(
+    shared: &Shared,
+    session: &mut Session,
+    mirrors: &mut BTreeMap<String, Mirror>,
+) -> source::Result<()> {
+    let wanted = shared.leases.wanted();
+    let removed = session
+        .leased
+        .iter()
+        .filter(|(name, generation)| {
+            wanted
+                .get(*name)
+                .is_none_or(|w| w.generation != **generation)
+        })
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    for name in &removed {
+        session.leased.remove(name);
+        session.available.retain(|n| n != name);
+        mirrors.remove(name);
+    }
+    if !removed.is_empty() {
+        send(
+            shared,
+            &mut session.writer,
+            &Message::Unsub { topics: removed },
+        )
+        .await?;
+    }
+    let mut added = Vec::new();
+    let mut resync = Vec::new();
+    for (name, wanted) in wanted {
+        if session.advertised.get(&name) != Some(&1) {
+            continue;
+        }
+        if !session.leased.contains_key(&name) {
+            wanted.publisher.restart(session.boot.clone())?;
+            let mut mirror = Mirror::new(Instant::now());
+            mirror.reconnected(&session.boot, Instant::now())?;
+            mirrors.insert(name.clone(), mirror);
+            session.leased.insert(name.clone(), wanted.generation);
+            session.available.push(name.clone());
+            added.push(name);
+        } else if wanted.resync {
+            if let Some(mirror) = mirrors.get_mut(&name) {
+                mirror.disconnected(Instant::now());
+            }
+            wanted.publisher.disconnect()?;
+            resync.push(name);
+        }
+    }
+    if !added.is_empty() {
+        send(shared, &mut session.writer, &Message::Sub { topics: added }).await?;
+    }
+    if !resync.is_empty() {
+        send(
+            shared,
+            &mut session.writer,
+            &Message::Resync { topics: resync },
+        )
+        .await?;
+    }
+    Ok(())
 }
 async fn connect(config: &Config) -> source::Result<Session> {
     check_socket(&config.socket)?;
@@ -502,6 +588,8 @@ async fn connect(config: &Config) -> source::Result<Session> {
         boot,
         methods,
         available,
+        advertised: topics,
+        leased: BTreeMap::new(),
     })
 }
 async fn send(
@@ -531,8 +619,9 @@ fn apply_snapshot(
         });
         if mirror.accept(snapshot, Instant::now())? == Applied::Updated
             && let Some(snapshot) = mirror.snapshot()
+            && let Some(publisher) = shared.publisher(topic)
         {
-            shared.topics[topic].publish_shared(snapshot.data.clone())?;
+            publisher.publish_shared(snapshot.data.clone())?;
         }
     }
     Ok(())
@@ -552,11 +641,14 @@ fn apply_patch(
     let applied = mirror.patch(boot, base, seq, data, Instant::now())?;
     if applied == Applied::Updated
         && let Some(snapshot) = mirror.snapshot()
+        && let Some(publisher) = shared.publisher(topic)
     {
-        shared.topics[topic].publish_shared(snapshot.data.clone())?;
+        publisher.publish_shared(snapshot.data.clone())?;
     }
-    if applied == Applied::Resync {
-        shared.topics[topic].disconnect()?;
+    if applied == Applied::Resync
+        && let Some(publisher) = shared.publisher(topic)
+    {
+        publisher.disconnect()?;
     }
     Ok(applied)
 }
@@ -640,7 +732,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                     methods: session.methods.clone(),
                 };
             }
-            for topic in shared.topics.values() {
+            for topic in shared.publishers() {
                 if topic.restart(session.boot.clone()).is_err() {
                     break 'outer;
                 }
@@ -657,79 +749,83 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
             for mirror in mirrors.values_mut() {
                 let _ = mirror.reconnected(&session.boot, Instant::now());
             }
-            let mut pending = BTreeMap::<Id, Pending>::new();
-            let mut handlers: JoinSet<(Id, source::Result<Value>)> = JoinSet::new();
-            loop {
-                if shared.stop.load(Ordering::Acquire) {
-                    break;
-                }
-                let deadline = pending.values().map(|p| p.deadline).min();
-                let alarm = async {
-                    match deadline {
-                        Some(d) => tokio::time::sleep_until(d.into()).await,
-                        None => std::future::pending::<()>().await,
+            // Initial subscription failure uses the same disconnect/backoff path.
+            if sync_leases(&shared, session, &mut mirrors).await.is_ok() {
+                let mut pending = BTreeMap::<Id, Pending>::new();
+                let mut handlers: JoinSet<(Id, source::Result<Value>)> = JoinSet::new();
+                loop {
+                    if shared.stop.load(Ordering::Acquire) {
+                        break;
                     }
-                };
-                tokio::pin!(alarm);
-                tokio::select! {
-                    _=shared.notify.notified()=>break,
-                    _=&mut alarm=>expire(&mut pending),
-                    command=commands.recv()=>match command {
-                        Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
-                        Some(Command::Reconnect(reply))=>{disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
-                        Some(Command::Call{id,method,params,deadline,reply})=>{
-                            if deadline<=Instant::now(){let _=reply.send(Err(timeout()));continue;}
-                            if pending.len()>=nacre_protocol::MAX_CALLS{let _=reply.send(Err(Error::new("busy","daemon outstanding-call limit",true)));continue;}
-                            next+=1;if next as u64>nacre_protocol::MAX_SAFE_INTEGER{let _=reply.send(Err(Error::new("internal","call id exhausted",false)));break;}
-                            let id=id.unwrap_or(Id::Integer(next));
-                            if pending.contains_key(&id){let _=reply.send(Err(Error::new("validation","duplicate call id",false)));continue;}
-                            let remaining=deadline.saturating_duration_since(Instant::now());
-                            let trace_menu=bead::core::profile::enabled() && method=="menu.query";
-                            let message=Message::Call{id:id.clone(),m:method,p:params,timeout:Some(remaining.as_millis().clamp(1,120000) as u32)};
-                            if let Err(e)=framing::encode(&message){let _=reply.send(Err(failure(e)));continue;}
-                            pending.insert(id.clone(),Pending{reply,deadline,trace_menu});
-                            if !tokio::time::timeout(remaining.min(Duration::from_secs(10)),send(&shared,&mut session.writer,&message)).await.is_ok_and(|r|r.is_ok()){break;}
-                            if trace_menu && let Id::Integer(id)=&id { println!("MENU_RPC_SENT id={id}"); }
+                    let deadline = pending.values().map(|p| p.deadline).min();
+                    let alarm = async {
+                        match deadline {
+                            Some(d) => tokio::time::sleep_until(d.into()).await,
+                            None => std::future::pending::<()>().await,
+                        }
+                    };
+                    tokio::pin!(alarm);
+                    tokio::select! {
+                        _=shared.notify.notified()=>break,
+                        _=shared.leases.changed.notified()=>{if sync_leases(&shared,session,&mut mirrors).await.is_err(){break;}},
+                        _=&mut alarm=>expire(&mut pending),
+                        command=commands.recv()=>match command {
+                            Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
+                            Some(Command::Reconnect(reply))=>{disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
+                            Some(Command::Call{id,method,params,deadline,reply})=>{
+                                if deadline<=Instant::now(){let _=reply.send(Err(timeout()));continue;}
+                                if pending.len()>=nacre_protocol::MAX_CALLS{let _=reply.send(Err(Error::new("busy","daemon outstanding-call limit",true)));continue;}
+                                next+=1;if next as u64>nacre_protocol::MAX_SAFE_INTEGER{let _=reply.send(Err(Error::new("internal","call id exhausted",false)));break;}
+                                let id=id.unwrap_or(Id::Integer(next));
+                                if pending.contains_key(&id){let _=reply.send(Err(Error::new("validation","duplicate call id",false)));continue;}
+                                let remaining=deadline.saturating_duration_since(Instant::now());
+                                let trace_menu=bead::core::profile::enabled() && method=="menu.query";
+                                let message=Message::Call{id:id.clone(),m:method,p:params,timeout:Some(remaining.as_millis().clamp(1,120000) as u32)};
+                                if let Err(e)=framing::encode(&message){let _=reply.send(Err(failure(e)));continue;}
+                                pending.insert(id.clone(),Pending{reply,deadline,trace_menu});
+                                if !tokio::time::timeout(remaining.min(Duration::from_secs(10)),send(&shared,&mut session.writer,&message)).await.is_ok_and(|r|r.is_ok()){break;}
+                                if trace_menu && let Id::Integer(id)=&id { println!("MENU_RPC_SENT id={id}"); }
+                            },
+                            #[cfg(test)] Some(Command::Wire(message,reply))=>{let result=send(&shared,&mut session.writer,&message).await.map(|_|Value::Null);let _=reply.send(result);},
+                            None=>break,
                         },
-                        #[cfg(test)] Some(Command::Wire(message,reply))=>{let result=send(&shared,&mut session.writer,&message).await.map(|_|Value::Null);let _=reply.send(result);},
-                        None=>break,
-                    },
-                    complete=handlers.join_next(),if !handlers.is_empty()=>{if let Some(Ok((id,result)))=complete {let reply=match result {Ok(ok)=>Reply::Ok{ok},Err(e)=>Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Unavailable,e.message,e.retry).dispatch_state(true)}};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}}},
-                    message=session.reader.next()=>{
-                        let Ok(Some(message))=message else{break;};
-                        match message {
-                            Message::Snap{topic,seq,data}=>{
-                                if !session.available.contains(&topic){continue;}
-                                if apply_snapshot(&shared,&mut mirrors,&session.boot,&topic,seq,data).is_err(){break;}
-                            },
-                            Message::Patch{topic,base,seq,data}=>{
-                                if !session.available.contains(&topic){continue;}
-                                match apply_patch(&shared,&mut mirrors,&session.boot,&topic,base,seq,&data) {
-                                    Ok(Applied::Resync)=>{
-                                        if send(&shared,&mut session.writer,&Message::Resync{topics:vec![topic]}).await.is_err(){break;}
-                                    },
-                                    Err(_)=>break,
-                                    _=>{},
-                                }
-                            },
-                            Message::Ret{id,reply}=>resolve(&mut pending,&id,reply),
-                            Message::Ping{id}=>{if send(&shared,&mut session.writer,&Message::Pong{id}).await.is_err(){break;}},
-                            Message::Call{id,m,p,timeout:limit}=>{if let Some((_,methods,handler))=&config.provider && methods.contains_key(&m)&&handlers.len()<nacre_protocol::MAX_CALLS {let future=handler(m,p);handlers.spawn(async move{(id,tokio::time::timeout(Duration::from_millis(limit.unwrap_or(1000) as u64),future).await.unwrap_or_else(|_|Err(timeout())))});continue;}
-                                let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::UnknownMethod,"UI method unavailable",false).dispatch_state(true)};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}},
-                            Message::Ev{..}|Message::Lost{..}|Message::Pong{..}=>{if let Some(event)=&config.event {event(&message);}},
-                            Message::Error{..}=>break,
-                            _=>break,
+                        complete=handlers.join_next(),if !handlers.is_empty()=>{if let Some(Ok((id,result)))=complete {let reply=match result {Ok(ok)=>Reply::Ok{ok},Err(e)=>Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Unavailable,e.message,e.retry).dispatch_state(true)}};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}}},
+                        message=session.reader.next()=>{
+                            let Ok(Some(message))=message else{break;};
+                            match message {
+                                Message::Snap{topic,seq,data}=>{
+                                    if !session.available.contains(&topic){continue;}
+                                    if apply_snapshot(&shared,&mut mirrors,&session.boot,&topic,seq,data).is_err(){break;}
+                                },
+                                Message::Patch{topic,base,seq,data}=>{
+                                    if !session.available.contains(&topic){continue;}
+                                    match apply_patch(&shared,&mut mirrors,&session.boot,&topic,base,seq,&data) {
+                                        Ok(Applied::Resync)=>{
+                                            if send(&shared,&mut session.writer,&Message::Resync{topics:vec![topic]}).await.is_err(){break;}
+                                        },
+                                        Err(_)=>break,
+                                        _=>{},
+                                    }
+                                },
+                                Message::Ret{id,reply}=>resolve(&mut pending,&id,reply),
+                                Message::Ping{id}=>{if send(&shared,&mut session.writer,&Message::Pong{id}).await.is_err(){break;}},
+                                Message::Call{id,m,p,timeout:limit}=>{if let Some((_,methods,handler))=&config.provider && methods.contains_key(&m)&&handlers.len()<nacre_protocol::MAX_CALLS {let future=handler(m,p);handlers.spawn(async move{(id,tokio::time::timeout(Duration::from_millis(limit.unwrap_or(1000) as u64),future).await.unwrap_or_else(|_|Err(timeout())))});continue;}
+                                    let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::UnknownMethod,"UI method unavailable",false).dispatch_state(true)};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}},
+                                Message::Ev{..}|Message::Lost{..}|Message::Pong{..}=>{if let Some(event)=&config.event {event(&message);}},
+                                Message::Error{..}=>break,
+                                _=>break,
+                            }
                         }
                     }
                 }
-            }
-            handlers.abort_all();
-            for (_, p) in pending {
-                let _ = p.reply.send(Err(if p.deadline <= Instant::now() {
-                    timeout()
-                } else {
-                    unavailable()
-                }));
+                handlers.abort_all();
+                for (_, p) in pending {
+                    let _ = p.reply.send(Err(if p.deadline <= Instant::now() {
+                        timeout()
+                    } else {
+                        unavailable()
+                    }));
+                }
             }
         }
         drop(session);

@@ -1,0 +1,29 @@
+-- SPDX-License-Identifier: GPL-3.0-only
+local ui=require("bead.ui")
+local C=require("./components")
+return function()
+    return ui.Box{id="weather",width=940,height=562,
+        ui.Column{id="hero",position="absolute",left=0,top=0,width=564,height=298,padding=22,gap=8,radius=20,fill="surfaceContainer",
+            C.title("location",ui.bind("dashboard.heading"),520),
+            ui.Text{id="temperature",text=ui.bind("dashboard.metric"),font_size=76,height=100,color="primary"},
+            ui.Text{id="condition",text=ui.bind("dashboard.summary"),font_size=20,height=52,width=520,color="onSurface"},
+            ui.Text{id="details",text=ui.bind("dashboard.detail"),font_size=14,height=48,width=520,color="onSurfaceVariant"},
+        },
+        ui.Column{id="hourly",position="absolute",left=0,top=310,width=564,height=252,padding=16,gap=12,radius=16,fill="surfaceContainerLow",
+            C.title("title","Next hours",532),
+            ui.Row{id="hours",height=170,gap=8,
+                ui.Repeat{id="items",model=ui.bind("dashboard.rows"),key="id",render=function(item)
+                    return ui.Column{id="hour",width=59,height=160,gap=12,align="center",
+                        ui.Text{text=item.value,height=30,font_size=20,color="primary"},
+                        ui.Text{text=item.detail,width=59,height=48,font_size=12,text_align="center",color="onSurfaceVariant"},
+                        ui.Text{text=item.label,height=24,font_size=14,color="onSurface"},
+                    }
+                end},
+            },
+        },
+        ui.Column{id="outlook",position="absolute",left=580,top=0,width=360,height=562,padding=16,gap=16,radius=16,fill="surfaceContainerLow",
+            C.title("title","Daily outlook",328),
+            C.rows("days","dashboard.secondary",328,470,false,"Forecast unavailable"),
+        },
+    }
+end

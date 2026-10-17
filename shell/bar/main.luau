@@ -20,6 +20,9 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
                 }
             end},
         },
+        popouts and kit.Button{id="dashboard",width=30,height=30,padding=0,fill="transparent",aria_label="Open dashboard",on_activate=ui.action("view.open","dashboard-system"),
+            glyph("glyph","dashboard","primary"),
+        } or nil,
     },
     ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=10,height=30,justify="center",align="center",gap=7,
         ui.Text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
