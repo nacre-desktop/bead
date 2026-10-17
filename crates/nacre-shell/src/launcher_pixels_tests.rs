@@ -101,3 +101,53 @@ fn real_launcher_grid_results_and_scrolled_pixels_match_accepted_markup() -> Res
     }
     Ok(())
 }
+
+#[test]
+fn restored_launcher_route_reopens_with_matching_mode_and_results_layout() -> Result<()> {
+    for route in ["search", "actions"] {
+        let mut h = harness("", 0.)?;
+        // Only page/route strings are durable; mode and query are transient.
+        h.update(BTreeMap::from([(
+            "launcher.route".into(),
+            Value::Text(route.into()),
+        )]))?;
+        assert_eq!(
+            h.session.stores.get("launcher.mode"),
+            Some(&Value::Text("apps".into()))
+        );
+        let mut reply = crate::launcher::fixture_reply(
+            "",
+            vec![serde_json::json!({"id":"restored","name":"Restored result","icon":"fixture"})],
+        );
+        reply["mode"] = serde_json::json!(route);
+        reply["route"] = serde_json::json!(route);
+        let source = std::sync::Arc::new(crate::launcher::Fixture::new(
+            serde_json::json!({"queries":{"":reply}}),
+        )?);
+        let menu = crate::launcher::Menu::new(Some(source))?;
+        h.session
+            .set_projector(Box::new(move |stores| menu.project(stores)));
+        h.update(BTreeMap::new())?;
+        assert_eq!(
+            h.session.stores.get("launcher.mode"),
+            Some(&Value::Text(route.into()))
+        );
+        assert_eq!(
+            h.session.stores.get("launcher.search.text"),
+            Some(&Value::Text(String::new()))
+        );
+        assert!(
+            h.scene()
+                .layers
+                .iter()
+                .any(|layer| layer.id.contains("results"))
+        );
+        assert!(
+            !h.scene()
+                .layers
+                .iter()
+                .any(|layer| layer.id.contains("app-grid"))
+        );
+    }
+    Ok(())
+}

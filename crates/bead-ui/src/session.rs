@@ -430,7 +430,10 @@ impl Session {
         &mut self,
         changes: BTreeMap<String, Value>,
     ) -> Result<Option<Scene>, Diagnostic> {
-        if self.pending.is_none()
+        // An empty/unused model delta may be a wakeup for external data. Read
+        // its projector before deciding there is no view change.
+        if self.projector.is_none()
+            && self.pending.is_none()
             && let Some(generation) = &self.generation
             && !generation.model_affects_view(changes.iter().filter_map(|(id, value)| {
                 (self.stores.get(id) != Some(value)).then_some(id.as_str())

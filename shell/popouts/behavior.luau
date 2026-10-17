@@ -22,7 +22,7 @@ end
 return {
     stores={
         ["panel.open"]=true,["view.edge"]="top",
-        ["calendar.ready"]=false,["calendar.initialized"]=false,["calendar.year"]=1970,["calendar.month"]=1,
+        ["calendar.ready"]=false,["calendar.initialized"]=false,["calendar.follow_today"]=false,["calendar.year"]=1970,["calendar.month"]=1,
         ["calendar.first_weekday"]=1,["calendar.today"]="",
     },
     actions={
@@ -31,7 +31,10 @@ return {
             if type(delta)~="number" or delta%1~=0 or math.abs(delta)>1200 then return end
             local y,m=displayed(s)
             y,m=shifted(y,m,delta)
-            if valid(y,m) then s["calendar.year"],s["calendar.month"]=y,m end
+            if valid(y,m) then
+                s["calendar.follow_today"]=false
+                s["calendar.year"],s["calendar.month"]=y,m
+            end
         end,
     },
     computed={

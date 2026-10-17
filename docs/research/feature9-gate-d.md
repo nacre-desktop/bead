@@ -32,6 +32,73 @@ with measurements/core forecast. Full parity is an estimate-only alternative.
 Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
 release. QML stays daily driver. No live run/install/release is authorized.
 
+### Calendar Source and restored launcher modes — 2026-10-17
+
+Source wakes now reach external projectors even when a view has no used Model
+fields. An unchanged wake still produces no staged scene/layout/raster. Calendar
+initializes from the clock and follows the date until its month is browsed;
+reload retains that choice. Older live views without the new follow flag retain
+their selected month. This is transient view state: year/month/follow are not
+written to disk and an idle-retired calendar starts at today's month again.
+
+The shared bar no longer retains two unused startup-state copies. Panel workers
+still restore their own permitted page/route state on first use. Restoring a
+Search/Actions route now reconstructs its launcher mode; query text remains
+transient and empty. Actual-widget tests first reproduced the ignored Source
+wake/date rollover and restored-route failures, then passed with the fixes.
+197 workspace tests, the isolated trace allocator proof, fmt, all-feature clippy
+with warnings denied and the CPU-only build pass.
+
+The final normal binary `d54df4fe` additionally passes seeded Search on Hyprland
+and Actions on niri, including matching commit/presentation feedback. The accepted
+`5527d8ab` control first reproduces Search route with Apps mode and exits failing;
+that expected behavioral failure is retained. Final candidate settled UI is
+23.050/23.749 MiB H/N; all 22 closed/settled observations fit own bar+5, both
+25 MiB ceilings and group/cache/owned-cleanup guards pass. These are focused
+correctness/lifecycle proofs, not another five-pair optimization claim. An initial
+harness safety assertion rejected the separate daemon-bundle path before writing
+state; its failed capture remains. The corrected guard requires the UI's exact
+private compositor sandbox state directory. Raw `core-calendar-source-794875f-route-native-v2/`.
+
+A four-cell native screen uses immutable cleanup control `5527d8ab` and Source
+snapshot `37679e46`, matching bundles and frozen daemon `75157fd3`. Each compositor
+has one matched pair, not five-pair statistical acceptance. Strict preparation,
+quick-reopen, input, feedback, close, cache, process-group and cleanup guards pass.
+
+| UI MiB | Hyprland control → Source | niri control → Source |
+| --- | ---: | ---: |
+| Third warm |47.123 → 46.742|45.663 → 45.890|
+| Third closed |22.267 → 21.995|23.075 → 23.021|
+| Settled |23.110 → 22.833|23.780 → 23.785|
+
+These deltas fit the preceding control spreads; no settled saving or extra
+feature allowance is claimed. The fresh fixtures do not measure the saving from
+removing populated startup-state copies. This snapshot predates the additional
+launcher mode-restoration fix; its numbers are not relabeled as that later binary.
+
+The unchanged Nacre calendar/header at reference `54a9e5d6` is now measured using
+the existing private QML harness. A missing test-only NacreMenu shim initially
+raised ReferenceError; that failed capture is preserved and excluded. Adding
+only its read-only recording/elapsed fixture allows the actual widgets to run.
+Both sides use 2880×1800, scale 1.5, matched calendar geometry/content, four-second
+warmup and 60-second observation. H is virtual120/N nested60; refresh is unknown,
+host contention uncontrolled, no own build/capture overlap. No physical test.
+
+| Open calendar/header, PSS+DRM MiB | Hyprland | niri |
+| --- | ---: | ---: |
+| Bead UI, Source snapshot `37679e46` |28.486|31.200|
+| QML actual calendar/header |195.153|176.293|
+
+QML includes 50.250/37.055 MiB DRM; Bead has no DRM client fds; SwapPss is zero.
+QML CPU ticks were zero at the sampling resolution; Bead used 0.217/0.200% of
+one core. QML's static service fixtures and Bead's running bar services differ,
+so this is not an isolated-renderer CPU comparison or whole-core savings claim.
+Calendar content is matched; bar workspace/title/status fixture data and card
+shadow differ. This does not assert full-bar visual or service parity.
+Raw screens: `core-calendar-source-076f509-smoke/`, `qml-reference-v2/` beneath it,
+and `core-calendar-source-076f509-calendar-reference/`. Original failed captures
+and corrected method metadata are retained; no runs were silently reselected.
+
 ### Closed-panel residency audit — 2026-10-17
 
 The actual bar bundle does not preload calendar, sound or launcher modules/assets;
@@ -128,9 +195,10 @@ The niri increase stays reported; 8 ms/key and 16.7 ms p99 remain open. Raw data
 22 memory/native cells, 258 total close samples, cache caps, binary/helper hashes,
 cleanup and paired spreads. Local validation: 193 workspace tests, isolated trace
 allocation proof, fmt, all-target/all-feature clippy and CPU-only build.
-Calendar Source-wake/date-follow/reload and bar startup-state cleanup are separate
-untested drafts; the ranked-prefix typing draft is also outside these captures.
-No new panel is added before this audit is integrated. Dashboard/live plan held.
+At this cleanup checkpoint, Calendar Source/date-follow and bar startup-state
+fixes were separate drafts; their later validation is reported above. The ranked-
+prefix typing draft remains outside these captures. The audit is now integrated
+at `3fb011a`, CI38989066777 green. Dashboard/live plan held.
 
 ### Calendar and named views — memory decision, 2026-10-17
 
@@ -206,9 +274,9 @@ still outlives its worker. No cleanup saving has been measured yet. If25 MiB
 remains a blocker after cleanup, propose a reasoned ceiling instead of repeated
 panel stops. Pure optimization spread guards remain unchanged.
 
-Service views are not complete. Unbrowsed month/year following at a date rollover
-still needs parity with QML; browsed-month retention is already tested. The matched
-unchanged-calendar QML harness is prepared but not run after the memory hold.
+Service views are not complete. The newer Source/date-follow correctness tests and
+matched calendar QML measurement above supersede the earlier rollover/comparison
+gaps; they do not supply missing service actions or full-bar parity.
 No full AP/audio-device/Bluetooth/power action contract is invented. Nacre
 `6a737629` / [CI38965942859](https://github.com/nacre-desktop/nacre/actions/runs/38965942859) is green; `network.watch` remains a change trigger,
 not a stable AP/action snapshot. Typed F3 activation and same-engine QML remain

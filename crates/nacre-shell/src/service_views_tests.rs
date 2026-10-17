@@ -184,7 +184,7 @@ fn calendar_today_changes_do_not_reset_the_browsed_month_or_date_identity() -> R
 }
 
 #[test]
-fn calendar_source_seeds_once_and_recovers_without_writing_host_state() -> Result<()> {
+fn calendar_source_recovers_without_overwriting_a_browsed_month() -> Result<()> {
     use bead::core::source::Source;
     use bead_test::source::FakeSource;
     use std::{rc::Rc, sync::Arc};
@@ -462,5 +462,158 @@ fn bar_bundle_does_not_load_closed_panel_modules_or_assets() -> Result<()> {
         );
     }
     assert!(!bar.sources.is_empty());
+    Ok(())
+}
+
+#[test]
+fn calendar_runtime_consumes_source_wakes_for_date_readiness_and_recovery() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    use bead_test::source::FakeSource;
+    use std::{
+        sync::{Arc, mpsc},
+        time::Duration,
+    };
+    let source = Arc::new(FakeSource::new(serde_json::json!({
+        "date":{"year":2026,"month":12,"day":31}
+    }))?);
+    let h = calendar(2024, 2, 1, 1.)?;
+    let mut runtime = crate::reload::Runtime::new(h.session).with_calendar(source.clone())?;
+    let (send, receive) = mpsc::channel();
+    runtime.services(Box::new(move |event| {
+        send.send(event).unwrap();
+    }));
+    let event = receive.recv_timeout(Duration::from_millis(200))?;
+    assert!(matches!(&event, UiEvent::Model(values) if values.is_empty()));
+    let scene = runtime
+        .stage(event)?
+        .ok_or("calendar wake did not stage changed Source data")?;
+    // Commit the headless session without writing the runtime's durable UI file
+    // or invoking presentation/recovery side effects.
+    runtime.session.commit(scene);
+    assert_eq!(
+        runtime.session.stores.get("calendar.today"),
+        Some(&Value::Text("2026-12-31".into()))
+    );
+    assert_eq!(
+        runtime.session.stores.get("calendar.year"),
+        Some(&Value::Number(2026.))
+    );
+    source.publish(serde_json::json!({"date":{"year":1900,"month":2,"day":29}}))?;
+    let event = receive.recv_timeout(Duration::from_millis(200))?;
+    let scene = runtime
+        .stage(event)?
+        .ok_or("invalid date did not invalidate the view")?;
+    runtime.session.commit(scene);
+    assert_eq!(
+        runtime.session.stores.get("calendar.ready"),
+        Some(&Value::Bool(false))
+    );
+    source.publish(serde_json::json!({"date":{"year":2027,"month":1,"day":1}}))?;
+    let event = receive.recv_timeout(Duration::from_millis(200))?;
+    let scene = runtime
+        .stage(event)?
+        .ok_or("recovered date did not restore the view")?;
+    runtime.session.commit(scene);
+    assert_eq!(
+        runtime.session.stores.get("calendar.ready"),
+        Some(&Value::Bool(true))
+    );
+    assert_eq!(
+        runtime.session.stores.get("calendar.today"),
+        Some(&Value::Text("2027-01-01".into()))
+    );
+    assert_eq!(
+        runtime.session.stores.get("calendar.year"),
+        Some(&Value::Number(2027.))
+    );
+    assert_eq!(
+        runtime.session.stores.get("calendar.month"),
+        Some(&Value::Number(1.))
+    );
+    assert!(
+        runtime.stage(UiEvent::Model(BTreeMap::new()))?.is_none(),
+        "unchanged external data must not stage another layout or raster"
+    );
+    assert_eq!(source.calls(), 0);
+    Ok(())
+}
+
+#[test]
+fn calendar_follows_today_until_the_user_browses_then_keeps_that_month() -> Result<()> {
+    use bead_test::source::FakeSource;
+    use std::sync::Arc;
+    let source = Arc::new(FakeSource::new(serde_json::json!({
+        "date":{"year":2024,"month":2,"day":29}
+    }))?);
+    let projector = crate::calendar::Calendar::new(source.clone());
+    let mut h = calendar(2024, 2, 1, 1.)?;
+    h.session
+        .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+    h.update(BTreeMap::new())?;
+    source.publish(serde_json::json!({"date":{"year":2024,"month":3,"day":1}}))?;
+    h.update(BTreeMap::new())?;
+    assert_eq!(
+        h.session.stores.get("calendar.month"),
+        Some(&Value::Number(3.))
+    );
+    month(&mut h, "Previous month")?;
+    source.publish(serde_json::json!({"date":{"year":2025,"month":1,"day":1}}))?;
+    h.update(BTreeMap::new())?;
+    assert_eq!(
+        h.session.stores.get("calendar.month"),
+        Some(&Value::Number(2.))
+    );
+    assert_eq!(
+        h.session.stores.get("calendar.year"),
+        Some(&Value::Number(2024.))
+    );
+    assert_eq!(
+        h.session.stores.get("calendar.today"),
+        Some(&Value::Text("2025-01-01".into()))
+    );
+    assert_eq!(source.calls(), 0);
+    Ok(())
+}
+
+#[test]
+fn calendar_old_bundle_without_follow_flag_keeps_its_navigation_behavior() -> Result<()> {
+    use bead_test::source::FakeSource;
+    use std::sync::Arc;
+    let source = Arc::new(FakeSource::new(serde_json::json!({
+        "date":{"year":2025,"month":1,"day":1}
+    }))?);
+    let projector = crate::calendar::Calendar::new(source.clone());
+    let stores = bead::core::Stores::default().reconcile(&BTreeMap::from([
+        ("calendar.initialized".into(), Value::Bool(true)),
+        ("calendar.year".into(), Value::Number(2024.)),
+        ("calendar.month".into(), Value::Number(2.)),
+    ]))?;
+    let changes = projector.project(&stores);
+    assert!(!changes.contains_key("calendar.year"));
+    assert!(!changes.contains_key("calendar.month"));
+    assert_eq!(changes["calendar.today"], Value::Text("2025-01-01".into()));
+    // Also preserve an already-open older view when the NEW bundle supplies
+    // its optional follow flag. Calendar month/year are not durable page state.
+    let mut h = calendar(2024, 2, 1, 1.)?;
+    h.update(BTreeMap::from([(
+        "calendar.initialized".into(),
+        Value::Bool(true),
+    )]))?;
+    let projector = crate::calendar::Calendar::new(source);
+    h.session
+        .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+    h.update(BTreeMap::new())?;
+    assert_eq!(
+        h.session.stores.get("calendar.year"),
+        Some(&Value::Number(2024.))
+    );
+    assert_eq!(
+        h.session.stores.get("calendar.month"),
+        Some(&Value::Number(2.))
+    );
+    assert_eq!(
+        h.session.stores.get("calendar.today"),
+        Some(&Value::Text("2025-01-01".into()))
+    );
     Ok(())
 }

@@ -481,12 +481,24 @@ impl Menu {
             Some(Value::Text(s)) => s.clone(),
             _ => String::new(),
         };
-        let mode = text("launcher.mode");
+        let mut mode = text("launcher.mode");
+        let mut restored_route = false;
+        if self.view.borrow().request.is_none()
+            && mode == "apps"
+            && let Some(Value::Text(route)) = stores.get("launcher.route")
+            && matches!(route.as_str(), "search" | "actions")
+        {
+            // Only the page/route is durable. Reconstruct its transient mode
+            // on first projection, without retaining or restoring a query.
+            mode = route.clone();
+            restored_route = true;
+        }
         let request = (
             text("launcher.search.text"),
             if mode.is_empty() { "apps".into() } else { mode },
             text("launcher.engine_route"),
         );
+        let restore_mode = restored_route.then(|| request.1.clone());
         let selection = text("launcher.selection");
         let choose_first =
             !request.0.trim().is_empty() || request.1 != "apps" || !request.2.is_empty();
@@ -577,6 +589,9 @@ impl Menu {
             ("launcher.selection".into(), Value::Text(selection)),
             ("launcher.error".into(), Value::Text(view.error.clone())),
         ]);
+        if let Some(mode) = restore_mode {
+            delta.insert("launcher.mode".into(), Value::Text(mode));
+        }
         let conversion = view.conversion.as_ref();
         for (key, value) in [
             (

@@ -38,7 +38,17 @@ impl Calendar {
                     date.year, date.month, date.day
                 )),
             );
-            if stores.get("calendar.initialized") != Some(&Value::Bool(true)) {
+            // Missing flag preserves navigation in older last-good bundles.
+            if stores.get("calendar.initialized") != Some(&Value::Bool(true))
+                || stores.get("calendar.follow_today") == Some(&Value::Bool(true))
+            {
+                if stores.get("calendar.initialized") != Some(&Value::Bool(true))
+                    && stores.get("calendar.follow_today").is_some()
+                {
+                    // A fresh view follows today. An already-open older bundle
+                    // has no flag; the new false default preserves its browsed month.
+                    values.insert("calendar.follow_today".into(), Value::Bool(true));
+                }
                 values.insert("calendar.initialized".into(), Value::Bool(true));
                 values.insert("calendar.year".into(), Value::Number(date.year.into()));
                 values.insert("calendar.month".into(), Value::Number(date.month.into()));

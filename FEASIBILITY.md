@@ -1,5 +1,31 @@
 # Feasibility
 
+## 2026-10-17 — Calendar Source wakes and transient route restoration
+
+Calendar follows the clock until browsed, including Source-only wakes.
+Reload preserves that choice; retired views release it and start from today.
+Launcher reconstructs Search/Actions mode from its saved route, without queries.
+Actual-widget regressions reproduce the old failures and pass with the fixes.
+
+| Check / UI MiB | Hyprland | niri |
+| --- | ---: | ---: |
+| One-pair Source settled, before → candidate |23.110 → 22.833|23.780 → 23.785|
+| Open calendar, Bead / actual QML calendar+header |28.486 /195.153|31.200 /176.293|
+| Workspace tests / trace proof / fmt / clippy / CPU-only |197 /pass /pass /pass /pass|same source|
+
+Source memory screen is one matched pair/compositor, not five-pair acceptance;
+its deltas fit the previous control spreads. No settled saving is claimed.
+Normal immutable binaries/matching bundles, frozen75157 daemon, 320 apps.
+Nested CPU scale1.5, Hvirtual120/N60, refresh unknown; host uncontrolled,
+no own build/capture overlap. Strict close/cache/group/cleanup guards pass.
+The 60-second calendar comparison uses actual QML widgets at matched geometry;
+QML static service fixtures and Bead running services differ, so CPU is not a
+rendering-speed comparison. Header fixture data/shadow differ; not full parity.
+Source snapshot predates the later launcher-restoration fix; no relabeling.
+Final binary native Search/Actions restore passes H/N; settled23.050/23.749MiB.
+All22 closed/settled samples fit bar+5; group/cache/cleanup and25MiB pass.
+[Scope, provenance and method](docs/research/feature9-gate-d.md#calendar-source-and-restored-launcher-modes--2026-10-17).
+
 ## 2026-10-17 — Closed-panel ownership and large-raster reclamation
 
 Panel modules and assets already load lazily and release with their worker.

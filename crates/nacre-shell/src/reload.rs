@@ -311,6 +311,12 @@ impl Runtime {
         self.actions.grant("desktop.services");
         self.desktop = Some(desktop);
         self.bar = bar;
+        if bar {
+            // Durable panel pages are loaded by their own worker on first open.
+            // The bar must not retain either startup copy after configuration.
+            self.state_file = None;
+            self.session.restore_on_start(Default::default());
+        }
         Ok(self)
     }
     fn desktop_action(

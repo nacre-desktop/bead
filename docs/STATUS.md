@@ -1,73 +1,69 @@
 # Status
 
-## 2026-10-17 — Closed-panel cleanup verified
+## 2026-10-17 — Calendar and launcher restoration verified
 
-The bar already loads only its own bundle. Panel modules, icons, stores,
-subscriptions and rasters release with the worker after the 2.2-second close
-grace; unused hover preparation expires after 2 seconds. The launcher scalar
-mirror now clears too. The application-only 4 MiB mmap policy fixes an older
-large-raster residency failure; no framework allocator/font rewrite.
+Calendar Source-only wakes now project changes; unchanged wakes stage no scene.
+The date follows today until browsed and keeps that choice on reload. Retired
+calendar view state releases after idle; year/month/query are never saved to disk.
+The bar drops two unused startup-state copies. A restored Search/Actions route
+now reconstructs its transient mode, fixing Apps-mode reopening after retirement.
 
-| UI MiB, five alternating pairs | Hyprland before → cleanup | niri before → cleanup |
+197 tests, isolated trace allocator proof, fmt, all-feature warnings-denied clippy
+and CPU-only build pass. Actual-widget red/green tests reproduce the old bugs.
+The accepted native control also reproduces the route bug; the final candidate
+passes Search on Hyprland/Actions on niri with exact presentation feedback.
+All 22 closed/settled samples fit own bar+5; settled23.050/23.749 MiB is below25.
+Cache, process-group and cleanup guards pass. No live test or service takeover.
+[Source, provenance and measurements](research/feature9-gate-d.md#calendar-source-and-restored-launcher-modes--2026-10-17).
+
+| UI MiB, earlier Source snapshot | Hyprland | niri |
 | --- | ---: | ---: |
-| Third warm median |48.102 → 38.350|47.032 → 45.603|
-| Settled median |22.901 → 22.954|23.398 → 23.490|
-| Paired settled delta / control spread |+0.147 / 0.300|+0.097 / 0.735|
-| Maximum candidate settled |23.120|23.924|
+| One-pair settled, control → Source |23.110 → 22.833|23.780 → 23.785|
+| Open calendar, Bead / actual QML calendar+header |28.486 /195.153|31.200 /176.293|
 
-Both 20-cycle native proofs pass, including two unused preparations and quick
-reopen. All 158 candidate closes fit own bar+5; cache/group/cleanup guards pass.
-One paired control fails six close budgets and remains valid=false/exit1 in the
-data. Candidate warm ranges vary; the paired-median gate passes, not a uniform
-peak reduction. No settled saving is claimed. Nested CPU only, scale 1.5,
-H virtual 120/N 60 Hz; refresh unknown, host uncontrolled, no own build overlap.
+The memory screen is one pair, within preceding control spreads, not a new
+optimization claim. Calendar comparison is matched geometry/content, four-second
+warmup/60-second observation; header fixture data/shadow and service activity
+differ. It is not full-bar parity or an isolated-renderer CPU comparison.
+Nested CPU scale1.5, Hvirtual120/N60; refresh unknown, host uncontrolled,
+no own build overlap. Missing/physical measurements are not inferred.
 
-193 tests, isolated trace allocator proof, fmt, all-feature clippy and CPU-only
-build pass; [CI workflow](https://github.com/nacre-desktop/bead/actions/workflows/ci.yml).
-Five CPU pairs give UI paired −0.075/+1.364 ms H/N, within control spreads
-4.153/3.033. Both UI and daemon are slower in this window. No typing gain or
-acceptance: targets remain UI 8 ms/key and presented p99 16.7 ms. The older
-29.61→32.66% typing regression remains on the optimization list.
-[Full measurements, ranges and method](research/feature9-gate-d.md#closed-panel-residency-audit--2026-10-17).
+## Closed-panel cleanup — published 3fb011a, CI38989066777 green
 
-Next: test/fix calendar Source wakes and date-follow behavior, drop unused bar
-startup-state copies, then measure the ranked-prefix typing draft. These drafts
-are untested and outside the frozen cleanup captures. Check this checkpoint’s CI
-before further integration. Dashboard has not started.
+Only the bar bundle stays loaded. Panel modules/icons/stores/subscriptions/rasters
+release after the 2.2-second grace; unused preparation expires after2 seconds.
+The launcher scalar mirror clears too. App-only4MiB mmap policy fixes older
+large-raster retention, with no framework allocator/font rewrite.
+Five memory pairs/compositor: warm third median48.102→38.350 /47.032→45.603MiB;
+settled paired+0.147/+0.097 lies inside control spreads0.300/0.735.
+All158 candidate closes pass ownbar+5, maxsettled23.120/23.924. One control
+fails six close budgets and remains invalid/exit1. Warm ranges vary; no settled
+saving or uniform peak reduction claimed. Five CPU pairs show no typing gain.
+[Full audit](research/feature9-gate-d.md#closed-panel-residency-audit--2026-10-17).
+
+Next: check this checkpoint's CI, then test/measure the preserved ranked-prefix
+UI typing draft. Targets remain UI8ms/key and presented p9916.7ms; historical
+29.61→32.66% typing regression stays open. No new panel or dashboard has started.
 
 ## Core-switch scope and standing rules
 
-Owner accepted recovery/static-text (~0.4 MiB settled) and calendar/sound/routing
-(+1.121/+0.753 MiB H/N). Feature allowance is 0.5 MiB per explained feature,
-not per commit. Pure optimizations preserve warm/settled control spreads;
-every closed-idle UI sample fits own bar+5 and settled UI bar stays ≤25 MiB.
-Closed panels load on first use and release after idle. Propose a reasoned ceiling
-if 25 MiB becomes a blocker after cleanup; no new ceiling is requested now.
+Continue daemon typing/contracts, then remaining bar popouts/service views.
+STOP for review after those, BEFORE dashboard; QML remains the daily driver.
+Typed action contract is upstream CI-green; executor/same-engine QML are pending.
+Keep the frozen measured helper for A/B; no ranking/provider/backend duplication.
+Full AP/audio/Bluetooth/power/tray contracts/hosting remain unavailable;
+network.watch is only an availability/change trigger. Current views are partial.
 
-Continue daemon typing and activation/reconnect/UI-provider contracts, then
-remaining bar popouts/service views. STOP for review after those, BEFORE dashboard.
-Nacre's additive typed action contract is published but its CI repair and actual
-executor remain pending. Keep the validated protocol and frozen measured helper;
-never build launcher ranking/providers or invent service payloads. Network watch
-is only an availability/change trigger; full AP, audio, Bluetooth, power and tray
-contracts/hosting remain unavailable. Calendar/sound/routing are not full parity.
+Feature allowance0.5MiB is per explained feature, not commit. Pure optimizations
+preserve warm/settled control spreads; every close fits ownbar+5 and settled UI
+stays≤25MiB on both compositors. Closed panels load lazily and release after idle.
+No new ceiling requested. Core forecast40–81 eight-hour agent-days,320–648hours,
+roughly3–8weeks at an assumed16–20task-hours/day including waits. Always-on
+90–150MiB remains an estimate; update after service views. On-demand QML windows
+remain included. [Forecast](research/feature9-gate-d.md#gate-e--core-switch-active-2026-10-16).
 
-Core estimate remains 40–81 eight-hour agent-days (320–648 hours), roughly
-3–8 calendar weeks at an assumed 16–20 task-hours/day including waits. Always-on
-90–150 MiB is a forecast, not a measured full core. On-demand QML Settings, Colors,
-Welcome, AI and software windows stay in that plan. Update it after service views.
-[Remaining parity and forecast](research/feature9-gate-d.md#gate-e--core-switch-active-2026-10-16).
-
-## Accepted gates and boundaries
-
-Gate C/optimization and Gate D are accepted for continued work. Bounded partial
-repair retains the accepted exact-pixel behavior. Preserve 6b's open nested-niri
-pacing and strict idle-invariance items. CPU for bars/small panels; GL only for
-large animated surfaces, with the measured ~20 MiB Mesa residue finding.
-
-QML stays the daily driver. The private preview still pins the earlier accepted
-runtime until updated and smoked. The desktop [validation plan](research/gate-e-validation-plan.md)
-is HOLD, not run; earlier physical permission is consumed. Further IME/reader
-work is deferred to public release. No live desktop/install/config/keybinding,
-notification-service takeover, Feature11 or package/release publication.
-The nacre-shell installed-name clash remains open for packaging.
+Keep6b niri pacing/strict idle invariance open. CPU small panels, GL only large
+animated surfaces (~20MiB Mesa residue). Preview still pins the older accepted
+runtime until updated/smoked. [Desktop plan](research/gate-e-validation-plan.md)
+is HOLD, not run; further IME/reader work deferred. No live/install/config/unit/
+keybinding changes, Feature11 or release. Binary/control-script name clash open.

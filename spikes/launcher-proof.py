@@ -23,6 +23,19 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     core_views=os.environ.get('BEAD_CORE_VIEWS_PROOF')=='1'
     release_state=os.environ.get('BEAD_PANEL_IDLE_STATE')=='release'
     query_on_open=os.environ.get('BEAD_LAUNCHER_QUERY_ON_OPEN')=='1'
+    restored_mode=os.environ.get('BEAD_EXPECT_RESTORED_MODE')
+    if restored_mode is not None:
+        assert restored_mode in ['search','actions']
+        private_state=pathlib.Path(env['XDG_STATE_HOME']).resolve()
+        # The UI uses the outer compositor sandbox; bundle_root belongs to
+        # the separate daemon fixture and intentionally has different XDG paths.
+        private_root=runtime.parent
+        assert private_root.name.startswith('bd-') and runtime.name=='r','non-fixture runtime refused'
+        assert private_state==private_root/'state' and private_state.is_dir(),'non-fixture state refused'
+        assert private_root.stat().st_uid==os.getuid() and private_root.stat().st_mode&0o077==0,'non-private sandbox refused'
+        path=private_state/'bead/panels.json';path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+        path.write_text(json.dumps({'version':1,'values':{'panel.open':False,'launcher.route':restored_mode}}))
+        path.chmod(0o600)
     source_args=['--daemon-socket',engine_socket]if engine_socket else['--menu-fixture',str(fixture)]
     command=[binary,'--bar','--core-views'if core_views else'--launcher-panel',*source_args,'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','300'if core_views else'180']
     if os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1':
@@ -130,7 +143,23 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 if not query_on_open or cycle==0:
                     call('prepare');state_wait(lambda s:s['prepared'])
                 offset=len(matrix.log_text(log));began=time.monotonic_ns()
-                if query_on_open:call('launcher','a',target='nacre')
+                if cycle==0 and restored_mode is not None:
+                    call('open')
+                    def restored_presented(text):
+                        for match in re.finditer(r'^UI_STATE (.+)$',text[offset:],re.M):
+                            data=json.loads(match[1])
+                            if data.get('panel.open') is True and data.get('launcher.mode')==restored_mode and data.get('launcher.route')==restored_mode and data.get('launcher.search.text')=='' and not data.get('launcher.error'):
+                                if committed_and_presented(text[offset:][match.end():]):return True
+                        return False
+                    try:matrix.wait_log(log,restored_presented,timeout=8)
+                    except RuntimeError:
+                        states=[json.loads(m[1]) for m in re.finditer(r'^UI_STATE (.+)$',matrix.log_text(log)[offset:],re.M)]
+                        seen=[{'mode':d.get('launcher.mode'),'route':d.get('launcher.route'),'query_empty':d.get('launcher.search.text')==''}for d in states if d.get('panel.open')is True]
+                        (raw/'restored-mode-failure.json').write_text(json.dumps({'expected':restored_mode,'seen':seen[-8:]},indent=2)+'\n')
+                        raise
+                    result['restored_mode']=restored_mode
+                    call('launcher','a',target='nacre')
+                elif query_on_open:call('launcher','a',target='nacre')
                 else:call('open')
                 matrix.wait_log(log,lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* .*companion=true',t[offset:])is not None)
                 if not query_on_open and (cycle==0 or release_state):call('launcher','a',target='nacre')
@@ -190,7 +219,14 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                             after=call('state')
                             for key in ['view','target_open','resident','surfaces']:
                                 assert after[key]==before[key],'invalid request retired a current view'
-                    warm=matrix.idle(client.pid,.2)
+                    reference_seconds=os.environ.get('BEAD_CALENDAR_REFERENCE_SECONDS') if view=='calendar' else None
+                    if reference_seconds is not None:
+                        duration=float(reference_seconds)
+                        assert 1<=duration<=60,'calendar reference duration outside bounded sample'
+                        time.sleep(4)  # Match the static QML reference's warmup.
+                    else:duration=.2
+                    warm=matrix.idle(client.pid,duration)
+                    if reference_seconds is not None:warm['reference_seconds']=duration
                     if observe:warm['external']=observe()
                     offset=len(matrix.log_text(log))
                     if cycle==0:

@@ -39,6 +39,7 @@ def fixture(root):
         'NacreBluetooth': 'property bool available:true; property bool powered:true',
         'NacreNotifs': 'property var retained:[]',
         'NacreTime': 'function format(pattern) {return "10:14"}',
+        'NacreMenu': 'property var workflows:({data:{recording:false},elapsed:"0:00"})',
         'Updates': 'property string message:""; property int count:0',
         'AppLaunch': 'function run(args) {}',
     }
