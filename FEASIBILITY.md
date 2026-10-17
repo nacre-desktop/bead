@@ -1,5 +1,30 @@
 # Feasibility
 
+## 2026-10-17 — First dashboard pages reach the headroom stop
+
+Three lazy dashboard pages compile and render against reserved schema fixtures.
+Their local tests and private headless preview pass; runtime remains unpublished.
+All close budgets pass, but Niri settles inside the owner's new memory reserve.
+The batch stops before paired controls or typing; no gain or parity is claimed.
+
+| Nested result, H / N | Result |
+| --- | --- |
+| Local checks |230 workspace + trace/fmt/Clippy/CPU/release/Luau47 pass|
+| Populated page goldens |Weather/Media/System at scales1/1.5; repeat pass|
+| Unavailable pages, final settled MiB |23.822 /24.413|
+| Fixture native20, final settled MiB |24.423 /24.768; N trips24.5 stop|
+| File / anonymous / shared MiB |16.483/7.246/.693 /16.510/7.152/1.105|
+| Closed / final observations |106 /4, all ownbar+5; all captures hard-guard valid|
+| Maximum closed delta from own bar MiB |2.490 /1.572|
+| Fixture page warm UI medians MiB |45.580–45.852 /45.280–45.970, two samples/page|
+| Registry cache bytes at report |195885 /194114; permanent frame pool542592 raw bytes|
+| New headroom gate |FAIL, no COMPLETE; propose26 ceiling/25.5 stop|
+
+Methods: four serial private nested captures, frozen75157 daemon, same immutable
+release; light metadata only, no own builds/tests. DRM counters null, not a
+measured zero; configured CPU. SwapPss0. Refresh interval0 means unknown.
+No matched QML or old/new paired measurement completed. See research report.
+
 ## 2026-10-17 — Placement and joined frame accepted
 
 The owner accepts the exact measured d88e94e placement candidate.

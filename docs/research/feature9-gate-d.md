@@ -11,6 +11,85 @@ the daily driver; live validation is held.
 
 
 
+## First dashboard pages — headroom stop, 2026-10-17
+
+Owner accepts placement and authorizes the first dashboard subset, adopting the
+full-green c2b26d98 protocol pin. Local checkpoints e944b8f/e6e41c1 implement
+Weather, Media enrichment/lyrics and System process/disk plus Updates. They are
+NOT on main. Three separate entry folders load four page modules plus two
+existing root image snapshots. Source leases share the existing provider link;
+last-user unsubscribe releases payload/mirror state without stopping that link.
+Initial subscription failure uses reconnect backoff. No new service or sampler.
+
+Local 230 workspace tests (ten added: six pages/four leases), isolated trace,
+fmt, warnings-denied Clippy, CPU-only/release and Luau47 pass. Six populated
+bead-test PNGs at scales1/1.5 repeat without updates and assert visible fixture
+label pixels. Unknown readings stay unknown; CPU seconds are cumulative, memory
+is bytes, no fake percent. Typed fixtures reject actions; real topics remain
+unavailable unless actual welcome advertises v1. Media is not a player source.
+Reserved c2 examples are copied unchanged: decoded JSON equality accommodates
+serde_json host feature-dependent object key ordering, then Rust decode/encode,
+merge patch and typed-state validation run. No original wire golden changed.
+
+Private headless try-bead --dashboard-fixtures passes launcher/private notices
+and all three page state/commit/presentation joins; owned cleanup passes. First smoke
+used an unsupported ui.dispatch target; failed evidence is preserved, then
+corrected to the existing private panel IPC. No new public route is inferred.
+Navigation/update widths were corrected during visual review. Actual saved PNG
+pixels/raster ink confirmed labels present; no renderer change was necessary.
+
+Four serial nested captures use immutable release1a821f8d and frozen helper75157,
+no builds/tests during capture, only light metadata. Two nine-cycle unavailable-page
+runs precede two 20-cycle fixture runs, all nine views represented. This is
+shared-host, not quiet or physical. Hypr virtual120 is requested, but both logs
+report refresh_ns=0 (unknown): no measured120-Hz or physical-pacing claim.
+
+| Measured UI state, MiB unless noted | Hyprland | Niri |
+| --- | ---: | ---: |
+| Unavailable pages: cold bar / final settled |21.785 /23.822|23.124 /24.413|
+| Fixture native20: cold bar / final settled |21.938 /24.423|23.176 /24.768|
+| Final file-backed / anonymous / shared |16.483 /7.246 /.693|16.510 /7.152 /1.105|
+| Maximum closed UI / delta from own bar |24.428 /2.490|24.748 /1.572|
+| Closed samples / final settled samples |53 /2|53 /2|
+| UI + daemon/workers, fixture final |56.371|56.417|
+| Weather / Media / System warm median |45.852 /45.580 /45.590|45.970 /45.442 /45.280|
+| Cold command to ready-present range, 2 samples/page ms |104.01–127.97|118.61–142.94|
+| Registry cache bytes at report |195885|194114|
+
+Totals here are measured PSS+SwapPss; raw DRM counter is null, not a measured
+zero. Rendering is configured CPU. SwapPss is 0 in all samples. Kernel backing
+categories are exact final rollups. Last-closed smaps map 16.547/16.566 MiB to the
+executable (including private writable portions); most remaining mapped files
+are shared libraries. The permanent decoration pool is 542,592 raw bytes; panel
+workers, rasters and SHM release, and reported caches total only about 0.19 MiB.
+This is not 77 MiB of retained panels. No new matched feature-delta attribution is
+available: the driver stops before its five alternating pairs. Historical frame
+maxima23.096/23.648 are another cohort and not a substitute paired control.
+
+All 106 closed observations plus four final settled samples fit own bar + 5 MiB and are
+below 25MiB. Every capture's existing budget_failures is empty. The additional
+owner headroom rule FAILS on Niri24.767578MiB (less than.5MiB below 25); STOP.json
+is written and there is no COMPLETE marker. No further pairs or typing ran.
+Scoped exact-artifact process audit finds zero remaining; no desktop lab slot/job.
+
+Propose 26 MiB settled ceiling with stop at 25.5, retaining ownbar+5, explained
+increases, unexplained anonymous > 1 MiB and pure-optimization safeguards. This
+would leave1.232MiB hard headroom above this niri sample; it is an owner decision,
+not a waiver. Alternatively retain25 and authorize a bounded code-footprint
+pass; potential savings are unmeasured. Dashboard runtime/pin remains local.
+Only this report and accepted placement are published. No live changes.
+
+Forecast remains 40–81 eight-hour agent-days,320–648 task hours, practical3–8 calendar
+weeks at 16–20 task hours/day with dependency/hardware waits. First fixture pages are
+built; hosted data/actions, remaining pages and source parity are not. Keep the
+90–150 MiB complete-core estimate distinct from measured 56.4 MiB bar/daemon group
+(excludes separate notice host/wallpaper). The remaining-parity table below
+continues to apply; this prototype does not justify reducing hard unbuilt work.
+Typing 9.963/10.922ms/key and p99 30.886/31.562 remain historical/unaccepted;
+new core-frame typing and matched QML dashboard capture are NOT MEASURED.
+Keep 6b pacing/strict idle, long chaos, Reader capacity/publication, remaining
+cache bounds and binary-name clash open. STOP for first-page/memory decision.
+
 ## Placement accepted — 2026-10-17
 
 Owner accepts exact d88e94e placement plus joined rim at paired settled

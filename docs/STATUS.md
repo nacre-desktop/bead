@@ -1,53 +1,56 @@
 # Status
 
-## 2026-10-17 — Placement accepted; first dashboard pages next
+## 2026-10-17 — First dashboard pages built; memory headroom stop
 
-Owner accepts measured placement/joined-frame candidate d88e94e. Its code is
-integrated unchanged onto main. Fresh local checks pass: 220 workspace tests,
-trace checks, fmt, Clippy with warnings denied and CPU-only build. Eleven real-Qt
-geometry/rim cases and paired 2880×1800/1.5 placement masks pass, with exact
-solid interiors. Prior measured-source checks: 220 workspace tests, trace tests,
-fmt/clippy/CPU-only/release pass. Strict mapped-close hover race fixed; no proof
-weakened.
+Placement/frame 9ea0a70 is published and [CI 39017972201](https://github.com/nacre-desktop/bead/actions/runs/39017972201)
+is green. Its code/assets equal owner-accepted d88e94e; 220 workspace tests,
+trace/fmt/Clippy/CPU-only pass. Measured settled maxima were 23.096/23.648 MiB
+H/N, with accepted paired increase +0.729/+0.861 MiB.
 
-Five alternating pairs per compositor plus native20: all 424 close/settled
-samples (244 candidate) fit own bar + 5 MiB. Maximum final settled UI is
-23.096/23.648 MiB H/N; maximum earlier closed-idle is 23.149/23.711 MiB.
-Paired settled increase is +0.729/+0.861 MiB: file-backed +0.313/+0.428,
-shared frame buffers about +0.260 both, anonymous +0.098/+0.109 MiB. Component
-medians need not sum. No saving/noise claim. [Measured
-report](research/feature9-gate-d.md#placement-accepted--2026-10-17).
+Dashboard checkpoints e944b8f/e6e41c1 are LOCAL, not on main. They adopt green
+Nacre c2b26d98 and add lazy Weather, enrichment-only Media, and process/disk
+System with Updates. All 230 workspace tests, isolated trace, fmt/Clippy,
+CPU-only/release and Luau47 pass. Six scale-1/1.5 goldens repeat; private
+headless preview passes launcher/private notices and all three pages with
+state/commit/presentation feedback. Explicit fixtures are visibly labeled;
+real unsupported topics stay unavailable. No new backend or player discovery.
 
-New memory rule replaces the per-feature allowance: all closes ≤ own bar +
-5 MiB, settled ≤ 25 MiB; explain every increase. STOP at settled ≥ 24.5 MiB,
-unexplained anonymous growth > 1 MiB in one change, or any memory-raising pure
-optimization. No placement hold remains. Stop after the first dashboard pages.
+Nested checks stopped at Niri settled 24.768 MiB, within the owner's 0.5 MiB
+reserve below 25. Hyprland settled 24.423 MiB. All 106 closed observations plus
+four final settled samples fit own bar + 5 MiB; all four captures pass the
+existing hard guards. New headroom gate FAILS; no COMPLETE marker, alternating
+pairs, typing rerun or dashboard publication. No performance/noise claim.
+[Measured report](research/feature9-gate-d.md#first-dashboard-pages--headroom-stop-2026-10-17).
 
-Dashboard WIP 911688e is preserved, unbuilt: scoped topic leases on the existing
-provider link, three separate lazy bundles and schema-shaped fixtures. Next:
-adopt full-green Nacre c2b26d98, build/test, add goldens and measure. Reserved
-core topics are NOT hosted capabilities. Existing observational lane is
-helper.execute / dashboard-data / ["read"]; media needs caller metadata, system
-is standalone. No guessed player/MPRIS source or CPU percentage. Explicit
-fixtures and unavailable real pages remain honest. Reader trim API is upstream
-unpublished F3; do not adopt before published green. Device implementation is
-post-F4. No new backend or action inference.
+Final file / anonymous / shared MiB: H 16.483/7.246/0.693;
+N 16.510/7.152/1.105. Last-closed smaps are dominated by executable mappings
+(including private writable parts). Reported caches are 0.187/0.185 MiB;
+panel workers/rasters/SHM release, permanent decoration pool is 542,592 raw bytes.
+No matched old/new cost attribution: the batch stopped before paired controls.
+Propose UI ceiling 26 MiB with stop at 25.5; keep close +5, anonymous-growth and
+pure-optimization rules. Owner decision needed before more runtime work.
 
-## Published baseline and open gates
+## Scope and remaining work
 
-Prior status-view source f1d66af and docs cbd7031 have green CI 39003597141 /
-39004077385. Report ecc90fa CI 39016083571 is green. New placement CI pending.
-Frozen helper 75157 remains the A/B control; no desktop job/slot. No live UI,
-installation/config/unit/keybinding changes; validation plan HOLD. QML daily.
+Stop at first pages / this decision. QML remains daily driver; no live UI,
+install/config/unit/keybinding changes. All owned capture artifacts stopped;
+no desktop job/slot. Frozen helper 75157 remained unchanged. Nested refresh
+feedback reports zero (unknown); no physical or measured-120-Hz claim.
 
-Typing remains unaccepted: last compatibility pair UI 9.963/10.922 ms per key,
-presented p99 30.886/31.562 ms H/N. Targets 8 ms / 16.7 ms; keep 29.61 →
-32.66% regression. Recheck new core chrome before claiming a typing gain. Public
-ui.menu.activate stays denied; shared QML/executor/hosting wait upstream.
+Main protocol pin remains 1e2; c2 adoption is tested locally, not published.
+Reserved schemas are not hosting: helper.execute / dashboard-data / ["read"]
+is observational; Media needs caller metadata and System is standalone.
+Device implementation/hosting is post-F4. Reader trim API remains unpublished
+upstream F3; do not adopt before published green. Public ui.menu.activate denied.
 
-Core forecast: 40–81 eight-hour agent-days (320–648 task hours), practical 3–8
-calendar weeks including waits. Full parity: 102–207 days / 7–18 weeks;
-complete-core idle 90–150 MiB is an estimate. No measured dashboard pace yet.
-Keep 6b niri pacing/strict idle, long chaos, reader/cache gaps and binary-name
-clash open. CPU for small panels; GL for large animation (~20 MiB Mesa residue).
-IME/reader beyond existing work deferred to public release.
+Typing stays unaccepted: prior compatibility UI 9.963/10.922 ms/key, presented
+p99 30.886/31.562 ms H/N; targets 8 ms / 16.7 ms. New core-frame typing and
+matched QML dashboard measurements are missing, not zero. Keep 29.61 → 32.66%
+CPU regression, 6b pacing/strict idle, long chaos, reader/cache gaps and binary
+name clash open. CPU small panels; GL large animation (~20 MiB Mesa residue).
+
+Core forecast remains 40–81 eight-hour agent-days (320–648 task hours), practical
+3–8 calendar weeks at assumed 16–20 task hours/day including waits. Fixture UI
+progress does not settle service hosting, hardware, session/wallpaper or packaging
+work. Complete-core idle 90–150 MiB remains an estimate. Full parity historical
+alternative: 102–207 days / 7–18 weeks. IME/reader beyond current work deferred.
