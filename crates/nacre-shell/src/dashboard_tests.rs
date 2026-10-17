@@ -190,8 +190,15 @@ fn dashboard_four_tabs_have_complete_state_defaults() -> Result<()> {
             Dashboard::new(page, Arc::new(ReadOnly::unavailable()?), None, false).project();
         assert_eq!(unavailable["dashboard.ready"], Value::Bool(false));
         assert_eq!(unavailable["dashboard.stale"], Value::Bool(false));
-        for key in unavailable.keys().filter(|key| key.starts_with("dashboard.")) {
-            assert!(defaults.contains_key(key), "{} unavailable state key {key}", page.name());
+        for key in unavailable
+            .keys()
+            .filter(|key| key.starts_with("dashboard."))
+        {
+            assert!(
+                defaults.contains_key(key),
+                "{} unavailable state key {key}",
+                page.name()
+            );
         }
 
         let primary_data = fixture(page.name());
@@ -240,7 +247,11 @@ fn dashboard_four_tabs_have_complete_state_defaults() -> Result<()> {
         assert_eq!(projected["dashboard.ready"], Value::Bool(true));
         assert_eq!(projected["dashboard.stale"], Value::Bool(false));
         for key in projected.keys().filter(|key| key.starts_with("dashboard.")) {
-            assert!(defaults.contains_key(key), "{} ready state key {key}", page.name());
+            assert!(
+                defaults.contains_key(key),
+                "{} ready state key {key}",
+                page.name()
+            );
         }
         if page == Page::Today {
             assert!(defaults.contains_key("dashboard.clock"));
@@ -363,8 +374,18 @@ fn dashboard_disconnect_keeps_last_good_stale() -> Result<()> {
         };
         let dashboard = Dashboard::new(page, source.clone(), secondary, true);
         let before = dashboard.project();
-        assert_eq!(before["dashboard.ready"], Value::Bool(true), "{} ready", page.name());
-        assert_eq!(before["dashboard.stale"], Value::Bool(false), "{} fresh", page.name());
+        assert_eq!(
+            before["dashboard.ready"],
+            Value::Bool(true),
+            "{} ready",
+            page.name()
+        );
+        assert_eq!(
+            before["dashboard.stale"],
+            Value::Bool(false),
+            "{} fresh",
+            page.name()
+        );
 
         source.disconnect()?;
         let after = dashboard.project();
