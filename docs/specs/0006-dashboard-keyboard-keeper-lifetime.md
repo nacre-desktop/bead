@@ -3,7 +3,7 @@
 - ID: B0006
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Ready
+- Status: In progress
 - Depends on: B0005 Review at9f77da20dbb67d227737b63b39a82816bbab637a
 - Date: 2026-10-18
 - Size: one focused session, maximum90minutes
