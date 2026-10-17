@@ -1,10 +1,13 @@
 # Status
 
-## 2026-10-18 — B0002 artifact/preflight
+## 2026-10-18 — B0002 artifact/preflight submitted
 
-Reviewing existing local artifacts and provenance only. No builds, remote host
-access, probes, previews or captures. The private capture request and timing
-estimate will be submitted for review; no measurement grant is active.
+The current B1/B4 production runtime inputs are byte-identical. Available old
+bundles are from earlier code, harness-dirty and incomplete; no source-proven
+B0002 binaries or helper pairing are ready. Five pairs with full 60s phase-idle
+fit about 94–124 minutes; 600s warmups raise this to about 4h54–5h24, so request
+separate three-hour compositor windows if needed. No build or capture ran.
+`0192` owner-policy and measurement grants remain blockers.
 
 ## 2026-10-18 — B0003 source-only preparation
 

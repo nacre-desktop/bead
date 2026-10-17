@@ -3,7 +3,7 @@
 - ID: B0002
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress
+- Status: Review (early artifact/preflight only; capture blocked)
 - Depends on: source-only preflight eligible after B0004 Done; captures require B0001 Done and exact slot grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours including capture after grant
