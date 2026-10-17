@@ -104,3 +104,15 @@
   validation plan is HOLD; no live permission. Targets UI8ms/key/presented16.7ms;
   after fair effort <=33ms with UI<=8ms is only an owner-acceptance candidate.
   Do not invent launcher ranking/providers or unpublished activation contracts.
+
+- Owner update2026-10-17: park remaining B device controls until migration
+  publishes their schemas before F4; controls may then target those schemas,
+  with implementation after F4. Dashboard C is authorized now. First port
+  Nacre attached/popout placement and joined frame contours, with matched
+  QML/Bead placement goldens; launcher uses the owner's requested TOP edge.
+  Dashboard media/system use published daemon contracts; weather/updates use
+  explicit fixtures shaped like agreed upcoming schemas. Every page loads
+  lazily and releases after closed+idle. Same memory rules/25MiB ceiling apply.
+  Continue typing between independent work. STOP for review after the first
+  dashboard pages or a needed decision. Optional preview system-bus reads for
+  network/Bluetooth/battery are authorized READ-ONLY; no live UI/writes/install.

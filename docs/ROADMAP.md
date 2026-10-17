@@ -1,11 +1,13 @@
 # Roadmap and gates
 
-Updated2026-10-16. Foundation F5 and Gate C are accepted. Features9–10 use the
+Updated 2026-10-17. Foundation F5 and Gate C are accepted. Features9–10 use the
 shared daemon; typing targets remain open. The current Gate E target is the
 core-switch route. QML stays daily driver; no live switch or installation.
 Owner accepted the recovery/static-text resident cost and revised memory policy.
-Continue daemon typing/contracts, then remaining bar popouts/service views;
-STOP after those with measurements and an updated core forecast, before dashboard.
+The owner parks remaining device controls for migration schemas before F4 and
+implementation after F4. Dashboard C is authorized now: exact attached/popout
+placement and joined frame first, then first lazy pages, with typing between.
+STOP after those first pages with measurements and an updated core forecast.
 The desktop validation plan is on hold. IME/screen-reader work beyond existing
 coverage is deferred to public release. Historical6b nested pacing/idle concerns
 remain open; CPU small views/GL large animated surfaces remains the renderer policy.
@@ -63,9 +65,21 @@ QML remains daily driver until a separately accepted switch. Order:
    Targets UI≤8ms/key and presented p99≤16.7ms. After fair effort, p99≤33ms with
    UI≤8ms is an owner-acceptance candidate; keep only measured improvements.
    Match official same-engine QML when the migration F3 adapter is published.
-3. Remaining bar popouts and service views. STOP here for review with measured
-   lifecycle/memory/pacing and an updated core-switch forecast.
-4. Dashboard follows only AFTER that owner review. Do not start it now.
+3. Remaining bar popouts and service views. The safe read-only subset is
+   integrated. Owner update2026-10-17 parks device controls until migration
+   publishes schemas before F4; build schema-backed controls when green, with
+   implementation after F4. Do not invent backend payloads or calls.
+4. Owner authorizes dashboard C now (the first subset of Feature11). First port
+   canonical drawers/layout.js attached/popout and joined contour/lips/rim, with
+   same-size/scale QML/Bead placement goldens. Launcher uses the requested TOP
+   edge, although published NacrePanelHost selects bottom. Then first pages:
+   media/system from advertised daemon contracts, other unavailable contracts
+   through explicitly selected fixtures shaped like upcoming schemas. Each
+   page loads lazily and releases after close, including payloads/subscriptions.
+   Keep typing work going between independent work. STOP after the first pages
+   for review or a needed decision; this does not authorize the full Feature11
+   remainder or later features. Optional preview system-bus device reads are
+   read-only, not live UI testing or a write/installation permission.
 
 New memory policy replaces the earlier first-open/no-regression rule. Pure
 optimizations cannot raise warm/settled beyond control spread. Feature-bearing

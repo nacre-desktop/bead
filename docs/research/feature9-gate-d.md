@@ -5,10 +5,127 @@ No live-session test, notification-name takeover, installation or release is
 allowed. The earlier single physical Gate C authorization was consumed.
 Nacre and Orient remain read-only except additive nacre-protocol work through
 Nacre CONTRIBUTING. Owner resumed Features9–10 after Foundation F5.
-Gate E targets the core switch; stop after remaining bar popouts/service views.
-QML remains the daily driver; dashboard and live validation are held.
+Gate E targets the core switch. The owner's 2026-10-17 update parks remaining
+device controls and authorizes the first dashboard subset below. QML remains
+the daily driver; live validation is held.
 
 
+
+## Dashboard C authorized; placement candidate — 2026-10-17
+
+The owner parks remaining B device controls for published schemas before Nacre
+F4, with implementation after F4, and authorizes the first dashboard pages.
+Placement parity comes first; the stop is now first-page review, not the earlier
+service-contract stop. No live UI/config/install permission accompanies this.
+
+The candidate ports published e0a81ce7 drawers/layout.js and contour.js into GPL
+nacre-shell. MIT bead-wayland exposes generic position/static-vector hooks only.
+Visible bodies, not padded surfaces, align to the usable viewport: top50,
+left/right/bottom10 and radius25 are NacreFrame defaults. Popouts center on the
+trigger, dock at the canonical corner threshold, and have no gap. IPC/keybind
+opens reuse the live trigger center. The owner's launcher attaches TOP; published
+NacrePanelHost currently selects BOTTOM. Both canonical attached() cases are
+covered, without claiming the published host already uses top.
+
+Eleven real-Qt cases compare exact logical origins and body/rim SVG paths. At
+2880×1800/scale1.5, eleven QML/Bead mask comparisons and side-by-side goldens pass.
+Masks check placement/frame shape and actual Luau root dimensions; they do not
+replace populated content goldens or claim full UI-content/hardware parity.
+Qt scripts are frozen byte-exact with source hashes; FrameRim uses fixed palette,
+no motion and its canonical engaged/idle state. The first mask comparison exposed
+clipped half-strokes; disjoint pixel-aligned crops fix them without raising the
+comparison tolerance. Failed intermediate diffs remain private evidence.
+
+Static frame strips/corners use one SHM pool, one buffer per tile, no timer or
+full-output bitmap. Eight tiles require542592pixel bytes at1920×1200logical/1.5;
+this is NOT a PSS measurement or acceptance. Direct borrowed-target SVG rendering
+keeps no decoded-tree/bitmap cache. Panel contour data lives in the retiring
+worker; repeated decoration retains one asset and transform/opacity counters
+show no additional rasterization. Frame SHM bytes are exposed by --report.
+The completed native/lifecycle and five-pair outcome is recorded below.
+No preview artifact has changed. Candidate source is not yet published.
+
+The first immutable466ea62 native smoke passes both compositors' lifecycle,
+close/cache/group/cleanup guards: settled22.980/23.545MiB H/N. These are single
+candidate cells, not paired memory acceptance or a saving claim. A subsequent
+narrow-join diagnostic finds24 stale-rim pixels inside a solid QML neighbourhood:
+the old closed frame can remain under a changed contour. Active-panel geometry
+now enters the static tile factory; a new zero-tolerance stable-interior assertion
+passes all11 cases. Whole-image tolerance was not increased. Animation uses the
+fixed layout inset for attachment and leaves static frame geometry unchanged;
+the counter test covers both layer reuse and attachment. Slot reservations
+include Smithay's64-byte alignment to prevent accidental pool doubling on odd
+outputs. Reference goldens disable motion; full QML motion/settings parity is
+not claimed. The revised d88 native outcome follows below.
+
+The first4ace native20 cell fails after7 completed service cycles waiting for
+Sound's close presentation. Its generation/update-scoped proof is retained,
+valid=false and cleanup_errors=[]. Closing removes the dismissal layer while
+the pointer is over the clock; speculative Calendar preparation replaces the
+still-mapped closing Sound surface before update109 is presented. The guard
+must protect mapped surfaces, not just target_open=true. A regression policy
+check and the unchanged native proof validate the repair; no timeout/marker
+waiver or memory acceptance follows from this failed cell.
+
+
+
+The d88 mapped-surface guard passes220 workspace checks plus isolated trace2,
+fmt, clippy-Dwarnings, CPU-only and normal release. Native20 passes BOTH nested
+compositors without weakening generation/update/presentation matching. Five
+alternating resource pairs use frozen117 control/helper75157, normal policy and
+shared-host light editing/metadata, with no own builds/tests/other captures.
+
+| Resource metric, MiB | Hyprland | niri |
+| --- | --- | --- |
+| Settled median control→candidate |22.292→22.946|22.652→23.546|
+| Median paired settled increase |+0.729|+0.861|
+| Paired increases min…max |+0.497…+0.804|+0.555…+1.214|
+| Control / candidate settled spread |0.216 /0.362|0.440 /0.277|
+| First-open median paired change |+0.418|+0.592|
+| Third-warm median paired change |+0.327|+0.730|
+| Maximum settled candidate, including native20 |23.096|23.648|
+| Largest candidate close delta from own bar |+2.119|+1.048|
+| Max settled UI+daemon/workers |55.121|55.383|
+
+All424 closed/settled observations (244 candidate) fit ownbar+5. All22 lifecycle
+captures are valid with no failed-control waiver. The feature allowance gate
+separately FAILS0.5MiB on both and intentionally writes no COMPLETE marker.
+Both25MiB ceilings pass, but that does not waive the increase gate. No runtime
+candidate or new preview is integrated; this publication is documentation only.
+
+Exact settled-snapshot component medians are file-backed+.313/+.428, shared
++.260/+.260 and anonymous+.098/+.109MiB H/N. Component medians do not add to the
+median paired total. Saved smaps identifies the main executable as most of the
+file-backed difference. The shared contribution matches the bounded static
+frame pool. No full-canvas allocation or oversized reserved pool was found;
+this is a real feature cost, not a demonstrated cache leak or a noise claim.
+Warm-third niri ranges span~6.8MiB in BOTH variants; no uniform peak improvement
+is claimed. CPU/typing, physical pacing and full QML motion remain unmeasured in
+this block. The scoped post-capture process audit finds no owned processes.
+Raw private evidence: `dashboard-placement-d88e94e-memory-five/` includes exact
+artifacts,22proofs,424guard snapshots,paired-summary/feature-gate/review-summary.
+The earlier4ace failure remains separate, valid=false, and is not pooled here.
+
+Nacre c2b26d98 now reserves dashboard.media/system/weather/updates/calendar and
+core device schemas; SourceCI39010730141 is independently FULL GREEN, including
+desktop and fresh-install jobs. They register no runtime
+capability. Media describes enrichment, not playback state; system is not yet
+hosted. UI fixtures follow those shapes and real controls require advertised
+versions, without guessed RPCs or duplicate backends. Typing's
+8ms/16.7ms targets and the previous regression remain open.
+
+Unpublished dashboard WIP911688e (bab527a/77b0a51 checkpoints) drafts scoped topic leases on the same
+UI-provider connection, with last-user unsubscribe and payload/mirror release.
+Weather, lyrics enrichment and process/disk pages load fixed preview fixtures
+only when explicitly requested. System also loads an updates fixture. Unknown
+readings remain unknown; no playback, package or device operation is simulated.
+Separate four-source page bundles isolate recovery and unopened modules under
+the existing whole-folder loader. These pages, protocol adoption, transcript
+replays, pixel goldens and lifecycle tests are NOT yet compiled or validated;
+builds/tests were deferred during placement timing and now await this memory
+decision. No dashboard acceptance is claimed. The existing protocol reader retains
+its largest line-buffer capacity; upstream idle trimming is requested, not yet
+implemented/adopted. No large hosted-dashboard lifetime claim is made.
 
 ## Gate E — core switch active, 2026-10-16
 

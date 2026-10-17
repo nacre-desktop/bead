@@ -1,5 +1,38 @@
 # Feasibility
 
+## 2026-10-17 — Attached placement and joined-frame candidate
+
+The joined frame matches canonical Nacre placement, including flush popouts.
+Its real memory cost exceeds the per-feature allowance, so it is not integrated.
+The absolute ceiling and all close budgets pass; the separate increase gate fails.
+Dashboard drafts are preserved unbuilt while the owner decides this frame cost.
+
+| Nested/local result, H / N | Result |
+| --- | --- |
+| Real-Qt geometry/rim + paired placement masks |11 pass at2880×1800/1.5; exact solid interiors|
+| Candidate local checks |220 +trace/fmt/clippy/CPU-only/release pass|
+| Strict mapped-close regression |4ace failed; fixed d88 native20 passes both|
+| Five-pair settled UI medians MiB |22.292→22.946 /22.652→23.546|
+| Median paired delta / control spread MiB |+0.729/0.216 /+0.861/0.440|
+| Maximum settled candidate UI MiB |23.096 /23.648, both≤25|
+| Close/settled samples, all / candidate |424 /244, all ownbar+5; max candidate delta2.119/1.048|
+| First-open median paired delta MiB |+0.418 /+0.592|
+| Warm-third median paired delta MiB |+0.327 /+0.730; N ranges span~6.8MiB|
+| Settled file / shared / anonymous paired medians MiB |+.313/+.260/+.098 /+.428/+.260/+.109|
+| UI + daemon/workers max settled MiB |55.121 /55.383; no combined notices/wallpaper|
+| Feature allowance / outcome |0.5MiB; FAIL both; no COMPLETE or preview update|
+
+Five alternating pairs each; same frozen117 control/helper75157, normal policy,
+shared host with light editing/metadata but no concurrent own builds/tests/captures.
+These are nested resource results, not physical timing or typing improvements.
+Medians of component deltas do not sum to the median total delta. Eight static
+tiles hold542592pixel bytes; no full-output raster/GL/decoder cache is retained.
+No oversized eager pool was found; dropping canonical rim geometry is not a fix.
+Source d88 is unpublished; dashboard911688e is unbuilt/unvalidated. The owner
+requests a top launcher, while the published QML host selects bottom; both
+canonical attached() cases pass. Masks are placement, not full content parity.
+[Full scope and evidence](docs/research/feature9-gate-d.md#dashboard-c-authorized-placement-candidate--2026-10-17).
+
 ## 2026-10-17 — Lazy read-only service popouts
 
 Network, Bluetooth and battery share the existing hosted service through Sources.
