@@ -49,6 +49,10 @@ jobs:
           unzip -q "$RUNNER_TEMP/luau.zip" -d "$RUNNER_TEMP/luau"
           chmod +x "$RUNNER_TEMP/luau/luau-analyze"
           python3 tools/check-luau.py --analyzer "$RUNNER_TEMP/luau/luau-analyze" --binary "$PWD/target/debug/nacre-shell" --check-generated
+      - name: Dashboard capture-window regression tests
+        run: |
+          nice -n 10 python3 -m unittest discover -s spikes/tests -p test_dashboard_capture_windows.py
+          nice -n 10 python3 -m py_compile spikes/dashboard-residency.py spikes/launcher-proof.py spikes/tests/test_dashboard_capture_windows.py
       - name: Private service owner lifecycle
         run: python3 spikes/services-check.py
       - name: Install cargo-deny
