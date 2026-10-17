@@ -172,7 +172,14 @@ impl App {
         });
         let changed = self.requested_panel_differs(name)?;
         // Preparation never replaces a visible view or restarts an already warm one.
-        if !open && (self.panel_target || (self.panel_runtime.is_some() && !changed)) {
+        if !open
+            && !panels::preparation_allowed(
+                self.panel_target,
+                self.surfaces.iter().any(|surface| surface.companion),
+                self.panel_runtime.is_some(),
+                changed,
+            )
+        {
             return Ok(());
         }
         // A missing output must fail before retiring the old worker/surface.

@@ -9,6 +9,16 @@ pub(crate) fn validate_center(center: Option<f32>) -> Result<(), String> {
     }
     Ok(())
 }
+/// Speculative work must never destroy a mapped view, including its close
+/// animation/presentation. An unused, unmapped worker may be replaced.
+pub(crate) fn preparation_allowed(
+    target_open: bool,
+    mapped: bool,
+    worker: bool,
+    changed: bool,
+) -> bool {
+    !target_open && !mapped && (!worker || changed)
+}
 
 /// A requested center runs along the surface's own edge. Keep legacy placement
 /// unchanged when no center is supplied; clamp a popout inside its output.
@@ -78,6 +88,17 @@ impl Panels {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hover_preserves_a_closing_surface_but_can_replace_unused_preparation() {
+        assert!(
+            !preparation_allowed(false, true, true, true),
+            "Closing sound must present before calendar hover can retire it"
+        );
+        assert!(!preparation_allowed(true, true, true, true));
+        assert!(!preparation_allowed(false, false, true, false));
+        assert!(preparation_allowed(false, false, true, true));
+        assert!(preparation_allowed(false, false, false, true));
+    }
     #[test]
     fn popout_centers_follow_each_edge_and_stay_inside_the_output() {
         use bead_core::Edge;
