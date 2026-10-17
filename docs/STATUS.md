@@ -2,10 +2,12 @@
 
 ## 2026-10-18 — B0004 dashboard review coverage fixes
 
-B0004 is in progress after exact-head CI39073205633 passed on `3da4856`.
-It closes ready-state default and primary-source disconnect evidence gaps from
-B0001 without runtime changes. No fixtures, PNG goldens or measurements are in
-scope.
+B0004 closes ready-state default and primary disconnect evidence gaps from
+B0001. Exact fixtures are checked before projection; all four page defaults and
+primary-source stale retention pass, including Today's clock/store path. The
+41-row inventory remains exact. CI39074426606 is green on `56210a6`; no runtime,
+fixture, PNG golden or measurement changed. B0001 and B0004 are submitted for
+spec review.
 
 ## 2026-10-17 — B0001 core dashboard completion
 

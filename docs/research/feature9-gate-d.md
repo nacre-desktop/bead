@@ -29,12 +29,13 @@ a GPU/raster-residency or elapsed 2.2-second timer measurement. The outer
 `close_panel()` timer/token guards remain in Bead source `04c492a`; the separate
 service-view test proves ownership only, not elapsed retirement timing.
 
-No dashboard product defect was demonstrated, so B0001 changes tests and this
-coverage document only; no image golden changed. No measurement was authorized
-or run. Media/player discovery and GPU metrics lack published runtime providers;
-the reserved dashboard schemas still do not advertise hosted topics. Optional
-extras, Focus mutations, customization, photography/video and player controls
-remain deferred. Local validation and CI status follow.
+No dashboard product defect was demonstrated. B0001 and its B0004 review
+follow-up change tests and review/coverage documentation only; no image golden
+changed. No measurement was authorized or run. Media/player discovery and GPU
+metrics lack published runtime providers; the reserved dashboard schemas still
+do not advertise hosted topics. Optional extras, Focus mutations, customization,
+photography/video and player controls remain deferred. Local validation and CI
+status follow.
 
 Local checks pass: 241 workspace tests (0 failed, 3 ignored), the trace memory
 test (1 passed, 1 ignored), fmt, warning-denied workspace Clippy, service
@@ -43,6 +44,30 @@ check, generated Luau analysis (52 modules), private service-owner proof, and
 workspace plus framework cargo-deny. No measurement was run; Bead
 [CI39072111811](https://github.com/nacre-desktop/bead/actions/runs/39072111811)
 is green.
+
+### B0004 dashboard review coverage fixes — 2026-10-18
+
+Starting source `3da4856508ffa0963dab69f5eaf47112a9538909` had green
+[CI39073205633](https://github.com/nacre-desktop/bead/actions/runs/39073205633).
+The ready fixture for each page now passes its existing `checked()` decoder
+before projection; both unavailable and ready `dashboard.*` keys are checked
+against that page's Luau defaults. Today also exercises the existing clock and
+Stores projection (`10:00`, 2024-02-29); the other pages cannot project
+`dashboard.clock`. The disconnect proof keeps the last-good full projection
+for Today, Weather, Media and System while setting only `dashboard.stale`;
+Today/System have their secondary Weather/Updates fixtures present. The unknown,
+not-stale case remains.
+
+The 41 QML rows are unchanged and exact. Media's disconnect link now refers to
+the parameterized four-page proof; System numeric process evidence points to its
+explicit projection test, while defaults tests make no numeric hardware claim.
+Implementation is `197fe5157b652cea2d8e5018fc6326c4e2cf1dc5` plus formatting
+correction `56210a682b82bc1742356aacad3e48504f0a47d3`. Exact-head
+[CI39074426606](https://github.com/nacre-desktop/bead/actions/runs/39074426606)
+passes formatting, Clippy, tests, renderer features, facade/Luau, private
+service ownership and cargo-deny. No runtime source, fixture, PNG golden or
+measurement changed. The first attempt CI39074350918 failed only formatting;
+the formatter's requested changes are in the final commit.
 
 
 
