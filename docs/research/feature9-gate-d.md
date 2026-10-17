@@ -32,79 +32,105 @@ with measurements/core forecast. Full parity is an estimate-only alternative.
 Desktop validation stays HOLD, not run; extra IME/reader work deferred to public
 release. QML stays daily driver. No live run/install/release is authorized.
 
-### Closed-panel residency audit — candidate, 2026-10-17
+### Closed-panel residency audit — 2026-10-17
 
-The loader scopes Luau sources/assets to the selected entry's directory. The
-bar does not import calendar, sound or launcher bundles; a new headless check
-loads the actual core bar and asserts their absence from tracked sources.
-Panel factories retain only configuration/palette/placeholder geometry, not
-compiled modules, decoded icons, view stores or catalog results. Those belong
-to the selected worker and are dropped with it. The shared Desktop and menu
-connection belong to the bar/daemon and remain necessary for the bar itself.
+The actual bar bundle does not preload calendar, sound or launcher modules/assets;
+a headless check enforces that. Factories keep configuration and placeholder
+geometry. The selected worker owns its VM, subscriptions, view stores and rasters.
+It is joined and released after the existing 2.2-second close grace; unused hover
+preparation expires after 2 seconds. Quick reopen retains the live view. Cache
+trimming and the final queued-raster trim follow retirement. Shared bar services
+and its menu connection remain; these are not closed-panel data.
 
-The existing close grace is2200 ms (quick reopen reuses the worker); unused
-hover preparation expires after2s. Retirement joins the worker and drops its
-VM, Source subscriptions, scene/raster ownership and surface buffers. The bar
-cache trims and a second allocator trim follows100 ms later for queued rasters.
+The bar's extra launcher scalar mirror now clears on worker retirement. Tests
+cover a 64 KiB query and ensure dropping the bar does not clear a live panel.
+After idle, reopening starts fresh unless an opening command supplies a query.
+No timer, thread or cache is added. Calendar month/year are transient too; only
+open flags and bounded page/route strings are currently durable panel state.
 
-One genuine extra retention path was the launcher's bounded scalar-state mirror
-owned by the bar. The cleanup candidate clears every mirrored value on launcher
-worker retirement, including search, selection, mode/route and scroll. A test
-uses the maximum64 KiB query and proves retirement clears the map; dropping the
-bar does not prematurely clear a live panel. No extra timer/thread/cache is added.
-Immediate named-view switching retires state too; quick close/reopen within the
-existing grace retains it. After idle, reopening starts fresh unless a new launch
-command supplies a query. This intentionally supersedes indefinite query retention.
+Two unused preparations exposed an older allocator-residency failure in both
+normal accepted and mirror-only binaries: 28.656/28.838 MiB after release versus
+21.782/22.102 MiB bars. Cache accounting was only about 164 KiB. A trace build
+showed freed heap space but changed the allocation layout, so it was diagnostic,
+not an acceptance substitute. A 1 MiB mmap policy passed memory pairs but worsened
+a single-pair CPU screen; that version stays unshipped.
 
-The stronger native check discards two consecutive prepared-but-never-opened
-launchers. The normal accepted/candidate binaries both fail the unchanged
-close+5 guard:21.782->28.656 and22.102->28.838 MiB H respectively. Waiting4s more
-does not release it. Both report only164 KiB of accounted caches afterward.
-This is new coverage of an existing retention path, not a measured regression
-caused by clearing the scalar mirror. Failed raw runs are preserved separately.
+The application-only Linux/glibc policy is now 4 MiB, before application threads,
+respecting explicit allocator options. It keeps ordinary paint masks below the
+threshold while making larger temporary rasters individually releasable. It
+changes no framework allocator/font engine and exports no allocator environment
+to helpers. The [glibc manual](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html)
+describes the threshold. An isolated trace test first raises the adaptive threshold,
+then proves a 1.5 MiB mask remains on the heap and three 5 MiB buffers each return
+their mapping on drop. The ownership failure is fixed; exclusive allocation-site
+attribution is not claimed. Accepted feature code pages cannot be unloaded by
+view drop; no code-page discard is introduced.
 
-A separate trace build reaches3.07->3.32 MiB live heap while free heap reaches
-12.72 MiB; its PSS stays low, so those instrumented results cannot stand in for
-the normal binary. A UI-only diagnostic on the normal accepted binary fixes
-mmap threshold at1 MiB: the second discard is21.914 MiB, settled22.909 MiB,
-and all its close/settled/group guards pass. Together these observations point
-to allocator residency of a freed large raster; they do not prove exclusivity.
-The launcher shadow alone is6.53 MiB at this scale.
+Normal release `5527d8ab`/production `d750aa6` is compared with accepted `5764dd`,
+each with its matching bundle and immutable `75157fd3` daemon. Five alternating
+pairs per compositor use the same 320-app/query-on-open workload and private
+keyboard before both baselines. CPU rendering, 2880×1800, scale 1.5, private
+headless parents/buses/state, nice 10; Hyprland virtual 120 Hz, niri nested 60 Hz.
+Presentation refresh is unknown; these are not physical numbers. No own build or
+capture overlap; host contention is uncontrolled. Daemon settles 32 seconds before
+bar startup and 35 seconds before the final group sample. Totals include SwapPss.
 
-The application-only candidate sets glibc's mmap threshold to1 MiB before
-threads start, respecting explicit mmap/trim environment settings and malloc
-tunables. This lets large temporary buffers use individually releasable mappings
-instead of adapting toward reusable thread arenas. It does not change the
-framework's allocator/font code or child process environments. More OS mappings
-are a possible cost; matched warm/settled memory and typing checks are pending.
-The [glibc documentation](https://sourceware.org/glibc/manual/latest/html_node/Malloc-Tunable-Parameters.html)
-describes this threshold; [allocator source](https://raw.githubusercontent.com/bminor/glibc/master/malloc/malloc.c)
-shows why free bytes and resident bytes need not agree.
-An isolated trace-only test raises the adaptive threshold, applies the policy,
-and proves three1.5 MiB allocations each return their mapping on drop; CI runs it.
-No allocator rewrite, cache-ledger tolerance or relaxed close assertion is added.
+| UI MiB, median [range] | Hyprland before → cleanup | niri before → cleanup |
+| --- | --- | --- |
+| First warm |50.891 [50.087–51.148] → 41.501 [41.051–48.789]|48.218 [47.648–48.354] → 46.711 [46.527–46.784]|
+| Third warm |48.102 [47.808–48.837] → 38.350 [37.812–46.797]|47.032 [46.829–47.218] → 45.603 [45.151–50.310]|
+| Third closed |22.223 [22.170–28.988] → 22.104 [21.770–22.285]|22.906 [22.370–23.018] → 22.738 [22.626–22.892]|
+| Settled bar |22.901 [22.797–23.097] → 22.954 [22.577–23.120]|23.398 [22.822–23.558] → 23.490 [23.382–23.600]|
+| Paired third-warm delta / control spread |−9.562 / 1.029|−1.244 / 0.389|
+| Paired third-closed delta / control spread |−0.163 / 6.818|−0.168 / 0.647|
+| Paired settled delta / control spread |+0.147 / 0.300|+0.097 / 0.735|
 
-Five alternating pairs/compositor now pass the memory gate: paired warm
--1.845/-1.823 MiB H/N; paired settled+0.159/+0.110 stay within control spreads
-0.269/0.740. Both normal20-cycle native checks pass the two-unused stress,
-quick reopen and idle reset. H/N settled native23.487/23.655 MiB remain below25.
-N observation attempts1/2 are invalid: an expired child remained a zombie in the
-process list. The repaired observer records stat-confirmed exited children and
-requires every live process measured with stable membership, not a zero substitute.
+Paired deltas are medians of the five pair differences, not differences of the
+median columns. The established paired-median gate passes; candidate warm ranges
+are wider, including one 50.310 MiB niri third open. This is not a uniform peak
+reduction or a demonstrated settled-memory saving. No allowance is spent on a
+pure optimization: positive settled deltas fit control spreads.
 
-The200-key single-pair CPU screen is not clean: UI11.218->12.067 /11.447->11.649
-ms/key H/N; presentedp9931.102->32.472 /28.752->34.356ms. No statistical gain or
-typing acceptance is claimed. The1 MiB candidate remains unshipped. The paint
-path creates fresh masks that can exceed1 MiB; forcing more mappings may cost
-CPU. A same-ELF, UI-only4 MiB environment override is the next diagnostic before
-rebuilding another policy candidate. A global allocator/font rewrite is avoided.
-The following calendar-wake/rollover and bar startup-restore fixes remain separate
-unbuilt drafts; current frozen073 captures contain none of them.
+All 158 candidate closed-idle samples pass own bar+5 MiB, including both 20-cycle
+native proofs with two unused preparations, quick reopen, named hover, input,
+retirement, exact commit/presentation and clean shutdown. Candidate settled maxima
+are 23.120/23.924 MiB H/N. Closed reported caches span 162,267–167,422 bytes, under
+all owner/process caps. Final UI+daemon/provider group guards pass; group settled
+medians are 53.682→53.931 /54.627→54.854 MiB. Warm-third group medians are
+96.524→87.131 /96.307→94.662 MiB. No SwapPss is observed.
 
-The accepted feature's mapped code pages are
-not retained panel data; they cannot be unloaded by dropping a view. No unsafe
-code-page discard or allocator/font-engine rewrite is introduced. No new panel
-is added until the cleanup has its matched measurements.
+One of ten paired control proofs fails six early close budgets, although it later
+settles normally. Its measurements remain in the comparison, marked valid=false
+and exit 1. A SHA-pinned control-only observation mode collects all data after
+budget failures; it cannot turn them into a passing proof. Candidates and all
+functional/presentation checks remain strict. An earlier unpaired control failure
+(28.587 MiB, still 28.608 after another 4 seconds) is preserved separately. The
+observer excludes only OS-confirmed exited zombies, records them, and requires
+all live processes measured with stable membership; missing memory is never zero.
+
+Five alternating 200-key CPU pairs per compositor also complete (4,000 real-engine
+key-to-exact-present proofs). This is a cleanup regression screen, not typing
+acceptance. Both UI and daemon are slower than the preceding window.
+
+| Median per-run measurements | Hyprland before → cleanup | niri before → cleanup |
+| --- | ---: | ---: |
+| UI CPU ms/key |23.334 → 23.286|22.529 → 24.169|
+| Daemon CPU ms/key |9.277 → 9.202|9.310 → 9.580|
+| Provider CPU ms/key |3.930 → 3.700|4.054 → 4.007|
+| Presented p99 ms |1179.491 → 1193.361|100.439 → 85.058|
+| Paired UI delta / control spread ms |−0.075 / 4.153|+1.364 / 3.033|
+| Paired p99 delta / control spread ms |−170.533 / 1298.306|−2.729 / 39.615|
+
+No CPU penalty beyond the control spread is established, nor a CPU improvement.
+The niri increase stays reported; 8 ms/key and 16.7 ms p99 remain open. Raw data:
+`core-panel-idle-d750aa6-gates-v5` plus its referenced native proofs, and
+`core-panel-idle-d750aa6-typing-five-v2`. Independent verification checks all
+22 memory/native cells, 258 total close samples, cache caps, binary/helper hashes,
+cleanup and paired spreads. Local validation: 193 workspace tests, isolated trace
+allocation proof, fmt, all-target/all-feature clippy and CPU-only build.
+Calendar Source-wake/date-follow/reload and bar startup-state cleanup are separate
+untested drafts; the ranked-prefix typing draft is also outside these captures.
+No new panel is added before this audit is integrated. Dashboard/live plan held.
 
 ### Calendar and named views — memory decision, 2026-10-17
 

@@ -1,25 +1,31 @@
 # Feasibility
 
-## 2026-10-17 — Closed-panel audit exposes unused-preparation retention
+## 2026-10-17 — Closed-panel ownership and large-raster reclamation
 
-Closed modules already load on demand; worker retirement now clears mirrored
-launcher view state. Two consecutive unused preparations expose an older
-resident-memory failure in both normal accepted and cleanup binaries.
-The1 MiB policy passes memory pairs but worsens a typing CPU screen; unshipped.
+Panel modules and assets already load lazily and release with their worker.
+The shared launcher scalar mirror now releases after the 2.2-second grace.
+An application-only 4 MiB mmap threshold fixes freed large-raster residency.
+Five alternating pairs pass the established memory gate on both compositors.
 
-| Hyprland diagnostic, UI MiB | Bar | After second unused discard | Settled |
-| --- | ---: | ---: | ---: |
-| Accepted normal binary |21.782|28.656: close+5 fails|Not measured|
-| Cleanup normal binary |22.102|28.838: close+5 fails|Not measured|
-| Accepted, child-only1 MiB mmap threshold |22.114|21.914|22.909|
+| UI MiB, Hyprland / niri | Before → cleanup | Paired delta / control spread |
+| --- | --- | --- |
+| Third warm |48.102→38.350 /47.032→45.603|−9.562/1.029; −1.244/0.389|
+| Settled bar |22.901→22.954 /23.398→23.490|+0.147/0.300; +0.097/0.735|
+| Maximum candidate settled |23.120 /23.924|both below 25|
 
-Nested/private, scale1.5, frozen75157 daemon,320 apps; host contention uncontrolled.
-No own build overlap. Trace-only heap accounting shows freed bytes can remain
-reserved; it changes allocation layout and is not an acceptance substitute.
-193 workspace tests plus the isolated trace allocation proof, fmt/clippy/CPU-only
-pass. Both20-cycle checks and five memory pairs/compositor pass; the200-key CPU
-screen rises11.218->12.067 /11.447->11.649ms. Same-ELF4 MiB diagnostic next.
-[Audit and method](docs/research/feature9-gate-d.md#closed-panel-residency-audit--candidate-2026-10-17).
+Normal immutable binaries, matching bundles and frozen 75157 daemon, 320 apps.
+Private CPU, scale 1.5, H virtual120/N nested60; not physical, refresh unknown.
+No own build/capture overlap; host uncontrolled. All 158 candidate close samples
+fit own bar+5; group/caps/cleanup pass. One paired control fails six close budgets;
+valid=false/exit1 data is retained, never converted into a pass. Warm ranges vary
+(one niri third-open 50.310 MiB); this is a paired-median, not peak, improvement.
+Five CPU pairs give UI paired −0.075/+1.364 ms inside spreads 4.153/3.033;
+current UI/daemon window is slower. No typing gain or target acceptance claimed.
+193 tests, isolated trace allocator proof, fmt/clippy/CPU-only pass. The test
+keeps 1.5 MiB scratch on the heap and returns three 5 MiB mappings on drop.
+No allocator/font rewrite; explicit allocator options respected. Separate
+calendar/source and ranked-prefix drafts remain untested. No new panel yet.
+[Audit, ranges and method](docs/research/feature9-gate-d.md#closed-panel-residency-audit--2026-10-17).
 
 ## 2026-10-17 — Named service views: measured combined feature cost accepted
 

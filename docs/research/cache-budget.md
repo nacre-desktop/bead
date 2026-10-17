@@ -181,3 +181,20 @@ exact advances versus a fresh system, stamp invalidation and inability to upgrad
 the reference after renderer teardown. Existing renderer idle/close teardown still
 bounds dependency-internal font caches; their opaque internals remain a gap.
 [Matched CPU and memory checks](feature9-gate-d.md#borrow-existing-font-state-for-caret-metrics--2026-10-16).
+
+## Closed-panel allocator boundary — 2026-10-17
+
+The byte budget measures retained payloads and metadata, not freed allocator
+space. Repeated unused preparation exposed a close+5 failure outside the live
+cache totals. On Linux/glibc, nacre-shell now applies a 4 MiB mmap threshold
+before starting workers, unless explicit allocator options are present. Ordinary
+paint masks stay below it; larger transient rasters can return their mappings on
+free. The policy is application-only and exports no allocator environment to
+helpers. An isolated trace test checks 1.5 MiB heap scratch and three released
+5 MiB mappings. No allocator or font engine is rewritten.
+
+Five paired runs/compositor pass the established warm/settled median spreads;
+all 158 candidate closes fit own bar+5 and settled UI stays below 25 MiB. Closed
+reported caches are 162,267–167,422 bytes. The warm niri range includes an outlier;
+this is not a peak-memory improvement claim. Settled memory has no demonstrated
+saving. See the [audit and full ranges](feature9-gate-d.md#closed-panel-residency-audit--2026-10-17).
