@@ -1,5 +1,11 @@
 # Status
 
+## 2026-10-18 — B0002 artifact/preflight
+
+Reviewing existing local artifacts and provenance only. No builds, remote host
+access, probes, previews or captures. The private capture request and timing
+estimate will be submitted for review; no measurement grant is active.
+
 ## 2026-10-18 — B0003 source-only preparation
 
 The typed query path and clock boundaries are mapped in
