@@ -1387,6 +1387,323 @@ async fn ui_provider_disconnect_discards_pending_task_metadata() {
     server.await.unwrap();
 }
 
+fn provider_slot_call(id: &str, slot: usize) -> Message {
+    Message::Call {
+        id: Id::Text(id.into()),
+        m: "ui.dispatch".into(),
+        p: serde_json::json!({"slot": slot}),
+        timeout: Some(30_000),
+    }
+}
+
+fn provider_error_ret(
+    id: &str,
+    code: nacre_protocol::ErrorCode,
+    message: &str,
+    retry: bool,
+) -> Message {
+    Message::Ret {
+        id: Id::Text(id.into()),
+        reply: Reply::Err {
+            err: nacre_protocol::Failure::new(code, message, retry).dispatch_state(false),
+        },
+    }
+}
+
+fn waiting_provider(
+    slots: usize,
+) -> (
+    Action,
+    mpsc::UnboundedReceiver<usize>,
+    Arc<std::sync::atomic::AtomicUsize>,
+    Vec<Option<oneshot::Sender<()>>>,
+) {
+    let (started_tx, started_rx) = mpsc::unbounded_channel();
+    let mut release_receivers = BTreeMap::new();
+    let mut release_senders = Vec::with_capacity(slots + 1);
+    for slot in 0..=slots {
+        let (release_tx, release_rx) = oneshot::channel();
+        release_senders.push(Some(release_tx));
+        release_receivers.insert(slot, release_rx);
+    }
+    let release_receivers = Arc::new(Mutex::new(release_receivers));
+    let invocations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let action_invocations = invocations.clone();
+    let action_receivers = release_receivers.clone();
+    let action: Action = Arc::new(move |_, params| {
+        action_invocations.fetch_add(1, Ordering::SeqCst);
+        let slot = params["slot"].as_u64().unwrap() as usize;
+        let release = action_receivers.lock().unwrap().remove(&slot).unwrap();
+        let started = started_tx.clone();
+        Box::pin(async move {
+            started.send(slot).unwrap();
+            release.await.unwrap();
+            Ok(Value::from(slot as u64))
+        })
+    });
+    (action, started_rx, invocations, release_senders)
+}
+
+async fn fill_provider_pool(
+    writer: &mut tokio::net::unix::OwnedWriteHalf,
+    started: &mut mpsc::UnboundedReceiver<usize>,
+    invocations: &std::sync::atomic::AtomicUsize,
+) {
+    let max_calls = nacre_protocol::MAX_CALLS;
+    for slot in 0..max_calls {
+        framing::write(
+            writer,
+            &provider_slot_call(&format!("slot-{slot}"), slot),
+        )
+        .await
+        .unwrap();
+    }
+    let mut started_slots = std::collections::BTreeSet::new();
+    for _ in 0..max_calls {
+        started_slots.insert(
+            tokio::time::timeout(Duration::from_secs(5), started.recv())
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+    }
+    assert_eq!(started_slots, (0..max_calls).collect());
+    assert_eq!(invocations.load(Ordering::SeqCst), max_calls);
+}
+
+async fn assert_provider_results_unordered(
+    reader: &mut tokio::net::unix::OwnedReadHalf,
+    expected_slots: impl IntoIterator<Item = usize>,
+) {
+    let expected: BTreeMap<_, _> = expected_slots
+        .into_iter()
+        .map(|slot| {
+            (
+                format!("slot-{slot}"),
+                Value::from(slot as u64),
+            )
+        })
+        .collect();
+    let mut actual = BTreeMap::new();
+    for _ in 0..expected.len() {
+        let Message::Ret {
+            id: Id::Text(id),
+            reply: Reply::Ok { ok },
+        } = next(reader).await
+        else {
+            panic!("expected successful provider reply");
+        };
+        assert!(actual.insert(id, ok).is_none(), "duplicate provider reply");
+    }
+    assert_eq!(actual, expected);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_full_pool_returns_busy_without_dispatch() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (action, mut started, invocations, mut releases) =
+        waiting_provider(nacre_protocol::MAX_CALLS);
+    let (verified_tx, verified_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        assert_eq!(next(&mut reader).await, fixture("ui")[0]);
+        fill_provider_pool(&mut writer, &mut started, &invocations).await;
+        framing::write(&mut writer, &provider_slot_call("overload", nacre_protocol::MAX_CALLS))
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            provider_error_ret(
+                "overload",
+                nacre_protocol::ErrorCode::Busy,
+                "UI handler request limit reached",
+                true,
+            )
+        );
+        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS);
+        for release in releases.iter_mut().take(nacre_protocol::MAX_CALLS) {
+            release.take().unwrap().send(()).unwrap();
+        }
+        assert_provider_results_unordered(&mut reader, 0..nacre_protocol::MAX_CALLS).await;
+        verified_tx.send(()).unwrap();
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(provider_config(lab.socket(), action)).unwrap();
+    verified_rx.await.unwrap();
+    client.control(true).await.unwrap();
+    let _ = shutdown_tx.send(());
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_unknown_method_is_not_dispatched_at_capacity() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (action, mut started, invocations, mut releases) =
+        waiting_provider(nacre_protocol::MAX_CALLS);
+    let (verified_tx, verified_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        assert_eq!(next(&mut reader).await, fixture("ui")[0]);
+        fill_provider_pool(&mut writer, &mut started, &invocations).await;
+        framing::write(
+            &mut writer,
+            &Message::Call {
+                id: Id::Text("unknown-at-capacity".into()),
+                m: "ui.not-registered".into(),
+                p: Value::Null,
+                timeout: Some(30_000),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            provider_error_ret(
+                "unknown-at-capacity",
+                nacre_protocol::ErrorCode::UnknownMethod,
+                "UI method unavailable",
+                false,
+            )
+        );
+        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS);
+        for release in releases.iter_mut().take(nacre_protocol::MAX_CALLS) {
+            release.take().unwrap().send(()).unwrap();
+        }
+        assert_provider_results_unordered(&mut reader, 0..nacre_protocol::MAX_CALLS).await;
+        verified_tx.send(()).unwrap();
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(provider_config(lab.socket(), action)).unwrap();
+    verified_rx.await.unwrap();
+    client.control(true).await.unwrap();
+    let _ = shutdown_tx.send(());
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_completion_frees_one_admission_slot() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (action, mut started, invocations, mut releases) =
+        waiting_provider(nacre_protocol::MAX_CALLS);
+    let (verified_tx, verified_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        assert_eq!(next(&mut reader).await, fixture("ui")[0]);
+        fill_provider_pool(&mut writer, &mut started, &invocations).await;
+        framing::write(&mut writer, &provider_slot_call("rejected", nacre_protocol::MAX_CALLS))
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            provider_error_ret(
+                "rejected",
+                nacre_protocol::ErrorCode::Busy,
+                "UI handler request limit reached",
+                true,
+            )
+        );
+        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS);
+
+        releases[0].take().unwrap().send(()).unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Ret {
+                id: Id::Text("slot-0".into()),
+                reply: Reply::Ok {
+                    ok: Value::from(0u64),
+                },
+            }
+        );
+        framing::write(
+            &mut writer,
+            &provider_slot_call("admitted-after-completion", nacre_protocol::MAX_CALLS),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(5), started.recv())
+                .await
+                .unwrap()
+                .unwrap(),
+            nacre_protocol::MAX_CALLS
+        );
+        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS + 1);
+        releases[nacre_protocol::MAX_CALLS]
+            .take()
+            .unwrap()
+            .send(())
+            .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Ret {
+                id: Id::Text("admitted-after-completion".into()),
+                reply: Reply::Ok {
+                    ok: Value::from(nacre_protocol::MAX_CALLS as u64),
+                },
+            }
+        );
+        for release in releases.iter_mut().take(nacre_protocol::MAX_CALLS).skip(1) {
+            release.take().unwrap().send(()).unwrap();
+        }
+        assert_provider_results_unordered(&mut reader, 1..nacre_protocol::MAX_CALLS).await;
+        let ping_id = Id::Text("after-admission".into());
+        framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
+            .await
+            .unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
+        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS + 1);
+        verified_tx.send(()).unwrap();
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(provider_config(lab.socket(), action)).unwrap();
+    verified_rx.await.unwrap();
+    client.control(true).await.unwrap();
+    let _ = shutdown_tx.send(());
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_missing_provider_returns_unknown_method_undispatched() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (verified_tx, verified_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        assert_eq!(next(&mut reader).await, fixture("ui")[0]);
+        framing::write(&mut writer, &provider_call("no-provider"))
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            provider_error_ret(
+                "no-provider",
+                nacre_protocol::ErrorCode::UnknownMethod,
+                "UI method unavailable",
+                false,
+            )
+        );
+        let ping_id = Id::Text("missing-provider-link".into());
+        framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
+            .await
+            .unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
+        verified_tx.send(()).unwrap();
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    verified_rx.await.unwrap();
+    client.control(true).await.unwrap();
+    let _ = shutdown_tx.send(());
+    server.await.unwrap();
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn full_snapshots_preserve_new_null_members() {
     let lab = Lab::new();

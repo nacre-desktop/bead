@@ -835,16 +835,29 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                 },
                                 Message::Ret{id,reply}=>resolve(&mut pending,&id,reply),
                                 Message::Ping{id}=>{if send(&shared,&mut session.writer,&Message::Pong{id}).await.is_err(){break;}},
-                                Message::Call{id,m,p,timeout:limit}=>{if let Some((_,methods,handler))=&config.provider && methods.contains_key(&m)&&handlers.len()<nacre_protocol::MAX_CALLS {
-                                        let handler=handler.clone();
-                                        let task=handlers.spawn(async move{
-                                            let future=handler(m,p);
-                                            tokio::time::timeout(Duration::from_millis(limit.unwrap_or(1000) as u64),future).await.unwrap_or_else(|_|Err(timeout()))
-                                        });
-                                        handler_requests.insert(task.id(),id);
+                                Message::Call{id,m,p,timeout:limit}=>{
+                                    let Some((_,methods,handler))=&config.provider else {
+                                        let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::UnknownMethod,"UI method unavailable",false).dispatch_state(false)};
+                                        if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}
+                                        continue;
+                                    };
+                                    if !methods.contains_key(&m) {
+                                        let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::UnknownMethod,"UI method unavailable",false).dispatch_state(false)};
+                                        if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}
                                         continue;
                                     }
-                                    let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::UnknownMethod,"UI method unavailable",false).dispatch_state(true)};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}},
+                                    if handlers.len()>=nacre_protocol::MAX_CALLS {
+                                        let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Busy,"UI handler request limit reached",true).dispatch_state(false)};
+                                        if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}
+                                        continue;
+                                    }
+                                    let handler=handler.clone();
+                                    let task=handlers.spawn(async move{
+                                        let future=handler(m,p);
+                                        tokio::time::timeout(Duration::from_millis(limit.unwrap_or(1000) as u64),future).await.unwrap_or_else(|_|Err(timeout()))
+                                    });
+                                    handler_requests.insert(task.id(),id);
+                                },
                                 Message::Ev{..}|Message::Lost{..}|Message::Pong{..}=>{if let Some(event)=&config.event {event(&message);}},
                                 Message::Error{..}=>break,
                                 _=>break,
