@@ -3,7 +3,7 @@
 - ID: B0011
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Ready
+- Status: In progress
 - Depends on: B0010 Done; published BatteryState contract
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours

@@ -6,7 +6,7 @@ spec sections and thread messages. Batch status notes at start/review/Done.
 
 | Order | Spec | Status | Authorized next action |
 | --- | --- | --- | --- |
-| 1 | [B0011 Battery popout](0011-daemon-battery-status-popout.md) | Ready | Typed BatteryState, optional readings preserved, lazy shared lease and private tests; no lab. |
+| 1 | [B0011 Battery popout](0011-daemon-battery-status-popout.md) | In progress | Typed BatteryState, optional readings preserved, lazy shared lease and private tests; no lab. |
 | 2 | [B0010 Bluetooth popout](0010-daemon-bluetooth-status-popout.md) | Done | Accepted `e3e417e`; exact-head CI `39136586458` green. Spec review only; producer remains capability-gated. |
 | 2 | [B0009 Network popout](0009-daemon-network-status-popout.md) | Done | Accepted bd7bf56/source5d96384; exact-head CI39134388246 green. Capability-gated, no measurement claim. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Blocked | Missing wayland-info; minimal authorized install failed sudo password required. No retry/probe/capture until prerequisite and new slot. |

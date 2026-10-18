@@ -1,5 +1,12 @@
 # Status
 
+## 2026-10-18 — B0011 in progress
+
+Implementing the typed Battery popout from the published `BatteryState`
+contract. Scope is the lazy shared-topic lease, independent unknown readings,
+bounded last-good display state and private lifecycle tests. No capture, lab
+work or producer capability claim.
+
 ## 2026-10-18 — B0010 submitted for review
 
 The Bluetooth popout now leases the published topic only while its Runtime is
