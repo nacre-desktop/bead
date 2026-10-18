@@ -1410,14 +1410,14 @@ fn provider_error_ret(
     }
 }
 
-fn waiting_provider(
-    slots: usize,
-) -> (
+type WaitingProvider = (
     Action,
     mpsc::UnboundedReceiver<usize>,
     Arc<std::sync::atomic::AtomicUsize>,
     Vec<Option<oneshot::Sender<()>>>,
-) {
+);
+
+fn waiting_provider(slots: usize) -> WaitingProvider {
     let (started_tx, started_rx) = mpsc::unbounded_channel();
     let mut release_receivers = BTreeMap::new();
     let mut release_senders = Vec::with_capacity(slots + 1);
