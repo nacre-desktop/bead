@@ -104,17 +104,18 @@ peer pause,>=4GiB available,abort<2GiB,private capped scope; no host overlap.
 
 ## Implementation evidence
 
-The implementation is `b58041a` (following start commit `be4305c`); exact-head
-hosted CI run `39132356640` passed. The named projection tests verify explicit
-primary selection rather than map order, AP signal only when its connection
-matches primary, malformed/unknown data never becoming zero, stale disconnect
-retention and atomic recovery, and unchanged legacy preview. The private fake
-daemon test verifies the network subscription is absent before opening, added
-when the panel Runtime opens, and removed when it drops while the shared client
-remains usable and no later callback is delivered. Validation ran in hosted CI;
-no local build, lab session, capture, memory measurement or latency claim was
-made. The code consumes the published schema but does not advertise runtime
-availability; the view stays unavailable until Nacre publishes the producer.
+The implementation is `b58041a` (following start commit `be4305c`); the fake
+peer keepalive/shutdown test correction is `5d96384`. Exact-head hosted CI run
+`39133884809` passed. Named projection tests verify explicit primary selection
+rather than map order, AP signal only when its connection matches primary,
+malformed/unknown data never becoming zero, stale disconnect retention and
+atomic recovery, and unchanged legacy preview. The private fake daemon test
+verifies the network subscription is absent before opening, added when the panel
+Runtime opens, and removed when it drops while the shared client remains usable
+and no later callback is delivered. Validation ran in hosted CI; no local build,
+lab session, capture, memory measurement or latency claim was made. The code
+consumes the published schema but does not advertise runtime availability; the
+view stays unavailable until Nacre publishes the producer.
 
 ## Stop conditions
 

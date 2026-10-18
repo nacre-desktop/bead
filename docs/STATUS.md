@@ -6,9 +6,11 @@ The Network popout lazily leases the shared daemon topic and displays only a
 validated, explicitly mapped primary connection. Stale data retains a bounded
 last-good display; Runtime retirement releases the lease without closing the
 shared client. Legacy preview behavior is unchanged. Named projection and
-private fake-daemon lifecycle tests pass. Exact-head CI `39132356640` is green
-at `b58041a`; validation was hosted-only. No lab, capture, memory or latency
-claim. Runtime display remains unavailable until Nacre advertises the topic.
+private fake-daemon lifecycle tests pass. The test peer tolerates interleaved
+keepalive traffic and stays open through the shared-link assertion. Exact-head
+CI `39133884809` is green at `5d96384`; validation was hosted-only. No lab,
+capture, memory or latency claim. Runtime display remains unavailable until
+Nacre advertises the topic.
 
 ## 2026-10-18 — B0008 submitted for review
 

@@ -6,7 +6,7 @@ spec sections and thread messages. Batch status notes at start/review/Done.
 
 | Order | Spec | Status | Authorized next action |
 | --- | --- | --- | --- |
-| 1 | [B0009 Network popout](0009-daemon-network-status-popout.md) | Review | Implementation `b58041a`; exact-head hosted CI `39132356640` green. Awaiting spec review; runtime remains unavailable until Nacre advertises the topic. |
+| 1 | [B0009 Network popout](0009-daemon-network-status-popout.md) | Review | Implementation `b58041a`, lifecycle-test follow-up `5d96384`; exact-head hosted CI `39133884809` green. Awaiting spec review; runtime remains unavailable until Nacre advertises the topic. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Blocked | Missing wayland-info; minimal authorized install failed sudo password required. No retry/probe/capture until prerequisite and new slot. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source B0003-S Done; measured phase gated | Source89afb381 accepted, CI39123319816 green. No repeated static reports; measurements after B0002 PASS/new slot. |
 | 4 | [B0008 admission](0008-ui-provider-bounded-admission.md) | Done | Exact0deb314/CI39128553160 accepted; no further review wait. |
