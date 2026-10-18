@@ -661,13 +661,17 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         )
         .await
         .unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Pong {
-                id: Id::Integer(703)
-            },
-            "the shared provider link stays alive after lease drop"
-        );
+        loop {
+            match next(&mut reader).await {
+                Message::Pong {
+                    id: Id::Integer(703),
+                } => break,
+                Message::Ping { id } => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                message => panic!("unexpected message while checking shared link: {message:?}"),
+            }
+        }
         observed_link.notify_one();
     });
 
