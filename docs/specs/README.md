@@ -10,7 +10,8 @@ Updated2026-10-18. [Standing rules](https://github.com/nacre-desktop/nacre/blob/
 | 1c | [B0006 keeper](0006-dashboard-keyboard-keeper-lifetime.md) | Done | Review410bf09/CI39081728470green |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | In progress, preflight blocked | `wayland-info` missing; minimal install denied (`sudo: a password is required`) |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Review (B0003-S) | Source/test checkpoint submitted; measured work remains gated on B0002 |
-| 4 | [B0007 UI-provider failures](0007-ui-provider-task-failure-replies.md) | Review | Implementation and four socket tests submitted; CI39124495975 green |
+| 4 | [B0007 UI-provider failures](0007-ui-provider-task-failure-replies.md) | Done | Accepted at736e778a; exact-head CI39125066926 green |
+| 5 | [B0008 UI-provider admission](0008-ui-provider-bounded-admission.md) | In progress | Bounded registered-method admission; source/tests only, no lab dependency |
 
 Incident CLOSED by owner2026-10-18: likely lost Codex connection; no OOM/oomd
 kills or relevant kernel crash attribution. Worktrees and artifacts preserved.

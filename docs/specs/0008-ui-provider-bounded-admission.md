@@ -3,7 +3,7 @@
 - ID: B0008
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Ready
+- Status: In progress
 - Depends on: B0007 Done at736e778a; independent of B0002/capture
 - Date: 2026-10-18
 - Size: one focused session, maximum90minutes

@@ -1,12 +1,18 @@
 # Status
 
-## 2026-10-18 — B0007 review submitted
+## 2026-10-18 — B0008 in progress
 
-UI-provider factory/future panics and task cancellation now return one terminal
+B0007 was accepted Done at `736e778`. B0008 separates registered-method overload
+from unknown methods without changing `MAX_CALLS`; work is source/tests only,
+with no lab use or measurement.
+
+## 2026-10-18 — B0007 accepted
+
+UI-provider factory/future panics and task cancellation return one terminal
 Internal error for the original request. The daemon link remains usable, and
 session teardown drops task metadata without replay across boots. Four private
-socket tests cover these paths. CI39124495975 is green on `041884a`; no
-measurement or live work occurred.
+socket tests pass; exact-head CI39125066926 is green. No measurement or live
+work occurred.
 
 ## 2026-10-18 — B0005 review submitted
 
