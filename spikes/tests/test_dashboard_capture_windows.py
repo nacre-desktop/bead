@@ -43,6 +43,15 @@ class FakeClock:
         return {"seconds": seconds}
 
 
+class FakeKeeper:
+    def __init__(self, clock, lifetime_seconds):
+        self.clock = clock
+        self.expires_at = clock.now + lifetime_seconds
+
+    def poll(self):
+        return 0 if self.clock.now >= self.expires_at else None
+
+
 class CaptureWindowTests(unittest.TestCase):
     def test_acceptance_full_idle_not_sleep_then_one_second(self):
         clock = FakeClock()
@@ -69,6 +78,71 @@ class CaptureWindowTests(unittest.TestCase):
             "baseline_idle_seconds": 60,
         })
         self.assertEqual(row["seconds"], 60)
+
+    def test_acceptance_keeper_outlives_600_warmup(self):
+        clock = FakeClock()
+        keeper = FakeKeeper(clock, 1800)
+        with mock.patch.object(launcher.subprocess, "Popen", return_value=keeper) as popen:
+            owned = launcher.start_keyboard_keeper(True, True, {"fixture": "env"})
+        popen.assert_called_once()
+        self.assertEqual(popen.call_args.args[0], ["wtype", "-s", "1800000", ""])
+        checks = []
+        check = lambda stage: (checks.append(stage), launcher.check_keyboard_keeper(owned, stage))
+        residency.acceptance_baseline(22, clock.idle, 600, clock.monotonic, clock.sleep, check)
+        for label, budget in residency.ACCEPTANCE_PHASE_BUDGETS.items():
+            began = clock.monotonic()
+            clock.advance(2)
+            residency.finish_phase_window(
+                label, began, budget, lambda seconds: clock.idle(22, seconds), True,
+                clock.monotonic, clock.sleep, check,
+            )
+        self.assertIn("after warmup", checks)
+        self.assertIn("before baseline", checks)
+        self.assertIn("after baseline", checks)
+        self.assertEqual(checks.count("before phase idle observation"), 4)
+        self.assertEqual(checks.count("after phase idle observation"), 4)
+        self.assertLess(clock.now, 1800)
+
+    def test_legacy_keeper_duration_unchanged(self):
+        keeper = object()
+        with mock.patch.object(launcher.subprocess, "Popen", return_value=keeper) as popen:
+            self.assertIs(launcher.start_keyboard_keeper(True, False, {}), keeper)
+        self.assertEqual(popen.call_args.args[0], ["wtype", "-s", "600000", ""])
+
+    def test_early_keeper_exit_invalidates_and_cleans(self):
+        for expires_at, window in ((600, "warmup"), (630, "baseline"), (690, "phase")):
+            with self.subTest(window=window):
+                clock = FakeClock()
+                keeper = FakeKeeper(clock, expires_at)
+                stopped = []
+                with mock.patch.object(launcher.subprocess, "Popen", return_value=keeper) as popen:
+                    owned = launcher.start_keyboard_keeper(True, True, {})
+                check = lambda stage: launcher.check_keyboard_keeper(owned, stage)
+                try:
+                    if window == "warmup":
+                        with self.assertRaisesRegex(AssertionError, "after warmup"):
+                            residency.acceptance_baseline(22, clock.idle, 600, clock.monotonic, clock.sleep, check)
+                        self.assertFalse(any(event[0] == "idle" for event in clock.events))
+                    elif window == "baseline":
+                        with self.assertRaisesRegex(AssertionError, "after baseline"):
+                            residency.acceptance_baseline(22, clock.idle, 600, clock.monotonic, clock.sleep, check)
+                    else:
+                        clock.advance(660)
+                        with self.assertRaisesRegex(AssertionError, "after phase idle observation"):
+                            residency.finish_phase_window(
+                                "never-opened", clock.monotonic(), 65,
+                                lambda seconds: clock.idle(22, seconds), True,
+                                clock.monotonic, clock.sleep, check,
+                            )
+                finally:
+                    launcher.stop_keyboard_keeper(owned, stopped.append)
+                popen.assert_called_once()
+                self.assertEqual(stopped, [keeper])
+
+    def test_keeper_not_requested_adds_no_process(self):
+        with mock.patch.object(launcher.subprocess, "Popen") as popen:
+            self.assertIsNone(launcher.start_keyboard_keeper(False, True, {}))
+        popen.assert_not_called()
 
     def test_acceptance_phase_overrun_rejected(self):
         clock = FakeClock()

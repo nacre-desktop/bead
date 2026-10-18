@@ -9,6 +9,21 @@ spec=importlib.util.spec_from_file_location('menu_fixtures',ROOT/'spikes/menu-fi
 menu_fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(menu_fixtures)
 spec=importlib.util.spec_from_file_location('dashboard_residency',ROOT/'spikes/dashboard-residency.py')
 dashboard_residency=importlib.util.module_from_spec(spec);spec.loader.exec_module(dashboard_residency)
+
+def start_keyboard_keeper(requested, acceptance, env):
+    if not requested:
+        return None
+    duration_ms=1800000 if acceptance else 600000
+    return subprocess.Popen(['wtype','-s',str(duration_ms),''],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+
+def check_keyboard_keeper(keeper, stage):
+    if keeper is not None and keeper.poll() is not None:
+        raise AssertionError('private keyboard keeper exited '+stage)
+
+def stop_keyboard_keeper(keeper, stop):
+    if keeper is not None:
+        stop(keeper)
+
 def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     acceptance=dashboard_residency.acceptance_config(os.environ)
     runtime=pathlib.Path(env['XDG_RUNTIME_DIR']).resolve()
@@ -138,17 +153,19 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             # Match input capabilities for control and candidate before the bar
             # baseline. Registering a keyboard only during candidate Escape
             # would wrongly charge its IME/seat setup to the new service view.
-            keeper=subprocess.Popen(['wtype','-s','600000',''],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+            keeper=start_keyboard_keeper(True,acceptance is not None,env)
             time.sleep(.25)
-            assert keeper.poll() is None,'private keyboard keeper exited'
+            check_keyboard_keeper(keeper,'at start')
             result['keyboard_at_start']=True
+        def keeper_check(stage):
+            check_keyboard_keeper(keeper,stage)
         with log.open('w')as stream:
             client=subprocess.Popen(command,cwd=bundle_root or ROOT,env=env,stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
             matrix.wait_log(log,lambda t:'UI_PRESENTED generation=1'in t and 'source_error=false'in t)
             assert 'PRESENTATION clock_id=1'in matrix.log_text(log)
             call('state',target='nacre')
             if acceptance:
-                bar,baseline_timing=dashboard_residency.acceptance_baseline(client.pid,matrix.idle,acceptance['warmup_seconds'],time.monotonic,time.sleep)
+                bar,baseline_timing=dashboard_residency.acceptance_baseline(client.pid,matrix.idle,acceptance['warmup_seconds'],time.monotonic,time.sleep,keeper_check)
                 result['acceptance_baseline']=baseline_timing
                 (raw/'dashboard-residency-baseline.json').write_text(json.dumps(baseline_timing,indent=2)+'\n')
             else:
@@ -159,7 +176,8 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             (raw/'bar.json').write_text(json.dumps(bar,indent=2)+'\n')
             (raw/'bar.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
             if os.environ.get('BEAD_DASHBOARD_RESIDENCY') == '1':
-                result=dashboard_residency.sample(client,raw,bar,matrix,call,state_wait,log,dashboard_presented,committed_and_presented,observe,dashboard_views,result.get('acceptance_baseline'))
+                result=dashboard_residency.sample(client,raw,bar,matrix,call,state_wait,log,dashboard_presented,committed_and_presented,observe,dashboard_views,result.get('acceptance_baseline'),keeper_check)
+                keeper_check('before success cleanup')
                 stop(client)
                 assert client.returncode==0,'residency UI did not exit cleanly'
                 assert 'STOP surfaces=0' in log.read_text()
@@ -364,6 +382,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 baseline=bar['pss_plus_drm_mib']+bar['memory']['swap_pss_mib']+bar['external']['pss_plus_drm_swap_mib']
                 total=sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']+sample['external']['pss_plus_drm_swap_mib']
                 budget(total,baseline+5,'settled UI + daemon/workers exceeds matched bar group+5 MiB')
+        keeper_check('before success cleanup')
     finally:
         try:
             if pointer:pointer.close()
@@ -371,7 +390,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             try:
                 if client:stop(client)
             finally:
-                if keeper:stop(keeper)
+                stop_keyboard_keeper(keeper,stop)
     assert client.returncode==0,'launcher did not exit cleanly'
     assert 'STOP surfaces=0'in log.read_text()
     result.update(valid=not budget_failures,budget_failures=budget_failures,observed_failed_control=record_control,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=not release_state,query_released_after_idle=release_state,query_on_open=query_on_open,query_not_on_disk=True)

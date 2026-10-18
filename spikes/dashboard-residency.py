@@ -38,13 +38,18 @@ def acceptance_config(environ):
     return {"warmup_seconds": int(warmup)}
 
 
-def acceptance_baseline(pid, idle, warmup_seconds, monotonic, sleep):
+def acceptance_baseline(pid, idle, warmup_seconds, monotonic, sleep, keeper_check=None):
     warmup_started = monotonic()
     if warmup_seconds:
         sleep(warmup_seconds)
     warmup_elapsed = monotonic() - warmup_started
     assert warmup_elapsed >= warmup_seconds, "measured warmup shorter than requested"
+    if keeper_check:
+        keeper_check("after warmup")
+        keeper_check("before baseline")
     row = observe_window(idle, pid, 60, require_full=True)
+    if keeper_check:
+        keeper_check("after baseline")
     return row, {
         "mode": "acceptance",
         "warmup_requested_seconds": warmup_seconds,
@@ -67,7 +72,7 @@ def assert_capture_rails(row, bar, external, total):
     assert total(row) <= 25, "diagnostic exceeds current hard ceiling"
 
 
-def finish_phase_window(label, began, budget, capture, acceptance, monotonic, sleep):
+def finish_phase_window(label, began, budget, capture, acceptance, monotonic, sleep, keeper_check=None):
     elapsed = monotonic() - began
     if acceptance:
         idle_seconds = 60
@@ -75,7 +80,11 @@ def finish_phase_window(label, began, budget, capture, acceptance, monotonic, sl
         assert wait_seconds >= 0, "phase activity overran its matched acceptance window"
         if wait_seconds:
             sleep(wait_seconds)
+        if keeper_check:
+            keeper_check("before phase idle observation")
         row = capture(idle_seconds)
+        if keeper_check:
+            keeper_check("after phase idle observation")
         actual_idle = row["seconds"]
         assert actual_idle >= idle_seconds, "dashboard acceptance phase idle shorter than 60 seconds"
         return row, {
@@ -94,7 +103,7 @@ def finish_phase_window(label, began, budget, capture, acceptance, monotonic, sl
     return row, {"mode": "legacy", "phase_seconds": monotonic() - began}
 
 
-def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed, observe, enabled, baseline_timing=None):
+def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed, observe, enabled, baseline_timing=None, keeper_check=None):
     acceptance = acceptance_config(os.environ)
     def total(row):
         return row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
@@ -150,6 +159,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
             acceptance is not None,
             time.monotonic,
             time.sleep,
+            keeper_check,
         )
         row.update(timing)
         assert total(row) < 24.5, "settled reaches owner stop line"
