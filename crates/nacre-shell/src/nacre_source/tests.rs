@@ -1452,8 +1452,8 @@ async fn fill_provider_pool(
     let max_calls = nacre_protocol::MAX_CALLS;
     for slot in 0..max_calls {
         framing::write(writer, &provider_slot_call(&format!("slot-{slot}"), slot))
-        .await
-        .unwrap();
+            .await
+            .unwrap();
     }
     let mut started_slots = std::collections::BTreeSet::new();
     for _ in 0..max_calls {
@@ -1506,8 +1506,8 @@ async fn ui_provider_full_pool_returns_busy_without_dispatch() {
             &mut writer,
             &provider_slot_call("overload", nacre_protocol::MAX_CALLS),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         assert_eq!(
             next(&mut reader).await,
             provider_error_ret(
@@ -1601,8 +1601,8 @@ async fn ui_provider_completion_frees_one_admission_slot() {
             &mut writer,
             &provider_slot_call("rejected", nacre_protocol::MAX_CALLS),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         assert_eq!(
             next(&mut reader).await,
             provider_error_ret(
@@ -1669,8 +1669,8 @@ async fn ui_provider_completion_frees_one_admission_slot() {
                 id: ping_id.clone(),
             },
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
         assert_eq!(
             invocations.load(Ordering::SeqCst),
@@ -1714,8 +1714,8 @@ async fn ui_provider_missing_provider_returns_unknown_method_undispatched() {
                 id: ping_id.clone(),
             },
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
         verified_tx.send(()).unwrap();
         let _ = shutdown_rx.await;
