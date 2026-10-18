@@ -576,441 +576,525 @@ async fn page_lease_resubscribes_on_boot_and_drop_unsubscribes() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn network_core_lease_exists_only_for_open_runtime() {
-    use bead::wayland::UiEvent;
-    use std::{
-        path::Path,
-        sync::{OnceLock, mpsc},
-    };
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            use bead::wayland::UiEvent;
+            use nacre_protocol::core_services::{CoreSnapshot, NetworkState};
+            use std::{path::Path, sync::OnceLock};
 
-    let lab = Lab::new();
-    let listener = lab.bind();
-    let link_alive = Arc::new(Notify::new());
-    let observed_link = link_alive.clone();
-    let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        let (r, mut w) = stream.into_split();
-        let mut reader = framing::Reader::new(BufReader::new(r));
-        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
-        let mut hello = welcome();
-        if let Message::Welcome { topics, .. } = &mut hello {
-            topics.insert("network".into(), 1);
-        }
-        framing::write(&mut w, &hello).await.unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Sub {
-                topics: vec!["compositor".into()]
-            }
-        );
-        loop {
-            match next(&mut reader).await {
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
+            let lab = Lab::new();
+            let listener = lab.bind();
+            let (connected, connected_ready) = tokio::sync::oneshot::channel();
+            let (unsubscribed, unsubscribed_ready) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                let (r, mut w) = stream.into_split();
+                let mut reader = framing::Reader::new(BufReader::new(r));
+                assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+                let mut hello = welcome();
+                if let Message::Welcome { topics, .. } = &mut hello {
+                    topics.insert("network".into(), 1);
                 }
-                Message::Sub { topics } => {
-                    assert_eq!(topics, vec![String::from("network")]);
-                    break;
+                framing::write(&mut w, &hello).await.unwrap();
+                assert_eq!(
+                    next(&mut reader).await,
+                    Message::Sub {
+                        topics: vec!["compositor".into()]
+                    }
+                );
+                connected.send(()).unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Sub { topics } => {
+                            assert_eq!(topics, vec![String::from("network")]);
+                            break;
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => panic!("unexpected message before network lease: {message:?}"),
+                    }
                 }
-                message => panic!("unexpected message before network lease: {message:?}"),
-            }
-        }
-        let network = serde_json::json!({
-            "health":{"available":true,"stale":false},
-            "wireless_enabled":true,
-            "devices":{"items":{"wifi0":{"name":"Wi-Fi","kind":"wireless","connected":true}},"order":["wifi0"]},
-            "access_points":{"items":{"ap0":{"device":"wifi0","name":"Home Wi-Fi","strength":80,"secured":true,"active":true,"connection":"wifi"}},"order":["ap0"]},
-            "connections":{"items":{"wifi":{"name":"Wi-Fi profile","kind":"wireless","active":true}},"order":["wifi"]},
-            "primary_connection":"wifi"
-        });
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "network".into(),
-                seq: 0,
-                data: network.clone(),
-            },
-        )
-        .await
-        .unwrap();
-        loop {
-            match next(&mut reader).await {
-                Message::Unsub { topics } => {
-                    assert_eq!(topics, vec!["network"]);
-                    break;
+                let network = serde_json::json!({
+                    "health":{"available":true,"stale":false},
+                    "wireless_enabled":true,
+                    "devices":{"items":{"wifi0":{"name":"Wi-Fi","kind":"wireless","connected":true}},"order":["wifi0"]},
+                    "access_points":{"items":{"ap0":{"device":"wifi0","name":"Home Wi-Fi","strength":80,"secured":true,"active":true,"connection":"wifi"}},"order":["ap0"]},
+                    "connections":{"items":{"wifi":{"name":"Wi-Fi profile","kind":"wireless","active":true}},"order":["wifi"]},
+                    "primary_connection":"wifi"
+                });
+                framing::write(
+                    &mut w,
+                    &Message::Snap {
+                        topic: "network".into(),
+                        seq: 0,
+                        data: network.clone(),
+                    },
+                )
+                .await
+                .unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Unsub { topics } => {
+                            assert_eq!(topics, vec!["network"]);
+                            break;
+                        }
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => panic!("unexpected frame before network Unsub: {message:?}"),
+                    }
                 }
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
+                // Send a post-Unsub snapshot before the ping so the Pong also proves
+                // the client has consumed the late frame without waking the view.
+                framing::write(
+                    &mut w,
+                    &Message::Snap {
+                        topic: "network".into(),
+                        seq: 1,
+                        data: network,
+                    },
+                )
+                .await
+                .unwrap();
+                framing::write(
+                    &mut w,
+                    &Message::Ping {
+                        id: Id::Integer(703),
+                    },
+                )
+                .await
+                .unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Pong {
+                            id: Id::Integer(703),
+                        } => break,
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => {
+                            panic!("unexpected message while checking shared link: {message:?}")
+                        }
+                    }
                 }
-                Message::Ping { id } => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                // The post-Unsub frame preceded the Pong, proving the shared client
+                // consumed it while remaining connected.
+                unsubscribed.send(()).unwrap();
+                loop {
+                    match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                        Ok(Ok(Some(Message::Call { id, m, .. }))) => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Ok(Ok(Some(Message::Ping { id }))) => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        Ok(Ok(Some(message))) => {
+                            panic!("unexpected message while preserving shared link: {message:?}")
+                        }
+                        Ok(Ok(None) | Err(_)) => break,
+                        Err(_) => panic!("client did not stop after the lease test finished"),
+                    }
                 }
-                message => panic!("unexpected frame before network Unsub: {message:?}"),
-            }
-        }
-        // Send a post-Unsub snapshot before the ping so the Pong also proves
-        // the client has consumed the late frame without waking the view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "network".into(),
-                seq: 1,
-                data: network,
-            },
-        )
-        .await
-        .unwrap();
-        framing::write(
-            &mut w,
-            &Message::Ping {
-                id: Id::Integer(703),
-            },
-        )
-        .await
-        .unwrap();
-        loop {
-            match next(&mut reader).await {
-                Message::Pong {
-                    id: Id::Integer(703),
-                } => break,
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                }
-                Message::Ping { id } => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
-                }
-                message => panic!("unexpected message while checking shared link: {message:?}"),
-            }
-        }
-        // The post-Unsub frame preceded the Pong, proving the shared client
-        // consumed it while remaining connected.
-        observed_link.notify_one();
-        loop {
-            match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
-                Ok(Ok(Some(Message::Call { id, m, .. }))) => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                }
-                Ok(Ok(Some(Message::Ping { id }))) => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
-                }
-                Ok(Ok(Some(message))) => {
-                    panic!("unexpected message while preserving shared link: {message:?}")
-                }
-                Ok(Ok(None) | Err(_)) => break,
-                Err(_) => panic!("client did not stop after the lease test finished"),
-            }
-        }
-        observed_link.notify_one();
-    });
+            });
 
-    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while client.status().boot.is_none() {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    })
-    .await
-    .unwrap();
-    let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
-    let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
-    let scale: Value =
-        serde_json::from_str(include_str!("../../../bead-ui/assets/size-scale.json")).unwrap();
-    let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
-    let spec = crate::popouts::status(
-        crate::status_views::Kind::Network,
-        Arc::new(palette),
-        colors,
-        Arc::new(OnceLock::new()),
-        Some(client.clone()),
-        radius,
-        false,
-    )
-    .unwrap();
-    assert!(!client.0.shared.leases.has_topic("network"));
+            let client =
+                Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+            tokio::time::timeout(Duration::from_secs(5), connected_ready)
+                .await
+                .expect("peer must observe the permanent desktop subscription")
+                .unwrap();
+            let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
+            let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
+            let scale_json = include_str!("../../../bead-ui/assets/size-scale.json");
+            let scale: Value = serde_json::from_str(scale_json).unwrap();
+            let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
+            let spec = crate::popouts::status(
+                crate::status_views::Kind::Network,
+                Arc::new(palette),
+                colors,
+                Arc::new(OnceLock::new()),
+                Some(client.clone()),
+                radius,
+                false,
+            )
+            .unwrap();
+            assert!(!client.0.shared.leases.has_topic("network"));
 
-    let mut runtime = (spec.factory)(true).unwrap();
-    let (send, receive) = mpsc::channel();
-    runtime.services(Box::new(move |event| {
-        let _ = send.send(event);
-    }));
-    let event = receive.recv_timeout(Duration::from_secs(2)).unwrap();
-    assert!(matches!(&event, UiEvent::Model(_)));
-    let _ = runtime.stage(event).unwrap();
-    drop(runtime);
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while client.0.shared.leases.has_topic("network") {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    })
-    .await
-    .unwrap();
-    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
-        .await
-        .unwrap();
-    assert!(
-        receive.recv_timeout(Duration::from_millis(50)).is_err(),
-        "a retired Runtime must receive no callback after its lease is released"
-    );
-    assert!(
-        client.status().boot.is_some(),
-        "the shared client stays connected"
-    );
-    drop(spec);
-    Source::stop(&client).await.unwrap();
-    server.await.unwrap();
+            let mut runtime = (spec.factory)(true).unwrap();
+            // Observe the Runtime's existing publisher without acquiring another lease.
+            let publisher = client.0.shared.leases.publisher("network").unwrap();
+            let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
+            runtime.services(Box::new(move |event| {
+                let _ = send.send(event);
+            }));
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let event = receive.recv().await.expect("Runtime callback channel closed");
+                    assert!(matches!(&event, UiEvent::Model(_)));
+                    let _ = runtime.stage(event).unwrap();
+                    let snapshot = publisher.snapshot();
+                    if snapshot.connected
+                        && let Ok(state) =
+                            serde_json::from_value::<NetworkState>(snapshot.data.as_ref().clone())
+                        && state.health.available
+                        && !state.health.stale
+                    {
+                        assert!(CoreSnapshot::Network(state).valid());
+                        break;
+                    }
+                }
+            })
+            .await
+            .expect("peer must observe Sub and client must consume a fresh typed snapshot");
+            // A snapshot can become visible just before its callbacks finish.
+            // The same-stream reply also fences completion of those callbacks.
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+            )
+            .await
+            .expect("fresh snapshot callbacks must finish before closing the Runtime")
+            .unwrap();
+            // subscribe() also reports the initial/pending state synchronously. Drain
+            // every startup callback before testing callbacks after Runtime retirement.
+            while let Ok(event) = receive.try_recv() {
+                let _ = runtime.stage(event).unwrap();
+            }
+            drop(publisher);
+            drop(runtime);
+            assert!(!client.0.shared.leases.has_topic("network"));
+            tokio::time::timeout(Duration::from_secs(5), unsubscribed_ready)
+                .await
+                .expect("peer must observe Unsub and the late-snapshot Ping/Pong")
+                .unwrap();
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+            )
+            .await
+            .expect("the shared client remains usable after the status lease closes")
+            .unwrap();
+            // The late Snap precedes this RPC response on the same stream, so the
+            // client has processed it before we inspect the retired callback queue.
+            assert!(
+                receive.try_recv().is_err(),
+                "a retired Runtime must receive no callback after its lease is released"
+            );
+            assert!(
+                client.status().boot.is_some(),
+                "the shared client stays connected"
+            );
+            drop(spec);
+            Source::stop(&client).await.unwrap();
+            server.await.unwrap();
+        })
+        .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn bluetooth_core_lease_exists_only_for_open_runtime() {
-    use bead::wayland::UiEvent;
-    use std::{
-        path::Path,
-        sync::{OnceLock, mpsc},
-    };
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            use bead::wayland::UiEvent;
+            use nacre_protocol::core_services::{BluetoothState, CoreSnapshot};
+            use std::{path::Path, sync::OnceLock};
 
-    let lab = Lab::new();
-    let listener = lab.bind();
-    let link_alive = Arc::new(Notify::new());
-    let observed_link = link_alive.clone();
-    let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        let (r, mut w) = stream.into_split();
-        let mut reader = framing::Reader::new(BufReader::new(r));
-        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
-        let mut hello = welcome();
-        if let Message::Welcome { topics, .. } = &mut hello {
-            topics.insert("bluetooth".into(), 1);
-        }
-        framing::write(&mut w, &hello).await.unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Sub {
-                topics: vec!["compositor".into()]
-            }
-        );
-        loop {
-            match next(&mut reader).await {
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
+            let lab = Lab::new();
+            let listener = lab.bind();
+            let (connected, connected_ready) = tokio::sync::oneshot::channel();
+            let (unsubscribed, unsubscribed_ready) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                let (r, mut w) = stream.into_split();
+                let mut reader = framing::Reader::new(BufReader::new(r));
+                assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+                let mut hello = welcome();
+                if let Message::Welcome { topics, .. } = &mut hello {
+                    topics.insert("bluetooth".into(), 1);
                 }
-                Message::Sub { topics } => {
-                    assert_eq!(topics, vec![String::from("bluetooth")]);
-                    break;
+                framing::write(&mut w, &hello).await.unwrap();
+                assert_eq!(
+                    next(&mut reader).await,
+                    Message::Sub {
+                        topics: vec!["compositor".into()]
+                    }
+                );
+                connected.send(()).unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Sub { topics } => {
+                            assert_eq!(topics, vec![String::from("bluetooth")]);
+                            break;
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => panic!("unexpected message before bluetooth lease: {message:?}"),
+                    }
                 }
-                message => panic!("unexpected message before network lease: {message:?}"),
-            }
-        }
-        let bluetooth = serde_json::json!({
-            "health":{"available":true,"stale":false},
-            "adapters":{"items":{"adapter-a":{"name":"Adapter A","powered":true,"discovering":false}},"order":["adapter-a"]},
-            "devices":{"items":{"headphones":{"adapter":"adapter-a","name":"Headphones Studio","connected":true,"paired":true,"trusted":true,"pairing":false}},"order":["headphones"]}
-        });
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "bluetooth".into(),
-                seq: 0,
-                data: bluetooth.clone(),
-            },
-        )
-        .await
-        .unwrap();
-        loop {
-            match next(&mut reader).await {
-                Message::Unsub { topics } => {
-                    assert_eq!(topics, vec!["bluetooth"]);
-                    break;
+                let bluetooth = serde_json::json!({
+                    "health":{"available":true,"stale":false},
+                    "adapters":{"items":{"adapter-a":{"name":"Adapter A","powered":true,"discovering":false}},"order":["adapter-a"]},
+                    "devices":{"items":{"headphones":{"adapter":"adapter-a","name":"Headphones Studio","connected":true,"paired":true,"trusted":true,"pairing":false}},"order":["headphones"]}
+                });
+                framing::write(
+                    &mut w,
+                    &Message::Snap {
+                        topic: "bluetooth".into(),
+                        seq: 0,
+                        data: bluetooth.clone(),
+                    },
+                )
+                .await
+                .unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Unsub { topics } => {
+                            assert_eq!(topics, vec!["bluetooth"]);
+                            break;
+                        }
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => panic!("unexpected frame before bluetooth Unsub: {message:?}"),
+                    }
                 }
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
+                // Send a post-Unsub snapshot before the ping so the Pong also proves
+                // the client has consumed the late frame without waking the view.
+                framing::write(
+                    &mut w,
+                    &Message::Snap {
+                        topic: "bluetooth".into(),
+                        seq: 1,
+                        data: bluetooth,
+                    },
+                )
+                .await
+                .unwrap();
+                framing::write(
+                    &mut w,
+                    &Message::Ping {
+                        id: Id::Integer(703),
+                    },
+                )
+                .await
+                .unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Pong {
+                            id: Id::Integer(703),
+                        } => break,
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => {
+                            panic!("unexpected message while checking shared link: {message:?}")
+                        }
+                    }
                 }
-                Message::Ping { id } => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                // The post-Unsub frame preceded the Pong, proving the shared client
+                // consumed it while remaining connected.
+                unsubscribed.send(()).unwrap();
+                loop {
+                    match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                        Ok(Ok(Some(Message::Call { id, m, .. }))) => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Ok(Ok(Some(Message::Ping { id }))) => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        Ok(Ok(Some(message))) => {
+                            panic!("unexpected message while preserving shared link: {message:?}")
+                        }
+                        Ok(Ok(None) | Err(_)) => break,
+                        Err(_) => panic!("client did not stop after the lease test finished"),
+                    }
                 }
-                message => panic!("unexpected frame before bluetooth Unsub: {message:?}"),
-            }
-        }
-        // Send a post-Unsub snapshot before the ping so the Pong also proves
-        // the client has consumed the late frame without waking the view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "bluetooth".into(),
-                seq: 1,
-                data: bluetooth,
-            },
-        )
-        .await
-        .unwrap();
-        framing::write(
-            &mut w,
-            &Message::Ping {
-                id: Id::Integer(703),
-            },
-        )
-        .await
-        .unwrap();
-        loop {
-            match next(&mut reader).await {
-                Message::Pong {
-                    id: Id::Integer(703),
-                } => break,
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                }
-                Message::Ping { id } => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
-                }
-                message => panic!("unexpected message while checking shared link: {message:?}"),
-            }
-        }
-        // The post-Unsub frame preceded the Pong, proving the shared client
-        // consumed it while remaining connected.
-        observed_link.notify_one();
-        loop {
-            match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
-                Ok(Ok(Some(Message::Call { id, m, .. }))) => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                }
-                Ok(Ok(Some(Message::Ping { id }))) => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
-                }
-                Ok(Ok(Some(message))) => {
-                    panic!("unexpected message while preserving shared link: {message:?}")
-                }
-                Ok(Ok(None) | Err(_)) => break,
-                Err(_) => panic!("client did not stop after the lease test finished"),
-            }
-        }
-        observed_link.notify_one();
-    });
+            });
 
-    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while client.status().boot.is_none() {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    })
-    .await
-    .unwrap();
-    let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
-    let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
-    let scale: Value =
-        serde_json::from_str(include_str!("../../../bead-ui/assets/size-scale.json")).unwrap();
-    let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
-    let spec = crate::popouts::status(
-        crate::status_views::Kind::Bluetooth,
-        Arc::new(palette),
-        colors,
-        Arc::new(OnceLock::new()),
-        Some(client.clone()),
-        radius,
-        false,
-    )
-    .unwrap();
-    assert!(!client.0.shared.leases.has_topic("bluetooth"));
+            let client =
+                Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+            tokio::time::timeout(Duration::from_secs(5), connected_ready)
+                .await
+                .expect("peer must observe the permanent desktop subscription")
+                .unwrap();
+            let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
+            let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
+            let scale_json = include_str!("../../../bead-ui/assets/size-scale.json");
+            let scale: Value = serde_json::from_str(scale_json).unwrap();
+            let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
+            let spec = crate::popouts::status(
+                crate::status_views::Kind::Bluetooth,
+                Arc::new(palette),
+                colors,
+                Arc::new(OnceLock::new()),
+                Some(client.clone()),
+                radius,
+                false,
+            )
+            .unwrap();
+            assert!(!client.0.shared.leases.has_topic("bluetooth"));
 
-    let mut runtime = (spec.factory)(true).unwrap();
-    let (send, receive) = mpsc::channel();
-    runtime.services(Box::new(move |event| {
-        let _ = send.send(event);
-    }));
-    let event = receive.recv_timeout(Duration::from_secs(2)).unwrap();
-    assert!(matches!(&event, UiEvent::Model(_)));
-    let _ = runtime.stage(event).unwrap();
-    drop(runtime);
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while client.0.shared.leases.has_topic("bluetooth") {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    })
-    .await
-    .unwrap();
-    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
-        .await
-        .unwrap();
-    assert!(
-        receive.recv_timeout(Duration::from_millis(50)).is_err(),
-        "a retired Runtime must receive no callback after its lease is released"
-    );
-    assert!(
-        client.status().boot.is_some(),
-        "the shared client stays connected"
-    );
-    drop(spec);
-    Source::stop(&client).await.unwrap();
-    server.await.unwrap();
+            let mut runtime = (spec.factory)(true).unwrap();
+            // Observe the Runtime's existing publisher without acquiring another lease.
+            let publisher = client.0.shared.leases.publisher("bluetooth").unwrap();
+            let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
+            runtime.services(Box::new(move |event| {
+                let _ = send.send(event);
+            }));
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let event = receive.recv().await.expect("Runtime callback channel closed");
+                    assert!(matches!(&event, UiEvent::Model(_)));
+                    let _ = runtime.stage(event).unwrap();
+                    let snapshot = publisher.snapshot();
+                    if snapshot.connected
+                        && let Ok(state) =
+                            serde_json::from_value::<BluetoothState>(snapshot.data.as_ref().clone())
+                        && state.health.available
+                        && !state.health.stale
+                    {
+                        assert!(CoreSnapshot::Bluetooth(state).valid());
+                        break;
+                    }
+                }
+            })
+            .await
+            .expect("peer must observe Sub and client must consume a fresh typed snapshot");
+            // A snapshot can become visible just before its callbacks finish.
+            // The same-stream reply also fences completion of those callbacks.
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+            )
+            .await
+            .expect("fresh snapshot callbacks must finish before closing the Runtime")
+            .unwrap();
+            // subscribe() also reports the initial/pending state synchronously. Drain
+            // every startup callback before testing callbacks after Runtime retirement.
+            while let Ok(event) = receive.try_recv() {
+                let _ = runtime.stage(event).unwrap();
+            }
+            drop(publisher);
+            drop(runtime);
+            assert!(!client.0.shared.leases.has_topic("bluetooth"));
+            tokio::time::timeout(Duration::from_secs(5), unsubscribed_ready)
+                .await
+                .expect("peer must observe Unsub and the late-snapshot Ping/Pong")
+                .unwrap();
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+            )
+            .await
+            .expect("the shared client remains usable after the status lease closes")
+            .unwrap();
+            // The late Snap precedes this RPC response on the same stream, so the
+            // client has processed it before we inspect the retired callback queue.
+            assert!(
+                receive.try_recv().is_err(),
+                "a retired Runtime must receive no callback after its lease is released"
+            );
+            assert!(
+                client.status().boot.is_some(),
+                "the shared client stays connected"
+            );
+            drop(spec);
+            Source::stop(&client).await.unwrap();
+            server.await.unwrap();
+        })
+        .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2422,224 +2506,259 @@ async fn connection_mark_keeps_last_snapshot_and_provider_registers_after_new_bo
 
 #[tokio::test(flavor = "current_thread")]
 async fn battery_core_lease_exists_only_for_open_runtime() {
-    use bead::wayland::UiEvent;
-    use std::{
-        path::Path,
-        sync::{OnceLock, mpsc},
-    };
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            use bead::wayland::UiEvent;
+            use nacre_protocol::core_services::{BatteryState, CoreSnapshot};
+            use std::{path::Path, sync::OnceLock};
 
-    let lab = Lab::new();
-    let listener = lab.bind();
-    let link_alive = Arc::new(Notify::new());
-    let observed_link = link_alive.clone();
-    let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        let (r, mut w) = stream.into_split();
-        let mut reader = framing::Reader::new(BufReader::new(r));
-        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
-        let mut hello = welcome();
-        if let Message::Welcome { topics, .. } = &mut hello {
-            topics.insert("battery".into(), 1);
-        }
-        framing::write(&mut w, &hello).await.unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Sub {
-                topics: vec!["compositor".into()]
-            }
-        );
-        loop {
-            match next(&mut reader).await {
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
+            let lab = Lab::new();
+            let listener = lab.bind();
+            let (connected, connected_ready) = tokio::sync::oneshot::channel();
+            let (unsubscribed, unsubscribed_ready) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                let (r, mut w) = stream.into_split();
+                let mut reader = framing::Reader::new(BufReader::new(r));
+                assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+                let mut hello = welcome();
+                if let Message::Welcome { topics, .. } = &mut hello {
+                    topics.insert("battery".into(), 1);
                 }
-                Message::Sub { topics } => {
-                    assert_eq!(topics, vec![String::from("battery")]);
-                    break;
+                framing::write(&mut w, &hello).await.unwrap();
+                assert_eq!(
+                    next(&mut reader).await,
+                    Message::Sub {
+                        topics: vec!["compositor".into()]
+                    }
+                );
+                connected.send(()).unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Sub { topics } => {
+                            assert_eq!(topics, vec![String::from("battery")]);
+                            break;
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => panic!("unexpected message before battery lease: {message:?}"),
+                    }
                 }
-                message => panic!("unexpected message before battery lease: {message:?}"),
-            }
-        }
-        framing::write(
-            &mut w,
-            &Message::Ping {
-                id: Id::Integer(703),
-            },
-        )
-        .await
-        .unwrap();
-        loop {
-            match next(&mut reader).await {
-                Message::Pong {
-                    id: Id::Integer(703),
-                } => break,
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
+                let battery = serde_json::json!({
+                    "health":{"available":true,"stale":false},
+                    "percentage":83.0,
+                    "charging":true
+                });
+                framing::write(
+                    &mut w,
+                    &Message::Snap {
+                        topic: "battery".into(),
+                        seq: 0,
+                        data: battery.clone(),
+                    },
+                )
+                .await
+                .unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Unsub { topics } => {
+                            assert_eq!(topics, vec!["battery"]);
+                            break;
+                        }
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => panic!("unexpected frame before battery Unsub: {message:?}"),
+                    }
                 }
-                Message::Ping { id } => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                // A peer that sends after Unsub must not wake the retired view.
+                framing::write(
+                    &mut w,
+                    &Message::Snap {
+                        topic: "battery".into(),
+                        seq: 1,
+                        data: battery,
+                    },
+                )
+                .await
+                .unwrap();
+                framing::write(
+                    &mut w,
+                    &Message::Ping {
+                        id: Id::Integer(703),
+                    },
+                )
+                .await
+                .unwrap();
+                loop {
+                    match next(&mut reader).await {
+                        Message::Pong {
+                            id: Id::Integer(703),
+                        } => break,
+                        Message::Call { id, m, .. } => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Message::Ping { id } => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        message => {
+                            panic!("unexpected message while checking shared link: {message:?}")
+                        }
+                    }
                 }
-                message => panic!("unexpected message during battery link proof: {message:?}"),
-            }
-        }
-        let battery = serde_json::json!({
-            "health":{"available":true,"stale":false},
-            "percentage":83.0,
-            "charging":true
-        });
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "battery".into(),
-                seq: 0,
-                data: battery.clone(),
-            },
-        )
-        .await
-        .unwrap();
-        loop {
-            match next(&mut reader).await {
-                Message::Unsub { topics } => {
-                    assert_eq!(topics, vec!["battery"]);
-                    break;
+                unsubscribed.send(()).unwrap();
+                loop {
+                    match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                        Ok(Ok(Some(Message::Call { id, m, .. }))) => {
+                            assert_eq!(m, "daemon.ping");
+                            framing::write(
+                                &mut w,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Ok { ok: Value::Null },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                        Ok(Ok(Some(Message::Ping { id }))) => {
+                            framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                        }
+                        Ok(Ok(Some(message))) => {
+                            panic!("unexpected message while preserving shared link: {message:?}")
+                        }
+                        Ok(Ok(None) | Err(_)) => break,
+                        Err(_) => panic!("client did not stop after the lease test finished"),
+                    }
                 }
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                }
-                Message::Ping { id } => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
-                }
-                message => panic!("unexpected frame before battery Unsub: {message:?}"),
-            }
-        }
-        // A peer that sends after Unsub must not wake the retired view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "battery".into(),
-                seq: 1,
-                data: battery,
-            },
-        )
-        .await
-        .unwrap();
-        observed_link.notify_one();
-        loop {
-            match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
-                Ok(Ok(Some(Message::Call { id, m, .. }))) => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                }
-                Ok(Ok(Some(Message::Ping { id }))) => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
-                }
-                Ok(Ok(Some(message))) => {
-                    panic!("unexpected message while preserving shared link: {message:?}")
-                }
-                Ok(Ok(None) | Err(_)) => break,
-                Err(_) => panic!("client did not stop after the lease test finished"),
-            }
-        }
-        observed_link.notify_one();
-    });
+            });
 
-    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while client.status().boot.is_none() {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    })
-    .await
-    .unwrap();
-    let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
-    let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
-    let scale: Value =
-        serde_json::from_str(include_str!("../../../bead-ui/assets/size-scale.json")).unwrap();
-    let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
-    let spec = crate::popouts::status(
-        crate::status_views::Kind::Battery,
-        Arc::new(palette),
-        colors,
-        Arc::new(OnceLock::new()),
-        Some(client.clone()),
-        radius,
-        false,
-    )
-    .unwrap();
-    assert!(!client.0.shared.leases.has_topic("battery"));
+            let client =
+                Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
+            tokio::time::timeout(Duration::from_secs(5), connected_ready)
+                .await
+                .expect("peer must observe the permanent desktop subscription")
+                .unwrap();
+            let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
+            let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
+            let scale_json = include_str!("../../../bead-ui/assets/size-scale.json");
+            let scale: Value = serde_json::from_str(scale_json).unwrap();
+            let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
+            let spec = crate::popouts::status(
+                crate::status_views::Kind::Battery,
+                Arc::new(palette),
+                colors,
+                Arc::new(OnceLock::new()),
+                Some(client.clone()),
+                radius,
+                false,
+            )
+            .unwrap();
+            assert!(!client.0.shared.leases.has_topic("battery"));
 
-    let mut runtime = (spec.factory)(true).unwrap();
-    let (send, receive) = mpsc::channel();
-    runtime.services(Box::new(move |event| {
-        let _ = send.send(event);
-    }));
-    let event = receive.recv_timeout(Duration::from_secs(2)).unwrap();
-    assert!(matches!(&event, UiEvent::Model(_)));
-    let _ = runtime.stage(event).unwrap();
-    drop(runtime);
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while client.0.shared.leases.has_topic("battery") {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    })
-    .await
-    .unwrap();
-    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
-        .await
-        .unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(2),
-        client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
-    )
-    .await
-    .expect("the shared client remains usable after the battery lease closes")
-    .unwrap();
-    assert!(
-        receive.recv_timeout(Duration::from_millis(50)).is_err(),
-        "a retired Runtime must receive no callback after its lease is released"
-    );
-    assert!(
-        client.status().boot.is_some(),
-        "the shared client stays connected"
-    );
-    drop(spec);
-    Source::stop(&client).await.unwrap();
-    server.await.unwrap();
+            let mut runtime = (spec.factory)(true).unwrap();
+            // Observe the Runtime's existing publisher without acquiring another lease.
+            let publisher = client.0.shared.leases.publisher("battery").unwrap();
+            let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
+            runtime.services(Box::new(move |event| {
+                let _ = send.send(event);
+            }));
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let event = receive.recv().await.expect("Runtime callback channel closed");
+                    assert!(matches!(&event, UiEvent::Model(_)));
+                    let _ = runtime.stage(event).unwrap();
+                    let snapshot = publisher.snapshot();
+                    if snapshot.connected
+                        && let Ok(state) =
+                            serde_json::from_value::<BatteryState>(snapshot.data.as_ref().clone())
+                        && state.health.available
+                        && !state.health.stale
+                    {
+                        assert!(CoreSnapshot::Battery(state).valid());
+                        break;
+                    }
+                }
+            })
+            .await
+            .expect("peer must observe Sub and client must consume a fresh typed snapshot");
+            // A snapshot can become visible just before its callbacks finish.
+            // The same-stream reply also fences completion of those callbacks.
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+            )
+            .await
+            .expect("fresh snapshot callbacks must finish before closing the Runtime")
+            .unwrap();
+            // subscribe() also reports the initial/pending state synchronously. Drain
+            // every startup callback before testing callbacks after Runtime retirement.
+            while let Ok(event) = receive.try_recv() {
+                let _ = runtime.stage(event).unwrap();
+            }
+            drop(publisher);
+            drop(runtime);
+            assert!(!client.0.shared.leases.has_topic("battery"));
+            tokio::time::timeout(Duration::from_secs(5), unsubscribed_ready)
+                .await
+                .expect("peer must observe Unsub and the late-snapshot Ping/Pong")
+                .unwrap();
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+            )
+            .await
+            .expect("the shared client remains usable after the status lease closes")
+            .unwrap();
+            // The late Snap precedes this RPC response on the same stream, so the
+            // client has processed it before we inspect the retired callback queue.
+            assert!(
+                receive.try_recv().is_err(),
+                "a retired Runtime must receive no callback after its lease is released"
+            );
+            assert!(
+                client.status().boot.is_some(),
+                "the shared client stays connected"
+            );
+            drop(spec);
+            Source::stop(&client).await.unwrap();
+            server.await.unwrap();
+        })
+        .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
