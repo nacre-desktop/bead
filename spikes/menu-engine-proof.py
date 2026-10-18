@@ -15,6 +15,7 @@ def load(name, path):
 
 matrix = load('matrix', ROOT / 'spikes/bar-matrix.py')
 clocks = load('owned_clocks', ROOT / 'spikes/process-clock.py')
+menu_engine_trace = load('menu_engine_trace', ROOT / 'spikes/menu_engine_trace.py')
 
 
 def presented_catalog(text, count):
@@ -232,33 +233,16 @@ def sample(env, raw, compositor, stop):
                         segment = matrix.log_text(log)[offset:]
                         after_daemon = daemon_clock.sample_ns()
                         after_workers = worker_samples()
-                        assert 'UI_ERROR' not in segment and 'MENU_RESULT ok=false' not in segment
-                        received = re.findall(r'INPUT_RECEIVED monotonic_ns=(\d+) cpu_ns=(\d+)', segment)
-                        sent = re.findall(r'MENU_RPC_SENT id=(\d+)', segment)
-                        returned = re.findall(r'MENU_RPC_RETURN id=(\d+) ok=true catalog_rev=(\d+) count=(\d+)', segment)
-                        busy = re.findall(r'MENU_RPC_RETURN id=(\d+) ok=false code=busy retry=true', segment)
-                        assert len(received) == len(returned) == 1 and 1 <= len(sent) <= 11, 'missing/extraneous completed menu RPC'
-                        assert len(set(sent)) == len(sent) and busy == sent[:-1], 'only bounded retryable busy replies may precede completion'
-                        rpc_id, revision, count = map(int, returned[0])
-                        assert rpc_id == int(sent[-1]) and revision == initial['catalog_rev'] and count > 0
-                        typed = re.search(r'MENU_RESULT ok=true catalog_rev=' + str(revision) + r' count=' + str(count) + r'\b', segment)
-                        assert typed and presented_catalog(segment, count)
-                        commits = re.findall(r'UI_COMMIT generation=(\d+).*update=(\d+).*source_error=false', segment[typed.end():])
-                        presented = re.findall(r'UI_PRESENTED generation=(\d+) monotonic_ns=(\d+) refresh_ns=(\d+) companion=(\w+) update=(\d+) cpu_ns=(\d+)', segment)
-                        start, cpu = map(int, received[0])
-                        found = [p for p in presented if (p[0], p[4]) in commits and int(p[1]) > start]
-                        assert len(found) == 1, 'completed result did not match its exact committed/presented update'
-                        gen, ns, refresh, companion, update, end_cpu = found[0]
-                        assert int(end_cpu) > cpu > 0 and int(ns) > start > 0
-                        profiles = [{'stage': stage, 'wall_ms': float(wall), 'cpu_ms': float(cpu)}
-                                    for stage, wall, cpu in re.findall(r'INPUT_PROFILE stage=(\w+) wall_ms=([\d.]+) cpu_ms=([\d.]+)', segment)]
-                        if profile_mode == 'clocks': assert not profiles, 'clock-only capture emitted stage traces'
-                        rows.append(dict(index=index, rpc_id=rpc_id, busy_retries=len(busy), catalog_rev=revision, result_count=count,
-                                         update=int(update), input_ns=start, presented_ns=int(ns),
-                                         latency_ms=(int(ns) - start) / 1e6, ui_cpu_ms=(int(end_cpu) - cpu) / 1e6,
+                        trace = menu_engine_trace.parse_serial_key_trace(
+                            segment, initial['catalog_rev'], profile_mode)
+                        rows.append(dict(index=index, rpc_id=trace['rpc_id'], busy_retries=trace['busy_retries'],
+                                         catalog_rev=trace['catalog_rev'], result_count=trace['result_count'],
+                                         update=trace['update'], input_ns=trace['input_ns'],
+                                         presented_ns=trace['presented_ns'], latency_ms=trace['latency_ms'],
+                                         ui_cpu_ms=trace['ui_cpu_ms'],
                                          daemon_cpu_ms=(after_daemon - before_daemon) / 1e6,
                                          worker_cpu_ms=sum(value - before_workers.get(pid, 0) for pid, value in after_workers.items()) / 1e6,
-                                         refresh_ns=int(refresh) or None, profiles=profiles))
+                                         refresh_ns=trace['refresh_ns'], profiles=trace['profiles']))
                         time.sleep(.04)
                     assert 'PRESENTATION clock_id=1' in matrix.log_text(log)
                     thread_profile = clocks.thread_delta(thread_before, clocks.thread_snapshot(client), len(rows)) if thread_before is not None else None
