@@ -2560,7 +2560,6 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
     server.await.unwrap();
 }
 
-
 #[tokio::test(flavor = "current_thread")]
 async fn battery_lease_without_advertised_topic_stays_unavailable() {
     let lab = Lab::new();

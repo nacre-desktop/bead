@@ -657,12 +657,7 @@ fn battery_core_optional_readings_remain_unknown() -> Result<()> {
         );
     }
 
-    for (percentage, expected) in [
-        (0.0, "0%"),
-        (100.0, "100%"),
-        (12.4, "12%"),
-        (12.6, "13%"),
-    ] {
+    for (percentage, expected) in [(0.0, "0%"), (100.0, "100%"), (12.4, "12%"), (12.6, "13%")] {
         let mut state = core_battery();
         state["percentage"] = serde_json::json!(percentage);
         let values = Status::core_battery(Arc::new(FakeSource::new(state)?)).project();
@@ -728,7 +723,10 @@ fn battery_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
     let disconnected = status.project();
     assert_eq!(disconnected["status.ready"], Value::Bool(false));
     assert_eq!(text_value(&disconnected, "status.primary"), "83%");
-    assert_eq!(text_value(&disconnected, "status.secondary"), "Status stale");
+    assert_eq!(
+        text_value(&disconnected, "status.secondary"),
+        "Status stale"
+    );
     assert_eq!(disconnected["status.active"], Value::Bool(true));
 
     let mut recovered = core_battery();
