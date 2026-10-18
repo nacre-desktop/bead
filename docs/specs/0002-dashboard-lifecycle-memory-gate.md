@@ -140,3 +140,13 @@ observation. Missing provenance is NOT resolved. Counts are10pairs/20cells total
 600s per-cell adds200min. Additional baseline60s must be included in schedule.
 Next eligible assignment is B0005 harness correctness with mocked clocks only.
 No artifact build/capture grant,0192exception approval or B0002completion.
+
+## Current disposition — 2026-10-18
+
+Preflight, B0005 and B0006 are accepted; no more harness/report polishing is
+requested. Capture remains Blocked: B0001 inherited0192owner-policy ruling,
+source-proven UI artifacts and certified helper pairing absent, no exact slot.
+Do not use cached unproven binaries, repeat historical runs, install a toolchain,
+borrow Nacre's host, or change dependency policy to bypass these blockers.
+Provide existing provenance only if newly located; otherwise await the missing
+prerequisite/authorized artifact-build spec. No new build or capture is granted.

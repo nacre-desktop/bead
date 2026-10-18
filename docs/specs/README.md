@@ -10,7 +10,7 @@ must not infer permission from an old roadmap or reserve a measurement slot.
 | 1a | B0004 | [Dashboard review coverage fixes](0004-dashboard-review-coverage-fixes.md) | Done | reviewedef5406f; CI39075073594green |
 | 2 | B0002 | [Dashboard lifecycle/memory](0002-dashboard-lifecycle-memory-gate.md) | Review | early artifact/preflight report submitted; captures gated |
 | 2a | B0005 | [Capture-window correctness](0005-dashboard-capture-window-correctness.md) | Review | seven fake-clock tests pass locally and in hosted CI; no capture grant or artifact certification |
-| 2b | B0006 | [Keyboard keeper lifetime](0006-dashboard-keyboard-keeper-lifetime.md) | Review | B0005 Review; mocks only |
+| 2b | B0006 | [Keyboard keeper lifetime](0006-dashboard-keyboard-keeper-lifetime.md) | Done | reviewed410bf09; CI39081728470green |
 | 3 | B0003 | [Typing dominant-cost investigation](0003-launcher-typing-investigation.md) | Review | source-only checkpoint; remaining steps gated |
 
 First Ready assignment is authorized after its listed prerequisites pass. Existing
@@ -41,3 +41,7 @@ B0002 preflight accepted atbb75590; next eligible B0005 harness correctness
 
 B0005 timing/CI reviewed; closure waits for B0006 keyboard-keeper lifetime fix.
 Next eligible B0006 (90min, mocks only). Neither implementer holds capture grant.
+
+B0005/B0006 Done at410bf09 review. B0002 preflight and harness phases are
+complete; capture blocked on artifacts/provenance/0192 and a separate slot.
+No further report-only work or unapproved build/capture is requested.

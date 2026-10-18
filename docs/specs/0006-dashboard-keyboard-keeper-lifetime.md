@@ -3,7 +3,7 @@
 - ID: B0006
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Done
 - Depends on: B0005 Review at9f77da20dbb67d227737b63b39a82816bbab637a
 - Date: 2026-10-18
 - Size: one focused session, maximum90minutes
@@ -103,3 +103,13 @@ go to the owner. Measurement requires an explicit exclusive slot grant.
 
 
 
+
+## Spec-agent final review — 2026-10-18
+
+Done after B0006. Reviewed implementationb7e5862055ee7b3d53bd49d0a0436db2c90bb200
+and final410bf0963002670be92f204a1d17d0444fe7ae73; independently verified exact
+CI39081728470success. Acceptance30min/legacy10min command, no-unrequested-process,
+lifetime checks around warmup/baseline/phase/success and existing finally cleanup
+match scope. Eleven mocked tests cover timing and expiry paths without real
+process/sleep/sampling. This accepts harness correctness only, not actual input
+or memory behavior, binary provenance, advisory policy or a capture grant.

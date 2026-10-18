@@ -3,7 +3,7 @@
 - ID: B0005
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Done
 - Depends on: B0002 early preflight accepted atbb75590; NO capture grant
 - Date: 2026-10-18
 - Size: one focused session, maximum2hours
@@ -149,3 +149,13 @@ Timing/window implementation and hostedCI39079511622/39079931459 accepted as
 scoped. Status remains Review for B0006: existing600s keyboard keeper can expire
 at the end of optional600s warmup before baseline60s. Preserve inputs throughout
 an acceptance arm and reject early exit; do not run a measurement to diagnose it.
+
+## Spec-agent final review — 2026-10-18
+
+Done after B0006. Reviewed implementationb7e5862055ee7b3d53bd49d0a0436db2c90bb200
+and final410bf0963002670be92f204a1d17d0444fe7ae73; independently verified exact
+CI39081728470success. Acceptance30min/legacy10min command, no-unrequested-process,
+lifetime checks around warmup/baseline/phase/success and existing finally cleanup
+match scope. Eleven mocked tests cover timing and expiry paths without real
+process/sleep/sampling. This accepts harness correctness only, not actual input
+or memory behavior, binary provenance, advisory policy or a capture grant.
