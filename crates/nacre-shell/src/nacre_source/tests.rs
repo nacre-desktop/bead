@@ -584,6 +584,8 @@ async fn network_core_lease_exists_only_for_open_runtime() {
 
     let lab = Lab::new();
     let listener = lab.bind();
+    let link_alive = Arc::new(Notify::new());
+    let observed_link = link_alive.clone();
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let (r, mut w) = stream.into_split();
@@ -651,19 +653,22 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         )
         .await
         .unwrap();
-        let Message::Call { id, m, .. } = next(&mut reader).await else {
-            panic!("shared provider link should remain usable after lease drop")
-        };
-        assert_eq!(m, "daemon.ping");
         framing::write(
             &mut w,
-            &Message::Ret {
-                id,
-                reply: Reply::Ok { ok: Value::Null },
+            &Message::Ping {
+                id: Id::Integer(703),
             },
         )
         .await
         .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Pong {
+                id: Id::Integer(703)
+            },
+            "the shared provider link stays alive after lease drop"
+        );
+        observed_link.notify_one();
     });
 
     let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
@@ -711,12 +716,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         receive.recv_timeout(Duration::from_millis(50)).is_err(),
         "a retired Runtime must receive no callback after its lease is released"
     );
-    client
-        .call(
-            "daemon.ping".into(),
-            serde_json::json!({}),
-            Duration::from_secs(1),
-        )
+    tokio::time::timeout(Duration::from_secs(2), link_alive.notified())
         .await
         .unwrap();
     assert!(
