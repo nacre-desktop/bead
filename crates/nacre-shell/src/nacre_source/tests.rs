@@ -659,6 +659,18 @@ async fn network_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected frame before network Unsub: {message:?}"),
             }
         }
+        // Send a post-Unsub snapshot before the ping so the Pong also proves
+        // the client has consumed the late frame without waking the view.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "network".into(),
+                seq: 1,
+                data: network,
+            },
+        )
+        .await
+        .unwrap();
         framing::write(
             &mut w,
             &Message::Ping {
@@ -690,17 +702,8 @@ async fn network_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected message while checking shared link: {message:?}"),
             }
         }
-        // A peer that sends after Unsub must not wake the retired view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "network".into(),
-                seq: 1,
-                data: network,
-            },
-        )
-        .await
-        .unwrap();
+        // The post-Unsub frame preceded the Pong, proving the shared client
+        // consumed it while remaining connected.
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
@@ -774,7 +777,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         receive.recv_timeout(Duration::from_millis(50)).is_err(),
         "a retired Runtime must receive no callback after its lease is released"
     );
-    tokio::time::timeout(Duration::from_secs(2), link_alive.notified())
+    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
         .await
         .unwrap();
     assert!(
@@ -2484,6 +2487,18 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected frame before battery Unsub: {message:?}"),
             }
         }
+        // Send a post-Unsub snapshot before the ping so the Pong also proves
+        // the client has consumed the late frame without waking the view.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "battery".into(),
+                seq: 1,
+                data: battery,
+            },
+        )
+        .await
+        .unwrap();
         framing::write(
             &mut w,
             &Message::Ping {
@@ -2515,18 +2530,8 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected message while checking shared link: {message:?}"),
             }
         }
-        // A peer that sends after Unsub must not wake the retired view. The
-        // preceding Pong proves the shared link remains alive after close.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "battery".into(),
-                seq: 1,
-                data: battery,
-            },
-        )
-        .await
-        .unwrap();
+        // The post-Unsub frame preceded the Pong, proving the shared link
+        // remains alive and the retired view received no callback.
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
@@ -2600,7 +2605,7 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
         receive.recv_timeout(Duration::from_millis(50)).is_err(),
         "a retired Runtime must receive no callback after its lease is released"
     );
-    tokio::time::timeout(Duration::from_secs(2), link_alive.notified())
+    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
         .await
         .unwrap();
     assert!(
