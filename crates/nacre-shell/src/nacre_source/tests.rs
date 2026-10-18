@@ -594,12 +594,27 @@ async fn network_core_lease_exists_only_for_open_runtime() {
             topics.insert("network".into(), 1);
         }
         framing::write(&mut w, &hello).await.unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Sub {
-                topics: vec!["network".into()]
+        loop {
+            match next(&mut reader).await {
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Message::Sub { topics } => {
+                    assert_eq!(topics, vec!["network"]);
+                    break;
+                }
+                message => panic!("unexpected message before network lease: {message:?}"),
             }
-        );
+        }
         let network = serde_json::json!({
             "health":{"available":true,"stale":false},
             "wireless_enabled":true,
