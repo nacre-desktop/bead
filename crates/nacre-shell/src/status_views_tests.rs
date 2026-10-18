@@ -303,7 +303,10 @@ fn network_core_signal_requires_primary_ap_mapping() -> Result<()> {
     assert_eq!(text_value(&values, "status.primary"), "First matching AP");
     assert_eq!(text_value(&values, "status.detail"), "Signal strength 32%");
 
-    state["access_points"]["items"].as_object_mut().unwrap().remove("ap1");
+    state["access_points"]["items"]
+        .as_object_mut()
+        .unwrap()
+        .remove("ap1");
     state["access_points"]["order"] = serde_json::json!(["ap0"]);
     state["access_points"]["items"]["ap0"]["connection"] = serde_json::json!("wifi-connection");
     state["access_points"]["items"]["ap0"]["strength"] = serde_json::json!(0);
