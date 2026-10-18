@@ -3,7 +3,7 @@
 - ID: B0010
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Done
 - Depends on: B0009 Done; published BluetoothState contract
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours
@@ -52,3 +52,7 @@ Follow linked Nacre standing rules. Approved author+committer siverteh <92440237
 ## Report format
 
 B0010 Review: start/source/final commits, changed files, named test and exact-head CI evidence, powered/device-order and lease/drop proof, remaining capability gate, cleanup and no measurement claim.
+
+## Spec review
+
+Accepted source e3e417e and final a379eda; CI39136586458 and39137266601 green. Powered-adapter filtering, ordered connected device projection, stale cache, lazy lease and missing-capability proof satisfy scope. Hosted-only validation; no runtime availability or measurement claim.
