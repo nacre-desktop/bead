@@ -3,7 +3,7 @@
 - ID: B0007
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress
+- Status: Review
 - Depends on: published89afb381; independent of B0002/capture
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours
@@ -81,12 +81,12 @@ explicit slot. Preserve existing B0002 artifacts and captures unchanged.
 
 ## Acceptance criteria
 
-- [ ] Factory/future panic and cancellation return one sanitized terminal error.
-- [ ] No handler replay; link remains usable for ping and next successful call.
-- [ ] Normal/timeouts retain their contract; MAX_CALLS remains bounded.
-- [ ] Task metadata removed on completion/failure/session teardown; no old-boot reply.
-- [ ] Required private tests,fmt,Clippy and exact-head full CI pass.
-- [ ] No live action, measurement, new schema/dependency or Nacre edit.
+- [x] Factory/future panic and cancellation return one sanitized terminal error.
+- [x] No handler replay; link remains usable for ping and next successful call.
+- [x] Normal/timeouts retain their contract; MAX_CALLS remains bounded.
+- [x] Task metadata removed on completion/failure/session teardown; no old-boot reply.
+- [x] Required private tests,fmt,Clippy and exact-head full CI pass.
+- [x] No live action, measurement, new schema/dependency or Nacre edit.
 
 ## Stop conditions
 

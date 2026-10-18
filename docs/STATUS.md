@@ -1,5 +1,13 @@
 # Status
 
+## 2026-10-18 — B0007 review submitted
+
+UI-provider factory/future panics and task cancellation now return one terminal
+Internal error for the original request. The daemon link remains usable, and
+session teardown drops task metadata without replay across boots. Four private
+socket tests cover these paths. CI39124495975 is green on `041884a`; no
+measurement or live work occurred.
+
 ## 2026-10-18 — B0005 review submitted
 
 Acceptance timing and hosted regression tests are published at `bb98474`; CI

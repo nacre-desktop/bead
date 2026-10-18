@@ -10,6 +10,7 @@ Updated2026-10-18. [Standing rules](https://github.com/nacre-desktop/nacre/blob/
 | 1c | [B0006 keeper](0006-dashboard-keyboard-keeper-lifetime.md) | Done | Review410bf09/CI39081728470green |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | In progress, preflight blocked | `wayland-info` missing; minimal install denied (`sudo: a password is required`) |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Review (B0003-S) | Source/test checkpoint submitted; measured work remains gated on B0002 |
+| 4 | [B0007 UI-provider failures](0007-ui-provider-task-failure-replies.md) | Review | Implementation and four socket tests submitted; CI39124495975 green |
 
 Incident CLOSED by owner2026-10-18: likely lost Codex connection; no OOM/oomd
 kills or relevant kernel crash attribution. Worktrees and artifacts preserved.
@@ -37,7 +38,5 @@ started; the private lab was released to Nacre. Preserve the prepared artifacts.
 B0003-S source/tests are submitted for Review; measured B0003 remains gated on
 B0002 passing and an explicit peer release. Do not overlap host work.
 
-Independent product queue: [B0007 UI-provider task failure replies](0007-ui-provider-task-failure-replies.md)
-is In progress, no capture/B0002 dependency. B0003-S source/tests accepted; no
-further static reports or guard polishing requested. Nacre holds focused lab
-correctness until explicit release; B0007 may use source work and hosted CI.
+Independent product queue: B0007 is submitted for review; it has no
+capture/B0002 dependency. No measurement was taken.
