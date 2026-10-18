@@ -1,5 +1,12 @@
 # Status
 
+## 2026-10-18 — B0010 in progress
+
+Implementing the read-only Bluetooth popout against the published schema, using
+the shared daemon client only while its Runtime is open. Scope is projection,
+lazy lease lifecycle and private tests; no producer availability, measurements
+or lab access are claimed.
+
 ## 2026-10-18 — B0009 submitted for review
 
 The Network popout lazily leases the shared daemon topic and displays only a
