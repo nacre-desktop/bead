@@ -117,7 +117,7 @@ pub fn status(
                         .map_err(|e| e.to_string())?,
                 )
             };
-            let runtime = crate::reload::Runtime::panel_session(session, open)
+            crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
                 .with_frame(crate::placement::Attachment::Popout, &colors)
                 .and_then(|runtime| {
