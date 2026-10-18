@@ -1469,7 +1469,7 @@ async fn fill_provider_pool(
 }
 
 async fn assert_provider_results_unordered(
-    reader: &mut tokio::net::unix::OwnedReadHalf,
+    reader: &mut framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>,
     expected_slots: impl IntoIterator<Item = usize>,
 ) {
     let expected: BTreeMap<_, _> = expected_slots
