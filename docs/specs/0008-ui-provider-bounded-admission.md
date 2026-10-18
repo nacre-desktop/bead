@@ -3,7 +3,7 @@
 - ID: B0008
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Done
 - Depends on: B0007 Done at736e778a; independent of B0002/capture
 - Date: 2026-10-18
 - Size: one focused session, maximum90minutes
@@ -106,3 +106,12 @@ follow delegated exact-ID policy; vulnerability/unsoundness go to owner.
 B0008 Review: start/final commits, files, named test results, exact-head CI URL,
 admission/no-dispatch counts, deviations and cleanup. Say hosted-only if local
 Rust unavailable. Keep raw/private logs out of Git. No measurement claim.
+
+## Review accepted — 2026-10-18
+
+Done at0deb314c1e82a2d798a1009184be02cde8571ce4. Source inspection confirms
+method recognition precedes unchanged MAX_CALLS admission, exact Busy/UnknownMethod
+flags and no factory invocation for rejection. Named private coverage and B0007
+regressions pass in independently verified exact-head CI39128553160. The existing
+reconnect test now synchronizes on actual boot-status publication; no production
+reconnect semantics changed. No measurements or performance claim accepted.

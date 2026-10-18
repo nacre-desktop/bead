@@ -45,3 +45,8 @@ capture/B0002 dependency. No measurement was taken.
 B0007 Done at736e778a, source review/CI39125066926 accepted. Next independent
 Ready product task: [B0008 bounded UI-provider admission](0008-ui-provider-bounded-admission.md),
 90min source/private tests+hostedCI, no B0002 or lab dependency.
+
+B0008 Done at0deb314, exactCI39128553160 accepted. Next Ready independent
+feature: [B0009 daemon Network status popout](0009-daemon-network-status-popout.md),
+source/private tests against published schemas, no producer runtime/capture hold.
+No live bus/capture/lab access; use hostedCI while Nacre validates its producer.
