@@ -773,13 +773,13 @@ async fn network_core_lease_exists_only_for_open_runtime() {
     })
     .await
     .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
+        .await
+        .unwrap();
     assert!(
         receive.recv_timeout(Duration::from_millis(50)).is_err(),
         "a retired Runtime must receive no callback after its lease is released"
     );
-    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
-        .await
-        .unwrap();
     assert!(
         client.status().boot.is_some(),
         "the shared client stays connected"
@@ -871,6 +871,18 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected frame before bluetooth Unsub: {message:?}"),
             }
         }
+        // Send a post-Unsub snapshot before the ping so the Pong also proves
+        // the client has consumed the late frame without waking the view.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "bluetooth".into(),
+                seq: 1,
+                data: bluetooth,
+            },
+        )
+        .await
+        .unwrap();
         framing::write(
             &mut w,
             &Message::Ping {
@@ -902,17 +914,8 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected message while checking shared link: {message:?}"),
             }
         }
-        // A peer that sends after Unsub must not wake the retired view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "bluetooth".into(),
-                seq: 1,
-                data: bluetooth,
-            },
-        )
-        .await
-        .unwrap();
+        // The post-Unsub frame preceded the Pong, proving the shared client
+        // consumed it while remaining connected.
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
@@ -982,13 +985,13 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
     })
     .await
     .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
+        .await
+        .unwrap();
     assert!(
         receive.recv_timeout(Duration::from_millis(50)).is_err(),
         "a retired Runtime must receive no callback after its lease is released"
     );
-    tokio::time::timeout(Duration::from_secs(2), link_alive.notified())
-        .await
-        .unwrap();
     assert!(
         client.status().boot.is_some(),
         "the shared client stays connected"
@@ -2601,13 +2604,13 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
     })
     .await
     .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
+        .await
+        .unwrap();
     assert!(
         receive.recv_timeout(Duration::from_millis(50)).is_err(),
         "a retired Runtime must receive no callback after its lease is released"
     );
-    tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
-        .await
-        .unwrap();
     assert!(
         client.status().boot.is_some(),
         "the shared client stays connected"
