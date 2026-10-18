@@ -3,7 +3,7 @@
 - ID: B0007
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Done
 - Depends on: published89afb381; independent of B0002/capture
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours
@@ -113,3 +113,12 @@ B0007 Review: start/final commits, files, named tests/results, exact-head CI URL
 terminal-reply and no-replay proof, deviations and owned-process cleanup. Keep
 raw private logs outside Git. If local Rust unavailable say so and cite hosted
 checks honestly. Begin next eligible source task after submission.
+
+## Review accepted — 2026-10-18
+
+Done at736e778ad15b5f20aece9ae844c2f0ee23d6fe0f; sourceb18a4d2 plus
+format-only041884a. Inspected task-ID metadata, factory invocation inside task,
+normal/error mapping and teardown ownership. Four named private socket tests
+reported passing; exact-head CI39125066926 independently verified green. No
+local Cargo claim or capture. Existing full-pool admission behavior was outside
+B0007 and remains unchanged; B0008 fixes that separate demonstrated branch.

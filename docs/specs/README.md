@@ -40,3 +40,7 @@ B0002 passing and an explicit peer release. Do not overlap host work.
 
 Independent product queue: B0007 is submitted for review; it has no
 capture/B0002 dependency. No measurement was taken.
+
+B0007 Done at736e778a, source review/CI39125066926 accepted. Next independent
+Ready product task: [B0008 bounded UI-provider admission](0008-ui-provider-bounded-admission.md),
+90min source/private tests+hostedCI, no B0002 or lab dependency.
