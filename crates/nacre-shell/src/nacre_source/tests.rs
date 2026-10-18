@@ -796,7 +796,11 @@ async fn network_core_lease_exists_only_for_open_runtime() {
             // The same-stream reply also fences completion of those callbacks.
             tokio::time::timeout(
                 Duration::from_secs(2),
-                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+                client.call(
+                    "daemon.ping".into(),
+                    serde_json::json!({}),
+                    Duration::from_secs(1),
+                ),
             )
             .await
             .expect("fresh snapshot callbacks must finish before closing the Runtime")
@@ -815,7 +819,11 @@ async fn network_core_lease_exists_only_for_open_runtime() {
                 .unwrap();
             tokio::time::timeout(
                 Duration::from_secs(2),
-                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+                client.call(
+                    "daemon.ping".into(),
+                    serde_json::json!({}),
+                    Duration::from_secs(1),
+                ),
             )
             .await
             .expect("the shared client remains usable after the status lease closes")
@@ -1056,7 +1064,11 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
             // The same-stream reply also fences completion of those callbacks.
             tokio::time::timeout(
                 Duration::from_secs(2),
-                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+                client.call(
+                    "daemon.ping".into(),
+                    serde_json::json!({}),
+                    Duration::from_secs(1),
+                ),
             )
             .await
             .expect("fresh snapshot callbacks must finish before closing the Runtime")
@@ -1075,7 +1087,11 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
                 .unwrap();
             tokio::time::timeout(
                 Duration::from_secs(2),
-                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+                client.call(
+                    "daemon.ping".into(),
+                    serde_json::json!({}),
+                    Duration::from_secs(1),
+                ),
             )
             .await
             .expect("the shared client remains usable after the status lease closes")
@@ -2723,7 +2739,11 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
             // The same-stream reply also fences completion of those callbacks.
             tokio::time::timeout(
                 Duration::from_secs(2),
-                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+                client.call(
+                    "daemon.ping".into(),
+                    serde_json::json!({}),
+                    Duration::from_secs(1),
+                ),
             )
             .await
             .expect("fresh snapshot callbacks must finish before closing the Runtime")
@@ -2742,7 +2762,11 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                 .unwrap();
             tokio::time::timeout(
                 Duration::from_secs(2),
-                client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+                client.call(
+                    "daemon.ping".into(),
+                    serde_json::json!({}),
+                    Duration::from_secs(1),
+                ),
             )
             .await
             .expect("the shared client remains usable after the status lease closes")
