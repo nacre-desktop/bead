@@ -104,7 +104,7 @@ pub fn status(
             let typed_topic = match kind {
                 crate::status_views::Kind::Network => Some("network"),
                 crate::status_views::Kind::Bluetooth => Some("bluetooth"),
-                crate::status_views::Kind::Battery => None,
+                crate::status_views::Kind::Battery => Some("battery"),
             }
             .filter(|_| client.is_some());
             let source: Arc<dyn bead::core::source::Source> = if let Some(topic) = typed_topic {
@@ -123,6 +123,7 @@ pub fn status(
                 .and_then(|runtime| match typed_topic {
                     Some("network") => runtime.with_core_network_status(source),
                     Some("bluetooth") => runtime.with_core_bluetooth_status(source),
+                    Some("battery") => runtime.with_core_battery_status(source),
                     _ => runtime.with_status(kind, source),
                 })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)

@@ -4,7 +4,7 @@ use bead::core::{
     Value,
     source::{self, Source},
 };
-use nacre_protocol::core_services::{BluetoothState, CoreSnapshot, NetworkState};
+use nacre_protocol::core_services::{BatteryState, BluetoothState, CoreSnapshot, NetworkState};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 #[derive(Clone, Copy, Debug)]
@@ -56,6 +56,7 @@ enum Mode {
     Legacy,
     CoreNetwork,
     CoreBluetooth,
+    CoreBattery,
 }
 impl Status {
     pub fn new(kind: Kind, source: Arc<dyn Source>) -> Self {
@@ -82,6 +83,14 @@ impl Status {
             last_good: RefCell::new(None),
         }
     }
+    pub fn core_battery(source: Arc<dyn Source>) -> Self {
+        Self {
+            kind: Kind::Battery,
+            source,
+            mode: Mode::CoreBattery,
+            last_good: RefCell::new(None),
+        }
+    }
     pub fn subscribe(
         &self,
         notify: Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>,
@@ -94,6 +103,7 @@ impl Status {
         match self.mode {
             Mode::CoreNetwork => return self.project_core_network(),
             Mode::CoreBluetooth => return self.project_core_bluetooth(),
+            Mode::CoreBattery => return self.project_core_battery(),
             Mode::Legacy => {}
         }
         let snapshot = self.source.snapshot();
@@ -304,6 +314,56 @@ impl Status {
         display.insert("status.kind".into(), Value::Text("bluetooth".into()));
         display
     }
+
+    fn project_core_battery(&self) -> BTreeMap<String, Value> {
+        let snapshot = self.source.snapshot();
+        let battery = serde_json::from_value::<BatteryState>(snapshot.data.as_ref().clone())
+            .ok()
+            .map(CoreSnapshot::Battery);
+        let fresh = snapshot.connected
+            && battery.as_ref().is_some_and(|state| {
+                matches!(state, CoreSnapshot::Battery(value) if value.health.available && !value.health.stale)
+                    && state.valid()
+            });
+        if fresh && let Some(CoreSnapshot::Battery(state)) = battery {
+            let display = core_battery_display(&state);
+            let secondary = match state.charging {
+                Some(true) => "Charging",
+                Some(false) => "Not charging",
+                None => "Charging state unknown",
+            };
+            *self.last_good.borrow_mut() = Some(display.clone());
+            return core_battery_values(display, true, secondary);
+        }
+
+        let cached = self.last_good.borrow().clone();
+        let mut display = cached.clone().unwrap_or_else(|| {
+            BTreeMap::from([
+                (
+                    "status.primary".into(),
+                    Value::Text("Battery unavailable".into()),
+                ),
+                ("status.detail".into(), Value::Text(String::new())),
+                ("status.active".into(), Value::Bool(false)),
+            ])
+        });
+        display.insert("status.ready".into(), Value::Bool(false));
+        display.insert(
+            "status.secondary".into(),
+            Value::Text(
+                if cached.is_some() {
+                    "Status stale"
+                } else {
+                    "Status data unavailable"
+                }
+                .into(),
+            ),
+        );
+        display.insert("status.heading".into(), Value::Text("Battery".into()));
+        display.insert("status.icon".into(), Value::Text("battery_full".into()));
+        display.insert("status.kind".into(), Value::Text("battery".into()));
+        display
+    }
 }
 
 fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
@@ -403,6 +463,35 @@ fn core_bluetooth_values(
     display.insert("status.heading".into(), Value::Text("Bluetooth".into()));
     display.insert("status.icon".into(), Value::Text("bluetooth".into()));
     display.insert("status.kind".into(), Value::Text("bluetooth".into()));
+    display.insert("status.secondary".into(), Value::Text(secondary.into()));
+    display
+}
+fn core_battery_display(state: &BatteryState) -> BTreeMap<String, Value> {
+    let primary = state
+        .percentage
+        .map(|percentage| format!("{percentage:.0}%"))
+        .unwrap_or_else(|| "Battery level unknown".into());
+    BTreeMap::from([
+        ("status.primary".into(), Value::Text(line(&primary, 32))),
+        (
+            "status.detail".into(),
+            Value::Text("Power controls unavailable".into()),
+        ),
+        (
+            "status.active".into(),
+            Value::Bool(state.charging == Some(true)),
+        ),
+    ])
+}
+fn core_battery_values(
+    mut display: BTreeMap<String, Value>,
+    ready: bool,
+    secondary: &str,
+) -> BTreeMap<String, Value> {
+    display.insert("status.ready".into(), Value::Bool(ready));
+    display.insert("status.heading".into(), Value::Text("Battery".into()));
+    display.insert("status.icon".into(), Value::Text("battery_full".into()));
+    display.insert("status.kind".into(), Value::Text("battery".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
     display
 }

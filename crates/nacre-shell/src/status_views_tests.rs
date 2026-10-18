@@ -60,6 +60,13 @@ fn core_bluetooth() -> serde_json::Value {
         },"order":["m-first","a-empty","z-off","paired-only"]}
     })
 }
+fn core_battery() -> serde_json::Value {
+    serde_json::json!({
+        "health":{"available":true,"stale":false},
+        "percentage":83.0,
+        "charging":true
+    })
+}
 fn text_value<'a>(values: &'a BTreeMap<String, Value>, key: &str) -> &'a str {
     let Value::Text(value) = &values[key] else {
         panic!("{key} must be text")
@@ -608,6 +615,150 @@ fn bluetooth_legacy_preview_remains_unchanged() -> Result<()> {
     assert_eq!(
         text_value(&values, "status.detail"),
         "Fixture headphones, Fixture keyboard"
+    );
+    Ok(())
+}
+
+#[test]
+fn battery_core_optional_readings_remain_unknown() -> Result<()> {
+    let cases = [
+        (Some(83.0), Some(true), "83%", "Charging", true),
+        (Some(44.0), Some(false), "44%", "Not charging", false),
+        (Some(57.0), None, "57%", "Charging state unknown", false),
+        (None, Some(true), "Battery level unknown", "Charging", true),
+        (
+            None,
+            None,
+            "Battery level unknown",
+            "Charging state unknown",
+            false,
+        ),
+    ];
+    for (percentage, charging, primary, secondary, active) in cases {
+        let mut state = core_battery();
+        if let Some(percentage) = percentage {
+            state["percentage"] = serde_json::Value::from(percentage);
+        } else {
+            state.as_object_mut().unwrap().remove("percentage");
+        }
+        if let Some(charging) = charging {
+            state["charging"] = serde_json::Value::from(charging);
+        } else {
+            state.as_object_mut().unwrap().remove("charging");
+        }
+        let values = Status::core_battery(Arc::new(FakeSource::new(state)?)).project();
+        assert_eq!(values["status.ready"], Value::Bool(true));
+        assert_eq!(values["status.active"], Value::Bool(active));
+        assert_eq!(text_value(&values, "status.primary"), primary);
+        assert_eq!(text_value(&values, "status.secondary"), secondary);
+        assert_eq!(
+            text_value(&values, "status.detail"),
+            "Power controls unavailable"
+        );
+    }
+
+    for (percentage, expected) in [
+        (0.0, "0%"),
+        (100.0, "100%"),
+        (12.4, "12%"),
+        (12.6, "13%"),
+    ] {
+        let mut state = core_battery();
+        state["percentage"] = serde_json::json!(percentage);
+        let values = Status::core_battery(Arc::new(FakeSource::new(state)?)).project();
+        assert_eq!(text_value(&values, "status.primary"), expected);
+    }
+    Ok(())
+}
+
+#[test]
+fn battery_core_invalid_is_not_zero() -> Result<()> {
+    let mut missing_health = core_battery();
+    missing_health.as_object_mut().unwrap().remove("health");
+    let mut cases = vec![missing_health];
+    for percentage in [
+        serde_json::json!(-0.1),
+        serde_json::json!(100.1),
+        serde_json::json!("NaN"),
+    ] {
+        let mut state = core_battery();
+        state["percentage"] = percentage;
+        cases.push(state);
+    }
+    assert!(serde_json::Number::from_f64(f64::NAN).is_none());
+
+    for state in cases {
+        let values = Status::core_battery(Arc::new(FakeSource::new(state)?)).project();
+        assert_eq!(values["status.ready"], Value::Bool(false));
+        assert_eq!(values["status.active"], Value::Bool(false));
+        assert_eq!(text_value(&values, "status.primary"), "Battery unavailable");
+        assert_eq!(
+            text_value(&values, "status.secondary"),
+            "Status data unavailable"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn battery_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
+    let source = Arc::new(FakeSource::new(core_battery())?);
+    let status = Status::core_battery(source.clone());
+    let good = status.project();
+    assert_eq!(text_value(&good, "status.primary"), "83%");
+    assert_eq!(text_value(&good, "status.secondary"), "Charging");
+    assert_eq!(good["status.active"], Value::Bool(true));
+
+    let mut stale = core_battery();
+    stale["health"]["stale"] = serde_json::json!(true);
+    let mut unavailable = core_battery();
+    unavailable["health"]["available"] = serde_json::json!(false);
+    let mut invalid = core_battery();
+    invalid["percentage"] = serde_json::json!(101.0);
+    for state in [stale, unavailable, invalid] {
+        source.publish(state)?;
+        let values = status.project();
+        assert_eq!(values["status.ready"], Value::Bool(false));
+        assert_eq!(text_value(&values, "status.primary"), "83%");
+        assert_eq!(text_value(&values, "status.secondary"), "Status stale");
+        assert_eq!(values["status.active"], Value::Bool(true));
+    }
+
+    source.disconnect()?;
+    let disconnected = status.project();
+    assert_eq!(disconnected["status.ready"], Value::Bool(false));
+    assert_eq!(text_value(&disconnected, "status.primary"), "83%");
+    assert_eq!(text_value(&disconnected, "status.secondary"), "Status stale");
+    assert_eq!(disconnected["status.active"], Value::Bool(true));
+
+    let mut recovered = core_battery();
+    recovered.as_object_mut().unwrap().remove("percentage");
+    recovered.as_object_mut().unwrap().remove("charging");
+    source.publish(recovered)?;
+    let current = status.project();
+    assert_eq!(current["status.ready"], Value::Bool(true));
+    assert_eq!(
+        text_value(&current, "status.primary"),
+        "Battery level unknown"
+    );
+    assert_eq!(
+        text_value(&current, "status.secondary"),
+        "Charging state unknown"
+    );
+    assert_eq!(current["status.active"], Value::Bool(false));
+    Ok(())
+}
+
+#[test]
+fn battery_legacy_preview_remains_unchanged() -> Result<()> {
+    let values = Status::new(Kind::Battery, Arc::new(FakeSource::new(data())?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    assert_eq!(values["status.active"], Value::Bool(true));
+    assert_eq!(text_value(&values, "status.primary"), "83%");
+    assert_eq!(text_value(&values, "status.secondary"), "Charging");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Power profiles unavailable"
     );
     Ok(())
 }
