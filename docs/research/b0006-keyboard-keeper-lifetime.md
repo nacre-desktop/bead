@@ -1,6 +1,8 @@
 # B0006 keyboard keeper lifetime
 
-Status: implementation submitted; hosted CI pending. No measurement or capture
+Status: Review. Implementation commit `b7e5862055ee7b3d53bd49d0a0436db2c90bb200`;
+hosted CI run [39081161039](https://github.com/nacre-desktop/bead/actions/runs/39081161039)
+passed all checks, including the new regression step. No measurement or capture
 was run.
 
 Acceptance mode now starts the existing owned `wtype` keeper with
