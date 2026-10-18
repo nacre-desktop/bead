@@ -2433,17 +2433,6 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
             },
             "retiring the view must release only its topic lease"
         );
-        // A peer that sends after Unsub must not wake the retired view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "battery".into(),
-                seq: 1,
-                data: battery,
-            },
-        )
-        .await
-        .unwrap();
         framing::write(
             &mut w,
             &Message::Ping {
@@ -2475,6 +2464,18 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected message while checking shared link: {message:?}"),
             }
         }
+        // A peer that sends after Unsub must not wake the retired view. The
+        // preceding Pong proves the shared link remains alive after close.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "battery".into(),
+                seq: 1,
+                data: battery,
+            },
+        )
+        .await
+        .unwrap();
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
