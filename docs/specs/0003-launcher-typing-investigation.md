@@ -235,3 +235,49 @@ if blocked. Keep exact five-pair-per-compositor sampling and full windows.
 Release early and transfer only by explicit DONE/IDLE/RELEASED. Nacre N0002
 is next when its reviewed candidate is ready. If fewer full cells fit, request
 an immediate spec-agent window adjustment; never truncate or silently overlap.
+
+## Independent implementation phase — B0003-S, 2026-10-18
+
+Status: Ready. This source/test phase is eligible now, independently of B0002
+PASS, lab access or capture activation. It supersedes the earlier static-only
+restriction for this phase. Size: maximum60minutes. Base: latest main after
+014a726, preserving concurrent work. Goal: test the existing serial-key proof
+without executing a capture; no optimization or repeated source-audit report.
+
+Scope/files: spikes/menu-engine-proof.py, optional small pure parser module
+beside it, spikes/tests/test_menu_engine_trace.py, existing Python CI step in
+.github/workflows/ci.yml. No runtime crate/schema/instrumentation changes, new
+dependencies, framework, actual process launch, host probe, build or capture.
+
+1. Extract existing inline per-key trace parsing/validation into a pure function
+   taking segment, expected catalog revision and profile mode. Call it from the
+   existing sample loop. Preserve output fields, time/CPU calculations, sampling
+   boundaries and200-key sequence; daemon/worker CPU sampling stays in caller.
+2. Preserve checks: exactly one input and successful RPC;1–11 unique sent IDs;
+   Busy chain matches preceding sends; final successful ID matches final send;
+   expected catalog revision and positive count; matching MENU_RESULT followed
+   by source-error-free commit; presentation matches exact generation/update
+   after input with positive increasing CPU timestamps. Ignore unrelated frames.
+   Preserve existing clock-only versus stage-enabled validation. Query text is
+   not present in all markers: invent no query-identity or burst proof and add
+   no runtime logging. Note this limitation once in the report.
+3. Add synthetic-log tests named serial_key_trace_accepts_exact_match,
+   serial_key_trace_ignores_unrelated_presentations,
+   serial_key_trace_rejects_wrong_generation_or_update,
+   serial_key_trace_checks_bounded_busy_chain,
+   serial_key_trace_rejects_missing_or_duplicate_success,
+   serial_key_trace_rejects_nonmonotonic_clocks and
+   serial_key_trace_checks_profile_mode. Parameterize boundary cases. Reuse
+   equivalent coverage if present; no frozen/historical trace edits.
+4. Run nice10 stdlib unittest discovery for the new module and existing28
+   capture-window/guard tests, py_compile changed Python and git diff --check.
+   Add only new discovery/compile commands to existing hosted Python step; no
+   job/action/dependency/permission changes. Integrate/push normally with approved
+   identity, check exact-head CI. Do not wait for lab or measurement approval.
+
+Acceptance: existing live sample loop uses pure parser; named tests and existing
+28 tests pass; method/output unchanged; exact-head CI green; no actual process
+or capture. Report Review with commit/files/test commands/results/CI and query
+identity limitation. B0003 remains incomplete until measured phases pass.
+Stop if runtime/protocol changes are needed or60minutes exhausted; return exact
+gap rather than expanding scope. All standing rules still apply.
