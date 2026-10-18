@@ -95,7 +95,7 @@ def scope_command(scope_name, command):
         raise CaptureSafetyError("refusing an unrecognized, non-task-owned scope name")
     return [
         "systemd-run", "--user", "--scope", f"--unit={scope_name}",
-        f"--property=MemoryMax={SCOPE_MEMORY_MAX}", "--wait", "--collect", "--",
+        f"--property=MemoryMax={SCOPE_MEMORY_MAX}", "--collect", "--",
         *command,
     ]
 

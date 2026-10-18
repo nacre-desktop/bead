@@ -315,6 +315,7 @@ class CaptureSafetyTests(unittest.TestCase):
             "bead-capture-012345abcdef.scope", ["python3", "measure.py"])
         self.assertIn("--property=MemoryMax=2147483648", command)
         self.assertIn("--scope", command)
+        self.assertNotIn("--wait", command)
         self.assertEqual(command[-2:], ["python3", "measure.py"])
 
     def test_start_below_four_gib_fails_before_scope_launch(self):
