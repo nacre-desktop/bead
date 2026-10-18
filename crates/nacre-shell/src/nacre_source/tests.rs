@@ -596,6 +596,12 @@ async fn network_core_lease_exists_only_for_open_runtime() {
             topics.insert("network".into(), 1);
         }
         framing::write(&mut w, &hello).await.unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["compositor".into()]
+            }
+        );
         loop {
             match next(&mut reader).await {
                 Message::Call { id, m, .. } => {
@@ -732,7 +738,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         observed_link.notify_one();
     });
 
-    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while client.status().boot.is_none() {
             tokio::time::sleep(Duration::from_millis(2)).await;
@@ -811,6 +817,12 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
             topics.insert("bluetooth".into(), 1);
         }
         framing::write(&mut w, &hello).await.unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["compositor".into()]
+            }
+        );
         loop {
             match next(&mut reader).await {
                 Message::Call { id, m, .. } => {
@@ -944,7 +956,7 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
         observed_link.notify_one();
     });
 
-    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while client.status().boot.is_none() {
             tokio::time::sleep(Duration::from_millis(2)).await;
@@ -2430,6 +2442,12 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
             topics.insert("battery".into(), 1);
         }
         framing::write(&mut w, &hello).await.unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["compositor".into()]
+            }
+        );
         loop {
             match next(&mut reader).await {
                 Message::Call { id, m, .. } => {
@@ -2563,7 +2581,7 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
         observed_link.notify_one();
     });
 
-    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let client = Client::start(Config::new(lab.socket(), vec!["compositor".into()])).unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while client.status().boot.is_none() {
             tokio::time::sleep(Duration::from_millis(2)).await;
