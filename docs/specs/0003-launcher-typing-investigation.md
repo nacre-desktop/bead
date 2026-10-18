@@ -3,7 +3,7 @@
 - ID: B0003
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress (B0003-S pure trace parser and tests)
+- Status: Review (B0003-S pure trace parser and tests; measured phase remains gated)
 - Depends on: source-only preparation eligible now after B0004 Done; captures require B0001/B0002 Done and exclusive grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
@@ -238,7 +238,7 @@ an immediate spec-agent window adjustment; never truncate or silently overlap.
 
 ## Independent implementation phase — B0003-S, 2026-10-18
 
-Status: Ready. This source/test phase is eligible now, independently of B0002
+Status: Review. This source/test phase is complete, independently of B0002
 PASS, lab access or capture activation. It supersedes the earlier static-only
 restriction for this phase. Size: maximum60minutes. Base: latest main after
 014a726, preserving concurrent work. Goal: test the existing serial-key proof
