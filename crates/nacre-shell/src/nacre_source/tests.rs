@@ -611,7 +611,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
                     .unwrap();
                 }
                 Message::Sub { topics } => {
-                    assert_eq!(topics, vec!["network"]);
+                    assert_eq!(topics, vec![String::from("network")]);
                     break;
                 }
                 message => panic!("unexpected message before network lease: {message:?}"),
@@ -635,13 +635,30 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         )
         .await
         .unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Unsub {
-                topics: vec!["network".into()]
-            },
-            "retiring the view must release only its topic lease"
-        );
+        loop {
+            match next(&mut reader).await {
+                Message::Unsub { topics } => {
+                    assert_eq!(topics, vec!["network"]);
+                    break;
+                }
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Message::Ping { id } => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                message => panic!("unexpected frame before network Unsub: {message:?}"),
+            }
+        }
         framing::write(
             &mut w,
             &Message::Ping {
@@ -806,7 +823,7 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
                     .unwrap();
                 }
                 Message::Sub { topics } => {
-                    assert_eq!(topics, vec!["bluetooth"]);
+                    assert_eq!(topics, vec![String::from("bluetooth")]);
                     break;
                 }
                 message => panic!("unexpected message before network lease: {message:?}"),
@@ -827,13 +844,30 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
         )
         .await
         .unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Unsub {
-                topics: vec!["bluetooth".into()]
-            },
-            "retiring the view must release only its topic lease"
-        );
+        loop {
+            match next(&mut reader).await {
+                Message::Unsub { topics } => {
+                    assert_eq!(topics, vec!["bluetooth"]);
+                    break;
+                }
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Message::Ping { id } => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                message => panic!("unexpected frame before bluetooth Unsub: {message:?}"),
+            }
+        }
         framing::write(
             &mut w,
             &Message::Ping {
@@ -2405,7 +2439,7 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                     .unwrap();
                 }
                 Message::Sub { topics } => {
-                    assert_eq!(topics, vec!["battery"]);
+                    assert_eq!(topics, vec![String::from("battery")]);
                     break;
                 }
                 message => panic!("unexpected message before battery lease: {message:?}"),
@@ -2426,13 +2460,30 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
         )
         .await
         .unwrap();
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Unsub {
-                topics: vec!["battery".into()]
-            },
-            "retiring the view must release only its topic lease"
-        );
+        loop {
+            match next(&mut reader).await {
+                Message::Unsub { topics } => {
+                    assert_eq!(topics, vec!["battery"]);
+                    break;
+                }
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Message::Ping { id } => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                message => panic!("unexpected frame before battery Unsub: {message:?}"),
+            }
+        }
         framing::write(
             &mut w,
             &Message::Ping {
