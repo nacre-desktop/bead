@@ -666,6 +666,18 @@ async fn network_core_lease_exists_only_for_open_runtime() {
                 Message::Pong {
                     id: Id::Integer(703),
                 } => break,
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
                 Message::Ping { id } => {
                     framing::write(&mut w, &Message::Pong { id }).await.unwrap();
                 }
@@ -675,6 +687,18 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                Ok(Ok(Some(Message::Call { id, m, .. }))) => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
                 Ok(Ok(Some(Message::Ping { id }))) => {
                     framing::write(&mut w, &Message::Pong { id }).await.unwrap();
                 }
@@ -834,6 +858,18 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
                 Message::Pong {
                     id: Id::Integer(703),
                 } => break,
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
                 Message::Ping { id } => {
                     framing::write(&mut w, &Message::Pong { id }).await.unwrap();
                 }
@@ -843,6 +879,18 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                Ok(Ok(Some(Message::Call { id, m, .. }))) => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
                 Ok(Ok(Some(Message::Ping { id }))) => {
                     framing::write(&mut w, &Message::Pong { id }).await.unwrap();
                 }
