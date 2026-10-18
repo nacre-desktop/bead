@@ -673,6 +673,19 @@ async fn network_core_lease_exists_only_for_open_runtime() {
             }
         }
         observed_link.notify_one();
+        loop {
+            match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                Ok(Ok(Some(Message::Ping { id }))) => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                Ok(Ok(Some(message))) => {
+                    panic!("unexpected message while preserving shared link: {message:?}")
+                }
+                Ok(Ok(None) | Err(_)) => break,
+                Err(_) => panic!("client did not stop after the lease test finished"),
+            }
+        }
+        observed_link.notify_one();
     });
 
     let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
