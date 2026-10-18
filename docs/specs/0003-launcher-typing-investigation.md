@@ -281,3 +281,12 @@ or capture. Report Review with commit/files/test commands/results/CI and query
 identity limitation. B0003 remains incomplete until measured phases pass.
 Stop if runtime/protocol changes are needed or60minutes exhausted; return exact
 gap rather than expanding scope. All standing rules still apply.
+
+## B0003-S review — 2026-10-18
+
+Source/test phase accepted at89afb381fcccc735d48edff36998c2f7ff5ae527,
+implementatione237460. Pure parser is used by live sample loop; seven synthetic
+cases and28 existing guard/window tests pass. Exact-head CI39123319816 verified
+green. Marker/query-identity boundary is correctly explicit; no capture or target
+claim accepted. Source phase Done; B0003 overall still needs measured work after
+B0002 PASS. Next independent product task is B0007 UI-provider terminal replies.
