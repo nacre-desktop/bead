@@ -187,9 +187,21 @@ impl Runtime {
         Ok(self)
     }
     pub fn with_status(
-        mut self,
+        self,
         kind: crate::status_views::Kind,
         source: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.with_status_projector(crate::status_views::Status::new(kind, source))
+    }
+    pub fn with_core_network_status(
+        self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.with_status_projector(crate::status_views::Status::core_network(source))
+    }
+    fn with_status_projector(
+        mut self,
+        status: crate::status_views::Status,
     ) -> Result<Self, Box<dyn Error>> {
         if self.launcher.is_some()
             || self.calendar.is_some()
@@ -198,7 +210,7 @@ impl Runtime {
         {
             return Err("one data projector per panel".into());
         }
-        let status = std::rc::Rc::new(crate::status_views::Status::new(kind, source));
+        let status = std::rc::Rc::new(status);
         let projector = status.clone();
         self.session
             .set_projector(Box::new(move |_| Ok(projector.project())));

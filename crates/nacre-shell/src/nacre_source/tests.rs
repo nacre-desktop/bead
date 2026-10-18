@@ -575,6 +575,142 @@ async fn page_lease_resubscribes_on_boot_and_drop_unsubscribes() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn network_core_lease_exists_only_for_open_runtime() {
+    use bead::wayland::{SceneSource, UiEvent};
+    use std::{
+        path::Path,
+        sync::{OnceLock, mpsc},
+    };
+
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (r, mut w) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(r));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        let mut hello = welcome();
+        if let Message::Welcome { topics, .. } = &mut hello {
+            topics.insert("network".into(), 1);
+        }
+        framing::write(&mut w, &hello).await.unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["network".into()]
+            }
+        );
+        let network = serde_json::json!({
+            "health":{"available":true,"stale":false},
+            "wireless_enabled":true,
+            "devices":{"items":{"wifi0":{"name":"Wi-Fi","kind":"wireless","connected":true}},"order":["wifi0"]},
+            "access_points":{"items":{"ap0":{"device":"wifi0","name":"Home Wi-Fi","strength":80,"secured":true,"active":true,"connection":"wifi"}},"order":["ap0"]},
+            "connections":{"items":{"wifi":{"name":"Wi-Fi profile","kind":"wireless","active":true}},"order":["wifi"]},
+            "primary_connection":"wifi"
+        });
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "network".into(),
+                seq: 0,
+                data: network.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Unsub {
+                topics: vec!["network".into()]
+            },
+            "retiring the view must release only its topic lease"
+        );
+        // A peer that sends after Unsub must not wake the retired view.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "network".into(),
+                seq: 1,
+                data: network,
+            },
+        )
+        .await
+        .unwrap();
+        let Message::Call { id, m, .. } = next(&mut reader).await else {
+            panic!("shared provider link should remain usable after lease drop")
+        };
+        assert_eq!(m, "daemon.ping");
+        framing::write(
+            &mut w,
+            &Message::Ret {
+                id,
+                reply: Reply::Ok { ok: Value::Null },
+            },
+        )
+        .await
+        .unwrap();
+    });
+
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
+    let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
+    let scale: Value =
+        serde_json::from_str(include_str!("../../bead-ui/assets/size-scale.json")).unwrap();
+    let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
+    let spec = crate::popouts::status(
+        crate::status_views::Kind::Network,
+        Arc::new(palette),
+        colors,
+        Arc::new(OnceLock::new()),
+        Some(client.clone()),
+        radius,
+        false,
+    )
+    .unwrap();
+    assert!(client.0.shared.leases.records.lock().unwrap().is_empty());
+
+    let mut runtime = (spec.factory)(true).unwrap();
+    let (send, receive) = mpsc::channel();
+    runtime.services(Box::new(move |event| {
+        let _ = send.send(event);
+    }));
+    let event = receive.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(matches!(&event, UiEvent::Model(_)));
+    assert!(runtime.stage(event).unwrap().is_some());
+    drop(runtime);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !client.0.shared.leases.records.lock().unwrap().is_empty() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        receive.recv_timeout(Duration::from_millis(50)).is_err(),
+        "a retired Runtime must receive no callback after its lease is released"
+    );
+    client
+        .call(
+            "daemon.ping".into(),
+            Value::Null,
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
+    assert!(client.status().boot.is_some(), "the shared client stays connected");
+    drop(spec);
+    Source::stop(&client).await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn page_lease_does_not_subscribe_to_unadvertised_version() {
     let lab = Lab::new();
     let listener = lab.bind();

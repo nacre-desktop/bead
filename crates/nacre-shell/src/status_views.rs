@@ -4,7 +4,12 @@ use bead::core::{
     Value,
     source::{self, Source},
 };
-use std::{collections::BTreeMap, sync::Arc};
+use nacre_protocol::core_services::{CoreSnapshot, NetworkState};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    sync::Arc,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -47,10 +52,25 @@ impl Kind {
 pub struct Status {
     kind: Kind,
     source: Arc<dyn Source>,
+    core_network: bool,
+    last_good: RefCell<Option<BTreeMap<String, Value>>>,
 }
 impl Status {
     pub fn new(kind: Kind, source: Arc<dyn Source>) -> Self {
-        Self { kind, source }
+        Self {
+            kind,
+            source,
+            core_network: false,
+            last_good: RefCell::new(None),
+        }
+    }
+    pub fn core_network(source: Arc<dyn Source>) -> Self {
+        Self {
+            kind: Kind::Network,
+            source,
+            core_network: true,
+            last_good: RefCell::new(None),
+        }
     }
     pub fn subscribe(
         &self,
@@ -61,6 +81,9 @@ impl Status {
         }))
     }
     pub fn project(&self) -> BTreeMap<String, Value> {
+        if self.core_network {
+            return self.project_core_network();
+        }
         let snapshot = self.source.snapshot();
         // Sources retain their last good snapshot while disconnected. Keep its
         // display too; the shell's connection Source owns the reconnecting mark.
@@ -166,6 +189,105 @@ impl Status {
             ("status.detail".into(), Value::Text(line(&detail, 48))),
         ])
     }
+
+    fn project_core_network(&self) -> BTreeMap<String, Value> {
+        let snapshot = self.source.snapshot();
+        let network = serde_json::from_value::<NetworkState>(snapshot.data.as_ref().clone())
+            .ok()
+            .map(CoreSnapshot::Network);
+        let fresh = snapshot.connected
+            && network.as_ref().is_some_and(|network| {
+                matches!(network, CoreSnapshot::Network(state) if state.health.available && !state.health.stale)
+                    && network.valid()
+            });
+        if fresh && let Some(CoreSnapshot::Network(state)) = network {
+            let display = core_network_display(&state);
+            *self.last_good.borrow_mut() = Some(display.clone());
+            return core_network_values(
+                display,
+                true,
+                if state.wireless_enabled {
+                    "Wi-Fi on"
+                } else {
+                    "Wi-Fi off"
+                },
+            );
+        }
+
+        let cached = self.last_good.borrow().clone();
+        let mut display = cached.clone().unwrap_or_else(|| {
+            BTreeMap::from([
+                (
+                    "status.primary".into(),
+                    Value::Text("Network unavailable".into()),
+                ),
+                ("status.detail".into(), Value::Text(String::new())),
+                ("status.active".into(), Value::Bool(false)),
+            ])
+        });
+        display.insert("status.ready".into(), Value::Bool(false));
+        display.insert(
+            "status.secondary".into(),
+            Value::Text(if cached.is_some() {
+                "Status stale"
+            } else {
+                "Status data unavailable"
+            }
+            .into()),
+        );
+        display.insert("status.heading".into(), Value::Text("Network".into()));
+        display.insert("status.icon".into(), Value::Text("wifi".into()));
+        display.insert("status.kind".into(), Value::Text("network".into()));
+        display
+    }
+}
+
+fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
+    let primary = state.primary_connection.as_ref();
+    let connection = primary.and_then(|id| state.connections.items.get(id));
+    let matching_ap = primary.and_then(|id| {
+        state
+            .access_points
+            .order
+            .iter()
+            .filter_map(|ap_id| state.access_points.items.get(ap_id))
+            .find(|ap| ap.active && ap.connection.as_ref() == Some(id))
+    });
+    let connection_name = connection
+        .map(|connection| connection.name.as_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Connected");
+    let primary_text = matching_ap
+        .map(|ap| ap.name.as_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| {
+            if connection.is_some() {
+                connection_name
+            } else {
+                "Not connected"
+            }
+        });
+    let detail = matching_ap
+        .map(|ap| format!("Signal strength {}%", ap.strength))
+        .unwrap_or_else(|| "Connection controls unavailable".into());
+    BTreeMap::from([
+        ("status.primary".into(), Value::Text(line(primary_text, 32))),
+        ("status.detail".into(), Value::Text(line(&detail, 48))),
+        ("status.active".into(), Value::Bool(primary.is_some() || state.wireless_enabled)),
+    ])
+}
+
+fn core_network_values(
+    mut display: BTreeMap<String, Value>,
+    ready: bool,
+    secondary: &str,
+) -> BTreeMap<String, Value> {
+    display.insert("status.ready".into(), Value::Bool(ready));
+    display.insert("status.heading".into(), Value::Text("Network".into()));
+    display.insert("status.icon".into(), Value::Text("wifi".into()));
+    display.insert("status.kind".into(), Value::Text("network".into()));
+    display.insert("status.secondary".into(), Value::Text(secondary.into()));
+    display
 }
 fn line(text: &str, max: usize) -> String {
     let mut chars = text.chars().map(|c| if c.is_control() { ' ' } else { c });

@@ -34,6 +34,22 @@ fn data() -> serde_json::Value {
     };
     serde_json::to_value(snapshot).unwrap()
 }
+fn core_network() -> serde_json::Value {
+    serde_json::json!({
+        "health":{"available":true,"stale":false},
+        "wireless_enabled":true,
+        "devices":{"items":{"wifi0":{"name":"Wi-Fi","kind":"wireless","connected":true}},"order":["wifi0"]},
+        "access_points":{"items":{"ap0":{"device":"wifi0","name":"Home Wi-Fi","strength":86,"secured":true,"active":true,"connection":"wifi-connection"}},"order":["ap0"]},
+        "connections":{"items":{"wired":{"name":"Ethernet","kind":"wired","active":true},"wifi-connection":{"name":"Wi-Fi profile","kind":"wireless","active":true}},"order":["wired","wifi-connection"]},
+        "primary_connection":"wifi-connection"
+    })
+}
+fn text_value(values: &BTreeMap<String, Value>, key: &str) -> &str {
+    let Value::Text(value) = &values[key] else {
+        panic!("{key} must be text")
+    };
+    value
+}
 fn harness(scale: f32) -> Result<Harness> {
     Harness::load(
         &root(),
@@ -198,6 +214,7 @@ fn status_registry_keeps_only_cold_metadata_and_never_starts_another_service() -
                 palette.clone(),
                 colors.clone(),
                 owner.clone(),
+                None,
                 radius,
                 false,
             )
@@ -241,5 +258,156 @@ fn each_status_source_selects_its_existing_service_before_copying_data() -> Resu
             "bulk tray data must never be copied into the view Source"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn network_core_primary_is_explicit_not_map_order() -> Result<()> {
+    let mut state = core_network();
+    state["primary_connection"] = serde_json::json!("wired");
+    // The active Wi-Fi profile and AP are first in the explicit collection order.
+    state["connections"]["order"] = serde_json::json!(["wifi-connection", "wired"]);
+    let source = Arc::new(FakeSource::new(state)?);
+    let values = Status::core_network(source).project();
+    assert_eq!(text_value(&values, "status.primary"), "Ethernet");
+    assert_eq!(text_value(&values, "status.secondary"), "Wi-Fi on");
+    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    assert_eq!(values["status.active"], Value::Bool(true));
+
+    let mut no_primary = core_network();
+    no_primary.as_object_mut().unwrap().remove("primary_connection");
+    let values = Status::core_network(Arc::new(FakeSource::new(no_primary)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Not connected");
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    Ok(())
+}
+
+#[test]
+fn network_core_signal_requires_primary_ap_mapping() -> Result<()> {
+    let mut state = core_network();
+    state["access_points"]["items"]["ap0"]["strength"] = serde_json::json!(77);
+    state["access_points"]["items"]["ap0"]["connection"] = serde_json::json!("wired");
+    let values = Status::core_network(Arc::new(FakeSource::new(state.clone())?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Wi-Fi profile");
+    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+
+    state["access_points"]["items"]["ap0"]["connection"] =
+        serde_json::json!("wifi-connection");
+    state["access_points"]["items"]["ap0"]["strength"] = serde_json::json!(0);
+    let values = Status::core_network(Arc::new(FakeSource::new(state)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Home Wi-Fi");
+    assert_eq!(text_value(&values, "status.detail"), "Signal strength 0%");
+    Ok(())
+}
+
+#[test]
+fn network_core_unknown_or_invalid_state_never_becomes_zero() -> Result<()> {
+    let missing_topic = Status::core_network(Arc::new(FakeSource::new(serde_json::json!({}))?))
+        .project();
+    assert_eq!(missing_topic["status.ready"], Value::Bool(false));
+    assert_eq!(text_value(&missing_topic, "status.primary"), "Network unavailable");
+    assert_eq!(
+        text_value(&missing_topic, "status.secondary"),
+        "Status data unavailable"
+    );
+
+    let mut no_primary = core_network();
+    no_primary.as_object_mut().unwrap().remove("primary_connection");
+    no_primary["wireless_enabled"] = serde_json::json!(false);
+    let values = Status::core_network(Arc::new(FakeSource::new(no_primary)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Not connected");
+    assert_eq!(text_value(&values, "status.secondary"), "Wi-Fi off");
+    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+
+    let mut invalid_strength = core_network();
+    invalid_strength["access_points"]["items"]["ap0"]["strength"] = serde_json::json!(101);
+    let values = Status::core_network(Arc::new(FakeSource::new(invalid_strength)?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(false));
+    assert_eq!(text_value(&values, "status.primary"), "Network unavailable");
+
+    let mut invalid_order = core_network();
+    invalid_order["connections"]["order"] = serde_json::json!(["wired"]);
+    let values = Status::core_network(Arc::new(FakeSource::new(invalid_order)?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(false));
+
+    let mut dangling = core_network();
+    dangling["primary_connection"] = serde_json::json!("missing-connection");
+    let values = Status::core_network(Arc::new(FakeSource::new(dangling)?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(false));
+
+    let mut dangling_device = core_network();
+    dangling_device["access_points"]["items"]["ap0"]["device"] =
+        serde_json::json!("missing-device");
+    let values = Status::core_network(Arc::new(FakeSource::new(dangling_device)?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(false));
+
+    let mut oversized = core_network();
+    let mut items = serde_json::Map::new();
+    let mut order = vec![serde_json::json!("wifi0")];
+    items.insert(
+        "wifi0".into(),
+        serde_json::json!({"name":"Wi-Fi","kind":"wireless","connected":true}),
+    );
+    for index in 0..2048 {
+        let id = format!("dev-{index}");
+        items.insert(
+            id.clone(),
+            serde_json::json!({"name":"Device","kind":"wireless","connected":false}),
+        );
+        order.push(id);
+    }
+    oversized["devices"] = serde_json::json!({"items":items,"order":order});
+    let values = Status::core_network(Arc::new(FakeSource::new(oversized)?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(false));
+    assert_eq!(text_value(&values, "status.primary"), "Network unavailable");
+
+    let mut controls = core_network();
+    controls["connections"]["items"]["wifi-connection"]["name"] =
+        serde_json::json!("Home\nWi-Fi\u{0007}");
+    controls["access_points"]["items"]["ap0"]["name"] = serde_json::json!("");
+    let values = Status::core_network(Arc::new(FakeSource::new(controls)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Home Wi-Fi ");
+    Ok(())
+}
+
+#[test]
+fn network_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
+    let source = Arc::new(FakeSource::new(core_network())?);
+    let status = Status::core_network(source.clone());
+    let good = status.project();
+    assert_eq!(text_value(&good, "status.primary"), "Home Wi-Fi");
+    source.disconnect()?;
+    let stale = status.project();
+    assert_eq!(stale["status.ready"], Value::Bool(false));
+    assert_eq!(stale["status.active"], Value::Bool(true));
+    assert_eq!(text_value(&stale, "status.primary"), "Home Wi-Fi");
+    assert_eq!(text_value(&stale, "status.detail"), "Signal strength 86%");
+    assert_eq!(text_value(&stale, "status.secondary"), "Status stale");
+
+    let mut recovered = core_network();
+    recovered["primary_connection"] = serde_json::json!("wired");
+    recovered["wireless_enabled"] = serde_json::json!(false);
+    source.publish(recovered)?;
+    let current = status.project();
+    assert_eq!(current["status.ready"], Value::Bool(true));
+    assert_eq!(current["status.active"], Value::Bool(true));
+    assert_eq!(text_value(&current, "status.primary"), "Ethernet");
+    assert_eq!(text_value(&current, "status.secondary"), "Wi-Fi off");
+    Ok(())
+}
+
+#[test]
+fn network_legacy_preview_remains_unchanged() -> Result<()> {
+    let values = Status::new(
+        Kind::Network,
+        Arc::new(FakeSource::new(data())?),
+    )
+    .project();
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    assert_eq!(values["status.active"], Value::Bool(true));
+    assert_eq!(text_value(&values, "status.primary"), "Fixture network");
+    assert_eq!(text_value(&values, "status.secondary"), "Wi-Fi on");
+    assert_eq!(text_value(&values, "status.detail"), "Signal strength 86%");
     Ok(())
 }

@@ -607,6 +607,7 @@ fn start(
                     status_palette.clone(),
                     status_colors.clone(),
                     desktop_owner.clone(),
+                    _ui_provider.clone(),
                     status_radius,
                     panel_trace,
                 )?,
