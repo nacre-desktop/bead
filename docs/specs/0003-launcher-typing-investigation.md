@@ -204,3 +204,34 @@ Use the B0002 reviewed source/release/helper with recorded exact hashes and
 final tested guard/harness commit. Preserve the existing ten-pair diagnostic
 method and targets. If B0002 ends early, ask to move this window earlier; if
 prerequisites fail, keep source preparation and no captures.
+
+## Incident closed — owner decision, 2026-10-18
+
+Owner closed the incident review: no OOM/systemd-oomd kills or relevant kernel
+crash entries; likely lost Codex connection. This is the owner's disposition,
+not proof from the unavailable earlier laptop journal. Retain all capture-safety
+rules. Closure supersedes incident-review activation holds; it does not waive
+containment, memory, artifact, quiet or explicit peer-pause checks.
+
+## Active grant — supersedes earlier reservations and holds
+
+Owner activates B0002 Oct18 11:00–19:00UTC, then B0003 19:00–21:00UTC after
+B0002 PASS, on the previously verified private nested lab. No further incident
+or spec-agent activation approval is required. Prepared runtime artifacts stay
+unchanged: Bead source1cff9d17 release SHA
+b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b;
+Nacre5f4 release helper SHA
+4a65f4ec887bc85e93b5b862f1786fe6f1b7a811875333765ee8f8c052cce0aa.
+Use guarded harness4d0861d or later reviewed guard-only fix, record its commit.
+
+Perform required memory/scope/peer-pause checks, then announce CAPTURE_START.
+Minimal private-lab setup of the missing wayland-info prerequisite is within
+owner's go-now direction; do not install a new toolchain, upgrade the system,
+change the harness probe or touch live desktop settings. Record that preparation
+before matched arms. Actual privilege/dependency failure is a blocker to report,
+not permission to weaken assertions. Continue independent typing source/tests
+if blocked. Keep exact five-pair-per-compositor sampling and full windows.
+
+Release early and transfer only by explicit DONE/IDLE/RELEASED. Nacre N0002
+is next when its reviewed candidate is ready. If fewer full cells fit, request
+an immediate spec-agent window adjustment; never truncate or silently overlap.
