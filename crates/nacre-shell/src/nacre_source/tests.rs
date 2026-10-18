@@ -1078,6 +1078,308 @@ async fn actual_provider_with_pending_menu(golden: &str) {
     server.await.unwrap();
 }
 
+fn provider_config(socket: PathBuf, action: Action) -> Config {
+    let mut config = Config::new(socket, vec![]);
+    config.provider = Some((
+        "ui".into(),
+        BTreeMap::from([("ui.dispatch".into(), 1)]),
+        action,
+    ));
+    config
+}
+
+fn provider_call(id: &str) -> Message {
+    Message::Call {
+        id: Id::Text(id.into()),
+        m: "ui.dispatch".into(),
+        p: serde_json::json!({"target":"nacre","method":"launcher","args":[""]}),
+        timeout: Some(1000),
+    }
+}
+
+async fn provider_failure_exchange(
+    listener: UnixListener,
+    request_id: &'static str,
+    invocations: Arc<std::sync::atomic::AtomicUsize>,
+    request_sent: oneshot::Sender<()>,
+    verified: oneshot::Sender<()>,
+    shutdown: oneshot::Receiver<()>,
+) {
+    let (mut reader, mut writer) = accepted(&listener).await;
+    assert_eq!(next(&mut reader).await, fixture("ui")[0]);
+    framing::write(&mut writer, &provider_call(request_id))
+        .await
+        .unwrap();
+    request_sent.send(()).unwrap();
+    let Message::Ret {
+        id: failed_id,
+        reply: Reply::Err { err },
+    } = next(&mut reader).await
+    else {
+        panic!("terminal provider failure reply expected")
+    };
+    assert_eq!(failed_id, Id::Text(request_id.into()));
+    assert_eq!(err.code, nacre_protocol::ErrorCode::Internal);
+    assert_eq!(err.message, "UI handler task failed");
+    assert!(!err.retry);
+    assert_eq!(err.dispatched, Some(true));
+    assert_eq!(invocations.load(Ordering::SeqCst), 1);
+
+    let ping_id = Id::Text("ping-after-handler-failure".into());
+    framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
+        .await
+        .unwrap();
+    assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
+    framing::write(&mut writer, &provider_call("after-failure"))
+        .await
+        .unwrap();
+    assert_eq!(
+        next(&mut reader).await,
+        Message::Ret {
+            id: Id::Text("after-failure".into()),
+            reply: Reply::Ok { ok: Value::Null },
+        }
+    );
+    assert_eq!(invocations.load(Ordering::SeqCst), 2);
+    verified.send(()).unwrap();
+    let _ = shutdown.await;
+}
+
+struct ProviderFailureHarness {
+    client: Client,
+    server: tokio::task::JoinHandle<()>,
+    request_sent: Option<oneshot::Receiver<()>>,
+    verified: oneshot::Receiver<()>,
+    shutdown: Option<oneshot::Sender<()>>,
+    _lab: Lab,
+}
+
+fn start_provider_failure_harness(
+    request_id: &'static str,
+    action: Action,
+    invocations: Arc<std::sync::atomic::AtomicUsize>,
+) -> ProviderFailureHarness {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (sent_tx, sent_rx) = oneshot::channel();
+    let (verified_tx, verified_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(provider_failure_exchange(
+        listener,
+        request_id,
+        invocations,
+        sent_tx,
+        verified_tx,
+        shutdown_rx,
+    ));
+    let client = Client::start(provider_config(lab.socket(), action)).unwrap();
+    ProviderFailureHarness {
+        client,
+        server,
+        request_sent: Some(sent_rx),
+        verified: verified_rx,
+        shutdown: Some(shutdown_tx),
+        _lab: lab,
+    }
+}
+
+impl ProviderFailureHarness {
+    async fn finish(self, invocations: &std::sync::atomic::AtomicUsize) {
+        self.verified.await.unwrap();
+        assert_eq!(invocations.load(Ordering::SeqCst), 2);
+        self.client.control(true).await.unwrap();
+        let _ = self.shutdown.unwrap().send(());
+        self.server.await.unwrap();
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_factory_panic_returns_terminal_error_and_keeps_link() {
+    let invocations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = invocations.clone();
+    let action: Action = Arc::new(move |_, _| {
+        if count.fetch_add(1, Ordering::SeqCst) == 0 {
+            panic!("factory panic fixture");
+        }
+        Box::pin(async { Ok(Value::Null) })
+    });
+    let mut harness =
+        start_provider_failure_harness("factory-panic", action, invocations.clone());
+    harness.request_sent.take().unwrap().await.unwrap();
+    harness.finish(&invocations).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_future_panic_returns_terminal_error_and_keeps_link() {
+    let invocations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = invocations.clone();
+    let (started_tx, started_rx) = oneshot::channel();
+    let started_tx = Arc::new(Mutex::new(Some(started_tx)));
+    let action: Action = Arc::new(move |_, _| {
+        let first = count.fetch_add(1, Ordering::SeqCst) == 0;
+        let started_tx = started_tx.clone();
+        Box::pin(async move {
+            if first {
+                if let Some(tx) = started_tx.lock().unwrap().take() {
+                    let _ = tx.send(());
+                }
+                panic!("future panic fixture");
+            }
+            Ok(Value::Null)
+        })
+    });
+    let mut harness =
+        start_provider_failure_harness("future-panic", action, invocations.clone());
+    harness.request_sent.take().unwrap().await.unwrap();
+    started_rx.await.unwrap();
+    harness.finish(&invocations).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_cancelled_task_returns_terminal_error_without_replay() {
+    let invocations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = invocations.clone();
+    let (started_tx, started_rx) = oneshot::channel();
+    let started_tx = Arc::new(Mutex::new(Some(started_tx)));
+    let action: Action = Arc::new(move |_, _| {
+        let first = count.fetch_add(1, Ordering::SeqCst) == 0;
+        if first {
+            let tx = started_tx.lock().unwrap().take().unwrap();
+            Box::pin(async move {
+                let _ = tx.send(());
+                std::future::pending::<source::Result<Value>>().await
+            })
+        } else {
+            Box::pin(async { Ok(Value::Null) })
+        }
+    });
+    let mut harness =
+        start_provider_failure_harness("cancelled-task", action, invocations.clone());
+    harness.request_sent.take().unwrap().await.unwrap();
+    started_rx.await.unwrap();
+    let (abort_tx, abort_rx) = oneshot::channel();
+    harness
+        .client
+        .0
+        .tx
+        .try_send(Command::AbortProviderTasks(abort_tx))
+        .unwrap();
+    abort_rx.await.unwrap();
+    harness.finish(&invocations).await;
+}
+
+async fn accepted_with_boot(
+    listener: &UnixListener,
+    boot_id: &str,
+) -> (
+    framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>,
+    tokio::net::unix::OwnedWriteHalf,
+) {
+    let (stream, _) = listener.accept().await.unwrap();
+    let (read, mut writer) = stream.into_split();
+    let mut reader = framing::Reader::new(BufReader::new(read));
+    assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+    let mut welcome = welcome();
+    if let Message::Welcome { boot, .. } = &mut welcome {
+        *boot = boot_id.into();
+    }
+    framing::write(&mut writer, &welcome).await.unwrap();
+    (reader, writer)
+}
+
+struct DropNotify(Option<oneshot::Sender<()>>);
+impl Drop for DropNotify {
+    fn drop(&mut self) {
+        if let Some(tx) = self.0.take() {
+            let _ = tx.send(());
+        }
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn ui_provider_disconnect_discards_pending_task_metadata() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let invocations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (started_tx, started_rx) = oneshot::channel();
+    let started_tx = Arc::new(Mutex::new(Some(started_tx)));
+    let (release_tx, release_rx) = oneshot::channel();
+    let release_rx = Arc::new(Mutex::new(Some(release_rx)));
+    let (dropped_tx, dropped_rx) = oneshot::channel();
+    let dropped_tx = Arc::new(Mutex::new(Some(dropped_tx)));
+    let count = invocations.clone();
+    let action: Action = Arc::new(move |_, _| {
+        if count.fetch_add(1, Ordering::SeqCst) == 0 {
+            let started = started_tx.lock().unwrap().take().unwrap();
+            let release = release_rx.lock().unwrap().take().unwrap();
+            let dropped = dropped_tx.lock().unwrap().take().unwrap();
+            Box::pin(async move {
+                let _drop_notify = DropNotify(Some(dropped));
+                let _ = started.send(());
+                let _ = release.await;
+                Ok(Value::String("old-session-result".into()))
+            })
+        } else {
+            Box::pin(async { Ok(Value::Null) })
+        }
+    });
+    let (request_sent_tx, request_sent_rx) = oneshot::channel();
+    let (disconnect_tx, disconnect_rx) = oneshot::channel();
+    let (registered_tx, registered_rx) = oneshot::channel();
+    let (verified_tx, verified_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut old_reader, mut old_writer) = accepted(&listener).await;
+        assert_eq!(next(&mut old_reader).await, fixture("ui")[0]);
+        framing::write(&mut old_writer, &provider_call("old-session-id"))
+            .await
+            .unwrap();
+        request_sent_tx.send(()).unwrap();
+        disconnect_rx.await.unwrap();
+        drop(old_writer);
+        drop(old_reader);
+
+        let (mut reader, mut writer) = accepted_with_boot(&listener, "new-session-boot").await;
+        assert_eq!(next(&mut reader).await, fixture("ui")[0]);
+        assert_eq!(invocations.load(Ordering::SeqCst), 1);
+        registered_tx.send(()).unwrap();
+
+        let ping_id = Id::Text("new-boot-ping".into());
+        framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
+            .await
+            .unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
+        framing::write(&mut writer, &provider_call("new-session-id"))
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Ret {
+                id: Id::Text("new-session-id".into()),
+                reply: Reply::Ok { ok: Value::Null },
+            }
+        );
+        assert_eq!(invocations.load(Ordering::SeqCst), 2);
+        verified_tx.send(()).unwrap();
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(provider_config(lab.socket(), action)).unwrap();
+    request_sent_rx.await.unwrap();
+    started_rx.await.unwrap();
+    disconnect_tx.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), dropped_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(release_tx.send(()).is_err());
+    registered_rx.await.unwrap();
+    assert_eq!(client.status().boot.as_deref(), Some("new-session-boot"));
+    verified_rx.await.unwrap();
+    client.control(true).await.unwrap();
+    let _ = shutdown_tx.send(());
+    server.await.unwrap();
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn full_snapshots_preserve_new_null_members() {
     let lab = Lab::new();

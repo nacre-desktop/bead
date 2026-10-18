@@ -6,7 +6,7 @@ use bead::core::source::{
 use nacre_protocol::{Id, Message, Reply, framing};
 use serde_json::Value;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{
         Arc, Mutex,
@@ -133,6 +133,8 @@ enum Command {
     Stop(oneshot::Sender<source::Result<Value>>),
     #[cfg(test)]
     Wire(Message, oneshot::Sender<source::Result<Value>>),
+    #[cfg(test)]
+    AbortProviderTasks(oneshot::Sender<()>),
 }
 fn unavailable() -> Error {
     Error::new(
@@ -720,6 +722,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                     Some(Command::Reconnect(reply))=>{let _=reply.send(Ok(Value::Null));},
                     Some(Command::Call{reply,..})=>{let _=reply.send(Err(unavailable()));},
                     #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
+                    #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{let _=reply.send(());},
                     None=>break 'outer,
                 }
             }
@@ -752,7 +755,8 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
             // Initial subscription failure uses the same disconnect/backoff path.
             if sync_leases(&shared, session, &mut mirrors).await.is_ok() {
                 let mut pending = BTreeMap::<Id, Pending>::new();
-                let mut handlers: JoinSet<(Id, source::Result<Value>)> = JoinSet::new();
+                let mut handlers: JoinSet<source::Result<Value>> = JoinSet::new();
+                let mut handler_requests = HashMap::<tokio::task::Id, Id>::new();
                 loop {
                     if shared.stop.load(Ordering::Acquire) {
                         break;
@@ -787,9 +791,31 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                 if trace_menu && let Id::Integer(id)=&id { println!("MENU_RPC_SENT id={id}"); }
                             },
                             #[cfg(test)] Some(Command::Wire(message,reply))=>{let result=send(&shared,&mut session.writer,&message).await.map(|_|Value::Null);let _=reply.send(result);},
+                            #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{handlers.abort_all();let _=reply.send(());},
                             None=>break,
                         },
-                        complete=handlers.join_next(),if !handlers.is_empty()=>{if let Some(Ok((id,result)))=complete {let reply=match result {Ok(ok)=>Reply::Ok{ok},Err(e)=>Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Unavailable,e.message,e.retry).dispatch_state(true)}};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}}},
+                        complete=handlers.join_next_with_id(),if !handlers.is_empty()=>{
+                            if let Some(completion)=complete {
+                                let (task_id,result)=match completion {
+                                    Ok((task_id,result))=>(task_id,Some(result)),
+                                    Err(error)=>{
+                                        let task_id=error.id();
+                                        eprintln!("UI_PROVIDER_TASK_FAILED panic={} cancelled={}",error.is_panic(),error.is_cancelled());
+                                        (task_id,None)
+                                    },
+                                };
+                                let Some(id)=handler_requests.remove(&task_id) else {
+                                    eprintln!("UI_PROVIDER_TASK_FAILED metadata_missing=true");
+                                    continue;
+                                };
+                                let reply=match result {
+                                    Some(Ok(ok))=>Reply::Ok{ok},
+                                    Some(Err(e))=>Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Unavailable,e.message,e.retry).dispatch_state(true)},
+                                    None=>Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Internal,"UI handler task failed",false).dispatch_state(true)},
+                                };
+                                if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}
+                            }
+                        },
                         message=session.reader.next()=>{
                             let Ok(Some(message))=message else{break;};
                             match message {
@@ -809,7 +835,15 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                 },
                                 Message::Ret{id,reply}=>resolve(&mut pending,&id,reply),
                                 Message::Ping{id}=>{if send(&shared,&mut session.writer,&Message::Pong{id}).await.is_err(){break;}},
-                                Message::Call{id,m,p,timeout:limit}=>{if let Some((_,methods,handler))=&config.provider && methods.contains_key(&m)&&handlers.len()<nacre_protocol::MAX_CALLS {let future=handler(m,p);handlers.spawn(async move{(id,tokio::time::timeout(Duration::from_millis(limit.unwrap_or(1000) as u64),future).await.unwrap_or_else(|_|Err(timeout())))});continue;}
+                                Message::Call{id,m,p,timeout:limit}=>{if let Some((_,methods,handler))=&config.provider && methods.contains_key(&m)&&handlers.len()<nacre_protocol::MAX_CALLS {
+                                        let handler=handler.clone();
+                                        let task=handlers.spawn(async move{
+                                            let future=handler(m,p);
+                                            tokio::time::timeout(Duration::from_millis(limit.unwrap_or(1000) as u64),future).await.unwrap_or_else(|_|Err(timeout()))
+                                        });
+                                        handler_requests.insert(task.id(),id);
+                                        continue;
+                                    }
                                     let reply=Reply::Err{err:nacre_protocol::Failure::new(nacre_protocol::ErrorCode::UnknownMethod,"UI method unavailable",false).dispatch_state(true)};if send(&shared,&mut session.writer,&Message::Ret{id,reply}).await.is_err(){break;}},
                                 Message::Ev{..}|Message::Lost{..}|Message::Pong{..}=>{if let Some(event)=&config.event {event(&message);}},
                                 Message::Error{..}=>break,
@@ -846,6 +880,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                     Some(Command::Reconnect(reply))=>{let _=reply.send(Ok(Value::Null));break;},
                     Some(Command::Call{reply,..})=>{let _=reply.send(Err(unavailable()));},
                     #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
+                    #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{let _=reply.send(());},
                     None=>break 'outer,
                 }
             }
