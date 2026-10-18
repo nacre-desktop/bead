@@ -43,3 +43,48 @@ No runtime optimization/memory acceptance claim, new protocol/dependency or
 live desktop/install/unit/config/AI-policy changes. No sudo retry authorized here.
 Use isolated worktree, approved identity, direct normal main push, no force push,
 check exact-head CI. Private raw artifacts stay outside public Git.
+
+## Lead handoff — 2026-10-18, standing workflow installed
+
+Latest owner workflow supersedes separate terminal worker chats: lead-workflow
+skill with BUILT-IN subagents, maximum3 active, separate writer worktrees, one
+heavy job including hosted full CI. Defaults Sol6.1/medium lead, Luna/medium
+worker, explorer Luna/low; one clearer failed retry then Sol, reviewer before
+nontrivial integration, Terra second opinion for high-risk work. Existing AI
+permissions unchanged. Older visible-chat instructions are historical only.
+
+Current product state: B0001/B0004/B0005/B0006/B0007/B0008/B0009/B0010 Done;
+B0003-S source checkpoint Done, measured B0003 gated on B0002. Network and
+Bluetooth typed consumers remain capability-gated; no running-producer claim.
+
+B0011 separate implementer01a13c5f-bf69-7cd3-bc54-6c176ea0aabd finishes current
+Battery task then retires without new assignments. At the final handoff refresh, main advanced through72c43f6,6f816eb and4e8ad73
+(private lifecycle synchronization/lease follow-ups). CI39141528958/72c43f6
+FAILED; CI39141806219/6f816eb was in progress. Verify exact current head and
+latest run rather than treating any of these as accepted. Earlierbf02b13 /
+39140928302 and4dac3b3/39139295854 also FAILED; don't claim them green. Worker must submit final exact-head evidence
+for review; if another failure, preserve source and escalate to built-in Sol
+rather than repeat Luna guesses. No shared-lab Bead work is active/authorized.
+
+Owner installed wayland-utils; missing-wayland-info/sudo blocker is SUPERSEDED.
+Priority now: Nacre F4 publication, reviewed owner switch-on/rollback plan, THEN
+BeadB0002/B0003 captures, then core-service implementations. B0002 therefore waits
+scheduling, not package installation. Preserve frozen1cff9d1 runtime artifact and
+helper5f4; later Battery/Network/Bluetooth sources are not silently substituted.
+
+Nacre N0002 separate worker01a14f98-71e5-7131-98cc-f9dbd3ff4561 holds conditional
+15:30–18:30UTC window; capture source/mock held-child containment gate is still
+outstanding at last report. Both retiring peers explicitly ACKed IDLE. No
+capture payload can overlap Bead hostedCI. Lead must verify current CI/workers,
+not infer idle from window expiry. Capture requires explicit exact artifact/host/
+window grant,>=4GiB available start/abort<2GiB, verified private2GiB/swap0scope
+and external watchdog; only own processes may be stopped. No new Bead heavyCI
+while N2 capture is armed; batch documentation pushes to avoid unwanted suites.
+
+Next: obtain B0011 exact-head result and reviewer disposition; finish/retire that
+chat. After F4/plan gates, schedule B2 five alternating pairs per compositor
+using corrected capture windows/keeper/guard, then B3 measured work. Use built-in
+workers with one spec/worktree each; no new separate terminal chats. Preserve
+all parked drafts and raw evidence. No package/live UI/config/unit action or
+performance acceptance inferred from this handoff. Docs-only [skip ci] here
+prevents an unintended full suite; code checks remain required.
