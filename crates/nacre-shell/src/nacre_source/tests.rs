@@ -2699,7 +2699,10 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
             }));
             tokio::time::timeout(Duration::from_secs(5), async {
                 loop {
-                    let event = receive.recv().await.expect("Runtime callback channel closed");
+                    let event = receive
+                        .recv()
+                        .await
+                        .expect("Runtime callback channel closed");
                     assert!(matches!(&event, UiEvent::Model(_)));
                     let _ = runtime.stage(event).unwrap();
                     let snapshot = publisher.snapshot();
