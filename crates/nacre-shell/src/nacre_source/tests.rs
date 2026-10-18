@@ -1126,9 +1126,14 @@ async fn provider_failure_exchange(
     assert_eq!(invocations.load(Ordering::SeqCst), 1);
 
     let ping_id = Id::Text("ping-after-handler-failure".into());
-    framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
-        .await
-        .unwrap();
+    framing::write(
+        &mut writer,
+        &Message::Ping {
+            id: ping_id.clone(),
+        },
+    )
+    .await
+    .unwrap();
     assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
     framing::write(&mut writer, &provider_call("after-failure"))
         .await
@@ -1203,8 +1208,7 @@ async fn ui_provider_factory_panic_returns_terminal_error_and_keeps_link() {
         }
         Box::pin(async { Ok(Value::Null) })
     });
-    let mut harness =
-        start_provider_failure_harness("factory-panic", action, invocations.clone());
+    let mut harness = start_provider_failure_harness("factory-panic", action, invocations.clone());
     harness.request_sent.take().unwrap().await.unwrap();
     harness.finish(&invocations).await;
 }
@@ -1228,8 +1232,7 @@ async fn ui_provider_future_panic_returns_terminal_error_and_keeps_link() {
             Ok(Value::Null)
         })
     });
-    let mut harness =
-        start_provider_failure_harness("future-panic", action, invocations.clone());
+    let mut harness = start_provider_failure_harness("future-panic", action, invocations.clone());
     harness.request_sent.take().unwrap().await.unwrap();
     started_rx.await.unwrap();
     harness.finish(&invocations).await;
@@ -1253,8 +1256,7 @@ async fn ui_provider_cancelled_task_returns_terminal_error_without_replay() {
             Box::pin(async { Ok(Value::Null) })
         }
     });
-    let mut harness =
-        start_provider_failure_harness("cancelled-task", action, invocations.clone());
+    let mut harness = start_provider_failure_harness("cancelled-task", action, invocations.clone());
     harness.request_sent.take().unwrap().await.unwrap();
     started_rx.await.unwrap();
     let (abort_tx, abort_rx) = oneshot::channel();
@@ -1345,9 +1347,14 @@ async fn ui_provider_disconnect_discards_pending_task_metadata() {
         registered_tx.send(()).unwrap();
 
         let ping_id = Id::Text("new-boot-ping".into());
-        framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
-            .await
-            .unwrap();
+        framing::write(
+            &mut writer,
+            &Message::Ping {
+                id: ping_id.clone(),
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
         framing::write(&mut writer, &provider_call("new-session-id"))
             .await
