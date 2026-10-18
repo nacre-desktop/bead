@@ -642,17 +642,6 @@ async fn network_core_lease_exists_only_for_open_runtime() {
             },
             "retiring the view must release only its topic lease"
         );
-        // A peer that sends after Unsub must not wake the retired view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "network".into(),
-                seq: 1,
-                data: network,
-            },
-        )
-        .await
-        .unwrap();
         framing::write(
             &mut w,
             &Message::Ping {
@@ -684,6 +673,17 @@ async fn network_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected message while checking shared link: {message:?}"),
             }
         }
+        // A peer that sends after Unsub must not wake the retired view.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "network".into(),
+                seq: 1,
+                data: network,
+            },
+        )
+        .await
+        .unwrap();
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
@@ -834,17 +834,6 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
             },
             "retiring the view must release only its topic lease"
         );
-        // A peer that sends after Unsub must not wake the retired view.
-        framing::write(
-            &mut w,
-            &Message::Snap {
-                topic: "bluetooth".into(),
-                seq: 1,
-                data: bluetooth,
-            },
-        )
-        .await
-        .unwrap();
         framing::write(
             &mut w,
             &Message::Ping {
@@ -876,6 +865,17 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected message while checking shared link: {message:?}"),
             }
         }
+        // A peer that sends after Unsub must not wake the retired view.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "bluetooth".into(),
+                seq: 1,
+                data: bluetooth,
+            },
+        )
+        .await
+        .unwrap();
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
