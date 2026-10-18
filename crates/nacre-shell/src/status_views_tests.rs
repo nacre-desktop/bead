@@ -271,12 +271,18 @@ fn network_core_primary_is_explicit_not_map_order() -> Result<()> {
     let values = Status::core_network(source).project();
     assert_eq!(text_value(&values, "status.primary"), "Ethernet");
     assert_eq!(text_value(&values, "status.secondary"), "Wi-Fi on");
-    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Connection controls unavailable"
+    );
     assert_eq!(values["status.ready"], Value::Bool(true));
     assert_eq!(values["status.active"], Value::Bool(true));
 
     let mut no_primary = core_network();
-    no_primary.as_object_mut().unwrap().remove("primary_connection");
+    no_primary
+        .as_object_mut()
+        .unwrap()
+        .remove("primary_connection");
     let values = Status::core_network(Arc::new(FakeSource::new(no_primary)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "Not connected");
     assert_eq!(values["status.ready"], Value::Bool(true));
@@ -288,12 +294,18 @@ fn network_core_signal_requires_primary_ap_mapping() -> Result<()> {
     let mut state = core_network();
     state["access_points"]["items"]["ap0"]["strength"] = serde_json::json!(77);
     state["access_points"]["items"]["ap0"]["connection"] = serde_json::json!("wired");
+    state["access_points"]["items"]["ap1"] = serde_json::json!({
+        "device":"wifi0","name":"First matching AP","strength":32,
+        "secured":true,"active":true,"connection":"wifi-connection"
+    });
+    state["access_points"]["order"] = serde_json::json!(["ap1", "ap0"]);
     let values = Status::core_network(Arc::new(FakeSource::new(state.clone())?)).project();
-    assert_eq!(text_value(&values, "status.primary"), "Wi-Fi profile");
-    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+    assert_eq!(text_value(&values, "status.primary"), "First matching AP");
+    assert_eq!(text_value(&values, "status.detail"), "Signal strength 32%");
 
-    state["access_points"]["items"]["ap0"]["connection"] =
-        serde_json::json!("wifi-connection");
+    state["access_points"]["items"].as_object_mut().unwrap().remove("ap1");
+    state["access_points"]["order"] = serde_json::json!(["ap0"]);
+    state["access_points"]["items"]["ap0"]["connection"] = serde_json::json!("wifi-connection");
     state["access_points"]["items"]["ap0"]["strength"] = serde_json::json!(0);
     let values = Status::core_network(Arc::new(FakeSource::new(state)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "Home Wi-Fi");
@@ -303,22 +315,31 @@ fn network_core_signal_requires_primary_ap_mapping() -> Result<()> {
 
 #[test]
 fn network_core_unknown_or_invalid_state_never_becomes_zero() -> Result<()> {
-    let missing_topic = Status::core_network(Arc::new(FakeSource::new(serde_json::json!({}))?))
-        .project();
+    let missing_topic =
+        Status::core_network(Arc::new(FakeSource::new(serde_json::json!({}))?)).project();
     assert_eq!(missing_topic["status.ready"], Value::Bool(false));
-    assert_eq!(text_value(&missing_topic, "status.primary"), "Network unavailable");
+    assert_eq!(
+        text_value(&missing_topic, "status.primary"),
+        "Network unavailable"
+    );
     assert_eq!(
         text_value(&missing_topic, "status.secondary"),
         "Status data unavailable"
     );
 
     let mut no_primary = core_network();
-    no_primary.as_object_mut().unwrap().remove("primary_connection");
+    no_primary
+        .as_object_mut()
+        .unwrap()
+        .remove("primary_connection");
     no_primary["wireless_enabled"] = serde_json::json!(false);
     let values = Status::core_network(Arc::new(FakeSource::new(no_primary)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "Not connected");
     assert_eq!(text_value(&values, "status.secondary"), "Wi-Fi off");
-    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Connection controls unavailable"
+    );
 
     let mut invalid_strength = core_network();
     invalid_strength["access_points"]["items"]["ap0"]["strength"] = serde_json::json!(101);
@@ -399,11 +420,7 @@ fn network_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
 
 #[test]
 fn network_legacy_preview_remains_unchanged() -> Result<()> {
-    let values = Status::new(
-        Kind::Network,
-        Arc::new(FakeSource::new(data())?),
-    )
-    .project();
+    let values = Status::new(Kind::Network, Arc::new(FakeSource::new(data())?)).project();
     assert_eq!(values["status.ready"], Value::Bool(true));
     assert_eq!(values["status.active"], Value::Bool(true));
     assert_eq!(text_value(&values, "status.primary"), "Fixture network");

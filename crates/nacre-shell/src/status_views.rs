@@ -5,11 +5,7 @@ use bead::core::{
     source::{self, Source},
 };
 use nacre_protocol::core_services::{CoreSnapshot, NetworkState};
-use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    sync::Arc,
-};
+use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -228,12 +224,14 @@ impl Status {
         display.insert("status.ready".into(), Value::Bool(false));
         display.insert(
             "status.secondary".into(),
-            Value::Text(if cached.is_some() {
-                "Status stale"
-            } else {
-                "Status data unavailable"
-            }
-            .into()),
+            Value::Text(
+                if cached.is_some() {
+                    "Status stale"
+                } else {
+                    "Status data unavailable"
+                }
+                .into(),
+            ),
         );
         display.insert("status.heading".into(), Value::Text("Network".into()));
         display.insert("status.icon".into(), Value::Text("wifi".into()));
@@ -273,7 +271,10 @@ fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
     BTreeMap::from([
         ("status.primary".into(), Value::Text(line(primary_text, 32))),
         ("status.detail".into(), Value::Text(line(&detail, 48))),
-        ("status.active".into(), Value::Bool(primary.is_some() || state.wireless_enabled)),
+        (
+            "status.active".into(),
+            Value::Bool(primary.is_some() || state.wireless_enabled),
+        ),
     ])
 }
 

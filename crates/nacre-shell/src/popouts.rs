@@ -101,15 +101,11 @@ pub fn status(
                 (*colors).clone(),
                 cold.clone(),
             );
-            let typed_network = matches!(kind, crate::status_views::Kind::Network)
-                && client.is_some();
+            let typed_network =
+                matches!(kind, crate::status_views::Kind::Network) && client.is_some();
             let source: Arc<dyn bead::core::source::Source> = if typed_network {
                 let client = client.as_ref().ok_or("daemon client unavailable")?;
-                Arc::new(
-                    client
-                        .lease_topic("network")
-                        .map_err(|e| e.to_string())?,
-                )
+                Arc::new(client.lease_topic("network").map_err(|e| e.to_string())?)
             } else {
                 let desktop = owner.get().cloned().ok_or("bar services not ready")?;
                 Arc::new(

@@ -697,14 +697,13 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         "a retired Runtime must receive no callback after its lease is released"
     );
     client
-        .call(
-            "daemon.ping".into(),
-            Value::Null,
-            Duration::from_secs(1),
-        )
+        .call("daemon.ping".into(), Value::Null, Duration::from_secs(1))
         .await
         .unwrap();
-    assert!(client.status().boot.is_some(), "the shared client stays connected");
+    assert!(
+        client.status().boot.is_some(),
+        "the shared client stays connected"
+    );
     drop(spec);
     Source::stop(&client).await.unwrap();
     server.await.unwrap();
