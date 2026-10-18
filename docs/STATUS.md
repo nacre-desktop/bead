@@ -1,10 +1,14 @@
 # Status
 
-## 2026-10-18 — B0009 in progress
+## 2026-10-18 — B0009 submitted for review
 
-The Network popout will consume the shared daemon client only while its panel
-Runtime is open. The implementation is limited to validated read-only display;
-legacy preview behavior remains for runs without a daemon client.
+The Network popout lazily leases the shared daemon topic and displays only a
+validated, explicitly mapped primary connection. Stale data retains a bounded
+last-good display; Runtime retirement releases the lease without closing the
+shared client. Legacy preview behavior is unchanged. Named projection and
+private fake-daemon lifecycle tests pass. Exact-head CI `39132356640` is green
+at `b58041a`; validation was hosted-only. No lab, capture, memory or latency
+claim. Runtime display remains unavailable until Nacre advertises the topic.
 
 ## 2026-10-18 — B0008 submitted for review
 

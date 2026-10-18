@@ -3,7 +3,7 @@
 - ID: B0009
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress
+- Status: Review
 - Depends on: published network contract at Nacre5f4c0bf3; Bead B0008 Done
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours
@@ -95,12 +95,26 @@ peer pause,>=4GiB available,abort<2GiB,private capped scope; no host overlap.
 
 ## Acceptance criteria
 
-- [ ] Existing Network popout lazily consumes shared daemon network lease.
-- [ ] Narrow validated decoding; explicit primary/AP mapping, no fabricated signal.
-- [ ] Unsupported/stale/disconnected/invalid data honest; recovery atomic.
-- [ ] Only bounded display cache; release callbacks/leases at Runtime drop.
-- [ ] Legacy no-client preview and Bluetooth/battery unchanged; no network action.
-- [ ] Named private tests,fmt,Clippy and exact-head full CI green.
+- [x] Existing Network popout lazily consumes shared daemon network lease.
+- [x] Narrow validated decoding; explicit primary/AP mapping, no fabricated signal.
+- [x] Unsupported/stale/disconnected/invalid data honest; recovery atomic.
+- [x] Only bounded display cache; release callbacks/leases at Runtime drop.
+- [x] Legacy no-client preview and Bluetooth/battery unchanged; no network action.
+- [x] Named private tests,fmt,Clippy and exact-head full CI green.
+
+## Implementation evidence
+
+The implementation is `b58041a` (following start commit `be4305c`); exact-head
+hosted CI run `39132356640` passed. The named projection tests verify explicit
+primary selection rather than map order, AP signal only when its connection
+matches primary, malformed/unknown data never becoming zero, stale disconnect
+retention and atomic recovery, and unchanged legacy preview. The private fake
+daemon test verifies the network subscription is absent before opening, added
+when the panel Runtime opens, and removed when it drops while the shared client
+remains usable and no later callback is delivered. Validation ran in hosted CI;
+no local build, lab session, capture, memory measurement or latency claim was
+made. The code consumes the published schema but does not advertise runtime
+availability; the view stays unavailable until Nacre publishes the producer.
 
 ## Stop conditions
 
