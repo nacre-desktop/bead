@@ -588,6 +588,7 @@ fn bluetooth_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
     assert_eq!(text_value(&stale, "status.secondary"), "Status stale");
 
     let mut recovered = core_bluetooth();
+    recovered["adapters"]["items"]["adapter-on-a"]["powered"] = serde_json::json!(false);
     recovered["adapters"]["items"]["adapter-on-b"]["powered"] = serde_json::json!(false);
     source.publish(recovered)?;
     let current = status.project();
