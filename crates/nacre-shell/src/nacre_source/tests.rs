@@ -697,7 +697,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         "a retired Runtime must receive no callback after its lease is released"
     );
     client
-        .call("daemon.ping".into(), Value::Null, Duration::from_secs(1))
+        .call("daemon.ping".into(), serde_json::json!({}), Duration::from_secs(1))
         .await
         .unwrap();
     assert!(
