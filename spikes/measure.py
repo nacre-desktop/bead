@@ -4,6 +4,7 @@
 SPDX-License-Identifier: MIT OR Apache-2.0
 """
 import argparse
+import importlib.util
 import json
 import os
 import pathlib
@@ -17,6 +18,11 @@ import sys
 import tempfile
 import time
 import threading
+
+_capture_safety_spec = importlib.util.spec_from_file_location(
+    'capture_safety', pathlib.Path(__file__).resolve().with_name('capture_safety.py'))
+capture_safety = importlib.util.module_from_spec(_capture_safety_spec)
+_capture_safety_spec.loader.exec_module(capture_safety)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -457,11 +463,27 @@ def main():
     p.add_argument('--panel', action='store_true', help='Static Feature 2 loaded-font panel, nested only')
     p.add_argument('--modes', nargs='+', default=None)
     p.add_argument('--in-private-bus', action='store_true')
+    p.add_argument('--capture-guard-child', action='store_true', help=argparse.SUPPRESS)
+    p.add_argument('--capture-guard-ready-file', type=pathlib.Path, help=argparse.SUPPRESS)
+    p.add_argument('--capture-guard-release-file', type=pathlib.Path, help=argparse.SUPPRESS)
     args = p.parse_args()
     if args.physical_pacing and not (args.bar_ui and args.parent == 'desktop' and args.compositor == 'niri' and os.environ.get('BEAD_PHYSICAL_NIRI_APPROVED') == '1'):
         p.error('Physical pacing requires --bar-ui --parent desktop --compositor niri and explicit owner approval')
     if args.modes is None:args.modes=['cpu','femtovg','vello','qml'] if args.retained else ['tiny-skia','vello','femtovg','qml']
     if (args.retained or args.reload_test or args.qml_reload_test or args.demo_test) and args.parent!='headless':p.error('Retained comparison is private only; live desktop needs separate owner approval')
+    try:
+        capture_safety.require_wayland_info()
+    except capture_safety.CaptureSafetyError as error:
+        p.error(str(error))
+    if args.capture_guard_child:
+        if not args.capture_guard_ready_file or not args.capture_guard_release_file:
+            p.error('capture guard child requires its parent readiness gate')
+        capture_safety.wait_for_release(args.capture_guard_ready_file, args.capture_guard_release_file)
+    else:
+        raw_root = pathlib.Path(os.environ.get('BEAD_RAW_DIR', str(ROOT / 'spikes/results/raw')))
+        report = raw_root / f'{args.compositor}-capture-safety.json'
+        return capture_safety.run_guarded(
+            [sys.executable, __file__, *sys.argv[1:]], report_path=report, env=os.environ.copy())
     if not args.in_private_bus:
         # D-Bus activation inherits its daemon's environment: isolate XDG BEFORE
         # starting the bus, not just before launching its clients.
@@ -478,7 +500,7 @@ def main():
                 path.mkdir(mode=0o700)
                 env[key]=str(path)
             env['XDG_DATA_DIRS']='/usr/local/share:/usr/share'
-            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', *(['--physical-pacing'] if args.physical_pacing else []), '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--bar-ui'] if args.bar_ui else []),*(['--bar-reference'] if args.bar_reference else []),*(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
+            return subprocess.call(['dbus-run-session', '--', sys.executable, __file__, '--in-private-bus', '--capture-guard-child', '--capture-guard-ready-file', str(args.capture_guard_ready_file), '--capture-guard-release-file', str(args.capture_guard_release_file), *(['--physical-pacing'] if args.physical_pacing else []), '--seconds', str(args.seconds), '--runs', str(args.runs), '--compositor',args.compositor,'--parent',args.parent, *(['--bar-ui'] if args.bar_ui else []),*(['--bar-reference'] if args.bar_reference else []),*(['--lifecycle'] if args.lifecycle else []),*(['--retained'] if args.retained else []),*(['--reload-test'] if args.reload_test else []),*(['--qml-reload-test'] if args.qml_reload_test else []),*(['--demo-test'] if args.demo_test else []),'--layouts',*args.layouts,'--renderer',args.renderer,*(['--animate'] if args.animate else []),*(['--content-size'] if args.content_size else []),*(['--virtual120'] if args.virtual120 else []),*(['--panel'] if args.panel else []),*(['--palette',str(args.palette)] if args.palette else []),'--modes', *args.modes],env=env)
     raw = pathlib.Path(os.environ.get('BEAD_RAW_DIR', str(ROOT / 'spikes/results/raw')))
     if args.retained:raw=raw/('retained-'+args.compositor)
     elif 'bead' in args.modes: raw=raw/(args.compositor+'-panel' if args.panel else args.compositor)
