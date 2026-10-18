@@ -9,7 +9,7 @@ Updated2026-10-18. [Standing rules](https://github.com/nacre-desktop/nacre/blob/
 | 1b | [B0005 windows](0005-dashboard-capture-window-correctness.md) | Done | Eleven hosted mocked tests accepted with B0006 |
 | 1c | [B0006 keeper](0006-dashboard-keyboard-keeper-lifetime.md) | Done | Review410bf09/CI39081728470green |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | In progress | Active capture grant; guarded preflight then five pairs/compositor |
-| 3 | [B0003 typing](0003-launcher-typing-investigation.md) | In progress source phase | B0003-S pure serial-key parser/tests now; measurements after B0002 pass |
+| 3 | [B0003 typing](0003-launcher-typing-investigation.md) | In progress (B0003-S) | Extract serial-key trace validation and add synthetic-log tests; no capture |
 
 Incident CLOSED by owner2026-10-18: likely lost Codex connection; no OOM/oomd
 kills or relevant kernel crash attribution. Worktrees and artifacts preserved.

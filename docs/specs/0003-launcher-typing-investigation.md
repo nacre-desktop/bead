@@ -3,7 +3,7 @@
 - ID: B0003
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Ready (source phase accepted; measured steps after B0002 pass)
+- Status: In progress (B0003-S pure trace parser and tests)
 - Depends on: source-only preparation eligible now after B0004 Done; captures require B0001/B0002 Done and exclusive grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
