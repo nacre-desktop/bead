@@ -44,7 +44,7 @@ fn core_network() -> serde_json::Value {
         "primary_connection":"wifi-connection"
     })
 }
-fn text_value(values: &BTreeMap<String, Value>, key: &str) -> &str {
+fn text_value<'a>(values: &'a BTreeMap<String, Value>, key: &str) -> &'a str {
     let Value::Text(value) = &values[key] else {
         panic!("{key} must be text")
     };
@@ -379,7 +379,7 @@ fn network_core_unknown_or_invalid_state_never_becomes_zero() -> Result<()> {
             id.clone(),
             serde_json::json!({"name":"Device","kind":"wireless","connected":false}),
         );
-        order.push(id);
+        order.push(serde_json::json!(id));
     }
     oversized["devices"] = serde_json::json!({"items":items,"order":order});
     let values = Status::core_network(Arc::new(FakeSource::new(oversized)?)).project();

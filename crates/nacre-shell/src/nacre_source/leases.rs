@@ -20,6 +20,14 @@ pub(super) struct Wanted {
     pub resync: bool,
 }
 impl Registry {
+    #[cfg(test)]
+    pub(super) fn has_topic(&self, name: &str) -> bool {
+        self.records
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .contains_key(name)
+    }
+
     pub fn wanted(&self) -> BTreeMap<String, Wanted> {
         self.records
             .lock()

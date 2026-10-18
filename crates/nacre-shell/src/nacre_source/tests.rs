@@ -576,7 +576,7 @@ async fn page_lease_resubscribes_on_boot_and_drop_unsubscribes() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn network_core_lease_exists_only_for_open_runtime() {
-    use bead::wayland::{SceneSource, UiEvent};
+    use bead::wayland::UiEvent;
     use std::{
         path::Path,
         sync::{OnceLock, mpsc},
@@ -662,7 +662,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
     let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
     let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
     let scale: Value =
-        serde_json::from_str(include_str!("../../bead-ui/assets/size-scale.json")).unwrap();
+        serde_json::from_str(include_str!("../../../bead-ui/assets/size-scale.json")).unwrap();
     let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
     let spec = crate::popouts::status(
         crate::status_views::Kind::Network,
@@ -674,7 +674,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
         false,
     )
     .unwrap();
-    assert!(client.0.shared.leases.records.lock().unwrap().is_empty());
+    assert!(!client.0.shared.leases.has_topic("network"));
 
     let mut runtime = (spec.factory)(true).unwrap();
     let (send, receive) = mpsc::channel();
@@ -686,7 +686,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
     assert!(runtime.stage(event).unwrap().is_some());
     drop(runtime);
     tokio::time::timeout(Duration::from_secs(5), async {
-        while !client.0.shared.leases.records.lock().unwrap().is_empty() {
+        while client.0.shared.leases.has_topic("network") {
             tokio::time::sleep(Duration::from_millis(2)).await;
         }
     })
