@@ -1451,10 +1451,7 @@ async fn fill_provider_pool(
 ) {
     let max_calls = nacre_protocol::MAX_CALLS;
     for slot in 0..max_calls {
-        framing::write(
-            writer,
-            &provider_slot_call(&format!("slot-{slot}"), slot),
-        )
+        framing::write(writer, &provider_slot_call(&format!("slot-{slot}"), slot))
         .await
         .unwrap();
     }
@@ -1477,12 +1474,7 @@ async fn assert_provider_results_unordered(
 ) {
     let expected: BTreeMap<_, _> = expected_slots
         .into_iter()
-        .map(|slot| {
-            (
-                format!("slot-{slot}"),
-                Value::from(slot as u64),
-            )
-        })
+        .map(|slot| (format!("slot-{slot}"), Value::from(slot as u64)))
         .collect();
     let mut actual = BTreeMap::new();
     for _ in 0..expected.len() {
@@ -1510,7 +1502,10 @@ async fn ui_provider_full_pool_returns_busy_without_dispatch() {
         let (mut reader, mut writer) = accepted(&listener).await;
         assert_eq!(next(&mut reader).await, fixture("ui")[0]);
         fill_provider_pool(&mut writer, &mut started, &invocations).await;
-        framing::write(&mut writer, &provider_slot_call("overload", nacre_protocol::MAX_CALLS))
+        framing::write(
+            &mut writer,
+            &provider_slot_call("overload", nacre_protocol::MAX_CALLS),
+        )
             .await
             .unwrap();
         assert_eq!(
@@ -1522,7 +1517,10 @@ async fn ui_provider_full_pool_returns_busy_without_dispatch() {
                 true,
             )
         );
-        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS);
+        assert_eq!(
+            invocations.load(Ordering::SeqCst),
+            nacre_protocol::MAX_CALLS
+        );
         for release in releases.iter_mut().take(nacre_protocol::MAX_CALLS) {
             release.take().unwrap().send(()).unwrap();
         }
@@ -1569,7 +1567,10 @@ async fn ui_provider_unknown_method_is_not_dispatched_at_capacity() {
                 false,
             )
         );
-        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS);
+        assert_eq!(
+            invocations.load(Ordering::SeqCst),
+            nacre_protocol::MAX_CALLS
+        );
         for release in releases.iter_mut().take(nacre_protocol::MAX_CALLS) {
             release.take().unwrap().send(()).unwrap();
         }
@@ -1596,7 +1597,10 @@ async fn ui_provider_completion_frees_one_admission_slot() {
         let (mut reader, mut writer) = accepted(&listener).await;
         assert_eq!(next(&mut reader).await, fixture("ui")[0]);
         fill_provider_pool(&mut writer, &mut started, &invocations).await;
-        framing::write(&mut writer, &provider_slot_call("rejected", nacre_protocol::MAX_CALLS))
+        framing::write(
+            &mut writer,
+            &provider_slot_call("rejected", nacre_protocol::MAX_CALLS),
+        )
             .await
             .unwrap();
         assert_eq!(
@@ -1608,7 +1612,10 @@ async fn ui_provider_completion_frees_one_admission_slot() {
                 true,
             )
         );
-        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS);
+        assert_eq!(
+            invocations.load(Ordering::SeqCst),
+            nacre_protocol::MAX_CALLS
+        );
 
         releases[0].take().unwrap().send(()).unwrap();
         assert_eq!(
@@ -1633,7 +1640,10 @@ async fn ui_provider_completion_frees_one_admission_slot() {
                 .unwrap(),
             nacre_protocol::MAX_CALLS
         );
-        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS + 1);
+        assert_eq!(
+            invocations.load(Ordering::SeqCst),
+            nacre_protocol::MAX_CALLS + 1
+        );
         releases[nacre_protocol::MAX_CALLS]
             .take()
             .unwrap()
@@ -1653,11 +1663,19 @@ async fn ui_provider_completion_frees_one_admission_slot() {
         }
         assert_provider_results_unordered(&mut reader, 1..nacre_protocol::MAX_CALLS).await;
         let ping_id = Id::Text("after-admission".into());
-        framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
+        framing::write(
+            &mut writer,
+            &Message::Ping {
+                id: ping_id.clone(),
+            },
+        )
             .await
             .unwrap();
         assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
-        assert_eq!(invocations.load(Ordering::SeqCst), nacre_protocol::MAX_CALLS + 1);
+        assert_eq!(
+            invocations.load(Ordering::SeqCst),
+            nacre_protocol::MAX_CALLS + 1
+        );
         verified_tx.send(()).unwrap();
         let _ = shutdown_rx.await;
     });
@@ -1690,7 +1708,12 @@ async fn ui_provider_missing_provider_returns_unknown_method_undispatched() {
             )
         );
         let ping_id = Id::Text("missing-provider-link".into());
-        framing::write(&mut writer, &Message::Ping { id: ping_id.clone() })
+        framing::write(
+            &mut writer,
+            &Message::Ping {
+                id: ping_id.clone(),
+            },
+        )
             .await
             .unwrap();
         assert_eq!(next(&mut reader).await, Message::Pong { id: ping_id });
