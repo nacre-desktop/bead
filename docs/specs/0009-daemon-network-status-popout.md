@@ -3,7 +3,7 @@
 - ID: B0009
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review
+- Status: Done
 - Depends on: published network contract at Nacre5f4c0bf3; Bead B0008 Done
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours
@@ -141,3 +141,7 @@ vulnerability/unsoundness to owner. No implicit measurement grant.
 B0009 Review: start/final commits, changed files, named test/CI evidence, fixture
 primary mapping and lease/drop proof, capability-gated runtime limitation and
 cleanup. Keep private raw paths outside Git; hosted-only validation stated honestly.
+
+## Spec review
+
+Accepted bd7bf56, source/test head5d96384 and exact-head CI39134388246 /39133884809. Explicit primary/AP selection, narrow validated decoding and open-runtime lease ownership satisfy the contract. No measurement or running-producer claim is accepted or required.
