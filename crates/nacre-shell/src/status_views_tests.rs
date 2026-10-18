@@ -44,6 +44,22 @@ fn core_network() -> serde_json::Value {
         "primary_connection":"wifi-connection"
     })
 }
+fn core_bluetooth() -> serde_json::Value {
+    serde_json::json!({
+        "health":{"available":true,"stale":false},
+        "adapters":{"items":{
+            "adapter-off":{"name":"Off adapter","powered":false,"discovering":false},
+            "adapter-on-a":{"name":"Adapter A","powered":true,"discovering":false},
+            "adapter-on-b":{"name":"Adapter B","powered":true,"discovering":false}
+        },"order":["adapter-on-a","adapter-off","adapter-on-b"]},
+        "devices":{"items":{
+            "a-empty":{"adapter":"adapter-on-b","name":"","connected":true,"paired":true,"trusted":false,"pairing":false},
+            "m-first":{"adapter":"adapter-on-a","name":"Headphones Studio","connected":true,"paired":true,"trusted":true,"pairing":false,"battery":82},
+            "z-off":{"adapter":"adapter-off","name":"Off device","connected":true,"paired":true,"trusted":false,"pairing":false},
+            "paired-only":{"adapter":"adapter-on-a","name":"Paired only","connected":false,"paired":true,"trusted":true,"pairing":false}
+        },"order":["m-first","a-empty","z-off","paired-only"]}
+    })
+}
 fn text_value<'a>(values: &'a BTreeMap<String, Value>, key: &str) -> &'a str {
     let Value::Text(value) = &values[key] else {
         panic!("{key} must be text")
@@ -429,5 +445,144 @@ fn network_legacy_preview_remains_unchanged() -> Result<()> {
     assert_eq!(text_value(&values, "status.primary"), "Fixture network");
     assert_eq!(text_value(&values, "status.secondary"), "Wi-Fi on");
     assert_eq!(text_value(&values, "status.detail"), "Signal strength 86%");
+    Ok(())
+}
+
+#[test]
+fn bluetooth_core_power_and_connected_order() -> Result<()> {
+    let values = Status::core_bluetooth(Arc::new(FakeSource::new(core_bluetooth())?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    assert_eq!(values["status.active"], Value::Bool(true));
+    assert_eq!(text_value(&values, "status.primary"), "Headphones Studio");
+    assert_eq!(text_value(&values, "status.secondary"), "Bluetooth on");
+    assert_eq!(text_value(&values, "status.detail"), "2 connected devices");
+
+    let mut reversed = core_bluetooth();
+    reversed["devices"]["order"] = serde_json::json!(
+        ["a-empty", "m-first", "z-off", "paired-only"]
+    );
+    let values = Status::core_bluetooth(Arc::new(FakeSource::new(reversed)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Connected device");
+
+    let mut empty = core_bluetooth();
+    for device in empty["devices"]["items"].as_object_mut().unwrap().values_mut() {
+        device["connected"] = serde_json::json!(false);
+    }
+    let values = Status::core_bluetooth(Arc::new(FakeSource::new(empty)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "No connected devices");
+    assert_eq!(text_value(&values, "status.secondary"), "Bluetooth on");
+    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+
+    let mut off = core_bluetooth();
+    off["adapters"]["items"]["adapter-on-a"]["powered"] = serde_json::json!(false);
+    off["adapters"]["items"]["adapter-on-b"]["powered"] = serde_json::json!(false);
+    let values = Status::core_bluetooth(Arc::new(FakeSource::new(off)?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    assert_eq!(values["status.active"], Value::Bool(false));
+    assert_eq!(text_value(&values, "status.primary"), "Bluetooth off");
+    assert_eq!(text_value(&values, "status.secondary"), "Bluetooth off");
+    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+
+    let mut controls = core_bluetooth();
+    controls["devices"]["items"]["m-first"]["name"] =
+        serde_json::json!("Headphones\nStudio\u{0007}");
+    let values = Status::core_bluetooth(Arc::new(FakeSource::new(controls)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Headphones Studio ");
+
+    let mut long_name = core_bluetooth();
+    long_name["devices"]["items"]["m-first"]["name"] = serde_json::json!("A".repeat(40));
+    let values = Status::core_bluetooth(Arc::new(FakeSource::new(long_name)?)).project();
+    let primary = text_value(&values, "status.primary");
+    assert_eq!(primary.chars().count(), 33);
+    assert!(primary.ends_with('…'));
+    Ok(())
+}
+
+#[test]
+fn bluetooth_core_invalid_is_not_powered_off() -> Result<()> {
+    let missing_topic = Status::core_bluetooth(Arc::new(FakeSource::new(serde_json::json!({}))?))
+        .project();
+    assert_eq!(missing_topic["status.ready"], Value::Bool(false));
+    assert_eq!(text_value(&missing_topic, "status.primary"), "Bluetooth unavailable");
+    assert_eq!(
+        text_value(&missing_topic, "status.secondary"),
+        "Status data unavailable"
+    );
+
+    let mut dangling = core_bluetooth();
+    dangling["devices"]["items"]["m-first"]["adapter"] = serde_json::json!("missing");
+    let mut cases = vec![dangling];
+
+    let mut oversized = core_bluetooth();
+    let mut items = serde_json::Map::new();
+    let mut order = Vec::new();
+    for index in 0..2049 {
+        let id = format!("adapter-{index}");
+        items.insert(
+            id.clone(),
+            serde_json::json!({"name":"Adapter","powered":true,"discovering":false}),
+        );
+        order.push(serde_json::json!(id));
+    }
+    oversized["adapters"] = serde_json::json!({"items":items,"order":order});
+    cases.push(oversized);
+
+    let mut invalid_battery = core_bluetooth();
+    invalid_battery["devices"]["items"]["m-first"]["battery"] = serde_json::json!(101);
+    cases.push(invalid_battery);
+
+    for state in cases {
+        let values = Status::core_bluetooth(Arc::new(FakeSource::new(state)?)).project();
+        assert_eq!(values["status.ready"], Value::Bool(false));
+        assert_eq!(values["status.active"], Value::Bool(false));
+        assert_eq!(text_value(&values, "status.primary"), "Bluetooth unavailable");
+    }
+    Ok(())
+}
+
+#[test]
+fn bluetooth_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
+    let source = Arc::new(FakeSource::new(core_bluetooth())?);
+    let status = Status::core_bluetooth(source.clone());
+    let good = status.project();
+    assert_eq!(text_value(&good, "status.primary"), "Headphones Studio");
+
+    let mut invalid = core_bluetooth();
+    invalid["devices"]["items"]["m-first"]["battery"] = serde_json::json!(101);
+    source.publish(invalid)?;
+    let stale_invalid = status.project();
+    assert_eq!(stale_invalid["status.ready"], Value::Bool(false));
+    assert_eq!(text_value(&stale_invalid, "status.primary"), "Headphones Studio");
+    assert_eq!(text_value(&stale_invalid, "status.secondary"), "Status stale");
+
+    source.disconnect()?;
+    let stale = status.project();
+    assert_eq!(stale["status.ready"], Value::Bool(false));
+    assert_eq!(stale["status.active"], Value::Bool(true));
+    assert_eq!(text_value(&stale, "status.primary"), "Headphones Studio");
+    assert_eq!(text_value(&stale, "status.detail"), "2 connected devices");
+    assert_eq!(text_value(&stale, "status.secondary"), "Status stale");
+
+    let mut recovered = core_bluetooth();
+    recovered["adapters"]["items"]["adapter-on-b"]["powered"] = serde_json::json!(false);
+    source.publish(recovered)?;
+    let current = status.project();
+    assert_eq!(current["status.ready"], Value::Bool(true));
+    assert_eq!(text_value(&current, "status.primary"), "Bluetooth off");
+    assert_eq!(text_value(&current, "status.secondary"), "Bluetooth off");
+    Ok(())
+}
+
+#[test]
+fn bluetooth_legacy_preview_remains_unchanged() -> Result<()> {
+    let values = Status::new(Kind::Bluetooth, Arc::new(FakeSource::new(data())?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    assert_eq!(values["status.active"], Value::Bool(true));
+    assert_eq!(text_value(&values, "status.primary"), "2 devices connected");
+    assert_eq!(text_value(&values, "status.secondary"), "Bluetooth on");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Fixture headphones, Fixture keyboard"
+    );
     Ok(())
 }

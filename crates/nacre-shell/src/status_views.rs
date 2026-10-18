@@ -4,7 +4,7 @@ use bead::core::{
     Value,
     source::{self, Source},
 };
-use nacre_protocol::core_services::{CoreSnapshot, NetworkState};
+use nacre_protocol::core_services::{BluetoothState, CoreSnapshot, NetworkState};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 #[derive(Clone, Copy, Debug)]
@@ -48,15 +48,21 @@ impl Kind {
 pub struct Status {
     kind: Kind,
     source: Arc<dyn Source>,
-    core_network: bool,
+    mode: Mode,
     last_good: RefCell<Option<BTreeMap<String, Value>>>,
+}
+#[derive(Clone, Copy)]
+enum Mode {
+    Legacy,
+    CoreNetwork,
+    CoreBluetooth,
 }
 impl Status {
     pub fn new(kind: Kind, source: Arc<dyn Source>) -> Self {
         Self {
             kind,
             source,
-            core_network: false,
+            mode: Mode::Legacy,
             last_good: RefCell::new(None),
         }
     }
@@ -64,7 +70,15 @@ impl Status {
         Self {
             kind: Kind::Network,
             source,
-            core_network: true,
+            mode: Mode::CoreNetwork,
+            last_good: RefCell::new(None),
+        }
+    }
+    pub fn core_bluetooth(source: Arc<dyn Source>) -> Self {
+        Self {
+            kind: Kind::Bluetooth,
+            source,
+            mode: Mode::CoreBluetooth,
             last_good: RefCell::new(None),
         }
     }
@@ -77,8 +91,10 @@ impl Status {
         }))
     }
     pub fn project(&self) -> BTreeMap<String, Value> {
-        if self.core_network {
-            return self.project_core_network();
+        match self.mode {
+            Mode::CoreNetwork => return self.project_core_network(),
+            Mode::CoreBluetooth => return self.project_core_bluetooth(),
+            Mode::Legacy => {}
         }
         let snapshot = self.source.snapshot();
         // Sources retain their last good snapshot while disconnected. Keep its
@@ -238,6 +254,56 @@ impl Status {
         display.insert("status.kind".into(), Value::Text("network".into()));
         display
     }
+
+    fn project_core_bluetooth(&self) -> BTreeMap<String, Value> {
+        let snapshot = self.source.snapshot();
+        let bluetooth = serde_json::from_value::<BluetoothState>(snapshot.data.as_ref().clone())
+            .ok()
+            .map(CoreSnapshot::Bluetooth);
+        let fresh = snapshot.connected
+            && bluetooth.as_ref().is_some_and(|state| {
+                matches!(state, CoreSnapshot::Bluetooth(value) if value.health.available && !value.health.stale)
+                    && state.valid()
+            });
+        if fresh && let Some(CoreSnapshot::Bluetooth(state)) = bluetooth {
+            let display = core_bluetooth_display(&state);
+            let secondary = if display["status.active"] == Value::Bool(true) {
+                "Bluetooth on"
+            } else {
+                "Bluetooth off"
+            };
+            *self.last_good.borrow_mut() = Some(display.clone());
+            return core_bluetooth_values(display, true, secondary);
+        }
+
+        let cached = self.last_good.borrow().clone();
+        let mut display = cached.clone().unwrap_or_else(|| {
+            BTreeMap::from([
+                (
+                    "status.primary".into(),
+                    Value::Text("Bluetooth unavailable".into()),
+                ),
+                ("status.detail".into(), Value::Text(String::new())),
+                ("status.active".into(), Value::Bool(false)),
+            ])
+        });
+        display.insert("status.ready".into(), Value::Bool(false));
+        display.insert(
+            "status.secondary".into(),
+            Value::Text(
+                if cached.is_some() {
+                    "Status stale"
+                } else {
+                    "Status data unavailable"
+                }
+                .into(),
+            ),
+        );
+        display.insert("status.heading".into(), Value::Text("Bluetooth".into()));
+        display.insert("status.icon".into(), Value::Text("bluetooth".into()));
+        display.insert("status.kind".into(), Value::Text("bluetooth".into()));
+        display
+    }
 }
 
 fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
@@ -287,6 +353,56 @@ fn core_network_values(
     display.insert("status.heading".into(), Value::Text("Network".into()));
     display.insert("status.icon".into(), Value::Text("wifi".into()));
     display.insert("status.kind".into(), Value::Text("network".into()));
+    display.insert("status.secondary".into(), Value::Text(secondary.into()));
+    display
+}
+fn core_bluetooth_display(state: &BluetoothState) -> BTreeMap<String, Value> {
+    let powered = state.adapters.items.values().any(|adapter| adapter.powered);
+    let connected = state
+        .devices
+        .order
+        .iter()
+        .filter_map(|id| state.devices.items.get(id))
+        .filter(|device| {
+            device.connected
+                && state
+                    .adapters
+                    .items
+                    .get(&device.adapter)
+                    .is_some_and(|adapter| adapter.powered)
+        })
+        .collect::<Vec<_>>();
+    let primary = if !powered {
+        "Bluetooth off".to_owned()
+    } else if let Some(device) = connected.first() {
+        if device.name.is_empty() {
+            "Connected device".to_owned()
+        } else {
+            device.name.clone()
+        }
+    } else {
+        "No connected devices".to_owned()
+    };
+    let detail = if connected.is_empty() {
+        "Connection controls unavailable".to_owned()
+    } else {
+        format!("{} connected devices", connected.len())
+    };
+    BTreeMap::from([
+        ("status.primary".into(), Value::Text(line(&primary, 32))),
+        ("status.detail".into(), Value::Text(line(&detail, 48))),
+        ("status.active".into(), Value::Bool(powered)),
+    ])
+}
+fn core_bluetooth_values(
+    mut display: BTreeMap<String, Value>,
+    ready: bool,
+    secondary: &str,
+) -> BTreeMap<String, Value> {
+    display.insert("status.ready".into(), Value::Bool(ready));
+    display.insert("status.heading".into(), Value::Text("Bluetooth".into()));
+    display.insert("status.icon".into(), Value::Text("bluetooth".into()));
+    display.insert("status.kind".into(), Value::Text("bluetooth".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
     display
 }

@@ -199,6 +199,12 @@ impl Runtime {
     ) -> Result<Self, Box<dyn Error>> {
         self.with_status_projector(crate::status_views::Status::core_network(source))
     }
+    pub fn with_core_bluetooth_status(
+        self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.with_status_projector(crate::status_views::Status::core_bluetooth(source))
+    }
     fn with_status_projector(
         mut self,
         status: crate::status_views::Status,

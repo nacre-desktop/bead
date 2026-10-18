@@ -746,6 +746,261 @@ async fn network_core_lease_exists_only_for_open_runtime() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn bluetooth_core_lease_exists_only_for_open_runtime() {
+    use bead::wayland::UiEvent;
+    use std::{
+        path::Path,
+        sync::{OnceLock, mpsc},
+    };
+
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let link_alive = Arc::new(Notify::new());
+    let observed_link = link_alive.clone();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (r, mut w) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(r));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        let mut hello = welcome();
+        if let Message::Welcome { topics, .. } = &mut hello {
+            topics.insert("bluetooth".into(), 1);
+        }
+        framing::write(&mut w, &hello).await.unwrap();
+        loop {
+            match next(&mut reader).await {
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Message::Sub { topics } => {
+                    assert_eq!(topics, vec!["bluetooth"]);
+                    break;
+                }
+                message => panic!("unexpected message before network lease: {message:?}"),
+            }
+        }
+        let bluetooth = serde_json::json!({
+            "health":{"available":true,"stale":false},
+            "adapters":{"items":{"adapter-a":{"name":"Adapter A","powered":true,"discovering":false}},"order":["adapter-a"]},
+            "devices":{"items":{"headphones":{"adapter":"adapter-a","name":"Headphones Studio","connected":true,"paired":true,"trusted":true,"pairing":false}},"order":["headphones"]}
+        });
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "bluetooth".into(),
+                seq: 0,
+                data: bluetooth.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Unsub {
+                topics: vec!["bluetooth".into()]
+            },
+            "retiring the view must release only its topic lease"
+        );
+        // A peer that sends after Unsub must not wake the retired view.
+        framing::write(
+            &mut w,
+            &Message::Snap {
+                topic: "bluetooth".into(),
+                seq: 1,
+                data: bluetooth,
+            },
+        )
+        .await
+        .unwrap();
+        framing::write(
+            &mut w,
+            &Message::Ping {
+                id: Id::Integer(703),
+            },
+        )
+        .await
+        .unwrap();
+        loop {
+            match next(&mut reader).await {
+                Message::Pong {
+                    id: Id::Integer(703),
+                } => break,
+                Message::Ping { id } => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                message => panic!("unexpected message while checking shared link: {message:?}"),
+            }
+        }
+        observed_link.notify_one();
+        loop {
+            match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                Ok(Ok(Some(Message::Ping { id }))) => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                Ok(Ok(Some(message))) => {
+                    panic!("unexpected message while preserving shared link: {message:?}")
+                }
+                Ok(Ok(None) | Err(_)) => break,
+                Err(_) => panic!("client did not stop after the lease test finished"),
+            }
+        }
+        observed_link.notify_one();
+    });
+
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
+    let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
+    let scale: Value =
+        serde_json::from_str(include_str!("../../../bead-ui/assets/size-scale.json")).unwrap();
+    let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
+    let spec = crate::popouts::status(
+        crate::status_views::Kind::Bluetooth,
+        Arc::new(palette),
+        colors,
+        Arc::new(OnceLock::new()),
+        Some(client.clone()),
+        radius,
+        false,
+    )
+    .unwrap();
+    assert!(!client.0.shared.leases.has_topic("bluetooth"));
+
+    let mut runtime = (spec.factory)(true).unwrap();
+    let (send, receive) = mpsc::channel();
+    runtime.services(Box::new(move |event| {
+        let _ = send.send(event);
+    }));
+    let event = receive.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(matches!(&event, UiEvent::Model(_)));
+    let _ = runtime.stage(event).unwrap();
+    drop(runtime);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.0.shared.leases.has_topic("bluetooth") {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        receive.recv_timeout(Duration::from_millis(50)).is_err(),
+        "a retired Runtime must receive no callback after its lease is released"
+    );
+    tokio::time::timeout(Duration::from_secs(2), link_alive.notified())
+        .await
+        .unwrap();
+    assert!(
+        client.status().boot.is_some(),
+        "the shared client stays connected"
+    );
+    drop(spec);
+    Source::stop(&client).await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn bluetooth_lease_without_advertised_topic_stays_unavailable() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (r, mut w) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(r));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        framing::write(&mut w, &welcome()).await.unwrap();
+        framing::write(
+            &mut w,
+            &Message::Ping {
+                id: Id::Integer(704),
+            },
+        )
+        .await
+        .unwrap();
+        loop {
+            match next(&mut reader).await {
+                Message::Pong {
+                    id: Id::Integer(704),
+                } => break,
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Message::Ping { id } => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                message => panic!("unexpected frame during shared-link proof: {message:?}"),
+            }
+        }
+        loop {
+            match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
+                Ok(Ok(Some(Message::Call { id, m, .. }))) => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Ok(Ok(Some(Message::Sub { topics }))) => {
+                    panic!("unadvertised Bluetooth topic must not be subscribed: {topics:?}")
+                }
+                Ok(Ok(None) | Err(_)) => break,
+                Err(_) => panic!("shared link did not close after client stop"),
+                Ok(Ok(Some(message))) => panic!("unexpected frame: {message:?}"),
+            }
+        }
+    });
+
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.is_none() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let topic = client.lease_topic("bluetooth").unwrap();
+    assert!(!topic.snapshot().connected);
+    let values = crate::status_views::Status::core_bluetooth(Arc::new(topic.clone())).project();
+    assert_eq!(values["status.ready"], bead::core::Value::Bool(false));
+    let bead::core::Value::Text(primary) = &values["status.primary"] else {
+        panic!("Bluetooth primary must be text")
+    };
+    assert_eq!(primary, "Bluetooth unavailable");
+    topic.stop().await.unwrap();
+    assert!(!client.0.shared.leases.has_topic("bluetooth"));
+    Source::stop(&client).await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn page_lease_does_not_subscribe_to_unadvertised_version() {
     let lab = Lab::new();
     let listener = lab.bind();

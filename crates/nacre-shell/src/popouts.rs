@@ -101,11 +101,15 @@ pub fn status(
                 (*colors).clone(),
                 cold.clone(),
             );
-            let typed_network =
-                matches!(kind, crate::status_views::Kind::Network) && client.is_some();
-            let source: Arc<dyn bead::core::source::Source> = if typed_network {
+            let typed_topic = match kind {
+                crate::status_views::Kind::Network => Some("network"),
+                crate::status_views::Kind::Bluetooth => Some("bluetooth"),
+                crate::status_views::Kind::Battery => None,
+            }
+            .filter(|_| client.is_some());
+            let source: Arc<dyn bead::core::source::Source> = if let Some(topic) = typed_topic {
                 let client = client.as_ref().ok_or("daemon client unavailable")?;
-                Arc::new(client.lease_topic("network").map_err(|e| e.to_string())?)
+                Arc::new(client.lease_topic(topic).map_err(|e| e.to_string())?)
             } else {
                 let desktop = owner.get().cloned().ok_or("bar services not ready")?;
                 Arc::new(
@@ -117,10 +121,10 @@ pub fn status(
                 .with_trace(trace)
                 .with_frame(crate::placement::Attachment::Popout, &colors)
                 .and_then(|runtime| {
-                    if typed_network {
-                        runtime.with_core_network_status(source)
-                    } else {
-                        runtime.with_status(kind, source)
+                    match typed_topic {
+                        Some("network") => runtime.with_core_network_status(source),
+                        Some("bluetooth") => runtime.with_core_bluetooth_status(source),
+                        _ => runtime.with_status(kind, source),
                     }
                 })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
