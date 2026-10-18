@@ -159,3 +159,10 @@ lifetime checks around warmup/baseline/phase/success and existing finally cleanu
 match scope. Eleven mocked tests cover timing and expiry paths without real
 process/sleep/sampling. This accepts harness correctness only, not actual input
 or memory behavior, binary provenance, advisory policy or a capture grant.
+
+
+## Restart safety
+
+No measurements are authorized by this spec. Any later measurement must follow
+the standing capture-safety rules: peer pause, MemAvailable >=4GiB before start,
+abort below2GiB, private memory-limited scope, and explicit spec-agent grant.

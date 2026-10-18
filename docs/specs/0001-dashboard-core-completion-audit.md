@@ -162,3 +162,10 @@ ratifies inherited0192 and pre-existing documented exceptions; its retained reas
 gets the cosmic-text/fontdb/usvg/untrusted-font/2027-01-31 revisit trigger. This
 resolves the sole remaining policy blocker. Historical blocked text above records
 prior review, not current status. Fold the two deny-file reason updates into B0002.
+
+
+## Restart safety
+
+No measurements are authorized by this spec. Any later measurement must follow
+the standing capture-safety rules: peer pause, MemAvailable >=4GiB before start,
+abort below2GiB, private memory-limited scope, and explicit spec-agent grant.

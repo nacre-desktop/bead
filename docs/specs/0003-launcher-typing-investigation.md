@@ -156,3 +156,51 @@ promptly so spec agent can specify one bounded launcher PRODUCT fix while the
 measured work continues. Do not spend the whole slot polishing the diagnosis or
 repeat source audits. Optimization acceptance still needs matched before/after
 and existing memory/typing gates; owner typing candidate boundary unchanged.
+
+## Capture safety — restart rule, 2026-10-18
+
+This section supersedes earlier capture windows. No capture starts until incident
+review is reported to the owner and the spec agent issues the replacement grant.
+An unexplained simultaneous agent shutdown is not proof of OOM or a safe retry.
+
+- “Stop other jobs” means pausing your own builds and asking the other implementer
+  to pause theirs. Never kill a process you did not start. Never signal or restart
+  Codex/app-server processes. An expired window is not proof of host idleness;
+  require explicit DONE/IDLE/RELEASED before another task starts.
+- Before each arm: no builds running, peer pause acknowledged, and MemAvailable
+  at least 4 GiB (4,194,304 KiB in /proc/meminfo). Record the value. During the
+  entire warmup and capture sample MemAvailable at least once per second; abort
+  and invalidate the arm if below 2 GiB (2,097,152 KiB), or if monitoring fails.
+- Run the harness and all measured descendants (private compositor, UI, daemon,
+  helpers and input driver) inside one new private systemd user scope. Set an
+  explicit MemoryMax well above expected peak: 2 GiB for the existing nested
+  lanes, expected below 1 GiB. Verify the effective cgroup limit before any arm;
+  no unlimited fallback. If expected peak cannot fit with generous headroom,
+  stop for spec-agent sizing instead of silently raising it. Scope setup is
+  transient and task-private, not a live unit/configuration change.
+- Keep the lightweight memory watchdog outside that measured scope, but task-owned.
+  On low memory, scope OOM, unexpected exit or lost watchdog, invalidate the arm
+  and stop only the recorded owned scope/descendants. Preserve partial logs,
+  cgroup memory.events/peak and the reason; never retry automatically or count
+  aborted samples as a valid cell. Do not include Codex/app-server in the scope.
+- Verify containment and watchdog behavior with a bounded mocked check before
+  measurement; do not deliberately exhaust RAM or induce host memory pressure.
+  Fold the small guard and regression tests into the measurement spec, not a new
+  tooling project. Report scope name, limit, start/minimum MemAvailable, guard
+  result, exact artifact identities and owned cleanup with ordinary gate evidence.
+- Inspect kernel and user journals from 2026-10-18 02:30 with explicit timezone
+  and retained-boot coverage. Report OOM/kills, agent/app-server exits and the last
+  owned job without touching those processes. If evidence points to another
+  cause, fix it and tell the owner before re-granting. Missing old journals mean
+  unknown, not no OOM. Never change global OOM policy, swap, sysctl or caches.
+
+## Replacement schedule — 2026-10-18 restart
+
+Reserve2026-10-18 19:00–21:00UTC on the same private nested lab, after B0002
+PASS and explicit host release. The former window is withdrawn. This reservation
+requires spec-agent activation after incident review and the capture-safety
+preflight above; no automatic start on clock expiry or incomplete B0002.
+Use the B0002 reviewed source/release/helper with recorded exact hashes and
+final tested guard/harness commit. Preserve the existing ten-pair diagnostic
+method and targets. If B0002 ends early, ask to move this window earlier; if
+prerequisites fail, keep source preparation and no captures.

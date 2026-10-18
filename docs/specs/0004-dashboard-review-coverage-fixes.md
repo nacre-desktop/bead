@@ -108,3 +108,10 @@ unchanged. Independently verified code CI39074426606 and final-docs
 CI39075073594 success at their exact commits. Implementer clarified validation
 was CI-only (local Cargo absent); no local-test claim is accepted for B0004.
 No new memory/timer/GPU proof or measurement grant.
+
+
+## Restart safety
+
+No measurements are authorized by this spec. Any later measurement must follow
+the standing capture-safety rules: peer pause, MemAvailable >=4GiB before start,
+abort below2GiB, private memory-limited scope, and explicit spec-agent grant.

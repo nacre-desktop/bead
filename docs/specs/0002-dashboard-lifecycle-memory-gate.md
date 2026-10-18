@@ -3,7 +3,7 @@
 - ID: B0002
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review (early artifact/preflight only; capture blocked)
+- Status: Blocked (missing capture prerequisite; restart safety review)
 - Depends on: source-only preflight eligible after B0004 Done; captures require B0001 Done and exact slot grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours including capture after grant
@@ -204,3 +204,64 @@ Report commit/profile/hash, exact method and per-run values/medians/spreads/peak
 quiet counters, explained memory deltas and cleanup. No slot-only commit or extra
 provenance report. Follow hostedCI after normal integration; advisory reason edits
 are policy-only and need not block source-identical artifact preparation.
+
+## Capture safety — restart rule, 2026-10-18
+
+This section supersedes earlier capture windows. No capture starts until incident
+review is reported to the owner and the spec agent issues the replacement grant.
+An unexplained simultaneous agent shutdown is not proof of OOM or a safe retry.
+
+- “Stop other jobs” means pausing your own builds and asking the other implementer
+  to pause theirs. Never kill a process you did not start. Never signal or restart
+  Codex/app-server processes. An expired window is not proof of host idleness;
+  require explicit DONE/IDLE/RELEASED before another task starts.
+- Before each arm: no builds running, peer pause acknowledged, and MemAvailable
+  at least 4 GiB (4,194,304 KiB in /proc/meminfo). Record the value. During the
+  entire warmup and capture sample MemAvailable at least once per second; abort
+  and invalidate the arm if below 2 GiB (2,097,152 KiB), or if monitoring fails.
+- Run the harness and all measured descendants (private compositor, UI, daemon,
+  helpers and input driver) inside one new private systemd user scope. Set an
+  explicit MemoryMax well above expected peak: 2 GiB for the existing nested
+  lanes, expected below 1 GiB. Verify the effective cgroup limit before any arm;
+  no unlimited fallback. If expected peak cannot fit with generous headroom,
+  stop for spec-agent sizing instead of silently raising it. Scope setup is
+  transient and task-private, not a live unit/configuration change.
+- Keep the lightweight memory watchdog outside that measured scope, but task-owned.
+  On low memory, scope OOM, unexpected exit or lost watchdog, invalidate the arm
+  and stop only the recorded owned scope/descendants. Preserve partial logs,
+  cgroup memory.events/peak and the reason; never retry automatically or count
+  aborted samples as a valid cell. Do not include Codex/app-server in the scope.
+- Verify containment and watchdog behavior with a bounded mocked check before
+  measurement; do not deliberately exhaust RAM or induce host memory pressure.
+  Fold the small guard and regression tests into the measurement spec, not a new
+  tooling project. Report scope name, limit, start/minimum MemAvailable, guard
+  result, exact artifact identities and owned cleanup with ordinary gate evidence.
+- Inspect kernel and user journals from 2026-10-18 02:30 with explicit timezone
+  and retained-boot coverage. Report OOM/kills, agent/app-server exits and the last
+  owned job without touching those processes. If evidence points to another
+  cause, fix it and tell the owner before re-granting. Missing old journals mean
+  unknown, not no OOM. Never change global OOM policy, swap, sysctl or caches.
+
+## Replacement schedule — 2026-10-18 restart
+
+The old00:55–10:55 window is withdrawn. Reserve2026-10-18 11:00–19:00UTC
+for B0002 on the previously verified private nested desktop lab only. This is
+a conditional reservation, not permission to bypass the missing wayland-info
+prerequisite or incident review. Before CAPTURE_START send READY with existing
+probe path, incident finding reported to owner, explicit Nacre pause, verified
+4GiB available, scope/2GiB limit and tested low-memory guard, then obtain the
+spec-agent activation of this reservation. No installation is authorized here.
+
+Artifacts: reviewed source1cff9d17d61fb05451546bb0ea13c826c93cb4c9, release UI
+b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b,
+and5f4c0bf3 release helper
+4a65f4ec887bc85e93b5b862f1786fe6f1b7a811875333765ee8f8c052cce0aa
+in both arms, using the accepted B0005/B0006 harness plus tested safety guard.
+Record final harness commit and hashes; guard changes must not alter sampling,
+presentation assertions or the five-pair-per-compositor/600s+60s method.
+Failed pre-compositor cell is invalid. Do not reuse any historical partials.
+
+Release early on completion/blocker. If readiness is delayed or full cells cannot
+fit, request a revised actual window; never compress windows, overlap or start
+from an expired reservation. B0003 follows only on B0002 PASS and its own safety
+preflight. Nacre correctness work is scheduled separately after explicit release.
