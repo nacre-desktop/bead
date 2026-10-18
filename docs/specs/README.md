@@ -38,6 +38,6 @@ B0003-S source/tests are submitted for Review; measured B0003 remains gated on
 B0002 passing and an explicit peer release. Do not overlap host work.
 
 Independent product queue: [B0007 UI-provider task failure replies](0007-ui-provider-task-failure-replies.md)
-is Ready now, no capture/B0002 dependency. B0003-S source/tests accepted; no
+is In progress, no capture/B0002 dependency. B0003-S source/tests accepted; no
 further static reports or guard polishing requested. Nacre holds focused lab
 correctness until explicit release; B0007 may use source work and hosted CI.
