@@ -150,3 +150,57 @@ Do not use cached unproven binaries, repeat historical runs, install a toolchain
 borrow Nacre's host, or change dependency policy to bypass these blockers.
 Provide existing provenance only if newly located; otherwise await the missing
 prerequisite/authorized artifact-build spec. No new build or capture is granted.
+
+## Active execution authorization — owner update2026-10-18
+
+This section supersedes earlier policy/provenance/build holds. B0001 is Done;
+B0004/B0005/B0006 and source preflight are accepted. Execute the existing gate,
+folding small harness fixes into it rather than opening a tooling-only spec.
+
+1. In deny.toml and deny-framework.toml retain0192's existing reason and append:
+   revisit when cosmic-text/fontdb/usvg move off ttf-parser, before loading
+   untrusted font files, or by2027-01-31. Include its RustSec link. Do not remove
+   other exact IDs or broaden ignores; use the updated standing-rules delegation.
+2. Prepare release artifacts in an existing isolated build environment. Owner's
+   proportional provenance rule is commit+build profile+binarySHA256 in report;
+   no extra attestation/archive chain required. Build only missing artifacts,
+   nice10/Cargo-j2, and use existing pinned dependencies. No installed desktop,
+   new perf-lab setup, credential copying or toolchain/config installation.
+   Cached binaries still need honest source/profile identification, not relabelling.
+3. Use current reviewed Bead runtime (75bd50b or later with only docs/harness /
+   approved deny-reason edits) built as release. B0001/B0004 runtime inputs equal
+   baseline83f5ecf, so a common exact release binary may serve both repeated arms;
+   record runtime identity and make no feature-speedup claim from identical code.
+   Use helper75157 if its existing record gives commit/profile/hash; otherwise
+   explicitly use published Nacre5f4c0bf3 release helper4a65f4ec887bc85e93b5b862f1786fe6f1b7a811875333765ee8f8c052cce0aa
+   in BOTH arms as a separately named current-daemon lane. Original75157 artifacts
+   and historical measurements remain immutable. Bead never edits Nacre source.
+4. Exclusive private/nested measurement grant:2026-10-18 00:55–10:55UTC, existing
+   Bead nested lab or existing private desktop lab, no physical output/live bus.
+   Exact private route/identity is delivered in the agent message, never public
+   inventory. Verify the selected already-trusted host, log commit/release/hash,
+   and notify spec agent/Nacre CAPTURE_START before the first arm; no further
+   permission prompt is required once those prerequisites pass. During build /
+   preparation the capture host is not measured. No other build/test job may
+   overlap an active capture. Use own isolated task worktree and private tmux.
+5. B0002 first: five alternating pairs EACH compositor,20cells total, full600s
+   matched warmup per arm and60s baseline/phase observation, accepted B0005/B0006
+   harness,2880×1800/1.5 Hvirtual120/Nnested60. Plan separate sequential compositor
+   windows, about3h15 each within the total grant; no truncation or reduced pairs.
+   If remaining grant cannot fit a full cell, stop before it and request a revised
+   spec-agent window. Quiet/memory/presentation/ownership/cleanup rules unchanged.
+6. Send each compositor's concise result and final B0002 Review immediately; do
+   not wait to write a separate ledger. On passing criteria, continue to B0003's
+   measured diagnostic/paired steps in the remaining window, same host/artifact
+   recording rules. No blanket product-optimization permission: send the measured
+   bottleneck and exact proposed code change for an immediate product-fix spec.
+   If a memory/quiet/measurement blocker stops this gate, report it promptly and
+   continue independent existing typing source/test preparation, not report churn.
+7. Release the measurement host as soon as ready so Nacre N0002 can take over.
+   Nacre source work does not block this grant; avoid its unrelated checkout and
+   installed helpers. Gate grants only private nested work, never desktop changes.
+
+Report commit/profile/hash, exact method and per-run values/medians/spreads/peaks,
+quiet counters, explained memory deltas and cleanup. No slot-only commit or extra
+provenance report. Follow hostedCI after normal integration; advisory reason edits
+are policy-only and need not block source-identical artifact preparation.

@@ -3,7 +3,7 @@
 - ID: B0003
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Blocked (source-only phase accepted; capture prerequisites/grant absent)
+- Status: Ready (source phase accepted; measured steps after B0002 pass)
 - Depends on: source-only preparation eligible now after B0004 Done; captures require B0001/B0002 Done and exclusive grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
@@ -139,3 +139,20 @@ or target acceptance. Docs-only delta; no build/capture/product change.
 B0003 remains incomplete/Blocked for capture dependencies and explicit grant.
 No further static report polishing requested. Next eligible work is B0002's
 limited artifact/preflight request phase, not a measurement.
+
+## Measured execution — owner throughput update2026-10-18
+
+Source analysis is accepted; do not rewrite it. After B0002 passes, measured
+Steps3–4 are authorized in the remaining Bead-exclusive00:55–10:55UTC window
+on the same existing private nested lab. Commit/release profile/binaryhash suffice
+for provenance. Use the B0002-selected helper consistently in all diagnostic /
+clock-only arms; label any new5f4lane without altering frozen75157 references.
+Existing method/quiet/memory rules remain. Capture only a complete cell within
+remaining time, request extension from spec agent if needed, and release early.
+
+Fold any small observation/harness correction into this spec with its relevant
+test; no standalone tooling spec or extra paper trail. Send first useful evidence
+promptly so spec agent can specify one bounded launcher PRODUCT fix while the
+measured work continues. Do not spend the whole slot polishing the diagnosis or
+repeat source audits. Optimization acceptance still needs matched before/after
+and existing memory/typing gates; owner typing candidate boundary unchanged.

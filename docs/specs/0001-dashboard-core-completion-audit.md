@@ -3,7 +3,7 @@
 - ID: B0001
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Blocked
+- Status: Done
 - Depends on: exact scoped zbus advisory exception committed; published-head CI green
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
@@ -108,9 +108,8 @@ Runtime fixes cannot be declared memory-accepted until B0002's matched gate.
   and first-open/2s-close retirement preserved.
 - [ ] No fabricated provider capability, new mutation, optional feature or new dep.
 - [ ] fmt, warning-denied Clippy, workspace/trace tests, CPU-only/all-features,
-  service boundary, Luau and cargo-deny CI pass on published main. Only the exact
-  three approved advisory IDs are excepted; review trigger is2027-01-31 or earlier
-  consumer zbus6 support, not the older proposed October review date.
+  service boundary, Luau and cargo-deny CI pass on published main. Exact-ID exceptions follow current standing rules, including ratified0192
+  and the three approved zbus IDs with their recorded revisit triggers.
 
 ## Stop conditions
 
@@ -155,3 +154,11 @@ three and require others fail. Owner decision/original authorization requested;
 no extension/removal is authorized by green CI. B0001 cannot be marked Done
 until that explicit criterion is reconciled. Do not change dependency policy or
 stall authorized source-only preparation while awaiting the owner decision.
+
+## Final disposition — owner ruling2026-10-18
+
+Done. Functional review and B0004 were already accepted. Owner explicitly
+ratifies inherited0192 and pre-existing documented exceptions; its retained reason
+gets the cosmic-text/fontdb/usvg/untrusted-font/2027-01-31 revisit trigger. This
+resolves the sole remaining policy blocker. Historical blocked text above records
+prior review, not current status. Fold the two deny-file reason updates into B0002.
