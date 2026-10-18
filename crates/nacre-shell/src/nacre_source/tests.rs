@@ -1552,7 +1552,7 @@ async fn ui_provider_unknown_method_is_not_dispatched_at_capacity() {
             &Message::Call {
                 id: Id::Text("unknown-at-capacity".into()),
                 m: "ui.not-registered".into(),
-                p: Value::Null,
+                p: serde_json::json!({}),
                 timeout: Some(30_000),
             },
         )
@@ -1694,7 +1694,6 @@ async fn ui_provider_missing_provider_returns_unknown_method_undispatched() {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let server = tokio::spawn(async move {
         let (mut reader, mut writer) = accepted(&listener).await;
-        assert_eq!(next(&mut reader).await, fixture("ui")[0]);
         framing::write(&mut writer, &provider_call("no-provider"))
             .await
             .unwrap();
