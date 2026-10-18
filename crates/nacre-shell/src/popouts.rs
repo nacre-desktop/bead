@@ -120,12 +120,10 @@ pub fn status(
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
                 .with_frame(crate::placement::Attachment::Popout, &colors)
-                .and_then(|runtime| {
-                    match typed_topic {
-                        Some("network") => runtime.with_core_network_status(source),
-                        Some("bluetooth") => runtime.with_core_bluetooth_status(source),
-                        _ => runtime.with_status(kind, source),
-                    }
+                .and_then(|runtime| match typed_topic {
+                    Some("network") => runtime.with_core_network_status(source),
+                    Some("bluetooth") => runtime.with_core_bluetooth_status(source),
+                    _ => runtime.with_status(kind, source),
                 })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())

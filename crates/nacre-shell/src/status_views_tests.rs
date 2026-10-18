@@ -458,20 +458,28 @@ fn bluetooth_core_power_and_connected_order() -> Result<()> {
     assert_eq!(text_value(&values, "status.detail"), "2 connected devices");
 
     let mut reversed = core_bluetooth();
-    reversed["devices"]["order"] = serde_json::json!(
-        ["a-empty", "m-first", "z-off", "paired-only"]
-    );
+    reversed["devices"]["order"] = serde_json::json!(["a-empty", "m-first", "z-off", "paired-only"]);
     let values = Status::core_bluetooth(Arc::new(FakeSource::new(reversed)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "Connected device");
 
     let mut empty = core_bluetooth();
-    for device in empty["devices"]["items"].as_object_mut().unwrap().values_mut() {
+    for device in empty["devices"]["items"]
+        .as_object_mut()
+        .unwrap()
+        .values_mut()
+    {
         device["connected"] = serde_json::json!(false);
     }
     let values = Status::core_bluetooth(Arc::new(FakeSource::new(empty)?)).project();
-    assert_eq!(text_value(&values, "status.primary"), "No connected devices");
+    assert_eq!(
+        text_value(&values, "status.primary"),
+        "No connected devices"
+    );
     assert_eq!(text_value(&values, "status.secondary"), "Bluetooth on");
-    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Connection controls unavailable"
+    );
 
     let mut off = core_bluetooth();
     off["adapters"]["items"]["adapter-on-a"]["powered"] = serde_json::json!(false);
@@ -481,7 +489,10 @@ fn bluetooth_core_power_and_connected_order() -> Result<()> {
     assert_eq!(values["status.active"], Value::Bool(false));
     assert_eq!(text_value(&values, "status.primary"), "Bluetooth off");
     assert_eq!(text_value(&values, "status.secondary"), "Bluetooth off");
-    assert_eq!(text_value(&values, "status.detail"), "Connection controls unavailable");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Connection controls unavailable"
+    );
 
     let mut controls = core_bluetooth();
     controls["devices"]["items"]["m-first"]["name"] =
@@ -500,10 +511,13 @@ fn bluetooth_core_power_and_connected_order() -> Result<()> {
 
 #[test]
 fn bluetooth_core_invalid_is_not_powered_off() -> Result<()> {
-    let missing_topic = Status::core_bluetooth(Arc::new(FakeSource::new(serde_json::json!({}))?))
-        .project();
+    let missing_topic =
+        Status::core_bluetooth(Arc::new(FakeSource::new(serde_json::json!({}))?)).project();
     assert_eq!(missing_topic["status.ready"], Value::Bool(false));
-    assert_eq!(text_value(&missing_topic, "status.primary"), "Bluetooth unavailable");
+    assert_eq!(
+        text_value(&missing_topic, "status.primary"),
+        "Bluetooth unavailable"
+    );
     assert_eq!(
         text_value(&missing_topic, "status.secondary"),
         "Status data unavailable"
@@ -535,7 +549,10 @@ fn bluetooth_core_invalid_is_not_powered_off() -> Result<()> {
         let values = Status::core_bluetooth(Arc::new(FakeSource::new(state)?)).project();
         assert_eq!(values["status.ready"], Value::Bool(false));
         assert_eq!(values["status.active"], Value::Bool(false));
-        assert_eq!(text_value(&values, "status.primary"), "Bluetooth unavailable");
+        assert_eq!(
+            text_value(&values, "status.primary"),
+            "Bluetooth unavailable"
+        );
     }
     Ok(())
 }
@@ -552,8 +569,14 @@ fn bluetooth_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
     source.publish(invalid)?;
     let stale_invalid = status.project();
     assert_eq!(stale_invalid["status.ready"], Value::Bool(false));
-    assert_eq!(text_value(&stale_invalid, "status.primary"), "Headphones Studio");
-    assert_eq!(text_value(&stale_invalid, "status.secondary"), "Status stale");
+    assert_eq!(
+        text_value(&stale_invalid, "status.primary"),
+        "Headphones Studio"
+    );
+    assert_eq!(
+        text_value(&stale_invalid, "status.secondary"),
+        "Status stale"
+    );
 
     source.disconnect()?;
     let stale = status.project();
