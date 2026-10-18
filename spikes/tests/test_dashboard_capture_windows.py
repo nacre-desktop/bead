@@ -229,10 +229,73 @@ class CaptureWindowTests(unittest.TestCase):
 
 
 class CaptureSafetyTests(unittest.TestCase):
+    def _run_mock_guard(self, temporary, cgroup_snapshots, monotonic, scope_poll_values=None):
+        class FakeScope:
+            def __init__(self):
+                self.poll_values = list(scope_poll_values or [None, 0])
+                self.returncode = None
+
+            def poll(self):
+                value = self.poll_values.pop(0) if self.poll_values else self.returncode
+                self.returncode = value
+                return value
+
+            def wait(self, timeout=None):
+                self.returncode = 0
+                return 0
+
+            def terminate(self):
+                self.returncode = -15
+
+        class FakeWatchdog:
+            def poll(self):
+                return None
+
+            def wait(self, timeout=None):
+                return 0
+
+        scope, watchdog = FakeScope(), FakeWatchdog()
+        commands = []
+
+        def fake_popen(command, **kwargs):
+            if command[0] == "systemd-run":
+                ready = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
+                ready.write_text(json.dumps({"pid": 321, "cgroup": "/scope"}))
+                return scope
+            ready = pathlib.Path(command[command.index("--ready-file") + 1])
+            heartbeat = pathlib.Path(command[command.index("--heartbeat-file") + 1])
+            ready.write_text(json.dumps({"available_kib": capture_safety.START_MIN_KIB,
+                                         "monotonic": 100.0}))
+            heartbeat.write_text(json.dumps({"monotonic": 100.0}))
+            return watchdog
+
+        def fake_run(command, **kwargs):
+            commands.append(command)
+            prop = next((part.split("=", 1)[1] for part in command if part.startswith("--property=")), "")
+            output = {"MemoryMax": "2147483648", "ControlGroup": "/scope"}.get(prop, "")
+            return mock.Mock(returncode=0, stdout=output, stderr="")
+
+        with mock.patch.object(capture_safety, "cgroup_memory_snapshot", side_effect=cgroup_snapshots):
+            try:
+                result = capture_safety.run_guarded(
+                    ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
+                    env={}, memory_reader=lambda: capture_safety.START_MIN_KIB,
+                    popen=fake_popen, run=fake_run, sleeper=lambda _: None,
+                    monotonic=monotonic, unit_id="012345abcdef",
+                )
+                error = None
+            except BaseException as caught:
+                result, error = None, caught
+        report = json.loads((pathlib.Path(temporary) / "safety.json").read_text())
+        return result, error, commands, report
+
     def test_memavailable_parser_requires_kernel_field(self):
         self.assertEqual(capture_safety.parse_memavailable_kib("MemTotal: 9000 kB\nMemAvailable: 4194304 kB\n"), 4194304)
         with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "missing or malformed"):
             capture_safety.parse_memavailable_kib("MemTotal: 9000 kB\n")
+        for contents in ("MemAvailable: 0 kB\n", "MemAvailable: nope kB\n"):
+            with self.subTest(contents=contents), self.assertRaises(capture_safety.CaptureSafetyError):
+                capture_safety.parse_memavailable_kib(contents)
 
     def test_scope_is_exact_limit_and_contains_harness(self):
         capture_safety.validate_scope(
@@ -266,6 +329,111 @@ class CaptureSafetyTests(unittest.TestCase):
                 report = json.loads((pathlib.Path(temporary) / "safety.json").read_text())
                 self.assertEqual(report["status"], "refused-low-memory")
 
+    def test_release_is_not_touched_before_watchdog_ready(self):
+        class FakeClock:
+            now = 100.0
+
+            def monotonic(self):
+                return self.now
+
+            def sleep(self, seconds):
+                self.now += seconds
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            release_file = root / "release"
+            clock = FakeClock()
+            watchdog = mock.Mock(poll=mock.Mock(return_value=None))
+            with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "timed out waiting for watchdog READY"):
+                capture_safety.release_after_watchdog_ready(
+                    ready_file=root / "ready.json", heartbeat_file=root / "heartbeat.json",
+                    release_file=release_file, watchdog=watchdog,
+                    memory_reader=lambda: capture_safety.START_MIN_KIB,
+                    sleeper=clock.sleep, monotonic=clock.monotonic, timeout=0.2,
+                )
+            self.assertFalse(release_file.exists())
+            self.assertGreater(watchdog.poll.call_count, 0)
+
+    def test_stale_heartbeat_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            heartbeat = pathlib.Path(temporary) / "heartbeat.json"
+            heartbeat.write_text(json.dumps({"monotonic": 1.0}))
+            with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "heartbeat is stale"):
+                capture_safety.check_heartbeat(heartbeat, now=10.0, stale_after=3.5)
+
+    def test_release_rechecks_four_gib_after_watchdog_ready(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            ready = root / "ready.json"
+            heartbeat = root / "heartbeat.json"
+            release = root / "release"
+            ready.write_text(json.dumps({"available_kib": capture_safety.START_MIN_KIB,
+                                         "monotonic": 100.0}))
+            heartbeat.write_text(json.dumps({"monotonic": 100.0}))
+            with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "4-GiB release rail"):
+                capture_safety.release_after_watchdog_ready(
+                    ready_file=ready, heartbeat_file=heartbeat, release_file=release,
+                    watchdog=mock.Mock(poll=lambda: None),
+                    memory_reader=lambda: capture_safety.START_MIN_KIB - 1,
+                    monotonic=lambda: 100.0,
+                )
+            self.assertFalse(release.exists())
+
+    def test_watchdog_ready_follows_first_valid_sample(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "armed").touch()
+            stopped = root / "stop"
+            stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "100"}
+            with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable):
+                result = capture_safety.watchdog_loop(
+                    owner_pid=123, owner_start=4, scope_name="bead-capture-012345abcdef.scope",
+                    stop_file=stopped, armed_file=root / "armed", ready_file=root / "ready.json",
+                    heartbeat_file=root / "heartbeat.json", events_file=root / "events.jsonl",
+                    control_group="/private/scope", initial_oom={"oom": 0, "oom_kill": 0},
+                    memory_reader=lambda: capture_safety.START_MIN_KIB,
+                    sleeper=lambda _: stopped.touch(), monotonic=lambda: 100.0,
+                    run=lambda *_args, **_kwargs: mock.Mock(returncode=0),
+                    owner_alive=lambda: True,
+                )
+            self.assertEqual(result, 0)
+            self.assertEqual(json.loads((root / "ready.json").read_text())["available_kib"], capture_safety.START_MIN_KIB)
+            self.assertEqual(json.loads((root / "heartbeat.json").read_text())["monotonic"], 100.0)
+
+    def test_oom_counters_must_be_present_and_unchanged(self):
+        initial = {"memory.events": "low 0\noom 2\noom_kill 1\n"}
+        self.assertEqual(capture_safety.oom_counter_delta(
+            initial, {"memory.events": "oom 2\noom_kill 1\n"}), {"oom": 0, "oom_kill": 0})
+        with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "counter increased"):
+            capture_safety.oom_counter_delta(initial, {"memory.events": "oom 3\noom_kill 1\n"})
+        with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "unavailable"):
+            capture_safety.oom_counter_delta(initial, {"memory.events": "unavailable: removed"})
+
+    def test_stale_heartbeat_invalidates_and_stops_owned_scope(self):
+        stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+        ticks = iter([100.0, 100.0, 100.0, 100.0, 100.0, 104.0])
+        with tempfile.TemporaryDirectory() as temporary:
+            _, error, commands, report = self._run_mock_guard(
+                temporary, [stable_events], lambda: next(ticks), [None, None, 0])
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("heartbeat is stale", str(error))
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", "bead-capture-012345abcdef.scope"])
+        self.assertEqual(report["status"], "aborted")
+
+    def test_oom_delta_invalidates_even_zero_exit_harness(self):
+        baseline = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+        oom = {"memory.events": "low 0\noom 1\noom_kill 0\n", "memory.peak": "4096"}
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [baseline, oom], lambda: 100.0)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("counter increased", str(error))
+        self.assertEqual(report["oom_initial"], {"oom": 0, "oom_kill": 0})
+        self.assertEqual(report["oom_final_or_last_available"], {"oom": 1, "oom_kill": 0})
+        self.assertEqual(report["oom_delta"], {"oom": 1, "oom_kill": 0})
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", "bead-capture-012345abcdef.scope"])
+
     def test_guard_verifies_scope_before_releasing_child_and_records_report(self):
         class FakeProcess:
             def __init__(self, returncode=None):
@@ -284,7 +452,15 @@ class CaptureSafetyTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             scope = FakeProcess()
-            watcher = FakeProcess()
+
+            class FakeWatchdog:
+                def poll(self):
+                    return None
+
+                def wait(self, timeout=None):
+                    return 0
+
+            watcher = FakeWatchdog()
             popen_calls = []
 
             def fake_popen(command, **kwargs):
@@ -293,24 +469,32 @@ class CaptureSafetyTests(unittest.TestCase):
                     ready_path = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
                     ready_path.write_text(json.dumps({"pid": 321, "cgroup": "/scope"}))
                     return scope
+                watchdog_ready = pathlib.Path(command[command.index("--ready-file") + 1])
+                heartbeat = pathlib.Path(command[command.index("--heartbeat-file") + 1])
+                watchdog_ready.write_text(json.dumps({"available_kib": capture_safety.START_MIN_KIB,
+                                                      "monotonic": 100.0}))
+                heartbeat.write_text(json.dumps({"monotonic": 100.0}))
                 return watcher
 
             def fake_run(command, **kwargs):
                 prop = next((part.split("=", 1)[1] for part in command if part.startswith("--property=")), "")
                 return mock.Mock(returncode=0, stdout={"MemoryMax": "2147483648", "ControlGroup": "/scope"}.get(prop, ""))
 
-            result = capture_safety.run_guarded(
-                ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
-                env={}, memory_reader=lambda: capture_safety.START_MIN_KIB,
-                popen=fake_popen, run=fake_run, sleeper=lambda _: None,
-                monotonic=iter([0, 0, 0, 0, 0, 0, 0, 0]).__next__, unit_id="012345abcdef",
-            )
+            stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+            with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events):
+                result = capture_safety.run_guarded(
+                    ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
+                    env={}, memory_reader=lambda: capture_safety.START_MIN_KIB,
+                    popen=fake_popen, run=fake_run, sleeper=lambda _: None,
+                    monotonic=lambda: 100.0, unit_id="012345abcdef",
+                )
             self.assertEqual(result, 0)
             self.assertIn("--property=MemoryMax=2147483648", popen_calls[0])
             report = json.loads((pathlib.Path(temporary) / "safety.json").read_text())
             self.assertEqual(report["status"], "complete")
             self.assertEqual(report["effective_memory_max"], "2147483648")
             self.assertEqual(report["child_cgroup"], "/scope")
+            self.assertEqual(report["oom_delta"], {"oom": 0, "oom_kill": 0})
 
     def test_interrupt_stops_the_scope_before_disarming_watchdog(self):
         class RunningProcess:
@@ -332,6 +516,10 @@ class CaptureSafetyTests(unittest.TestCase):
                     ready_path = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
                     ready_path.write_text(json.dumps({"pid": 321, "cgroup": "/scope"}))
                     return scope
+                pathlib.Path(command[command.index("--ready-file") + 1]).write_text(
+                    json.dumps({"available_kib": capture_safety.START_MIN_KIB, "monotonic": 100.0}))
+                pathlib.Path(command[command.index("--heartbeat-file") + 1]).write_text(
+                    json.dumps({"monotonic": 100.0}))
                 return watcher
 
             def fake_run(command, **kwargs):
@@ -339,14 +527,16 @@ class CaptureSafetyTests(unittest.TestCase):
                 prop = next((part.split("=", 1)[1] for part in command if part.startswith("--property=")), "")
                 return mock.Mock(returncode=0, stdout={"MemoryMax": "2147483648", "ControlGroup": "/scope"}.get(prop, ""))
 
-            with self.assertRaises(KeyboardInterrupt):
-                capture_safety.run_guarded(
-                    ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
-                    env={}, memory_reader=lambda: capture_safety.START_MIN_KIB,
-                    popen=fake_popen, run=fake_run,
-                    sleeper=lambda _: (_ for _ in ()).throw(KeyboardInterrupt()),
-                    monotonic=iter([0, 0, 0, 0, 0]).__next__, unit_id="012345abcdef",
-                )
+            stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+            with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events):
+                with self.assertRaises(KeyboardInterrupt):
+                    capture_safety.run_guarded(
+                        ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
+                        env={}, memory_reader=lambda: capture_safety.START_MIN_KIB,
+                        popen=fake_popen, run=fake_run,
+                        sleeper=lambda _: (_ for _ in ()).throw(KeyboardInterrupt()),
+                        monotonic=lambda: 100.0, unit_id="012345abcdef",
+                    )
             self.assertEqual(commands[-1], ["systemctl", "--user", "stop", "bead-capture-012345abcdef.scope"])
             self.assertTrue(all(command[3] == "bead-capture-012345abcdef.scope" for command in commands))
             report = json.loads((pathlib.Path(temporary) / "safety.json").read_text())
@@ -359,14 +549,19 @@ class CaptureSafetyTests(unittest.TestCase):
             events_file = pathlib.Path(temporary) / "events.jsonl"
             armed_file.touch()
             stopped = []
-            result = capture_safety.watchdog_loop(
-                owner_pid=123, owner_start=4, scope_name="bead-capture-012345abcdef.scope",
-                stop_file=stop_file, armed_file=armed_file, events_file=events_file,
-                control_group="/private/scope", memory_reader=lambda: capture_safety.ABORT_BELOW_KIB - 1,
-                sleeper=lambda _: self.fail("watchdog should stop at low memory"),
-                run=lambda command, **_: (stopped.append(command) or mock.Mock(returncode=0)),
-                owner_alive=lambda: True,
-            )
+            stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "100"}
+            with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable):
+                result = capture_safety.watchdog_loop(
+                    owner_pid=123, owner_start=4, scope_name="bead-capture-012345abcdef.scope",
+                    stop_file=stop_file, armed_file=armed_file, events_file=events_file,
+                    ready_file=pathlib.Path(temporary) / "ready.json",
+                    heartbeat_file=pathlib.Path(temporary) / "heartbeat.json",
+                    control_group="/private/scope", initial_oom={"oom": 0, "oom_kill": 0},
+                    memory_reader=lambda: capture_safety.ABORT_BELOW_KIB - 1,
+                    sleeper=lambda _: self.fail("watchdog should stop at low memory"),
+                    run=lambda command, **_: (stopped.append(command) or mock.Mock(returncode=0)),
+                    owner_alive=lambda: True,
+                )
             self.assertEqual(result, 3)
             self.assertEqual(stopped, [["systemctl", "--user", "stop", "bead-capture-012345abcdef.scope"]])
             events = [json.loads(line) for line in events_file.read_text().splitlines()]
@@ -380,7 +575,10 @@ class CaptureSafetyTests(unittest.TestCase):
             result = capture_safety.watchdog_loop(
                 owner_pid=123, owner_start=4, scope_name="bead-capture-fedcba987654.scope",
                 stop_file=pathlib.Path(temporary) / "stop", armed_file=armed_file,
+                ready_file=pathlib.Path(temporary) / "ready.json",
+                heartbeat_file=pathlib.Path(temporary) / "heartbeat.json",
                 events_file=pathlib.Path(temporary) / "events.jsonl", control_group="/private/scope",
+                initial_oom={"oom": 0, "oom_kill": 0},
                 memory_reader=lambda: (_ for _ in ()).throw(OSError("meminfo disappeared")),
                 sleeper=lambda _: self.fail("watchdog should stop after read failure"),
                 run=lambda command, **_: (stopped.append(command) or mock.Mock(returncode=0)),
@@ -390,6 +588,25 @@ class CaptureSafetyTests(unittest.TestCase):
             self.assertEqual(stopped, [["systemctl", "--user", "stop", "bead-capture-fedcba987654.scope"]])
             with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "not created by this task"):
                 capture_safety.stop_owned_scope("user.slice", lambda *_args, **_kwargs: self.fail("must not stop another unit"))
+
+    def test_zero_or_malformed_watchdog_samples_stop_scope(self):
+        for value in (0, "bad"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                (root / "armed").touch()
+                stopped = []
+                result = capture_safety.watchdog_loop(
+                    owner_pid=123, owner_start=4, scope_name="bead-capture-012345abcdef.scope",
+                    stop_file=root / "stop", armed_file=root / "armed", ready_file=root / "ready",
+                    heartbeat_file=root / "heartbeat", events_file=root / "events.jsonl",
+                    control_group="/private/scope", initial_oom={"oom": 0, "oom_kill": 0},
+                    memory_reader=lambda: value, sleeper=lambda _: self.fail("invalid sample must abort"),
+                    run=lambda command, **_: (stopped.append(command) or mock.Mock(returncode=0)),
+                    owner_alive=lambda: True,
+                )
+                self.assertEqual(result, 4)
+                self.assertEqual(stopped, [["systemctl", "--user", "stop", "bead-capture-012345abcdef.scope"]])
+                self.assertFalse((root / "ready").exists())
 
     def test_missing_wayland_info_is_a_prerequisite_not_a_probe_substitution(self):
         with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "wayland-info"):

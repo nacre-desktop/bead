@@ -4,6 +4,7 @@
 
 import argparse
 import json
+import math
 import os
 import pathlib
 import re
@@ -19,6 +20,8 @@ START_MIN_KIB = 4 * 1024 * 1024
 ABORT_BELOW_KIB = 2 * 1024 * 1024
 SCOPE_MEMORY_MAX = 2 * 1024 * 1024 * 1024
 CHILD_GATE_TIMEOUT_SECONDS = 30
+WATCHDOG_READY_TIMEOUT_SECONDS = 10
+WATCHDOG_HEARTBEAT_STALE_SECONDS = 3.5
 SCOPE_NAME_RE = re.compile(r"^bead-capture-[0-9a-f]{12}\.scope$")
 
 
@@ -30,7 +33,13 @@ def parse_memavailable_kib(contents):
     match = re.search(r"^MemAvailable:\s+(\d+)\s+kB\s*$", contents, re.MULTILINE)
     if not match:
         raise CaptureSafetyError("MemAvailable is missing or malformed")
-    return int(match.group(1))
+    return validate_memavailable_kib(int(match.group(1)))
+
+
+def validate_memavailable_kib(value):
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise CaptureSafetyError("MemAvailable sample is zero, malformed, or not an integer")
+    return value
 
 
 def read_memavailable_kib(path="/proc/meminfo"):
@@ -109,6 +118,90 @@ def cgroup_memory_snapshot(control_group):
     return result
 
 
+def parse_oom_counters(snapshot):
+    raw = snapshot.get("memory.events")
+    if not isinstance(raw, str) or raw.startswith("unavailable:"):
+        return None
+    counters = {}
+    for line in raw.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            raise CaptureSafetyError("malformed cgroup memory.events snapshot")
+        name, value = fields
+        try:
+            counter = int(value)
+        except ValueError as error:
+            raise CaptureSafetyError("noninteger cgroup memory.events counter") from error
+        if counter < 0:
+            raise CaptureSafetyError("negative cgroup memory.events counter")
+        counters[name] = counter
+    if "oom" not in counters or "oom_kill" not in counters:
+        raise CaptureSafetyError("cgroup memory.events omits oom or oom_kill")
+    return {"oom": counters["oom"], "oom_kill": counters["oom_kill"]}
+
+
+def oom_counter_delta(initial, final, reject_increase=True):
+    before, after = parse_oom_counters(initial), parse_oom_counters(final)
+    if before is None or after is None:
+        raise CaptureSafetyError("cgroup OOM counters are unavailable; capture cannot be validated")
+    delta = {key: after[key] - before[key] for key in ("oom", "oom_kill")}
+    if any(value < 0 for value in delta.values()):
+        raise CaptureSafetyError("cgroup OOM counter moved backwards")
+    if reject_increase and any(value > 0 for value in delta.values()):
+        raise CaptureSafetyError(f"cgroup OOM counter increased: {delta}")
+    return delta
+
+
+def write_json_atomic(path, value):
+    path = pathlib.Path(path)
+    temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(value, sort_keys=True) + "\n")
+    os.replace(temporary, path)
+
+
+def check_heartbeat(path, now, stale_after=WATCHDOG_HEARTBEAT_STALE_SECONDS):
+    try:
+        value = json.loads(pathlib.Path(path).read_text())["monotonic"]
+        timestamp = float(value)
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise CaptureSafetyError(f"watchdog heartbeat is missing or malformed: {error}") from error
+    age = now - timestamp
+    if not math.isfinite(timestamp) or timestamp <= 0 or age < 0 or age > stale_after:
+        raise CaptureSafetyError(f"watchdog heartbeat is stale or invalid (age={age:.3f}s)")
+    return timestamp
+
+
+def release_after_watchdog_ready(*, ready_file, heartbeat_file, release_file, watchdog,
+                                 memory_reader=read_memavailable_kib,
+                                 sleeper=time.sleep, monotonic=time.monotonic,
+                                 timeout=WATCHDOG_READY_TIMEOUT_SECONDS):
+    deadline = monotonic() + timeout
+    while monotonic() < deadline:
+        if watchdog.poll() is not None:
+            raise CaptureSafetyError("watchdog exited before READY")
+        if pathlib.Path(ready_file).exists():
+            try:
+                ready = json.loads(pathlib.Path(ready_file).read_text())
+                first_sample = validate_memavailable_kib(ready["available_kib"])
+                if first_sample < ABORT_BELOW_KIB:
+                    raise CaptureSafetyError("watchdog READY sample is below the 2-GiB abort rail")
+                check_heartbeat(heartbeat_file, monotonic())
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                raise CaptureSafetyError(f"watchdog READY record is invalid: {error}") from error
+            release_sample = validate_memavailable_kib(memory_reader())
+            if release_sample < START_MIN_KIB:
+                raise CaptureSafetyError(
+                    f"MemAvailable {release_sample} KiB fell below the 4-GiB release rail")
+            if watchdog.poll() is not None:
+                raise CaptureSafetyError("watchdog exited while rechecking the release rail")
+            check_heartbeat(heartbeat_file, monotonic())
+            pathlib.Path(release_file).touch()
+            return {"watchdog_first_sample_kib": first_sample,
+                    "release_memavailable_kib": release_sample}
+        sleeper(0.1)
+    raise CaptureSafetyError("timed out waiting for watchdog READY; capture was not released")
+
+
 def stop_owned_scope(scope_name, run=subprocess.run):
     if not SCOPE_NAME_RE.fullmatch(scope_name):
         raise CaptureSafetyError("refusing to stop a scope not created by this task")
@@ -121,8 +214,10 @@ def stop_owned_scope(scope_name, run=subprocess.run):
 
 
 def watchdog_loop(*, owner_pid, owner_start, scope_name, stop_file, armed_file,
-                  events_file, control_group, memory_reader=read_memavailable_kib,
-                  sleeper=time.sleep, run=subprocess.run, owner_alive=None):
+                  ready_file, heartbeat_file, events_file, control_group,
+                  initial_oom,
+                  memory_reader=read_memavailable_kib, sleeper=time.sleep,
+                  monotonic=time.monotonic, run=subprocess.run, owner_alive=None):
     """Run outside the measured scope; return zero on requested clean stop."""
     if owner_alive is None:
         owner_alive = lambda: process_start_ticks(owner_pid) == owner_start
@@ -135,19 +230,28 @@ def watchdog_loop(*, owner_pid, owner_start, scope_name, stop_file, armed_file,
                 stop_owned_scope(scope_name, run)
                 return 2
             if pathlib.Path(armed_file).exists():
-                available = memory_reader()
+                available = validate_memavailable_kib(memory_reader())
                 event = {"kind": "memory", "available_kib": available,
                          "cgroup": cgroup_memory_snapshot(control_group)}
                 append_event(events_file, event)
+                oom_counter_delta({"memory.events": "oom " + str(initial_oom["oom"]) +
+                                   "\noom_kill " + str(initial_oom["oom_kill"])},
+                                  event["cgroup"])
                 if available < ABORT_BELOW_KIB:
                     append_event(events_file, {"kind": "abort", "reason": "MemAvailable-below-2GiB",
                                                "available_kib": available})
                     stop_owned_scope(scope_name, run)
                     return 3
+                stamp = monotonic()
+                write_json_atomic(heartbeat_file, {"monotonic": stamp})
+                if not pathlib.Path(ready_file).exists():
+                    write_json_atomic(ready_file, {"available_kib": available, "monotonic": stamp})
         except Exception as error:
-            append_event(events_file, {"kind": "abort", "reason": "watchdog-failed",
-                                       "error": str(error)})
-            stop_owned_scope(scope_name, run)
+            try:
+                append_event(events_file, {"kind": "abort", "reason": "watchdog-failed",
+                                           "error": str(error)})
+            finally:
+                stop_owned_scope(scope_name, run)
             return 4
         sleeper(1)
 
@@ -160,14 +264,25 @@ def watchdog_process_main(argv):
     parser.add_argument("--scope", required=True)
     parser.add_argument("--stop-file", required=True)
     parser.add_argument("--armed-file", required=True)
+    parser.add_argument("--ready-file", required=True)
+    parser.add_argument("--heartbeat-file", required=True)
     parser.add_argument("--events-file", required=True)
     parser.add_argument("--control-group", required=True)
+    parser.add_argument("--initial-oom", required=True, help="oom,oom_kill counters at scope baseline")
     args = parser.parse_args(argv)
+    try:
+        initial_oom_values = [int(value) for value in args.initial_oom.split(",")]
+        if len(initial_oom_values) != 2 or min(initial_oom_values) < 0:
+            raise ValueError
+        initial_oom = {"oom": initial_oom_values[0], "oom_kill": initial_oom_values[1]}
+    except ValueError as error:
+        raise CaptureSafetyError("invalid watchdog OOM baseline") from error
     try:
         return watchdog_loop(owner_pid=args.owner_pid, owner_start=args.owner_start,
                              scope_name=args.scope, stop_file=args.stop_file,
-                             armed_file=args.armed_file, events_file=args.events_file,
-                             control_group=args.control_group)
+                             armed_file=args.armed_file, ready_file=args.ready_file,
+                             heartbeat_file=args.heartbeat_file, events_file=args.events_file,
+                             control_group=args.control_group, initial_oom=initial_oom)
     except Exception as error:
         # A failed watchdog must be visible to its parent, which then stops the
         # exact scope it owns. It never chooses a process by name or pattern.
@@ -198,7 +313,7 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
               "start_memavailable_kib": None, "minimum_memavailable_kib": None,
               "status": "preflight"}
     try:
-        available_at_start = memory_reader()
+        available_at_start = validate_memavailable_kib(memory_reader())
         report["start_memavailable_kib"] = available_at_start
         if available_at_start < START_MIN_KIB:
             report["status"] = "refused-low-memory"
@@ -227,6 +342,8 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
     with tempfile.TemporaryDirectory(prefix="bead-capture-guard-") as temporary:
         temporary = pathlib.Path(temporary)
         ready_file = temporary / "ready.json"
+        watchdog_ready_file = temporary / "watchdog-ready.json"
+        heartbeat_file = temporary / "watchdog-heartbeat.json"
         release_file = temporary / "release"
         armed_file = temporary / "armed"
         stop_file = temporary / "stop"
@@ -256,23 +373,37 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
             ready = json.loads(ready_file.read_text())
             child_group = ready.get("cgroup", "")
             validate_scope(scope_name, effective_limit, control_group, child_group)
+            initial_cgroup = cgroup_memory_snapshot(control_group)
+            initial_oom = parse_oom_counters(initial_cgroup)
+            if initial_oom is None:
+                raise CaptureSafetyError("cgroup memory.events oom counters unavailable before release")
             report.update({"control_group": control_group, "child_pid": ready.get("pid"),
-                           "child_cgroup": child_group, "effective_memory_max": effective_limit})
+                           "child_cgroup": child_group, "effective_memory_max": effective_limit,
+                           "cgroup_initial": initial_cgroup, "oom_initial": initial_oom})
             watchdog_command = [sys.executable, str(pathlib.Path(__file__).resolve()), "--watchdog",
                                 "--owner-pid", str(wrapper_pid), "--owner-start", str(wrapper_start),
                                 "--scope", scope_name, "--stop-file", str(stop_file),
-                                "--armed-file", str(armed_file), "--events-file", str(events_file),
-                                "--control-group", control_group]
+                                "--armed-file", str(armed_file),
+                                "--ready-file", str(watchdog_ready_file),
+                                "--heartbeat-file", str(heartbeat_file),
+                                "--events-file", str(events_file),
+                                "--control-group", control_group,
+                                "--initial-oom", f"{initial_oom['oom']},{initial_oom['oom_kill']}"]
             watchdog = popen(watchdog_command, env=env, start_new_session=True,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             armed_file.touch()
-            release_file.touch()
+            release_result = release_after_watchdog_ready(
+                ready_file=watchdog_ready_file, heartbeat_file=heartbeat_file,
+                release_file=release_file, watchdog=watchdog, memory_reader=memory_reader,
+                sleeper=sleeper, monotonic=monotonic)
+            report.update(release_result)
 
             while scope_process.poll() is None:
                 if watchdog.poll() is not None:
                     stop_owned_scope(scope_name, run)
                     raise CaptureSafetyError("memory watchdog exited before capture completed")
-                sleeper(1)
+                check_heartbeat(heartbeat_file, monotonic())
+                sleeper(0.25)
 
             stop_file.touch()
             watchdog_code = watchdog.wait(timeout=5)
@@ -281,8 +412,28 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
             available_samples = [row["available_kib"] for row in events if row.get("kind") == "memory"]
             report["minimum_memavailable_kib"] = min(available_samples, default=available_at_start)
             report["watchdog_samples"] = len(available_samples)
-            report["cgroup_last"] = next((row.get("cgroup") for row in reversed(events)
-                                           if row.get("kind") == "memory"), None)
+            final_cgroup = cgroup_memory_snapshot(control_group)
+            final_oom = parse_oom_counters(final_cgroup)
+            final_source = "final"
+            if final_oom is None:
+                for event in reversed(events):
+                    sample = event.get("cgroup") if event.get("kind") == "memory" else None
+                    if isinstance(sample, dict):
+                        counters = parse_oom_counters(sample)
+                        if counters is not None:
+                            final_cgroup, final_oom = sample, counters
+                            final_source = "watchdog-last-available"
+                            break
+            if final_oom is None:
+                final_source = "unavailable"
+            report["cgroup_final_or_last_available"] = final_cgroup
+            report["oom_final_or_last_available"] = final_oom
+            report["oom_final_source"] = final_source
+            if final_oom is None:
+                raise CaptureSafetyError("cgroup oom counters unavailable at capture completion")
+            report["oom_delta"] = oom_counter_delta(initial_cgroup, final_cgroup, reject_increase=False)
+            if any(value > 0 for value in report["oom_delta"].values()):
+                raise CaptureSafetyError(f"cgroup OOM counter increased: {report['oom_delta']}")
             if any(row.get("kind") == "abort" for row in events) or watchdog_code != 0:
                 raise CaptureSafetyError("watchdog invalidated the capture")
             if scope_process.returncode != 0:
