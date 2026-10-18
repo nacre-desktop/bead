@@ -1380,6 +1380,13 @@ async fn ui_provider_disconnect_discards_pending_task_metadata() {
         .unwrap();
     assert!(release_tx.send(()).is_err());
     registered_rx.await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.as_deref() != Some("new-session-boot") {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
     assert_eq!(client.status().boot.as_deref(), Some("new-session-boot"));
     verified_rx.await.unwrap();
     client.control(true).await.unwrap();
