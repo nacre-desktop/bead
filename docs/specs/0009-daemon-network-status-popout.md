@@ -3,7 +3,7 @@
 - ID: B0009
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Ready
+- Status: In progress
 - Depends on: published network contract at Nacre5f4c0bf3; Bead B0008 Done
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours

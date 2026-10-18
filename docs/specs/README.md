@@ -12,6 +12,7 @@ Updated2026-10-18. [Standing rules](https://github.com/nacre-desktop/nacre/blob/
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Review (B0003-S) | Source/test checkpoint submitted; measured work remains gated on B0002 |
 | 4 | [B0007 UI-provider failures](0007-ui-provider-task-failure-replies.md) | Done | Accepted at736e778a; exact-head CI39125066926 green |
 | 5 | [B0008 UI-provider admission](0008-ui-provider-bounded-admission.md) | Review | Source at `b042e47`; exact CI `39127924726` green |
+| 6 | [B0009 network status popout](0009-daemon-network-status-popout.md) | In progress | Lazy shared network lease and validated primary/AP display; source/tests only |
 
 Incident CLOSED by owner2026-10-18: likely lost Codex connection; no OOM/oomd
 kills or relevant kernel crash attribution. Worktrees and artifacts preserved.

@@ -1,5 +1,11 @@
 # Status
 
+## 2026-10-18 — B0009 in progress
+
+The Network popout will consume the shared daemon client only while its panel
+Runtime is open. The implementation is limited to validated read-only display;
+legacy preview behavior remains for runs without a daemon client.
+
 ## 2026-10-18 — B0008 submitted for review
 
 Registered UI-provider overload now returns Busy/retryable/not-dispatched;
