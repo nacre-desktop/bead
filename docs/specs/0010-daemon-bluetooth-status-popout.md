@@ -3,7 +3,7 @@
 - ID: B0010
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Ready
+- Status: Review
 - Depends on: B0009 Done; published BluetoothState contract
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours
@@ -35,11 +35,11 @@ None. No capture/host probe, memory or latency claim. Frozen B0002 artifacts unc
 
 ## Acceptance criteria
 
-- [ ] Existing Bluetooth popout lazily leases shared daemon topic with narrow validated decoding.
-- [ ] Deterministic powered/connected mapping and exact strings above; no fabricated battery/action.
-- [ ] Last-good projection survives stale/invalid/disconnect and recovers atomically.
-- [ ] Private fixture proves Runtime lease and callback retirement; shared client stays usable.
-- [ ] Legacy preview, Network and Battery regressions pass; exact-head CI green.
+- [x] Existing Bluetooth popout lazily leases shared daemon topic with narrow validated decoding.
+- [x] Deterministic powered/connected mapping and exact strings above; no fabricated battery/action.
+- [x] Last-good projection survives stale/invalid/disconnect and recovers atomically.
+- [x] Private fixture proves Runtime lease and callback retirement; shared client stays usable.
+- [x] Legacy preview, Network and Battery regressions pass; exact-head CI green.
 
 ## Stop conditions
 

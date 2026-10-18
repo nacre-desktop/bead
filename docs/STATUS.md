@@ -1,13 +1,16 @@
 # Status
 
-## 2026-10-18 — B0010 in progress
+## 2026-10-18 — B0010 submitted for review
 
-Implementing the read-only Bluetooth popout against the published schema, using
-the shared daemon client only while its Runtime is open. Scope is projection,
-lazy lease lifecycle and private tests; no producer availability, measurements
-or lab access are claimed.
+The Bluetooth popout now leases the published topic only while its Runtime is
+open. It validates `BluetoothState`, follows explicit device order, filters
+powered adapters and caches only the last-good display fields. Private tests
+cover invalid/missing data, recovery, legacy preview, lease retirement and the
+shared link. Exact-head CI `39136586458` is green at `e3e417e`; validation was
+hosted-only because no local Rust tools are installed. No measurement or
+producer availability is claimed; the view stays unavailable until advertised.
 
-## 2026-10-18 — B0009 submitted for review
+## 2026-10-18 — B0009 accepted
 
 The Network popout lazily leases the shared daemon topic and displays only a
 validated, explicitly mapped primary connection. Stale data retains a bounded

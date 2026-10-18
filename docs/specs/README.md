@@ -6,7 +6,7 @@ spec sections and thread messages. Batch status notes at start/review/Done.
 
 | Order | Spec | Status | Authorized next action |
 | --- | --- | --- | --- |
-| 1 | [B0010 Bluetooth popout](0010-daemon-bluetooth-status-popout.md) | In progress | Implement read-only typed Bluetooth projection and lazy shared lease; private fixtures/hosted CI, no lab. |
+| 1 | [B0010 Bluetooth popout](0010-daemon-bluetooth-status-popout.md) | Review | Implementation `e3e417e`; exact-head CI `39136586458` green. Spec review only; producer remains capability-gated. |
 | 2 | [B0009 Network popout](0009-daemon-network-status-popout.md) | Done | Accepted bd7bf56/source5d96384; exact-head CI39134388246 green. Capability-gated, no measurement claim. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Blocked | Missing wayland-info; minimal authorized install failed sudo password required. No retry/probe/capture until prerequisite and new slot. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source B0003-S Done; measured phase gated | Source89afb381 accepted, CI39123319816 green. No repeated static reports; measurements after B0002 PASS/new slot. |
