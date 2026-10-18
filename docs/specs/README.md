@@ -30,4 +30,3 @@ No new tooling-only specs: small fixes/tests fold into B0002/B0003. Status chang
 at start/review/Done; batch notes. No repeated audit/status-only reports while
 product work is ready. New informational unmaintained exceptions may be approved
 by spec agent under standing criteria; vulnerabilities/unsoundness go to owner.
-
