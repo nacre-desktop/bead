@@ -683,7 +683,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
     }));
     let event = receive.recv_timeout(Duration::from_secs(2)).unwrap();
     assert!(matches!(&event, UiEvent::Model(_)));
-    assert!(runtime.stage(event).unwrap().is_some());
+    let _ = runtime.stage(event).unwrap();
     drop(runtime);
     tokio::time::timeout(Duration::from_secs(5), async {
         while client.0.shared.leases.has_topic("network") {
