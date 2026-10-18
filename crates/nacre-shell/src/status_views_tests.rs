@@ -458,7 +458,8 @@ fn bluetooth_core_power_and_connected_order() -> Result<()> {
     assert_eq!(text_value(&values, "status.detail"), "2 connected devices");
 
     let mut reversed = core_bluetooth();
-    reversed["devices"]["order"] = serde_json::json!(["a-empty", "m-first", "z-off", "paired-only"]);
+    reversed["devices"]["order"] =
+        serde_json::json!(["a-empty", "m-first", "z-off", "paired-only"]);
     let values = Status::core_bluetooth(Arc::new(FakeSource::new(reversed)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "Connected device");
 
