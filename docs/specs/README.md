@@ -6,7 +6,7 @@ spec sections and thread messages. Batch status notes at start/review/Done.
 
 | Order | Spec | Status | Authorized next action |
 | --- | --- | --- | --- |
-| 1 | [B0011 Battery popout](0011-daemon-battery-status-popout.md) | In progress | Typed BatteryState, optional readings preserved, lazy shared lease and private tests; no lab. |
+| 1 | [B0011 Battery popout](0011-daemon-battery-status-popout.md) | Done | Accepted source `af61d18`; exact-head CI `39147491406` green. Independent optional readings, lazy shared lease and private lifecycle regressions; no lab or producer claim. |
 | 2 | [B0010 Bluetooth popout](0010-daemon-bluetooth-status-popout.md) | Done | Accepted `e3e417e`; exact-head CI `39136586458` green. Spec review only; producer remains capability-gated. |
 | 2 | [B0009 Network popout](0009-daemon-network-status-popout.md) | Done | Accepted bd7bf56/source5d96384; exact-head CI39134388246 green. Capability-gated, no measurement claim. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Blocked | Missing wayland-info; minimal authorized install failed sudo password required. No retry/probe/capture until prerequisite and new slot. |
@@ -81,8 +81,12 @@ window grant,>=4GiB available start/abort<2GiB, verified private2GiB/swap0scope
 and external watchdog; only own processes may be stopped. No new Bead heavyCI
 while N2 capture is armed; batch documentation pushes to avoid unwanted suites.
 
-Next: obtain B0011 exact-head result and reviewer disposition; finish/retire that
-chat. After F4/plan gates, schedule B2 five alternating pairs per compositor
+B0011 completion supersedes the unfinished Battery handoff above: built-in source
+review accepted; source `af61d18` passed full CI `39147491406`. The old implementer
+retired without further writes. Hosted validation is complete and its heavy slot
+is released; no Bead lab/capture slot is inferred.
+
+Next: after F4/plan gates, schedule B2 five alternating pairs per compositor
 using corrected capture windows/keeper/guard, then B3 measured work. Use built-in
 workers with one spec/worktree each; no new separate terminal chats. Preserve
 all parked drafts and raw evidence. No package/live UI/config/unit action or

@@ -3,7 +3,7 @@
 - ID: B0011
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress
+- Status: Done
 - Depends on: B0010 Done; published BatteryState contract
 - Date: 2026-10-18
 - Size: one focused session, maximum3hours
@@ -34,11 +34,11 @@ None; no memory/latency claim. Frozen B0002 artifacts unchanged. Future capture 
 
 ## Acceptance criteria
 
-- [ ] Narrow BatteryState validation and lazy shared battery lease.
-- [ ] Missing readings remain independently unknown; legitimate0 is displayed correctly.
-- [ ] Stale/invalid/disconnected display retains only bounded last-good projection, recovery atomic.
-- [ ] Runtime drop releases lease/callbacks while shared client stays usable; missing topic honest.
-- [ ] Legacy preview and Network/Bluetooth regressions pass; exact-head full CI green.
+- [x] Narrow BatteryState validation and lazy shared battery lease.
+- [x] Missing readings remain independently unknown; legitimate0 is displayed correctly.
+- [x] Stale/invalid/disconnected display retains only bounded last-good projection, recovery atomic.
+- [x] Runtime drop releases lease/callbacks while shared client stays usable; missing topic honest.
+- [x] Legacy preview and Network/Bluetooth regressions pass; exact-head full CI green.
 
 ## Stop conditions
 
@@ -51,3 +51,27 @@ Standing rules apply. Approved author+committer siverteh <92440237+Siverteh@user
 ## Report format
 
 B0011 Review: exact start/source/final commits, changed files, optional-value projection proof, lease/drop/missing-capability tests, exact-head CI, validation limitations and cleanup; no measurement claim.
+
+## Final review — 2026-10-18
+
+Typed Battery implementation `7051edc`; lifecycle repair started at `7975382`
+and landed as `fb81b38`, formatter correction `d8259dd`, and final source
+`af61d18f367b00c10a618c5bf966da884bc079c7`. Built-in source review accepted the
+synchronization design. Exact-source [CI39147491406](https://github.com/nacre-desktop/bead/actions/runs/39147491406)
+is green: formatting, workspace/all-target Clippy, workspace tests, trace memory
+policy, renderer configurations, UI/Luau proofs, private service lifecycle and
+license checks. Shell tests:138passed,0failed,1ignored.
+
+Named Battery tests prove independent optional readings, real zero, rounding,
+invalid input, stale/disconnected retention and recovery, missing capability,
+legacy preview and lazy Runtime ownership. Battery/Network/Bluetooth lifecycle
+tests now wait for actual Sub and fresh typed data, fence/drain startup callbacks,
+then require Unsub, late-frame consumption and a usable shared connection before
+checking retired callbacks. RPC barriers use the published object parameter shape.
+The earlier `fb81b38` format failure and `d8259dd` null-parameter test failures
+were corrected; neither failed run is acceptance evidence.
+
+Validation was hosted-only; no local Rust toolchain, lab, capture, live UI or
+installation was used. No memory/latency or producer-availability claim. The
+popout remains unavailable unless the daemon advertises Battery. The final
+receipt changes documentation only and skips CI; the tested source is exact above.

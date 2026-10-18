@@ -1,11 +1,18 @@
 # Status
 
-## 2026-10-18 — B0011 in progress
+## 2026-10-18 — B0011 accepted
 
-Implementing the typed Battery popout from the published `BatteryState`
-contract. Scope is the lazy shared-topic lease, independent unknown readings,
-bounded last-good display state and private lifecycle tests. No capture, lab
-work or producer capability claim.
+The Battery popout validates published `BatteryState`, preserves percentage and
+charging as independently unknown, and caches only bounded last-good display
+fields through stale/disconnected input. Its topic lease exists only while the
+Runtime is open. Private Battery/Network/Bluetooth lifecycle tests require actual
+Sub, fresh typed data, drained startup callbacks, Unsub and consumed late data;
+the shared desktop connection stays usable. Named optional-value, invalid-data,
+recovery, missing-capability and legacy tests pass. Built-in source review is
+accepted; exact-source `af61d18` passed full [CI39147491406](https://github.com/nacre-desktop/bead/actions/runs/39147491406).
+Validation was hosted-only: shell138passed,0failed,1ignored. No lab, capture,
+installation, memory/latency or producer availability claim; unavailable until
+Battery is advertised. The final receipt is documentation-only with CI skipped.
 
 ## 2026-10-18 — B0010 submitted for review
 
