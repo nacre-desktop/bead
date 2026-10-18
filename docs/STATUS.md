@@ -1,5 +1,13 @@
 # Status
 
+## 2026-10-18 — B0008 submitted for review
+
+Registered UI-provider overload now returns Busy/retryable/not-dispatched;
+unknown or missing methods return UnknownMethod/not-retryable/not-dispatched.
+The 64-call cap and no-replay behavior are unchanged. Three saturated-pool
+socket tests, missing-provider coverage and B0007 regressions pass. Exact-head
+CI `39127924726` at `b042e47` is green. No measurements or lab use.
+
 ## 2026-10-18 — B0008 in progress
 
 B0007 was accepted Done at `736e778`. B0008 separates registered-method overload

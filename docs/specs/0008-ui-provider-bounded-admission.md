@@ -3,7 +3,7 @@
 - ID: B0008
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress
+- Status: Review
 - Depends on: B0007 Done at736e778a; independent of B0002/capture
 - Date: 2026-10-18
 - Size: one focused session, maximum90minutes
@@ -69,11 +69,19 @@ and capped private scope; do not use the active Nacre capture/correctness host.
 
 ## Acceptance criteria
 
-- [ ] Registered overload yields Busy/retry=true/dispatched=false and no action.
-- [ ] Unknown/missing provider yields UnknownMethod/retry=false/dispatched=false.
-- [ ] MAX_CALLS unchanged; completion frees capacity; no implicit retry/replay.
-- [ ] Three named private tests plus missing-provider and B0007 regressions pass.
-- [ ] fmt,Clippy and exact-head full CI green; no new schema/dependency/live action.
+- [x] Registered overload yields Busy/retry=true/dispatched=false and no action.
+- [x] Unknown/missing provider yields UnknownMethod/retry=false/dispatched=false.
+- [x] MAX_CALLS unchanged; completion frees capacity; no implicit retry/replay.
+- [x] Three named private tests plus missing-provider and B0007 regressions pass.
+- [x] fmt,Clippy and exact-head full CI green; no new schema/dependency/live action.
+
+## Implementation report
+
+Published source at `b042e47`; exact-head full CI `39127924726` green. Private
+socket tests cover full-pool Busy, unknown-at-capacity, admission after one
+completion, and missing provider. Existing B0007 regressions pass. CI ran fmt,
+warnings-denied Clippy and the full test workflow. No protocol, capacity, queue,
+dependency, Nacre, or runtime configuration changed; no measurement was taken.
 
 ## Stop conditions
 
