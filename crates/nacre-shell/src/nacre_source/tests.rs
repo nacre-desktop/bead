@@ -2469,6 +2469,37 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected message before battery lease: {message:?}"),
             }
         }
+        framing::write(
+            &mut w,
+            &Message::Ping {
+                id: Id::Integer(703),
+            },
+        )
+        .await
+        .unwrap();
+        loop {
+            match next(&mut reader).await {
+                Message::Pong {
+                    id: Id::Integer(703),
+                } => break,
+                Message::Call { id, m, .. } => {
+                    assert_eq!(m, "daemon.ping");
+                    framing::write(
+                        &mut w,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok { ok: Value::Null },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                Message::Ping { id } => {
+                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
+                }
+                message => panic!("unexpected message during battery link proof: {message:?}"),
+            }
+        }
         let battery = serde_json::json!({
             "health":{"available":true,"stale":false},
             "percentage":83.0,
@@ -2508,8 +2539,7 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                 message => panic!("unexpected frame before battery Unsub: {message:?}"),
             }
         }
-        // Send a post-Unsub snapshot before the ping so the Pong also proves
-        // the client has consumed the late frame without waking the view.
+        // A peer that sends after Unsub must not wake the retired view.
         framing::write(
             &mut w,
             &Message::Snap {
@@ -2520,39 +2550,6 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
         )
         .await
         .unwrap();
-        framing::write(
-            &mut w,
-            &Message::Ping {
-                id: Id::Integer(703),
-            },
-        )
-        .await
-        .unwrap();
-        loop {
-            match next(&mut reader).await {
-                Message::Pong {
-                    id: Id::Integer(703),
-                } => break,
-                Message::Call { id, m, .. } => {
-                    assert_eq!(m, "daemon.ping");
-                    framing::write(
-                        &mut w,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok: Value::Null },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                }
-                Message::Ping { id } => {
-                    framing::write(&mut w, &Message::Pong { id }).await.unwrap();
-                }
-                message => panic!("unexpected message while checking shared link: {message:?}"),
-            }
-        }
-        // The post-Unsub frame preceded the Pong, proving the shared link
-        // remains alive and the retired view received no callback.
         observed_link.notify_one();
         loop {
             match tokio::time::timeout(Duration::from_secs(5), reader.next()).await {
@@ -2625,6 +2622,13 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
     tokio::time::timeout(Duration::from_secs(5), link_alive.notified())
         .await
         .unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        client.call("daemon.ping".into(), Value::Null, Duration::from_secs(1)),
+    )
+    .await
+    .expect("the shared client remains usable after the battery lease closes")
+    .unwrap();
     assert!(
         receive.recv_timeout(Duration::from_millis(50)).is_err(),
         "a retired Runtime must receive no callback after its lease is released"
