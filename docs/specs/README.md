@@ -81,3 +81,11 @@ adapter read-only. Full hosted [CI39240289443](https://github.com/nacre-desktop/
 passed on exact main source `dcf541a9f19d37b4ef493380664ff4ff1f5a123d`.
 No protocol/pin/producer, lab, install or measurement change. B2/B3 remain gated
 on their explicit grants; no next device-control unit is assigned here.
+
+## Owner scheduling update — 2026-10-19 afternoon
+
+F4 standard five-pair/compositor acceptance is next after N9/N10 private checks.
+Bead light source/review/preparation may continue; no hosted heavy CI, full suite,
+release build, nested session or capture during exclusive N2. Desktop available
+now; lead announces actual capture start/release rather than waiting for night.
+Wayland-utils is installed; no missing-tool blocker is inferred.
