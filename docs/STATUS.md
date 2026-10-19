@@ -7,8 +7,13 @@ The Bluetooth popout has a Client-backed power control path gated on the live
 adapter. It uses the shared CallTicket path and treats topic data as the only
 power readback. A private actual-Runtime fake-daemon test covers exact target
 and payload, duplicate suppression, `changed:false`, and later Snap authority.
-Source is isolated; formatter and `git diff --check` pass. Build, tests, Clippy,
-hosted CI and live producer checks remain unrun under the source-only gate.
+Private fake-daemon cases now cover exact target/payload and `changed:false`,
+invalid/ambiguous/stale state, absent or wrong method version, adapter replacement
+with a fenced late reply, terminal Busy/malformed results, and legacy preview.
+The factory regression also checks that a Bluetooth Runtime opened with the
+shared Client receives the controlled store schema. Source is isolated;
+formatter and `git diff --check` pass. Test execution, build, Clippy, hosted CI
+and live producer checks remain unrun under the source-only gate.
 
 ## 2026-10-18 — B0011 accepted
 

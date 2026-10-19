@@ -1110,8 +1110,15 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
                 .input_regions()
                 .iter()
                 .all(|region| region.id != WIFI_SWITCH_ID),
-            "only Network selects the control template"
+            "Bluetooth does not expose the Network switch"
         );
+        if std::ptr::eq(other, &bluetooth) {
+            assert_eq!(
+                read_only.session.stores.get("bluetooth.power_enabled"),
+                Some(&bead::core::Value::Bool(false)),
+                "a Bluetooth factory with the shared Client selects its capability-gated control template"
+            );
+        }
     }
     assert!(
         (legacy.factory)(true).is_err(),

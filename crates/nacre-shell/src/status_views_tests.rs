@@ -724,6 +724,8 @@ fn bluetooth_power_legacy_preview_unchanged() -> Result<()> {
         text_value(&values, "status.detail"),
         "Fixture headphones, Fixture keyboard"
     );
+    assert!(!values.contains_key("bluetooth.power_checked"));
+    assert!(!values.contains_key("bluetooth.power_enabled"));
     Ok(())
 }
 
