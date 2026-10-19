@@ -4,7 +4,11 @@ use crate::nacre_source::{Client, Config};
 use bead::core::source::Source;
 use nacre_protocol::{Capability, Id, Message, Reply, framing};
 use std::{
-    collections::BTreeMap, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc, time::Duration,
+    collections::BTreeMap,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
 };
 use tokio::{
     io::BufReader,
