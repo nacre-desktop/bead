@@ -4,7 +4,7 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Review: focused correctness passed | Localcdd9fb2 accepted;11 ticket+5 Wi-Fi+1 template tests, fmt and affected Clippy PASS. No source push/full CI; integration pending heavy availability. |
+| 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Desktop wayland-utils installed by owner and command availability verified; prerequisite resolved. Preserve frozen runtime1cff9d1/helper5f4; no slot. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source Done; measured gated | B0003-S89afb381 accepted/CI39123319816 green. Measured work after B2 PASS/new slot; no static polishing. |
@@ -17,14 +17,15 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 B0013 focused correctness finished and RELEASED08:39UTC. Final sourcecdd9fb2
 independently ACCEPTED;11 actor ticket,5 Wi-Fi Runtime and1 template tests PASS,
-fmt and affected all-target Clippy PASS. Earlier failures are retained. No full
-suite/hosted CI/source integration yet. Evidence archive6ccfe29daa51e4c6a92fc445552a6cdd47fae08facfee0423a8284a0a6517f71.
+fmt and affected all-target Clippy PASS. Earlier failures are retained. Exact integration021fdaad published; full hostedCI39230443828 SUCCESS. Evidence archive6ccfe29daa51e4c6a92fc445552a6cdd47fae08facfee0423a8284a0a6517f71.
 Scope manager/effective12GiB/swap0 and held-child membership verified; no OOM,
 peak2,021,376,000B. Actual SCHED_IDLE/priority19 preserved; no host policy change.
 
-Nacre sole heavy grant09:00–11:00UTC is fresh Niri-only quick pair for source8a;
-no Bead build/hosted CI/lab work during that grant. Hyprland needs a separate
-Nacre resume grant. Bead B2/B3 measurement remains after F4 and explicit grant.
+Nacre Niri-only source8a quick pair released09:28UTC with valid cells but failed
+memory screen +5.756/+6.121/+0.488MiB. No H/full-eight; no current capture.
+Bead used the released sole heavy slot for021fdaad CI39230443828, now completed
+SUCCESS09:37:56UTC. All workers released except read-only Nacre diagnosis.
+Bead B2/B3 measurement remains after F4 and explicit grant.
 Owner clarified installation was first laptop, then desktop08:08:50UTC during
 an earlier Nacre candidate warmup: ONLY wayland-utils, no other package changes.
 Desktop /usr/bin/wayland-info availability subsequently verified; no probe run.
@@ -53,3 +54,12 @@ push onlywhenreviewed, noforce/rebaseothers. No live desktop/configs/units/
 installedNacre/packages/tags/releases withoutowner; preserveAIpermissions/paru.
 IncidentCLOSED. Informationaladvisory0192 ratified; exact0370/71/72 exceptions
 retained; vulnerability/unsound advice owneronly. No new Nacre protocol changes.
+
+## B0013 Done — 2026-10-19
+
+Reviewed sourcecdd9fb2, structurally preserved in normal integration021fdaad735f3b1db835d267c117e325018d333e.
+Exact-head [CI39230443828](https://github.com/nacre-desktop/bead/actions/runs/39230443828)
+completed SUCCESS09:37:56UTC: fmt, Clippy, tests, feature/config/schema, capture
+regressions, private lifecycle and dependency/license checks. No local full suite,
+measurement, package, live enablement or producer availability claim. Source and
+queue integrated normally; no force. B2/B3 remain explicitly unscheduled afterF4.

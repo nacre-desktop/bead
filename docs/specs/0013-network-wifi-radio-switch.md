@@ -3,7 +3,7 @@
 - ID: B0013
 - Repo: nacre-desktop/bead
 - Implementer: BEAD (Luna, source/private tests; Sol review of actor lifecycle)
-- Status: Review; source accepted, execution and integration pending
+- Status: Done; integrated021fdaad, exact-headCI39230443828 SUCCESS
 - Depends on: B0009 Done; published reserved Nacre5f4c0bf3 contract
 - Date: 2026-10-19
 - Size: one focused unit, maximum3hours before reporting a gap
@@ -212,3 +212,13 @@ source archivece7767911fdb779103b1dc59b2d5f0a30c6d552651bd085b763a4825a3b5fe63.
 Verified12GiB/swap0 scope, peak2,021,376,000B, zero OOM; actual SCHED_IDLE and
 numeric priority19 preserved. Lab/process/scope/lock released08:39UTC. Pending
 normal integration and exact-head hosted CI when F4 heavy priority permits.
+
+## Done — published integration and exact-head CI
+
+Normal integration021fdaad735f3b1db835d267c117e325018d333e preserves accepted
+sourcecdd9fb2 plus current queue/spec docs. Exact-head [Rust checks39230443828](https://github.com/nacre-desktop/bead/actions/runs/39230443828)
+completed SUCCESS2026-10-19 09:37:56UTC, including fmt/Clippy/full tests,
+feature/config/schema, regression/lifecycle and dependency/license gates. Lead
+verified headSha/conclusion. Capability unavailable until actual daemon method
+advertisement and fresh state; no running producer, physical/liveness/performance
+claim, capture, package or live operation. Task and heavy slot released.
