@@ -210,6 +210,12 @@ impl Runtime {
         let mut runtime = self.with_status_projector(
             crate::status_views::Status::core_network_control(source, client),
         )?;
+        runtime.session.stores = runtime.session.stores.reconcile(&BTreeMap::from([
+            ("network.wifi_checked".into(), bead::core::Value::Bool(false)),
+            ("network.wifi_enabled".into(), bead::core::Value::Bool(false)),
+            ("network.wifi_busy".into(), bead::core::Value::Bool(false)),
+            ("network.wifi_message".into(), bead::core::Value::Text(String::new())),
+        ]))?;
         runtime.actions.register("network.toggle_wifi", "network.control")?;
         runtime.actions.grant("network.control");
         Ok(runtime)

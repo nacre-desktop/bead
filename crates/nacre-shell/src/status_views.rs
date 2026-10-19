@@ -144,7 +144,7 @@ impl Status {
         let snapshot = self.source.snapshot();
         let client = control.borrow().client.clone();
         let candidate = wifi_candidate(&snapshot, &client);
-        let Some(candidate) = candidate.filter(|candidate| candidate.eligible) else { return; };
+        if !candidate.eligible { return; }
         let Some(boot) = candidate.topic_boot.clone() else { return; };
         let Some(state) = candidate.state else { return; };
         let mut control = control.borrow_mut();
