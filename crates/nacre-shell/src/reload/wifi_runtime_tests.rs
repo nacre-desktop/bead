@@ -166,13 +166,14 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic() -> Result<(), 
         let lab = Lab::new();
         let listener = lab.bind();
         let (done_tx, mut done_rx) = oneshot::channel();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let (read, mut writer) = stream.into_split();
             let mut reader = framing::Reader::new(BufReader::new(read));
             assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
             framing::write(&mut writer, &welcome(method, topic_version)).await.unwrap();
-            if topic_version == Some(1) {
+            if topic_version == Some(1) && state_case < 3 {
                 assert_eq!(next(&mut reader).await, Message::Sub { topics: vec!["network".into()] });
                 let mut value = network(true);
                 if state_case == 1 { value["health"]["stale"] = serde_json::json!(true); }
@@ -183,12 +184,17 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic() -> Result<(), 
                 tokio::select! {
                     _ = &mut done_rx => break,
                     incoming = reader.next() => match incoming {
-                        Ok(Some(Message::Call { .. })) => panic!("{label} must never emit a Wi-Fi call"),
+                        Ok(Some(Message::Call { id, m, p, .. })) => {
+                            assert_eq!(m, "daemon.ping", "{label} must never emit a Wi-Fi call");
+                            assert_eq!(p, serde_json::json!({"fence":"unavailable-wifi"}));
+                            framing::write(&mut writer, &Message::Ret { id, reply: Reply::Ok { ok: serde_json::json!({"fenced":true}) } }).await.unwrap();
+                        },
                         Ok(Some(_)) => {},
                         _ => break,
                     }
                 }
             }
+            let _ = shutdown_rx.await;
         });
         let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
         tokio::time::timeout(Duration::from_secs(5), async { while client.status().boot.is_none() { tokio::task::yield_now().await; } }).await?;
@@ -223,9 +229,14 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic() -> Result<(), 
         let rect = bead::ui::rect(&node.draw);
         runtime.stage(UiEvent::Click { x: rect.x + rect.w / 2., y: rect.y + rect.h / 2. })?;
         runtime.commit();
+        // This ordinary call follows any accidental action command in the
+        // existing actor's FIFO. Its Ret proves the peer consumed all earlier
+        // wire Calls before teardown can win the done-channel select.
+        assert_eq!(client.call("daemon.ping".into(), serde_json::json!({"fence":"unavailable-wifi"}), Duration::from_secs(2)).await?, serde_json::json!({"fenced":true}), "{label}");
         drop(runtime);
         let _ = done_tx.send(());
         Source::stop(&client).await?;
+        let _ = shutdown_tx.send(());
         server.await.unwrap();
     }
     Ok(())
