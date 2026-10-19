@@ -128,7 +128,7 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
         h.session
             .view_nodes()
             .iter()
-            .all(|node| node.id != "wifi-radio"),
+            .all(|node| node.id != "status-popout.wifi-row.wifi-radio"),
         "unavailable switch has no hit action"
     );
     assert!(

@@ -12,6 +12,8 @@ use tokio::{
     sync::{mpsc, oneshot},
 };
 
+const WIFI_SWITCH_ID: &str = "status-popout.wifi-row.wifi-radio";
+
 struct Lab(PathBuf);
 impl Lab {
     fn new() -> Self {
@@ -84,7 +86,7 @@ fn switch_center(runtime: &Runtime) -> (f32, f32) {
         .session
         .view_nodes()
         .iter()
-        .find(|node| node.id == "wifi-radio")
+        .find(|node| node.id == WIFI_SWITCH_ID)
         .unwrap();
     let rect = bead::ui::rect(&node.draw);
     (rect.x + rect.w / 2., rect.y + rect.h / 2.)
@@ -225,7 +227,6 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate()
         runtime.session.stores.get("network.wifi_busy"),
         Some(&bead::core::Value::Bool(true))
     );
-    let (x, y) = switch_center(&runtime);
     runtime.stage(UiEvent::Click { x, y })?;
     runtime.commit();
     assert_eq!(
@@ -448,7 +449,7 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic()
                 .session
                 .view_nodes()
                 .iter()
-                .all(|node| node.id != "wifi-radio"),
+                .all(|node| node.id != WIFI_SWITCH_ID),
             "{label}: unavailable control exposes no hit action"
         );
         runtime.stage(UiEvent::Click {
@@ -1085,7 +1086,7 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
             read_only
                 .input_regions()
                 .iter()
-                .all(|region| region.id != "wifi-radio"),
+                .all(|region| region.id != WIFI_SWITCH_ID),
             "only Network selects the control template"
         );
     }
@@ -1104,7 +1105,7 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
             if let Some(region) = runtime
                 .input_regions()
                 .into_iter()
-                .find(|region| region.id == "wifi-radio")
+                .find(|region| region.id == WIFI_SWITCH_ID)
             {
                 break region.rect;
             }
