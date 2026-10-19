@@ -31,6 +31,11 @@ previews remain unchanged. No device pairing/connect/discovery, adapter selector
 multiple-adapter write, direct D-Bus/files fallback, producer/schema/dependency,
 backend, live desktop, installation, measurement or packaging work.
 
+Test-only scope exception approved 2026-10-19: a bounded `#[cfg(test)]`
+`Client::gate_for_tests` wrapper around B0013's existing actor Gate command
+provides a deterministic queued-close fixture. It adds no production API,
+command or runtime behavior.
+
 ## Required behavior
 
 1. Add controlled Bluetooth construction for Runtime with a shared daemon Client.

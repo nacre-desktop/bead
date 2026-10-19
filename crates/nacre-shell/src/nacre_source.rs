@@ -341,6 +341,38 @@ impl Drop for LinkSignalMask {
 }
 
 impl Client {
+    /// Hold the existing IO actor at its test-only gate and return the release
+    /// handle only after the actor confirms entry. Dropping the handle releases
+    /// the gate, so a failed test cannot strand the link thread.
+    #[cfg(test)]
+    pub(crate) async fn gate_for_tests(&self) -> source::Result<oneshot::Sender<()>> {
+        let (entered_tx, entered_rx) = oneshot::channel();
+        let (release_tx, release_rx) = oneshot::channel();
+        self.0
+            .tx
+            .try_send(Command::Gate {
+                entered: entered_tx,
+                release: release_rx,
+            })
+            .map_err(|_| Error::new("busy", "test actor gate could not be queued", true))?;
+        match tokio::time::timeout(Duration::from_secs(5), entered_rx).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) => {
+                drop(release_tx);
+                return Err(Error::new("unavailable", "test actor gate exited", true));
+            }
+            Err(_) => {
+                drop(release_tx);
+                return Err(Error::new(
+                    "timeout",
+                    "test actor gate did not become active",
+                    true,
+                ));
+            }
+        }
+        Ok(release_tx)
+    }
+
     pub fn start(mut config: Config) -> source::Result<Self> {
         if !config.socket.is_absolute() || config.topics.len() > nacre_protocol::MAX_SUBSCRIPTIONS {
             return Err(Error::new(

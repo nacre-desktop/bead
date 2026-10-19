@@ -9,9 +9,11 @@ power readback. A private actual-Runtime fake-daemon test covers exact target
 and payload, duplicate suppression, `changed:false`, and later Snap authority.
 Private fake-daemon cases now cover exact target/payload and `changed:false`,
 invalid/ambiguous/stale state, absent or wrong method version, adapter replacement
-with a fenced late reply, terminal Busy/malformed results, and legacy preview.
-The factory regression also checks that a Bluetooth Runtime opened with the
-shared Client receives the controlled store schema. Source is isolated;
+with a fenced late reply, dispatched close and boot replacement, a deterministic
+queued close through the existing test-only actor gate, disconnected-link
+rejection, timeout/uncertain dispatch, terminal Busy/malformed results, and
+legacy preview. The factory regression also checks that a Bluetooth Runtime
+opened with the shared Client receives the controlled store schema. Source is isolated;
 formatter and `git diff --check` pass. Test execution, build, Clippy, hosted CI
 and live producer checks remain unrun under the source-only gate.
 
