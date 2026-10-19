@@ -76,12 +76,14 @@ pub fn status(
         owner,
         client,
         (radius, trace),
-        "shell".into(),
+        ("shell".into(), None),
     )
 }
 
-/// The root is explicit for private fake-daemon tests, without changing the
-/// process working directory or the factory used in production.
+pub(crate) type StatusInit = Arc<dyn Fn(&mut crate::reload::Runtime) + Send + Sync>;
+
+/// Private fixtures supply a root and scoped initialization without changing
+/// the process environment or the factory used in production.
 pub(crate) fn status_at_root(
     kind: crate::status_views::Kind,
     palette: Arc<PathBuf>,
@@ -89,9 +91,10 @@ pub(crate) fn status_at_root(
     owner: Arc<OnceLock<Arc<bead::services::Desktop>>>,
     client: Option<crate::nacre_source::Client>,
     style: (f32, bool),
-    root: PathBuf,
+    fixture: (PathBuf, Option<StatusInit>),
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
     let (radius, trace) = style;
+    let (root, initialize) = fixture;
     let fill = colors.get("surface")?;
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = 310.;
@@ -163,7 +166,12 @@ pub(crate) fn status_at_root(
                     Some("battery") => runtime.with_core_battery_status(source),
                     _ => runtime.with_status(kind, source),
                 })
-                .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
+                .map(|mut runtime| {
+                    if let Some(initialize) = &initialize {
+                        initialize(&mut runtime);
+                    }
+                    Box::new(runtime) as Box<dyn bead::wayland::SceneSource>
+                })
                 .map_err(|e| e.to_string())
         }),
     })

@@ -207,6 +207,7 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate()
         cold,
     );
     let mut runtime = Runtime::new(session).with_core_network_control(leased, client.clone())?;
+    isolate_runtime(&mut runtime, &lab.0.join("runtime-recovery"));
     runtime.stage(UiEvent::Reload)?;
     runtime.commit();
     let (event_tx, mut event_rx) = mpsc::channel(8);
@@ -308,7 +309,8 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate()
 #[tokio::test(flavor = "current_thread")]
 async fn wifi_runtime_requires_exact_capability_and_fresh_topic()
 -> Result<(), Box<dyn std::error::Error>> {
-    let cases: [(&str, Option<(&str, u16)>, Option<u16>, u8); 9] = [
+    type Case = (&'static str, Option<(&'static str, u16)>, Option<u16>, u8);
+    let cases: [Case; 9] = [
         ("method absent", None, Some(1), 0),
         (
             "misleading name",
@@ -432,6 +434,7 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic()
         );
         let mut runtime =
             Runtime::new(session).with_core_network_control(source, client.clone())?;
+        isolate_runtime(&mut runtime, &lab.0.join("runtime-recovery"));
         let scene = runtime
             .stage(UiEvent::Reload)?
             .expect("controlled template must load");
@@ -501,7 +504,13 @@ fn switch_rect(scene: &bead::render::Scene) -> bead::render::Rect {
         .expect("controlled template renders the switch geometry")
 }
 
-fn controlled_runtime(client: &Client) -> Result<Runtime, Box<dyn std::error::Error>> {
+fn isolate_runtime(runtime: &mut Runtime, recovery: &Path) {
+    runtime.state_file = None;
+    runtime.session.restore_on_start(BTreeMap::new());
+    runtime.session.enable_recovery(recovery.into());
+}
+
+fn controlled_runtime(client: &Client, recovery: &Path) -> Result<Runtime, Box<dyn std::error::Error>> {
     let palette = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
     let colors = bead::render::Palette::read(&palette)?;
     let cold = crate::sound::fallback(colors.get("surface")?);
@@ -514,6 +523,7 @@ fn controlled_runtime(client: &Client) -> Result<Runtime, Box<dyn std::error::Er
     );
     let mut runtime = Runtime::new(session)
         .with_core_network_control(Arc::new(client.lease_topic("network")?), client.clone())?;
+    isolate_runtime(&mut runtime, recovery);
     runtime.services(Box::new(|_| {}));
     let scene = runtime
         .stage(UiEvent::Reload)?
@@ -611,10 +621,10 @@ async fn wifi_runtime_failures_disconnect_never_replay() -> Result<(), Box<dyn s
                 writer = write;
                 assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
                 let mut replacement = welcome(Some(("network.set_wifi", 1)), Some(1));
-                if outcome == "new-boot" {
-                    if let Message::Welcome { boot, .. } = &mut replacement {
-                        *boot = "wifi-boot-b".into();
-                    }
+                if outcome == "new-boot"
+                    && let Message::Welcome { boot, .. } = &mut replacement
+                {
+                    *boot = "wifi-boot-b".into();
                 }
                 framing::write(&mut writer, &replacement).await.unwrap();
                 assert_eq!(
@@ -698,7 +708,7 @@ async fn wifi_runtime_failures_disconnect_never_replay() -> Result<(), Box<dyn s
             let _ = shutdown_rx.await;
         });
         let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
-        let mut runtime = controlled_runtime(&client)?;
+        let mut runtime = controlled_runtime(&client, &lab.0.join("runtime-recovery"))?;
         until(&mut runtime, |r| flag(r, "network.wifi_enabled")).await;
         click(&mut runtime);
         tokio::time::timeout(Duration::from_secs(5), seen_rx).await??;
@@ -867,7 +877,7 @@ async fn wifi_runtime_retire_reopen_isolates_old_reply() -> Result<(), Box<dyn s
         let _ = shutdown_rx.await;
     });
     let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
-    let mut old = controlled_runtime(&client)?;
+    let mut old = controlled_runtime(&client, &lab.0.join("old-recovery"))?;
     let old_controller = std::rc::Rc::downgrade(old.status.as_ref().unwrap());
     let callback_owner = Arc::new(());
     let callback_weak = Arc::downgrade(&callback_owner);
@@ -886,7 +896,7 @@ async fn wifi_runtime_retire_reopen_isolates_old_reply() -> Result<(), Box<dyn s
         "retirement releases controller and ticket"
     );
     tokio::time::timeout(Duration::from_secs(5), retired_rx).await??;
-    let mut replacement = controlled_runtime(&client)?;
+    let mut replacement = controlled_runtime(&client, &lab.0.join("replacement-recovery"))?;
     until(&mut replacement, |r| flag(r, "network.wifi_enabled")).await;
     assert!(!flag(&replacement, "network.wifi_checked"));
     click(&mut replacement);
@@ -1034,6 +1044,12 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
     let colors = Arc::new(bead::render::Palette::read(&palette)?);
     let owner = Arc::new(std::sync::OnceLock::new());
     let root = palette.parent().unwrap().to_path_buf();
+    let recovery_root = lab.0.join("factory-recovery");
+    let next_runtime = std::sync::atomic::AtomicU64::new(0);
+    let initialize: crate::popouts::StatusInit = Arc::new(move |runtime| {
+        let generation = next_runtime.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        isolate_runtime(runtime, &recovery_root.join(generation.to_string()));
+    });
     let spec = crate::popouts::status_at_root(
         crate::status_views::Kind::Network,
         palette.clone(),
@@ -1041,7 +1057,7 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
         owner.clone(),
         Some(client.clone()),
         (12., false),
-        root.clone(),
+        (root.clone(), Some(initialize.clone())),
     )?;
     let bluetooth = crate::popouts::status_at_root(
         crate::status_views::Kind::Bluetooth,
@@ -1050,7 +1066,7 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
         owner.clone(),
         Some(client.clone()),
         (12., false),
-        root.clone(),
+        (root.clone(), Some(initialize.clone())),
     )?;
     let battery = crate::popouts::status_at_root(
         crate::status_views::Kind::Battery,
@@ -1059,7 +1075,7 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
         owner.clone(),
         Some(client.clone()),
         (12., false),
-        root.clone(),
+        (root.clone(), Some(initialize.clone())),
     )?;
     let legacy = crate::popouts::status_at_root(
         crate::status_views::Kind::Network,
@@ -1068,7 +1084,7 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
         owner,
         None,
         (12., false),
-        root.clone(),
+        (root.clone(), Some(initialize.clone())),
     )?;
     assert!(
         !spec.initial_open

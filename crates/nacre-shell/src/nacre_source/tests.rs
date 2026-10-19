@@ -363,10 +363,10 @@ async fn fresh_lease(topic: &LeasedTopic, value: &str) {
 async fn connected_client(client: &Client) -> String {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Some(boot) = client.status().boot {
-                if client.snapshot().connected {
-                    break boot;
-                }
+            if let Some(boot) = client.status().boot
+                && client.snapshot().connected
+            {
+                break boot;
             }
             tokio::task::yield_now().await;
         }
