@@ -137,6 +137,11 @@ enum Command {
     Wire(Message, oneshot::Sender<source::Result<Value>>),
     #[cfg(test)]
     AbortProviderTasks(oneshot::Sender<()>),
+    #[cfg(test)]
+    Gate {
+        entered: oneshot::Sender<()>,
+        release: oneshot::Receiver<()>,
+    },
 }
 const TICKET_QUEUED: u8 = 0;
 const TICKET_DISPATCHED: u8 = 1;
@@ -563,9 +568,9 @@ impl Source for Topic {
     }
 }
 fn disconnect(shared: &Shared) {
-    shared.transport_generation.fetch_add(1, Ordering::AcqRel);
     shared.connection.disconnected(Instant::now());
     let _ = shared.link.disconnect();
+    shared.transport_generation.fetch_add(1, Ordering::AcqRel);
     if let Ok(mut status) = shared.status.lock() {
         *status = Status::default();
     }
@@ -848,6 +853,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                     Some(Command::Call{reply,..})=>reply.finish(Err(unavailable())),
                     #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
                     #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{let _=reply.send(());},
+                    #[cfg(test)] Some(Command::Gate{entered,release})=>{let _=entered.send(());let _=release.await;},
                     None=>break 'outer,
                 }
             }
@@ -925,6 +931,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                             },
                             #[cfg(test)] Some(Command::Wire(message,reply))=>{let result=send(&shared,&mut session.writer,&message).await.map(|_|Value::Null);let _=reply.send(result);},
                             #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{handlers.abort_all();let _=reply.send(());},
+                            #[cfg(test)] Some(Command::Gate{entered,release})=>{let _=entered.send(());let _=release.await;},
                             None=>break,
                         },
                         complete=handlers.join_next_with_id(),if !handlers.is_empty()=>{
@@ -1027,6 +1034,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                     Some(Command::Call{reply,..})=>reply.finish(Err(unavailable())),
                     #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
                     #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{let _=reply.send(());},
+                    #[cfg(test)] Some(Command::Gate{entered,release})=>{let _=entered.send(());let _=release.await;},
                     None=>break 'outer,
                 }
             }

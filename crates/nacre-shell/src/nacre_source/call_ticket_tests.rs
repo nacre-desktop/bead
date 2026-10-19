@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn call_ticket_reply_and_timeout_wake_once() {
     for expected in [Ok(serde_json::json!(true)), Err(timeout())] {
-        let (sender, receiver) = oneshot::channel();
+        let (sender, mut receiver) = oneshot::channel();
         let receiver = Arc::new(Mutex::new(Some(receiver)));
         let observed = receiver.clone();
         let wakes = Arc::new(AtomicU64::new(0));
@@ -59,7 +59,7 @@ fn call_ticket_guard_rejects_changed_boot_or_method() {
 
 #[test]
 fn call_ticket_disconnect_shutdown_and_drop_wake_once() {
-    let (sender, receiver) = oneshot::channel::<source::Result<Value>>();
+    let (sender, mut receiver) = oneshot::channel::<source::Result<Value>>();
     let wakes = Arc::new(AtomicU64::new(0));
     let wake_count = wakes.clone();
     drop(TicketCompletion {
@@ -73,7 +73,7 @@ fn call_ticket_disconnect_shutdown_and_drop_wake_once() {
 
 #[test]
 fn call_ticket_drop_closes_and_wakes_once_even_if_callback_panics() {
-    let (sender, receiver) = oneshot::channel::<source::Result<Value>>();
+    let (sender, mut receiver) = oneshot::channel::<source::Result<Value>>();
     let wakes = Arc::new(AtomicU64::new(0));
     let wake_count = wakes.clone();
     let completion = TicketCompletion {

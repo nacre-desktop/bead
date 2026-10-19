@@ -360,6 +360,81 @@ async fn fresh_lease(topic: &LeasedTopic, value: &str) {
     .unwrap();
 }
 
+async fn connected_client(client: &Client) -> String {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(boot) = client.status().boot {
+                if client.snapshot().connected { break boot; }
+            }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap()
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn call_ticket_drop_before_dispatch_sends_nothing() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (ping_tx, ping_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        ping_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ping { id: Id::Text("barrier-proof".into()) }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("barrier-proof".into()) }, "cancelled queued ticket emitted no Call");
+    });
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let boot = connected_client(&client).await;
+    let (entered_tx, entered_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel();
+    assert!(client.0.tx.try_send(Command::Gate { entered: entered_tx, release: release_rx }).is_ok());
+    entered_rx.await.unwrap();
+    let (wake_tx, wake_rx) = oneshot::channel();
+    let wake_tx = Arc::new(Mutex::new(Some(wake_tx)));
+    let wake: CallWake = Arc::new(move || { if let Some(tx) = wake_tx.lock().unwrap().take() { let _ = tx.send(()); } });
+    let ticket = client.begin_call("daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2), CallGuard { boot, version: 1 }, Some(wake)).unwrap();
+    drop(ticket);
+    let _ = release_tx.send(());
+    tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
+    ping_tx.send(()).unwrap();
+    server.await.unwrap();
+    client.control(true).await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn call_ticket_drop_after_dispatch_does_not_cancel_or_replay() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (release_tx, release_rx) = oneshot::channel();
+    let (ping_tx, ping_rx) = oneshot::channel();
+    let (call_seen_tx, call_seen_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        let Message::Call { id, m, p, .. } = next(&mut reader).await else { panic!("ticket call expected") };
+        assert_eq!(m, "daemon.ping");
+        assert_eq!(p, serde_json::json!({}));
+        call_seen_tx.send(()).unwrap();
+        release_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ret { id, reply: Reply::Ok { ok: serde_json::json!({"pong":true}) } }).await.unwrap();
+        ping_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ping { id: Id::Text("after-ret".into()) }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("after-ret".into()) }, "dropped dispatched ticket was not cancelled/replayed");
+    });
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let boot = connected_client(&client).await;
+    let (wake_tx, wake_rx) = oneshot::channel();
+    let wake_tx = Arc::new(Mutex::new(Some(wake_tx)));
+    let wake: CallWake = Arc::new(move || { if let Some(tx) = wake_tx.lock().unwrap().take() { let _ = tx.send(()); } });
+    let mut ticket = client.begin_call("daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2), CallGuard { boot, version: 1 }, Some(wake)).unwrap();
+    call_seen_rx.await.unwrap();
+    assert!(ticket.try_take().is_none(), "immediate poll is pending until Ret");
+    drop(ticket);
+    let _ = release_tx.send(());
+    tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
+    ping_tx.send(()).unwrap();
+    server.await.unwrap();
+    client.control(true).await.unwrap();
+}
+
 async fn accepted_dashboard(
     listener: &UnixListener,
     boot: &str,
