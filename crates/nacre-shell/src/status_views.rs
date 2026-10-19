@@ -4,7 +4,9 @@ use bead::core::{
     Value,
     source::{self, Source},
 };
-use nacre_protocol::core_services::{BatteryState, BluetoothState, CoreSnapshot, NetworkState};
+use nacre_protocol::core_services::{
+    AudioKind, AudioState, BatteryState, BluetoothState, CoreSnapshot, NetworkState,
+};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
 #[derive(Clone, Copy, Debug)]
@@ -12,6 +14,8 @@ pub enum Kind {
     Network,
     Bluetooth,
     Battery,
+    /// Dedicated Sound route; intentionally absent from the three bar status popouts.
+    Audio,
 }
 impl Kind {
     pub const ALL: [Self; 3] = [Self::Network, Self::Bluetooth, Self::Battery];
@@ -20,6 +24,7 @@ impl Kind {
             Self::Network => "network",
             Self::Bluetooth => "bluetooth",
             Self::Battery => "battery",
+            Self::Audio => "audio",
         }
     }
     pub fn projection(self) -> fn(&bead::services::Snapshot) -> serde_json::Value {
@@ -27,6 +32,7 @@ impl Kind {
             Self::Network => |s| serde_json::json!({"network":s.network}),
             Self::Bluetooth => |s| serde_json::json!({"bluetooth":s.bluetooth}),
             Self::Battery => |s| serde_json::json!({"battery":s.battery}),
+            Self::Audio => |s| serde_json::json!({"audio":s.audio}),
         }
     }
     fn title(self) -> &'static str {
@@ -34,6 +40,7 @@ impl Kind {
             Self::Network => "Network",
             Self::Bluetooth => "Bluetooth",
             Self::Battery => "Battery",
+            Self::Audio => "Sound output",
         }
     }
     fn icon(self) -> &'static str {
@@ -41,6 +48,7 @@ impl Kind {
             Self::Network => "wifi",
             Self::Bluetooth => "bluetooth",
             Self::Battery => "battery_full",
+            Self::Audio => "volume_up",
         }
     }
 }
@@ -75,6 +83,7 @@ enum Mode {
     CoreBluetooth,
     CoreBluetoothControl,
     CoreBattery,
+    CoreAudio,
 }
 impl Status {
     pub fn new(kind: Kind, source: Arc<dyn Source>) -> Self {
@@ -150,6 +159,16 @@ impl Status {
             kind: Kind::Battery,
             source,
             mode: Mode::CoreBattery,
+            last_good: RefCell::new(None),
+            wifi_control: None,
+            bluetooth_control: None,
+        }
+    }
+    pub fn core_audio(source: Arc<dyn Source>) -> Self {
+        Self {
+            kind: Kind::Audio,
+            source,
+            mode: Mode::CoreAudio,
             last_good: RefCell::new(None),
             wifi_control: None,
             bluetooth_control: None,
@@ -280,6 +299,7 @@ impl Status {
             Mode::CoreBluetooth => return self.project_core_bluetooth(),
             Mode::CoreBluetoothControl => return self.project_core_bluetooth_control(),
             Mode::CoreBattery => return self.project_core_battery(),
+            Mode::CoreAudio => return self.project_core_audio(),
             Mode::Legacy => {}
         }
         let snapshot = self.source.snapshot();
@@ -722,6 +742,38 @@ impl Status {
         display.insert("status.kind".into(), Value::Text("battery".into()));
         display
     }
+
+    fn project_core_audio(&self) -> BTreeMap<String, Value> {
+        let snapshot = self.source.snapshot();
+        let audio = serde_json::from_value::<AudioState>(snapshot.data.as_ref().clone())
+            .ok()
+            .map(CoreSnapshot::Audio);
+        let fresh = snapshot.connected
+            && audio.as_ref().is_some_and(|state| {
+                matches!(state, CoreSnapshot::Audio(value) if value.health.available && !value.health.stale)
+                    && state.valid()
+            });
+        if fresh && let Some(CoreSnapshot::Audio(state)) = audio {
+            let display = core_audio_display(&state);
+            *self.last_good.borrow_mut() = Some(display.clone());
+            return core_audio_values(display, true, "Audio status available");
+        }
+        let cached = self.last_good.borrow().clone();
+        let mut display = cached.clone().unwrap_or_else(|| {
+            BTreeMap::from([
+                ("status.primary".into(), Value::Text("Audio unavailable".into())),
+                ("status.device".into(), Value::Text("Output unavailable".into())),
+                ("status.mute".into(), Value::Text("Mute state unknown".into())),
+                ("status.active".into(), Value::Bool(false)),
+            ])
+        });
+        display.insert("status.ready".into(), Value::Bool(false));
+        display.insert("status.health".into(), Value::Text(if cached.is_some() { "Status stale" } else { "Status data unavailable" }.into()));
+        display.insert("status.heading".into(), Value::Text("Sound output".into()));
+        display.insert("status.icon".into(), Value::Text("volume_up".into()));
+        display.insert("status.kind".into(), Value::Text("audio".into()));
+        display
+    }
 }
 
 struct WifiCandidate {
@@ -949,6 +1001,49 @@ fn core_battery_values(
     display.insert("status.icon".into(), Value::Text("battery_full".into()));
     display.insert("status.kind".into(), Value::Text("battery".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
+    display
+}
+fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
+    let node = state.default_output.as_ref()
+        .and_then(|id| state.nodes.items.get(id))
+        .filter(|node| node.kind == AudioKind::Output);
+    let Some(node) = node else {
+        return BTreeMap::from([
+            ("status.primary".into(), Value::Text("Output unavailable".into())),
+            ("status.device".into(), Value::Text("Output unavailable".into())),
+            ("status.mute".into(), Value::Text("Mute state unknown".into())),
+            ("status.active".into(), Value::Bool(false)),
+        ]);
+    };
+    let (volume, muted) = if let Some(readback) = &node.readback {
+        (
+            readback.perceptual_volume.filter(|v| v.is_finite() && *v >= 0.0).map(|v| format!("{:.0}%", v * 100.)),
+            readback.muted.map(|m| if m { "Muted" } else { "Not muted" }.to_owned()),
+        )
+    } else if node.ready {
+        (
+            Some(format!("{:.0}%", node.volume.cbrt() * 100.)),
+            Some(if node.muted { "Muted" } else { "Not muted" }.to_owned()),
+        )
+    } else { (None, None) };
+    let device = if node.name.trim().is_empty() { "Default output" } else { &node.name };
+    let active = muted.as_deref() == Some("Muted");
+    BTreeMap::from([
+        (
+            "status.primary".into(),
+            Value::Text(line(&volume.unwrap_or_else(|| "Volume unknown".into()), 24)),
+        ),
+        ("status.device".into(), Value::Text(line(device, 40))),
+        ("status.mute".into(), Value::Text(muted.unwrap_or_else(|| "Mute state unknown".into()))),
+        ("status.active".into(), Value::Bool(active)),
+    ])
+}
+fn core_audio_values(mut display: BTreeMap<String, Value>, ready: bool, health: &str) -> BTreeMap<String, Value> {
+    display.insert("status.ready".into(), Value::Bool(ready));
+    display.insert("status.health".into(), Value::Text(health.into()));
+    display.insert("status.heading".into(), Value::Text("Sound output".into()));
+    display.insert("status.icon".into(), Value::Text("volume_up".into()));
+    display.insert("status.kind".into(), Value::Text("audio".into()));
     display
 }
 fn line(text: &str, max: usize) -> String {

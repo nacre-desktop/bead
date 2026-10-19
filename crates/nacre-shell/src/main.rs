@@ -482,7 +482,7 @@ fn start(
             .decorations(),
         );
     }
-    if audio_panel || core_views {
+    if audio_panel {
         let owner = desktop_owner.clone();
         let panel_palette = palette.clone();
         let panel_colors = colors.clone();
@@ -525,11 +525,6 @@ fn start(
             }),
         });
     }
-    let core_sound = if core_views {
-        options.panel_spec.take()
-    } else {
-        None
-    };
     if register_ui_provider && (!launcher_panel || menu_fixture.is_some()) {
         return Err("--ui-provider requires the bar launcher with its daemon Source".into());
     }
@@ -550,6 +545,16 @@ fn start(
             )
             .map_err(|e| e.to_string())?,
         )
+    } else {
+        None
+    };
+    let core_sound = if core_views {
+        Some(popouts::core_sound(
+            _ui_provider.clone(),
+            palette.clone(),
+            colors.clone(),
+            panel_trace,
+        )?)
     } else {
         None
     };

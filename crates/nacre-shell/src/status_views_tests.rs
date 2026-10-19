@@ -67,6 +67,18 @@ fn core_battery() -> serde_json::Value {
         "charging":true
     })
 }
+fn core_audio() -> serde_json::Value {
+    serde_json::json!({
+        "health":{"available":true,"stale":false},
+        "default_output":"out",
+        "default_input":"mic",
+        "nodes":{"items":{
+            "out":{"name":"Studio speakers","kind":"output","volume":0.125,"muted":false,"ready":true,"readback":{"linear_volume":0.125,"perceptual_volume":0.5,"muted":false}},
+            "mic":{"name":"Microphone","kind":"input","volume":0.0,"muted":false,"ready":true},
+            "play":{"name":"Playback stream","kind":"playback","volume":1.0,"muted":false,"ready":true}
+        },"order":["mic","play","out"]}
+    })
+}
 fn text_value<'a>(values: &'a BTreeMap<String, Value>, key: &str) -> &'a str {
     let Value::Text(value) = &values[key] else {
         panic!("{key} must be text")
@@ -869,5 +881,103 @@ fn battery_legacy_preview_remains_unchanged() -> Result<()> {
         text_value(&values, "status.detail"),
         "Power profiles unavailable"
     );
+    Ok(())
+}
+
+#[test]
+fn audio_core_uses_only_explicit_default_output() -> Result<()> {
+    let mut state = core_audio();
+    state.as_object_mut().unwrap().remove("default_output");
+    let values = Status::core_audio(Arc::new(FakeSource::new(state)?)).project();
+    assert_eq!(values["status.ready"], Value::Bool(true));
+    assert_eq!(text_value(&values, "status.primary"), "Output unavailable");
+    assert_eq!(text_value(&values, "status.device"), "Output unavailable");
+    Ok(())
+}
+
+#[test]
+fn audio_core_readback_unknown_is_not_zero_or_unmuted() -> Result<()> {
+    let mut state = core_audio();
+    state["nodes"]["items"]["out"]["ready"] = serde_json::json!(false);
+    state["nodes"]["items"]["out"]["readback"] = serde_json::json!({});
+    let values = Status::core_audio(Arc::new(FakeSource::new(state)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Volume unknown");
+    assert_eq!(text_value(&values, "status.mute"), "Mute state unknown");
+    Ok(())
+}
+
+#[test]
+fn audio_core_partial_readback_and_boosted_volume() -> Result<()> {
+    let mut state = core_audio();
+    state["nodes"]["items"]["out"]["readback"] = serde_json::json!({"perceptual_volume":1.5});
+    state["nodes"]["items"]["out"]["ready"] = serde_json::json!(false);
+    let values = Status::core_audio(Arc::new(FakeSource::new(state)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "150%");
+    assert_eq!(text_value(&values, "status.mute"), "Mute state unknown");
+    Ok(())
+}
+
+#[test]
+fn audio_core_legacy_ready_volume_uses_perceptual_scale() -> Result<()> {
+    let mut state = core_audio();
+    state["nodes"]["items"]["out"].as_object_mut().unwrap().remove("readback");
+    state["nodes"]["items"]["out"]["volume"] = serde_json::json!(0.125);
+    let values = Status::core_audio(Arc::new(FakeSource::new(state)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "50%");
+    assert_eq!(text_value(&values, "status.mute"), "Not muted");
+    Ok(())
+}
+
+#[test]
+fn audio_core_invalid_snapshot_stays_unavailable() -> Result<()> {
+    let wrong_source =
+        serde_json::json!({"health":{"available":true,"stale":false},"percentage":50.0});
+    let mut invalid_range = core_audio();
+    invalid_range["nodes"]["items"]["out"]["volume"] = serde_json::json!(-0.1);
+    for state in [wrong_source, invalid_range] {
+        let values = Status::core_audio(Arc::new(FakeSource::new(state)?)).project();
+        assert_eq!(values["status.ready"], Value::Bool(false));
+        assert_eq!(text_value(&values, "status.primary"), "Audio unavailable");
+    }
+    Ok(())
+}
+
+#[test]
+fn audio_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
+    let source = Arc::new(FakeSource::new(core_audio())?);
+    let status = Status::core_audio(source.clone());
+    assert_eq!(text_value(&status.project(), "status.primary"), "50%");
+    source.disconnect()?;
+    let stale = status.project();
+    assert_eq!(stale["status.ready"], Value::Bool(false));
+    assert_eq!(text_value(&stale, "status.primary"), "50%");
+    assert_eq!(text_value(&stale, "status.health"), "Status stale");
+    source.publish(core_audio())?;
+    assert_eq!(status.project()["status.ready"], Value::Bool(true));
+    Ok(())
+}
+
+#[test]
+fn audio_legacy_preview_remains_unchanged() -> Result<()> {
+    let initial = BTreeMap::from([
+        ("panel.open".into(), Value::Bool(true)),
+        ("bead.desktop.audio.device".into(), Value::Text("Speakers".into())),
+        ("bead.desktop.audio.label".into(), Value::Text("50%".into())),
+        ("bead.desktop.audio.percent".into(), Value::Number(50.)),
+        ("bead.desktop.audio".into(), Value::Text("volume_up".into())),
+    ]);
+    let h = Harness::load(
+        &root(),
+        Path::new("sound/main.luau"),
+        &root().join("palette.json"),
+        initial,
+        Config { width: 420, height: 320, scale: 1. },
+    )?;
+    let actions = h.session.view_nodes().into_iter().filter_map(|node| node.action).collect::<Vec<_>>();
+    assert!(actions.iter().any(|action| action == "services.audio"));
+    assert!(actions.iter().any(|action| action == "services.audio.volume"));
+    assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive,
+        bead::render::Primitive::Text { text, .. } if text == "Drag or use arrow keys to adjust volume"
+    )));
     Ok(())
 }

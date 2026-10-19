@@ -80,6 +80,48 @@ pub fn status(
     )
 }
 
+/// Dedicated Sound route in core mode. The audio topic lease is acquired only
+/// when the right-side panel opens and is owned by that Runtime.
+pub fn core_sound(
+    client: Option<crate::nacre_source::Client>,
+    palette: PathBuf,
+    colors: Palette,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    let fill = colors.get("surface")?;
+    let mut fallback = crate::sound::fallback(fill);
+    fallback.width = 400.;
+    fallback.bounds = Rect::new(-32., -32., 464., 340.);
+    if let Some(motion) = &mut fallback.motion {
+        motion.id = "sound-output".into();
+        motion.edge = bead::core::Edge::Right;
+    }
+    let cold = fallback.clone();
+    Ok(PanelSpec {
+        position: Some(crate::placement::Frame::default().positioner(crate::placement::Attachment::Attached(bead::core::Edge::Right))),
+        engages_decorations: true,
+        passive: false,
+        initial_open: false,
+        fallback,
+        renderer: RendererKind::Cpu,
+        factory: Arc::new(move |open| {
+            let client = client.as_ref().ok_or("daemon client unavailable")?;
+            let source: Arc<dyn bead::core::source::Source> = Arc::new(
+                client.lease_topic("audio").map_err(|e| e.to_string())?,
+            );
+            let session = bead::ui::Session::new(
+                "shell".into(), "sound/core.luau".into(), palette.clone(), colors.clone(), cold.clone(),
+            );
+            crate::reload::Runtime::panel_session(session, open)
+                .with_trace(trace)
+                .with_frame(crate::placement::Attachment::Attached(bead::core::Edge::Right), &colors)
+                .and_then(|runtime| runtime.with_core_audio_status(source))
+                .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
+                .map_err(|e| e.to_string())
+        }),
+    })
+}
+
 pub(crate) type StatusInit = Arc<dyn Fn(&mut crate::reload::Runtime) + Send + Sync>;
 
 /// Private fixtures supply a root and scoped initialization without changing
@@ -142,6 +184,7 @@ pub(crate) fn status_at_root(
                 crate::status_views::Kind::Network => Some("network"),
                 crate::status_views::Kind::Bluetooth => Some("bluetooth"),
                 crate::status_views::Kind::Battery => Some("battery"),
+                crate::status_views::Kind::Audio => None,
             }
             .filter(|_| client.is_some());
             let source: Arc<dyn bead::core::source::Source> = if let Some(topic) = typed_topic {
