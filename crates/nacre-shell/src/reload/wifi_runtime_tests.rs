@@ -1103,7 +1103,13 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
     tokio::time::timeout(Duration::from_secs(5), probed_rx).await??;
     for other in [&bluetooth, &battery] {
         let mut read_only = (other.factory)(true).map_err(std::io::Error::other)?;
-        read_only.stage(UiEvent::Reload)?;
+        let scene = read_only
+            .stage(UiEvent::Reload)?
+            .expect("status factory loads its template");
+        let has_bluetooth_power_control = scene.primitives.iter().any(|primitive| {
+            matches!(primitive, bead::render::Primitive::Rounded { rect, .. }
+                if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)
+        });
         read_only.commit();
         assert!(
             read_only
@@ -1112,10 +1118,13 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
                 .all(|region| region.id != WIFI_SWITCH_ID),
             "Bluetooth does not expose the Network switch"
         );
-        let has_bluetooth_power_control = read_only
-            .input_regions()
-            .iter()
-            .any(|region| region.id == "bluetooth-power");
+        assert!(
+            read_only
+                .input_regions()
+                .iter()
+                .all(|region| { region.id != "status-popout.bluetooth-row.bluetooth-power" }),
+            "unadvertised Bluetooth method keeps the rendered switch disabled"
+        );
         assert_eq!(
             has_bluetooth_power_control,
             std::ptr::eq(other, &bluetooth),

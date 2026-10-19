@@ -1026,6 +1026,20 @@ async fn bluetooth_power_queued_close_sends_nothing_and_link_recovers()
 #[tokio::test(flavor = "current_thread")]
 async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
 -> Result<(), Box<dyn std::error::Error>> {
+    async fn next_with_keepalive(
+        reader: &mut framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>,
+        writer: &mut tokio::net::unix::OwnedWriteHalf,
+    ) -> Message {
+        loop {
+            match next(reader).await {
+                Message::Ping { id } => {
+                    framing::write(writer, &Message::Pong { id }).await.unwrap()
+                }
+                message => return message,
+            }
+        }
+    }
+
     let lab = Lab::new();
     let listener = lab.bind();
     let (first_call_tx, first_call_rx) = oneshot::channel();
@@ -1038,7 +1052,10 @@ async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
         let (stream, _) = listener.accept().await.unwrap();
         let (read, mut writer) = stream.into_split();
         let mut reader = framing::Reader::new(BufReader::new(read));
-        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        assert!(matches!(
+            next_with_keepalive(&mut reader, &mut writer).await,
+            Message::Hello { .. }
+        ));
         framing::write(
             &mut writer,
             &Message::Welcome {
@@ -1053,7 +1070,7 @@ async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
         .await
         .unwrap();
         assert_eq!(
-            next(&mut reader).await,
+            next_with_keepalive(&mut reader, &mut writer).await,
             Message::Sub {
                 topics: vec!["bluetooth".into()]
             }
@@ -1070,7 +1087,7 @@ async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
         .unwrap();
         let Message::Call {
             id: old_id, m, p, ..
-        } = next(&mut reader).await
+        } = next_with_keepalive(&mut reader, &mut writer).await
         else {
             panic!("first runtime call expected")
         };
@@ -1098,10 +1115,13 @@ async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
         framing::write(&mut writer, &Message::Ping { id: fence.clone() })
             .await
             .unwrap();
-        assert_eq!(next(&mut reader).await, Message::Pong { id: fence });
+        assert_eq!(
+            next_with_keepalive(&mut reader, &mut writer).await,
+            Message::Pong { id: fence }
+        );
         let _ = fenced_tx.send(());
         let (new_id, m, p) = loop {
-            match next(&mut reader).await {
+            match next_with_keepalive(&mut reader, &mut writer).await {
                 Message::Call { id, m, p, .. } => break (id, m, p),
                 Message::Pong { .. } => {}
                 message => {
@@ -1129,7 +1149,7 @@ async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
         .await
         .unwrap();
         assert_eq!(
-            next(&mut reader).await,
+            next_with_keepalive(&mut reader, &mut writer).await,
             Message::Unsub {
                 topics: vec!["bluetooth".into()]
             }
@@ -1145,6 +1165,9 @@ async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
     })
     .await?;
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    // Keep the topic and its authoritative snapshot alive across Runtime retirement.
+    // The lease belongs to this fixture and is released after the replacement.
+    let companion_lease = client.lease_topic("bluetooth")?;
     let mut old_runtime = controlled_runtime(&client, root.clone(), lab.0.join("retired-runtime"))?;
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -1199,6 +1222,7 @@ async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
     assert!(busy(&replacement));
     tokio::time::timeout(Duration::from_secs(5), second_call_rx).await??;
     drop(replacement);
+    drop(companion_lease);
     tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
     Source::stop(&client).await?;
     let _ = shutdown_tx.send(());
