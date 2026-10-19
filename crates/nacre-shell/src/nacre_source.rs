@@ -61,6 +61,7 @@ struct Shared {
     stop: AtomicBool,
     notify: Notify,
     ended: AtomicBool,
+    transport_generation: AtomicU64,
     closed: Notify,
 }
 impl Shared {
@@ -117,7 +118,7 @@ pub struct Topic {
     publisher: Publisher,
 }
 struct Pending {
-    reply: oneshot::Sender<source::Result<Value>>,
+    reply: CallReply,
     deadline: Instant,
     trace_menu: bool,
 }
@@ -127,7 +128,8 @@ enum Command {
         method: String,
         params: Value,
         deadline: Instant,
-        reply: oneshot::Sender<source::Result<Value>>,
+        reply: CallReply,
+        ticket: Option<TicketDispatch>,
     },
     Reconnect(oneshot::Sender<source::Result<Value>>),
     Stop(oneshot::Sender<source::Result<Value>>),
@@ -135,6 +137,87 @@ enum Command {
     Wire(Message, oneshot::Sender<source::Result<Value>>),
     #[cfg(test)]
     AbortProviderTasks(oneshot::Sender<()>),
+}
+const TICKET_QUEUED: u8 = 0;
+const TICKET_DISPATCHED: u8 = 1;
+const TICKET_CANCELLED: u8 = 2;
+pub type CallWake = Arc<dyn Fn() + Send + Sync>;
+#[derive(Clone, Debug)]
+pub struct CallGuard {
+    pub boot: String,
+    pub version: u16,
+}
+struct TicketDispatch {
+    state: Arc<std::sync::atomic::AtomicU8>,
+    generation: u64,
+    guard: CallGuard,
+}
+enum CallReply {
+    Async(oneshot::Sender<source::Result<Value>>),
+    Ticket(TicketCompletion),
+}
+impl CallReply {
+    fn finish(self, result: source::Result<Value>) {
+        match self {
+            Self::Async(reply) => { let _ = reply.send(result); }
+            Self::Ticket(reply) => reply.finish(result),
+        }
+    }
+}
+struct TicketCompletion {
+    sender: Option<oneshot::Sender<source::Result<Value>>>,
+    wake: Option<CallWake>,
+}
+impl TicketCompletion {
+    fn wake(&mut self) {
+        if let Some(wake) = self.wake.take() {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| wake()));
+        }
+    }
+    fn finish(mut self, result: source::Result<Value>) {
+        if let Some(sender) = self.sender.take() { let _ = sender.send(result); }
+        self.wake();
+    }
+}
+impl Drop for TicketCompletion {
+    fn drop(&mut self) {
+        self.sender.take();
+        self.wake();
+    }
+}
+pub struct CallTicket {
+    receiver: oneshot::Receiver<source::Result<Value>>,
+    state: Arc<std::sync::atomic::AtomicU8>,
+    done: bool,
+}
+impl CallTicket {
+    pub fn try_take(&mut self) -> Option<source::Result<Value>> {
+        if self.done { return None; }
+        match self.receiver.try_recv() {
+            Ok(result) => { self.done = true; Some(result) },
+            Err(oneshot::error::TryRecvError::Empty) => None,
+            Err(oneshot::error::TryRecvError::Closed) => { self.done = true; Some(Err(unavailable())) },
+        }
+    }
+}
+impl Drop for CallTicket {
+    fn drop(&mut self) {
+        let _ = self.state.compare_exchange(TICKET_QUEUED, TICKET_CANCELLED, Ordering::AcqRel, Ordering::Acquire);
+    }
+}
+fn ticket_guard_matches(
+    ticket: &TicketDispatch,
+    generation: u64,
+    boot: &str,
+    methods: &BTreeMap<String, nacre_protocol::Method>,
+    method: &str,
+) -> bool {
+    ticket.generation == generation
+        && boot == ticket.guard.boot
+        && methods.get(method).is_some_and(|advertised| advertised.v == ticket.guard.version)
+}
+fn claim_ticket_dispatch(state: &std::sync::atomic::AtomicU8) -> bool {
+    state.compare_exchange(TICKET_QUEUED, TICKET_DISPATCHED, Ordering::AcqRel, Ordering::Acquire).is_ok()
 }
 fn unavailable() -> Error {
     Error::new(
@@ -281,6 +364,7 @@ impl Client {
             stop: AtomicBool::new(false),
             notify: Notify::new(),
             ended: AtomicBool::new(false),
+            transport_generation: AtomicU64::new(0),
             closed: Notify::new(),
         });
         let (tx, rx) = mpsc::channel(nacre_protocol::MAX_CALLS);
@@ -336,6 +420,45 @@ impl Client {
             .unwrap_or_else(|p| p.into_inner())
             .clone()
     }
+    pub fn begin_call(
+        &self,
+        method: String,
+        params: Value,
+        duration: Duration,
+        guard: CallGuard,
+        wake: Option<CallWake>,
+    ) -> source::Result<CallTicket> {
+        if duration.is_zero() || duration > Duration::from_secs(120)
+            || method.is_empty() || method.len() > 128
+        {
+            return Err(Error::new("validation", "invalid call/deadline", false));
+        }
+        let generation = self.0.shared.transport_generation.load(Ordering::Acquire);
+        let status = self.status();
+        if self.0.shared.stop.load(Ordering::Acquire)
+            || !self.0.shared.link.snapshot().connected
+            || status.boot.as_deref() != Some(guard.boot.as_str())
+        {
+            return Err(unavailable());
+        }
+        let state = Arc::new(std::sync::atomic::AtomicU8::new(TICKET_QUEUED));
+        let (sender, receiver) = oneshot::channel();
+        let reply = CallReply::Ticket(TicketCompletion { sender: Some(sender), wake });
+        let command = Command::Call {
+            id: None, method, params, deadline: Instant::now() + duration,
+            reply,
+            ticket: Some(TicketDispatch { state: state.clone(), generation, guard }),
+        };
+        match self.0.tx.try_send(command) {
+            Ok(()) => Ok(CallTicket { receiver, state, done: false }),
+            Err(error) => {
+                if let Command::Call { reply: CallReply::Ticket(mut completion), .. } = error.into_inner() {
+                    completion.wake = None;
+                }
+                Err(Error::new("busy", "daemon call queue full or stopped", true))
+            }
+        }
+    }
     pub async fn call(
         &self,
         method: String,
@@ -369,7 +492,8 @@ impl Client {
                 method,
                 params,
                 deadline: Instant::now() + duration,
-                reply,
+                reply: CallReply::Async(reply),
+                ticket: None,
             })
             .map_err(|_| Error::new("busy", "daemon call queue full or stopped", true))?;
         rx.await.map_err(|_| unavailable())?
@@ -439,6 +563,7 @@ impl Source for Topic {
     }
 }
 fn disconnect(shared: &Shared) {
+    shared.transport_generation.fetch_add(1, Ordering::AcqRel);
     shared.connection.disconnected(Instant::now());
     let _ = shared.link.disconnect();
     if let Ok(mut status) = shared.status.lock() {
@@ -663,7 +788,7 @@ fn expire(pending: &mut BTreeMap<Id, Pending>) {
         .collect::<Vec<_>>();
     for id in ids {
         if let Some(call) = pending.remove(&id) {
-            let _ = call.reply.send(Err(timeout()));
+            call.reply.finish(Err(timeout()));
         }
     }
 }
@@ -680,7 +805,7 @@ fn resolve(pending: &mut BTreeMap<Id, Pending>, id: &Id, reply: Reply) {
         if call.trace_menu {
             trace_menu_return(id, &result);
         }
-        let _ = call.reply.send(result);
+        call.reply.finish(result);
     }
 }
 // Numeric method readiness only: never query text or result contents.
@@ -720,7 +845,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                 command=commands.recv()=>match command {
                     Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);let _=reply.send(Ok(Value::Null));break 'outer;},
                     Some(Command::Reconnect(reply))=>{let _=reply.send(Ok(Value::Null));},
-                    Some(Command::Call{reply,..})=>{let _=reply.send(Err(unavailable()));},
+                    Some(Command::Call{reply,..})=>reply.finish(Err(unavailable())),
                     #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
                     #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{let _=reply.send(());},
                     None=>break 'outer,
@@ -776,16 +901,24 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                         command=commands.recv()=>match command {
                             Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
                             Some(Command::Reconnect(reply))=>{disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
-                            Some(Command::Call{id,method,params,deadline,reply})=>{
-                                if deadline<=Instant::now(){let _=reply.send(Err(timeout()));continue;}
-                                if pending.len()>=nacre_protocol::MAX_CALLS{let _=reply.send(Err(Error::new("busy","daemon outstanding-call limit",true)));continue;}
-                                next+=1;if next as u64>nacre_protocol::MAX_SAFE_INTEGER{let _=reply.send(Err(Error::new("internal","call id exhausted",false)));break;}
+                            Some(Command::Call{id,method,params,deadline,reply,ticket})=>{
+                                if let Some(ticket) = &ticket {
+                                    let available = ticket_guard_matches(ticket, shared.transport_generation.load(Ordering::Acquire), &session.boot, &session.methods, &method);
+                                    if !available { reply.finish(Err(unavailable())); continue; }
+                                    if ticket.state.load(Ordering::Acquire) == TICKET_CANCELLED { drop(reply); continue; }
+                                }
+                                if deadline<=Instant::now(){reply.finish(Err(timeout()));continue;}
+                                if pending.len()>=nacre_protocol::MAX_CALLS{reply.finish(Err(Error::new("busy","daemon outstanding-call limit",true)));continue;}
+                                next+=1;if next as u64>nacre_protocol::MAX_SAFE_INTEGER{reply.finish(Err(Error::new("internal","call id exhausted",false)));break;}
                                 let id=id.unwrap_or(Id::Integer(next));
-                                if pending.contains_key(&id){let _=reply.send(Err(Error::new("validation","duplicate call id",false)));continue;}
+                                if pending.contains_key(&id){reply.finish(Err(Error::new("validation","duplicate call id",false)));continue;}
                                 let remaining=deadline.saturating_duration_since(Instant::now());
                                 let trace_menu=bead::core::profile::enabled() && method=="menu.query";
                                 let message=Message::Call{id:id.clone(),m:method,p:params,timeout:Some(remaining.as_millis().clamp(1,120000) as u32)};
-                                if let Err(e)=framing::encode(&message){let _=reply.send(Err(failure(e)));continue;}
+                                if let Err(e)=framing::encode(&message){reply.finish(Err(failure(e)));continue;}
+                                if let Some(ticket) = &ticket
+                                    && !claim_ticket_dispatch(&ticket.state)
+                                { drop(reply); continue; }
                                 pending.insert(id.clone(),Pending{reply,deadline,trace_menu});
                                 if !tokio::time::timeout(remaining.min(Duration::from_secs(10)),send(&shared,&mut session.writer,&message)).await.is_ok_and(|r|r.is_ok()){break;}
                                 if trace_menu && let Id::Integer(id)=&id { println!("MENU_RPC_SENT id={id}"); }
@@ -867,7 +1000,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                 }
                 handlers.abort_all();
                 for (_, p) in pending {
-                    let _ = p.reply.send(Err(if p.deadline <= Instant::now() {
+                    p.reply.finish(Err(if p.deadline <= Instant::now() {
                         timeout()
                     } else {
                         unavailable()
@@ -891,7 +1024,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                 command=commands.recv()=>match command {
                     Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);let _=reply.send(Ok(Value::Null));break 'outer;},
                     Some(Command::Reconnect(reply))=>{let _=reply.send(Ok(Value::Null));break;},
-                    Some(Command::Call{reply,..})=>{let _=reply.send(Err(unavailable()));},
+                    Some(Command::Call{reply,..})=>reply.finish(Err(unavailable())),
                     #[cfg(test)] Some(Command::Wire(_,reply))=>{let _=reply.send(Err(unavailable()));},
                     #[cfg(test)] Some(Command::AbortProviderTasks(reply))=>{let _=reply.send(());},
                     None=>break 'outer,
@@ -981,3 +1114,6 @@ mod tests;
 
 #[cfg(test)]
 mod core_compatibility_tests;
+
+#[cfg(test)]
+mod call_ticket_tests;
