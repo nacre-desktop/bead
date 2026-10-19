@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-19 — B0014 source in progress
+
+The Bluetooth popout has a Client-backed power control path gated on the live
+`bluetooth.set_power` v1 advertisement and one fresh, valid, unambiguous
+adapter. It uses the shared CallTicket path and treats topic data as the only
+power readback. A private actual-Runtime fake-daemon test covers exact target
+and payload, duplicate suppression, `changed:false`, and later Snap authority.
+Source is isolated; formatter and `git diff --check` pass. Build, tests, Clippy,
+hosted CI and live producer checks remain unrun under the source-only gate.
+
 ## 2026-10-18 — B0011 accepted
 
 The Battery popout validates published `BatteryState`, preserves percentage and

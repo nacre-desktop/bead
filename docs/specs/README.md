@@ -4,7 +4,7 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Ready: light source | Exactly-one-adapter control against published schema; source-only while Nacre diagnostic owns heavy slot. |
+| 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | In progress: light source | Controlled single-adapter switch, actual Runtime/fake-daemon coverage; source-only while Nacre diagnostic owns heavy slot. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Desktop wayland-utils installed by owner and command availability verified; prerequisite resolved. Preserve frozen runtime1cff9d1/helper5f4; no slot. |

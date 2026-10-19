@@ -3,7 +3,7 @@
 - ID: B0014
 - Repo: nacre-desktop/bead
 - Implementer: one Luna worker; Sol review before integration
-- Status: Ready — source-only during the Nacre heavy slot
+- Status: In progress — source-only during the Nacre heavy slot
 - Start: current main85f89e9, containing B0013 source021fdaad
 - Depends on: B0010/B0013 Done; published5f4c0bf3 reserved contract
 - Date: 2026-10-19

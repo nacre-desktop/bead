@@ -51,10 +51,18 @@ pub struct Status {
     mode: Mode,
     last_good: RefCell<Option<BTreeMap<String, Value>>>,
     wifi_control: Option<RefCell<WifiControl>>,
+    bluetooth_control: Option<RefCell<BluetoothControl>>,
 }
 struct WifiControl {
     client: crate::nacre_source::Client,
     pending: Option<(String, crate::nacre_source::CallTicket)>,
+    message: Option<String>,
+    last_boot: Option<String>,
+    checked: bool,
+}
+struct BluetoothControl {
+    client: crate::nacre_source::Client,
+    pending: Option<(String, String, crate::nacre_source::CallTicket)>,
     message: Option<String>,
     last_boot: Option<String>,
     checked: bool,
@@ -65,6 +73,7 @@ enum Mode {
     CoreNetwork,
     CoreNetworkControl,
     CoreBluetooth,
+    CoreBluetoothControl,
     CoreBattery,
 }
 impl Status {
@@ -75,6 +84,7 @@ impl Status {
             mode: Mode::Legacy,
             last_good: RefCell::new(None),
             wifi_control: None,
+            bluetooth_control: None,
         }
     }
     pub fn core_network(source: Arc<dyn Source>) -> Self {
@@ -84,6 +94,7 @@ impl Status {
             mode: Mode::CoreNetwork,
             last_good: RefCell::new(None),
             wifi_control: None,
+            bluetooth_control: None,
         }
     }
     pub fn core_network_control(
@@ -102,6 +113,7 @@ impl Status {
                 last_boot: None,
                 checked: false,
             })),
+            bluetooth_control: None,
         }
     }
     pub fn core_bluetooth(source: Arc<dyn Source>) -> Self {
@@ -111,6 +123,26 @@ impl Status {
             mode: Mode::CoreBluetooth,
             last_good: RefCell::new(None),
             wifi_control: None,
+            bluetooth_control: None,
+        }
+    }
+    pub fn core_bluetooth_control(
+        source: Arc<dyn Source>,
+        client: crate::nacre_source::Client,
+    ) -> Self {
+        Self {
+            kind: Kind::Bluetooth,
+            source,
+            mode: Mode::CoreBluetoothControl,
+            last_good: RefCell::new(None),
+            wifi_control: None,
+            bluetooth_control: Some(RefCell::new(BluetoothControl {
+                client,
+                pending: None,
+                message: None,
+                last_boot: None,
+                checked: false,
+            })),
         }
     }
     pub fn core_battery(source: Arc<dyn Source>) -> Self {
@@ -120,6 +152,7 @@ impl Status {
             mode: Mode::CoreBattery,
             last_good: RefCell::new(None),
             wifi_control: None,
+            bluetooth_control: None,
         }
     }
     pub fn subscribe(
@@ -134,17 +167,23 @@ impl Status {
         &self,
         notify: crate::nacre_source::CallWake,
     ) -> source::Result<source::Subscription> {
-        let Some(control) = &self.wifi_control else {
-            return Err(source::Error::new(
-                "unavailable",
-                "Wi-Fi control is disabled",
-                false,
-            ));
-        };
-        control
-            .borrow()
-            .client
-            .subscribe(Arc::new(move |_| notify()))
+        if let Some(control) = &self.wifi_control {
+            return control
+                .borrow()
+                .client
+                .subscribe(Arc::new(move |_| notify()));
+        }
+        if let Some(control) = &self.bluetooth_control {
+            return control
+                .borrow()
+                .client
+                .subscribe(Arc::new(move |_| notify()));
+        }
+        Err(source::Error::new(
+            "unavailable",
+            "Control is disabled",
+            false,
+        ))
     }
     pub fn wifi_action(&self, wake: crate::nacre_source::CallWake) {
         let Some(control) = &self.wifi_control else {
@@ -189,11 +228,57 @@ impl Status {
             Err(_) => control.message = Some("Wi-Fi change failed".into()),
         }
     }
+    pub fn bluetooth_action(&self, wake: crate::nacre_source::CallWake) {
+        let Some(control) = &self.bluetooth_control else {
+            return;
+        };
+        let snapshot = self.source.snapshot();
+        let client = control.borrow().client.clone();
+        let candidate = bluetooth_candidate(&snapshot, &client);
+        if !candidate.eligible {
+            return;
+        }
+        let (Some(boot), Some(adapter_id)) =
+            (candidate.topic_boot.clone(), candidate.adapter_id.clone())
+        else {
+            return;
+        };
+        let Some(adapter) = candidate.adapter.as_ref() else {
+            return;
+        };
+        let mut control = control.borrow_mut();
+        if control.pending.is_some() {
+            return;
+        }
+        if control
+            .last_boot
+            .as_deref()
+            .is_some_and(|previous| previous != boot)
+        {
+            control.message = None;
+        }
+        control.last_boot = Some(boot.clone());
+        control.message = None;
+        match client.begin_call(
+            "bluetooth.set_power".into(),
+            serde_json::json!({"adapter": adapter_id, "powered": !adapter.powered}),
+            Duration::from_millis(candidate.timeout_ms.min(10_000) as u64),
+            crate::nacre_source::CallGuard {
+                boot: boot.clone(),
+                version: 1,
+            },
+            Some(wake),
+        ) {
+            Ok(ticket) => control.pending = Some((boot, adapter_id, ticket)),
+            Err(_) => control.message = Some("Bluetooth power change failed".into()),
+        }
+    }
     pub fn project(&self) -> BTreeMap<String, Value> {
         match self.mode {
             Mode::CoreNetwork => return self.project_core_network(),
             Mode::CoreNetworkControl => return self.project_core_network_control(),
             Mode::CoreBluetooth => return self.project_core_bluetooth(),
+            Mode::CoreBluetoothControl => return self.project_core_bluetooth_control(),
             Mode::CoreBattery => return self.project_core_battery(),
             Mode::Legacy => {}
         }
@@ -441,6 +526,13 @@ impl Status {
 
     fn project_core_bluetooth(&self) -> BTreeMap<String, Value> {
         let snapshot = self.source.snapshot();
+        self.project_core_bluetooth_snapshot(&snapshot)
+    }
+
+    fn project_core_bluetooth_snapshot(
+        &self,
+        snapshot: &bead::core::source::Snapshot,
+    ) -> BTreeMap<String, Value> {
         let bluetooth = serde_json::from_value::<BluetoothState>(snapshot.data.as_ref().clone())
             .ok()
             .map(CoreSnapshot::Bluetooth);
@@ -487,6 +579,94 @@ impl Status {
         display.insert("status.icon".into(), Value::Text("bluetooth".into()));
         display.insert("status.kind".into(), Value::Text("bluetooth".into()));
         display
+    }
+
+    fn project_core_bluetooth_control(&self) -> BTreeMap<String, Value> {
+        let snapshot = self.source.snapshot();
+        let control_cell = self
+            .bluetooth_control
+            .as_ref()
+            .expect("controlled Bluetooth has controller");
+        let client = control_cell.borrow().client.clone();
+        let candidate = bluetooth_candidate(&snapshot, &client);
+        let mut base = self.project_core_bluetooth_snapshot(&snapshot);
+        let mut control = control_cell.borrow_mut();
+        if candidate.topic_boot.as_ref().is_some_and(|boot| {
+            control
+                .last_boot
+                .as_deref()
+                .is_some_and(|previous| previous != boot)
+        }) {
+            control.message = None;
+        }
+        if let Some(boot) = candidate.topic_boot.as_ref() {
+            control.last_boot = Some(boot.clone());
+        }
+        let same_target = candidate
+            .eligible_identity
+            .as_ref()
+            .is_some_and(|(boot, adapter)| {
+                control
+                    .pending
+                    .as_ref()
+                    .is_some_and(|(pending_boot, pending_adapter, _)| {
+                        boot == pending_boot && adapter == pending_adapter
+                    })
+            });
+        if control.pending.is_some() && (!candidate.link_connected || !same_target) {
+            control.pending = None;
+        }
+        let terminal = control
+            .pending
+            .as_mut()
+            .and_then(|(_, _, ticket)| ticket.try_take());
+        if let Some(result) = terminal {
+            control.pending = None;
+            control.message = match result {
+                Ok(payload)
+                    if payload.as_object().is_some_and(|object| {
+                        object.len() == 1
+                            && object
+                                .get("changed")
+                                .and_then(serde_json::Value::as_bool)
+                                .is_some()
+                    }) =>
+                {
+                    None
+                }
+                _ => Some("Bluetooth power change failed".into()),
+            };
+        }
+        if candidate.fresh {
+            control.checked = candidate
+                .adapter
+                .as_ref()
+                .is_some_and(|adapter| adapter.powered);
+        }
+        let busy = control.pending.is_some();
+        let message = if !candidate.eligible {
+            "Bluetooth power control unavailable"
+        } else if busy {
+            "Changing Bluetooth power…"
+        } else {
+            control.message.as_deref().unwrap_or("")
+        };
+        base.extend([
+            (
+                "bluetooth.power_checked".into(),
+                Value::Bool(control.checked),
+            ),
+            (
+                "bluetooth.power_enabled".into(),
+                Value::Bool(candidate.eligible && !busy),
+            ),
+            ("bluetooth.power_busy".into(), Value::Bool(busy)),
+            (
+                "bluetooth.power_message".into(),
+                Value::Text(message.into()),
+            ),
+        ]);
+        base
     }
 
     fn project_core_battery(&self) -> BTreeMap<String, Value> {
@@ -549,6 +729,16 @@ struct WifiCandidate {
     eligible: bool,
     timeout_ms: u32,
 }
+struct BluetoothCandidate {
+    topic_boot: Option<String>,
+    eligible_identity: Option<(String, String)>,
+    adapter_id: Option<String>,
+    adapter: Option<nacre_protocol::core_services::BluetoothAdapter>,
+    fresh: bool,
+    link_connected: bool,
+    eligible: bool,
+    timeout_ms: u32,
+}
 fn wifi_candidate(
     topic: &bead::core::source::Snapshot,
     client: &crate::nacre_source::Client,
@@ -574,6 +764,53 @@ fn wifi_candidate(
         topic_boot: Some(topic_boot),
         eligible_identity: identity_matches.then(|| topic.epoch.clone()),
         state,
+        fresh,
+        link_connected: link.connected,
+        eligible,
+        timeout_ms: method.map_or(10_000, |method| method.timeout.min(10_000)),
+    }
+}
+
+fn bluetooth_candidate(
+    topic: &bead::core::source::Snapshot,
+    client: &crate::nacre_source::Client,
+) -> BluetoothCandidate {
+    let link = client.snapshot();
+    let status = client.status();
+    let topic_boot = topic.epoch.clone();
+    let link_boot = link.data.get("boot").and_then(serde_json::Value::as_str);
+    let identity_matches = topic.connected
+        && link.connected
+        && status.boot.as_deref() == Some(topic.epoch.as_str())
+        && link_boot == Some(topic.epoch.as_str());
+    let state = serde_json::from_value::<BluetoothState>(topic.data.as_ref().clone()).ok();
+    let fresh = identity_matches
+        && state.as_ref().is_some_and(|state| {
+            state.health.available
+                && !state.health.stale
+                && CoreSnapshot::Bluetooth(state.clone()).valid()
+        });
+    let sole = state.as_ref().and_then(|state| {
+        if state.adapters.order.len() != 1 || state.adapters.items.len() != 1 {
+            return None;
+        }
+        let id = state.adapters.order.first()?;
+        let adapter = state.adapters.items.get(id)?;
+        Some((id.0.clone(), adapter.clone()))
+    });
+    let method = status.methods.get("bluetooth.set_power");
+    let eligible = fresh && sole.is_some() && method.is_some_and(|method| method.v == 1);
+    let (adapter_id, adapter) =
+        sole.map_or((None, None), |(id, adapter)| (Some(id), Some(adapter)));
+    BluetoothCandidate {
+        topic_boot: Some(topic_boot.clone()),
+        eligible_identity: if identity_matches && eligible {
+            adapter_id.clone().map(|id| (topic_boot, id))
+        } else {
+            None
+        },
+        adapter_id,
+        adapter,
         fresh,
         link_connected: link.connected,
         eligible,

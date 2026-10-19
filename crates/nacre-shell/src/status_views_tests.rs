@@ -145,6 +145,55 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
     )), "the unavailable switch remains visible");
     Ok(())
 }
+
+#[test]
+fn controlled_bluetooth_template_omits_unavailable_switch_action() -> Result<()> {
+    let initial = BTreeMap::from([
+        ("view.edge".into(), Value::Text("top".into())),
+        ("panel.open".into(), Value::Bool(true)),
+        ("status.ready".into(), Value::Bool(false)),
+        ("status.active".into(), Value::Bool(false)),
+        ("status.heading".into(), Value::Text("Bluetooth".into())),
+        ("status.icon".into(), Value::Text("bluetooth".into())),
+        (
+            "status.primary".into(),
+            Value::Text("Bluetooth unavailable".into()),
+        ),
+        (
+            "status.secondary".into(),
+            Value::Text("Status data unavailable".into()),
+        ),
+        ("status.detail".into(), Value::Text(String::new())),
+        ("bluetooth.power_checked".into(), Value::Bool(false)),
+        ("bluetooth.power_enabled".into(), Value::Bool(false)),
+        ("bluetooth.power_busy".into(), Value::Bool(false)),
+        (
+            "bluetooth.power_message".into(),
+            Value::Text("Bluetooth power control unavailable".into()),
+        ),
+    ]);
+    let h = Harness::load(
+        &root(),
+        Path::new("status/bluetooth.luau"),
+        &root().join("palette.json"),
+        initial,
+        Config {
+            width: 380,
+            height: 300,
+            scale: 1.,
+        },
+    )?;
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .all(|node| node.id != "status-popout.bluetooth-row.bluetooth-power"),
+        "unavailable switch has no hit action"
+    );
+    assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive, bead::render::Primitive::Text { text, .. } if text == "Bluetooth")), "the unavailable row remains visible");
+    assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive, bead::render::Primitive::Rounded { rect, .. } if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)), "the unavailable switch remains visible");
+    Ok(())
+}
 #[test]
 fn read_only_status_popouts_have_populated_goldens_at_both_scales() -> Result<()> {
     for kind in Kind::ALL {
@@ -665,7 +714,7 @@ fn bluetooth_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
 }
 
 #[test]
-fn bluetooth_legacy_preview_remains_unchanged() -> Result<()> {
+fn bluetooth_power_legacy_preview_unchanged() -> Result<()> {
     let values = Status::new(Kind::Bluetooth, Arc::new(FakeSource::new(data())?)).project();
     assert_eq!(values["status.ready"], Value::Bool(true));
     assert_eq!(values["status.active"], Value::Bool(true));

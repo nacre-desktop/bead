@@ -237,6 +237,38 @@ impl Runtime {
     ) -> Result<Self, Box<dyn Error>> {
         self.with_status_projector(crate::status_views::Status::core_bluetooth(source))
     }
+    pub fn with_core_bluetooth_control(
+        self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+        client: crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut runtime = self.with_status_projector(
+            crate::status_views::Status::core_bluetooth_control(source, client),
+        )?;
+        runtime.session.stores = runtime.session.stores.reconcile(&BTreeMap::from([
+            (
+                "bluetooth.power_checked".into(),
+                bead::core::Value::Bool(false),
+            ),
+            (
+                "bluetooth.power_enabled".into(),
+                bead::core::Value::Bool(false),
+            ),
+            (
+                "bluetooth.power_busy".into(),
+                bead::core::Value::Bool(false),
+            ),
+            (
+                "bluetooth.power_message".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+        ]))?;
+        runtime
+            .actions
+            .register("bluetooth.toggle_power", "bluetooth.control")?;
+        runtime.actions.grant("bluetooth.control");
+        Ok(runtime)
+    }
     pub fn with_core_battery_status(
         self,
         source: std::sync::Arc<dyn bead::core::source::Source>,
@@ -851,6 +883,25 @@ impl SceneSource for Runtime {
             });
             if let Some(status) = &self.status {
                 status.wifi_action(callback);
+            }
+            let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene, false);
+        }
+        if let Some((_, name, _)) = &host_action
+            && name == "bluetooth.toggle_power"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("Bluetooth completion event channel unavailable")?;
+            let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            if let Some(status) = &self.status {
+                status.bluetooth_action(callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
@@ -1564,5 +1615,7 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+mod bluetooth_power_tests;
 #[cfg(test)]
 mod wifi_runtime_tests;

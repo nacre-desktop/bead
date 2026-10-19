@@ -122,10 +122,14 @@ pub(crate) fn status_at_root(
         factory: Arc::new(move |open| {
             let controlled_network =
                 matches!(kind, crate::status_views::Kind::Network) && client.is_some();
+            let controlled_bluetooth =
+                matches!(kind, crate::status_views::Kind::Bluetooth) && client.is_some();
             let session = bead::ui::Session::new(
                 root.clone(),
                 if controlled_network {
                     "status/network.luau"
+                } else if controlled_bluetooth {
+                    "status/bluetooth.luau"
                 } else {
                     "status/main.luau"
                 }
@@ -162,6 +166,14 @@ pub(crate) fn status_at_root(
                             .clone(),
                     ),
                     Some("network") => runtime.with_core_network_status(source),
+                    Some("bluetooth") if controlled_bluetooth => runtime
+                        .with_core_bluetooth_control(
+                            source,
+                            client
+                                .as_ref()
+                                .expect("controlled Bluetooth has shared daemon client")
+                                .clone(),
+                        ),
                     Some("bluetooth") => runtime.with_core_bluetooth_status(source),
                     Some("battery") => runtime.with_core_battery_status(source),
                     _ => runtime.with_status(kind, source),
