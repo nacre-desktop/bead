@@ -2,8 +2,8 @@
 
 - ID: B0014
 - Repo: nacre-desktop/bead
-- Implementer: one Luna worker; Sol review before integration
-- Status: In progress — source-only during the Nacre heavy slot
+- Implementer: Luna source, bounded Sol fixture/visibility completion; Sol review accepted
+- Status: Done — reviewed exact-source full hosted CI passed; integrated to main
 - Start: current main85f89e9, containing B0013 source021fdaad
 - Depends on: B0010/B0013 Done; published5f4c0bf3 reserved contract
 - Date: 2026-10-19
@@ -104,3 +104,23 @@ ownership or scope expansion. Report source/head/commits/files, exact tests and
 commands/output, unrun checks, exact CI link if any, open question and cleanup.
 Missing checks are NOT RUN. Keep capability-gated unavailable truthfully until
 an actual daemon advertises the producer; never enable live units.
+
+## Completion — 2026-10-19
+
+Reviewed final source `dcf541a9f19d37b4ef493380664ff4ff1f5a123d` integrated
+by normal fast-forward to main. Full existing hosted
+[CI39240289443](https://github.com/nacre-desktop/bead/actions/runs/39240289443)
+passed on that exact SHA; all six named acceptance groups and additional queued
+close, dispatched close/late reply, boot replacement and actual factory tests
+passed. Formatting, all-target Clippy, workspace tests, feature/schema, lifecycle
+and dependency/license checks passed. Shell: 164 passed, 0 failed, 1 ignored.
+The switch and message row are absent without a fresh valid sole adapter;
+healthy sole-adapter method absence/version mismatch remains visibly disabled.
+A test-owned companion lease preserves authoritative state across the dispatched
+retirement fixture; its late Ret is fenced before the deliberate second call.
+
+Automatic main [CI39241346554](https://github.com/nacre-desktop/bead/actions/runs/39241346554)
+was canceled by lead instruction as a duplicate of successful exact-source checks.
+This receipt changes documentation only and skips CI. No private-host build,
+lab activity, live desktop, install, measurement, protocol/pin/producer change or
+availability claim. Original worker history is retained; no force-push.

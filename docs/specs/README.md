@@ -4,7 +4,7 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | In progress: light source | Controlled single-adapter switch, actual Runtime/fake-daemon coverage; source-only while Nacre diagnostic owns heavy slot. |
+| 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Done | Sourcedcf541a9 integrated normally; exact-source full hostedCI39240289443 SUCCESS. Capability-gated; no producer or live enablement claim. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Desktop wayland-utils installed by owner and command availability verified; prerequisite resolved. Preserve frozen runtime1cff9d1/helper5f4; no slot. |
@@ -15,6 +15,13 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 | — | B0001/B0004/B0005/B0006/B0007/B0008 | Done | Prior accepted reports retained; no duplicate work. |
 
 ## Current execution ownership
+
+B0014 reviewed source `dcf541a9f19d37b4ef493380664ff4ff1f5a123d` is now on
+main; exact-source full hosted CI39240289443 SUCCESS. All six acceptance groups,
+additional retirement/boot cases and factory regression pass. Duplicate automatic
+main CI39241346554 was canceled by lead instruction; no second full result is
+claimed. Hosted slot released; no private host or lab used for B0014. Completion
+receipt is documentation-only with CI skipped. Earlier ownership below is history.
 
 B0013 focused correctness finished and RELEASED08:39UTC. Final sourcecdd9fb2
 independently ACCEPTED;11 actor ticket,5 Wi-Fi Runtime and1 template tests PASS,
@@ -65,10 +72,12 @@ regressions, private lifecycle and dependency/license checks. No local full suit
 measurement, package, live enablement or producer availability claim. Source and
 queue integrated normally; no force. B2/B3 remain explicitly unscheduled afterF4.
 
-## Next light product unit
+## B0014 Done — 2026-10-19
 
-B0014 is source-eligible against published5f4 `bluetooth.set_power` contract and
-B0013 CallTicket machinery. Exactly one adapter only; multiple adapters remain
-read-only. No producer/pin/lab/measurement change or hosted CI until root grants
-heavy slot. Nacre logging-only diagnostic10:10–11:05UTC has exclusive lab/heavy
-ownership; Bead may read/edit/commit source in a separate worktree only.
+The fresh sole-adapter power switch uses published5f4 `bluetooth.set_power` v1,
+shared CallTicket retirement and authoritative topic state. Zero/multiple/invalid
+or stale adapters omit the switch; unavailable method keeps a healthy sole
+adapter read-only. Full hosted [CI39240289443](https://github.com/nacre-desktop/bead/actions/runs/39240289443)
+passed on exact main source `dcf541a9f19d37b4ef493380664ff4ff1f5a123d`.
+No protocol/pin/producer, lab, install or measurement change. B2/B3 remain gated
+on their explicit grants; no next device-control unit is assigned here.

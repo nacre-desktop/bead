@@ -1,21 +1,26 @@
 # Status
 
-## 2026-10-19 — B0014 source in progress
+## 2026-10-19 — B0014 accepted
 
-The Bluetooth popout has a Client-backed power control path gated on the live
-`bluetooth.set_power` v1 advertisement and one fresh, valid, unambiguous
-adapter. It uses the shared CallTicket path and treats topic data as the only
-power readback. A private actual-Runtime fake-daemon test covers exact target
-and payload, duplicate suppression, `changed:false`, and later Snap authority.
-Private fake-daemon cases now cover exact target/payload and `changed:false`,
-invalid/ambiguous/stale state, absent or wrong method version, adapter replacement
-with a fenced late reply, dispatched close and boot replacement, a deterministic
-queued close through the existing test-only actor gate, disconnected-link
-rejection, timeout/uncertain dispatch, terminal Busy/malformed results, and
-legacy preview. The factory regression also checks that a Bluetooth Runtime
-opened with the shared Client receives the controlled store schema. Source is isolated;
-formatter and `git diff --check` pass. Test execution, build, Clippy, hosted CI
-and live producer checks remain unrun under the source-only gate.
+The Bluetooth popout exposes a power switch only for one fresh, valid adapter.
+Method v1 advertisement enables it; absent/wrong-version methods keep that sole
+adapter's switch disabled, while zero/multiple/invalid/stale adapters retain the
+aggregate read-only view without a switch. Topic snapshots remain the only power
+readback. Requests use the shared Client/CallTicket lifecycle without replay.
+
+Reviewed source `dcf541a9f19d37b4ef493380664ff4ff1f5a123d` integrated by normal
+fast-forward to main. Exact-source full hosted
+[CI39240289443](https://github.com/nacre-desktop/bead/actions/runs/39240289443)
+passed: formatting, all-target Clippy, workspace tests, feature configurations,
+Luau/schema, capture regressions, private lifecycle and dependency/license checks.
+All six named B0014 acceptance groups passed, including real Runtime/fake-daemon
+eligibility, authoritative readback, queued/dispatched retirement, fenced late
+replies, boot replacement, timeout/uncertain dispatch and legacy preview. The
+actual factory test also passed. Shell tests: 164 passed, 0 failed, 1 ignored.
+Duplicate automatic main [CI39241346554](https://github.com/nacre-desktop/bead/actions/runs/39241346554)
+on the same source was canceled by lead instruction to avoid repeating checks.
+The completion receipt is documentation-only with CI skipped. No private-host,
+live desktop, install, measurement, producer availability or memory/latency claim.
 
 ## 2026-10-18 — B0011 accepted
 
