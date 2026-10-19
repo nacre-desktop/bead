@@ -89,3 +89,8 @@ Bead light source/review/preparation may continue; no hosted heavy CI, full suit
 release build, nested session or capture during exclusive N2. Desktop available
 now; lead announces actual capture start/release rather than waiting for night.
 Wayland-utils is installed; no missing-tool blocker is inferred.
+
+B0015 In progress: Luna implements read-only daemon Sound view from existing
+published AudioState; own worktree/local commits only. No heavy/CI/lab work
+during exclusive F4 acceptance. Legacy preview unaffected; Rust gates wait for
+release. See[spec](0015-daemon-audio-readback-popout.md).
