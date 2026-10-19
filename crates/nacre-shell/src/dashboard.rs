@@ -168,6 +168,9 @@ pub fn spec(
 struct ReadOnly {
     publisher: Publisher,
 }
+pub(crate) fn unavailable_audio_source() -> source::Result<Arc<dyn Source>> {
+    Ok(Arc::new(ReadOnly::unavailable()?))
+}
 impl ReadOnly {
     fn unavailable() -> source::Result<Self> {
         let publisher = Publisher::new("dashboard-unavailable".into(), json!({}))?;

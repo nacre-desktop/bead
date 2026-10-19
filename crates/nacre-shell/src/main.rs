@@ -482,7 +482,7 @@ fn start(
             .decorations(),
         );
     }
-    if audio_panel {
+    if legacy_sound_panel_enabled(audio_panel, core_views) {
         let owner = desktop_owner.clone();
         let panel_palette = palette.clone();
         let panel_colors = colors.clone();
@@ -910,6 +910,10 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
     })
 }
 
+fn legacy_sound_panel_enabled(audio_panel: bool, core_views: bool) -> bool {
+    audio_panel && !core_views
+}
+
 fn select_renderer(options: &mut Options, name: &str) -> Result<(), Box<dyn std::error::Error>> {
     use bead::render::RendererKind;
     options.auto_fallback = name == "auto";
@@ -933,6 +937,12 @@ fn select_renderer(options: &mut Options, name: &str) -> Result<(), Box<dyn std:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn core_views_never_select_legacy_sound_factory() {
+        assert!(!legacy_sound_panel_enabled(true, true));
+        assert!(legacy_sound_panel_enabled(true, false));
+    }
 
     #[test]
     fn checked_in_ui_bundle_and_assets_are_complete() {

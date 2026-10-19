@@ -914,6 +914,14 @@ fn audio_core_partial_readback_and_boosted_volume() -> Result<()> {
     let values = Status::core_audio(Arc::new(FakeSource::new(state)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "150%");
     assert_eq!(text_value(&values, "status.mute"), "Mute state unknown");
+
+    let mut overflow = core_audio();
+    overflow["nodes"]["items"]["out"]["ready"] = serde_json::json!(false);
+    overflow["nodes"]["items"]["out"]["readback"] =
+        serde_json::json!({"perceptual_volume":f64::MAX,"muted":true});
+    let values = Status::core_audio(Arc::new(FakeSource::new(overflow)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Volume unknown");
+    assert_eq!(text_value(&values, "status.mute"), "Muted");
     Ok(())
 }
 
@@ -979,5 +987,55 @@ fn audio_legacy_preview_remains_unchanged() -> Result<()> {
     assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive,
         bead::render::Primitive::Text { text, .. } if text == "Drag or use arrow keys to adjust volume"
     )));
+    Ok(())
+}
+
+#[test]
+fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
+    use bead::wayland::SceneSource;
+
+    let palette_path = root().join("palette.json");
+    let colors = bead::render::Palette::read(&palette_path)?;
+    let spec = crate::popouts::core_sound(None, palette_path.clone(), colors, false)?;
+    assert_eq!(spec.fallback.width, 400.);
+    assert_eq!(spec.fallback.bounds.h, 350.);
+
+    let mut runtime = (spec.factory)(true).map_err(std::io::Error::other)?;
+    let (send, receive) = std::sync::mpsc::channel();
+    runtime.services(Box::new(move |event| {
+        let _ = send.send(event);
+    }));
+    let event = receive.recv_timeout(std::time::Duration::from_secs(1))?;
+    let scene = runtime.stage(event)?.ok_or("unavailable Sound view did not render")?;
+    for expected in [
+        "Sound output",
+        "Output unavailable",
+        "Volume unknown",
+        "Mute state unknown",
+        "Status data unavailable",
+    ] {
+        assert!(scene.primitives.iter().any(|primitive| matches!(primitive,
+            bead::render::Primitive::Text { text, .. } if text == expected
+        )), "missing visible core Sound text: {expected}");
+    }
+
+    let initial = BTreeMap::from([
+        ("panel.open".into(), Value::Bool(true)),
+        ("status.ready".into(), Value::Bool(false)),
+        ("status.device".into(), Value::Text("Output unavailable".into())),
+        ("status.primary".into(), Value::Text("Volume unknown".into())),
+        ("status.mute".into(), Value::Text("Mute state unknown".into())),
+        ("status.health".into(), Value::Text("Status data unavailable".into())),
+    ]);
+    let h = Harness::load(
+        &root(),
+        Path::new("sound/core.luau"),
+        &root().join("palette.json"),
+        initial,
+        Config { width: 420, height: 320, scale: 1. },
+    )?;
+    let actions = h.session.view_nodes().into_iter().filter_map(|node| node.action).collect::<Vec<_>>();
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0], "close");
     Ok(())
 }

@@ -1017,12 +1017,15 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
     };
     let (volume, muted) = if let Some(readback) = &node.readback {
         (
-            readback.perceptual_volume.filter(|v| v.is_finite() && *v >= 0.0).map(|v| format!("{:.0}%", v * 100.)),
+            readback
+                .perceptual_volume
+                .filter(|v| v.is_finite() && *v >= 0.0)
+                .and_then(audio_percent),
             readback.muted.map(|m| if m { "Muted" } else { "Not muted" }.to_owned()),
         )
     } else if node.ready {
         (
-            Some(format!("{:.0}%", node.volume.cbrt() * 100.)),
+            audio_percent(node.volume.cbrt()),
             Some(if node.muted { "Muted" } else { "Not muted" }.to_owned()),
         )
     } else { (None, None) };
@@ -1045,6 +1048,10 @@ fn core_audio_values(mut display: BTreeMap<String, Value>, ready: bool, health: 
     display.insert("status.icon".into(), Value::Text("volume_up".into()));
     display.insert("status.kind".into(), Value::Text("audio".into()));
     display
+}
+fn audio_percent(perceptual: f64) -> Option<String> {
+    let percent = perceptual * 100.0;
+    percent.is_finite().then(|| format!("{percent:.0}%"))
 }
 fn line(text: &str, max: usize) -> String {
     let mut chars = text.chars().map(|c| if c.is_control() { ' ' } else { c });

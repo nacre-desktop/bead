@@ -90,8 +90,6 @@ pub fn core_sound(
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
     let fill = colors.get("surface")?;
     let mut fallback = crate::sound::fallback(fill);
-    fallback.width = 400.;
-    fallback.bounds = Rect::new(-32., -32., 464., 340.);
     if let Some(motion) = &mut fallback.motion {
         motion.id = "sound-output".into();
         motion.edge = bead::core::Edge::Right;
@@ -105,10 +103,11 @@ pub fn core_sound(
         fallback,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
-            let client = client.as_ref().ok_or("daemon client unavailable")?;
-            let source: Arc<dyn bead::core::source::Source> = Arc::new(
-                client.lease_topic("audio").map_err(|e| e.to_string())?,
-            );
+            let source: Arc<dyn bead::core::source::Source> = match client.as_ref() {
+                Some(client) => Arc::new(client.lease_topic("audio").map_err(|e| e.to_string())?),
+                None => crate::dashboard::unavailable_audio_source()
+                    .map_err(|e| e.to_string())?,
+            };
             let session = bead::ui::Session::new(
                 "shell".into(), "sound/core.luau".into(), palette.clone(), colors.clone(), cold.clone(),
             );
