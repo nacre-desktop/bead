@@ -972,7 +972,6 @@ async fn bluetooth_power_queued_close_sends_nothing_and_link_recovers()
                     id: nacre_protocol::Id::Text(ref id),
                 } if id == "queued-close-progress" => {
                     saw_pong = true;
-                    let _ = pong_tx.send(());
                 }
                 Message::Unsub { topics } => {
                     assert_eq!(topics, vec!["bluetooth"]);
@@ -985,6 +984,7 @@ async fn bluetooth_power_queued_close_sends_nothing_and_link_recovers()
                 message => panic!("unexpected daemon message {message:?}"),
             }
         }
+        let _ = pong_tx.send(());
         let _ = done_tx.send(());
         let _ = shutdown_rx.await;
     });
@@ -1016,6 +1016,189 @@ async fn bluetooth_power_queued_close_sends_nothing_and_link_recovers()
     drop(release);
     probe_tx.send(()).unwrap();
     tokio::time::timeout(Duration::from_secs(5), pong_rx).await??;
+    tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
+    Source::stop(&client).await?;
+    let _ = shutdown_tx.send(());
+    server.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn bluetooth_power_retirement_drops_late_reply_for_replacement_runtime()
+-> Result<(), Box<dyn std::error::Error>> {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (first_call_tx, first_call_rx) = oneshot::channel();
+    let (release_ret_tx, release_ret_rx) = oneshot::channel();
+    let (fenced_tx, fenced_rx) = oneshot::channel();
+    let (second_call_tx, second_call_rx) = oneshot::channel();
+    let (done_tx, done_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read, mut writer) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(read));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        framing::write(
+            &mut writer,
+            &Message::Welcome {
+                proto: 1,
+                min: 1,
+                boot: "bt-retire-boot".into(),
+                topics: BTreeMap::from([("bluetooth".into(), 1)]),
+                methods: methods(Some(1)),
+                frame_ms: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["bluetooth".into()]
+            }
+        );
+        framing::write(
+            &mut writer,
+            &Message::Snap {
+                topic: "bluetooth".into(),
+                seq: 0,
+                data: state(true),
+            },
+        )
+        .await
+        .unwrap();
+        let Message::Call {
+            id: old_id, m, p, ..
+        } = next(&mut reader).await
+        else {
+            panic!("first runtime call expected")
+        };
+        assert_eq!(
+            (m.as_str(), p),
+            (
+                "bluetooth.set_power",
+                serde_json::json!({"adapter":"adapter-A","powered":false})
+            )
+        );
+        let _ = first_call_tx.send(());
+        release_ret_rx.await.unwrap();
+        framing::write(
+            &mut writer,
+            &Message::Ret {
+                id: old_id,
+                reply: Reply::Ok {
+                    ok: serde_json::json!({"changed":true}),
+                },
+            },
+        )
+        .await
+        .unwrap();
+        let fence = nacre_protocol::Id::Text("retired-runtime-late-ret-fence".into());
+        framing::write(&mut writer, &Message::Ping { id: fence.clone() })
+            .await
+            .unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: fence });
+        let _ = fenced_tx.send(());
+        let (new_id, m, p) = loop {
+            match next(&mut reader).await {
+                Message::Call { id, m, p, .. } => break (id, m, p),
+                Message::Pong { .. } => {}
+                message => {
+                    panic!("unexpected message before deliberate replacement call: {message:?}")
+                }
+            }
+        };
+        assert_eq!(
+            (m.as_str(), p),
+            (
+                "bluetooth.set_power",
+                serde_json::json!({"adapter":"adapter-A","powered":false})
+            )
+        );
+        let _ = second_call_tx.send(());
+        framing::write(
+            &mut writer,
+            &Message::Ret {
+                id: new_id,
+                reply: Reply::Ok {
+                    ok: serde_json::json!({"changed":true}),
+                },
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Unsub {
+                topics: vec!["bluetooth".into()]
+            }
+        );
+        let _ = done_tx.send(());
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while client.status().boot.is_none() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let mut old_runtime = controlled_runtime(&client, root.clone(), lab.0.join("retired-runtime"))?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            project(&mut old_runtime);
+            if old_runtime.session.stores.get("bluetooth.power_enabled")
+                == Some(&bead::core::Value::Bool(true))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    click(&mut old_runtime);
+    assert!(busy(&old_runtime));
+    tokio::time::timeout(Duration::from_secs(5), first_call_rx).await??;
+    drop(old_runtime);
+
+    let mut replacement = controlled_runtime(&client, root, lab.0.join("replacement-runtime"))?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            project(&mut replacement);
+            if replacement.session.stores.get("bluetooth.power_enabled")
+                == Some(&bead::core::Value::Bool(true))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    assert!(
+        checked(&replacement),
+        "replacement runtime starts from the still-authoritative snapshot"
+    );
+    assert!(
+        !busy(&replacement),
+        "retired ticket is not inherited by a new runtime"
+    );
+    release_ret_tx.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), fenced_rx).await??;
+    project(&mut replacement);
+    assert!(
+        checked(&replacement),
+        "late Ret cannot change replacement runtime state"
+    );
+    assert!(
+        !busy(&replacement),
+        "late Ret cannot attach to replacement runtime"
+    );
+    click(&mut replacement);
+    assert!(busy(&replacement));
+    tokio::time::timeout(Duration::from_secs(5), second_call_rx).await??;
+    drop(replacement);
     tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
     Source::stop(&client).await?;
     let _ = shutdown_tx.send(());
