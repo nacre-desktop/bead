@@ -4,7 +4,7 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Ready: source/private tests | ONE capability-gated daemon Network switch; published reserved5f4 schema only. Existing IO actor tickets; no producer/pin/measurement. Build/full-CI slot separately granted. |
+| 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Review: source accepted, checks pending | Local26702487 accepted after Sol completion/review; Rust checks NOT RUN. No source push; bounded correctness slot after F4 release. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Owner installation notice retained, but explicit lab retry found executable/package absent; owner notified. Preserve frozen runtime1cff9d1/helper5f4; no slot. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source Done; measured gated | B0003-S89afb381 accepted/CI39123319816 green. Measured work after B2 PASS/new slot; no static polishing. |
@@ -25,8 +25,8 @@ Owner installed-tool notice and lab read-only result disagree: explicit PATH
 lookup found /usr/bin/wayland-info absent and pacman reports no wayland-utils.
 Owner notified of minimal lab install command; no install/sudo retry authorized.
 B0012 is complete, no further host probes needed. Source work continues.
-B0013 defines the next light source unit against the published reserved Wi-Fi
-radio schema. Runtime control remains unavailable without actual Welcome method
+B0013 local26702487 is source-accepted against the published reserved Wi-Fi
+radio schema; implementation/fixtures are preserved locally pending execution. Runtime control remains unavailable without actual Welcome method
 capability and fresh topic data. No producer/pin change or measurement grant.
 Other device controls/static wallpaper still require a concrete next spec.
 

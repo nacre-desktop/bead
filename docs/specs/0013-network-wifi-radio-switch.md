@@ -3,7 +3,7 @@
 - ID: B0013
 - Repo: nacre-desktop/bead
 - Implementer: BEAD (Luna, source/private tests; Sol review of actor lifecycle)
-- Status: Ready; source implementation may proceed during F4 captures
+- Status: Review; source accepted, execution and integration pending
 - Depends on: B0009 Done; published reserved Nacre5f4c0bf3 contract
 - Date: 2026-10-19
 - Size: one focused unit, maximum3hours before reporting a gap
@@ -176,3 +176,23 @@ test requiring a live producer, or timebox exhaustion. Report exact gap rather
 than broadening controls or changing unrelated async semantics. Final report:
 start/final hashes, files, named test evidence, pending CI/slot, unavailable
 producer limitation, owned process cleanup, and no measurement claim.
+
+## Source review — 2026-10-19
+
+Local source `26702487a85bc62f9c2a8d6322a7571e35d7a495` accepted after Luna
+implementation, Sol completion and independent Sol review. Existing actor tickets
+retain bounded dispatch, transport-generation/boot/method guards, terminal wake
+and no replay. Controlled-only state initialization, actual Runtime/factory and
+private peer fixtures are included. Follow-up review corrected disconnect
+ordering and fixture scheduling/handshake/barrier defects. No live producer or
+availability claim is made.
+
+`git diff --check` passed. Rust formatting, compilation, tests and Clippy are
+NOT RUN; no source push or integration is approved yet. F4 retains heavy priority;
+request one separately granted bounded correctness run after its release.
+The source worktree is clean and local commits are preserved. An attempted
+formatter wrapper unexpectedly auto-installed a missing toolchain then failed
+because fmt was absent; no build/test ran, and no toolchain was removed. Exact
+command/output are preserved in the private worker report; subsequent work used
+source inspection only. Future tool invocations must explicitly prevent automatic
+installation and use a known existing toolchain.
