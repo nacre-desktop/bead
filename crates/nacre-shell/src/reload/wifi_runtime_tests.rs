@@ -71,6 +71,7 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     let (release_ret_tx, release_ret_rx) = oneshot::channel();
     let (allow_snap_tx, allow_snap_rx) = oneshot::channel();
     let (done_tx, done_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let (read, mut writer) = stream.into_split();
@@ -90,6 +91,7 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
         framing::write(&mut writer, &Message::Ret { id, reply: Reply::Ok { ok: serde_json::json!({"changed":true}) } }).await.unwrap();
         assert_eq!(next(&mut reader).await, Message::Unsub { topics: vec!["network".into()] });
         let _ = done_tx.send(());
+        let _ = shutdown_rx.await;
     });
 
     let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
@@ -100,8 +102,10 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     let palette_path = root.join("palette.json");
     let colors = bead::render::Palette::read(&palette_path)?;
     let cold = crate::sound::fallback(colors.get("surface")?);
-    let session = bead::ui::Session::new("shell".into(), "status/network.luau".into(), palette_path, colors, cold);
+    let session = bead::ui::Session::new(root, "status/network.luau".into(), palette_path, colors, cold);
     let mut runtime = Runtime::new(session).with_core_network_control(leased, client.clone())?;
+    runtime.stage(UiEvent::Reload)?;
+    runtime.commit();
     let (event_tx, mut event_rx) = mpsc::channel(8);
     runtime.services(Box::new(move |event| { let _ = event_tx.try_send(event); }));
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
@@ -115,7 +119,7 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     let (x, y) = switch_center(&runtime);
     runtime.stage(UiEvent::Click { x, y })?;
     runtime.commit();
-    assert_eq!(first_call_rx.recv().await.unwrap(), ("network.set_wifi".into(), serde_json::json!({"enabled":false})));
+    assert_eq!(tokio::time::timeout(Duration::from_secs(5), first_call_rx.recv()).await?.unwrap(), ("network.set_wifi".into(), serde_json::json!({"enabled":false})));
     release_ret_tx.send(()).unwrap();
     tokio::time::timeout(Duration::from_secs(5), event_rx.recv()).await?.expect("missing Ret wake");
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
@@ -127,10 +131,11 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
     runtime.commit();
     assert_eq!(runtime.session.stores.get("network.wifi_checked"), Some(&bead::core::Value::Bool(false)));
-    let (x, y) = switch_center(&runtime);
-    runtime.stage(UiEvent::Click { x, y })?;
+    runtime.stage(UiEvent::Command { command: "tab".into(), shift: false })?;
     runtime.commit();
-    assert_eq!(first_call_rx.recv().await.unwrap(), ("network.set_wifi".into(), serde_json::json!({"enabled":true})), "deliberate click re-reads authoritative state");
+    runtime.stage(UiEvent::Command { command: "enter".into(), shift: false })?;
+    runtime.commit();
+    assert_eq!(tokio::time::timeout(Duration::from_secs(5), first_call_rx.recv()).await?.unwrap(), ("network.set_wifi".into(), serde_json::json!({"enabled":true})), "deliberate click re-reads authoritative state");
     tokio::time::timeout(Duration::from_secs(5), event_rx.recv()).await?.expect("missing second Ret wake");
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
     runtime.commit();
@@ -139,6 +144,7 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     drop(runtime);
     tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
     Source::stop(&client).await?;
+    let _ = shutdown_tx.send(());
     server.await?;
     Ok(())
 }
@@ -205,8 +211,10 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic() -> Result<(), 
         let palette_path = root.join("palette.json");
         let colors = bead::render::Palette::read(&palette_path)?;
         let cold = crate::sound::fallback(colors.get("surface")?);
-        let session = bead::ui::Session::new("shell".into(), "status/network.luau".into(), palette_path, colors, cold);
+        let session = bead::ui::Session::new(root, "status/network.luau".into(), palette_path, colors, cold);
         let mut runtime = Runtime::new(session).with_core_network_control(source, client.clone())?;
+        runtime.stage(UiEvent::Reload)?;
+        runtime.commit();
         runtime.stage(UiEvent::Model(BTreeMap::new()))?;
         runtime.commit();
         assert_eq!(runtime.session.stores.get("network.wifi_enabled"), Some(&bead::core::Value::Bool(false)), "{label}");
@@ -220,5 +228,300 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic() -> Result<(), 
         Source::stop(&client).await?;
         server.await.unwrap();
     }
+    Ok(())
+}
+
+fn controlled_runtime(client: &Client) -> Result<Runtime, Box<dyn std::error::Error>> {
+    let palette = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
+    let colors = bead::render::Palette::read(&palette)?;
+    let cold = crate::sound::fallback(colors.get("surface")?);
+    let session = bead::ui::Session::new(palette.parent().unwrap().into(), "status/network.luau".into(), palette, colors, cold);
+    let mut runtime = Runtime::new(session).with_core_network_control(Arc::new(client.lease_topic("network")?), client.clone())?;
+    runtime.services(Box::new(|_| {}));
+    runtime.stage(UiEvent::Reload)?;
+    runtime.commit();
+    assert!(runtime.session.view_nodes().iter().any(|node| node.id == "wifi-radio"), "fixture must load the controlled template");
+    assert!(runtime.session.stores.get("network.wifi_message").is_some(), "controlled constructor supplies host store schema");
+    Ok(runtime)
+}
+fn project(runtime: &mut Runtime) {
+    runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+    runtime.commit();
+}
+fn flag(runtime: &Runtime, name: &str) -> bool {
+    runtime.session.stores.get(name) == Some(&bead::core::Value::Bool(true))
+}
+async fn until(runtime: &mut Runtime, predicate: impl Fn(&Runtime) -> bool) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            project(runtime);
+            if predicate(runtime) { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+}
+fn click(runtime: &mut Runtime) {
+    let (x, y) = switch_center(runtime);
+    runtime.stage(UiEvent::Click { x, y }).unwrap();
+    runtime.commit();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wifi_runtime_failures_disconnect_never_replay() -> Result<(), Box<dyn std::error::Error>> {
+    // Each failure terminates immediately without a Snap. Ping/Pong fences all
+    // preceding UI events, so an accidental retry cannot hide in a queue.
+    for outcome in ["policy", "unavailable", "timeout", "malformed", "disconnect", "new-boot"] {
+        let lab = Lab::new();
+        let listener = lab.bind();
+        let (seen_tx, seen_rx) = oneshot::channel();
+        let (finish_tx, finish_rx) = oneshot::channel();
+        let (probe_tx, probe_rx) = oneshot::channel();
+        let (snap_tx, snap_rx) = oneshot::channel();
+        let (done_tx, done_rx) = oneshot::channel();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut writer) = stream.into_split();
+            let mut reader = framing::Reader::new(BufReader::new(read));
+            assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+            let mut initial = welcome(Some(("network.set_wifi", 1)), Some(1));
+            if let Message::Welcome { methods, .. } = &mut initial {
+                methods.get_mut("network.set_wifi").unwrap().timeout = 100;
+            }
+            framing::write(&mut writer, &initial).await.unwrap();
+            assert!(matches!(next(&mut reader).await, Message::Sub { .. }));
+            framing::write(&mut writer, &Message::Snap { topic: "network".into(), seq: 0, data: network(true) }).await.unwrap();
+            let Message::Call { id, m, p, .. } = next(&mut reader).await else { panic!("first deliberate call expected") };
+            assert_eq!((m.as_str(), p), ("network.set_wifi", serde_json::json!({"enabled":false})));
+            seen_tx.send(()).unwrap();
+            finish_rx.await.unwrap();
+            if outcome == "disconnect" || outcome == "new-boot" {
+                drop(reader);
+                drop(writer);
+                let (stream, _) = listener.accept().await.unwrap();
+                let (read, write) = stream.into_split();
+                reader = framing::Reader::new(BufReader::new(read));
+                writer = write;
+                assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+                let mut replacement = welcome(Some(("network.set_wifi", 1)), Some(1));
+                if outcome == "new-boot" {
+                    if let Message::Welcome { boot, .. } = &mut replacement { *boot = "wifi-boot-b".into(); }
+                }
+                framing::write(&mut writer, &replacement).await.unwrap();
+                assert_eq!(next(&mut reader).await, Message::Sub { topics: vec!["network".into()] });
+            } else if outcome != "timeout" {
+                let reply = match outcome {
+                    "malformed" => Reply::Ok { ok: serde_json::json!({"changed":"yes"}) },
+                    _ => Reply::Err { err: nacre_protocol::Failure::new(
+                        if outcome == "policy" { nacre_protocol::ErrorCode::PermissionDenied } else { nacre_protocol::ErrorCode::Unavailable },
+                        "private error must not reach UI", false,
+                    ) },
+                };
+                framing::write(&mut writer, &Message::Ret { id, reply }).await.unwrap();
+            }
+            probe_rx.await.unwrap();
+            framing::write(&mut writer, &Message::Ping { id: Id::Text("no-replay".into()) }).await.unwrap();
+            assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("no-replay".into()) });
+            snap_rx.await.unwrap();
+            framing::write(&mut writer, &Message::Snap { topic: "network".into(), seq: 1, data: network(false) }).await.unwrap();
+            let Message::Call { id, m, p, .. } = next(&mut reader).await else { panic!("later deliberate call expected") };
+            assert_eq!((m.as_str(), p), ("network.set_wifi", serde_json::json!({"enabled":true})));
+            framing::write(&mut writer, &Message::Ret { id, reply: Reply::Ok { ok: serde_json::json!({"changed":false}) } }).await.unwrap();
+            assert_eq!(next(&mut reader).await, Message::Unsub { topics: vec!["network".into()] });
+            let _ = done_tx.send(());
+            let _ = shutdown_rx.await;
+        });
+        let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
+        let mut runtime = controlled_runtime(&client)?;
+        until(&mut runtime, |r| flag(r, "network.wifi_enabled")).await;
+        click(&mut runtime);
+        tokio::time::timeout(Duration::from_secs(5), seen_rx).await??;
+        finish_tx.send(()).unwrap();
+        until(&mut runtime, |r| !flag(r, "network.wifi_busy")).await;
+        if outcome != "disconnect" && outcome != "new-boot" {
+            assert_eq!(runtime.session.stores.get("network.wifi_message"), Some(&bead::core::Value::Text("Wi-Fi change failed".into())), "{outcome}");
+            project(&mut runtime);
+            assert_eq!(runtime.session.stores.get("network.wifi_message"), Some(&bead::core::Value::Text("Wi-Fi change failed".into())));
+        }
+        probe_tx.send(()).unwrap();
+        snap_tx.send(()).unwrap();
+        until(&mut runtime, |r| flag(r, "network.wifi_enabled") && !flag(r, "network.wifi_checked")).await;
+        click(&mut runtime);
+        until(&mut runtime, |r| !flag(r, "network.wifi_busy")).await;
+        assert_eq!(runtime.session.stores.get("network.wifi_message"), Some(&bead::core::Value::Text(String::new())));
+        drop(runtime);
+        tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
+        Source::stop(&client).await?;
+        let _ = shutdown_tx.send(());
+        server.await?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wifi_runtime_retire_reopen_isolates_old_reply() -> Result<(), Box<dyn std::error::Error>> {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (old_seen_tx, old_seen_rx) = oneshot::channel();
+    let (retired_tx, retired_rx) = oneshot::channel();
+    let (old_ret_tx, old_ret_rx) = oneshot::channel();
+    let (fenced_tx, fenced_rx) = oneshot::channel();
+    let (new_ret_tx, new_ret_rx) = oneshot::channel();
+    let (snap_tx, snap_rx) = oneshot::channel();
+    let (done_tx, done_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read, mut writer) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(read));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        framing::write(&mut writer, &welcome(Some(("network.set_wifi", 1)), Some(1))).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Sub { topics: vec!["network".into()] });
+        framing::write(&mut writer, &Message::Snap { topic: "network".into(), seq: 0, data: network(true) }).await.unwrap();
+        let Message::Call { id: old_id, .. } = next(&mut reader).await else { panic!("old call expected") };
+        old_seen_tx.send(()).unwrap();
+        assert_eq!(next(&mut reader).await, Message::Unsub { topics: vec!["network".into()] });
+        retired_tx.send(()).unwrap();
+        assert_eq!(next(&mut reader).await, Message::Sub { topics: vec!["network".into()] });
+        framing::write(&mut writer, &Message::Snap { topic: "network".into(), seq: 0, data: network(false) }).await.unwrap();
+        let Message::Call { id: new_id, p, .. } = next(&mut reader).await else { panic!("replacement call expected") };
+        assert_eq!(p, serde_json::json!({"enabled":true}));
+        old_ret_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ret { id: old_id, reply: Reply::Ok { ok: serde_json::json!({"changed":true}) } }).await.unwrap();
+        framing::write(&mut writer, &Message::Ping { id: Id::Text("old-reply-fence".into()) }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("old-reply-fence".into()) });
+        fenced_tx.send(()).unwrap();
+        new_ret_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ret { id: new_id, reply: Reply::Ok { ok: serde_json::json!({"changed":null}) } }).await.unwrap();
+        snap_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Snap { topic: "network".into(), seq: 1, data: network(true) }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Unsub { topics: vec!["network".into()] });
+        let _ = done_tx.send(());
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
+    let mut old = controlled_runtime(&client)?;
+    let old_controller = std::rc::Rc::downgrade(old.status.as_ref().unwrap());
+    let callback_owner = Arc::new(());
+    let callback_weak = Arc::downgrade(&callback_owner);
+    let (old_event_tx, mut old_event_rx) = mpsc::unbounded_channel();
+    old.services(Box::new(move |event| {
+        let _keep_alive = &callback_owner;
+        let _ = old_event_tx.send(event);
+    }));
+    until(&mut old, |r| flag(r, "network.wifi_enabled")).await;
+    click(&mut old);
+    tokio::time::timeout(Duration::from_secs(5), old_seen_rx).await??;
+    while old_event_rx.try_recv().is_ok() {}
+    drop(old);
+    assert!(old_controller.upgrade().is_none(), "retirement releases controller and ticket");
+    tokio::time::timeout(Duration::from_secs(5), retired_rx).await??;
+    let mut replacement = controlled_runtime(&client)?;
+    until(&mut replacement, |r| flag(r, "network.wifi_enabled")).await;
+    assert!(!flag(&replacement, "network.wifi_checked"));
+    click(&mut replacement);
+    assert!(flag(&replacement, "network.wifi_busy"));
+    old_ret_tx.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), fenced_rx).await??;
+    tokio::time::timeout(Duration::from_secs(5), old_event_rx.recv()).await?.expect("old completion wakes only old channel");
+    assert!(callback_weak.upgrade().is_none(), "Ret releases abandoned completion callback");
+    project(&mut replacement);
+    assert!(flag(&replacement, "network.wifi_busy"), "old Ret cannot complete new ticket");
+    assert!(!flag(&replacement, "network.wifi_checked"));
+    new_ret_tx.send(()).unwrap();
+    until(&mut replacement, |r| !flag(r, "network.wifi_busy")).await;
+    assert_eq!(replacement.session.stores.get("network.wifi_message"), Some(&bead::core::Value::Text("Wi-Fi change failed".into())));
+    snap_tx.send(()).unwrap();
+    until(&mut replacement, |r| flag(r, "network.wifi_checked")).await;
+    assert_eq!(replacement.session.stores.get("network.wifi_message"), Some(&bead::core::Value::Text("Wi-Fi change failed".into())), "new Snap preserves new controller error");
+    drop(replacement);
+    tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
+    Source::stop(&client).await?;
+    let _ = shutdown_tx.send(());
+    server.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wifi_popout_factory_is_lazy_and_routes_only_network_control() -> Result<(), Box<dyn std::error::Error>> {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (probe_tx, probe_rx) = oneshot::channel();
+    let (probed_tx, probed_rx) = oneshot::channel();
+    let (done_tx, done_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let (called_tx, called_rx) = oneshot::channel();
+    let (ignored_tx, ignored_rx) = oneshot::channel();
+    let (ignored_probed_tx, ignored_probed_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read, mut writer) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(read));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        framing::write(&mut writer, &welcome(Some(("network.set_wifi", 1)), Some(1))).await.unwrap();
+        probe_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ping { id: Id::Text("cold-factory".into()) }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("cold-factory".into()) }, "constructing factories must not lease or call");
+        probed_tx.send(()).unwrap();
+        assert_eq!(next(&mut reader).await, Message::Sub { topics: vec!["network".into()] });
+        framing::write(&mut writer, &Message::Snap { topic: "network".into(), seq: 0, data: network(true) }).await.unwrap();
+        ignored_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ping { id: Id::Text("ignored-input-fence".into()) }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("ignored-input-fence".into()) }, "context/scroll/drag must not dispatch control");
+        ignored_probed_tx.send(()).unwrap();
+        let Message::Call { id, m, p, .. } = next(&mut reader).await else { panic!("factory action must reach shared client") };
+        assert_eq!((m.as_str(), p), ("network.set_wifi", serde_json::json!({"enabled":false})));
+        called_tx.send(()).unwrap();
+        framing::write(&mut writer, &Message::Ret { id, reply: Reply::Ok { ok: serde_json::json!({"changed":false}) } }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Unsub { topics: vec!["network".into()] });
+        let _ = done_tx.send(());
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
+    let palette = Arc::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json"));
+    let colors = Arc::new(bead::render::Palette::read(&palette)?);
+    let owner = Arc::new(std::sync::OnceLock::new());
+    let root = palette.parent().unwrap().to_path_buf();
+    let spec = crate::popouts::status_at_root(crate::status_views::Kind::Network, palette.clone(), colors.clone(), owner.clone(), Some(client.clone()), (12., false), root.clone())?;
+    let bluetooth = crate::popouts::status_at_root(crate::status_views::Kind::Bluetooth, palette.clone(), colors.clone(), owner.clone(), Some(client.clone()), (12., false), root.clone())?;
+    let battery = crate::popouts::status_at_root(crate::status_views::Kind::Battery, palette.clone(), colors.clone(), owner.clone(), Some(client.clone()), (12., false), root.clone())?;
+    let legacy = crate::popouts::status_at_root(crate::status_views::Kind::Network, palette, colors, owner, None, (12., false), root.clone())?;
+    assert!(!spec.initial_open && !bluetooth.initial_open && !battery.initial_open && !legacy.initial_open);
+    probe_tx.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), probed_rx).await??;
+    for other in [&bluetooth, &battery] {
+        let mut read_only = (other.factory)(true).map_err(std::io::Error::other)?;
+        read_only.stage(UiEvent::Reload)?;
+        read_only.commit();
+        assert!(read_only.input_regions().iter().all(|region| region.id != "wifi-radio"), "only Network selects the control template");
+    }
+    assert!((legacy.factory)(true).is_err(), "legacy factory still requires hosted Desktop services");
+    let mut runtime = (spec.factory)(true).map_err(std::io::Error::other)?;
+    runtime.services(Box::new(|_| {}));
+    runtime.stage(UiEvent::Reload)?;
+    runtime.commit();
+    let rect = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+            runtime.commit();
+            if let Some(region) = runtime.input_regions().into_iter().find(|region| region.id == "wifi-radio") { break region.rect; }
+            tokio::task::yield_now().await;
+        }
+    }).await?;
+    let (x, y) = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+    for event in [UiEvent::ContextMenu { x, y }, UiEvent::Scroll { x, y, delta: 1. }, UiEvent::Drag { x, y }] {
+        runtime.stage(event)?;
+        runtime.commit();
+    }
+    ignored_tx.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), ignored_probed_rx).await??;
+    runtime.stage(UiEvent::Click { x: rect.x + rect.w / 2., y: rect.y + rect.h / 2. })?;
+    runtime.commit();
+    tokio::time::timeout(Duration::from_secs(5), called_rx).await??;
+    drop(runtime);
+    tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
+    Source::stop(&client).await?;
+    let _ = shutdown_tx.send(());
+    server.await?;
     Ok(())
 }

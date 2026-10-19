@@ -69,6 +69,21 @@ pub fn status(
     radius: f32,
     trace: bool,
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    status_at_root(kind, palette, colors, owner, client, (radius, trace), "shell".into())
+}
+
+/// The root is explicit for private fake-daemon tests, without changing the
+/// process working directory or the factory used in production.
+pub(crate) fn status_at_root(
+    kind: crate::status_views::Kind,
+    palette: Arc<PathBuf>,
+    colors: Arc<Palette>,
+    owner: Arc<OnceLock<Arc<bead::services::Desktop>>>,
+    client: Option<crate::nacre_source::Client>,
+    style: (f32, bool),
+    root: PathBuf,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    let (radius, trace) = style;
     let fill = colors.get("surface")?;
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = 310.;
@@ -96,7 +111,7 @@ pub fn status(
         factory: Arc::new(move |open| {
             let controlled_network = matches!(kind, crate::status_views::Kind::Network) && client.is_some();
             let session = bead::ui::Session::new(
-                "shell".into(),
+                root.clone(),
                 if controlled_network { "status/network.luau" } else { "status/main.luau" }.into(),
                 (*palette).clone(),
                 (*colors).clone(),
