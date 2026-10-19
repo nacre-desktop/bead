@@ -219,14 +219,13 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic() -> Result<(), 
         let cold = crate::sound::fallback(colors.get("surface")?);
         let session = bead::ui::Session::new(root, "status/network.luau".into(), palette_path, colors, cold);
         let mut runtime = Runtime::new(session).with_core_network_control(source, client.clone())?;
-        runtime.stage(UiEvent::Reload)?;
+        let scene = runtime.stage(UiEvent::Reload)?.expect("controlled template must load");
+        let rect = switch_rect(&scene);
         runtime.commit();
         runtime.stage(UiEvent::Model(BTreeMap::new()))?;
         runtime.commit();
         assert_eq!(runtime.session.stores.get("network.wifi_enabled"), Some(&bead::core::Value::Bool(false)), "{label}");
-        let node = runtime.session.view_nodes().iter().find(|node| node.id == "wifi-radio").unwrap();
-        assert!(node.action.is_none(), "{label}: unavailable control exposes no hit action");
-        let rect = bead::ui::rect(&node.draw);
+        assert!(runtime.session.view_nodes().iter().all(|node| node.id != "wifi-radio"), "{label}: unavailable control exposes no hit action");
         runtime.stage(UiEvent::Click { x: rect.x + rect.w / 2., y: rect.y + rect.h / 2. })?;
         runtime.commit();
         // This ordinary call follows any accidental action command in the
@@ -242,6 +241,16 @@ async fn wifi_runtime_requires_exact_capability_and_fresh_topic() -> Result<(), 
     Ok(())
 }
 
+fn switch_rect(scene: &bead::render::Scene) -> bead::render::Rect {
+    assert!(scene.primitives.iter().any(|primitive| matches!(primitive,
+        bead::render::Primitive::Text { text, .. } if text == "Wi-Fi"
+    )), "controlled template renders the Wi-Fi label");
+    scene.primitives.iter().find_map(|primitive| match primitive {
+        bead::render::Primitive::Rounded { rect, .. } if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1 => Some(*rect),
+        _ => None,
+    }).expect("controlled template renders the switch geometry")
+}
+
 fn controlled_runtime(client: &Client) -> Result<Runtime, Box<dyn std::error::Error>> {
     let palette = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
     let colors = bead::render::Palette::read(&palette)?;
@@ -249,9 +258,9 @@ fn controlled_runtime(client: &Client) -> Result<Runtime, Box<dyn std::error::Er
     let session = bead::ui::Session::new(palette.parent().unwrap().into(), "status/network.luau".into(), palette, colors, cold);
     let mut runtime = Runtime::new(session).with_core_network_control(Arc::new(client.lease_topic("network")?), client.clone())?;
     runtime.services(Box::new(|_| {}));
-    runtime.stage(UiEvent::Reload)?;
+    let scene = runtime.stage(UiEvent::Reload)?.expect("controlled template must load");
+    switch_rect(&scene);
     runtime.commit();
-    assert!(runtime.session.view_nodes().iter().any(|node| node.id == "wifi-radio"), "fixture must load the controlled template");
     assert!(runtime.session.stores.get("network.wifi_message").is_some(), "controlled constructor supplies host store schema");
     Ok(runtime)
 }
