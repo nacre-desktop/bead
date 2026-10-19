@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn call_ticket_reply_and_timeout_wake_once() {
     for expected in [Ok(serde_json::json!(true)), Err(timeout())] {
-        let (sender, mut receiver) = oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
         let receiver = Arc::new(Mutex::new(Some(receiver)));
         let observed = receiver.clone();
         let wakes = Arc::new(AtomicU64::new(0));

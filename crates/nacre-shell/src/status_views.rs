@@ -515,7 +515,7 @@ fn wifi_candidate(
     let method = status.methods.get("network.set_wifi");
     let eligible = fresh && method.is_some_and(|method| method.v == 1);
     WifiCandidate {
-        topic_boot,
+        topic_boot: Some(topic_boot),
         eligible_identity: identity_matches.then(|| topic.epoch.clone()),
         state,
         fresh,

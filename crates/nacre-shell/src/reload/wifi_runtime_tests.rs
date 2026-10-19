@@ -7,7 +7,7 @@ use std::{
     collections::BTreeMap,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
-    sync::{Arc, mpsc as std_mpsc},
+    sync::Arc,
     time::Duration,
 };
 use tokio::{io::BufReader, net::UnixListener, sync::{mpsc, oneshot}};
@@ -102,8 +102,8 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     let cold = crate::sound::fallback(colors.get("surface")?);
     let session = bead::ui::Session::new("shell".into(), "status/network.luau".into(), palette_path, colors, cold);
     let mut runtime = Runtime::new(session).with_core_network_control(leased, client.clone())?;
-    let (event_tx, event_rx) = std_mpsc::channel();
-    runtime.services(Box::new(move |event| { let _ = event_tx.send(event); }));
+    let (event_tx, mut event_rx) = mpsc::channel(8);
+    runtime.services(Box::new(move |event| { let _ = event_tx.try_send(event); }));
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
     runtime.commit();
     while event_rx.try_recv().is_ok() {}
@@ -117,13 +117,13 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     runtime.commit();
     assert_eq!(first_call_rx.recv().await.unwrap(), ("network.set_wifi".into(), serde_json::json!({"enabled":false})));
     release_ret_tx.send(()).unwrap();
-    let _ = event_rx.recv_timeout(Duration::from_secs(5))?;
+    tokio::time::timeout(Duration::from_secs(5), event_rx.recv()).await?.expect("missing Ret wake");
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
     runtime.commit();
     assert_eq!(runtime.session.stores.get("network.wifi_busy"), Some(&bead::core::Value::Bool(false)));
     assert_eq!(runtime.session.stores.get("network.wifi_checked"), Some(&bead::core::Value::Bool(true)), "Ret is acknowledgement; Snap owns checked state");
     allow_snap_tx.send(()).unwrap();
-    let _ = event_rx.recv_timeout(Duration::from_secs(5))?;
+    tokio::time::timeout(Duration::from_secs(5), event_rx.recv()).await?.expect("missing Snap wake");
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
     runtime.commit();
     assert_eq!(runtime.session.stores.get("network.wifi_checked"), Some(&bead::core::Value::Bool(false)));
@@ -131,7 +131,7 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     runtime.stage(UiEvent::Click { x, y })?;
     runtime.commit();
     assert_eq!(first_call_rx.recv().await.unwrap(), ("network.set_wifi".into(), serde_json::json!({"enabled":true})), "deliberate click re-reads authoritative state");
-    let _ = event_rx.recv_timeout(Duration::from_secs(5))?;
+    tokio::time::timeout(Duration::from_secs(5), event_rx.recv()).await?.expect("missing second Ret wake");
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
     runtime.commit();
     drop(runtime);

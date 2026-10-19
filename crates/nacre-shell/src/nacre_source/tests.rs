@@ -435,6 +435,81 @@ async fn call_ticket_drop_after_dispatch_does_not_cancel_or_replay() {
     client.control(true).await.unwrap();
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn call_ticket_admission_is_bounded_and_nonblocking() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (ping_tx, ping_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        ping_rx.await.unwrap();
+        framing::write(&mut writer, &Message::Ping { id: Id::Text("queue-proof".into()) }).await.unwrap();
+        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("queue-proof".into()) });
+    });
+    let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+    let boot = connected_client(&client).await;
+    let (entered_tx, entered_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel();
+    assert!(client.0.tx.try_send(Command::Gate { entered: entered_tx, release: release_rx }).is_ok());
+    entered_rx.await.unwrap();
+    let mut tickets = Vec::new();
+    for _ in 0..nacre_protocol::MAX_CALLS {
+        tickets.push(client.begin_call(
+            "daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2),
+            CallGuard { boot: boot.clone(), version: 1 }, None,
+        ).unwrap());
+    }
+    let rejected = client.begin_call(
+        "daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2),
+        CallGuard { boot, version: 1 }, None,
+    ).err().unwrap();
+    assert_eq!(rejected.code, "busy");
+    drop(tickets);
+    release_tx.send(()).unwrap();
+    ping_tx.send(()).unwrap();
+    server.await.unwrap();
+    client.control(true).await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn call_ticket_disconnect_and_shutdown_complete_pending_ticket() {
+    for shutdown in [false, true] {
+        let lab = Lab::new();
+        let listener = lab.bind();
+        let (call_seen_tx, call_seen_rx) = oneshot::channel();
+        let (stop_tx, stop_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut reader, writer) = accepted(&listener).await;
+            assert!(matches!(next(&mut reader).await, Message::Call { m, .. } if m == "daemon.ping"));
+            call_seen_tx.send(()).unwrap();
+            if shutdown {
+                let _ = stop_rx.await;
+            }
+            drop(writer);
+        });
+        let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
+        let boot = connected_client(&client).await;
+        let (wake_tx, wake_rx) = oneshot::channel();
+        let wake_tx = Arc::new(Mutex::new(Some(wake_tx)));
+        let wake: CallWake = Arc::new(move || {
+            if let Some(tx) = wake_tx.lock().unwrap().take() { let _ = tx.send(()); }
+        });
+        let mut ticket = client.begin_call(
+            "daemon.ping".into(), serde_json::json!({}), Duration::from_secs(10),
+            CallGuard { boot, version: 1 }, Some(wake),
+        ).unwrap();
+        call_seen_rx.await.unwrap();
+        if shutdown {
+            let _ = stop_tx.send(());
+            client.control(true).await.unwrap();
+        }
+        tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
+        assert!(matches!(ticket.try_take(), Some(Err(_))), "disconnect/shutdown completes with an error");
+        server.await.unwrap();
+        if !shutdown { client.control(true).await.unwrap(); }
+    }
+}
+
 async fn accepted_dashboard(
     listener: &UnixListener,
     boot: &str,
