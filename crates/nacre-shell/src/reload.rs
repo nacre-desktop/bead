@@ -211,12 +211,23 @@ impl Runtime {
             crate::status_views::Status::core_network_control(source, client),
         )?;
         runtime.session.stores = runtime.session.stores.reconcile(&BTreeMap::from([
-            ("network.wifi_checked".into(), bead::core::Value::Bool(false)),
-            ("network.wifi_enabled".into(), bead::core::Value::Bool(false)),
+            (
+                "network.wifi_checked".into(),
+                bead::core::Value::Bool(false),
+            ),
+            (
+                "network.wifi_enabled".into(),
+                bead::core::Value::Bool(false),
+            ),
             ("network.wifi_busy".into(), bead::core::Value::Bool(false)),
-            ("network.wifi_message".into(), bead::core::Value::Text(String::new())),
+            (
+                "network.wifi_message".into(),
+                bead::core::Value::Text(String::new()),
+            ),
         ]))?;
-        runtime.actions.register("network.toggle_wifi", "network.control")?;
+        runtime
+            .actions
+            .register("network.toggle_wifi", "network.control")?;
         runtime.actions.grant("network.control");
         Ok(runtime)
     }
@@ -656,7 +667,7 @@ impl SceneSource for Runtime {
             });
             match status.subscribe_control_link(notify) {
                 Ok(subscription) => self.status_control_subscription = Some(subscription),
-                Err(error) if error.code == "unavailable" => {},
+                Err(error) if error.code == "unavailable" => {}
                 Err(_) => eprintln!("SOURCE_ERROR code=status_control_subscription"),
             }
         }
@@ -831,7 +842,10 @@ impl SceneSource for Runtime {
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
-            let wakeup = self.wakeup.clone().ok_or("Wi-Fi completion event channel unavailable")?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("Wi-Fi completion event channel unavailable")?;
             let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
                 wakeup(UiEvent::Model(BTreeMap::new()));
             });

@@ -135,21 +135,42 @@ impl Status {
         notify: crate::nacre_source::CallWake,
     ) -> source::Result<source::Subscription> {
         let Some(control) = &self.wifi_control else {
-            return Err(source::Error::new("unavailable", "Wi-Fi control is disabled", false));
+            return Err(source::Error::new(
+                "unavailable",
+                "Wi-Fi control is disabled",
+                false,
+            ));
         };
-        control.borrow().client.subscribe(Arc::new(move |_| notify()))
+        control
+            .borrow()
+            .client
+            .subscribe(Arc::new(move |_| notify()))
     }
     pub fn wifi_action(&self, wake: crate::nacre_source::CallWake) {
-        let Some(control) = &self.wifi_control else { return; };
+        let Some(control) = &self.wifi_control else {
+            return;
+        };
         let snapshot = self.source.snapshot();
         let client = control.borrow().client.clone();
         let candidate = wifi_candidate(&snapshot, &client);
-        if !candidate.eligible { return; }
-        let Some(boot) = candidate.topic_boot.clone() else { return; };
-        let Some(state) = candidate.state else { return; };
+        if !candidate.eligible {
+            return;
+        }
+        let Some(boot) = candidate.topic_boot.clone() else {
+            return;
+        };
+        let Some(state) = candidate.state else {
+            return;
+        };
         let mut control = control.borrow_mut();
-        if control.pending.is_some() { return; }
-        if control.last_boot.as_deref().is_some_and(|previous| previous != boot) {
+        if control.pending.is_some() {
+            return;
+        }
+        if control
+            .last_boot
+            .as_deref()
+            .is_some_and(|previous| previous != boot)
+        {
             control.message = None;
         }
         control.last_boot = Some(boot.clone());
@@ -158,7 +179,10 @@ impl Status {
             "network.set_wifi".into(),
             serde_json::json!({"enabled": !state.wireless_enabled}),
             Duration::from_millis(candidate.timeout_ms.min(10_000) as u64),
-            crate::nacre_source::CallGuard { boot: boot.clone(), version: 1 },
+            crate::nacre_source::CallGuard {
+                boot: boot.clone(),
+                version: 1,
+            },
             Some(wake),
         ) {
             Ok(ticket) => control.pending = Some((boot, ticket)),
@@ -284,7 +308,10 @@ impl Status {
         self.project_core_network_snapshot(&snapshot)
     }
 
-    fn project_core_network_snapshot(&self, snapshot: &bead::core::source::Snapshot) -> BTreeMap<String, Value> {
+    fn project_core_network_snapshot(
+        &self,
+        snapshot: &bead::core::source::Snapshot,
+    ) -> BTreeMap<String, Value> {
         let network = serde_json::from_value::<NetworkState>(snapshot.data.as_ref().clone())
             .ok()
             .map(CoreSnapshot::Network);
@@ -338,13 +365,19 @@ impl Status {
 
     fn project_core_network_control(&self) -> BTreeMap<String, Value> {
         let snapshot = self.source.snapshot();
-        let control_cell = self.wifi_control.as_ref().expect("controlled network has Wi-Fi controller");
+        let control_cell = self
+            .wifi_control
+            .as_ref()
+            .expect("controlled network has Wi-Fi controller");
         let client = control_cell.borrow().client.clone();
         let candidate = wifi_candidate(&snapshot, &client);
         let mut base = self.project_core_network_snapshot(&snapshot);
         let mut control = control_cell.borrow_mut();
         if let Some(boot) = candidate.topic_boot.as_ref()
-            && control.last_boot.as_deref().is_some_and(|previous| previous != boot)
+            && control
+                .last_boot
+                .as_deref()
+                .is_some_and(|previous| previous != boot)
         {
             control.message = None;
         }
@@ -357,15 +390,32 @@ impl Status {
         }) {
             control.pending = None;
         }
-        let terminal = control.pending.as_mut().and_then(|(_, ticket)| ticket.try_take());
+        let terminal = control
+            .pending
+            .as_mut()
+            .and_then(|(_, ticket)| ticket.try_take());
         if let Some(result) = terminal {
             control.pending = None;
             control.message = match result {
-                Ok(payload) if payload.as_object().is_some_and(|object| object.len() == 1 && object.get("changed").and_then(serde_json::Value::as_bool).is_some()) => None,
+                Ok(payload)
+                    if payload.as_object().is_some_and(|object| {
+                        object.len() == 1
+                            && object
+                                .get("changed")
+                                .and_then(serde_json::Value::as_bool)
+                                .is_some()
+                    }) =>
+                {
+                    None
+                }
                 _ => Some("Wi-Fi change failed".into()),
             };
         }
-        let checked = candidate.state.as_ref().map(|state| state.wireless_enabled).unwrap_or(control.checked);
+        let checked = candidate
+            .state
+            .as_ref()
+            .map(|state| state.wireless_enabled)
+            .unwrap_or(control.checked);
         if candidate.fresh {
             control.checked = checked;
         }
@@ -379,7 +429,10 @@ impl Status {
         };
         base.extend([
             ("network.wifi_checked".into(), Value::Bool(control.checked)),
-            ("network.wifi_enabled".into(), Value::Bool(candidate.eligible && !busy)),
+            (
+                "network.wifi_enabled".into(),
+                Value::Bool(candidate.eligible && !busy),
+            ),
             ("network.wifi_busy".into(), Value::Bool(busy)),
             ("network.wifi_message".into(), Value::Text(message.into())),
         ]);
@@ -509,9 +562,12 @@ fn wifi_candidate(
         && status.boot.as_deref() == Some(topic.epoch.as_str())
         && link_boot == Some(topic.epoch.as_str());
     let state = serde_json::from_value::<NetworkState>(topic.data.as_ref().clone()).ok();
-    let fresh = identity_matches && state.as_ref().is_some_and(|state| {
-        state.health.available && !state.health.stale && CoreSnapshot::Network(state.clone()).valid()
-    });
+    let fresh = identity_matches
+        && state.as_ref().is_some_and(|state| {
+            state.health.available
+                && !state.health.stale
+                && CoreSnapshot::Network(state.clone()).valid()
+        });
     let method = status.methods.get("network.set_wifi");
     let eligible = fresh && method.is_some_and(|method| method.v == 1);
     WifiCandidate {

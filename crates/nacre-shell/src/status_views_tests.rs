@@ -96,25 +96,50 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
         ("status.active".into(), Value::Bool(false)),
         ("status.heading".into(), Value::Text("Network".into())),
         ("status.icon".into(), Value::Text("wifi".into())),
-        ("status.primary".into(), Value::Text("Network unavailable".into())),
-        ("status.secondary".into(), Value::Text("Status data unavailable".into())),
+        (
+            "status.primary".into(),
+            Value::Text("Network unavailable".into()),
+        ),
+        (
+            "status.secondary".into(),
+            Value::Text("Status data unavailable".into()),
+        ),
         ("status.detail".into(), Value::Text(String::new())),
         ("network.wifi_checked".into(), Value::Bool(false)),
         ("network.wifi_enabled".into(), Value::Bool(false)),
         ("network.wifi_busy".into(), Value::Bool(false)),
-        ("network.wifi_message".into(), Value::Text("Wi-Fi control unavailable".into())),
+        (
+            "network.wifi_message".into(),
+            Value::Text("Wi-Fi control unavailable".into()),
+        ),
     ]);
     let h = Harness::load(
         &root(),
         Path::new("status/network.luau"),
         &root().join("palette.json"),
         initial,
-        Config { width: 380, height: 300, scale: 1. },
+        Config {
+            width: 380,
+            height: 300,
+            scale: 1.,
+        },
     )?;
-    assert!(h.session.view_nodes().iter().all(|node| node.id != "wifi-radio"), "unavailable switch has no hit action");
-    assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive,
-        bead::render::Primitive::Text { text, .. } if text == "Wi-Fi"
-    )), "the unavailable row remains visible");
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .all(|node| node.id != "wifi-radio"),
+        "unavailable switch has no hit action"
+    );
+    assert!(
+        h.scene()
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive,
+                bead::render::Primitive::Text { text, .. } if text == "Wi-Fi"
+            )),
+        "the unavailable row remains visible"
+    );
     assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive,
         bead::render::Primitive::Rounded { rect, .. } if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1
     )), "the unavailable switch remains visible");

@@ -164,7 +164,9 @@ enum CallReply {
 impl CallReply {
     fn finish(self, result: source::Result<Value>) {
         match self {
-            Self::Async(reply) => { let _ = reply.send(result); }
+            Self::Async(reply) => {
+                let _ = reply.send(result);
+            }
             Self::Ticket(reply) => reply.finish(result),
         }
     }
@@ -180,7 +182,9 @@ impl TicketCompletion {
         }
     }
     fn finish(mut self, result: source::Result<Value>) {
-        if let Some(sender) = self.sender.take() { let _ = sender.send(result); }
+        if let Some(sender) = self.sender.take() {
+            let _ = sender.send(result);
+        }
         self.wake();
     }
 }
@@ -197,17 +201,30 @@ pub struct CallTicket {
 }
 impl CallTicket {
     pub fn try_take(&mut self) -> Option<source::Result<Value>> {
-        if self.done { return None; }
+        if self.done {
+            return None;
+        }
         match self.receiver.try_recv() {
-            Ok(result) => { self.done = true; Some(result) },
+            Ok(result) => {
+                self.done = true;
+                Some(result)
+            }
             Err(oneshot::error::TryRecvError::Empty) => None,
-            Err(oneshot::error::TryRecvError::Closed) => { self.done = true; Some(Err(unavailable())) },
+            Err(oneshot::error::TryRecvError::Closed) => {
+                self.done = true;
+                Some(Err(unavailable()))
+            }
         }
     }
 }
 impl Drop for CallTicket {
     fn drop(&mut self) {
-        let _ = self.state.compare_exchange(TICKET_QUEUED, TICKET_CANCELLED, Ordering::AcqRel, Ordering::Acquire);
+        let _ = self.state.compare_exchange(
+            TICKET_QUEUED,
+            TICKET_CANCELLED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
     }
 }
 fn ticket_guard_matches(
@@ -219,10 +236,19 @@ fn ticket_guard_matches(
 ) -> bool {
     ticket.generation == generation
         && boot == ticket.guard.boot
-        && methods.get(method).is_some_and(|advertised| advertised.v == ticket.guard.version)
+        && methods
+            .get(method)
+            .is_some_and(|advertised| advertised.v == ticket.guard.version)
 }
 fn claim_ticket_dispatch(state: &std::sync::atomic::AtomicU8) -> bool {
-    state.compare_exchange(TICKET_QUEUED, TICKET_DISPATCHED, Ordering::AcqRel, Ordering::Acquire).is_ok()
+    state
+        .compare_exchange(
+            TICKET_QUEUED,
+            TICKET_DISPATCHED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        )
+        .is_ok()
 }
 fn unavailable() -> Error {
     Error::new(
@@ -433,8 +459,10 @@ impl Client {
         guard: CallGuard,
         wake: Option<CallWake>,
     ) -> source::Result<CallTicket> {
-        if duration.is_zero() || duration > Duration::from_secs(120)
-            || method.is_empty() || method.len() > 128
+        if duration.is_zero()
+            || duration > Duration::from_secs(120)
+            || method.is_empty()
+            || method.len() > 128
         {
             return Err(Error::new("validation", "invalid call/deadline", false));
         }
@@ -448,19 +476,41 @@ impl Client {
         }
         let state = Arc::new(std::sync::atomic::AtomicU8::new(TICKET_QUEUED));
         let (sender, receiver) = oneshot::channel();
-        let reply = CallReply::Ticket(TicketCompletion { sender: Some(sender), wake });
+        let reply = CallReply::Ticket(TicketCompletion {
+            sender: Some(sender),
+            wake,
+        });
         let command = Command::Call {
-            id: None, method, params, deadline: Instant::now() + duration,
+            id: None,
+            method,
+            params,
+            deadline: Instant::now() + duration,
             reply,
-            ticket: Some(TicketDispatch { state: state.clone(), generation, guard }),
+            ticket: Some(TicketDispatch {
+                state: state.clone(),
+                generation,
+                guard,
+            }),
         };
         match self.0.tx.try_send(command) {
-            Ok(()) => Ok(CallTicket { receiver, state, done: false }),
+            Ok(()) => Ok(CallTicket {
+                receiver,
+                state,
+                done: false,
+            }),
             Err(error) => {
-                if let Command::Call { reply: CallReply::Ticket(mut completion), .. } = error.into_inner() {
+                if let Command::Call {
+                    reply: CallReply::Ticket(mut completion),
+                    ..
+                } = error.into_inner()
+                {
                     completion.wake = None;
                 }
-                Err(Error::new("busy", "daemon call queue full or stopped", true))
+                Err(Error::new(
+                    "busy",
+                    "daemon call queue full or stopped",
+                    true,
+                ))
             }
         }
     }

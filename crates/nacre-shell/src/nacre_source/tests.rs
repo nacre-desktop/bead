@@ -364,11 +364,15 @@ async fn connected_client(client: &Client) -> String {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if let Some(boot) = client.status().boot {
-                if client.snapshot().connected { break boot; }
+                if client.snapshot().connected {
+                    break boot;
+                }
             }
             tokio::task::yield_now().await;
         }
-    }).await.unwrap()
+    })
+    .await
+    .unwrap()
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -379,22 +383,59 @@ async fn call_ticket_drop_before_dispatch_sends_nothing() {
     let server = tokio::spawn(async move {
         let (mut reader, mut writer) = accepted(&listener).await;
         ping_rx.await.unwrap();
-        framing::write(&mut writer, &Message::Ping { id: Id::Text("barrier-proof".into()) }).await.unwrap();
-        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("barrier-proof".into()) }, "cancelled queued ticket emitted no Call");
+        framing::write(
+            &mut writer,
+            &Message::Ping {
+                id: Id::Text("barrier-proof".into()),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Pong {
+                id: Id::Text("barrier-proof".into())
+            },
+            "cancelled queued ticket emitted no Call"
+        );
     });
     let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
     let boot = connected_client(&client).await;
     let (entered_tx, entered_rx) = oneshot::channel();
     let (release_tx, release_rx) = oneshot::channel();
-    assert!(client.0.tx.try_send(Command::Gate { entered: entered_tx, release: release_rx }).is_ok());
+    assert!(
+        client
+            .0
+            .tx
+            .try_send(Command::Gate {
+                entered: entered_tx,
+                release: release_rx
+            })
+            .is_ok()
+    );
     entered_rx.await.unwrap();
     let (wake_tx, wake_rx) = oneshot::channel();
     let wake_tx = Arc::new(Mutex::new(Some(wake_tx)));
-    let wake: CallWake = Arc::new(move || { if let Some(tx) = wake_tx.lock().unwrap().take() { let _ = tx.send(()); } });
-    let ticket = client.begin_call("daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2), CallGuard { boot, version: 1 }, Some(wake)).unwrap();
+    let wake: CallWake = Arc::new(move || {
+        if let Some(tx) = wake_tx.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
+    });
+    let ticket = client
+        .begin_call(
+            "daemon.ping".into(),
+            serde_json::json!({}),
+            Duration::from_secs(2),
+            CallGuard { boot, version: 1 },
+            Some(wake),
+        )
+        .unwrap();
     drop(ticket);
     let _ = release_tx.send(());
-    tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
+    tokio::time::timeout(Duration::from_secs(5), wake_rx)
+        .await
+        .unwrap()
+        .unwrap();
     ping_tx.send(()).unwrap();
     server.await.unwrap();
     client.control(true).await.unwrap();
@@ -409,27 +450,70 @@ async fn call_ticket_drop_after_dispatch_does_not_cancel_or_replay() {
     let (call_seen_tx, call_seen_rx) = oneshot::channel();
     let server = tokio::spawn(async move {
         let (mut reader, mut writer) = accepted(&listener).await;
-        let Message::Call { id, m, p, .. } = next(&mut reader).await else { panic!("ticket call expected") };
+        let Message::Call { id, m, p, .. } = next(&mut reader).await else {
+            panic!("ticket call expected")
+        };
         assert_eq!(m, "daemon.ping");
         assert_eq!(p, serde_json::json!({}));
         call_seen_tx.send(()).unwrap();
         release_rx.await.unwrap();
-        framing::write(&mut writer, &Message::Ret { id, reply: Reply::Ok { ok: serde_json::json!({"pong":true}) } }).await.unwrap();
+        framing::write(
+            &mut writer,
+            &Message::Ret {
+                id,
+                reply: Reply::Ok {
+                    ok: serde_json::json!({"pong":true}),
+                },
+            },
+        )
+        .await
+        .unwrap();
         ping_rx.await.unwrap();
-        framing::write(&mut writer, &Message::Ping { id: Id::Text("after-ret".into()) }).await.unwrap();
-        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("after-ret".into()) }, "dropped dispatched ticket was not cancelled/replayed");
+        framing::write(
+            &mut writer,
+            &Message::Ping {
+                id: Id::Text("after-ret".into()),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Pong {
+                id: Id::Text("after-ret".into())
+            },
+            "dropped dispatched ticket was not cancelled/replayed"
+        );
     });
     let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
     let boot = connected_client(&client).await;
     let (wake_tx, wake_rx) = oneshot::channel();
     let wake_tx = Arc::new(Mutex::new(Some(wake_tx)));
-    let wake: CallWake = Arc::new(move || { if let Some(tx) = wake_tx.lock().unwrap().take() { let _ = tx.send(()); } });
-    let mut ticket = client.begin_call("daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2), CallGuard { boot, version: 1 }, Some(wake)).unwrap();
+    let wake: CallWake = Arc::new(move || {
+        if let Some(tx) = wake_tx.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
+    });
+    let mut ticket = client
+        .begin_call(
+            "daemon.ping".into(),
+            serde_json::json!({}),
+            Duration::from_secs(2),
+            CallGuard { boot, version: 1 },
+            Some(wake),
+        )
+        .unwrap();
     call_seen_rx.await.unwrap();
-    assert!(ticket.try_take().is_none(), "immediate poll is pending until Ret");
+    assert!(
+        ticket.try_take().is_none(),
+        "immediate poll is pending until Ret"
+    );
     drop(ticket);
     let _ = release_tx.send(());
-    tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
+    tokio::time::timeout(Duration::from_secs(5), wake_rx)
+        .await
+        .unwrap()
+        .unwrap();
     ping_tx.send(()).unwrap();
     server.await.unwrap();
     client.control(true).await.unwrap();
@@ -443,26 +527,63 @@ async fn call_ticket_admission_is_bounded_and_nonblocking() {
     let server = tokio::spawn(async move {
         let (mut reader, mut writer) = accepted(&listener).await;
         ping_rx.await.unwrap();
-        framing::write(&mut writer, &Message::Ping { id: Id::Text("queue-proof".into()) }).await.unwrap();
-        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("queue-proof".into()) });
+        framing::write(
+            &mut writer,
+            &Message::Ping {
+                id: Id::Text("queue-proof".into()),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Pong {
+                id: Id::Text("queue-proof".into())
+            }
+        );
     });
     let client = Client::start(Config::new(lab.socket(), vec![])).unwrap();
     let boot = connected_client(&client).await;
     let (entered_tx, entered_rx) = oneshot::channel();
     let (release_tx, release_rx) = oneshot::channel();
-    assert!(client.0.tx.try_send(Command::Gate { entered: entered_tx, release: release_rx }).is_ok());
+    assert!(
+        client
+            .0
+            .tx
+            .try_send(Command::Gate {
+                entered: entered_tx,
+                release: release_rx
+            })
+            .is_ok()
+    );
     entered_rx.await.unwrap();
     let mut tickets = Vec::new();
     for _ in 0..nacre_protocol::MAX_CALLS {
-        tickets.push(client.begin_call(
-            "daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2),
-            CallGuard { boot: boot.clone(), version: 1 }, None,
-        ).unwrap());
+        tickets.push(
+            client
+                .begin_call(
+                    "daemon.ping".into(),
+                    serde_json::json!({}),
+                    Duration::from_secs(2),
+                    CallGuard {
+                        boot: boot.clone(),
+                        version: 1,
+                    },
+                    None,
+                )
+                .unwrap(),
+        );
     }
-    let rejected = client.begin_call(
-        "daemon.ping".into(), serde_json::json!({}), Duration::from_secs(2),
-        CallGuard { boot, version: 1 }, None,
-    ).err().unwrap();
+    let rejected = client
+        .begin_call(
+            "daemon.ping".into(),
+            serde_json::json!({}),
+            Duration::from_secs(2),
+            CallGuard { boot, version: 1 },
+            None,
+        )
+        .err()
+        .unwrap();
     assert_eq!(rejected.code, "busy");
     drop(tickets);
     release_tx.send(()).unwrap();
@@ -480,7 +601,9 @@ async fn call_ticket_disconnect_and_shutdown_complete_pending_ticket() {
         let (stop_tx, stop_rx) = oneshot::channel();
         let server = tokio::spawn(async move {
             let (mut reader, writer) = accepted(&listener).await;
-            assert!(matches!(next(&mut reader).await, Message::Call { m, .. } if m == "daemon.ping"));
+            assert!(
+                matches!(next(&mut reader).await, Message::Call { m, .. } if m == "daemon.ping")
+            );
             call_seen_tx.send(()).unwrap();
             if shutdown {
                 let _ = stop_rx.await;
@@ -492,21 +615,36 @@ async fn call_ticket_disconnect_and_shutdown_complete_pending_ticket() {
         let (wake_tx, wake_rx) = oneshot::channel();
         let wake_tx = Arc::new(Mutex::new(Some(wake_tx)));
         let wake: CallWake = Arc::new(move || {
-            if let Some(tx) = wake_tx.lock().unwrap().take() { let _ = tx.send(()); }
+            if let Some(tx) = wake_tx.lock().unwrap().take() {
+                let _ = tx.send(());
+            }
         });
-        let mut ticket = client.begin_call(
-            "daemon.ping".into(), serde_json::json!({}), Duration::from_secs(10),
-            CallGuard { boot, version: 1 }, Some(wake),
-        ).unwrap();
+        let mut ticket = client
+            .begin_call(
+                "daemon.ping".into(),
+                serde_json::json!({}),
+                Duration::from_secs(10),
+                CallGuard { boot, version: 1 },
+                Some(wake),
+            )
+            .unwrap();
         call_seen_rx.await.unwrap();
         if shutdown {
             client.control(true).await.unwrap();
             let _ = stop_tx.send(());
         }
-        tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
-        assert!(matches!(ticket.try_take(), Some(Err(_))), "disconnect/shutdown completes with an error");
+        tokio::time::timeout(Duration::from_secs(5), wake_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(ticket.try_take(), Some(Err(_))),
+            "disconnect/shutdown completes with an error"
+        );
         server.await.unwrap();
-        if !shutdown { client.control(true).await.unwrap(); }
+        if !shutdown {
+            client.control(true).await.unwrap();
+        }
     }
 }
 
@@ -3035,12 +3173,31 @@ async fn call_ticket_same_boot_reconnect_barrier_never_replays_queued_call() {
     let server = tokio::spawn(async move {
         let (mut old_reader, old_writer) = accepted(&listener).await;
         // Reconnect closes the old socket. A queued ticket must never reach it.
-        assert!(tokio::time::timeout(Duration::from_secs(5), old_reader.next()).await.unwrap().unwrap().is_none());
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), old_reader.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .is_none()
+        );
         drop(old_writer);
         let (mut reader, mut writer) = accepted(&listener).await; // identical boot
         probe_rx.await.unwrap();
-        framing::write(&mut writer, &Message::Ping { id: Id::Text("same-boot-fence".into()) }).await.unwrap();
-        assert_eq!(next(&mut reader).await, Message::Pong { id: Id::Text("same-boot-fence".into()) }, "old ticket must not replay into the replacement transport");
+        framing::write(
+            &mut writer,
+            &Message::Ping {
+                id: Id::Text("same-boot-fence".into()),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Pong {
+                id: Id::Text("same-boot-fence".into())
+            },
+            "old ticket must not replay into the replacement transport"
+        );
         probed_tx.send(()).unwrap();
         let _ = done_rx.await;
     });
@@ -3049,32 +3206,70 @@ async fn call_ticket_same_boot_reconnect_barrier_never_replays_queued_call() {
     let generation = client.0.shared.transport_generation.load(Ordering::Acquire);
     let (entered_tx, entered_rx) = oneshot::channel();
     let (release_tx, release_rx) = oneshot::channel();
-    assert!(client.0.tx.try_send(Command::Gate { entered: entered_tx, release: release_rx }).is_ok());
+    assert!(
+        client
+            .0
+            .tx
+            .try_send(Command::Gate {
+                entered: entered_tx,
+                release: release_rx
+            })
+            .is_ok()
+    );
     entered_rx.await.unwrap();
     // FIFO orders Reconnect before the ticket while the connected link is
     // deliberately frozen. Admission therefore captures the old generation.
     let (reconnected_tx, reconnected_rx) = oneshot::channel();
-    assert!(client.0.tx.try_send(Command::Reconnect(reconnected_tx)).is_ok());
+    assert!(
+        client
+            .0
+            .tx
+            .try_send(Command::Reconnect(reconnected_tx))
+            .is_ok()
+    );
     let (wake_tx, wake_rx) = oneshot::channel();
     let wake_tx = Arc::new(Mutex::new(Some(wake_tx)));
     let wakes = Arc::new(AtomicU64::new(0));
     let wake_count = wakes.clone();
     let wake: CallWake = Arc::new(move || {
         wake_count.fetch_add(1, Ordering::Relaxed);
-        if let Some(tx) = wake_tx.lock().unwrap().take() { let _ = tx.send(()); }
+        if let Some(tx) = wake_tx.lock().unwrap().take() {
+            let _ = tx.send(());
+        }
     });
-    let mut ticket = client.begin_call("daemon.ping".into(), serde_json::json!({}), Duration::from_secs(5), CallGuard { boot: boot.clone(), version: 1 }, Some(wake)).unwrap();
+    let mut ticket = client
+        .begin_call(
+            "daemon.ping".into(),
+            serde_json::json!({}),
+            Duration::from_secs(5),
+            CallGuard {
+                boot: boot.clone(),
+                version: 1,
+            },
+            Some(wake),
+        )
+        .unwrap();
     assert!(ticket.try_take().is_none());
     release_tx.send(()).unwrap();
-    tokio::time::timeout(Duration::from_secs(5), reconnected_rx).await.unwrap().unwrap().unwrap();
-    tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
+    tokio::time::timeout(Duration::from_secs(5), reconnected_rx)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), wake_rx)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(matches!(ticket.try_take(), Some(Err(error)) if error.code == "unavailable"));
     assert!(ticket.try_take().is_none());
     assert_eq!(wakes.load(Ordering::Relaxed), 1);
     assert_eq!(connected_client(&client).await, boot);
     assert!(client.0.shared.transport_generation.load(Ordering::Acquire) > generation);
     probe_tx.send(()).unwrap();
-    tokio::time::timeout(Duration::from_secs(5), probed_rx).await.unwrap().unwrap();
+    tokio::time::timeout(Duration::from_secs(5), probed_rx)
+        .await
+        .unwrap()
+        .unwrap();
     client.control(true).await.unwrap();
     let _ = done_tx.send(());
     server.await.unwrap();

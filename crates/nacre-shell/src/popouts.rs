@@ -69,7 +69,15 @@ pub fn status(
     radius: f32,
     trace: bool,
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
-    status_at_root(kind, palette, colors, owner, client, (radius, trace), "shell".into())
+    status_at_root(
+        kind,
+        palette,
+        colors,
+        owner,
+        client,
+        (radius, trace),
+        "shell".into(),
+    )
 }
 
 /// The root is explicit for private fake-daemon tests, without changing the
@@ -109,10 +117,16 @@ pub(crate) fn status_at_root(
         fallback,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
-            let controlled_network = matches!(kind, crate::status_views::Kind::Network) && client.is_some();
+            let controlled_network =
+                matches!(kind, crate::status_views::Kind::Network) && client.is_some();
             let session = bead::ui::Session::new(
                 root.clone(),
-                if controlled_network { "status/network.luau" } else { "status/main.luau" }.into(),
+                if controlled_network {
+                    "status/network.luau"
+                } else {
+                    "status/main.luau"
+                }
+                .into(),
                 (*palette).clone(),
                 (*colors).clone(),
                 cold.clone(),
@@ -139,7 +153,10 @@ pub(crate) fn status_at_root(
                 .and_then(|runtime| match typed_topic {
                     Some("network") if controlled_network => runtime.with_core_network_control(
                         source,
-                        client.as_ref().expect("controlled network has shared daemon client").clone(),
+                        client
+                            .as_ref()
+                            .expect("controlled network has shared daemon client")
+                            .clone(),
                     ),
                     Some("network") => runtime.with_core_network_status(source),
                     Some("bluetooth") => runtime.with_core_bluetooth_status(source),
