@@ -13,7 +13,7 @@ preview, capture, package operation, or test suite was run for this update.
 | Selected real-daemon helper lane | Nacre `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57`, release | `4a65f4ec887bc85e93b5b862f1786fe6f1b7a811875333765ee8f8c052cce0aa` | Published identity; binary not rehashed in this prep |
 | Older helper reference | Nacre `75157fd32fdea26ef8defcfb0430e39be439fd89` | Archived helper `c803fe026a935049c1f19eda85c828d7ae3d081b24b9176a94ea6a790e39cd18` | Historical receipt only; not selected |
 
-The first bounded runner attempt used an empty remote `PATH` and stopped at
+The first bounded runner attempt used the inherited remote `PATH` and stopped at
 `command -v wayland-info`; its remaining checks did not run. A single authorized
 retry with an explicit `PATH` found no `/usr/bin/wayland-info`, and
 `pacman -Q wayland-utils` reported that the package was not found on that
@@ -140,3 +140,13 @@ typing measurement or target acceptance follows from it.
 
 No performance result, binary rehash, actual geometry proof, or B2/B3 readiness
 claim is made. Raw private artifacts remain outside Git.
+
+## Lead review
+
+Accepted as light preparation only. The first command's lookup failure does not
+prove PATH was empty; only the explicit-PATH retry established the reported
+missing executable/package on that runner route. The dependency discrepancy
+was reported to the owner with minimal install command; no package operation
+was attempted. Artifact hashes remain historical bindings, not new file rehashes.
+The source command-routing, geometry and safety gaps are concrete prerequisites
+for later B2/B3; no measurement or product acceptance follows from this report.

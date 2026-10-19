@@ -4,8 +4,8 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Ready: fresh Luna | Owner-installed wayland-info prerequisite; read-only dependency/artifact/source audit and execution handoff. NO capture/heavy job. |
-| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Old missing-wayland-info blocker superseded. Preserve frozen runtime1cff9d1/helper5f4; no new slot yet. |
+| 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
+| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Owner installation notice retained, but explicit lab retry found executable/package absent; owner notified. Preserve frozen runtime1cff9d1/helper5f4; no slot. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source Done; measured gated | B0003-S89afb381 accepted/CI39123319816 green. Measured work after B2 PASS/new slot; no static polishing. |
 | — | [B0011 Battery](0011-daemon-battery-status-popout.md) | Done | Sourceaf61d18/fullCI39147491406green; docs5ad2551. Lazy lease/optional readings/private lifecycle tests accepted. |
 | — | [B0010 Bluetooth](0010-daemon-bluetooth-status-popout.md) | Done | Sourcee3e417e/CI39136586458green. Capability-gated; no running producer claim. |
@@ -20,9 +20,10 @@ screen profiles but only NiriA/B passed; Hbaseline failed hostswap gate. Nacre
 now fixes QML memory before quick pairs/full confirmation. No B2/B3 measurement
 until a separate explicit grant. Never infer grant from an idle lock/window.
 
-Owner installed wayland-utils; no sudo retry/install or old missing-dependency
-waiting chain. B0012 may perform one strictly read-only installed dependency/
-artifact check using existing trusted runner, with no display/process probing.
+Owner installed-tool notice and lab read-only result disagree: explicit PATH
+lookup found /usr/bin/wayland-info absent and pacman reports no wayland-utils.
+Owner notified of minimal lab install command; no install/sudo retry authorized.
+B0012 is complete, no further host probes needed. Source work continues.
 Other source tasks (published-schema device controls/static wallpaper) require a
 concrete next spec; do not invent product design while waiting.
 

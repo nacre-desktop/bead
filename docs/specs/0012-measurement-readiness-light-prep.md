@@ -3,7 +3,7 @@
 - ID: B0012
 - Repo: nacre-desktop/bead
 - Implementer: fresh built-in Luna worker
-- Status: Ready
+- Status: Done — light handoff accepted; capture prerequisites open
 - Depends on: accepted B0001/B0004/B0003-S and owner-installed wayland-utils
 - Date: 2026-10-19
 - Size: one focused light session, <=90min
@@ -82,3 +82,13 @@ Own worktree; never force/rebase others. nice10/Cargo-j2 if later authorized;
 NO heavy slot in this task. No live desktop/installed Nacre/configs/keys/units,
 publication, AI permissions/paru changes, other agents' PIDs, pressure/cache/sysctl.
 No separate terminal agents. Keep personal paths/raw artifacts out of commits.
+
+## Review receipt
+
+Local worker14b93337: report/source-only corrections accepted. No runtime/tool
+code changed. git diff --check passed; no hosted CI/build/capture claimed.
+Explicit-PATH read-only runner check found no /usr/bin/wayland-info and no
+wayland-utils package, contrary to owner installation notice; owner notified,
+no install attempted. Frozen binary IDs remain recorded, not rehashed.
+B2 command dispatcher corrected to launcher; B3 menu-engine remains separately
+gated. Geometry/cap gaps documented. All next captures still need exact grant.
