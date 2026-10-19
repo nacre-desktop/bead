@@ -510,7 +510,10 @@ fn isolate_runtime(runtime: &mut Runtime, recovery: &Path) {
     runtime.session.enable_recovery(recovery.into());
 }
 
-fn controlled_runtime(client: &Client, recovery: &Path) -> Result<Runtime, Box<dyn std::error::Error>> {
+fn controlled_runtime(
+    client: &Client,
+    recovery: &Path,
+) -> Result<Runtime, Box<dyn std::error::Error>> {
     let palette = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
     let colors = bead::render::Palette::read(&palette)?;
     let cold = crate::sound::fallback(colors.get("surface")?);
