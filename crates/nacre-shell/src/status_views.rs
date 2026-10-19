@@ -5,7 +5,7 @@ use bead::core::{
     source::{self, Source},
 };
 use nacre_protocol::core_services::{BatteryState, BluetoothState, CoreSnapshot, NetworkState};
-use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
+use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -50,11 +50,20 @@ pub struct Status {
     source: Arc<dyn Source>,
     mode: Mode,
     last_good: RefCell<Option<BTreeMap<String, Value>>>,
+    wifi_control: Option<RefCell<WifiControl>>,
+}
+struct WifiControl {
+    client: crate::nacre_source::Client,
+    pending: Option<(String, crate::nacre_source::CallTicket)>,
+    message: Option<String>,
+    last_boot: Option<String>,
+    checked: bool,
 }
 #[derive(Clone, Copy)]
 enum Mode {
     Legacy,
     CoreNetwork,
+    CoreNetworkControl,
     CoreBluetooth,
     CoreBattery,
 }
@@ -65,6 +74,7 @@ impl Status {
             source,
             mode: Mode::Legacy,
             last_good: RefCell::new(None),
+            wifi_control: None,
         }
     }
     pub fn core_network(source: Arc<dyn Source>) -> Self {
@@ -73,6 +83,25 @@ impl Status {
             source,
             mode: Mode::CoreNetwork,
             last_good: RefCell::new(None),
+            wifi_control: None,
+        }
+    }
+    pub fn core_network_control(
+        source: Arc<dyn Source>,
+        client: crate::nacre_source::Client,
+    ) -> Self {
+        Self {
+            kind: Kind::Network,
+            source,
+            mode: Mode::CoreNetworkControl,
+            last_good: RefCell::new(None),
+            wifi_control: Some(RefCell::new(WifiControl {
+                client,
+                pending: None,
+                message: None,
+                last_boot: None,
+                checked: false,
+            })),
         }
     }
     pub fn core_bluetooth(source: Arc<dyn Source>) -> Self {
@@ -81,6 +110,7 @@ impl Status {
             source,
             mode: Mode::CoreBluetooth,
             last_good: RefCell::new(None),
+            wifi_control: None,
         }
     }
     pub fn core_battery(source: Arc<dyn Source>) -> Self {
@@ -89,6 +119,7 @@ impl Status {
             source,
             mode: Mode::CoreBattery,
             last_good: RefCell::new(None),
+            wifi_control: None,
         }
     }
     pub fn subscribe(
@@ -99,9 +130,45 @@ impl Status {
             notify(bead::wayland::UiEvent::Model(BTreeMap::new()))
         }))
     }
+    pub fn subscribe_control_link(
+        &self,
+        notify: crate::nacre_source::CallWake,
+    ) -> source::Result<source::Subscription> {
+        let Some(control) = &self.wifi_control else {
+            return Err(source::Error::new("unavailable", "Wi-Fi control is disabled", false));
+        };
+        control.borrow().client.subscribe(Arc::new(move |_| notify()))
+    }
+    pub fn wifi_action(&self, wake: crate::nacre_source::CallWake) {
+        let Some(control) = &self.wifi_control else { return; };
+        let snapshot = self.source.snapshot();
+        let client = control.borrow().client.clone();
+        let candidate = wifi_candidate(&snapshot, &client);
+        let Some(candidate) = candidate.filter(|candidate| candidate.eligible) else { return; };
+        let Some(boot) = candidate.topic_boot.clone() else { return; };
+        let Some(state) = candidate.state else { return; };
+        let mut control = control.borrow_mut();
+        if control.pending.is_some() { return; }
+        if control.last_boot.as_deref().is_some_and(|previous| previous != boot) {
+            control.message = None;
+        }
+        control.last_boot = Some(boot.clone());
+        control.message = None;
+        match client.begin_call(
+            "network.set_wifi".into(),
+            serde_json::json!({"enabled": !state.wireless_enabled}),
+            Duration::from_millis(candidate.timeout_ms.min(10_000) as u64),
+            crate::nacre_source::CallGuard { boot: boot.clone(), version: 1 },
+            Some(wake),
+        ) {
+            Ok(ticket) => control.pending = Some((boot, ticket)),
+            Err(_) => control.message = Some("Wi-Fi change failed".into()),
+        }
+    }
     pub fn project(&self) -> BTreeMap<String, Value> {
         match self.mode {
             Mode::CoreNetwork => return self.project_core_network(),
+            Mode::CoreNetworkControl => return self.project_core_network_control(),
             Mode::CoreBluetooth => return self.project_core_bluetooth(),
             Mode::CoreBattery => return self.project_core_battery(),
             Mode::Legacy => {}
@@ -214,6 +281,10 @@ impl Status {
 
     fn project_core_network(&self) -> BTreeMap<String, Value> {
         let snapshot = self.source.snapshot();
+        self.project_core_network_snapshot(&snapshot)
+    }
+
+    fn project_core_network_snapshot(&self, snapshot: &bead::core::source::Snapshot) -> BTreeMap<String, Value> {
         let network = serde_json::from_value::<NetworkState>(snapshot.data.as_ref().clone())
             .ok()
             .map(CoreSnapshot::Network);
@@ -263,6 +334,56 @@ impl Status {
         display.insert("status.icon".into(), Value::Text("wifi".into()));
         display.insert("status.kind".into(), Value::Text("network".into()));
         display
+    }
+
+    fn project_core_network_control(&self) -> BTreeMap<String, Value> {
+        let snapshot = self.source.snapshot();
+        let control_cell = self.wifi_control.as_ref().expect("controlled network has Wi-Fi controller");
+        let client = control_cell.borrow().client.clone();
+        let candidate = wifi_candidate(&snapshot, &client);
+        let mut base = self.project_core_network_snapshot(&snapshot);
+        let mut control = control_cell.borrow_mut();
+        if let Some(boot) = candidate.topic_boot.as_ref()
+            && control.last_boot.as_deref().is_some_and(|previous| previous != boot)
+        {
+            control.message = None;
+        }
+        if let Some(boot) = candidate.topic_boot.as_ref() {
+            control.last_boot = Some(boot.clone());
+        }
+        let current_identity = candidate.eligible_identity.as_deref();
+        if control.pending.as_ref().is_some_and(|(boot, _)| {
+            !candidate.link_connected || current_identity != Some(boot.as_str())
+        }) {
+            control.pending = None;
+        }
+        let terminal = control.pending.as_mut().and_then(|(_, ticket)| ticket.try_take());
+        if let Some(result) = terminal {
+            control.pending = None;
+            control.message = match result {
+                Ok(payload) if payload.as_object().is_some_and(|object| object.len() == 1 && object.get("changed").and_then(serde_json::Value::as_bool).is_some()) => None,
+                _ => Some("Wi-Fi change failed".into()),
+            };
+        }
+        let checked = candidate.state.as_ref().map(|state| state.wireless_enabled).unwrap_or(control.checked);
+        if candidate.fresh {
+            control.checked = checked;
+        }
+        let busy = control.pending.is_some();
+        let message = if !candidate.eligible {
+            "Wi-Fi control unavailable"
+        } else if busy {
+            "Changing Wi-Fi…"
+        } else {
+            control.message.as_deref().unwrap_or("")
+        };
+        base.extend([
+            ("network.wifi_checked".into(), Value::Bool(control.checked)),
+            ("network.wifi_enabled".into(), Value::Bool(candidate.eligible && !busy)),
+            ("network.wifi_busy".into(), Value::Bool(busy)),
+            ("network.wifi_message".into(), Value::Text(message.into())),
+        ]);
+        base
     }
 
     fn project_core_bluetooth(&self) -> BTreeMap<String, Value> {
@@ -363,6 +484,44 @@ impl Status {
         display.insert("status.icon".into(), Value::Text("battery_full".into()));
         display.insert("status.kind".into(), Value::Text("battery".into()));
         display
+    }
+}
+
+struct WifiCandidate {
+    topic_boot: Option<String>,
+    eligible_identity: Option<String>,
+    state: Option<NetworkState>,
+    fresh: bool,
+    link_connected: bool,
+    eligible: bool,
+    timeout_ms: u32,
+}
+fn wifi_candidate(
+    topic: &bead::core::source::Snapshot,
+    client: &crate::nacre_source::Client,
+) -> WifiCandidate {
+    let link = client.snapshot();
+    let status = client.status();
+    let topic_boot = topic.epoch.clone();
+    let link_boot = link.data.get("boot").and_then(serde_json::Value::as_str);
+    let identity_matches = topic.connected
+        && link.connected
+        && status.boot.as_deref() == Some(topic.epoch.as_str())
+        && link_boot == Some(topic.epoch.as_str());
+    let state = serde_json::from_value::<NetworkState>(topic.data.as_ref().clone()).ok();
+    let fresh = identity_matches && state.as_ref().is_some_and(|state| {
+        state.health.available && !state.health.stale && CoreSnapshot::Network(state.clone()).valid()
+    });
+    let method = status.methods.get("network.set_wifi");
+    let eligible = fresh && method.is_some_and(|method| method.v == 1);
+    WifiCandidate {
+        topic_boot,
+        eligible_identity: identity_matches.then(|| topic.epoch.clone()),
+        state,
+        fresh,
+        link_connected: link.connected,
+        eligible,
+        timeout_ms: method.map_or(10_000, |method| method.timeout.min(10_000)),
     }
 }
 

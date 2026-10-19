@@ -86,6 +86,37 @@ fn harness(scale: f32) -> Result<Harness> {
         },
     )
 }
+
+#[test]
+fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
+    let initial = BTreeMap::from([
+        ("view.edge".into(), Value::Text("top".into())),
+        ("panel.open".into(), Value::Bool(true)),
+        ("status.ready".into(), Value::Bool(false)),
+        ("status.active".into(), Value::Bool(false)),
+        ("status.heading".into(), Value::Text("Network".into())),
+        ("status.icon".into(), Value::Text("wifi".into())),
+        ("status.primary".into(), Value::Text("Network unavailable".into())),
+        ("status.secondary".into(), Value::Text("Status data unavailable".into())),
+        ("status.detail".into(), Value::Text(String::new())),
+        ("network.wifi_checked".into(), Value::Bool(false)),
+        ("network.wifi_enabled".into(), Value::Bool(false)),
+        ("network.wifi_busy".into(), Value::Bool(false)),
+        ("network.wifi_message".into(), Value::Text("Wi-Fi control unavailable".into())),
+    ]);
+    let mut h = Harness::load(
+        &root(),
+        Path::new("status/network.luau"),
+        &root().join("palette.json"),
+        initial,
+        Config { width: 380, height: 300, scale: 1. },
+    )?;
+    let switch = h.session.view_nodes().into_iter().find(|node| node.id == "wifi-radio")
+        .ok_or("controlled switch missing")?;
+    assert_eq!(switch.action, None, "unavailable switch has no hit action");
+    assert!(h.session.view_nodes().iter().any(|node| node.id == "wifi-label"));
+    Ok(())
+}
 #[test]
 fn read_only_status_popouts_have_populated_goldens_at_both_scales() -> Result<()> {
     for kind in Kind::ALL {

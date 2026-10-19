@@ -94,9 +94,10 @@ pub fn status(
         fallback,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
+            let controlled_network = matches!(kind, crate::status_views::Kind::Network) && client.is_some();
             let session = bead::ui::Session::new(
                 "shell".into(),
-                "status/main.luau".into(),
+                if controlled_network { "status/network.luau" } else { "status/main.luau" }.into(),
                 (*palette).clone(),
                 (*colors).clone(),
                 cold.clone(),
@@ -121,6 +122,10 @@ pub fn status(
                 .with_trace(trace)
                 .with_frame(crate::placement::Attachment::Popout, &colors)
                 .and_then(|runtime| match typed_topic {
+                    Some("network") if controlled_network => runtime.with_core_network_control(
+                        source,
+                        client.as_ref().expect("controlled network has shared daemon client").clone(),
+                    ),
                     Some("network") => runtime.with_core_network_status(source),
                     Some("bluetooth") => runtime.with_core_bluetooth_status(source),
                     Some("battery") => runtime.with_core_battery_status(source),

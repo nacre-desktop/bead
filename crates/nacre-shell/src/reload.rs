@@ -2,6 +2,7 @@
 use bead::backends::Backend;
 use bead::render::Scene;
 use bead::wayland::{SceneSource, UiEvent};
+use std::collections::BTreeMap;
 use std::error::Error;
 pub struct Runtime {
     pub session: bead::ui::Session,
@@ -13,6 +14,7 @@ pub struct Runtime {
     calendar_subscription: Option<bead::core::source::Subscription>,
     status: Option<std::rc::Rc<crate::status_views::Status>>,
     status_subscription: Option<bead::core::source::Subscription>,
+    status_control_subscription: Option<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
@@ -84,6 +86,7 @@ impl Runtime {
             calendar_subscription: None,
             status: None,
             status_subscription: None,
+            status_control_subscription: None,
             dashboard: None,
             dashboard_subscription: Vec::new(),
             launcher_memory: None,
@@ -198,6 +201,18 @@ impl Runtime {
         source: std::sync::Arc<dyn bead::core::source::Source>,
     ) -> Result<Self, Box<dyn Error>> {
         self.with_status_projector(crate::status_views::Status::core_network(source))
+    }
+    pub fn with_core_network_control(
+        self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+        client: crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut runtime = self.with_status_projector(
+            crate::status_views::Status::core_network_control(source, client),
+        )?;
+        runtime.actions.register("network.toggle_wifi", "network.control")?;
+        runtime.actions.grant("network.control");
+        Ok(runtime)
     }
     pub fn with_core_bluetooth_status(
         self,
@@ -629,6 +644,15 @@ impl SceneSource for Runtime {
                 Ok(subscription) => self.status_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=status_subscription"),
             }
+            let wakeup = wakeup.clone();
+            let notify: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
+            });
+            match status.subscribe_control_link(notify) {
+                Ok(subscription) => self.status_control_subscription = Some(subscription),
+                Err(error) if error.code == "unavailable" => {},
+                Err(_) => eprintln!("SOURCE_ERROR code=status_control_subscription"),
+            }
         }
         if let Some(dashboard) = &self.dashboard {
             match dashboard.subscribe(wakeup.clone()) {
@@ -794,6 +818,22 @@ impl SceneSource for Runtime {
                 center: self.popout_center(id, view),
             });
             return Ok(None);
+        }
+        if let Some((_, name, _)) = &host_action
+            && name == "network.toggle_wifi"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self.wakeup.clone().ok_or("Wi-Fi completion event channel unavailable")?;
+            let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            if let Some(status) = &self.status {
+                status.wifi_action(callback);
+            }
+            let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene, false);
         }
         if let Some((_, name, _)) = &host_action
             && name == "launcher.open"
@@ -1503,3 +1543,6 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod wifi_runtime_tests;
