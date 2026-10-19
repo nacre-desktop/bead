@@ -4,9 +4,9 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Review: source accepted, checks pending | Local26702487 accepted after Sol completion/review; Rust checks NOT RUN. No source push; bounded correctness slot after F4 release. |
+| 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Review: focused correctness passed | Localcdd9fb2 accepted;11 ticket+5 Wi-Fi+1 template tests, fmt and affected Clippy PASS. No source push/full CI; integration pending heavy availability. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
-| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Owner installation notice retained, but explicit lab retry found executable/package absent; owner notified. Preserve frozen runtime1cff9d1/helper5f4; no slot. |
+| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Waiting for slot after F4 | Desktop wayland-utils installed by owner and command availability verified; prerequisite resolved. Preserve frozen runtime1cff9d1/helper5f4; no slot. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source Done; measured gated | B0003-S89afb381 accepted/CI39123319816 green. Measured work after B2 PASS/new slot; no static polishing. |
 | — | [B0011 Battery](0011-daemon-battery-status-popout.md) | Done | Sourceaf61d18/fullCI39147491406green; docs5ad2551. Lazy lease/optional readings/private lifecycle tests accepted. |
 | — | [B0010 Bluetooth](0010-daemon-bluetooth-status-popout.md) | Done | Sourcee3e417e/CI39136586458green. Capability-gated; no running producer claim. |
@@ -15,20 +15,23 @@ Current owner handoff: morning2026-10-19. [Standing rules](https://github.com/na
 
 ## Current execution ownership
 
-No Bead capture or heavy job is active/granted. Owner ended the previous heavy
-window and restarted LIGHT work immediately. Nacre v14 proved both required
-screen profiles but only NiriA/B passed; Hbaseline failed hostswap gate. Nacre
-now fixes QML memory before quick pairs/full confirmation. No B2/B3 measurement
-until a separate explicit grant. Never infer grant from an idle lock/window.
+B0013 focused correctness finished and RELEASED08:39UTC. Final sourcecdd9fb2
+independently ACCEPTED;11 actor ticket,5 Wi-Fi Runtime and1 template tests PASS,
+fmt and affected all-target Clippy PASS. Earlier failures are retained. No full
+suite/hosted CI/source integration yet. Evidence archive6ccfe29daa51e4c6a92fc445552a6cdd47fae08facfee0423a8284a0a6517f71.
+Scope manager/effective12GiB/swap0 and held-child membership verified; no OOM,
+peak2,021,376,000B. Actual SCHED_IDLE/priority19 preserved; no host policy change.
 
-Owner installed-tool notice and lab read-only result disagree: explicit PATH
-lookup found /usr/bin/wayland-info absent and pacman reports no wayland-utils.
-Owner notified of minimal lab install command; no install/sudo retry authorized.
-B0012 is complete, no further host probes needed. Source work continues.
-B0013 local26702487 is source-accepted against the published reserved Wi-Fi
-radio schema; implementation/fixtures are preserved locally pending execution. Runtime control remains unavailable without actual Welcome method
-capability and fresh topic data. No producer/pin change or measurement grant.
-Other device controls/static wallpaper still require a concrete next spec.
+Nacre sole heavy grant09:00–11:00UTC is fresh Niri-only quick pair for source8a;
+no Bead build/hosted CI/lab work during that grant. Hyprland needs a separate
+Nacre resume grant. Bead B2/B3 measurement remains after F4 and explicit grant.
+Owner clarified installation was first laptop, then desktop08:08:50UTC during
+an earlier Nacre candidate warmup: ONLY wayland-utils, no other package changes.
+Desktop /usr/bin/wayland-info availability subsequently verified; no probe run.
+
+B0012 light prep is complete. B0013 remains capability-gated to actual Welcome
+method plus fresh topic; no producer/pin change. All task workers released.
+Other device controls/static wallpaper need a concrete next bounded spec.
 
 Frozen B2 runtime1cff9d17/releaseb01dfcca and helper5f4/4a65 remain separate from
 newer shell features. Source/profile/hash enough for nested provenance; unknown

@@ -27,7 +27,8 @@ framework/backend change, live access, installation or measurement.
 
 Files: crates/nacre-shell/src/{nacre_source.rs,nacre_source/tests.rs,
 status_views.rs,status_views_tests.rs,reload.rs,popouts.rs}, new private sibling
-test module if useful, and shell/status/network.luau. Keep status/main.luau and
+test module if useful, shell/status/network.luau and shell/status/behavior.luau
+(only an inert host-action declaration, matching existing launcher pattern). Keep status/main.luau and
 legacy/no-client Network, Bluetooth and Battery behavior unchanged.
 
 ## Changes and steps
@@ -196,3 +197,18 @@ because fmt was absent; no build/test ran, and no toolchain was removed. Exact
 command/output are preserved in the private worker report; subsequent work used
 source inspection only. Future tool invocations must explicitly prevent automatic
 installation and use a known existing toolchain.
+
+## Final focused correctness review — 2026-10-19
+
+Local clean sourcecdd9fb2f409838a5baaed251869d01c0afc1e8c8 independently ACCEPTED.
+Private cached offline/locked Rust1.99 checks: fmt PASS; call_ticket_11/11;
+wifi_5/5 using default parallel execution; unavailable controlled-template1/1;
+helper-independent nacre-shell all-target Clippy -D warnings PASS. No full suite,
+exact-head hosted CI, integration or publication claimed. Test-private roots and
+factory/store isolation fix fixture races; no global HOME/cwd mutation. Inert
+status/behavior.luau action declaration is allowed; only authorized Runtime acts.
+Evidence archive6ccfe29daa51e4c6a92fc445552a6cdd47fae08facfee0423a8284a0a6517f71;
+source archivece7767911fdb779103b1dc59b2d5f0a30c6d552651bd085b763a4825a3b5fe63.
+Verified12GiB/swap0 scope, peak2,021,376,000B, zero OOM; actual SCHED_IDLE and
+numeric priority19 preserved. Lab/process/scope/lock released08:39UTC. Pending
+normal integration and exact-head hosted CI when F4 heavy priority permits.
