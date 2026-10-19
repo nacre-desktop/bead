@@ -134,6 +134,8 @@ async fn wifi_runtime_sends_enabled_once_and_ignores_busy_duplicate() -> Result<
     tokio::time::timeout(Duration::from_secs(5), event_rx.recv()).await?.expect("missing second Ret wake");
     runtime.stage(UiEvent::Model(BTreeMap::new()))?;
     runtime.commit();
+    assert_eq!(runtime.session.stores.get("network.wifi_busy"), Some(&bead::core::Value::Bool(false)));
+    assert_eq!(runtime.session.stores.get("network.wifi_checked"), Some(&bead::core::Value::Bool(false)), "changed=true Ret is acknowledgement; only a later Snap changes checked state");
     drop(runtime);
     tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
     Source::stop(&client).await?;

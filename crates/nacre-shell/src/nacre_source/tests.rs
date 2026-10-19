@@ -500,8 +500,8 @@ async fn call_ticket_disconnect_and_shutdown_complete_pending_ticket() {
         ).unwrap();
         call_seen_rx.await.unwrap();
         if shutdown {
-            let _ = stop_tx.send(());
             client.control(true).await.unwrap();
+            let _ = stop_tx.send(());
         }
         tokio::time::timeout(Duration::from_secs(5), wake_rx).await.unwrap().unwrap();
         assert!(matches!(ticket.try_take(), Some(Err(_))), "disconnect/shutdown completes with an error");
