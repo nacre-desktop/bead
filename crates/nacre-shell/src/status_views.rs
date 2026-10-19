@@ -653,6 +653,10 @@ impl Status {
         };
         base.extend([
             (
+                "bluetooth.power_visible".into(),
+                Value::Bool(candidate.fresh && candidate.adapter_id.is_some()),
+            ),
+            (
                 "bluetooth.power_checked".into(),
                 Value::Bool(control.checked),
             ),

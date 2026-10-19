@@ -71,6 +71,7 @@ async fn assert_disabled_case(
     data: serde_json::Value,
     method_version: Option<u16>,
     disconnect_after_snap: bool,
+    expect_visible: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let lab = Lab::new();
     let listener = lab.bind();
@@ -178,6 +179,13 @@ async fn assert_disabled_case(
             .get("bluetooth.power_enabled")
             .is_some_and(|v| *v == bead::core::Value::Bool(true))
     );
+    assert_eq!(rendered_power_switch(&mut runtime), expect_visible);
+    assert!(
+        runtime
+            .input_regions()
+            .iter()
+            .all(|region| { region.id != "status-popout.bluetooth-row.bluetooth-power" })
+    );
     runtime
         .status
         .as_ref()
@@ -207,10 +215,9 @@ fn controlled_runtime(
     runtime.state_file = None;
     runtime.session.restore_on_start(BTreeMap::new());
     runtime.session.enable_recovery(recovery);
-    let scene = runtime
+    runtime
         .stage(UiEvent::Reload)?
         .expect("controlled template loads");
-    assert!(scene.primitives.iter().any(|primitive| matches!(primitive, bead::render::Primitive::Rounded { rect, .. } if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)));
     runtime.commit();
     runtime.services(Box::new(|_| {}));
     Ok(runtime)
@@ -218,6 +225,15 @@ fn controlled_runtime(
 fn project(runtime: &mut Runtime) {
     runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
     runtime.commit();
+}
+fn rendered_power_switch(runtime: &mut Runtime) -> bool {
+    let scene = runtime.stage(UiEvent::Reload).unwrap().unwrap();
+    let visible = scene.primitives.iter().any(|primitive| {
+        matches!(primitive, bead::render::Primitive::Rounded { rect, .. }
+            if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)
+    });
+    runtime.commit();
+    visible
 }
 fn checked(runtime: &Runtime) -> bool {
     runtime.session.stores.get("bluetooth.power_checked") == Some(&bead::core::Value::Bool(true))
@@ -354,9 +370,24 @@ async fn bluetooth_power_targets_exact_single_adapter() -> Result<(), Box<dyn st
     })
     .await?;
     assert!(checked(&runtime));
+    assert!(rendered_power_switch(&mut runtime));
+    let switch_rect = bead::ui::rect(
+        &runtime
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| node.id == "status-popout.bluetooth-row.bluetooth-power")
+            .unwrap()
+            .draw,
+    );
     click(&mut runtime);
     assert!(busy(&runtime));
-    click(&mut runtime);
+    assert!(rendered_power_switch(&mut runtime));
+    runtime.stage(UiEvent::Click {
+        x: switch_rect.x + switch_rect.w / 2.,
+        y: switch_rect.y + switch_rect.h / 2.,
+    })?;
+    runtime.commit();
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(5), call_rx.recv())
             .await?
@@ -423,7 +454,7 @@ async fn bluetooth_power_requires_fresh_unambiguous_adapter()
     let mut malformed = state(true);
     malformed["adapters"]["items"]["adapter-A"]["powered"] = serde_json::json!("unknown");
     for data in [zero, multiple, dangling, malformed, stale, unhealthy] {
-        assert_disabled_case(data, Some(1), false).await?;
+        assert_disabled_case(data, Some(1), false, false).await?;
     }
     Ok(())
 }
@@ -432,9 +463,9 @@ async fn bluetooth_power_requires_fresh_unambiguous_adapter()
 async fn bluetooth_power_unadvertised_method_stays_read_only()
 -> Result<(), Box<dyn std::error::Error>> {
     for version in [None, Some(2)] {
-        assert_disabled_case(state(true), version, false).await?;
+        assert_disabled_case(state(true), version, false, true).await?;
     }
-    assert_disabled_case(state(true), Some(1), true).await?;
+    assert_disabled_case(state(true), Some(1), true, false).await?;
     Ok(())
 }
 

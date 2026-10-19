@@ -961,12 +961,11 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
         let (read, mut writer) = stream.into_split();
         let mut reader = framing::Reader::new(BufReader::new(read));
         assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
-        framing::write(
-            &mut writer,
-            &welcome(Some(("network.set_wifi", 1)), Some(1)),
-        )
-        .await
-        .unwrap();
+        let mut greeting = welcome(Some(("network.set_wifi", 1)), Some(1));
+        if let Message::Welcome { topics, .. } = &mut greeting {
+            topics.insert("bluetooth".into(), 1);
+        }
+        framing::write(&mut writer, &greeting).await.unwrap();
         probe_rx.await.unwrap();
         framing::write(
             &mut writer,
@@ -984,6 +983,26 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
             "constructing factories must not lease or call"
         );
         probed_tx.send(()).unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["bluetooth".into()]
+            }
+        );
+        framing::write(&mut writer, &Message::Snap {
+            topic: "bluetooth".into(), seq: 0,
+            data: serde_json::json!({
+                "health":{"available":true,"stale":false},
+                "adapters":{"items":{"adapter-A":{"name":"Office adapter","powered":true,"discovering":false}},"order":["adapter-A"]},
+                "devices":{"items":{},"order":[]}
+            }),
+        }).await.unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Unsub {
+                topics: vec!["bluetooth".into()]
+            }
+        );
         assert_eq!(
             next(&mut reader).await,
             Message::Sub {
@@ -1103,14 +1122,21 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
     tokio::time::timeout(Duration::from_secs(5), probed_rx).await??;
     for other in [&bluetooth, &battery] {
         let mut read_only = (other.factory)(true).map_err(std::io::Error::other)?;
-        let scene = read_only
-            .stage(UiEvent::Reload)?
-            .expect("status factory loads its template");
-        let has_bluetooth_power_control = scene.primitives.iter().any(|primitive| {
-            matches!(primitive, bead::render::Primitive::Rounded { rect, .. }
-                if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)
-        });
-        read_only.commit();
+        let has_bluetooth_power_control = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let scene = read_only.stage(UiEvent::Reload).unwrap().unwrap();
+                let visible = scene.primitives.iter().any(|primitive| {
+                    matches!(primitive, bead::render::Primitive::Rounded { rect, .. }
+                        if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)
+                });
+                read_only.commit();
+                if visible || !std::ptr::eq(other, &bluetooth) {
+                    break visible;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
         assert!(
             read_only
                 .input_regions()

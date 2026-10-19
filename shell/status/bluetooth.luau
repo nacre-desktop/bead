@@ -3,6 +3,7 @@ local ui=require("bead.ui")
 local kit=require("bead.kit")
 local ready=ui.resolve_for_check(ui.bind("status.ready"))
 local active=ui.resolve_for_check(ui.bind("status.active"))
+local visible=ui.resolve_for_check(ui.bind("bluetooth.power_visible"))
 local enabled=ui.resolve_for_check(ui.bind("bluetooth.power_enabled"))
 local padding=kit.tokens.spacing.md
 local icon_size=kit.tokens.icons.xlarge*4/3
@@ -19,12 +20,12 @@ return kit.Panel{id="status-popout",edge=ui.resolve_for_check(ui.bind("view.edge
             ui.Text{id="secondary",text=ui.bind("status.secondary"),font_size=kit.tokens.text.caption*4/3,height=22,color="onSurfaceVariant"},
         },
     },
-    ui.Text{id="detail",text=ui.bind("status.detail"),font_size=kit.tokens.text.caption*4/3,height=24,color="onSurfaceVariant"},
-    ui.Row{id="bluetooth-row",height=36,align="center",gap=kit.tokens.spacing.md,
+    ui.Text{id="detail",text=ui.bind("status.detail"),font_size=kit.tokens.text.caption*4/3,height=visible and 24 or 60,color="onSurfaceVariant"},
+    visible and ui.Row{id="bluetooth-row",height=36,align="center",gap=kit.tokens.spacing.md,
         ui.Text{id="bluetooth-label",text="Bluetooth",height=28,grow=1,font_size=kit.tokens.text.body*4/3,
             color=enabled and "onSurface" or "onSurfaceVariant"},
         kit.Switch{id="bluetooth-power",checked=ui.bind("bluetooth.power_checked"),aria_label="Bluetooth radio",
             on_activate=enabled and ui.action("bluetooth.toggle_power") or nil},
-    },
-    ui.Text{id="bluetooth-message",text=ui.bind("bluetooth.power_message"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurfaceVariant"},
+    } or nil,
+    visible and ui.Text{id="bluetooth-message",text=ui.bind("bluetooth.power_message"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurfaceVariant"} or nil,
 }

@@ -164,6 +164,7 @@ fn controlled_bluetooth_template_omits_unavailable_switch_action() -> Result<()>
             Value::Text("Status data unavailable".into()),
         ),
         ("status.detail".into(), Value::Text(String::new())),
+        ("bluetooth.power_visible".into(), Value::Bool(true)),
         ("bluetooth.power_checked".into(), Value::Bool(false)),
         ("bluetooth.power_enabled".into(), Value::Bool(false)),
         ("bluetooth.power_busy".into(), Value::Bool(false)),

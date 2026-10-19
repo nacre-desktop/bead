@@ -247,6 +247,10 @@ impl Runtime {
         )?;
         runtime.session.stores = runtime.session.stores.reconcile(&BTreeMap::from([
             (
+                "bluetooth.power_visible".into(),
+                bead::core::Value::Bool(false),
+            ),
+            (
                 "bluetooth.power_checked".into(),
                 bead::core::Value::Bool(false),
             ),
