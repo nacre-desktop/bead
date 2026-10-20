@@ -18,7 +18,9 @@ import uuid
 
 START_MIN_KIB = 4 * 1024 * 1024
 ABORT_BELOW_KIB = 2 * 1024 * 1024
-SCOPE_MEMORY_MAX = 2 * 1024 * 1024 * 1024
+GIB = 1024 * 1024 * 1024
+SCOPE_MEMORY_MAX_MIN = 12 * GIB
+BASELINE_SCOPE_PEAK_ENV = "BEAD_CAPTURE_BASELINE_PEAK_BYTES"
 CHILD_GATE_TIMEOUT_SECONDS = 30
 WATCHDOG_READY_TIMEOUT_SECONDS = 10
 WATCHDOG_HEARTBEAT_STALE_SECONDS = 3.5
@@ -75,27 +77,56 @@ def process_cgroup(pid):
     raise CaptureSafetyError(f"process {pid} has no unified cgroup entry")
 
 
-def validate_scope(scope_name, memory_max, control_group, child_group):
+def parse_baseline_peak_bytes(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]+", value):
+        raise CaptureSafetyError("baseline scope peak must be a positive integer byte count")
+    peak = int(value)
+    if peak <= 0:
+        raise CaptureSafetyError("baseline scope peak must be a positive integer byte count")
+    return peak
+
+
+def scope_memory_max(baseline_peak_bytes=None):
+    if baseline_peak_bytes is None:
+        return SCOPE_MEMORY_MAX_MIN
+    if isinstance(baseline_peak_bytes, bool) or not isinstance(baseline_peak_bytes, int) or baseline_peak_bytes <= 0:
+        raise CaptureSafetyError("baseline scope peak must be a positive integer byte count")
+    # Round 1.5x upward so an odd byte count still receives full headroom.
+    return max(SCOPE_MEMORY_MAX_MIN, (baseline_peak_bytes * 3 + 1) // 2)
+
+
+def validate_scope(scope_name, memory_max, memory_swap_max, control_group, child_group,
+                   cgroup_memory_max, cgroup_swap_max, expected_memory_max):
     if not SCOPE_NAME_RE.fullmatch(scope_name):
         raise CaptureSafetyError("refusing an unrecognized, non-task-owned scope name")
     try:
         limit = int(memory_max)
     except (TypeError, ValueError) as error:
         raise CaptureSafetyError("scope MemoryMax is not a byte count") from error
-    if limit != SCOPE_MEMORY_MAX:
-        raise CaptureSafetyError(f"scope MemoryMax is {limit}, expected {SCOPE_MEMORY_MAX} bytes")
+    if limit != expected_memory_max:
+        raise CaptureSafetyError(f"scope MemoryMax is {limit}, expected {expected_memory_max} bytes")
+    try:
+        swap_limit = int(memory_swap_max)
+    except (TypeError, ValueError) as error:
+        raise CaptureSafetyError("scope MemorySwapMax is not a byte count") from error
+    if swap_limit != 0:
+        raise CaptureSafetyError(f"scope MemorySwapMax is {swap_limit}, expected 0 bytes")
+    if str(cgroup_memory_max).strip() != str(expected_memory_max):
+        raise CaptureSafetyError("effective cgroup memory.max does not match the scope MemoryMax")
+    if str(cgroup_swap_max).strip() != "0":
+        raise CaptureSafetyError("effective cgroup memory.swap.max is not zero")
     if not control_group or not control_group.startswith("/"):
         raise CaptureSafetyError("scope has no effective cgroup path")
     if child_group != control_group and not child_group.startswith(control_group.rstrip("/") + "/"):
         raise CaptureSafetyError("capture harness is outside the recorded systemd scope")
 
 
-def scope_command(scope_name, command):
+def scope_command(scope_name, command, memory_max=SCOPE_MEMORY_MAX_MIN):
     if not SCOPE_NAME_RE.fullmatch(scope_name):
         raise CaptureSafetyError("refusing an unrecognized, non-task-owned scope name")
     return [
         "systemd-run", "--user", "--scope", f"--unit={scope_name}",
-        f"--property=MemoryMax={SCOPE_MEMORY_MAX}", "--collect", "--",
+        f"--property=MemoryMax={memory_max}", "--property=MemorySwapMax=0", "--collect", "--",
         *command,
     ]
 
@@ -110,7 +141,7 @@ def append_event(path, event):
 def cgroup_memory_snapshot(control_group):
     base = pathlib.Path("/sys/fs/cgroup") / control_group.lstrip("/")
     result = {}
-    for name in ("memory.events", "memory.peak"):
+    for name in ("memory.events", "memory.peak", "memory.max", "memory.swap.max"):
         try:
             result[name] = (base / name).read_text().strip()
         except OSError as error:
@@ -309,7 +340,12 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
         raise CaptureSafetyError("generated invalid private scope name")
     destination = pathlib.Path(report_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    report = {"scope": scope_name, "memory_max_bytes": SCOPE_MEMORY_MAX,
+    baseline_peak = None
+    if BASELINE_SCOPE_PEAK_ENV in env:
+        baseline_peak = parse_baseline_peak_bytes(env[BASELINE_SCOPE_PEAK_ENV])
+    memory_max = scope_memory_max(baseline_peak)
+    report = {"scope": scope_name, "memory_max_bytes": memory_max,
+              "baseline_scope_peak_bytes": baseline_peak, "memory_swap_max_bytes": 0,
               "start_memavailable_kib": None, "minimum_memavailable_kib": None,
               "status": "preflight"}
     try:
@@ -352,7 +388,7 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
                          "--capture-guard-ready-file", str(ready_file),
                          "--capture-guard-release-file", str(release_file)]
         try:
-            invocation = scope_command(scope_name, child_command)
+            invocation = scope_command(scope_name, child_command, memory_max)
             scope_process = popen(invocation, env=env)
             scope_owned = True
             # The inner harness waits before creating a bus, compositor or UI.
@@ -363,8 +399,9 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
                 if scope_process.poll() is not None:
                     raise CaptureSafetyError("systemd scope command exited before readiness")
                 effective_limit = _show_scope(scope_name, "MemoryMax", run)
+                effective_swap_limit = _show_scope(scope_name, "MemorySwapMax", run)
                 control_group = _show_scope(scope_name, "ControlGroup", run)
-                if ready_file.exists() and effective_limit and control_group:
+                if ready_file.exists() and effective_limit and effective_swap_limit and control_group:
                     break
                 sleeper(0.1)
             else:
@@ -372,13 +409,15 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
 
             ready = json.loads(ready_file.read_text())
             child_group = ready.get("cgroup", "")
-            validate_scope(scope_name, effective_limit, control_group, child_group)
             initial_cgroup = cgroup_memory_snapshot(control_group)
+            validate_scope(scope_name, effective_limit, effective_swap_limit, control_group, child_group,
+                           initial_cgroup.get("memory.max"), initial_cgroup.get("memory.swap.max"), memory_max)
             initial_oom = parse_oom_counters(initial_cgroup)
             if initial_oom is None:
                 raise CaptureSafetyError("cgroup memory.events oom counters unavailable before release")
             report.update({"control_group": control_group, "child_pid": ready.get("pid"),
                            "child_cgroup": child_group, "effective_memory_max": effective_limit,
+                           "effective_memory_swap_max": effective_swap_limit,
                            "cgroup_initial": initial_cgroup, "oom_initial": initial_oom})
             watchdog_command = [sys.executable, str(pathlib.Path(__file__).resolve()), "--watchdog",
                                 "--owner-pid", str(wrapper_pid), "--owner-start", str(wrapper_start),

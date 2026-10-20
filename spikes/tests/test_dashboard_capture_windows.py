@@ -23,6 +23,7 @@ def load_module(name, path):
 residency = load_module("dashboard_residency", ROOT / "dashboard-residency.py")
 launcher = load_module("launcher_proof", ROOT / "launcher-proof.py")
 capture_safety = load_module("capture_safety", ROOT / "capture_safety.py")
+measure = load_module("measure", ROOT / "measure.py")
 
 
 class FakeClock:
@@ -44,6 +45,35 @@ class FakeClock:
         self.events.append(("idle", pid, seconds))
         self.now += seconds
         return {"seconds": seconds}
+
+
+class DashboardOutputGeometryTests(unittest.TestCase):
+    def test_hyprland_requires_exact_virtual_output_geometry(self):
+        output = {"name": "bead-bench", "width": 2880, "height": 1800,
+                  "scale": 1.5, "refreshRate": 120.0}
+        self.assertEqual(measure.validate_dashboard_output_geometry("hyprland", [output]), output)
+        for key, value in (("width", 1920), ("height", 1200), ("scale", 1.0), ("refreshRate", 60.0)):
+            altered = {**output, key: value}
+            with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, "geometry mismatch"):
+                measure.validate_dashboard_output_geometry("hyprland", [altered])
+        with self.assertRaisesRegex(RuntimeError, "exactly one"):
+            measure.validate_dashboard_output_geometry("hyprland", [output, output])
+
+    def test_niri_requires_physical_logical_scale_and_refresh_geometry(self):
+        output = {"current_mode": 0, "modes": [{"width": 2880, "height": 1800, "refresh_rate": 60000}],
+                  "logical": {"width": 1920, "height": 1200, "scale": 1.5}}
+        self.assertEqual(measure.validate_dashboard_output_geometry("niri", {"HEADLESS-1": output}),
+                         {"name": "HEADLESS-1", **output})
+        mutations = (
+            {**output, "logical": {**output["logical"], "width": 2881}},
+            {**output, "logical": {**output["logical"], "height": 1201}},
+            {**output, "logical": {**output["logical"], "scale": 1.0}},
+            {**output, "modes": [{**output["modes"][0], "refresh_rate": 59940}]},
+            {**output, "modes": [{**output["modes"][0], "width": 1920}]},
+        )
+        for altered in mutations:
+            with self.subTest(altered=altered), self.assertRaisesRegex(RuntimeError, "exactly one"):
+                measure.validate_dashboard_output_geometry("niri", {"HEADLESS-1": altered})
 
 
 class FakeKeeper:
@@ -229,7 +259,16 @@ class CaptureWindowTests(unittest.TestCase):
 
 
 class CaptureSafetyTests(unittest.TestCase):
-    def _run_mock_guard(self, temporary, cgroup_snapshots, monotonic, scope_poll_values=None):
+    def _run_mock_guard(self, temporary, cgroup_snapshots, monotonic, scope_poll_values=None, env=None,
+                        child_group="/scope", watchdog_starts=None):
+        env = {} if env is None else env
+        baseline_peak = (capture_safety.parse_baseline_peak_bytes(env[capture_safety.BASELINE_SCOPE_PEAK_ENV])
+                         if capture_safety.BASELINE_SCOPE_PEAK_ENV in env else None)
+        expected_memory_max = capture_safety.scope_memory_max(baseline_peak)
+        cgroup_snapshots = [
+            {"memory.max": str(expected_memory_max), "memory.swap.max": "0", **snapshot}
+            for snapshot in cgroup_snapshots
+        ]
         class FakeScope:
             def __init__(self):
                 self.poll_values = list(scope_poll_values or [None, 0])
@@ -260,8 +299,10 @@ class CaptureSafetyTests(unittest.TestCase):
         def fake_popen(command, **kwargs):
             if command[0] == "systemd-run":
                 ready = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
-                ready.write_text(json.dumps({"pid": 321, "cgroup": "/scope"}))
+                ready.write_text(json.dumps({"pid": 321, "cgroup": child_group}))
                 return scope
+            if watchdog_starts is not None:
+                watchdog_starts.append(command)
             ready = pathlib.Path(command[command.index("--ready-file") + 1])
             heartbeat = pathlib.Path(command[command.index("--heartbeat-file") + 1])
             ready.write_text(json.dumps({"available_kib": capture_safety.START_MIN_KIB,
@@ -272,14 +313,15 @@ class CaptureSafetyTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             commands.append(command)
             prop = next((part.split("=", 1)[1] for part in command if part.startswith("--property=")), "")
-            output = {"MemoryMax": "2147483648", "ControlGroup": "/scope"}.get(prop, "")
+            output = {"MemoryMax": str(expected_memory_max),
+                      "MemorySwapMax": "0", "ControlGroup": "/scope"}.get(prop, "")
             return mock.Mock(returncode=0, stdout=output, stderr="")
 
         with mock.patch.object(capture_safety, "cgroup_memory_snapshot", side_effect=cgroup_snapshots):
             try:
                 result = capture_safety.run_guarded(
                     ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
-                    env={}, memory_reader=lambda: capture_safety.START_MIN_KIB,
+                    env=env, memory_reader=lambda: capture_safety.START_MIN_KIB,
                     popen=fake_popen, run=fake_run, sleeper=lambda _: None,
                     monotonic=monotonic, unit_id="012345abcdef",
                 )
@@ -299,21 +341,92 @@ class CaptureSafetyTests(unittest.TestCase):
 
     def test_scope_is_exact_limit_and_contains_harness(self):
         capture_safety.validate_scope(
-            "bead-capture-012345abcdef.scope", "2147483648",
+            "bead-capture-012345abcdef.scope", str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0",
             "/user.slice/user-1000.slice/bead-capture-012345abcdef.scope",
             "/user.slice/user-1000.slice/bead-capture-012345abcdef.scope",
+            str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0", capture_safety.SCOPE_MEMORY_MAX_MIN,
         )
         with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "MemoryMax"):
-            capture_safety.validate_scope("bead-capture-012345abcdef.scope", "0", "/scope", "/scope")
+            capture_safety.validate_scope("bead-capture-012345abcdef.scope", "0", "0", "/scope", "/scope",
+                                          "0", "0", capture_safety.SCOPE_MEMORY_MAX_MIN)
+        with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "MemorySwapMax"):
+            capture_safety.validate_scope("bead-capture-012345abcdef.scope",
+                                          str(capture_safety.SCOPE_MEMORY_MAX_MIN), "1", "/scope", "/scope",
+                                          str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0",
+                                          capture_safety.SCOPE_MEMORY_MAX_MIN)
+        with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "memory.swap.max"):
+            capture_safety.validate_scope("bead-capture-012345abcdef.scope",
+                                          str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0", "/scope", "/scope",
+                                          str(capture_safety.SCOPE_MEMORY_MAX_MIN), "max",
+                                          capture_safety.SCOPE_MEMORY_MAX_MIN)
         with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "outside"):
-            capture_safety.validate_scope("bead-capture-012345abcdef.scope", "2147483648", "/scope/a", "/scope-b")
+            capture_safety.validate_scope("bead-capture-012345abcdef.scope",
+                                          str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0", "/scope/a", "/scope-b",
+                                          str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0",
+                                          capture_safety.SCOPE_MEMORY_MAX_MIN)
         with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "unrecognized"):
-            capture_safety.validate_scope("other.scope", "2147483648", "/scope", "/scope")
+            capture_safety.validate_scope("other.scope", str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0",
+                                          "/scope", "/scope", str(capture_safety.SCOPE_MEMORY_MAX_MIN), "0",
+                                          capture_safety.SCOPE_MEMORY_MAX_MIN)
+
+    def test_scope_limit_uses_minimum_or_one_and_a_half_times_recorded_peak(self):
+        self.assertEqual(capture_safety.scope_memory_max(), 12 * 1024 ** 3)
+        self.assertEqual(capture_safety.parse_baseline_peak_bytes("8589934592"), 8 * 1024 ** 3)
+        self.assertEqual(capture_safety.scope_memory_max(8 * 1024 ** 3), 12 * 1024 ** 3)
+        self.assertEqual(capture_safety.scope_memory_max(10 * 1024 ** 3), 15 * 1024 ** 3)
+        self.assertEqual(capture_safety.scope_memory_max(1), 12 * 1024 ** 3)
+        self.assertEqual(capture_safety.scope_memory_max(12 * 1024 ** 3 + 1), 18 * 1024 ** 3 + 2)
+        for value in ("", "0", "-1", "+1", "1.5", "nope"):
+            with self.subTest(value=value), self.assertRaises(capture_safety.CaptureSafetyError):
+                capture_safety.parse_baseline_peak_bytes(value)
+        for value in (True, 0, -1, 1.5, "12"):
+            with self.subTest(value=value), self.assertRaises(capture_safety.CaptureSafetyError):
+                capture_safety.scope_memory_max(value)
+
+    def test_guard_binds_derived_cap_to_manager_and_cgroup(self):
+        peak = 10 * 1024 ** 3
+        expected = 15 * 1024 ** 3
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": str(peak)}
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable, stable], lambda: 100.0, env={capture_safety.BASELINE_SCOPE_PEAK_ENV: str(peak)})
+        self.assertIsNone(error)
+        self.assertEqual(result, 0)
+        scope_command = capture_safety.scope_command("bead-capture-012345abcdef.scope", ["python3"], expected)
+        self.assertIn(f"--property=MemoryMax={expected}", scope_command)
+        self.assertIn("--property=MemorySwapMax=0", scope_command)
+        self.assertEqual(report["memory_max_bytes"], expected)
+        self.assertEqual(report["baseline_scope_peak_bytes"], peak)
+
+    def test_guard_stops_owned_scope_if_effective_cgroup_swap_is_not_zero(self):
+        unsafe = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096",
+                  "memory.swap.max": "max"}
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [unsafe], lambda: 100.0)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("memory.swap.max", str(error))
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+
+    def test_guard_stops_scope_before_watchdog_when_child_escapes_containment(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        with tempfile.TemporaryDirectory() as temporary:
+            watchdog_starts = []
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0, child_group="/scope-escape",
+                watchdog_starts=watchdog_starts)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("outside", str(error))
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+        self.assertEqual(watchdog_starts, [])
 
     def test_scope_command_sets_the_fixed_memory_cap(self):
         command = capture_safety.scope_command(
             "bead-capture-012345abcdef.scope", ["python3", "measure.py"])
-        self.assertIn("--property=MemoryMax=2147483648", command)
+        self.assertIn("--property=MemoryMax=12884901888", command)
+        self.assertIn("--property=MemorySwapMax=0", command)
         self.assertIn("--scope", command)
         self.assertNotIn("--wait", command)
         self.assertEqual(command[-2:], ["python3", "measure.py"])
@@ -479,9 +592,12 @@ class CaptureSafetyTests(unittest.TestCase):
 
             def fake_run(command, **kwargs):
                 prop = next((part.split("=", 1)[1] for part in command if part.startswith("--property=")), "")
-                return mock.Mock(returncode=0, stdout={"MemoryMax": "2147483648", "ControlGroup": "/scope"}.get(prop, ""))
+                return mock.Mock(returncode=0, stdout={
+                    "MemoryMax": str(capture_safety.SCOPE_MEMORY_MAX_MIN),
+                    "MemorySwapMax": "0", "ControlGroup": "/scope"}.get(prop, ""))
 
-            stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+            stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096",
+                             "memory.max": str(capture_safety.SCOPE_MEMORY_MAX_MIN), "memory.swap.max": "0"}
             with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events):
                 result = capture_safety.run_guarded(
                     ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
@@ -490,10 +606,12 @@ class CaptureSafetyTests(unittest.TestCase):
                     monotonic=lambda: 100.0, unit_id="012345abcdef",
                 )
             self.assertEqual(result, 0)
-            self.assertIn("--property=MemoryMax=2147483648", popen_calls[0])
+            self.assertIn("--property=MemoryMax=12884901888", popen_calls[0])
+            self.assertIn("--property=MemorySwapMax=0", popen_calls[0])
             report = json.loads((pathlib.Path(temporary) / "safety.json").read_text())
             self.assertEqual(report["status"], "complete")
-            self.assertEqual(report["effective_memory_max"], "2147483648")
+            self.assertEqual(report["effective_memory_max"], str(capture_safety.SCOPE_MEMORY_MAX_MIN))
+            self.assertEqual(report["effective_memory_swap_max"], "0")
             self.assertEqual(report["child_cgroup"], "/scope")
             self.assertEqual(report["oom_delta"], {"oom": 0, "oom_kill": 0})
 
@@ -526,9 +644,12 @@ class CaptureSafetyTests(unittest.TestCase):
             def fake_run(command, **kwargs):
                 commands.append(command)
                 prop = next((part.split("=", 1)[1] for part in command if part.startswith("--property=")), "")
-                return mock.Mock(returncode=0, stdout={"MemoryMax": "2147483648", "ControlGroup": "/scope"}.get(prop, ""))
+                return mock.Mock(returncode=0, stdout={
+                    "MemoryMax": str(capture_safety.SCOPE_MEMORY_MAX_MIN),
+                    "MemorySwapMax": "0", "ControlGroup": "/scope"}.get(prop, ""))
 
-            stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+            stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096",
+                             "memory.max": str(capture_safety.SCOPE_MEMORY_MAX_MIN), "memory.swap.max": "0"}
             with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events):
                 with self.assertRaises(KeyboardInterrupt):
                     capture_safety.run_guarded(

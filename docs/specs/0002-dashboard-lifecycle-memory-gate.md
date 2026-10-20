@@ -221,11 +221,12 @@ An unexplained simultaneous agent shutdown is not proof of OOM or a safe retry.
   and invalidate the arm if below 2 GiB (2,097,152 KiB), or if monitoring fails.
 - Run the harness and all measured descendants (private compositor, UI, daemon,
   helpers and input driver) inside one new private systemd user scope. Set an
-  explicit MemoryMax well above expected peak: 2 GiB for the existing nested
-  lanes, expected below 1 GiB. Verify the effective cgroup limit before any arm;
-  no unlimited fallback. If expected peak cannot fit with generous headroom,
-  stop for spec-agent sizing instead of silently raising it. Scope setup is
-  transient and task-private, not a live unit/configuration change.
+  MemoryMax=max(12 GiB, 1.5× the recorded baseline scope peak when known), plus
+  MemorySwapMax=0. Supply a known peak as the strict positive integer byte value
+  BEAD_CAPTURE_BASELINE_PEAK_BYTES; otherwise use the 12-GiB floor. Verify both
+  effective systemd properties and cgroup memory.max/memory.swap.max before
+  releasing the held child; no unlimited fallback. Scope setup is transient and
+  task-private, not a live unit/configuration change.
 - Keep the lightweight memory watchdog outside that measured scope, but task-owned.
   On low memory, scope OOM, unexpected exit or lost watchdog, invalidate the arm
   and stop only the recorded owned scope/descendants. Preserve partial logs,
@@ -236,6 +237,10 @@ An unexplained simultaneous agent shutdown is not proof of OOM or a safe retry.
   Fold the small guard and regression tests into the measurement spec, not a new
   tooling project. Report scope name, limit, start/minimum MemAvailable, guard
   result, exact artifact identities and owned cleanup with ordinary gate evidence.
+- Before each acceptance arm, save IPC output metadata and assert the actual
+  required profile: Hyprland bead-bench 2880×1800, scale 1.5, 120 Hz; nested
+  niri 2880×1800, logical 1920×1200, scale 1.5, 60 Hz. A requested config alone
+  does not establish geometry.
 - Inspect kernel and user journals from 2026-10-18 02:30 with explicit timezone
   and retained-boot coverage. Report OOM/kills, agent/app-server exits and the last
   owned job without touching those processes. If evidence points to another
@@ -249,7 +254,7 @@ for B0002 on the previously verified private nested desktop lab only. This is
 a conditional reservation, not permission to bypass the missing wayland-info
 prerequisite or incident review. Before CAPTURE_START send READY with existing
 probe path, incident finding reported to owner, explicit Nacre pause, verified
-4GiB available, scope/2GiB limit and tested low-memory guard, then obtain the
+4GiB available, sized scope with zero swap and tested low-memory guard, then obtain the
 spec-agent activation of this reservation. No installation is authorized here.
 
 Artifacts: reviewed source1cff9d17d61fb05451546bb0ea13c826c93cb4c9, release UI

@@ -6,6 +6,7 @@ SPDX-License-Identifier: MIT OR Apache-2.0
 import argparse
 import importlib.util
 import json
+import math
 import os
 import pathlib
 import re
@@ -25,6 +26,42 @@ capture_safety = importlib.util.module_from_spec(_capture_safety_spec)
 _capture_safety_spec.loader.exec_module(capture_safety)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def validate_dashboard_output_geometry(compositor, outputs):
+    """Require the exact private output profile specified by B0002."""
+    if compositor == 'hyprland':
+        matches = [output for output in outputs if output.get('name') == 'bead-bench']
+        expected_hz = 120.0
+        if len(matches) != 1:
+            raise RuntimeError('B0002 requires exactly one Hyprland bead-bench output')
+        output = matches[0]
+        values = (output.get('width'), output.get('height'), output.get('scale'), output.get('refreshRate'))
+        try:
+            refresh_hz = float(values[3])
+        except (TypeError, ValueError) as error:
+            raise RuntimeError(f'B0002 Hyprland output has invalid refresh rate: {output!r}') from error
+        if values[:2] != (2880, 1800) or values[2] != 1.5 or not math.isclose(refresh_hz, expected_hz, abs_tol=0.01):
+            raise RuntimeError(f'B0002 Hyprland output geometry mismatch: {output!r}')
+        return output
+    if compositor == 'niri':
+        matches = []
+        for name, output in outputs.items():
+            try:
+                mode = output['modes'][output['current_mode']]
+                logical = output['logical']
+                refresh_hz = float(mode['refresh_rate']) / 1000.0
+                if ((mode['width'], mode['height']) == (2880, 1800)
+                        and logical['width'] == 1920 and logical['height'] == 1200
+                        and logical['scale'] == 1.5 and math.isclose(refresh_hz, 60.0, abs_tol=0.01)):
+                    matches.append((name, output))
+            except (KeyError, IndexError, TypeError, ValueError):
+                continue
+        if len(matches) != 1:
+            raise RuntimeError('B0002 requires exactly one niri output at 2880x1800/1.5/60Hz')
+        name, output = matches[0]
+        return {'name': name, **output}
+    raise ValueError(f'unsupported B0002 compositor: {compositor}')
 
 
 def ticks(pid):
@@ -634,7 +671,12 @@ def main():
                 print('Private virtual monitor configuration:',configured.stdout.strip(),flush=True)
                 time.sleep(1)
                 monitors=json.loads(subprocess.check_output(['hyprctl','-j','monitors'],env=env,text=True,timeout=5))
+                result['output_properties']=monitors
                 print('Private outputs:',[{k:m.get(k) for k in ['name','width','height','refreshRate','scale']}for m in monitors],flush=True)
+                if os.environ.get('BEAD_DASHBOARD_ACCEPTANCE') == '1':
+                    geometry=validate_dashboard_output_geometry('hyprland',monitors)
+                    result['dashboard_output_geometry']=geometry
+                    (raw/'output-geometry.json').write_text(json.dumps(geometry,indent=2)+'\n')
             info=subprocess.run(['wayland-info'],env=env,capture_output=True,text=True,timeout=10,check=True)
             (raw/'wayland-info.log').write_text(info.stdout)
             result['globals']=[{'interface':name,'version':int(version)} for name,version in re.findall(r"interface: '([^']+)',\s*version:\s*(\d+)",info.stdout)]
@@ -652,11 +694,19 @@ def main():
                 time.sleep(1)
                 outputs=json.loads(subprocess.check_output(['niri','msg','-j','outputs'],env=env,text=True,timeout=5))
                 print('BAR_MATRIX_OUTPUTS '+json.dumps(outputs),flush=True)
-                output=next(iter(outputs.values()))
-                mode=output['modes'][output['current_mode']]
-                assert (mode['width'],mode['height'])==(2880,1800), outputs
-                assert output['logical']['width']==1920,outputs
+                result['output_properties']=outputs
+                if os.environ.get('BEAD_DASHBOARD_ACCEPTANCE') == '1':
+                    geometry=validate_dashboard_output_geometry('niri',outputs)
+                    result['dashboard_output_geometry']=geometry
+                    (raw/'output-geometry.json').write_text(json.dumps(geometry,indent=2)+'\n')
+                else:
+                    output=next(iter(outputs.values()))
+                    mode=output['modes'][output['current_mode']]
+                    assert (mode['width'],mode['height'])==(2880,1800), outputs
+                    assert output['logical']['width']==1920,outputs
             if args.bar_ui:
+                if os.environ.get('BEAD_DASHBOARD_ACCEPTANCE') == '1' and 'dashboard_output_geometry' not in result:
+                    raise RuntimeError('B0002 output geometry was not verified before the acceptance arm')
                 import importlib.util
                 spec=importlib.util.spec_from_file_location("bar_ui",ROOT/"spikes/bar-ui.py")
                 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
