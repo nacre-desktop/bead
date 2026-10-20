@@ -88,6 +88,16 @@ pub fn core_sound(
     colors: Palette,
     trace: bool,
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    core_sound_with_root("shell".into(), client, palette, colors, trace)
+}
+
+pub(crate) fn core_sound_with_root(
+    root: String,
+    client: Option<crate::nacre_source::Client>,
+    palette: PathBuf,
+    colors: Palette,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
     let fill = colors.get("surface")?;
     let mut fallback = crate::sound::fallback(fill);
     if let Some(motion) = &mut fallback.motion {
@@ -110,7 +120,7 @@ pub fn core_sound(
                 None => crate::dashboard::unavailable_audio_source().map_err(|e| e.to_string())?,
             };
             let session = bead::ui::Session::new(
-                "shell".into(),
+                root.clone(),
                 "sound/core.luau".into(),
                 palette.clone(),
                 colors.clone(),
