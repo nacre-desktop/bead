@@ -106,6 +106,7 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
         ("panel.open".into(), Value::Bool(true)),
         ("status.ready".into(), Value::Bool(false)),
         ("status.active".into(), Value::Bool(false)),
+        ("status.active".into(), Value::Bool(false)),
         ("status.heading".into(), Value::Text("Network".into())),
         ("status.icon".into(), Value::Text("wifi".into())),
         (
