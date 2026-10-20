@@ -21,6 +21,7 @@ def load_module(name, path):
 
 
 residency = load_module("dashboard_residency", ROOT / "dashboard-residency.py")
+batch_summary = load_module("dashboard_batch_summary", ROOT / "dashboard-batch-summary.py")
 launcher = load_module("launcher_proof", ROOT / "launcher-proof.py")
 capture_safety = load_module("capture_safety", ROOT / "capture_safety.py")
 measure = load_module("measure", ROOT / "measure.py")
@@ -321,14 +322,14 @@ class CaptureWindowTests(unittest.TestCase):
                                "pss_shmem_mib": shmem}}
         control = [row(24.0) for _ in range(5)]
         candidate = [row(24.9), row(25.0, file=9.0),
-                     row(25.0, file=9.0), row(25.0, file=9.0), row(27.0, file=11.0)]
+                     row(25.0, file=9.0), row(25.0, file=9.0), row(27.5, file=11.5)]
         summary = residency.summarize_batch_phase(control, candidate)
         self.assertEqual(summary["candidate_total_median_mib"], 25.0)
         self.assertEqual(summary["total_delta_median_mib"], 1.0)
         self.assertEqual(summary["category_delta_medians_mib"]["pss_file_mib"], 1.0)
         self.assertEqual(summary["category_medians_mib"]["control"]["pss_file_mib"], 8.0)
         self.assertEqual(summary["verdict"], "PASS-one-time-27MiB-file-backed-report")
-        self.assertEqual(summary["candidate_range_mib"], [24.9, 27.0])
+        self.assertEqual(summary["candidate_range_mib"], [24.9, 27.5])
         self.assertEqual(summary["drm_attribution"], "measured")
         self.assertEqual(residency.summarize_batch_phase(control, [row(24.5, file=8.5) for _ in range(5)])["verdict"], "PASS")
         with self.assertRaisesRegex(AssertionError, "anonymous growth"):
@@ -356,6 +357,38 @@ class CaptureWindowTests(unittest.TestCase):
         bad = {**base, "memory": {**base["memory"], "pss_file_mib": float("nan")}}
         with self.assertRaisesRegex(AssertionError, "invalid or negative"):
             residency.summarize_batch_phase([base.copy() for _ in range(5)], [bad.copy() for _ in range(5)])
+
+    def test_batch_summary_collects_all_phases_and_uses_27_mib_once(self):
+        import tempfile
+        def row(total, file):
+            anon, shmem = 5.0, 1.0
+            pss = anon + file + shmem
+            return {"pss_plus_drm_mib": total, "drm_mib": {"buffer": total - pss},
+                    "memory": {"pss_mib": pss, "swap_pss_mib": 0.0, "pss_anon_mib": anon,
+                               "pss_file_mib": file, "pss_shmem_mib": shmem}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for compositor in batch_summary.COMPOSITORS:
+                for pair in range(1, 6):
+                    for arm, total, file in (("A", 24.0, 8.0), ("B", 24.5, 8.5)):
+                        for phase in batch_summary.PHASES:
+                            value, file_value = total, file
+                            if compositor == "hyprland" and phase == "never-opened" and arm == "B":
+                                value, file_value = 25.0, 9.0
+                            if compositor == "niri" and phase == "opened-once" and arm == "B":
+                                value, file_value = 26.0, 10.0
+                            folder = root / f"{arm}{pair}" / compositor
+                            folder.mkdir(parents=True, exist_ok=True)
+                            (folder / f"{phase}.json").write_text(json.dumps(row(value, file_value)))
+            output = root / "summary.json"
+            report = batch_summary.summarize(root, report_path=output)
+            self.assertTrue(report["complete"])
+            self.assertFalse(report["pass"])
+            self.assertTrue(report["one_time_27_mib_report_used"])
+            self.assertEqual(len(report["phases"]), 8)
+            self.assertIn("one-time allowance", report["phases"]["niri/opened-once"]["error"])
+            self.assertTrue(output.is_file())
+            self.assertEqual(json.loads(output.read_text())["phases"], report["phases"])
 
     def test_batch_arm_rail_allows_median_evaluation_but_preserves_quiet_and_close_cap(self):
         total = lambda row: row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]

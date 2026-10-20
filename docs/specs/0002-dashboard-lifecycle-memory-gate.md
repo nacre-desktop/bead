@@ -129,6 +129,8 @@ with `BEAD_DASHBOARD_BATCH_MEDIANS=1`; the default remains strict legacy mode.
 - This exception changes no frozen reference, raw evidence, quiet/safety/swap
   gate, close bar+5MiB limit, or default assertion. Do not claim PASS until all
   five pairs and both compositors are complete and every phase median is decided.
+  The batch summary reads rather than rewrites endpoint JSON and saves each
+  phase decision while preserving the raw prefix if a later median fails.
 
 ## Acceptance criteria
 
