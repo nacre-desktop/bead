@@ -280,10 +280,12 @@ impl Runtime {
         self.with_status_projector(crate::status_views::Status::core_battery(source))
     }
     pub fn with_core_audio_status(
-        self,
+        mut self,
         source: std::sync::Arc<dyn bead::core::source::Source>,
     ) -> Result<Self, Box<dyn Error>> {
-        self.with_status_projector(crate::status_views::Status::core_audio(source))
+        let status = crate::status_views::Status::core_audio(source);
+        self.session.stores = self.session.stores.reconcile(&status.project())?;
+        self.with_status_projector(status)
     }
     fn with_status_projector(
         mut self,
