@@ -51,6 +51,22 @@ no speculative fixes. B3 follows when the slot is free.
   the user manager, which also needs a narrow NOPASSWD sudo rule for
   `swapoff -a` / `swapon -a`. The owner has been asked for it.
 
+### B2 phase A result — 2026-10-21
+
+The opened-once comparison on Hyprland compared a same-toolchain rebuilt
+control (`e21caa16`) against the GC-fix build (`306474f0`, UI `7948c3c`), with
+helper `4a65f4ec`. There were 3 valid arms per side; one environmental F2
+host-swap-in was replaced once. Medians: control 22.05 MiB PSS and 5.38 MiB
+anonymous; fixed 22.01 MiB and 5.25 MiB (Δ −0.04 PSS, −0.14 anonymous; DRM
+unknown). This passes the owner's numeric rule. However, the earlier +1.94 MiB
+anonymous opened-once growth did not reproduce in the rebuilt control, so no
+causal GC improvement is claimed. The GC change stays in the candidate as
+defensive, with no measured effect; the earlier excess most likely belonged to
+the lost frozen artifact. The full B2 batch (both compositors, 5 pairs each,
+unconditional zram reset before every arm) started 2026-10-21 01:21 local. The
+research note and harness fixes (`9babf54`, `bbac822`) are local and integrate
+with the batch result.
+
 ## Lead-transfer receipt — 2026-10-20
 
 ### B2 decision and preserved source
