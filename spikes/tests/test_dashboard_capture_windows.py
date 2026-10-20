@@ -295,6 +295,82 @@ class CaptureWindowTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "hard ceiling"):
             residency.assert_capture_rails({**good, "pss_plus_drm_mib": 26}, near_ceiling_bar, external, total)
 
+    def test_batch_median_mode_is_explicit_and_legacy_remains_strict(self):
+        self.assertIsNone(residency.acceptance_config({}))
+        env = {
+            "BEAD_DASHBOARD_ACCEPTANCE": "1",
+            "BEAD_DASHBOARD_RESIDENCY": "1",
+            "BEAD_DASHBOARD_PAGES": "today,weather,media,system",
+            "BEAD_DASHBOARD_RESIDENCY_SLOTS": "4",
+            "BEAD_DASHBOARD_RESIDENCY_LEGACY": "1",
+            "BEAD_DASHBOARD_WARMUP_SECONDS": "600",
+            "BEAD_DASHBOARD_BATCH_MEDIANS": "1",
+        }
+        self.assertTrue(residency.acceptance_config(env)["batch_medians"])
+        self.assertFalse(residency.acceptance_config({**env, "BEAD_DASHBOARD_BATCH_MEDIANS": "0"})["batch_medians"])
+        self.assertEqual(residency.acceptance_config({**env, "BEAD_DASHBOARD_BATCH_MEDIANS": "0"})["warmup_seconds"], 600)
+
+    def test_batch_median_gates_attribution_and_ignores_one_high_arm(self):
+        def row(total, anon=5.0, file=8.0, shmem=1.0, drm=None):
+            pss = anon + file + shmem
+            if drm is None:
+                drm = total - pss
+            return {"pss_plus_drm_mib": total, "drm_mib": {"buffer": drm},
+                    "memory": {"pss_mib": pss, "swap_pss_mib": 0.0,
+                               "pss_anon_mib": anon, "pss_file_mib": file,
+                               "pss_shmem_mib": shmem}}
+        control = [row(24.0) for _ in range(5)]
+        candidate = [row(24.9), row(25.0, file=9.0),
+                     row(25.0, file=9.0), row(25.0, file=9.0), row(27.0, file=11.0)]
+        summary = residency.summarize_batch_phase(control, candidate)
+        self.assertEqual(summary["candidate_total_median_mib"], 25.0)
+        self.assertEqual(summary["total_delta_median_mib"], 1.0)
+        self.assertEqual(summary["category_delta_medians_mib"]["pss_file_mib"], 1.0)
+        self.assertEqual(summary["category_medians_mib"]["control"]["pss_file_mib"], 8.0)
+        self.assertEqual(summary["verdict"], "PASS-one-time-27MiB-file-backed-report")
+        self.assertEqual(summary["candidate_range_mib"], [24.9, 27.0])
+        self.assertEqual(summary["drm_attribution"], "measured")
+        self.assertEqual(residency.summarize_batch_phase(control, [row(24.5, file=8.5) for _ in range(5)])["verdict"], "PASS")
+        with self.assertRaisesRegex(AssertionError, "anonymous growth"):
+            residency.summarize_batch_phase(control, [row(25.1, anon=6.1, file=8.0) for _ in range(5)])
+        with self.assertRaisesRegex(AssertionError, "file-backed"):
+            residency.summarize_batch_phase(control, [row(25.0, file=8.0) for _ in range(5)])
+        with self.assertRaisesRegex(AssertionError, "27 MiB"):
+            residency.summarize_batch_phase(control, [row(27.1, file=11.1) for _ in range(5)])
+        with self.assertRaisesRegex(AssertionError, "one-time allowance"):
+            residency.summarize_batch_phase(control, candidate, allow_27_report=False)
+        with self.assertRaisesRegex(AssertionError, "exactly five"):
+            residency.summarize_batch_phase(control[:4], candidate[:4])
+
+    def test_batch_median_keeps_missing_drm_unknown_and_rejects_bad_values(self):
+        base = {"pss_plus_drm_mib": 24.0, "drm_mib": None,
+                "memory": {"pss_mib": 24.0, "swap_pss_mib": 0.0, "pss_anon_mib": 8.0,
+                           "pss_file_mib": 12.0, "pss_shmem_mib": 4.0}}
+        summary = residency.summarize_batch_phase([base.copy() for _ in range(5)], [base.copy() for _ in range(5)])
+        self.assertEqual(summary["drm_attribution"], "unknown")
+        self.assertIsNone(summary["control_drm_median_mib"])
+        higher = {**base, "pss_plus_drm_mib": 25.0,
+                  "memory": {**base["memory"], "pss_mib": 25.0, "pss_file_mib": 13.0}}
+        with self.assertRaisesRegex(AssertionError, "measured DRM"):
+            residency.summarize_batch_phase([base.copy() for _ in range(5)], [higher.copy() for _ in range(5)])
+        bad = {**base, "memory": {**base["memory"], "pss_file_mib": float("nan")}}
+        with self.assertRaisesRegex(AssertionError, "invalid or negative"):
+            residency.summarize_batch_phase([base.copy() for _ in range(5)], [bad.copy() for _ in range(5)])
+
+    def test_batch_arm_rail_allows_median_evaluation_but_preserves_quiet_and_close_cap(self):
+        total = lambda row: row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
+        bar = {"pss_plus_drm_mib": 24, "memory": {"swap_pss_mib": 0, "pss_anon_mib": 5}}
+        row = {"pss_plus_drm_mib": 26, "memory": {"swap_pss_mib": 0, "pss_anon_mib": 5.5,
+                "pss_file_mib": 15, "pss_shmem_mib": 1}}
+        external = {"processes": [{"memory": {"swap_pss_mib": 0}}]}
+        residency.assert_capture_rails(row, bar, external, total, batch_medians=True)
+        close_bar = {"pss_plus_drm_mib": 20, "memory": {"swap_pss_mib": 0, "pss_anon_mib": 5}}
+        with self.assertRaisesRegex(AssertionError, r"bar\+5"):
+            residency.assert_capture_rails(row, close_bar, external, total, batch_medians=True, close=True)
+        with self.assertRaisesRegex(AssertionError, "UI swap"):
+            residency.assert_capture_rails({**row, "memory": {**row["memory"], "swap_pss_mib": 1}},
+                                            bar, external, total, batch_medians=True)
+
 
 class CaptureSafetyTests(unittest.TestCase):
     def _run_mock_guard(self, temporary, cgroup_snapshots, monotonic, scope_poll_values=None, env=None,

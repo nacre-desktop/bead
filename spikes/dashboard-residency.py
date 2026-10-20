@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Private dashboard residency decomposition; reuse the nested proof setup."""
 import json, os, pathlib, time
+import math
 
 
 ACCEPTANCE_PHASE_BUDGETS = {
@@ -11,6 +12,9 @@ ACCEPTANCE_PHASE_BUDGETS = {
     "combined-legacy": 95,
 }
 ACCEPTANCE_PAGES = ["today", "weather", "media", "system"]
+MEDIAN_BATCH_ENV = "BEAD_DASHBOARD_BATCH_MEDIANS"
+MEDIAN_BATCH_ARM_LIMIT_MIB = 27
+MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB = 1
 
 
 def acceptance_config(environ):
@@ -35,7 +39,10 @@ def acceptance_config(environ):
     warmup = environ.get("BEAD_DASHBOARD_WARMUP_SECONDS", "0")
     if warmup not in ("0", "600"):
         raise ValueError("BEAD_DASHBOARD_WARMUP_SECONDS must be 0 or 600 in acceptance mode")
-    return {"warmup_seconds": int(warmup)}
+    batch_medians = environ.get(MEDIAN_BATCH_ENV, "0")
+    if batch_medians not in ("0", "1"):
+        raise ValueError(MEDIAN_BATCH_ENV + " must be 0 or 1")
+    return {"warmup_seconds": int(warmup), "batch_medians": batch_medians == "1"}
 
 
 def acceptance_baseline(pid, idle, warmup_seconds, monotonic, sleep, keeper_check=None):
@@ -65,11 +72,86 @@ def observe_window(idle, pid, seconds, require_full=False):
     return row
 
 
-def assert_capture_rails(row, bar, external, total):
+def assert_capture_rails(row, bar, external, total, batch_medians=False, close=False):
     assert row["memory"]["swap_pss_mib"] == 0, "UI swap invalidates comparison"
     assert all(x["memory"]["swap_pss_mib"] == 0 for x in external["processes"]), "daemon swap invalidates comparison"
-    assert total(row) <= total(bar) + 5, "closed exceeds own bar+5 MiB"
-    assert total(row) <= 25, "diagnostic exceeds current hard ceiling"
+    if not batch_medians or close:
+        assert total(row) <= total(bar) + 5, "closed exceeds own bar+5 MiB"
+    if batch_medians:
+        memory = row["memory"]
+        # Required category fields make a 25–27 MiB result auditable later.
+        assert all(key in memory for key in ("pss_anon_mib", "pss_file_mib", "pss_shmem_mib")), \
+            "batch arm lacks PSS category attribution"
+    else:
+        assert total(row) <= 25, "diagnostic exceeds current hard ceiling"
+
+
+def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=True):
+    """Apply owner-approved matched five-pair median gates to one phase."""
+    import statistics
+    assert len(control_rows) == 5 and len(candidate_rows) == 5, \
+        "batch median requires exactly five matched alternating-pair rows per side"
+
+    def validate(rows):
+        for row in rows:
+            memory = row["memory"]
+            values = [row["pss_plus_drm_mib"], memory["pss_mib"], memory["swap_pss_mib"],
+                      memory["pss_anon_mib"], memory["pss_file_mib"], memory["pss_shmem_mib"]]
+            assert memory["swap_pss_mib"] == 0, "batch median includes UI SwapPss"
+            if row.get("drm_mib") is not None:
+                values.extend(row["drm_mib"].values())
+                drm_total = sum(row["drm_mib"].values())
+                assert abs(memory["pss_mib"] + drm_total - row["pss_plus_drm_mib"]) <= 0.01, \
+                    "batch median PSS plus DRM does not explain total"
+            assert all(not isinstance(value, bool) and isinstance(value, (int, float))
+                       and math.isfinite(value) and value >= 0
+                       for value in values), "batch median contains invalid or negative measurement"
+            assert abs(memory["pss_mib"] - sum(memory[key] for key in
+                       ("pss_anon_mib", "pss_file_mib", "pss_shmem_mib"))) <= 0.01, \
+                "batch median categories do not explain PSS"
+
+    validate(control_rows)
+    validate(candidate_rows)
+    def total(row):
+        return row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
+    def median(rows, value):
+        return statistics.median(value(row) for row in rows)
+    categories = ("pss_anon_mib", "pss_file_mib", "pss_shmem_mib")
+    category_medians = {side: {key: median(rows, lambda r, k=key: r["memory"][k])
+                               for key in categories}
+                        for side, rows in (("control", control_rows), ("candidate", candidate_rows))}
+    deltas = {key: median(candidate_rows, lambda r, k=key: r["memory"][k])
+              - median(control_rows, lambda r, k=key: r["memory"][k]) for key in categories}
+    control_total = median(control_rows, total)
+    candidate_total = median(candidate_rows, total)
+    anonymous_delta = deltas["pss_anon_mib"]
+    assert anonymous_delta <= MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB, \
+        "unexplained candidate-control anonymous growth exceeds 1 MiB"
+    file_delta = deltas["pss_file_mib"]
+    result = {"n_per_side": 5, "control_total_median_mib": control_total,
+              "candidate_total_median_mib": candidate_total,
+              "total_delta_median_mib": candidate_total - control_total,
+              "category_medians_mib": category_medians,
+              "category_delta_medians_mib": deltas,
+              "control_range_mib": [min(total(r) for r in control_rows), max(total(r) for r in control_rows)],
+              "candidate_range_mib": [min(total(r) for r in candidate_rows), max(total(r) for r in candidate_rows)],
+              "control_drm_median_mib": None if any(r.get("drm_mib") is None for r in control_rows)
+                  else median(control_rows, lambda r: sum(r["drm_mib"].values())),
+              "candidate_drm_median_mib": None if any(r.get("drm_mib") is None for r in candidate_rows)
+                  else median(candidate_rows, lambda r: sum(r["drm_mib"].values())),
+              "drm_attribution": "unknown" if any(r.get("drm_mib") is None for r in control_rows + candidate_rows)
+                  else "measured"}
+    if candidate_total < 25:
+        result["verdict"] = "PASS"
+    elif candidate_total <= MEDIAN_BATCH_ARM_LIMIT_MIB and allow_27_report:
+        assert result["drm_attribution"] == "measured", \
+            "25–27 MiB exception requires measured DRM category on both sides"
+        assert candidate_total > control_total and file_delta >= candidate_total - control_total, \
+            "25–27 MiB requires candidate-control growth explained by file-backed PSS"
+        result["verdict"] = "PASS-one-time-27MiB-file-backed-report"
+    else:
+        raise AssertionError("batch median exceeds 27 MiB stop ceiling or one-time allowance is already used")
+    return result
 
 
 def finish_phase_window(label, began, budget, capture, acceptance, monotonic, sleep, keeper_check=None):
@@ -123,7 +205,9 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         row["panel"] = state
         row["legacy"] = json.loads(call("state", target="nacre"))
         row["external"] = observe()
-        assert_capture_rails(row, bar, row["external"], total)
+        assert_capture_rails(row, bar, row["external"], total,
+                             batch_medians=bool(acceptance and acceptance["batch_medians"]),
+                             close="-close-" in label)
         (raw / (label + ".json")).write_text(json.dumps(row, indent=2) + "\n")
         (raw / (label + ".smaps")).write_text(pathlib.Path(f"/proc/{client.pid}/smaps").read_text())
         samples.append(row)
@@ -162,7 +246,8 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
             keeper_check,
         )
         row.update(timing)
-        assert total(row) < 24.5, "settled reaches owner stop line"
+        if not (acceptance and acceptance["batch_medians"]):
+            assert total(row) < 24.5, "settled reaches owner stop line"
         (raw / "dashboard-residency-progress.json").write_text(json.dumps(samples, indent=2) + "\n")
         print("DASHBOARD_RESIDENCY", label, total(row), flush=True)
         return row
@@ -176,6 +261,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
               "never": never, "once": once, "several": several,
               "combined": combined, "combined_legacy": legacy, "closed": closed, "warm": warm,
               "acceptance": acceptance is not None,
+              "batch_medians": bool(acceptance and acceptance["batch_medians"]),
               "mode": "acceptance" if acceptance else "legacy",
               "baseline_timing": baseline_timing,
               "method": "same process: never; one pass over fixed page slots; three passes over fixed page slots; acceptance mode uses matched 65/85/105/95s phase budgets and actual >=60s endpoint samples; control opens only legacy panels in final phase" if acceptance else "same process: never; one pass over fixed page slots; three passes over fixed page slots; fixed matched-age endpoints with >=30s idle; control opens only legacy panels in final phase"}

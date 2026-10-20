@@ -102,21 +102,53 @@ verdict. Raw evidence and exact hashes remain private; see the sanitized
 [measurement report](../research/b0002-hyprland-capture-20261020.md). No retry or
 threshold change is authorized by this result.
 
+## Fresh batch median decision — owner update 2026-10-20
+
+The owner authorized a new complete five-pair batch per compositor, using the
+same frozen UI/helper, lifecycle-only engine route, required geometry, full
+windows, containment, quiet, cleanup, and guarded swap-reset rules. This is a
+batch-specific exception to the single-arm24.5MiB early stop above. Enable only
+with `BEAD_DASHBOARD_BATCH_MEDIANS=1`; the default remains strict legacy mode.
+
+- Retain every endpoint's raw sample and PSS anonymous/file/shared, DRM, and
+  SwapPss evidence. A single endpoint above25MiB does not end the batch.
+- Stop/report unexplained anonymous growth above1MiB, any quiet/swap/safety
+  failure, or any other existing validity failure. Median aggregation requires
+  exactly five matched control and five candidate endpoint rows per phase.
+- Compare candidate and control medians for total, anonymous/file/shared PSS,
+  and DRM separately. Anonymous growth above1MiB is measured candidate-minus-
+  control. Reconcile the three PSS categories to PSS. Missing DRM stays unknown;
+  never treat it as zero.
+- Candidate median below25MiB with PSS category attribution is PASS. Median
+  25–27MiB may PASS only once in the whole batch, when the candidate-control
+  increase is fully explained by file-backed PSS growth; DRM does not count as
+  file-backed memory and must be measured well enough to rule out a graphics
+  increase. If graphics residency is unknown, fail closed for this exception
+  and report it unknown. Median above27MiB is STOP/report. Apply the decision to
+  every settled phase and compositor, and retain all endpoint values/ranges.
+- This exception changes no frozen reference, raw evidence, quiet/safety/swap
+  gate, close bar+5MiB limit, or default assertion. Do not claim PASS until all
+  five pairs and both compositors are complete and every phase median is decided.
+
 ## Acceptance criteria
 
-- [ ] Every close<=own bar+5MiB; settled<=25MiB and below24.5MiB stop line.
-- [ ] Every settled increase attributed; unexplained anonymous>1MiB stops.
+- [ ] Every close<=own bar+5MiB; settled batch medians follow the owner update
+      above when the explicit batch mode is enabled.
+- [ ] Every settled candidate-control increase attributed; unexplained
+      anonymous>1MiB stops.
 - [ ] A pure optimization never raises memory. Repeatable regression blocks landing.
-- [ ] No frozen reference/assertion altered; all ten pairs valid or gate NOT PASS.
+- [ ] No frozen reference/assertion altered; all twenty arms (ten pairs per
+      compositor) valid or gate NOT PASS.
 - [ ] Source fixes, if any, pass normal full CI and new pairs use final exact bytes.
 - [ ] Publish concise report and CI; raw/private artifacts stay outside Git.
 
 ## Stop conditions
 
-Reaching24.5MiB, unattributed anonymous growth, reproducible regression, paging,
-missing exact hashes or90min diagnosis exhausted: stop and report. A one-time
-27MiB ceiling is only considered by spec-agent review after demonstrated lazy /
-narrow-decoding pass with mostly file/shared remainder; this spec does not grant it.
+In default mode, reaching24.5MiB, unattributed anonymous growth, reproducible
+regression, paging, missing exact hashes or90min diagnosis exhausted: stop and
+report. The fresh batch mode uses only the explicit median decision above; it
+does not change other stop conditions. No earlier one-time27MiB exception is
+carried forward.
 
 ## General rules
 
