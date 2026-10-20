@@ -3,7 +3,7 @@
 - ID: B0002
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress (owner-activated capture)
+- Status: Source guard prep accepted; capture blocked pending host artifact verification, N9/N10 checks, preflight, and an exact grant
 - Depends on: source-only preflight eligible after B0004 Done; captures require B0001 Done and exact slot grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours including capture after grant
@@ -249,6 +249,14 @@ An unexplained simultaneous agent shutdown is not proof of OOM or a safe retry.
   owned job without touching those processes. If evidence points to another
   cause, fix it and tell the owner before re-granting. Missing old journals mean
   unknown, not no OOM. Never change global OOM policy, swap, sysctl or caches.
+
+## Source guard checkpoint — 2026-10-20
+
+Reviewed guard and B2 geometry assertions are integrated at source `eca9cc5c8526730aea125fb6fe59d9364aa6a1a8`; exact-main hosted [CI 39400923434](https://github.com/nacre-desktop/bead/actions/runs/39400923434) passed. The targeted stdlib suite passed all 42 tests. The guard enforces the recorded-peak cap floor and zero swap, proves held-child identity and cgroup membership, rechecks immediately before release, and keeps watchdog, cleanup, and host memory rails. Required B2 geometry is checked from actual IPC output metadata before arming; this source check is not evidence that the host compositor currently has that geometry.
+
+The first hosted run's unrelated recovery test failure was not reproduced on the unchanged-SHA rerun; cause unknown. Frozen runtime/helper bindings remain UI source `1cff9d17d61fb05451546bb0ea13c826c93cb4c9` / release SHA `b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b` and helper source `5f4c0bf3` / release SHA `4a65f4ec887bc85e93b5b862f1786fe6f1b7a811875333765ee8f8c052cce0aa`. These are frozen historical bindings, not a fresh host rehash or authorization to rebuild.
+
+B2 remains incomplete and capture-blocked. Before any capture, verify those exact artifacts at their authorized host paths, complete host preflight and N9/N10 private checks, and obtain a fresh exact capture grant. No host probe, artifact build, install, or capture is included in this checkpoint.
 
 ## Replacement schedule — 2026-10-18 restart
 

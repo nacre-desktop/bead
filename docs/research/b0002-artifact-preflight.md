@@ -47,16 +47,17 @@ runtime inputs; that does not certify a cached executable or a matched B2 run.
 ## Geometry and command audit
 
 The intended profiles remain five alternating A/B pairs per compositor at
-2880×1800, scale 1.5: Hyprland virtual 120 Hz and nested niri 60 Hz. The harness
-has configuration and partial output checks, but does not yet prove every
-effective mode field. `spikes/measure.py` configures Hyprland's virtual output
-and prints `hyprctl -j monitors` fields without asserting width, height, scale,
-or refresh. For niri's dashboard matrix it sets scale 1.5 and asserts physical
-2880×1800 plus logical width 1920, but omits explicit scale, logical height,
-and 60 Hz assertions. `wayland-info` collects protocol globals; it is not the
-geometry proof. A future capture's first preflight must assert and save actual
-output IPC results for dimensions, effective scale, and refresh on each lane.
-Config requests and the current partial checks alone are insufficient.
+2880×1800, scale 1.5: Hyprland virtual 120 Hz and nested niri 60 Hz. At the
+2026-10-19 prep head, `spikes/measure.py` configured Hyprland's virtual output
+and printed `hyprctl -j monitors` fields without asserting width, height, scale,
+or refresh. For niri's dashboard matrix it set scale 1.5 and asserted physical
+2880×1800 plus logical width 1920, but omitted explicit scale, logical height,
+and 60 Hz assertions. The accepted B2 source at `eca9cc5` now checks the
+required output metadata from actual compositor IPC before arming and preserves
+it for the run record. `wayland-info` collects protocol globals; it is not the
+geometry proof. Host preflight must still obtain and retain the actual output
+IPC evidence for each lane; a source assertion does not establish current host
+geometry.
 
 The previous command template also combined unrelated paths:
 `BEAD_HARDENING=menu-engine` dispatches to `spikes/menu-engine-proof.py`, the
@@ -103,15 +104,15 @@ and safety correction must be resolved before a later grant.
 
 ## Safety, schedule, and B3 dependency
 
-The source guard checks MemAvailable ≥4 GiB before start and aborts below 2 GiB,
-uses an owned systemd scope and an independent watchdog, and records OOM
-counters. Its `SCOPE_MEMORY_MAX`, scope validation, and `MemoryMax` command are
-fixed at 2 GiB; there is no scope swap cap or `MemorySwapMax` verification. This
-does not meet the current owner rule: scope cap must be
-`max(recorded baseline scope peak × 1.5, 12 GiB)` (therefore at least 12 GiB),
-with swap limit zero. The host start/abort rails stay 4 GiB/2 GiB. This is an
-exact later guard task requirement, not acceptance evidence and not a change in
-this docs-only task.
+The accepted B2 source guard at `eca9cc5c8526730aea125fb6fe59d9364aa6a1a8`
+enforces `max(recorded baseline scope peak × 1.5, 12 GiB)`, sets swap limit
+zero, verifies manager and effective cgroup limits, and proves the held child's
+PID/start-time/cgroup membership both before and immediately before release.
+It retains the host start/abort rails at 4 GiB/2 GiB, independent watchdog,
+OOM counters, and owned-scope cleanup. Exact-main hosted CI
+[39400923434](https://github.com/nacre-desktop/bead/actions/runs/39400923434)
+passed and all 42 targeted stdlib tests passed. This is source validation only;
+no host artifact verification, host preflight, or B2 capture has occurred.
 
 B2 uses ten cells per compositor, twenty total. The published timing model is
 about 145 minutes total without optional warmups (about 72.5 minutes per
@@ -138,8 +139,13 @@ text, so the parser proves RPC/result/commit/presentation linkage but does not
 prove query identity or burst behavior. Source preparation is accepted; no
 typing measurement or target acceptance follows from it.
 
-No performance result, binary rehash, actual geometry proof, or B2/B3 readiness
-claim is made. Raw private artifacts remain outside Git.
+No performance result, binary rehash, actual host geometry proof, or B2/B3
+readiness claim is made. The B2 source asserts required geometry from actual IPC
+output metadata before arming; host geometry still needs preflight. B2 capture
+remains blocked pending exact host artifact verification, N9/N10 checks, and a
+fresh exact grant. The first full hosted run's unrelated recovery test failure
+was not reproduced on the unchanged-SHA rerun; cause unknown. Raw private
+artifacts remain outside Git.
 
 ## Lead review
 
@@ -148,5 +154,7 @@ prove PATH was empty; only the explicit-PATH retry established the reported
 missing executable/package on that runner route. The dependency discrepancy
 was reported to the owner with minimal install command; no package operation
 was attempted. Artifact hashes remain historical bindings, not new file rehashes.
-The source command-routing, geometry and safety gaps are concrete prerequisites
-for later B2/B3; no measurement or product acceptance follows from this report.
+The B2 source geometry and safety guard gaps were addressed at `eca9cc5` and
+passed exact-main CI; host artifact verification, host preflight, N9/N10 checks,
+and an exact capture grant remain prerequisites. No measurement or product
+acceptance follows from this report.
