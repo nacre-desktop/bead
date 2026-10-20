@@ -1010,7 +1010,7 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
     let palette_path = root().join("palette.json");
     let colors = bead::render::Palette::read(&palette_path)?;
     let spec = crate::popouts::core_sound_with_root(
-        root().to_string_lossy().into_owned(),
+        root(),
         None,
         palette_path.clone(),
         colors,

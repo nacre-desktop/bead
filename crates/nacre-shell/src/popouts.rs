@@ -88,11 +88,11 @@ pub fn core_sound(
     colors: Palette,
     trace: bool,
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
-    core_sound_with_root("shell".into(), client, palette, colors, trace)
+    core_sound_with_root(PathBuf::from("shell"), client, palette, colors, trace)
 }
 
 pub(crate) fn core_sound_with_root(
-    root: String,
+    root: PathBuf,
     client: Option<crate::nacre_source::Client>,
     palette: PathBuf,
     colors: Palette,
