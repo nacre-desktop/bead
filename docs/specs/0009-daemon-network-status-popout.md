@@ -145,3 +145,21 @@ cleanup. Keep private raw paths outside Git; hosted-only validation stated hones
 ## Spec review
 
 Accepted bd7bf56, source/test head5d96384 and exact-head CI39134388246 /39133884809. Explicit primary/AP selection, narrow validated decoding and open-runtime lease ownership satisfy the contract. No measurement or running-producer claim is accepted or required.
+
+## Producer adoption — 2026-10-20
+
+Compared Bead against Nacre `fba6e9dae00e196081608415bb6177b415cdec2d`.
+Only mismatch: Bead's protocol dependency pin is still `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57`
+([Cargo.toml:25](../../crates/nacre-shell/Cargo.toml#L25)), while Nacre publishes
+the `network` topic from this producer revision ([network.rs:23,102-117](https://github.com/nacre-desktop/nacre/blob/fba6e9dae00e196081608415bb6177b415cdec2d/crates/nacre-helper/src/daemon/network.rs#L23)).
+The producer's NetworkState shape is health, wireless flag, three ID collections,
+and optional primary ([core_services.rs:88-97](https://github.com/nacre-desktop/nacre/blob/fba6e9dae00e196081608415bb6177b415cdec2d/crates/nacre-protocol/src/core_services.rs#L88)); Bead decodes and validates that shape ([status_views.rs:420-427](../../crates/nacre-shell/src/status_views.rs#L420)).
+No topic/method mismatch: Bead lazily leases `network` on open
+([popouts.rs:200-228](../../crates/nacre-shell/src/popouts.rs#L200)); producer publishes `network` ([network.rs:23,102-117](https://github.com/nacre-desktop/nacre/blob/fba6e9dae00e196081608415bb6177b415cdec2d/crates/nacre-helper/src/daemon/network.rs#L23)); B0009 status mode calls no methods. No capability-gating mismatch: Bead uses unavailable output if the leased topic is missing (B0009 steps 2,4), while N0003 keeps mutators unadvertised (Nacre N0003 steps 5, acceptance). No error/staleness mismatch: producer emits unavailable initially and stale last-good after errors ([network.rs:102-159](https://github.com/nacre-desktop/nacre/blob/fba6e9dae00e196081608415bb6177b415cdec2d/crates/nacre-helper/src/daemon/network.rs#L102)); Bead preserves only projected last-good display while marking it stale ([status_views.rs:423-468](../../crates/nacre-shell/src/status_views.rs#L423)). Owner-change retirement also matches: producer marks prior state unavailable/stale on owner boundary (Nacre N0005 steps 2-3; network.rs:120-159); Bead follows the same unavailable/stale path. No other mismatch found.
+
+No code or pin change: Nacre exact-head Source checks run39493418202 were still
+in progress at review time. Standing publication rule requires producer CI green
+before pin/adoption; lead can update the pin to `fba6e9da` after confirming green.
+No consumer change or tests were needed. This does not establish a running-producer
+claim: N0003 acceptance remains withdrawn/blocked, and live enablement is gated
+by N0014. No method/capability is inferred from the reserved schema.
