@@ -106,7 +106,6 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
         ("panel.open".into(), Value::Bool(true)),
         ("status.ready".into(), Value::Bool(false)),
         ("status.active".into(), Value::Bool(false)),
-        ("status.active".into(), Value::Bool(false)),
         ("status.heading".into(), Value::Text("Network".into())),
         ("status.icon".into(), Value::Text("wifi".into())),
         (
@@ -1037,6 +1036,7 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
     let initial = BTreeMap::from([
         ("panel.open".into(), Value::Bool(true)),
         ("status.ready".into(), Value::Bool(false)),
+        ("status.active".into(), Value::Bool(false)),
         (
             "status.device".into(),
             Value::Text("Output unavailable".into()),
