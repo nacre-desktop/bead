@@ -176,7 +176,7 @@ def scope_command(scope_name, command, memory_max=SCOPE_MEMORY_MAX_MIN):
     return [
         "systemd-run", "--user", "--scope", f"--unit={scope_name}",
         f"--property=MemoryMax={memory_max}", "--property=MemorySwapMax=0", "--collect", "--",
-        "/usr/bin/nice", "-n", "10", *command,
+        *command,
     ]
 
 

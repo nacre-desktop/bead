@@ -623,8 +623,6 @@ class CaptureSafetyTests(unittest.TestCase):
         scope_command = capture_safety.scope_command("bead-capture-012345abcdef.scope", ["python3"], expected)
         self.assertIn(f"--property=MemoryMax={expected}", scope_command)
         self.assertIn("--property=MemorySwapMax=0", scope_command)
-        self.assertEqual(scope_command[scope_command.index("--") + 1:scope_command.index("--") + 4],
-                         ["/usr/bin/nice", "-n", "10"])
         self.assertEqual(report["memory_max_bytes"], expected)
         self.assertEqual(report["baseline_scope_peak_bytes"], peak)
 
@@ -780,8 +778,6 @@ class CaptureSafetyTests(unittest.TestCase):
         self.assertIn("--property=MemorySwapMax=0", command)
         self.assertIn("--scope", command)
         self.assertNotIn("--wait", command)
-        self.assertEqual(command[command.index("--") + 1:command.index("--") + 4],
-                         ["/usr/bin/nice", "-n", "10"])
         self.assertEqual(command[-2:], ["python3", "measure.py"])
 
     def test_start_below_four_gib_fails_before_scope_launch(self):
