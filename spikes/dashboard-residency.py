@@ -13,6 +13,7 @@ ACCEPTANCE_PHASE_BUDGETS = {
 }
 ACCEPTANCE_PAGES = ["today", "weather", "media", "system"]
 MEDIAN_BATCH_ENV = "BEAD_DASHBOARD_BATCH_MEDIANS"
+OPENED_ONCE_ONLY_ENV = "BEAD_DASHBOARD_OPENED_ONCE_ONLY"
 MEDIAN_BATCH_ARM_LIMIT_MIB = 27
 MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB = 1
 
@@ -42,7 +43,11 @@ def acceptance_config(environ):
     batch_medians = environ.get(MEDIAN_BATCH_ENV, "0")
     if batch_medians not in ("0", "1"):
         raise ValueError(MEDIAN_BATCH_ENV + " must be 0 or 1")
-    return {"warmup_seconds": int(warmup), "batch_medians": batch_medians == "1"}
+    opened_once_only = environ.get(OPENED_ONCE_ONLY_ENV, "0")
+    if opened_once_only not in ("0", "1"):
+        raise ValueError(OPENED_ONCE_ONLY_ENV + " must be 0 or 1")
+    return {"warmup_seconds": int(warmup), "batch_medians": batch_medians == "1",
+            "opened_once_only": opened_once_only == "1"}
 
 
 def acceptance_baseline(pid, idle, warmup_seconds, monotonic, sleep, keeper_check=None):
@@ -252,16 +257,22 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         print("DASHBOARD_RESIDENCY", label, total(row), flush=True)
         return row
 
-    never = phase("never-opened", 0, 35)
-    once = phase("opened-once", slots, 55)
-    several = phase("opened-several", slots * 2, 75)
-    legacy = os.environ.get("BEAD_DASHBOARD_RESIDENCY_LEGACY", "1") == "1"
-    combined = phase("combined-legacy", 6, 65, legacy=True) if legacy else several
+    opened_once_only = bool(acceptance and acceptance["opened_once_only"])
+    if opened_once_only:
+        never = several = combined = None
+        once = phase("opened-once", slots, 55)
+    else:
+        never = phase("never-opened", 0, 35)
+        once = phase("opened-once", slots, 55)
+        several = phase("opened-several", slots * 2, 75)
+        legacy = os.environ.get("BEAD_DASHBOARD_RESIDENCY_LEGACY", "1") == "1"
+        combined = phase("combined-legacy", 6, 65, legacy=True) if legacy else several
     result = {"valid": True, "dashboard_enabled": enabled, "pages": pages, "page_slots": page_slots, "bar": bar,
               "never": never, "once": once, "several": several,
               "combined": combined, "combined_legacy": legacy, "closed": closed, "warm": warm,
               "acceptance": acceptance is not None,
               "batch_medians": bool(acceptance and acceptance["batch_medians"]),
+              "opened_once_only": opened_once_only,
               "mode": "acceptance" if acceptance else "legacy",
               "baseline_timing": baseline_timing,
               "method": "same process: never; one pass over fixed page slots; three passes over fixed page slots; acceptance mode uses matched 65/85/105/95s phase budgets and actual >=60s endpoint samples; control opens only legacy panels in final phase" if acceptance else "same process: never; one pass over fixed page slots; three passes over fixed page slots; fixed matched-age endpoints with >=30s idle; control opens only legacy panels in final phase"}

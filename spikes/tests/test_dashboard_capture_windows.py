@@ -308,6 +308,8 @@ class CaptureWindowTests(unittest.TestCase):
             "BEAD_DASHBOARD_BATCH_MEDIANS": "1",
         }
         self.assertTrue(residency.acceptance_config(env)["batch_medians"])
+        self.assertTrue(residency.acceptance_config({**env, "BEAD_DASHBOARD_OPENED_ONCE_ONLY": "1"})["opened_once_only"])
+        self.assertFalse(residency.acceptance_config(env)["opened_once_only"])
         self.assertFalse(residency.acceptance_config({**env, "BEAD_DASHBOARD_BATCH_MEDIANS": "0"})["batch_medians"])
         self.assertEqual(residency.acceptance_config({**env, "BEAD_DASHBOARD_BATCH_MEDIANS": "0"})["warmup_seconds"], 600)
 
