@@ -1,5 +1,9 @@
 # Status
 
+## 2026-10-20 — B0002 Hyprland capture stopped at combined-legacy
+
+A1 passed all four settled gates after a strict postcheck schema correction; its raw evidence is unchanged. B1 passed the first three settled phases but stopped at the required combined-legacy endpoint: 24.541992 MiB against the 24.5 MiB stop line. The endpoint was persisted before the assertion; progress.json therefore has only three completed rows. This is a valid stop, not a completed A/B pair or a product-regression finding. Both arms used the same frozen UI, helper, fixture tree, and lifecycle-only menu-engine route. No retry or threshold change is authorized. See [the capture report](research/b0002-hyprland-capture-20261020.md).
+
 ## 2026-10-19 — B0014 accepted
 
 The Bluetooth popout exposes a power switch only for one fresh, valid adapter.

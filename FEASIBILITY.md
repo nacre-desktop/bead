@@ -1,5 +1,17 @@
 # Feasibility
 
+
+## 2026-10-20 — B0002 Hyprland combined-legacy stop
+
+A1's four settled endpoints passed after strict validation of existing raw JSON. B1 passed three endpoints, then the required combined-legacy settled total reached 24.541992 MiB, above the 24.5 MiB stop line. The prior control was 24.010742 MiB. This single pair is a stop signal, not causal attribution or a regression verdict; no threshold change or retry is authorized.
+
+| Settled UI PSS+DRM+SwapPss MiB | Never | Once | Several | Combined legacy |
+| --- | ---: | ---: | ---: | ---: |
+| A1 control | 23.698242 | 23.705078 | 23.702148 | 24.010742 |
+| B1 candidate | 23.826172 | 23.783203 | 24.035156 | 24.541992 — STOP |
+
+A1 and B1 used the frozen UI/helper/fixtures and identical Hyprland geometry and phase windows. B1's per-close transient 24.606445 MiB was below the 25 MiB close rail and is not the settled endpoint. Raw evidence remains private; details and SHA-256 values are in the private capture report.
+
 ## 2026-10-17 — Published compatibility protocol passes consumer gates
 
 Adopt full-green Nacre5f4c0bf3; reserved schemas do not advertise runtime hosting.

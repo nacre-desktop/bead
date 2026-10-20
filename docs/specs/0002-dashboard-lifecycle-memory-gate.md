@@ -91,6 +91,17 @@ always. Quiet: every measured process SwapPss0, host swap-in<1MiB with page size
 Report UI PSS+DRM and external daemon/helpers separately; unknown DRM remains
 unknown. Preserve exact presented-page proof and cleanup. No physical claims.
 
+## 2026-10-20 capture result
+
+The accepted A1 control prefix passed all four settled phases. B1 passed the first
+three and stopped at the required combined-legacy endpoint: 24.541992 MiB against
+the 24.5 MiB stop line; the control endpoint was 24.010742 MiB. Combined legacy is
+part of the requested phase matrix above. The paired matrix remains incomplete and
+this gate is NOT PASS. The one pair is not causal attribution or a regression
+verdict. Raw evidence and exact hashes remain private; see the sanitized
+[measurement report](../research/b0002-hyprland-capture-20261020.md). No retry or
+threshold change is authorized by this result.
+
 ## Acceptance criteria
 
 - [ ] Every close<=own bar+5MiB; settled<=25MiB and below24.5MiB stop line.
