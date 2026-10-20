@@ -1,7 +1,7 @@
 # B0015 — Read-only daemon audio in the Sound popout
 
-Status: Review — source integrated on main; exact-source hosted CI is green.
-Final published-main hosted CI is pending; see delivery evidence below.
+Status: Done — source and review evidence are integrated on main; exact
+published-head hosted CI is green. See delivery evidence below.
 Worker: Luna; coordinator final review. Start from current published Bead main.
 Goal: core mode Sound output reads the existing published audio topic, without
 starting a new PipeWire/service owner or sending volume/mute actions.
@@ -64,9 +64,10 @@ exact-source full hosted [CI 39388972154](https://github.com/nacre-desktop/bead/
 passed formatting, Clippy, workspace tests, renderer configurations,
 facade/headless UI/Luau schema, capture-window regressions, private service
 lifecycle, and dependency/license checks. Tests cover the cases above plus
-invalid snapshots and an unavailable read-only factory. The main push triggered
-hosted CI 39390038309 on the same commit; it was still running when this status
-was recorded. No local full build/test, desktop capture, live device access,
-producer availability, or memory measurement is claimed. The original source
-phase's local-only/CI hold was superseded after the F4 capture release; no
-protocol, dependency, provider, or runtime-control scope was added.
+invalid snapshots and an unavailable read-only factory. Final published-head
+full hosted [CI 39390219914](https://github.com/nacre-desktop/bead/actions/runs/39390219914)
+passed on exact head e5fc3d8826493147c05ae1ecf59df294678a36c0, including this
+delivery evidence. No local full build/test, desktop capture, live device
+access, producer availability, or memory measurement is claimed. The original
+source phase's local-only/CI hold was superseded after the F4 capture release;
+no protocol, dependency, provider, or runtime-control scope was added.

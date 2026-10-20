@@ -90,7 +90,7 @@ release build, nested session or capture during exclusive N2. Desktop available
 now; lead announces actual capture start/release rather than waiting for night.
 Wayland-utils is installed; no missing-tool blocker is inferred.
 
-B0015 Review: source dc8832fe16db0db39185f342a2ae9a82d62a9924 is integrated on
+B0015 Done: source dc8832fe16db0db39185f342a2ae9a82d62a9924 is integrated on
 main. It adds a dedicated read-only core Sound view over the published AudioState,
 lazy audio-topic lease, bounded typed initial state, and no-client unavailable
 rendering. Legacy preview route and controls remain unchanged. No new provider,
@@ -103,8 +103,8 @@ facade/headless UI/Luau schema, capture-window regressions, private service
 lifecycle, and dependency/license checks. Coverage includes explicit default
 output selection, partial/boosted/unknown readback, invalid snapshots,
 disconnect recovery, legacy preview preservation, lazy lease/unadvertised topic,
-and the unavailable read-only factory. The published-main push triggered CI
-39390038309 on the same head; it was still running when this note was written.
-No desktop capture, local full build/test, or producer availability was used to
-claim acceptance. Lead review accepted source; mark Done only after final
-published-head CI is green.
+and the unavailable read-only factory. Final published-head full hosted
+[CI 39390219914](https://github.com/nacre-desktop/bead/actions/runs/39390219914)
+passed on exact head e5fc3d8826493147c05ae1ecf59df294678a36c0, including this
+review evidence. No desktop capture, local full build/test, or producer
+availability was used to claim acceptance.
