@@ -1009,13 +1009,8 @@ fn audio_legacy_preview_remains_unchanged() -> Result<()> {
 fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
     let palette_path = root().join("palette.json");
     let colors = bead::render::Palette::read(&palette_path)?;
-    let spec = crate::popouts::core_sound_with_root(
-        root(),
-        None,
-        palette_path.clone(),
-        colors,
-        false,
-    )?;
+    let spec =
+        crate::popouts::core_sound_with_root(root(), None, palette_path.clone(), colors, false)?;
     assert_eq!(spec.fallback.width, 400.);
     assert_eq!(spec.fallback.bounds.h, 350.);
 
