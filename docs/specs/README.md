@@ -1,13 +1,17 @@
 # Bead implementation queue
 
-Current owner handoff: 2026-10-20. F4 is accepted with green CI. B2 Hyprland batch5 stopped at its second arm: one accepted control, one candidate over the settled stop line; no retry. The desktop is released. Earlier execution receipts below are history. [Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
+Current owner handoff: 2026-10-20 lead transfer. F4/N9 are green. The owner
+requested finishing only the active B2 arm, releasing the desktop and stopping
+all workers for the new lead. The transfer receipt below supersedes earlier
+single-arm stop rules, grants and results. No automatic capture continuation.
+[Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
 | 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Done | Sourcedcf541a9 integrated normally; exact-source full hostedCI39240289443 SUCCESS. Capability-gated; no producer or live enablement claim. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
-| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Blocked: Hyprland combined-phase stop line | Harnessc807591 / CI39410701291 SUCCESS; 44 mocks. Frozen UI1cff9d1 rehashed/provenance verified; fresh10-cell lifecycle-only batch5 at11:38:31UTC, original slot through16:08:31UTC, released12:20:13UTC. Standing guarded swap reset before arms; unchanged in-arm quiet gates. A1 accepted; B1 stopped at combined-legacy 24.5MiB assertion, persisted endpoint 24.541992MiB (control 24.010742MiB); eight arms not started. No automatic retry. |
+| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Paused: owner lead transfer, incomplete fresh batch | Fresh local median-mode harness e66a747d/f8f504fd, 49 mocks pass; frozen UI/helper unchanged. Partial opened-once anonymous increase remains provisional. See transfer receipt; no batch PASS, no automatic resume. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source Done; measured gated | B0003-S89afb381 accepted/CI39123319816 green. Measured work after B2 PASS/new slot; no static polishing. |
 | — | [B0015 Audio](0015-daemon-audio-readback-popout.md) | Done | Source dc8832fe / CI39388972154 green; docs e5fc3d88 / CI39390219914 green. Read-only capability-gated view; no producer or live claim. |
 | — | [B0011 Battery](0011-daemon-battery-status-popout.md) | Done | Sourceaf61d18/fullCI39147491406green; docs5ad2551. Lazy lease/optional readings/private lifecycle tests accepted. |
@@ -15,12 +19,109 @@ Current owner handoff: 2026-10-20. F4 is accepted with green CI. B2 Hyprland bat
 | — | [B0009 Network](0009-daemon-network-status-popout.md) | Done | Source5d96384/docsbd7bf56/CI39134388246green. Capability-gated. |
 | — | B0001/B0004/B0005/B0006/B0007/B0008 | Done | Prior accepted reports retained; no duplicate work. |
 
-## Current execution ownership
+## Lead-transfer receipt — 2026-10-20
 
-No Bead capture, build or desktop job is active. B2 is blocked on the recorded
-combined-legacy memory result; B3 measurement stays gated on B2. See the
-[reviewed B2 report](../research/b0002-hyprland-capture-20261020.md).
-The other eight Hyprland arms and all ten Niri arms were not run.
+### B2 decision and preserved source
+
+Owner supersedes the single-arm24.5 stop for this fresh batch: decide each phase
+from five matched alternating pairs per compositor. Candidate median below25MiB
+with explained category changes passes; median25–27 only when the extra is
+file-backed may use the one-time27 allowance; above27 or unexplained anonymous
+increase above1MiB stops. Do not classify graphics as file-backed or unknown DRM
+as zero. Quiet/swap, geometry, containment/watchdog and close bar+5 rules remain.
+
+- Frozen UI source `1cff9d17d61fb05451546bb0ea13c826c93cb4c9`, release binary
+  SHA256 `b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b`;
+  common helper source5f4 and SHA256
+  `4a65f4ec887bc85e93b5b862f1786fe6f1b7a811875333765ee8f8c052cce0aa`.
+  No UI rebuild or feature-source substitution in this batch.
+- Local source worktree `bead-b0002-failure-report-20261020`: commits
+  `e66a747db0cd797ecdbf3e1c93d5cc56ec9ab90f` and
+  `f8f504fde80c9c18fb0ca955780c562987e29b25`, not pushed. Final clean HEAD is
+  `52d0df09ad1d7ef94d93475df454ef9160da90ec` on branch
+  `b0002-capture-failure-report-20261020`; the two further local commits
+  `cb1fca8` and `52d0df0` add then revert the unsuccessful Nice-property change.
+  Preserve all four unpublished commits; do not blindly replay the reverted fix. These add explicit
+  `BEAD_DASHBOARD_BATCH_MEDIANS=1`, paired category reducer and its collector,
+  preserving strict defaults. Worker reports49 mocks/py_compile/diff-check pass;
+  lead independently ran48 at the preceding revision. No hosted CI is claimed
+  for these local changes; prior harness c807591 CI39410701291 is historical.
+- Fresh batch begins15:22:31UTC after a pre-measurement failed priority check.
+  Duplicate additive `nice` caused priority19; corrected controller ancestry and
+  no-measure smoke proved priority10 plus12GiB/swap0 before the fresh start.
+  Initial failure raw remains separate; it is not an accepted measurement arm.
+- Initial raw endpoints from the old A1/B1 batch remain in the
+  [earlier report](../research/b0002-hyprland-capture-20261020.md), not reused.
+  New partial data below are a distinct fresh run, not a completed comparison.
+
+### Partial Hyprland results, MiB
+
+All listed completed arms have full endpoint samples; the worker reports quiet
+and safety verification, SwapPss0 and zero host swap-in. DRM is absent/unknown;
+reported PSS-plus-DRM field must not be described as measured graphics memory.
+
+| Arm | Never opened | Opened once | Opened several | Combined |
+| --- | ---: | ---: | ---: | ---: |
+| A1 | 24.095703 | 24.123047 | 24.155273 | 24.426758 |
+| A2 | 24.267578 | 24.275391 | 24.283203 | 24.565430 |
+| A3 | 23.780273 | 23.780273 | 23.784180 | 24.141602 |
+| B1 | 24.107422 | 25.345703 | 23.916016 | 24.587891 |
+| B2 | 23.970703 | 25.310547 | 24.001953 | 24.502930 |
+| B3 | 24.257813 | 24.109375 | 24.171875 | 24.883789 |
+| A4 | 24.493164 | 24.499023 | 24.497070 | 24.238281 |
+| B4 | 24.433594 | 23.828125 | 24.007813 | 24.673828 |
+
+Final **four-pair partial** opened-once medians are control24.19921875,
+candidate24.70996094MiB (+0.51074219); anonymous5.25390625→6.279296875
+(+1.025390625), file18.25048828→17.67480469 (−0.57568359), shmem0.671875 both.
+This is below25 total but slightly above the anonymous delta rule. It is NOT the
+required five-pair batch and has no final PASS, GC trigger or causal leak verdict.
+
+**Final stop/release:** A4 finished17:37:36UTC. Eight arms were captured
+(A1–A4/B1–B4); seven have controller `CELL_ACCEPTED`. A4 capture returned0,
+quiet/safety passed and immutable-evidence postcheck passed; an initial `Path`
+import typo in the administrative stop hook ended the controller after verify.
+The import was corrected and verify rerun on the same raw data, printing PASS
+then explicit `OWNER_HANDOFF_STOP` rc75. No recapture and no B5 start occurred.
+Two Hyprland arms (A5/B5) plus ten Niri arms remain unrun.
+
+Private REMOTE raw/controller root is
+`~/nacre-quiet/evidence/bead-b0002-20261020/median-cb1fca8/`;
+`controller.sh`, `controller-status.txt`, `controller.log` and `postcheck.py`
+remain there. Final postcheck SHA256
+`8e47b1b8ca6b69c8b150971bbcae58b0125403032acc044a71c5701134417a82`.
+Full raw archive sibling `median-cb1fca8.hyprland.raw.tar`, SHA256
+`dcc9ce92f3c5da8643bb0fe8bf16142b897d3eba2af0e85e7bc2feb9533a52de`
+(458 entries checked). Do not mistake these for local mirrored paths.
+Worker confirmed controller PID and child absent, no capture processes/scopes,
+bench-lock free; final MemAvailable12,982,712KiB and host pswpin unchanged.
+**Heavy slot RELEASED; all workers stopped.** No continuation is armed or held.
+The raw evidence is preserved, not deleted or reconstructed.
+
+### Next units and boundaries
+
+1. The new lead must explicitly schedule any continuation/fresh batch; this
+   lead's owner-transfer stop is not a measurement failure or a retry grant.
+   Preserve original rows and report any administrative gap without inventing
+   completed pairs. No B3 measurements before B2 passes.
+2. Conditional owner-authorized GC attempt only if the full opened-once median
+   confirms above25: target one full Luau cycle after release/idle, and trim only
+   if relevant. Read-only source mapping found the panel Runtime/VM is destroyed,
+   but the retained bar Runtime receives `set_idle(true)` via its owning worker
+   and currently uses the no-op trait default. This is a possible hook, not proof
+   of causality. `malloc_trim` already runs immediately and after100ms. Verify
+   actual mlua API and ordering before coding; no GC change was made.
+3. If targeted fix is justified, owner asks three control and three fixed
+   opened-once Hyprland arms with identical quiet/swap rules. Only below25 and
+   anonymous growth below1 proceeds to a full five-pair batch both compositors;
+   no improvement means stop/report, no speculative fixes. Base candidate on
+   frozen1cff, not unrelated newer shell work.
+4. N10 has priority for desktop builds between batches. Its latest local source
+   and remaining gates are in the Nacre queue. Hosted GitHub CI does not consume
+   the desktop slot. No package/live action is authorized here.
+5. Other Bead status: B13 Wi-Fi, B14 Bluetooth and B15 Audio are Done,
+   capability-gated; no producer/live availability claim. B3 source stage is Done,
+   measured stage remains gated. No new independent worker was started at stop.
 
 ## Earlier execution receipts (historical)
 
