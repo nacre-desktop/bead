@@ -157,9 +157,23 @@ and optional primary ([core_services.rs:88-97](https://github.com/nacre-desktop/
 No topic/method mismatch: Bead lazily leases `network` on open
 ([popouts.rs:200-228](../../crates/nacre-shell/src/popouts.rs#L200)); producer publishes `network` ([network.rs:23,102-117](https://github.com/nacre-desktop/nacre/blob/fba6e9dae00e196081608415bb6177b415cdec2d/crates/nacre-helper/src/daemon/network.rs#L23)); B0009 status mode calls no methods. No capability-gating mismatch: Bead uses unavailable output if the leased topic is missing (B0009 steps 2,4), while N0003 keeps mutators unadvertised (Nacre N0003 steps 5, acceptance). No error/staleness mismatch: producer emits unavailable initially and stale last-good after errors ([network.rs:102-159](https://github.com/nacre-desktop/nacre/blob/fba6e9dae00e196081608415bb6177b415cdec2d/crates/nacre-helper/src/daemon/network.rs#L102)); Bead preserves only projected last-good display while marking it stale ([status_views.rs:423-468](../../crates/nacre-shell/src/status_views.rs#L423)). Owner-change retirement also matches: producer marks prior state unavailable/stale on owner boundary (Nacre N0005 steps 2-3; network.rs:120-159); Bead follows the same unavailable/stale path. No other mismatch found.
 
-No code or pin change: Nacre exact-head Source checks run39493418202 were still
-in progress at review time. Standing publication rule requires producer CI green
-before pin/adoption; lead can update the pin to `fba6e9da` after confirming green.
-No consumer change or tests were needed. This does not establish a running-producer
-claim: N0003 acceptance remains withdrawn/blocked, and live enablement is gated
-by N0014. No method/capability is inferred from the reserved schema.
+## Protocol pin update — 2026-10-21
+
+Updated Bead's dependency from `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57` to
+Nacre main `83b85a1b7cba5f71578a3bf04d78a64e96553523`, whose exact-head CI is
+green. The N0003/N0005 network producer addition is compatible with this
+consumer's existing `network` topic decoding and stale/unavailable projection.
+The protocol diff since the old pin adds settings contracts and Tokio's `time`
+feature; it does not change B0009's contract. All seven `core-compat-*` fixture
+files are byte-identical to the new pin. Capability gating and status-only mode
+are unchanged. No producer-running or live-enablement claim is made; N0014
+remains the live gate.
+
+Validation on dev-1: Bead's `ubuntu-24.04` CI job passed, including fmt, denied-
+warning Clippy, workspace/trace tests, feature checks, Luau checks, regression
+tests and all nine cargo-deny graphs. Nacre's Arch `desktop` job passed at
+`83b85a1b7cba5f71578a3bf04d78a64e96553523`: fmt, Clippy, 292 helper tests,
+protocol minimal consumer, 472 shell-tools tests, parity/UI checks, and both
+translation galleries (228 standard, 178 wide-font states). Docker's missing
+`/dev/fuse` emitted non-fatal portal warnings during Xvfb checks. No local build
+or test was run because the desktop is performing a memory capture.
