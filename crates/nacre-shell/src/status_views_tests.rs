@@ -998,9 +998,11 @@ fn audio_legacy_preview_remains_unchanged() -> Result<()> {
         .filter_map(|node| node.action)
         .collect::<Vec<_>>();
     assert!(actions.iter().any(|action| action == "services.audio"));
-    assert!(actions
-        .iter()
-        .any(|action| action == "services.audio.volume"));
+    assert!(
+        actions
+            .iter()
+            .any(|action| action == "services.audio.volume")
+    );
     assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive,
         bead::render::Primitive::Text { text, .. } if text == "Drag or use arrow keys to adjust volume"
     )));
