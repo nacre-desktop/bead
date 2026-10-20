@@ -77,6 +77,55 @@ def process_cgroup(pid):
     raise CaptureSafetyError(f"process {pid} has no unified cgroup entry")
 
 
+def read_cgroup_processes(control_group):
+    path = pathlib.Path("/sys/fs/cgroup") / control_group.lstrip("/") / "cgroup.procs"
+    try:
+        values = path.read_text().splitlines()
+    except OSError as error:
+        raise CaptureSafetyError(f"cannot inspect cgroup membership {control_group}: {error}") from error
+    pids = set()
+    for value in values:
+        if not re.fullmatch(r"[0-9]+", value):
+            raise CaptureSafetyError(f"cgroup.procs is malformed for {control_group}")
+        pid = int(value)
+        if pid <= 0:
+            raise CaptureSafetyError(f"cgroup.procs contains an invalid pid for {control_group}")
+        pids.add(pid)
+    return pids
+
+
+def positive_integer(value, label):
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise CaptureSafetyError(f"held child {label} must be a positive integer")
+    return value
+
+
+def validate_held_child(pid, expected_start_ticks, expected_group, control_group,
+                        start_reader=None, group_reader=None, membership_reader=None):
+    start_reader = process_start_ticks if start_reader is None else start_reader
+    group_reader = process_cgroup if group_reader is None else group_reader
+    membership_reader = read_cgroup_processes if membership_reader is None else membership_reader
+    pid = positive_integer(pid, "pid")
+    expected_start_ticks = positive_integer(expected_start_ticks, "start ticks")
+    if not isinstance(expected_group, str) or not expected_group.startswith("/"):
+        raise CaptureSafetyError("held child reported an invalid cgroup path")
+    if expected_group != control_group and not expected_group.startswith(control_group.rstrip("/") + "/"):
+        raise CaptureSafetyError("capture harness is outside the recorded systemd scope")
+    current_ticks = positive_integer(start_reader(pid), "current start ticks")
+    if current_ticks != expected_start_ticks:
+        raise CaptureSafetyError("held child process identity changed (start ticks mismatch)")
+    current_group = group_reader(pid)
+    if current_group != expected_group:
+        raise CaptureSafetyError("held child moved from its recorded cgroup")
+    if pid not in membership_reader(current_group):
+        raise CaptureSafetyError("held child pid is absent from cgroup.procs")
+    if group_reader(pid) != expected_group:
+        raise CaptureSafetyError("held child moved during cgroup membership verification")
+    if positive_integer(start_reader(pid), "current start ticks") != expected_start_ticks:
+        raise CaptureSafetyError("held child process identity changed during verification")
+    return current_group
+
+
 def parse_baseline_peak_bytes(value):
     if not isinstance(value, str) or not re.fullmatch(r"[0-9]+", value):
         raise CaptureSafetyError("baseline scope peak must be a positive integer byte count")
@@ -205,6 +254,7 @@ def check_heartbeat(path, now, stale_after=WATCHDOG_HEARTBEAT_STALE_SECONDS):
 def release_after_watchdog_ready(*, ready_file, heartbeat_file, release_file, watchdog,
                                  memory_reader=read_memavailable_kib,
                                  sleeper=time.sleep, monotonic=time.monotonic,
+                                 pre_release_check=None,
                                  timeout=WATCHDOG_READY_TIMEOUT_SECONDS):
     deadline = monotonic() + timeout
     while monotonic() < deadline:
@@ -226,9 +276,14 @@ def release_after_watchdog_ready(*, ready_file, heartbeat_file, release_file, wa
             if watchdog.poll() is not None:
                 raise CaptureSafetyError("watchdog exited while rechecking the release rail")
             check_heartbeat(heartbeat_file, monotonic())
+            pre_release = pre_release_check() if pre_release_check is not None else None
+            if watchdog.poll() is not None:
+                raise CaptureSafetyError("watchdog exited during held-child verification")
+            check_heartbeat(heartbeat_file, monotonic())
             pathlib.Path(release_file).touch()
             return {"watchdog_first_sample_kib": first_sample,
-                    "release_memavailable_kib": release_sample}
+                    "release_memavailable_kib": release_sample,
+                    "pre_release_verification": pre_release}
         sleeper(0.1)
     raise CaptureSafetyError("timed out waiting for watchdog READY; capture was not released")
 
@@ -330,10 +385,31 @@ def _show_scope(scope_name, property_name, run=subprocess.run):
     return result.stdout.strip()
 
 
+def verify_scope_and_held_child(scope_name, expected_memory_max, expected_control_group,
+                                child_pid, child_start_ticks, child_group, run=subprocess.run):
+    effective_limit = _show_scope(scope_name, "MemoryMax", run)
+    effective_swap_limit = _show_scope(scope_name, "MemorySwapMax", run)
+    control_group = _show_scope(scope_name, "ControlGroup", run)
+    if control_group != expected_control_group:
+        raise CaptureSafetyError("systemd scope ControlGroup changed during held-child verification")
+    cgroup = cgroup_memory_snapshot(control_group)
+    validate_scope(scope_name, effective_limit, effective_swap_limit, control_group, child_group,
+                   cgroup.get("memory.max"), cgroup.get("memory.swap.max"), expected_memory_max)
+    validate_held_child(child_pid, child_start_ticks, child_group, control_group)
+    return {"effective_memory_max": effective_limit,
+            "effective_memory_swap_max": effective_swap_limit,
+            "control_group": control_group,
+            "child_pid": child_pid,
+            "child_start_ticks": child_start_ticks,
+            "child_cgroup": child_group,
+            "child_membership_verified": True,
+            "cgroup": cgroup}
+
+
 def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailable_kib,
                 popen=subprocess.Popen, run=subprocess.run, sleeper=time.sleep,
                 monotonic=time.monotonic, unit_id=None):
-    """Run a harness command inside a verified 2-GiB scope with an outer watchdog."""
+    """Run a harness command in a verified bounded scope with an outer watchdog."""
     env = os.environ.copy() if env is None else env
     scope_name = f"bead-capture-{(unit_id or uuid.uuid4().hex)[:12]}.scope"
     if not SCOPE_NAME_RE.fullmatch(scope_name):
@@ -409,15 +485,20 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
 
             ready = json.loads(ready_file.read_text())
             child_group = ready.get("cgroup", "")
-            initial_cgroup = cgroup_memory_snapshot(control_group)
-            validate_scope(scope_name, effective_limit, effective_swap_limit, control_group, child_group,
-                           initial_cgroup.get("memory.max"), initial_cgroup.get("memory.swap.max"), memory_max)
+            child_pid = positive_integer(ready.get("pid"), "pid")
+            child_start_ticks = positive_integer(ready.get("start_ticks"), "start ticks")
+            initial_verification = verify_scope_and_held_child(
+                scope_name, memory_max, control_group, child_pid, child_start_ticks, child_group, run)
+            initial_cgroup = initial_verification["cgroup"]
             initial_oom = parse_oom_counters(initial_cgroup)
             if initial_oom is None:
                 raise CaptureSafetyError("cgroup memory.events oom counters unavailable before release")
-            report.update({"control_group": control_group, "child_pid": ready.get("pid"),
-                           "child_cgroup": child_group, "effective_memory_max": effective_limit,
-                           "effective_memory_swap_max": effective_swap_limit,
+            report.update({"control_group": initial_verification["control_group"], "child_pid": child_pid,
+                           "child_start_ticks": child_start_ticks,
+                           "child_cgroup": child_group,
+                           "child_membership_verified": initial_verification["child_membership_verified"],
+                           "effective_memory_max": initial_verification["effective_memory_max"],
+                           "effective_memory_swap_max": initial_verification["effective_memory_swap_max"],
                            "cgroup_initial": initial_cgroup, "oom_initial": initial_oom})
             watchdog_command = [sys.executable, str(pathlib.Path(__file__).resolve()), "--watchdog",
                                 "--owner-pid", str(wrapper_pid), "--owner-start", str(wrapper_start),
@@ -431,10 +512,17 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
             watchdog = popen(watchdog_command, env=env, start_new_session=True,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             armed_file.touch()
+
+            def verify_before_release():
+                result = verify_scope_and_held_child(
+                    scope_name, memory_max, control_group, child_pid, child_start_ticks, child_group, run)
+                report["cgroup_pre_release"] = result["cgroup"]
+                return {key: value for key, value in result.items() if key != "cgroup"}
+
             release_result = release_after_watchdog_ready(
                 ready_file=watchdog_ready_file, heartbeat_file=heartbeat_file,
                 release_file=release_file, watchdog=watchdog, memory_reader=memory_reader,
-                sleeper=sleeper, monotonic=monotonic)
+                sleeper=sleeper, monotonic=monotonic, pre_release_check=verify_before_release)
             report.update(release_result)
 
             while scope_process.poll() is None:
@@ -530,7 +618,10 @@ def wait_for_release(ready_file, release_file, timeout=CHILD_GATE_TIMEOUT_SECOND
                      sleeper=time.sleep, monotonic=time.monotonic):
     ready_file, release_file = pathlib.Path(ready_file), pathlib.Path(release_file)
     ready_file.parent.mkdir(parents=True, exist_ok=True)
-    ready_file.write_text(json.dumps({"pid": os.getpid(), "cgroup": process_cgroup(os.getpid())}) + "\n")
+    pid = positive_integer(os.getpid(), "pid")
+    start_ticks = positive_integer(process_start_ticks(pid), "start ticks")
+    ready_file.write_text(json.dumps({"pid": pid, "start_ticks": start_ticks,
+                                      "cgroup": process_cgroup(pid)}) + "\n")
     deadline = monotonic() + timeout
     while monotonic() < deadline:
         if release_file.exists():

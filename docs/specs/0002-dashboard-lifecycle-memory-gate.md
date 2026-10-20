@@ -225,8 +225,11 @@ An unexplained simultaneous agent shutdown is not proof of OOM or a safe retry.
   MemorySwapMax=0. Supply a known peak as the strict positive integer byte value
   BEAD_CAPTURE_BASELINE_PEAK_BYTES; otherwise use the 12-GiB floor. Verify both
   effective systemd properties and cgroup memory.max/memory.swap.max before
-  releasing the held child; no unlimited fallback. Scope setup is transient and
-  task-private, not a live unit/configuration change.
+  releasing the held child; independently verify its PID/start-time identity,
+  `/proc` cgroup and `cgroup.procs` membership, then repeat the scope and child
+  checks immediately before release. Any mismatch leaves the child held and
+  stops only the owned scope. No unlimited fallback. Scope setup is transient
+  and task-private, not a live unit/configuration change.
 - Keep the lightweight memory watchdog outside that measured scope, but task-owned.
   On low memory, scope OOM, unexpected exit or lost watchdog, invalidate the arm
   and stop only the recorded owned scope/descendants. Preserve partial logs,

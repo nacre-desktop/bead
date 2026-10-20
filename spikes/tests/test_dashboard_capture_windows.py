@@ -260,8 +260,12 @@ class CaptureWindowTests(unittest.TestCase):
 
 class CaptureSafetyTests(unittest.TestCase):
     def _run_mock_guard(self, temporary, cgroup_snapshots, monotonic, scope_poll_values=None, env=None,
-                        child_group="/scope", watchdog_starts=None):
+                        child_group="/scope", watchdog_starts=None, child_start_ticks=456,
+                        manager_readbacks=None, start_ticks_readbacks=None, group_readbacks=None,
+                        cgroup_pids=None, events=None,
+                        release_observations=None):
         env = {} if env is None else env
+        cgroup_pids = {321} if cgroup_pids is None else cgroup_pids
         baseline_peak = (capture_safety.parse_baseline_peak_bytes(env[capture_safety.BASELINE_SCOPE_PEAK_ENV])
                          if capture_safety.BASELINE_SCOPE_PEAK_ENV in env else None)
         expected_memory_max = capture_safety.scope_memory_max(baseline_peak)
@@ -269,6 +273,12 @@ class CaptureSafetyTests(unittest.TestCase):
             {"memory.max": str(expected_memory_max), "memory.swap.max": "0", **snapshot}
             for snapshot in cgroup_snapshots
         ]
+        remaining_snapshots = list(cgroup_snapshots)
+
+        def next_cgroup_snapshot(_control_group):
+            if len(remaining_snapshots) > 1:
+                return remaining_snapshots.pop(0)
+            return remaining_snapshots[0]
         class FakeScope:
             def __init__(self):
                 self.poll_values = list(scope_poll_values or [None, 0])
@@ -295,12 +305,30 @@ class CaptureSafetyTests(unittest.TestCase):
 
         scope, watchdog = FakeScope(), FakeWatchdog()
         commands = []
+        readback_counts = {}
+        start_read_count = 0
+        group_read_count = 0
+
+        def record(event):
+            if events is not None:
+                events.append(event)
+
+        def readback(prop, default):
+            values = (manager_readbacks or {}).get(prop)
+            if values is None:
+                return default
+            index = readback_counts.get(prop, 0)
+            readback_counts[prop] = index + 1
+            return values[min(index, len(values) - 1)]
 
         def fake_popen(command, **kwargs):
             if command[0] == "systemd-run":
+                record("child-started-and-held")
                 ready = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
-                ready.write_text(json.dumps({"pid": 321, "cgroup": child_group}))
+                ready.write_text(json.dumps({"pid": 321, "start_ticks": child_start_ticks,
+                                             "cgroup": child_group}))
                 return scope
+            record("watchdog-started")
             if watchdog_starts is not None:
                 watchdog_starts.append(command)
             ready = pathlib.Path(command[command.index("--ready-file") + 1])
@@ -313,11 +341,64 @@ class CaptureSafetyTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             commands.append(command)
             prop = next((part.split("=", 1)[1] for part in command if part.startswith("--property=")), "")
+            record(f"manager-read:{prop}")
             output = {"MemoryMax": str(expected_memory_max),
                       "MemorySwapMax": "0", "ControlGroup": "/scope"}.get(prop, "")
+            output = readback(prop, output)
             return mock.Mock(returncode=0, stdout=output, stderr="")
 
-        with mock.patch.object(capture_safety, "cgroup_memory_snapshot", side_effect=cgroup_snapshots):
+        def start_ticks_reader(pid):
+            nonlocal start_read_count
+            record("child-start-ticks-read")
+            if pid != 321:
+                return 999
+            index = start_read_count
+            start_read_count += 1
+            if start_ticks_readbacks:
+                return start_ticks_readbacks[min(index, len(start_ticks_readbacks) - 1)]
+            return child_start_ticks
+
+        def group_reader(pid):
+            nonlocal group_read_count
+            record("child-cgroup-read")
+            if pid != 321:
+                return child_group
+            index = group_read_count
+            group_read_count += 1
+            if group_readbacks:
+                return group_readbacks[min(index, len(group_readbacks) - 1)]
+            return child_group
+
+        real_release_after = capture_safety.release_after_watchdog_ready
+
+        def observed_release(**kwargs):
+            pre_release_check = kwargs["pre_release_check"]
+
+            def tracked_check():
+                result = pre_release_check()
+                record("pre-release-check-passed")
+                return result
+
+            kwargs["pre_release_check"] = tracked_check
+            try:
+                result = real_release_after(**kwargs)
+            except BaseException:
+                marker_exists = pathlib.Path(kwargs["release_file"]).exists()
+                if release_observations is not None:
+                    release_observations.append(marker_exists)
+                record(f"release-failed-marker:{marker_exists}")
+                raise
+            marker_exists = pathlib.Path(kwargs["release_file"]).exists()
+            if release_observations is not None:
+                release_observations.append(marker_exists)
+            record(f"release-marker:{marker_exists}")
+            return result
+
+        with (mock.patch.object(capture_safety, "cgroup_memory_snapshot", side_effect=next_cgroup_snapshot),
+              mock.patch.object(capture_safety, "release_after_watchdog_ready", side_effect=observed_release),
+              mock.patch.object(capture_safety, "process_start_ticks", side_effect=start_ticks_reader),
+              mock.patch.object(capture_safety, "process_cgroup", side_effect=group_reader),
+              mock.patch.object(capture_safety, "read_cgroup_processes", return_value=cgroup_pids)):
             try:
                 result = capture_safety.run_guarded(
                     ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
@@ -397,6 +478,127 @@ class CaptureSafetyTests(unittest.TestCase):
         self.assertIn("--property=MemorySwapMax=0", scope_command)
         self.assertEqual(report["memory_max_bytes"], expected)
         self.assertEqual(report["baseline_scope_peak_bytes"], peak)
+
+    def test_guard_rechecks_held_child_and_scope_before_release_marker(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        events, release_observations = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, _commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0, events=events,
+                release_observations=release_observations)
+        self.assertIsNone(error)
+        self.assertEqual(result, 0)
+        self.assertEqual(release_observations, [True])
+        self.assertEqual(report["child_start_ticks"], 456)
+        self.assertTrue(report["child_membership_verified"])
+        self.assertEqual(report["pre_release_verification"]["child_pid"], 321)
+        self.assertEqual(report["pre_release_verification"]["child_start_ticks"], 456)
+        self.assertTrue(report["pre_release_verification"]["child_membership_verified"])
+        self.assertLess(events.index("child-started-and-held"), events.index("watchdog-started"))
+        self.assertLess(events.index("watchdog-started"), events.index("pre-release-check-passed"))
+        self.assertLess(events.index("pre-release-check-passed"), events.index("release-marker:True"))
+        marker = events.index("release-marker:True")
+        self.assertGreaterEqual(events[:marker].count("child-start-ticks-read"), 5)
+        for prop in ("MemoryMax", "MemorySwapMax", "ControlGroup"):
+            reads = [index for index, item in enumerate(events[:marker]) if item == f"manager-read:{prop}"]
+            self.assertGreaterEqual(len(reads), 3, prop)
+
+    def test_guard_rejects_manager_readback_mismatch_before_watchdog(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        watchdog_starts, release_observations = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0,
+                manager_readbacks={"MemorySwapMax": ["1024"]},
+                watchdog_starts=watchdog_starts, release_observations=release_observations)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("MemorySwapMax", str(error))
+        self.assertEqual(watchdog_starts, [])
+        self.assertEqual(release_observations, [])
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+
+    def test_guard_rejects_reused_child_pid_before_starting_watchdog(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        watchdog_starts, release_observations = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0, child_start_ticks=456,
+                start_ticks_readbacks=[789], watchdog_starts=watchdog_starts,
+                release_observations=release_observations)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("start ticks mismatch", str(error))
+        self.assertEqual(watchdog_starts, [])
+        self.assertEqual(release_observations, [])
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+
+    def test_guard_rechecks_memory_limit_immediately_before_release(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        expected = capture_safety.SCOPE_MEMORY_MAX_MIN
+        watchdog_starts, release_observations = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0,
+                manager_readbacks={"MemoryMax": [str(expected), str(expected), str(expected + 1)]},
+                watchdog_starts=watchdog_starts, release_observations=release_observations)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("MemoryMax", str(error))
+        self.assertEqual(len(watchdog_starts), 1)
+        self.assertEqual(release_observations, [False])
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+
+    def test_guard_rejects_child_start_time_change_immediately_before_release(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        watchdog_starts, release_observations = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0,
+                start_ticks_readbacks=[456, 456, 456, 999],
+                watchdog_starts=watchdog_starts, release_observations=release_observations)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("identity changed", str(error))
+        self.assertEqual(len(watchdog_starts), 1)
+        self.assertEqual(release_observations, [False])
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+
+    def test_guard_rejects_child_moved_immediately_before_release(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        watchdog_starts, release_observations = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0,
+                group_readbacks=["/scope", "/scope", "/outside"],
+                watchdog_starts=watchdog_starts, release_observations=release_observations)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("moved", str(error))
+        self.assertEqual(len(watchdog_starts), 1)
+        self.assertEqual(release_observations, [False])
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+
+    def test_guard_rejects_child_missing_from_cgroup_procs_before_watchdog(self):
+        stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
+        watchdog_starts, release_observations = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0, cgroup_pids=set(),
+                watchdog_starts=watchdog_starts, release_observations=release_observations)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("absent from cgroup.procs", str(error))
+        self.assertEqual(watchdog_starts, [])
+        self.assertEqual(release_observations, [])
+        self.assertEqual(commands[-1], ["systemctl", "--user", "stop", report["scope"]])
+
+    def test_held_child_identifiers_must_be_strict_positive_integers(self):
+        for pid, ticks in ((True, 456), (0, 456), (321, True), (321, 0), ("321", 456), (321, "456")):
+            with self.subTest(pid=pid, ticks=ticks), self.assertRaises(capture_safety.CaptureSafetyError):
+                capture_safety.validate_held_child(
+                    pid, ticks, "/scope", "/scope", start_reader=lambda _pid: 456,
+                    group_reader=lambda _pid: "/scope", membership_reader=lambda _group: {321})
 
     def test_guard_stops_owned_scope_if_effective_cgroup_swap_is_not_zero(self):
         unsafe = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096",
@@ -581,7 +783,7 @@ class CaptureSafetyTests(unittest.TestCase):
                 popen_calls.append(command)
                 if command[0] == "systemd-run":
                     ready_path = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
-                    ready_path.write_text(json.dumps({"pid": 321, "cgroup": "/scope"}))
+                    ready_path.write_text(json.dumps({"pid": 321, "start_ticks": 456, "cgroup": "/scope"}))
                     return scope
                 watchdog_ready = pathlib.Path(command[command.index("--ready-file") + 1])
                 heartbeat = pathlib.Path(command[command.index("--heartbeat-file") + 1])
@@ -598,7 +800,10 @@ class CaptureSafetyTests(unittest.TestCase):
 
             stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096",
                              "memory.max": str(capture_safety.SCOPE_MEMORY_MAX_MIN), "memory.swap.max": "0"}
-            with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events):
+            with (mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events),
+                  mock.patch.object(capture_safety, "process_start_ticks", return_value=456),
+                  mock.patch.object(capture_safety, "process_cgroup", return_value="/scope"),
+                  mock.patch.object(capture_safety, "read_cgroup_processes", return_value={321})):
                 result = capture_safety.run_guarded(
                     ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
                     env={}, memory_reader=lambda: capture_safety.START_MIN_KIB,
@@ -633,7 +838,7 @@ class CaptureSafetyTests(unittest.TestCase):
             def fake_popen(command, **kwargs):
                 if command[0] == "systemd-run":
                     ready_path = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
-                    ready_path.write_text(json.dumps({"pid": 321, "cgroup": "/scope"}))
+                    ready_path.write_text(json.dumps({"pid": 321, "start_ticks": 456, "cgroup": "/scope"}))
                     return scope
                 pathlib.Path(command[command.index("--ready-file") + 1]).write_text(
                     json.dumps({"available_kib": capture_safety.START_MIN_KIB, "monotonic": 100.0}))
@@ -650,7 +855,10 @@ class CaptureSafetyTests(unittest.TestCase):
 
             stable_events = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096",
                              "memory.max": str(capture_safety.SCOPE_MEMORY_MAX_MIN), "memory.swap.max": "0"}
-            with mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events):
+            with (mock.patch.object(capture_safety, "cgroup_memory_snapshot", return_value=stable_events),
+                  mock.patch.object(capture_safety, "process_start_ticks", return_value=456),
+                  mock.patch.object(capture_safety, "process_cgroup", return_value="/scope"),
+                  mock.patch.object(capture_safety, "read_cgroup_processes", return_value={321})):
                 with self.assertRaises(KeyboardInterrupt):
                     capture_safety.run_guarded(
                         ["python3", "measure.py"], report_path=pathlib.Path(temporary) / "safety.json",
