@@ -469,7 +469,7 @@ class CaptureSafetyTests(unittest.TestCase):
         expected = 15 * 1024 ** 3
         stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": str(peak)}
         with tempfile.TemporaryDirectory() as temporary:
-            result, error, commands, report = self._run_mock_guard(
+            result, error, _commands, report = self._run_mock_guard(
                 temporary, [stable, stable], lambda: 100.0, env={capture_safety.BASELINE_SCOPE_PEAK_ENV: str(peak)})
         self.assertIsNone(error)
         self.assertEqual(result, 0)
