@@ -19,6 +19,20 @@ single-arm stop rules, grants and results. No automatic capture continuation.
 | — | [B0009 Network](0009-daemon-network-status-popout.md) | Done | Source5d96384/docsbd7bf56/CI39134388246green. Capability-gated. |
 | — | B0001/B0004/B0005/B0006/B0007/B0008 | Done | Prior accepted reports retained; no duplicate work. |
 
+## New lead — 2026-10-20 evening
+
+Claude Code (Opus) is now lead, with Codex workers. Owner direction for B2: test
+the hypothesis that Luau's incremental GC never finishes collecting after the
+first close in an idle shell. The fix runs one full GC cycle after a panel
+releases and the UI is idle, adding malloc_trim only if evidence shows it helps.
+Phase A, assigned to a Luna worker with the desktop heavy slot, is an
+opened-once-only comparison on Hyprland: control (frozen `b01dfcca`) against the
+fixed build, 3 alternating arms each, with unchanged capture gates. If the fixed
+median is under 25 MiB and the anonymous increase is under 1 MiB, the full B2
+batch runs on both compositors and is decided on medians under the transfer
+rule. If the fix changes nothing, B2 stops and the result is reported; there are
+no speculative fixes. B3 follows when the slot is free.
+
 ## Lead-transfer receipt — 2026-10-20
 
 ### B2 decision and preserved source
