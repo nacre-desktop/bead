@@ -7,7 +7,7 @@ Current owner handoff: 2026-10-20. F4 is accepted with green CI; B2 fresh Hyprla
 | 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Done | Sourcedcf541a9 integrated normally; exact-source full hostedCI39240289443 SUCCESS. Capability-gated; no producer or live enablement claim. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
-| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | In progress: fresh Hyprland capture | Harnessc807591 / CI39410701291 SUCCESS; 44 mocks. Frozen UI1cff9d1 rehashed/provenance verified; fresh10-cell lifecycle-only batch5 at11:38:31UTC, slot through16:08:31UTC. Standing guarded swap reset before arms; unchanged in-arm quiet gates. No accepted result yet. |
+| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Blocked: Hyprland combined-phase stop line | Harnessc807591 / CI39410701291 SUCCESS; 44 mocks. Frozen UI1cff9d1 rehashed/provenance verified; fresh10-cell lifecycle-only batch5 at11:38:31UTC, slot through16:08:31UTC. Standing guarded swap reset before arms; unchanged in-arm quiet gates. A1 accepted; B1 stopped at combined-legacy 24.5MiB assertion, persisted endpoint 24.541992MiB (control 24.010742MiB); eight arms not started. No automatic retry. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source Done; measured gated | B0003-S89afb381 accepted/CI39123319816 green. Measured work after B2 PASS/new slot; no static polishing. |
 | — | [B0015 Audio](0015-daemon-audio-readback-popout.md) | Done | Source dc8832fe / CI39388972154 green; docs e5fc3d88 / CI39390219914 green. Read-only capability-gated view; no producer or live claim. |
 | — | [B0011 Battery](0011-daemon-battery-status-popout.md) | Done | Sourceaf61d18/fullCI39147491406green; docs5ad2551. Lazy lease/optional readings/private lifecycle tests accepted. |
@@ -54,7 +54,8 @@ cache drops orsysctl. Geometry means actual output proof, not config request.
 ## Workflow and owner boundaries
 
 Built-in workers only, maximum3 active; separate old implementer chats retired.
-One heavy job globally incl hosted full CI/build/nested/capture. Lead grants.
+One heavy job on the desktop: local builds/tests, nested sessions or captures.
+GitHub-hosted CI may run concurrently; desktop-hosted CI may not. Lead grants.
 Light docs/read-only prep may proceed in parallel. Lead staysWorking while
 workersrun, postsstarts/finishes and about30min long-job heartbeat (global skill).
 
