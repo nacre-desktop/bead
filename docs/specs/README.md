@@ -33,6 +33,24 @@ batch runs on both compositors and is decided on medians under the transfer
 rule. If the fix changes nothing, B2 stops and the result is reported; there are
 no speculative fixes. B3 follows when the slot is free.
 
+### Lead update — 2026-10-20 night
+
+- The B2 GC fix is implemented: UI `7948c3c` runs one full Luau collection on
+  the first idle notification after a release. 37 bead-ui and 113 nacre-shell
+  tests pass, along with clippy and 49 harness mocks. The release build is
+  `306474f0`, and the harness opened-once mode with its research note is at
+  `cb79930`. Both are local only.
+- Provenance: the frozen control artifact `b01dfcca` no longer exists on the
+  host, and source `1cff9d17` does not rebuild bit-identically. The rebuild is
+  `e21caa16`. Lead decision for phase A: compare a same-toolchain rebuild of
+  `1cff9d17` (control) against `7948c3c` (fixed), with the common helper
+  `4a65f4ec`, which was recovered and rehashed.
+- Captures are blocked on an unattended swap reset. Host swap is about
+  6.7 GiB, and the standing rule needs it below 64 MiB. Processes started by
+  the new lead run with no-new-privileges, so the reset is launched through
+  the user manager, which also needs a narrow NOPASSWD sudo rule for
+  `swapoff -a` / `swapon -a`. The owner has been asked for it.
+
 ## Lead-transfer receipt — 2026-10-20
 
 ### B2 decision and preserved source
