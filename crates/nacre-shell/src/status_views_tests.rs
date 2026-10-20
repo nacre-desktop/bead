@@ -1014,13 +1014,8 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
     assert_eq!(spec.fallback.bounds.h, 350.);
 
     let mut runtime = (spec.factory)(true).map_err(std::io::Error::other)?;
-    let (send, receive) = std::sync::mpsc::channel();
-    runtime.services(Box::new(move |event| {
-        let _ = send.send(event);
-    }));
-    let event = receive.recv_timeout(std::time::Duration::from_secs(1))?;
     let scene = runtime
-        .stage(event)?
+        .stage(bead::wayland::UiEvent::Reload)?
         .ok_or("unavailable Sound view did not render")?;
     for expected in [
         "Sound output",
