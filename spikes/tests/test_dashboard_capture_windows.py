@@ -142,6 +142,44 @@ class CaptureWindowTests(unittest.TestCase):
             self.assertIs(launcher.start_keyboard_keeper(True, False, {}), keeper)
         self.assertEqual(popen.call_args.args[0], ["wtype", "-s", "600000", ""])
 
+    def test_acceptance_launcher_argv_covers_full_gate_schedule(self):
+        acceptance = residency.acceptance_config({
+            "BEAD_DASHBOARD_ACCEPTANCE": "1",
+            "BEAD_DASHBOARD_RESIDENCY": "1",
+            "BEAD_DASHBOARD_PAGES": "today,weather,media,system",
+            "BEAD_DASHBOARD_RESIDENCY_SLOTS": "4",
+            "BEAD_DASHBOARD_RESIDENCY_LEGACY": "1",
+            "BEAD_DASHBOARD_WARMUP_SECONDS": "600",
+        })
+        command = launcher.build_launcher_command(
+            "/frozen/nacre-shell", True, ["--menu-fixture", "/fixtures/menu.json"],
+            pathlib.Path("/private/launcher.sock"), pathlib.Path("/private/raw"),
+            True, True, "/fixtures/dashboard", False, None, "hyprland", acceptance,
+        )
+        lifetime_seconds = int(command[command.index("--seconds") + 1])
+        required_seconds = (acceptance["warmup_seconds"] + 60
+                            + sum(residency.ACCEPTANCE_PHASE_BUDGETS.values()))
+        self.assertEqual(lifetime_seconds, 1800)
+        self.assertEqual(lifetime_seconds * 1000, 1800000)
+        self.assertEqual(required_seconds, 1010)
+        self.assertLess(required_seconds, lifetime_seconds)
+        self.assertIn("--dashboard-fixtures", command)
+        self.assertEqual(command[-2:], ["--output", "bead-bench"])
+
+    def test_legacy_launcher_argv_lifetimes_unchanged(self):
+        core_command = launcher.build_launcher_command(
+            "/frozen/nacre-shell", True, ["--menu-fixture", "/fixtures/menu.json"],
+            pathlib.Path("/private/launcher.sock"), pathlib.Path("/private/raw"),
+            False, True, None, False, None, "niri", None,
+        )
+        panel_command = launcher.build_launcher_command(
+            "/frozen/nacre-shell", False, ["--menu-fixture", "/fixtures/menu.json"],
+            pathlib.Path("/private/launcher.sock"), pathlib.Path("/private/raw"),
+            False, False, None, False, None, "niri", None,
+        )
+        self.assertEqual(core_command[core_command.index("--seconds") + 1], "300")
+        self.assertEqual(panel_command[panel_command.index("--seconds") + 1], "180")
+
     def test_early_keeper_exit_invalidates_and_cleans(self):
         for expires_at, window in ((600, "warmup"), (630, "baseline"), (690, "phase")):
             with self.subTest(window=window):

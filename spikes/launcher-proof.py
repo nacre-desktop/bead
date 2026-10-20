@@ -24,6 +24,21 @@ def stop_keyboard_keeper(keeper, stop):
     if keeper is not None:
         stop(keeper)
 
+def build_launcher_command(binary,core_views,source_args,sock,raw,dashboard_views,status_views,
+                           dashboard_fixtures,provider,engine_socket,compositor,acceptance):
+    lifetime=1800 if acceptance is not None else (300 if core_views else 180)
+    command=[binary,'--bar','--core-views'if core_views else'--launcher-panel',*source_args,
+             '--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state',
+             '--report',str(raw/'cache-report.json'),'--seconds',str(lifetime)]
+    if dashboard_views:
+        assert core_views and status_views,'dashboard proof requires full core views'
+        if dashboard_fixtures:command+=['--dashboard-fixtures',dashboard_fixtures]
+    if provider:
+        assert engine_socket,'shared UI provider requires the real daemon Source'
+        command+=['--ui-provider']
+    if compositor=='hyprland':command+=['--output','bead-bench']
+    return command
+
 def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     acceptance=dashboard_residency.acceptance_config(os.environ)
     runtime=pathlib.Path(env['XDG_RUNTIME_DIR']).resolve()
@@ -65,15 +80,10 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
         path.write_text(json.dumps({'version':1,'values':{'panel.open':False,'launcher.route':restored_mode}}))
         path.chmod(0o600)
     source_args=['--daemon-socket',engine_socket]if engine_socket else['--menu-fixture',str(fixture)]
-    command=[binary,'--bar','--core-views'if core_views else'--launcher-panel',*source_args,'--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state','--report',str(raw/'cache-report.json'),'--seconds','300'if core_views else'180']
-    if dashboard_views:
-        assert core_views and status_views,'dashboard proof requires full core views'
-        fixtures=os.environ.get('BEAD_DASHBOARD_FIXTURES')
-        if fixtures:command+=['--dashboard-fixtures',fixtures]
-    if os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1':
-        assert engine_socket,'shared UI provider requires the real daemon Source'
-        command+=['--ui-provider']
-    if compositor=='hyprland':command+=['--output','bead-bench']
+    dashboard_fixtures=os.environ.get('BEAD_DASHBOARD_FIXTURES')
+    command=build_launcher_command(binary,core_views,source_args,sock,raw,dashboard_views,status_views,
+                                   dashboard_fixtures,os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1',
+                                   engine_socket,compositor,acceptance)
     def call(method,*args,target='bead.panel',ok=True):
         p=subprocess.run([binary,'ipc','--socket',str(sock),'--json',target,method,*args],env=env,cwd=ROOT,capture_output=True,text=True,timeout=5)
         if (p.returncode==0)!=ok:
