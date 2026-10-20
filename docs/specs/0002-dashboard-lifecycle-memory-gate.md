@@ -3,7 +3,7 @@
 - ID: B0002
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress — fresh Hyprland five-pair batch4 granted 2026-10-20 11:15–16:30UTC; acceptance unclaimed
+- Status: In progress — fresh Hyprland five-pair lifecycle-only batch5 active from 2026-10-20 11:38:31UTC, window ends16:08:31UTC; acceptance unclaimed
 - Depends on: source-only preflight eligible after B0004 Done; captures require B0001 Done and exact slot grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours including capture after grant
@@ -326,3 +326,19 @@ capacity, then recheck swap used below 64 MiB before starting. No cache drops,
 sysctl changes, or other host changes. If any condition fails, stop and report.
 The existing per-arm host swap-in, process SwapPss, containment, memory watchdog,
 source, geometry and full-window gates remain unchanged.
+
+
+## Current B2 lifecycle invocation — 2026-10-20
+
+Use the existing `BEAD_HARDENING=menu-engine` dispatcher with
+`BEAD_ENGINE_LIFECYCLE_ONLY=1`, not the B3 typing path. The standalone launcher
+dispatch supplies no external-process observer and is insufficient for B2.
+Pin the frozen UI via `BEAD_HARDENING_BINARY`, the same actual5f4 daemon helper
+via `BEAD_MENU_ENGINE_BINARY` in BOTH arms, and the matching frozen BEAD shell
+source via `BEAD_MENU_ENGINE_BUNDLE`. The latter is not the Nacre helper source
+checkout. Keep the fixed B2 dashboard fixtures and all acceptance flags; do not
+set UI-provider mode. This existing lifecycle branch provides actual daemon and
+descendant PSS/DRM/SwapPss accounting while the UI also uses dashboard fixtures.
+No empty observer, assertion weakening, new measurement tool or runtime rebuild
+is authorized. A1 from the earlier standalone route was invalid after passing
+warmup/baseline/quiet gates; preserve it separately, never count it as a pair.

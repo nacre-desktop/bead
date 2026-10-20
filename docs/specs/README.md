@@ -1,13 +1,13 @@
 # Bead implementation queue
 
-Current owner handoff: 2026-10-20. F4 is accepted with green CI; B2 fresh Hyprland capture is active. Earlier ownership below is history. [Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
+Current owner handoff: 2026-10-20. F4 is accepted with green CI; B2 fresh Hyprland batch5 is active using the existing daemon-backed lifecycle route. Earlier ownership below is history. [Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
 | 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Done | Sourcedcf541a9 integrated normally; exact-source full hostedCI39240289443 SUCCESS. Capability-gated; no producer or live enablement claim. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
-| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | In progress: fresh Hyprland capture | Harnessc807591 / CI39410701291 SUCCESS; 44 mocks. Frozen UI1cff9d1 rehashed/provenance verified; fresh10-cell batch4 at11:16UTC, slot11:15–16:30UTC. Standing guarded swap reset before arms; unchanged in-arm quiet gates. No accepted result yet. |
+| 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | In progress: fresh Hyprland capture | Harnessc807591 / CI39410701291 SUCCESS; 44 mocks. Frozen UI1cff9d1 rehashed/provenance verified; fresh10-cell lifecycle-only batch5 at11:38:31UTC, slot through16:08:31UTC. Standing guarded swap reset before arms; unchanged in-arm quiet gates. No accepted result yet. |
 | 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Source Done; measured gated | B0003-S89afb381 accepted/CI39123319816 green. Measured work after B2 PASS/new slot; no static polishing. |
 | — | [B0015 Audio](0015-daemon-audio-readback-popout.md) | Done | Source dc8832fe / CI39388972154 green; docs e5fc3d88 / CI39390219914 green. Read-only capability-gated view; no producer or live claim. |
 | — | [B0011 Battery](0011-daemon-battery-status-popout.md) | Done | Sourceaf61d18/fullCI39147491406green; docs5ad2551. Lazy lease/optional readings/private lifecycle tests accepted. |

@@ -168,8 +168,10 @@ build receipt records release profile, Rust/Cargo1.99.0, UI SHA256
 `b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b`
 and ELF build ID `fd6ae3674e73090dd30aff0ab2c01b752b85af0f`. Current file
 rehash and build ID match. No rebuild or runtime feature substitution occurred.
-The common helper reference rehash matches the recorded5f4 artifact; it is not
-launched by the fixture-backed dashboard route. wayland-utils is installed.
+The common helper rehash matches the recorded5f4 artifact. The earlier standalone
+launcher attempt did not launch it and could not supply the required observer;
+current batch5 uses the existing daemon-backed lifecycle-only route and measures
+that same helper plus its descendants in BOTH arms. wayland-utils is installed.
 
 The reviewed guard/geometry harness passed CI39400923434. Acceptance-only UI
 lifetime correctionc807591 passed CI39410701291 and44 mocks; it changes only
@@ -182,3 +184,12 @@ preflight/smoke passed, correct Hyprland2880x1800/1.5/120 geometry is mandatory.
 Batch4 starts a fresh10-cell five-pair comparison; no measurement acceptance is
 claimed until all cells and analysis pass. Private paths/raw artifacts remain
 outside this public report.
+
+The standalone batch4 failed after correct600s warmup/60s baseline with zero
+host swap-in: its missing external observer made it invalid. The corrected
+invocation is the existing menu-engine lifecycle-only branch, not B3 typing.
+Batch5 uses identical frozen runtime artifacts,320-entry private catalog and
+fixtures in both conditions, changing only the reviewed dashboard-view flag.
+Shell bundle tree `0c32b0fd6fb8487a09c0e30a2932c29b7a72c286`; fixture tree
+`51dbf56ff49bf55656d7f04257f532dde73ece47`. Its external observer must remain
+real and strict; no missing process data is substituted with zero.
