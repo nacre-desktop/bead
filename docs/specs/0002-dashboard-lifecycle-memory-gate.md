@@ -3,7 +3,7 @@
 - ID: B0002
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Source guard prep accepted; capture blocked pending host artifact verification, N9/N10 checks, preflight, and an exact grant
+- Status: In progress — fresh Hyprland five-pair batch4 granted 2026-10-20 11:15–16:30UTC; acceptance unclaimed
 - Depends on: source-only preflight eligible after B0004 Done; captures require B0001 Done and exact slot grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours including capture after grant

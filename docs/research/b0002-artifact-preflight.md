@@ -158,3 +158,27 @@ The B2 source geometry and safety guard gaps were addressed at `eca9cc5` and
 passed exact-main CI; host artifact verification, host preflight, N9/N10 checks,
 and an exact capture grant remain prerequisites. No measurement or product
 acceptance follows from this report.
+
+
+## Verified artifact and readiness correction — 2026-10-20
+
+The earlier unresolved artifact binding is now resolved. The existing source
+checkout is clean at `1cff9d17d61fb05451546bb0ea13c826c93cb4c9`; its saved
+build receipt records release profile, Rust/Cargo1.99.0, UI SHA256
+`b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b`
+and ELF build ID `fd6ae3674e73090dd30aff0ab2c01b752b85af0f`. Current file
+rehash and build ID match. No rebuild or runtime feature substitution occurred.
+The common helper reference rehash matches the recorded5f4 artifact; it is not
+launched by the fixture-backed dashboard route. wayland-utils is installed.
+
+The reviewed guard/geometry harness passed CI39400923434. Acceptance-only UI
+lifetime correctionc807591 passed CI39410701291 and44 mocks; it changes only
+acceptance lifetime300→1800seconds so600warmup/fullwindows can finish, keeping
+legacy300/180 unchanged. Two setup/lifetime-invalid attempts and one host-paging
+invalid attempt are retained separately, with zero accepted cells.
+Owner extended guarded swap resets to all private captures; the logged reset
+restored original swap capacity and425MiB→0 used before fresh batch4. Host
+preflight/smoke passed, correct Hyprland2880x1800/1.5/120 geometry is mandatory.
+Batch4 starts a fresh10-cell five-pair comparison; no measurement acceptance is
+claimed until all cells and analysis pass. Private paths/raw artifacts remain
+outside this public report.
