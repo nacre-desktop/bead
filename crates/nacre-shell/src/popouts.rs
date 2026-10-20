@@ -96,7 +96,9 @@ pub fn core_sound(
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
-        position: Some(crate::placement::Frame::default().positioner(crate::placement::Attachment::Attached(bead::core::Edge::Right))),
+        position: Some(crate::placement::Frame::default().positioner(
+            crate::placement::Attachment::Attached(bead::core::Edge::Right),
+        )),
         engages_decorations: true,
         passive: false,
         initial_open: false,
@@ -105,15 +107,21 @@ pub fn core_sound(
         factory: Arc::new(move |open| {
             let source: Arc<dyn bead::core::source::Source> = match client.as_ref() {
                 Some(client) => Arc::new(client.lease_topic("audio").map_err(|e| e.to_string())?),
-                None => crate::dashboard::unavailable_audio_source()
-                    .map_err(|e| e.to_string())?,
+                None => crate::dashboard::unavailable_audio_source().map_err(|e| e.to_string())?,
             };
             let session = bead::ui::Session::new(
-                "shell".into(), "sound/core.luau".into(), palette.clone(), colors.clone(), cold.clone(),
+                "shell".into(),
+                "sound/core.luau".into(),
+                palette.clone(),
+                colors.clone(),
+                cold.clone(),
             );
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_frame(crate::placement::Attachment::Attached(bead::core::Edge::Right), &colors)
+                .with_frame(
+                    crate::placement::Attachment::Attached(bead::core::Edge::Right),
+                    &colors,
+                )
                 .and_then(|runtime| runtime.with_core_audio_status(source))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())

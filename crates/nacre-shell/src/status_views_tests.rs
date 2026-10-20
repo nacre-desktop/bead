@@ -928,7 +928,10 @@ fn audio_core_partial_readback_and_boosted_volume() -> Result<()> {
 #[test]
 fn audio_core_legacy_ready_volume_uses_perceptual_scale() -> Result<()> {
     let mut state = core_audio();
-    state["nodes"]["items"]["out"].as_object_mut().unwrap().remove("readback");
+    state["nodes"]["items"]["out"]
+        .as_object_mut()
+        .unwrap()
+        .remove("readback");
     state["nodes"]["items"]["out"]["volume"] = serde_json::json!(0.125);
     let values = Status::core_audio(Arc::new(FakeSource::new(state)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "50%");
@@ -969,7 +972,10 @@ fn audio_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
 fn audio_legacy_preview_remains_unchanged() -> Result<()> {
     let initial = BTreeMap::from([
         ("panel.open".into(), Value::Bool(true)),
-        ("bead.desktop.audio.device".into(), Value::Text("Speakers".into())),
+        (
+            "bead.desktop.audio.device".into(),
+            Value::Text("Speakers".into()),
+        ),
         ("bead.desktop.audio.label".into(), Value::Text("50%".into())),
         ("bead.desktop.audio.percent".into(), Value::Number(50.)),
         ("bead.desktop.audio".into(), Value::Text("volume_up".into())),
@@ -979,11 +985,22 @@ fn audio_legacy_preview_remains_unchanged() -> Result<()> {
         Path::new("sound/main.luau"),
         &root().join("palette.json"),
         initial,
-        Config { width: 420, height: 320, scale: 1. },
+        Config {
+            width: 420,
+            height: 320,
+            scale: 1.,
+        },
     )?;
-    let actions = h.session.view_nodes().into_iter().filter_map(|node| node.action).collect::<Vec<_>>();
+    let actions = h
+        .session
+        .view_nodes()
+        .into_iter()
+        .filter_map(|node| node.action)
+        .collect::<Vec<_>>();
     assert!(actions.iter().any(|action| action == "services.audio"));
-    assert!(actions.iter().any(|action| action == "services.audio.volume"));
+    assert!(actions
+        .iter()
+        .any(|action| action == "services.audio.volume"));
     assert!(h.scene().primitives.iter().any(|primitive| matches!(primitive,
         bead::render::Primitive::Text { text, .. } if text == "Drag or use arrow keys to adjust volume"
     )));
@@ -1006,7 +1023,9 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         let _ = send.send(event);
     }));
     let event = receive.recv_timeout(std::time::Duration::from_secs(1))?;
-    let scene = runtime.stage(event)?.ok_or("unavailable Sound view did not render")?;
+    let scene = runtime
+        .stage(event)?
+        .ok_or("unavailable Sound view did not render")?;
     for expected in [
         "Sound output",
         "Output unavailable",
@@ -1014,27 +1033,51 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         "Mute state unknown",
         "Status data unavailable",
     ] {
-        assert!(scene.primitives.iter().any(|primitive| matches!(primitive,
-            bead::render::Primitive::Text { text, .. } if text == expected
-        )), "missing visible core Sound text: {expected}");
+        assert!(
+            scene.primitives.iter().any(|primitive| matches!(primitive,
+                bead::render::Primitive::Text { text, .. } if text == expected
+            )),
+            "missing visible core Sound text: {expected}"
+        );
     }
 
     let initial = BTreeMap::from([
         ("panel.open".into(), Value::Bool(true)),
         ("status.ready".into(), Value::Bool(false)),
-        ("status.device".into(), Value::Text("Output unavailable".into())),
-        ("status.primary".into(), Value::Text("Volume unknown".into())),
-        ("status.mute".into(), Value::Text("Mute state unknown".into())),
-        ("status.health".into(), Value::Text("Status data unavailable".into())),
+        (
+            "status.device".into(),
+            Value::Text("Output unavailable".into()),
+        ),
+        (
+            "status.primary".into(),
+            Value::Text("Volume unknown".into()),
+        ),
+        (
+            "status.mute".into(),
+            Value::Text("Mute state unknown".into()),
+        ),
+        (
+            "status.health".into(),
+            Value::Text("Status data unavailable".into()),
+        ),
     ]);
     let h = Harness::load(
         &root(),
         Path::new("sound/core.luau"),
         &root().join("palette.json"),
         initial,
-        Config { width: 420, height: 320, scale: 1. },
+        Config {
+            width: 420,
+            height: 320,
+            scale: 1.,
+        },
     )?;
-    let actions = h.session.view_nodes().into_iter().filter_map(|node| node.action).collect::<Vec<_>>();
+    let actions = h
+        .session
+        .view_nodes()
+        .into_iter()
+        .filter_map(|node| node.action)
+        .collect::<Vec<_>>();
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0], "close");
     Ok(())

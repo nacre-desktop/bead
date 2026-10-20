@@ -761,14 +761,33 @@ impl Status {
         let cached = self.last_good.borrow().clone();
         let mut display = cached.clone().unwrap_or_else(|| {
             BTreeMap::from([
-                ("status.primary".into(), Value::Text("Audio unavailable".into())),
-                ("status.device".into(), Value::Text("Output unavailable".into())),
-                ("status.mute".into(), Value::Text("Mute state unknown".into())),
+                (
+                    "status.primary".into(),
+                    Value::Text("Audio unavailable".into()),
+                ),
+                (
+                    "status.device".into(),
+                    Value::Text("Output unavailable".into()),
+                ),
+                (
+                    "status.mute".into(),
+                    Value::Text("Mute state unknown".into()),
+                ),
                 ("status.active".into(), Value::Bool(false)),
             ])
         });
         display.insert("status.ready".into(), Value::Bool(false));
-        display.insert("status.health".into(), Value::Text(if cached.is_some() { "Status stale" } else { "Status data unavailable" }.into()));
+        display.insert(
+            "status.health".into(),
+            Value::Text(
+                if cached.is_some() {
+                    "Status stale"
+                } else {
+                    "Status data unavailable"
+                }
+                .into(),
+            ),
+        );
         display.insert("status.heading".into(), Value::Text("Sound output".into()));
         display.insert("status.icon".into(), Value::Text("volume_up".into()));
         display.insert("status.kind".into(), Value::Text("audio".into()));
@@ -1004,14 +1023,25 @@ fn core_battery_values(
     display
 }
 fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
-    let node = state.default_output.as_ref()
+    let node = state
+        .default_output
+        .as_ref()
         .and_then(|id| state.nodes.items.get(id))
         .filter(|node| node.kind == AudioKind::Output);
     let Some(node) = node else {
         return BTreeMap::from([
-            ("status.primary".into(), Value::Text("Output unavailable".into())),
-            ("status.device".into(), Value::Text("Output unavailable".into())),
-            ("status.mute".into(), Value::Text("Mute state unknown".into())),
+            (
+                "status.primary".into(),
+                Value::Text("Output unavailable".into()),
+            ),
+            (
+                "status.device".into(),
+                Value::Text("Output unavailable".into()),
+            ),
+            (
+                "status.mute".into(),
+                Value::Text("Mute state unknown".into()),
+            ),
             ("status.active".into(), Value::Bool(false)),
         ]);
     };
@@ -1021,15 +1051,23 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
                 .perceptual_volume
                 .filter(|v| v.is_finite() && *v >= 0.0)
                 .and_then(audio_percent),
-            readback.muted.map(|m| if m { "Muted" } else { "Not muted" }.to_owned()),
+            readback
+                .muted
+                .map(|m| if m { "Muted" } else { "Not muted" }.to_owned()),
         )
     } else if node.ready {
         (
             audio_percent(node.volume.cbrt()),
             Some(if node.muted { "Muted" } else { "Not muted" }.to_owned()),
         )
-    } else { (None, None) };
-    let device = if node.name.trim().is_empty() { "Default output" } else { &node.name };
+    } else {
+        (None, None)
+    };
+    let device = if node.name.trim().is_empty() {
+        "Default output"
+    } else {
+        &node.name
+    };
     let active = muted.as_deref() == Some("Muted");
     BTreeMap::from([
         (
@@ -1037,11 +1075,18 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
             Value::Text(line(&volume.unwrap_or_else(|| "Volume unknown".into()), 24)),
         ),
         ("status.device".into(), Value::Text(line(device, 40))),
-        ("status.mute".into(), Value::Text(muted.unwrap_or_else(|| "Mute state unknown".into()))),
+        (
+            "status.mute".into(),
+            Value::Text(muted.unwrap_or_else(|| "Mute state unknown".into())),
+        ),
         ("status.active".into(), Value::Bool(active)),
     ])
 }
-fn core_audio_values(mut display: BTreeMap<String, Value>, ready: bool, health: &str) -> BTreeMap<String, Value> {
+fn core_audio_values(
+    mut display: BTreeMap<String, Value>,
+    ready: bool,
+    health: &str,
+) -> BTreeMap<String, Value> {
     display.insert("status.ready".into(), Value::Bool(ready));
     display.insert("status.health".into(), Value::Text(health.into()));
     display.insert("status.heading".into(), Value::Text("Sound output".into()));
