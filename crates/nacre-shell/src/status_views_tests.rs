@@ -1021,7 +1021,7 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
     for expected in [
         "Sound output",
         "Output unavailable",
-        "Volume unknown",
+        "Audio unavailable",
         "Mute state unknown",
         "Status data unavailable",
     ] {
@@ -1043,7 +1043,7 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         ),
         (
             "status.primary".into(),
-            Value::Text("Volume unknown".into()),
+            Value::Text("Audio unavailable".into()),
         ),
         (
             "status.mute".into(),
