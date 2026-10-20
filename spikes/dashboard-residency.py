@@ -47,6 +47,7 @@ def acceptance_config(environ):
     if opened_once_only not in ("0", "1"):
         raise ValueError(OPENED_ONCE_ONLY_ENV + " must be 0 or 1")
     return {"warmup_seconds": int(warmup), "batch_medians": batch_medians == "1",
+            "legacy": True,
             "opened_once_only": opened_once_only == "1"}
 
 
@@ -257,6 +258,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         print("DASHBOARD_RESIDENCY", label, total(row), flush=True)
         return row
 
+    legacy = acceptance["legacy"] if acceptance else os.environ.get("BEAD_DASHBOARD_RESIDENCY_LEGACY", "1") == "1"
     opened_once_only = bool(acceptance and acceptance["opened_once_only"])
     if opened_once_only:
         never = several = combined = None
@@ -265,7 +267,6 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         never = phase("never-opened", 0, 35)
         once = phase("opened-once", slots, 55)
         several = phase("opened-several", slots * 2, 75)
-        legacy = os.environ.get("BEAD_DASHBOARD_RESIDENCY_LEGACY", "1") == "1"
         combined = phase("combined-legacy", 6, 65, legacy=True) if legacy else several
     result = {"valid": True, "dashboard_enabled": enabled, "pages": pages, "page_slots": page_slots, "bar": bar,
               "never": never, "once": once, "several": several,
