@@ -994,8 +994,8 @@ fn audio_legacy_preview_remains_unchanged() -> Result<()> {
     let actions = h
         .session
         .view_nodes()
-        .into_iter()
-        .filter_map(|node| node.action.clone())
+        .iter()
+        .filter_map(|node| node.action.as_deref())
         .collect::<Vec<_>>();
     assert!(actions.iter().any(|action| action == "services.audio"));
     assert!(
@@ -1075,8 +1075,8 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
     let actions = h
         .session
         .view_nodes()
-        .into_iter()
-        .filter_map(|node| node.action.clone())
+        .iter()
+        .filter_map(|node| node.action.as_deref())
         .collect::<Vec<_>>();
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0], "close");
