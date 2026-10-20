@@ -995,7 +995,7 @@ fn audio_legacy_preview_remains_unchanged() -> Result<()> {
         .session
         .view_nodes()
         .into_iter()
-        .filter_map(|node| node.action)
+        .filter_map(|node| node.action.clone())
         .collect::<Vec<_>>();
     assert!(actions.iter().any(|action| action == "services.audio"));
     assert!(
@@ -1011,8 +1011,6 @@ fn audio_legacy_preview_remains_unchanged() -> Result<()> {
 
 #[test]
 fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
-    use bead::wayland::SceneSource;
-
     let palette_path = root().join("palette.json");
     let colors = bead::render::Palette::read(&palette_path)?;
     let spec = crate::popouts::core_sound(None, palette_path.clone(), colors, false)?;
@@ -1078,7 +1076,7 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         .session
         .view_nodes()
         .into_iter()
-        .filter_map(|node| node.action)
+        .filter_map(|node| node.action.clone())
         .collect::<Vec<_>>();
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0], "close");
