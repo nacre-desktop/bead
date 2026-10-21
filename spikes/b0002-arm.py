@@ -176,9 +176,19 @@ def invocation_retry_allowed(raw_dir: pathlib.Path, compositor: str) -> bool:
     if not safety_path.exists():
         return failure.get("stage") == "preflight"
     safety = json.loads(safety_path.read_text())
-    # A normal scope that completed with a nonzero command before the baseline
-    # is the invocation-error case; aborted scope setup is handled separately.
-    return safety.get("status") == "complete" and safety.get("capture_returncode") not in (None, 0)
+    # The command may finish with a nonzero code inside a still-valid held scope
+    # when the measured process rejects its invocation (for example an incorrect
+    # priority). Permit one retry only before the sampling marker, with readable
+    # held-scope OOM counters, zero OOM delta, and clean host swap-in.
+    oom_delta = safety.get("oom_delta")
+    swapin = failure.get("host_swapin_delta_bytes")
+    return (safety.get("status") in ("complete", "aborted")
+            and isinstance(safety.get("capture_returncode"), int)
+            and safety.get("capture_returncode") != 0
+            and safety.get("final_cgroup_read_while_scope_held") is True
+            and isinstance(oom_delta, dict)
+            and oom_delta.get("oom") == 0 and oom_delta.get("oom_kill") == 0
+            and isinstance(swapin, int) and swapin < MIB)
 
 
 def environmental_replacement_allowed(raw_dir: pathlib.Path, compositor: str, cause: str) -> bool:

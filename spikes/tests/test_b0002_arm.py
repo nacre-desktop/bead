@@ -71,6 +71,22 @@ class B0002ArmLauncherTests(unittest.TestCase):
             (measured / "opened-once-close-0.json").write_text("{}")
             self.assertFalse(arm.invocation_retry_allowed(root, "hyprland"))
 
+    def test_invocation_retry_accepts_pre_sampling_priority_error_with_intact_safety(self):
+        with tempfile.TemporaryDirectory(prefix="b0002-priority-retry-test-") as temp:
+            root = pathlib.Path(temp)
+            (root / "launcher-failure.json").write_text(json.dumps({
+                "stage": "capture", "sampling_started": False, "host_swapin_delta_bytes": 0,
+                "error": "capture exited 1 before baseline"}))
+            (root / "hyprland-capture-safety.json").write_text(json.dumps({
+                "status": "aborted", "capture_returncode": 1,
+                "final_cgroup_read_while_scope_held": True,
+                "oom_delta": {"oom": 0, "oom_kill": 0}}))
+            self.assertTrue(arm.invocation_retry_allowed(root, "hyprland"))
+            safety = json.loads((root / "hyprland-capture-safety.json").read_text())
+            safety["final_cgroup_read_while_scope_held"] = False
+            (root / "hyprland-capture-safety.json").write_text(json.dumps(safety))
+            self.assertFalse(arm.invocation_retry_allowed(root, "hyprland"))
+
     def test_product_result_cannot_use_environmental_replacement(self):
         with tempfile.TemporaryDirectory(prefix="b0002-product-retry-test-") as temp:
             root = pathlib.Path(temp)
