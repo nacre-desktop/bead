@@ -59,9 +59,12 @@ class B0002ArmLauncherTests(unittest.TestCase):
     def test_invocation_retry_rejects_baseline_and_mid_phase_samples(self):
         with tempfile.TemporaryDirectory(prefix="b0002-retry-test-") as temp:
             root = pathlib.Path(temp)
-            (root / "launcher-failure.json").write_text(json.dumps({"stage": "capture", "sampling_started": False}))
+            (root / "launcher-failure.json").write_text(json.dumps({
+                "stage": "capture", "sampling_started": False, "host_swapin_delta_bytes": 0}))
             (root / "hyprland-capture-safety.json").write_text(json.dumps({
-                "status": "complete", "capture_returncode": 1}))
+                "status": "complete", "capture_returncode": 1,
+                "final_cgroup_read_while_scope_held": True,
+                "oom_delta": {"oom": 0, "oom_kill": 0}}))
             self.assertTrue(arm.invocation_retry_allowed(root, "hyprland"))
             measured = root / "hyprland"
             measured.mkdir()
