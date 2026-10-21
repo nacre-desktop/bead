@@ -457,14 +457,22 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
         watchdog_ready_file = temporary / "watchdog-ready.json"
         heartbeat_file = temporary / "watchdog-heartbeat.json"
         release_file = temporary / "release"
+        finished_file = temporary / "finished.json"
+        finish_release_file = temporary / "finish-release"
         armed_file = temporary / "armed"
         stop_file = temporary / "stop"
         events_file = temporary / "watchdog.jsonl"
         child_command = [*command, "--capture-guard-child",
                          "--capture-guard-ready-file", str(ready_file),
                          "--capture-guard-release-file", str(release_file)]
+        scope_runner_command = [
+            sys.executable, str(pathlib.Path(__file__).resolve()), "--scope-runner",
+            "--ready-file", str(ready_file), "--release-file", str(release_file),
+            "--finished-file", str(finished_file),
+            "--finish-release-file", str(finish_release_file), "--", *child_command,
+        ]
         try:
-            invocation = scope_command(scope_name, child_command, memory_max)
+            invocation = scope_command(scope_name, scope_runner_command, memory_max)
             scope_process = popen(invocation, env=env)
             scope_owned = True
             # The inner harness waits before creating a bus, compositor or UI.
@@ -525,12 +533,43 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
                 sleeper=sleeper, monotonic=monotonic, pre_release_check=verify_before_release)
             report.update(release_result)
 
-            while scope_process.poll() is None:
+            while not finished_file.exists():
+                if scope_process.poll() is not None:
+                    raise CaptureSafetyError("capture scope exited before its completion marker")
                 if watchdog.poll() is not None:
                     stop_owned_scope(scope_name, run)
                     raise CaptureSafetyError("memory watchdog exited before capture completed")
                 check_heartbeat(heartbeat_file, monotonic())
                 sleeper(0.25)
+
+            if scope_process.poll() is not None:
+                raise CaptureSafetyError("capture scope exited before final memory verification")
+            finished = json.loads(finished_file.read_text())
+            capture_returncode = finished.get("returncode")
+            if isinstance(capture_returncode, bool) or not isinstance(capture_returncode, int):
+                raise CaptureSafetyError("capture completion marker has an invalid return code")
+            report["capture_returncode"] = capture_returncode
+
+            # The scope runner stays alive after the measured command completes.
+            # Recheck its identity and containment, then read OOM counters while
+            # systemd still exposes the scope's cgroup files.
+            final_verification = verify_scope_and_held_child(
+                scope_name, memory_max, control_group, child_pid, child_start_ticks, child_group, run)
+            report["final_scope_verification"] = {
+                key: value for key, value in final_verification.items() if key != "cgroup"
+            }
+            if scope_process.poll() is not None:
+                raise CaptureSafetyError("capture scope exited before final OOM verification")
+            final_cgroup = cgroup_memory_snapshot(control_group)
+            final_oom = parse_oom_counters(final_cgroup)
+            report["final_cgroup_read_while_scope_held"] = True
+            report["cgroup_final_or_last_available"] = final_cgroup
+            report["oom_final_or_last_available"] = final_oom
+            if final_oom is None:
+                raise CaptureSafetyError("cgroup OOM counters unavailable while capture scope was held")
+            report["oom_delta"] = oom_counter_delta(initial_cgroup, final_cgroup, reject_increase=False)
+            if any(value > 0 for value in report["oom_delta"].values()):
+                raise CaptureSafetyError(f"cgroup OOM counter increased: {report['oom_delta']}")
 
             stop_file.touch()
             watchdog_code = watchdog.wait(timeout=5)
@@ -539,49 +578,31 @@ def run_guarded(command, *, report_path, env=None, memory_reader=read_memavailab
             available_samples = [row["available_kib"] for row in events if row.get("kind") == "memory"]
             report["minimum_memavailable_kib"] = min(available_samples, default=available_at_start)
             report["watchdog_samples"] = len(available_samples)
-            final_cgroup = cgroup_memory_snapshot(control_group)
-            final_oom = parse_oom_counters(final_cgroup)
-            final_source = "final"
-            if final_oom is None:
-                for event in reversed(events):
-                    sample = event.get("cgroup") if event.get("kind") == "memory" else None
-                    if isinstance(sample, dict):
-                        counters = parse_oom_counters(sample)
-                        if counters is not None:
-                            final_cgroup, final_oom = sample, counters
-                            final_source = "watchdog-last-available"
-                            break
-            if final_oom is None:
-                final_source = "unavailable"
-            report["cgroup_final_or_last_available"] = final_cgroup
-            report["oom_final_or_last_available"] = final_oom
-            report["oom_final_source"] = final_source
-            if final_oom is None:
-                raise CaptureSafetyError("cgroup oom counters unavailable at capture completion")
-            report["oom_delta"] = oom_counter_delta(initial_cgroup, final_cgroup, reject_increase=False)
-            if any(value > 0 for value in report["oom_delta"].values()):
-                raise CaptureSafetyError(f"cgroup OOM counter increased: {report['oom_delta']}")
             if any(row.get("kind") == "abort" for row in events) or watchdog_code != 0:
                 raise CaptureSafetyError("watchdog invalidated the capture")
-            if scope_process.returncode != 0:
+
+            finish_release_file.touch()
+            scope_returncode = scope_process.wait(timeout=15)
+            report["scope_runner_returncode"] = scope_returncode
+            if capture_returncode != 0 or scope_returncode != capture_returncode:
                 report["status"] = "scope-command-failed"
-                raise CaptureSafetyError(f"capture scope exited {scope_process.returncode}")
+                raise CaptureSafetyError(
+                    f"capture command returned {capture_returncode}; scope runner returned {scope_returncode}")
             report["status"] = "complete"
-            return scope_process.returncode
+            return scope_returncode
         except BaseException as error:
             report["status"] = "aborted"
             report["reason"] = str(error)
-            if scope_owned:
+            if scope_owned and scope_process is not None and scope_process.poll() is None:
                 try:
                     stop_owned_scope(scope_name, run)
-                    if scope_process is not None and scope_process.poll() is None:
-                        try:
-                            scope_process.wait(timeout=10)
-                        except subprocess.TimeoutExpired:
-                            # This is the exact systemd-run child started above;
-                            # the cgroup stop was already requested by unit ID.
-                            scope_process.terminate()
-                            scope_process.wait(timeout=5)
+                    try:
+                        scope_process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        # This is the exact systemd-run child started above;
+                        # the cgroup stop was already requested by unit ID.
+                        scope_process.terminate()
+                        scope_process.wait(timeout=5)
                 except Exception as stop_error:
                     report["cleanup_error"] = str(stop_error)
             raise
@@ -630,5 +651,36 @@ def wait_for_release(ready_file, release_file, timeout=CHILD_GATE_TIMEOUT_SECOND
     raise CaptureSafetyError("scope verification gate timed out; no capture was started")
 
 
-if __name__ == "__main__" and "--watchdog" in sys.argv:
-    raise SystemExit(watchdog_process_main(sys.argv[1:]))
+def scope_runner_process_main(argv):
+    """Keep the measured scope alive until its final memory check is recorded."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scope-runner", action="store_true")
+    parser.add_argument("--ready-file", required=True)
+    parser.add_argument("--release-file", required=True)
+    parser.add_argument("--finished-file", required=True)
+    parser.add_argument("--finish-release-file", required=True)
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args(argv)
+    command = args.command[1:] if args.command and args.command[0] == "--" else args.command
+    if not command:
+        raise CaptureSafetyError("scope runner requires a capture command")
+
+    wait_for_release(args.ready_file, args.release_file)
+    try:
+        returncode = subprocess.call(command, env=os.environ.copy())
+        result = {"returncode": returncode}
+    except Exception as error:
+        returncode = 127
+        result = {"returncode": returncode, "error": str(error)}
+    write_json_atomic(args.finished_file, result)
+    finish_release = pathlib.Path(args.finish_release_file)
+    while not finish_release.exists():
+        time.sleep(0.05)
+    return returncode
+
+
+if __name__ == "__main__":
+    if "--watchdog" in sys.argv:
+        raise SystemExit(watchdog_process_main(sys.argv[1:]))
+    if "--scope-runner" in sys.argv:
+        raise SystemExit(scope_runner_process_main(sys.argv[1:]))

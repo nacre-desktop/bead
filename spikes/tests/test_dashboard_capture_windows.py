@@ -414,7 +414,7 @@ class CaptureSafetyTests(unittest.TestCase):
                         child_group="/scope", watchdog_starts=None, child_start_ticks=456,
                         manager_readbacks=None, start_ticks_readbacks=None, group_readbacks=None,
                         cgroup_pids=None, events=None,
-                        release_observations=None):
+                        release_observations=None, scope_read_states=None):
         env = {} if env is None else env
         cgroup_pids = {321} if cgroup_pids is None else cgroup_pids
         baseline_peak = (capture_safety.parse_baseline_peak_bytes(env[capture_safety.BASELINE_SCOPE_PEAK_ENV])
@@ -427,21 +427,35 @@ class CaptureSafetyTests(unittest.TestCase):
         remaining_snapshots = list(cgroup_snapshots)
 
         def next_cgroup_snapshot(_control_group):
+            scope_alive = scope.finish_release_file is None or not scope.finish_release_file.exists()
+            if scope_read_states is not None:
+                scope_read_states.append(scope_alive)
+            if events is not None:
+                events.append("cgroup-read-while-scope-live" if scope_alive else "cgroup-read-after-scope-exit")
+            if not scope_alive:
+                return {"memory.events": "unavailable: scope removed"}
             if len(remaining_snapshots) > 1:
                 return remaining_snapshots.pop(0)
             return remaining_snapshots[0]
         class FakeScope:
             def __init__(self):
-                self.poll_values = list(scope_poll_values or [None, 0])
+                self.poll_values = list(scope_poll_values or [])
                 self.returncode = None
+                self.finish_release_file = None
 
             def poll(self):
-                value = self.poll_values.pop(0) if self.poll_values else self.returncode
-                self.returncode = value
-                return value
+                if self.poll_values:
+                    value = self.poll_values.pop(0)
+                    if value is not None:
+                        self.returncode = value
+                if (self.returncode is None and self.finish_release_file is not None
+                        and self.finish_release_file.exists()):
+                    self.returncode = 0
+                return self.returncode
 
             def wait(self, timeout=None):
                 self.returncode = 0
+                record("scope-released")
                 return 0
 
             def terminate(self):
@@ -475,7 +489,13 @@ class CaptureSafetyTests(unittest.TestCase):
         def fake_popen(command, **kwargs):
             if command[0] == "systemd-run":
                 record("child-started-and-held")
-                ready = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
+                ready = pathlib.Path(command[command.index("--ready-file") + 1])
+                release = pathlib.Path(command[command.index("--release-file") + 1])
+                finished = pathlib.Path(command[command.index("--finished-file") + 1])
+                scope.finish_release_file = pathlib.Path(
+                    command[command.index("--finish-release-file") + 1])
+                scope.finished_file = finished
+                scope.release_file = release
                 ready.write_text(json.dumps({"pid": 321, "start_ticks": child_start_ticks,
                                              "cgroup": child_group}))
                 return scope
@@ -543,6 +563,8 @@ class CaptureSafetyTests(unittest.TestCase):
             if release_observations is not None:
                 release_observations.append(marker_exists)
             record(f"release-marker:{marker_exists}")
+            pathlib.Path(scope.finished_file).write_text(json.dumps({"returncode": 0}) + "\n")
+            record("capture-finished-scope-held")
             return result
 
         with (mock.patch.object(capture_safety, "cgroup_memory_snapshot", side_effect=next_cgroup_snapshot),
@@ -653,6 +675,46 @@ class CaptureSafetyTests(unittest.TestCase):
         for prop in ("MemoryMax", "MemorySwapMax", "ControlGroup"):
             reads = [index for index, item in enumerate(events[:marker]) if item == f"manager-read:{prop}"]
             self.assertGreaterEqual(len(reads), 3, prop)
+
+    def test_final_oom_read_is_held_before_teardown_and_reproduces_old_race(self):
+        # Old ordering: systemd --collect removes the cgroup before the final
+        # memory.events read, so the required OOM counters become unavailable.
+        old_snapshot = {"memory.events": "unavailable: cgroup removed"}
+        self.assertIsNone(capture_safety.parse_oom_counters(old_snapshot))
+        with self.assertRaisesRegex(capture_safety.CaptureSafetyError, "unavailable after teardown"):
+            if capture_safety.parse_oom_counters(old_snapshot) is None:
+                raise capture_safety.CaptureSafetyError("cgroup OOM counters unavailable after teardown")
+
+        stable = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+        events, scope_reads = [], []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, _commands, report = self._run_mock_guard(
+                temporary, [stable], lambda: 100.0, events=events,
+                scope_read_states=scope_reads)
+        self.assertIsNone(error)
+        self.assertEqual(result, 0)
+        self.assertTrue(report["final_cgroup_read_while_scope_held"])
+        self.assertEqual(report["oom_delta"], {"oom": 0, "oom_kill": 0})
+        self.assertTrue(scope_reads)
+        self.assertTrue(all(scope_reads))
+        final_live_read = max(index for index, event in enumerate(events)
+                              if event == "cgroup-read-while-scope-live")
+        self.assertLess(final_live_read, events.index("scope-released"))
+
+    def test_final_missing_oom_counters_while_scope_held_still_invalidates(self):
+        stable = {"memory.events": "low 0\noom 0\noom_kill 0\n", "memory.peak": "4096"}
+        unavailable = {"memory.events": "unavailable: simulated read failure", "memory.peak": "4096"}
+        scope_reads = []
+        with tempfile.TemporaryDirectory() as temporary:
+            result, error, _commands, report = self._run_mock_guard(
+                temporary, [stable, stable, stable, unavailable], lambda: 100.0,
+                scope_read_states=scope_reads)
+        self.assertIsNone(result)
+        self.assertIsInstance(error, capture_safety.CaptureSafetyError)
+        self.assertIn("unavailable while capture scope was held", str(error))
+        self.assertTrue(report["final_cgroup_read_while_scope_held"])
+        self.assertEqual(report["status"], "aborted")
+        self.assertTrue(all(scope_reads))
 
     def test_guard_rejects_manager_readback_mismatch_before_watchdog(self):
         stable = {"memory.events": "oom 0\noom_kill 0\n", "memory.peak": "4096"}
@@ -906,10 +968,12 @@ class CaptureSafetyTests(unittest.TestCase):
             def __init__(self, returncode=None):
                 self.returncode = returncode
                 self.poll_count = 0
+                self.finish_release_file = None
 
             def poll(self):
                 self.poll_count += 1
-                if self.returncode is None and self.poll_count > 1:
+                if (self.returncode is None and self.finish_release_file is not None
+                        and self.finish_release_file.exists()):
                     self.returncode = 0
                 return self.returncode
 
@@ -933,8 +997,12 @@ class CaptureSafetyTests(unittest.TestCase):
             def fake_popen(command, **kwargs):
                 popen_calls.append(command)
                 if command[0] == "systemd-run":
-                    ready_path = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
+                    ready_path = pathlib.Path(command[command.index("--ready-file") + 1])
                     ready_path.write_text(json.dumps({"pid": 321, "start_ticks": 456, "cgroup": "/scope"}))
+                    pathlib.Path(command[command.index("--finished-file") + 1]).write_text(
+                        json.dumps({"returncode": 0}))
+                    scope.finish_release_file = pathlib.Path(
+                        command[command.index("--finish-release-file") + 1])
                     return scope
                 watchdog_ready = pathlib.Path(command[command.index("--ready-file") + 1])
                 heartbeat = pathlib.Path(command[command.index("--heartbeat-file") + 1])
@@ -970,6 +1038,7 @@ class CaptureSafetyTests(unittest.TestCase):
             self.assertEqual(report["effective_memory_swap_max"], "0")
             self.assertEqual(report["child_cgroup"], "/scope")
             self.assertEqual(report["oom_delta"], {"oom": 0, "oom_kill": 0})
+            self.assertTrue(report["final_cgroup_read_while_scope_held"])
 
     def test_interrupt_stops_the_scope_before_disarming_watchdog(self):
         class RunningProcess:
@@ -988,7 +1057,7 @@ class CaptureSafetyTests(unittest.TestCase):
 
             def fake_popen(command, **kwargs):
                 if command[0] == "systemd-run":
-                    ready_path = pathlib.Path(command[command.index("--capture-guard-ready-file") + 1])
+                    ready_path = pathlib.Path(command[command.index("--ready-file") + 1])
                     ready_path.write_text(json.dumps({"pid": 321, "start_ticks": 456, "cgroup": "/scope"}))
                     return scope
                 pathlib.Path(command[command.index("--ready-file") + 1]).write_text(
