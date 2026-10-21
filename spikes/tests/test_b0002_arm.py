@@ -109,6 +109,23 @@ class B0002ArmLauncherTests(unittest.TestCase):
             self.assertEqual(arm.latest_failed_attempt(comp_dir, "A1"), retry)
             self.assertFalse(arm.environmental_replacement_allowed(retry, "hyprland", "scope-setup"))
 
+    def test_previous_label_skips_invalidated_original_when_replacement_is_valid(self):
+        with tempfile.TemporaryDirectory(prefix="b0002-previous-replacement-test-") as temp:
+            comp_dir = pathlib.Path(temp) / "niri"
+            original = comp_dir / "B2"
+            replacement = comp_dir / "B2-replacement1"
+            for folder in (original, replacement):
+                measured = folder / "niri"
+                measured.mkdir(parents=True)
+                (folder / "niri-capture-safety.json").write_text(json.dumps({
+                    "status": "complete", "capture_returncode": 0, "scope_runner_returncode": 0}))
+                residency = {key: {"seconds": 60} for key in arm.PHASES}
+                residency.update({"valid": True, "batch_medians": True, "opened_once_only": False})
+                (measured / "dashboard-residency.json").write_text(json.dumps(residency))
+            (original / "launcher-failure.json").write_text(json.dumps({
+                "stage": "capture", "host_swapin_delta_bytes": 2367488}))
+            self.assertEqual(arm.verify_previous(comp_dir, "A3", "B2"), str(replacement))
+
     def test_dry_run_records_resolved_environment_argv_and_hashes_without_sampling(self):
         with tempfile.TemporaryDirectory(prefix="b0002-launcher-test-") as temp:
             root = pathlib.Path(temp)

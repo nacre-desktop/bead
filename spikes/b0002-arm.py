@@ -124,6 +124,8 @@ def verify_previous(raw_comp_dir: pathlib.Path, label: str, previous: str) -> st
                   raw_comp_dir / f"{previous}-invocation-retry1",
                   raw_comp_dir / f"{previous}-replacement1")
     for prior in candidates:
+        if (prior / "launcher-failure.json").is_file():
+            continue
         safety_path = prior / f"{raw_comp_dir.name}-capture-safety.json"
         residency_path = prior / raw_comp_dir.name / "dashboard-residency.json"
         if not safety_path.is_file() or not residency_path.is_file():
