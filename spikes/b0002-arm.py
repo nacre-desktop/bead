@@ -29,6 +29,8 @@ LABELS = [f"{side}{pair}" for pair in range(1, 6) for side in "AB"]
 PHASES = ("never", "once", "several", "combined")
 MIB = 1024 * 1024
 SWAP_SIZE_BYTES = 32_972_468_224
+# Host-gate parameters (set from arguments; defaults keep the original behaviour).
+HOST_GATES = {"max_load": None, "forbid_nacre_lead": False, "opened_once_only": False}
 CAPTURE_CONFIG = {
     "BEAD_RESEARCH_TOOLS": str(pathlib.Path.home() / "Projects/bead/.tools"),
     "CARGO_TARGET_DIR": str(UI_WORKTREE / "target"),
@@ -49,6 +51,15 @@ CAPTURE_CONFIG = {
     "BEAD_DASHBOARD_BATCH_MEDIANS": "1",
     "BEAD_DASHBOARD_WARMUP_SECONDS": "600",
 }
+
+
+def residency_valid(residency: dict) -> bool:
+    """Full-batch mode needs all four phases; opened-once-only mode needs only 'once'."""
+    if not residency.get("valid") or not residency.get("batch_medians"):
+        return False
+    if HOST_GATES["opened_once_only"]:
+        return bool(residency.get("opened_once_only")) and bool(residency.get("once"))
+    return not residency.get("opened_once_only") and all(residency.get(key) for key in PHASES)
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -90,6 +101,8 @@ def inherited_capture_environment(base: dict[str, str], side: str, compositor: s
     env["BEAD_HARDENING_BINARY"] = str(CONTROL if side == "A" else FIXED)
     env["BEAD_MENU_ENGINE_BINARY"] = str(HELPER)
     env.pop("BEAD_DASHBOARD_OPENED_ONCE_ONLY", None)
+    if HOST_GATES["opened_once_only"]:
+        env["BEAD_DASHBOARD_OPENED_ONCE_ONLY"] = "1"
     if compositor == "niri":
         env["BEAD_BAR_MATRIX"] = "1"
     else:
@@ -135,9 +148,7 @@ def verify_previous(raw_comp_dir: pathlib.Path, label: str, previous: str) -> st
         residency = json.loads(residency_path.read_text())
         if safety.get("status") != "complete" or safety.get("capture_returncode") != 0 or safety.get("scope_runner_returncode") != 0:
             continue
-        if not residency.get("valid") or not residency.get("batch_medians") or residency.get("opened_once_only"):
-            continue
-        if any(not residency.get(key) for key in PHASES):
+        if not residency_valid(residency):
             continue
         return str(prior)
     raise RuntimeError(f"no valid completed evidence found for previous arm {previous}")
@@ -200,9 +211,7 @@ def latest_failed_attempt(raw_comp_dir: pathlib.Path, label: str) -> pathlib.Pat
             safety = json.loads(safety_path.read_text())
             residency = json.loads(residency_path.read_text())
             if (safety.get("status") == "complete" and safety.get("capture_returncode") == 0
-                    and safety.get("scope_runner_returncode") == 0 and residency.get("valid")
-                    and residency.get("batch_medians") and not residency.get("opened_once_only")
-                    and all(residency.get(phase) for phase in PHASES)):
+                    and safety.get("scope_runner_returncode") == 0 and residency_valid(residency)):
                 return candidate
         if (candidate / "launcher-failure.json").is_file():
             return candidate
@@ -232,6 +241,16 @@ def check_idle_host() -> None:
                             check=True, capture_output=True, text=True).stdout
     if "bead-capture" in scopes:
         raise RuntimeError("another bead capture scope is running")
+    if HOST_GATES["max_load"] is not None:
+        load1 = float(pathlib.Path("/proc/loadavg").read_text().split()[0])
+        if load1 >= HOST_GATES["max_load"]:
+            raise RuntimeError(f"1-minute load average {load1} is not below {HOST_GATES['max_load']}")
+    if HOST_GATES["forbid_nacre_lead"]:
+        found = subprocess.run(["pgrep", "-fa", "nacre-lead"], capture_output=True, text=True).stdout.splitlines()
+        # The shared lock holder (our own flock/tmux wrapper) legitimately mentions the lock path.
+        others = [line for line in found if "desktop-heavy.lock" not in line and "pgrep" not in line]
+        if others:
+            raise RuntimeError("other nacre-lead sessions are running: " + " | ".join(others)[:300])
 
 
 def memavailable_and_swap() -> tuple[int, int]:
@@ -281,7 +300,7 @@ def guarded_swap_reset(raw_dir: pathlib.Path) -> None:
 
 
 def main() -> int:
-    global CONTROL, FIXED, HELPER, EXPECTED_HASHES, CAPTURE_CONFIG
+    global CONTROL, FIXED, HELPER, EXPECTED_HASHES, CAPTURE_CONFIG, SWAP_SIZE_BYTES
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--side", choices=("A", "B"), required=True)
     parser.add_argument("--compositor", choices=("hyprland", "niri"), required=True)
@@ -304,9 +323,20 @@ def main() -> int:
     parser.add_argument("--environmental-replacement", choices=("scope-setup", "host-swap-in"),
                         help="use the single authorized cell replacement after an environmental failure")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--swap-size-bytes", type=int, default=SWAP_SIZE_BYTES,
+                        help="expected /dev/zram0 size after the reset")
+    parser.add_argument("--opened-once-only", action="store_true",
+                        help="diagnostic mode: BEAD_DASHBOARD_OPENED_ONCE_ONLY=1, only the opened-once phase")
+    parser.add_argument("--max-load", type=float, default=None,
+                        help="refuse to start an arm when the 1-minute load average is at or above this")
+    parser.add_argument("--forbid-nacre-lead", action="store_true",
+                        help="refuse to start an arm when other nacre-lead sessions are running")
     args = parser.parse_args()
     if args.label[0] != args.side:
         parser.error("--side must match the arm label")
+    SWAP_SIZE_BYTES = args.swap_size_bytes
+    HOST_GATES.update(max_load=args.max_load, forbid_nacre_lead=args.forbid_nacre_lead,
+                      opened_once_only=args.opened_once_only)
     CONTROL, FIXED, HELPER = args.control_binary, args.candidate_binary, args.helper_binary
     EXPECTED_HASHES = {"control": args.control_sha256, "candidate": args.candidate_sha256,
                        "helper": args.helper_sha256}
@@ -352,7 +382,8 @@ def main() -> int:
                                                        check=True, capture_output=True, text=True).stdout.strip(),
             "cwd": str(ROOT),
             "replacement_kind": "invocation" if args.invocation_retry else args.environmental_replacement,
-            "dry_run": args.dry_run,
+            "dry_run": args.dry_run, "opened_once_only": args.opened_once_only,
+            "swap_size_bytes": args.swap_size_bytes, "max_load": args.max_load,
         })
         save_json(raw_dir / "artifact-hashes.json", hashes)
         (raw_dir / "argv.json").write_text(json.dumps(argv, indent=2) + "\n")
@@ -382,10 +413,8 @@ def main() -> int:
         residency = json.loads((raw_dir / args.compositor / "dashboard-residency.json").read_text())
         if safety.get("status") != "complete" or safety.get("oom_delta", {}).get("oom", 1) or safety.get("oom_delta", {}).get("oom_kill", 1):
             raise RuntimeError("capture safety report is invalid")
-        if not residency.get("valid") or not residency.get("batch_medians") or residency.get("opened_once_only"):
-            raise RuntimeError("full-batch residency report is invalid")
-        if any(not residency.get(phase) for phase in PHASES):
-            raise RuntimeError("one or more expected full-batch phases are missing")
+        if not residency_valid(residency):
+            raise RuntimeError("residency report is invalid or lacks the expected phases for this mode")
         return 0
     except (OSError, RuntimeError, subprocess.CalledProcessError, KeyError, ValueError) as error:
         if raw_dir is not None and raw_dir.exists():

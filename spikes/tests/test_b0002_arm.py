@@ -130,6 +130,21 @@ class B0002ArmLauncherTests(unittest.TestCase):
                 "stage": "capture", "host_swapin_delta_bytes": 2367488}))
             self.assertEqual(arm.verify_previous(comp_dir, "A3", "B2"), str(replacement))
 
+    def test_opened_once_only_mode_validates_only_the_opened_once_phase(self):
+        full = {key: {"seconds": 60} for key in arm.PHASES}
+        full.update({"valid": True, "batch_medians": True, "opened_once_only": False})
+        once = {"valid": True, "batch_medians": True, "opened_once_only": True,
+                "once": {"seconds": 60}, "never": None, "several": None, "combined": None}
+        with mock.patch.dict(arm.HOST_GATES, {"opened_once_only": False}):
+            self.assertTrue(arm.residency_valid(full))
+            self.assertFalse(arm.residency_valid(once))
+        with mock.patch.dict(arm.HOST_GATES, {"opened_once_only": True}):
+            self.assertFalse(arm.residency_valid(full))
+            self.assertTrue(arm.residency_valid(once))
+            env = arm.inherited_capture_environment(
+                {"PATH": os.environ["PATH"], "XDG_RUNTIME_DIR": "/tmp/r"}, "A", "hyprland", pathlib.Path("/tmp/raw"))
+            self.assertEqual(env["BEAD_DASHBOARD_OPENED_ONCE_ONLY"], "1")
+
     def test_dry_run_records_resolved_environment_argv_and_hashes_without_sampling(self):
         with tempfile.TemporaryDirectory(prefix="b0002-launcher-test-") as temp:
             root = pathlib.Path(temp)
