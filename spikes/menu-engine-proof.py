@@ -32,6 +32,23 @@ def stable_process_memory_snapshot(process_ids, memory_reader, attempts=5):
     raise RuntimeError(f'no stable process memory snapshot after {attempts} attempts')
 
 
+def active_process_ids(client_pid, daemon_pid, descendant_ids, state_reader):
+    """Exclude exited/zombie helpers and return their IDs separately."""
+    active = {client_pid, daemon_pid}
+    exited = set()
+    for pid in descendant_ids:
+        try:
+            state = state_reader(pid)
+        except (FileNotFoundError, ProcessLookupError):
+            exited.add(pid)
+            continue
+        if state == 'Z':
+            exited.add(pid)
+        else:
+            active.add(pid)
+    return active, exited
+
+
 def presented_catalog(text, count):
     ready = re.search(r'MENU_RESULT ok=true catalog_rev=[1-9]\d* count=' + str(count) + r'\b', text)
     if not ready:
@@ -235,11 +252,16 @@ def sample(env, raw, compositor, stop):
                     idle_memory_screen = []
                     screen_start = time.monotonic()
                     previous_worker_ids = set()
+                    exited_worker_ids = set()
                     for second in range(61):
                         def live_processes():
                             assert client.poll() is None, 'UI exited during idle screen'
                             assert daemon.poll() is None, 'private daemon exited during idle screen'
-                            return {client.pid, daemon.pid, *clocks.descendants(daemon)}
+                            active, exited = active_process_ids(
+                                client.pid, daemon.pid, clocks.descendants(daemon),
+                                lambda pid: pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0])
+                            exited_worker_ids.update(exited - {client.pid, daemon.pid})
+                            return active
 
                         snapshot = stable_process_memory_snapshot(live_processes, matrix.measure.memory)
                         live = snapshot['memory']
@@ -249,9 +271,11 @@ def sample(env, raw, compositor, stop):
                                   'ui': live[client.pid], 'daemon': live[daemon.pid],
                                   'workers': [{'pid': pid, **live[pid]} for pid in worker_ids],
                                   'worker_count': len(worker_ids),
-                                  'workers_exited_since_previous_sample': sorted(previous_worker_ids - worker_id_set),
+                                  'workers_exited_since_previous_sample': sorted(
+                                      (previous_worker_ids - worker_id_set) | exited_worker_ids),
                                   'observation_retries': snapshot['observation_retries']}
                         previous_worker_ids = worker_id_set
+                        exited_worker_ids.clear()
                         sample['swap_pss_mib'] = (sample['ui']['swap_pss_mib'] +
                             sample['daemon']['swap_pss_mib'] + sum(p['swap_pss_mib'] for p in sample['workers']))
                         idle_memory_screen.append(sample)

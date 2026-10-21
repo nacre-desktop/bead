@@ -16,6 +16,18 @@ PROOF_SPEC.loader.exec_module(proof)
 
 
 class B0003ArmTests(unittest.TestCase):
+    def test_idle_snapshot_excludes_zombies_and_records_missing_workers(self):
+        states = {3: "R", 4: "Z"}
+
+        def read_state(pid):
+            if pid not in states:
+                raise ProcessLookupError(pid, "exited")
+            return states[pid]
+
+        active, exited = proof.active_process_ids(1, 2, {3, 4, 5}, read_state)
+        self.assertEqual(active, {1, 2, 3})
+        self.assertEqual(exited, {4, 5})
+
     def test_idle_memory_snapshot_retries_a_worker_that_exits_mid_read(self):
         process_sets = iter(({1, 2, 3}, {1, 2}, {1, 2}))
 
