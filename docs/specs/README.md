@@ -81,6 +81,18 @@ with the batch result.
   B = `306474f0`, both compositors). It starts when the desktop heavy slot is
   free.
 
+### Owner rule change — relative memory gate on non-reference hosts — 2026-10-21
+
+Owner decision (2026-10-21 evening): on hosts other than the reference machine
+(the laptop), Bead memory gates are judged RELATIVE to the frozen control
+measured on the same host in the same batch. PASS if candidate − control is
+≤ +0.5 MiB (median) in every phase, with no unexplained anonymous growth > 1 MiB.
+The desktop's absolute level (~26.5 MiB on niri) is recorded as a host baseline
+and is not a stop condition. The absolute 25 MiB ceiling / 27 MiB one-time cap
+(stop 26.5) applies on the laptop as the reference machine. This supersedes the
+absolute-cap check for the B2 desktop niri half and re-confirms the Hyprland
+result (all candidate − control medians ≤ +0.22 MiB).
+
 ### B2 Hyprland desktop result and spec-agent allowance decision — 2026-10-21
 
 Desktop (`siverteh-desktop`) Hyprland: 10/10 valid arms. A is the frozen
