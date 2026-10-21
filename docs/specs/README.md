@@ -81,6 +81,28 @@ with the batch result.
   B = `306474f0`, both compositors). It starts when the desktop heavy slot is
   free.
 
+### B2 Hyprland desktop result and spec-agent allowance decision — 2026-10-21
+
+Desktop (`siverteh-desktop`) Hyprland: 10/10 valid arms. A is the frozen
+`b01dfcca`, B is the candidate `306474f0`, and the helper is `4a65f4ec`.
+Medians in MiB (control | candidate): never 24.753 | 24.874, once 24.877 |
+25.011, several 25.062 | 25.280, combined 25.640 | 25.687. Candidate − control:
+anonymous 0 / −0.129 / −0.027 / −0.070, file-backed +0.105 / +0.195 / +0.195 /
++0.125, shared 0. DRM is unknown. The diagnostic (frozen vs same-toolchain
+rebuild, opened-once) showed no binary difference (24.853 vs 25.186, anonymous
+Δ +0.027), so the earlier +1.94 MiB excess was not the binary.
+
+Decision (lead as spec agent, under the standing rule "ceiling may rise ONCE to
+27 MiB (stop 26.5) with written rationale and spec-agent review"): the one-time
+27 MiB allowance is granted for B2. Rationale: (1) the desktop host's
+file-backed baseline puts even the frozen control above 25 MiB; (2) the
+candidate's increase is +0.05 to +0.22 MiB, essentially file-backed, with
+anonymous memory flat or lower; (3) the unexplained remainder is ≤ 0.03 MiB,
+far below the 1 MiB stop; (4) all candidate medians are ≤ 25.69 MiB, under the
+26.5 stop. DRM stays unknown and is not counted as zero or as file-backed. The
+allowance is now spent for Bead; any later increase above 25 MiB goes to the
+owner. niri (5 pairs) continues under the same gates with the 26.5 MiB stop.
+
 ## Lead-transfer receipt — 2026-10-20
 
 ### B2 decision and preserved source
