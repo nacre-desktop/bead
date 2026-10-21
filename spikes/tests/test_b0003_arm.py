@@ -76,6 +76,24 @@ class B0003ArmTests(unittest.TestCase):
             'current_mode': 0, 'logical': {'width': 1920, 'height': 1200, 'scale': 1.5}}))
         self.assertFalse(arm.geometry_valid('niri', {'modes': [], 'logical': {}}))
 
+    def test_trace_validator_ignores_unrelated_presentations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = pathlib.Path(tmp) / "engine-typing.log"
+            lines = [
+                "MENU_RESULT ok=true catalog_rev=8 count=160",
+                "UI_COMMIT generation=1 update=1 source_error=false",
+                "INPUT_PROFILE stage=markup_eval wall_ms=1 cpu_ms=0.8",
+            ]
+            lines.extend(f"INPUT_RECEIVED monotonic_ns={i + 1} cpu_ns={i + 1}" for i in range(200))
+            lines.extend(f"UI_PRESENTED generation={i} update={i} cpu_ns={i}" for i in range(203))
+            trace.write_text("\n".join(lines) + "\n")
+            valid, _ = arm.trace_valid(trace, "1")
+            self.assertTrue(valid)
+            trace.write_text("\n".join(lines[1:]) + "\n")
+            valid, reason = arm.trace_valid(trace, "1")
+            self.assertFalse(valid)
+            self.assertIn("received keys", reason)
+
     def test_invocation_and_profile_differ_only_by_profile_flag(self):
         hypr = arm.capture_argv("hyprland")
         niri = arm.capture_argv("niri")

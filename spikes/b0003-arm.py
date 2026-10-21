@@ -197,12 +197,20 @@ def pswpin_pages() -> int:
 
 def trace_valid(path: pathlib.Path, expected_profile: str) -> tuple[bool, str]:
     text = path.read_text(errors="replace")
-    keys = re.findall(r"UI_PRESENTED .*update=(\d+).*", text)
-    if len(keys) != 200:
-        return False, f"expected 200 presented keys, found {len(keys)}"
+    inputs = re.findall(r"INPUT_RECEIVED monotonic_ns=\d+ cpu_ns=\d+", text)
+    presentations = re.findall(r"UI_PRESENTED .*update=(\d+).*", text)
+    if len(inputs) != 200:
+        return False, f"expected 200 received keys, found {len(inputs)}"
+    if len(presentations) < 200:
+        return False, f"expected at least 200 presentations, found {len(presentations)}"
     if "MENU_RESULT ok=true catalog_rev=" not in text or "UI_COMMIT generation=" not in text:
         return False, "missing menu result or commit trace"
-    return True, "200 presented keys with menu/commit trace"
+    profile_lines = re.findall(r"INPUT_PROFILE stage=", text)
+    if expected_profile == "clocks" and profile_lines:
+        return False, "clock-only trace unexpectedly emitted stage profiles"
+    if expected_profile == "1" and not profile_lines:
+        return False, "stage-enabled trace emitted no stage profiles"
+    return True, f"200 received keys, {len(presentations)} presentations, menu/commit trace"
 
 
 def validate_arm(directory: pathlib.Path, compositor: str, profile: str) -> dict:
