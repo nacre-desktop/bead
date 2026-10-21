@@ -259,7 +259,8 @@ def check_idle_host() -> None:
     if HOST_GATES["forbid_nacre_lead"]:
         found = subprocess.run(["pgrep", "-fa", "nacre-lead"], capture_output=True, text=True).stdout.splitlines()
         # The shared lock holder (our own flock/tmux wrapper) legitimately mentions the lock path.
-        others = [line for line in found if "desktop-heavy.lock" not in line and "pgrep" not in line]
+        own = ("desktop-heavy.lock", "pgrep", "b0002-arm.py", "drivers/batch.py")
+        others = [line for line in found if not any(token in line for token in own)]
         if others:
             raise RuntimeError("other nacre-lead sessions are running: " + " | ".join(others)[:300])
 
