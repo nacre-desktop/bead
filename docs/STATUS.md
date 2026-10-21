@@ -1,5 +1,9 @@
 # Status
 
+## 2026-10-22 — B0002 desktop relative gate passed
+
+Desktop Hyprland and niri both passed the owner-relative gate. Candidate-minus-control medians were +0.121/+0.134/+0.219/+0.047 MiB for Hyprland and +0.237/+0.249/+0.229/−0.998 MiB for niri; anonymous deltas stayed below +1 MiB. DRM was unknown and excluded. Candidate 306474f0 / UI 7948c3c. B3 measured stage is unblocked when the lead grants the desktop heavy slot. See [the batch report](research/b0002-desktop-batch-20261021.md).
+
 ## 2026-10-20 — B0002 Hyprland capture stopped at combined-legacy
 
 A1 passed all four settled gates after a strict postcheck schema correction; its raw evidence is unchanged. B1 passed the first three settled phases but stopped at the required combined-legacy endpoint: 24.541992 MiB against the then-active24.5MiB single-run stop line. The endpoint was persisted before the assertion; progress.json therefore has only three completed rows. This is a valid historical stop, not a completed A/B pair or product-regression finding. Both arms used the same frozen UI, helper, fixture tree, and lifecycle-only menu-engine route. On 2026-10-20 the owner authorized a fresh20-arm batch with explicit per-phase medians and unchanged quiet/safety/swap gates; the source patch is pending lead review and no fresh arm has started. See [the capture report](research/b0002-hyprland-capture-20261020.md).

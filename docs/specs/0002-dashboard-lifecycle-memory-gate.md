@@ -3,7 +3,7 @@
 - ID: B0002
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: In progress — fresh Hyprland five-pair lifecycle-only batch5 active from 2026-10-20 11:38:31UTC, window ends16:08:31UTC; acceptance unclaimed
+- Status: Done — 2026-10-22; desktop Hyprland and niri passed the owner-relative gate. Candidate 306474f0 / UI 7948c3c; see [desktop batch report](../research/b0002-desktop-batch-20261021.md).
 - Depends on: source-only preflight eligible after B0004 Done; captures require B0001 Done and exact slot grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours including capture after grant
