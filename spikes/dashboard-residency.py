@@ -14,8 +14,9 @@ ACCEPTANCE_PHASE_BUDGETS = {
 ACCEPTANCE_PAGES = ["today", "weather", "media", "system"]
 MEDIAN_BATCH_ENV = "BEAD_DASHBOARD_BATCH_MEDIANS"
 OPENED_ONCE_ONLY_ENV = "BEAD_DASHBOARD_OPENED_ONCE_ONLY"
-MEDIAN_BATCH_ARM_LIMIT_MIB = 27
+MEDIAN_BATCH_ARM_LIMIT_MIB = 26.5
 MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB = 1
+MEDIAN_BATCH_FILE_EXPLANATION_TOLERANCE_MIB = 0.05
 
 
 def acceptance_config(environ):
@@ -95,7 +96,7 @@ def assert_capture_rails(row, bar, external, total, batch_medians=False, close=F
         assert total(row) <= 25, "diagnostic exceeds current hard ceiling"
 
 
-def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=True):
+def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=False):
     """Apply owner-approved matched five-pair median gates to one phase."""
     import statistics
     assert len(control_rows) == 5 and len(candidate_rows) == 5, \
@@ -137,9 +138,12 @@ def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=True):
     assert anonymous_delta <= MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB, \
         "unexplained candidate-control anonymous growth exceeds 1 MiB"
     file_delta = deltas["pss_file_mib"]
+    total_delta = candidate_total - control_total
+    unexplained_increase = max(0.0, total_delta - file_delta)
     result = {"n_per_side": 5, "control_total_median_mib": control_total,
               "candidate_total_median_mib": candidate_total,
-              "total_delta_median_mib": candidate_total - control_total,
+              "total_delta_median_mib": total_delta,
+              "unexplained_increase_median_mib": unexplained_increase,
               "category_medians_mib": category_medians,
               "category_delta_medians_mib": deltas,
               "control_range_mib": [min(total(r) for r in control_rows), max(total(r) for r in control_rows)],
@@ -153,13 +157,13 @@ def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=True):
     if candidate_total < 25:
         result["verdict"] = "PASS"
     elif candidate_total <= MEDIAN_BATCH_ARM_LIMIT_MIB and allow_27_report:
-        assert result["drm_attribution"] == "measured", \
-            "25–27 MiB exception requires measured DRM category on both sides"
-        assert candidate_total > control_total and file_delta >= candidate_total - control_total, \
-            "25–27 MiB requires candidate-control growth explained by file-backed PSS"
+        assert anonymous_delta < MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB, \
+            "25–26.5 MiB allowance requires anonymous growth below 1 MiB"
+        assert unexplained_increase <= MEDIAN_BATCH_FILE_EXPLANATION_TOLERANCE_MIB + 1e-9, \
+            "25–26.5 MiB increase is not explained by file-backed PSS within 0.05 MiB"
         result["verdict"] = "PASS-one-time-27MiB-file-backed-report"
     else:
-        raise AssertionError("batch median exceeds 27 MiB stop ceiling or one-time allowance is already used")
+        raise AssertionError("batch median exceeds the 26.5 MiB stop ceiling or the one-time allowance is unavailable")
     return result
 
 

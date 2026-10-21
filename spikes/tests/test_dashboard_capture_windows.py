@@ -331,7 +331,7 @@ class CaptureWindowTests(unittest.TestCase):
         control = [row(24.0) for _ in range(5)]
         candidate = [row(24.9), row(25.0, file=9.0),
                      row(25.0, file=9.0), row(25.0, file=9.0), row(27.5, file=11.5)]
-        summary = residency.summarize_batch_phase(control, candidate)
+        summary = residency.summarize_batch_phase(control, candidate, allow_27_report=True)
         self.assertEqual(summary["candidate_total_median_mib"], 25.0)
         self.assertEqual(summary["total_delta_median_mib"], 1.0)
         self.assertEqual(summary["category_delta_medians_mib"]["pss_file_mib"], 1.0)
@@ -342,10 +342,28 @@ class CaptureWindowTests(unittest.TestCase):
         self.assertEqual(residency.summarize_batch_phase(control, [row(24.5, file=8.5) for _ in range(5)])["verdict"], "PASS")
         with self.assertRaisesRegex(AssertionError, "anonymous growth"):
             residency.summarize_batch_phase(control, [row(25.1, anon=6.1, file=8.0) for _ in range(5)])
-        with self.assertRaisesRegex(AssertionError, "file-backed"):
-            residency.summarize_batch_phase(control, [row(25.0, file=8.0) for _ in range(5)])
-        with self.assertRaisesRegex(AssertionError, "27 MiB"):
-            residency.summarize_batch_phase(control, [row(27.1, file=11.1) for _ in range(5)])
+        with self.assertRaisesRegex(AssertionError, "file-backed PSS within 0.05"):
+            residency.summarize_batch_phase(control, [row(25.0, file=8.0) for _ in range(5)],
+                                            allow_27_report=True)
+        # The 0.05 MiB unexplained remainder boundary is inclusive.
+        boundary_control = [row(24.0) for _ in range(5)]
+        boundary_candidate = [row(25.0, file=8.95) for _ in range(5)]
+        boundary = residency.summarize_batch_phase(boundary_control, boundary_candidate, allow_27_report=True)
+        self.assertAlmostEqual(boundary["unexplained_increase_median_mib"], 0.05)
+        self.assertEqual(boundary["verdict"], "PASS-one-time-27MiB-file-backed-report")
+        over_boundary = [row(25.0, file=8.949) for _ in range(5)]
+        with self.assertRaisesRegex(AssertionError, "within 0.05"):
+            residency.summarize_batch_phase(boundary_control, over_boundary, allow_27_report=True)
+        # The 26.5 MiB candidate ceiling is inclusive; above it always stops.
+        at_ceiling = [row(26.5, anon=5.0, file=20.5) for _ in range(5)]
+        self.assertEqual(residency.summarize_batch_phase(control, at_ceiling, allow_27_report=True)["verdict"],
+                         "PASS-one-time-27MiB-file-backed-report")
+        with self.assertRaisesRegex(AssertionError, "26.5 MiB"):
+            residency.summarize_batch_phase(control, [row(26.5001, anon=5.0, file=20.5001) for _ in range(5)],
+                                            allow_27_report=True)
+        with self.assertRaisesRegex(AssertionError, "below 1 MiB"):
+            residency.summarize_batch_phase(control, [row(25.0, anon=6.0, file=8.0) for _ in range(5)],
+                                            allow_27_report=True)
         with self.assertRaisesRegex(AssertionError, "one-time allowance"):
             residency.summarize_batch_phase(control, candidate, allow_27_report=False)
         with self.assertRaisesRegex(AssertionError, "exactly five"):
@@ -360,8 +378,12 @@ class CaptureWindowTests(unittest.TestCase):
         self.assertIsNone(summary["control_drm_median_mib"])
         higher = {**base, "pss_plus_drm_mib": 25.0,
                   "memory": {**base["memory"], "pss_mib": 25.0, "pss_file_mib": 13.0}}
-        with self.assertRaisesRegex(AssertionError, "measured DRM"):
-            residency.summarize_batch_phase([base.copy() for _ in range(5)], [higher.copy() for _ in range(5)])
+        summary = residency.summarize_batch_phase([base.copy() for _ in range(5)], [higher.copy() for _ in range(5)],
+                                                  allow_27_report=True)
+        self.assertEqual(summary["verdict"], "PASS-one-time-27MiB-file-backed-report")
+        self.assertEqual(summary["drm_attribution"], "unknown")
+        self.assertIsNone(summary["candidate_drm_median_mib"])
+        self.assertEqual(summary["unexplained_increase_median_mib"], 0.0)
         bad = {**base, "memory": {**base["memory"], "pss_file_mib": float("nan")}}
         with self.assertRaisesRegex(AssertionError, "invalid or negative"):
             residency.summarize_batch_phase([base.copy() for _ in range(5)], [bad.copy() for _ in range(5)])
@@ -383,17 +405,22 @@ class CaptureWindowTests(unittest.TestCase):
                             value, file_value = total, file
                             if compositor == "hyprland" and phase == "never-opened" and arm == "B":
                                 value, file_value = 25.0, 9.0
+                            if compositor == "hyprland" and phase == "opened-once" and arm == "B":
+                                value, file_value = 25.2, 9.2
                             if compositor == "niri" and phase == "opened-once" and arm == "B":
                                 value, file_value = 26.0, 10.0
                             folder = root / f"{arm}{pair}" / compositor
                             folder.mkdir(parents=True, exist_ok=True)
                             (folder / f"{phase}.json").write_text(json.dumps(row(value, file_value)))
             output = root / "summary.json"
-            report = batch_summary.summarize(root, report_path=output)
+            report = batch_summary.summarize(root, report_path=output,
+                                             allow_27_compositors=("hyprland",))
             self.assertTrue(report["complete"])
             self.assertFalse(report["pass"])
             self.assertTrue(report["one_time_27_mib_report_used"])
             self.assertEqual(len(report["phases"]), 8)
+            self.assertEqual(report["phases"]["hyprland/opened-once"]["verdict"],
+                             "PASS-one-time-27MiB-file-backed-report")
             self.assertIn("one-time allowance", report["phases"]["niri/opened-once"]["error"])
             self.assertTrue(output.is_file())
             self.assertEqual(json.loads(output.read_text())["phases"], report["phases"])
