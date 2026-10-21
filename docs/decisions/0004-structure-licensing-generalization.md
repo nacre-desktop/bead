@@ -20,21 +20,26 @@ on Nacre's GPL-3.0 implementation.
    generated types, golden transcripts, and protocol documentation. It has its
    own license files and Cargo metadata. The daemon and all other Nacre code
    remain GPL-3.0. Before relicensing, verify every commit touching the
-   protocol is by siverteh or their agents. On 2026-10-21, after fetching
-   `origin/main` at `7a7ca8b9236cf694a2686410057f5b79be41837f`, the per-file
-   history command was:
+   protocol is by siverteh or their agents. On 2026-10-21, against
+   `origin/main` at `84f4656b776f7ffdfe590166af24f8fbcbd5d061`, the file list
+   came from that base and the per-file history command was:
    ```sh
-   git ls-files crates/nacre-protocol protocol docs/architecture/protocol.md |
+   git ls-tree -r --name-only origin/main -- crates/nacre-protocol protocol docs/architecture/protocol.md |
      while IFS= read -r f; do
        git log --follow --format='%H%x09%an <%ae>' origin/main -- "$f"
      done
    ```
-   Result: 170 per-file commit records representing 20 unique commits; the only
+   Result: 176 per-file commit records representing 21 unique commits; the only
    author identity was siverteh
-   `<92440237+Siverteh@users.noreply.github.com>`. The matching per-file
-   `git log --follow --format='%(trailers:key=Co-authored-by)' origin/main -- "$f"`
-   audit returned no co-author trailers. Stop and list any non-owner identity
-   or co-author found by this check.
+   `<92440237+Siverteh@users.noreply.github.com>`. The co-author audit used:
+   ```sh
+   git ls-tree -r --name-only origin/main -- crates/nacre-protocol protocol docs/architecture/protocol.md |
+     while IFS= read -r f; do
+       git log --follow --format='%(trailers:key=Co-authored-by)' origin/main -- "$f"
+     done | sed '/^$/d' | sort -u
+   ```
+   It returned no co-author trailers. Stop and list any non-owner identity or
+   co-author found by this check.
    Afterwards, Bead's `deny-framework.toml` may allow `bead-*` crates to depend
    on `nacre-protocol` under MIT OR Apache-2.0.
 3. Do not split the daemon into another repository now. Revisit only if it
