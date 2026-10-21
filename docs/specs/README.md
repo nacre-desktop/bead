@@ -67,6 +67,20 @@ unconditional zram reset before every arm) started 2026-10-21 01:21 local. The
 research note and harness fixes (`9babf54`, `bbac822`) are local and integrate
 with the batch result.
 
+### B2 status — 2026-10-21 midday
+
+- Laptop full batch, as supporting evidence only: Hyprland PASS on all four
+  phases with 5 matched pairs (candidate medians 22.15–22.72 MiB, about −0.13
+  to −0.17 MiB anonymous where pages opened). niri was paused after 6 valid
+  arms when the owner's live switch needed the host.
+- Owner rule: captures run on the owner's DESKTOP, not the laptop. The original
+  frozen control `b01dfcca` and helper `4a65f4ec` exist there. The harness
+  (`f676a1c` watchdog fix, `6185c6e`/`1b1729d`/`3109905` launchers with
+  env/argv evidence) is ready. Desktop plan: a diagnostic first (`b01dfcca` vs
+  rebuild `e21caa16`, opened-once), then the full batch (A = `b01dfcca`,
+  B = `306474f0`, both compositors). It starts when the desktop heavy slot is
+  free.
+
 ## Lead-transfer receipt — 2026-10-20
 
 ### B2 decision and preserved source
