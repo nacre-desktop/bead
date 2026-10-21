@@ -214,6 +214,24 @@ def sample(env, raw, compositor, stop):
                     matrix.wait_log(log, lambda t: re.search(r'MENU_RPC_RETURN id=\d+ ok=true catalog_rev=\d+ count=320', t)
                                     and presented_catalog(t, 320), timeout=30)
                     time.sleep(1)
+                    # Required quiet residency window before typing. Sample the
+                    # UI, daemon and every live worker once per second; vanished
+                    # workers are not treated as zero.
+                    idle_memory_screen = []
+                    screen_start = time.monotonic()
+                    for second in range(61):
+                        live_workers = clocks.descendants(daemon)
+                        sample = {'second': second, 'elapsed_seconds': time.monotonic() - screen_start,
+                                  'ui': matrix.measure.memory(client.pid),
+                                  'daemon': matrix.measure.memory(daemon.pid),
+                                  'workers': [matrix.measure.memory(pid) for pid in sorted(live_workers)]}
+                        sample['swap_pss_mib'] = (sample['ui']['swap_pss_mib'] +
+                            sample['daemon']['swap_pss_mib'] + sum(p['swap_pss_mib'] for p in sample['workers']))
+                        idle_memory_screen.append(sample)
+                        assert sample['swap_pss_mib'] == 0, 'nonzero SwapPss during idle screen'
+                        (raw / 'idle-memory-screen.json').write_text(json.dumps(idle_memory_screen, indent=2) + '\n')
+                        if second != 60:
+                            time.sleep(1)
                     if compositor == 'hyprland':
                         subprocess.run(['hyprctl', 'eval', 'hl.dispatch(hl.dsp.focus({monitor="bead-bench"}))'],
                                        env=env, capture_output=True, check=True, timeout=5)
@@ -277,6 +295,7 @@ def sample(env, raw, compositor, stop):
                       helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(), memory=memory,
                       cpu_method='UI: input receipt to exact presentation, process CPU; daemon/workers: high-resolution process clocks bracketing injection through presentation, includes background work',
                       worker_count=len(workers), catalog_invalidated_without_key=True,
+                      idle_memory_screen=idle_memory_screen,
                       settle_seconds=settle, profile_mode=profile_mode, diagnostic=diagnostic, thread_profile=thread_profile,
                       owned_workers_cleaned=True, unknown_refresh_predictions=sum(row['refresh_ns'] is None for row in rows), valid=True)
         for metric in ['latency_ms', 'ui_cpu_ms', 'daemon_cpu_ms', 'worker_cpu_ms']:
