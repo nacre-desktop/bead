@@ -228,6 +228,17 @@ def relevant_environment(env: dict[str, str]) -> dict[str, str]:
                        and not re.search(r"(TOKEN|PASSWORD|SECRET|CREDENTIAL|PRIVATE_KEY)", key, re.I)))
 
 
+def launcher_revision() -> str:
+    """Git HEAD of the harness, or the REVISION file of an rsync'd (git-less) copy."""
+    result = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    revision = ROOT / "REVISION"
+    if revision.is_file():
+        return revision.read_text().strip()
+    raise RuntimeError("cannot determine the harness revision (no git checkout and no REVISION file)")
+
+
 def save_json(path: pathlib.Path, value) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
@@ -378,8 +389,7 @@ def main() -> int:
             "artifacts": hashes, "environment_filter": "BEAD_*, NACRE_*, XDG_*, WAYLAND_*, QT_*, GDK_*, GTK_*, XCURSOR_*, plus capture paths/session flags; secret-named variables omitted",
             "environment": relevant_environment(env), "argv": argv,
             "launcher_argv": sys.argv, "launcher_sha256": sha256(pathlib.Path(__file__).resolve()),
-            "launcher_git_revision": subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
-                                                       check=True, capture_output=True, text=True).stdout.strip(),
+            "launcher_git_revision": launcher_revision(),
             "cwd": str(ROOT),
             "replacement_kind": "invocation" if args.invocation_retry else args.environmental_replacement,
             "dry_run": args.dry_run, "opened_once_only": args.opened_once_only,
