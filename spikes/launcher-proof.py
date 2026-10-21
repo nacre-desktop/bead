@@ -175,7 +175,12 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             assert 'PRESENTATION clock_id=1'in matrix.log_text(log)
             call('state',target='nacre')
             if acceptance:
-                bar,baseline_timing=dashboard_residency.acceptance_baseline(client.pid,matrix.idle,acceptance['warmup_seconds'],time.monotonic,time.sleep,keeper_check)
+                def mark_dashboard_sampling_start():
+                    (raw/'dashboard-residency-sampling-start.json').write_text(json.dumps({
+                        'started_monotonic_ns':time.monotonic_ns(),
+                        'reason':'first 60-second B0002 acceptance baseline observation begins'
+                    },indent=2)+'\n')
+                bar,baseline_timing=dashboard_residency.acceptance_baseline(client.pid,matrix.idle,acceptance['warmup_seconds'],time.monotonic,time.sleep,keeper_check,mark_dashboard_sampling_start)
                 result['acceptance_baseline']=baseline_timing
                 (raw/'dashboard-residency-baseline.json').write_text(json.dumps(baseline_timing,indent=2)+'\n')
             else:

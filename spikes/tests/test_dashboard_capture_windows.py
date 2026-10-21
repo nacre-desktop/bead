@@ -103,8 +103,12 @@ class CaptureWindowTests(unittest.TestCase):
 
     def test_acceptance_warmup_precedes_bar_baseline(self):
         clock = FakeClock()
-        row, timing = residency.acceptance_baseline(22, clock.idle, 600, clock.monotonic, clock.sleep)
+        sampling_events = []
+        row, timing = residency.acceptance_baseline(
+            22, clock.idle, 600, clock.monotonic, clock.sleep,
+            sampling_started=lambda: sampling_events.append(("start", clock.monotonic())))
         self.assertEqual(clock.events, [("sleep", 600), ("idle", 22, 60)])
+        self.assertEqual(sampling_events, [("start", 600)])
         self.assertEqual(timing, {
             "mode": "acceptance",
             "warmup_requested_seconds": 600,

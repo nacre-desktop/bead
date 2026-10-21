@@ -51,7 +51,8 @@ def acceptance_config(environ):
             "opened_once_only": opened_once_only == "1"}
 
 
-def acceptance_baseline(pid, idle, warmup_seconds, monotonic, sleep, keeper_check=None):
+def acceptance_baseline(pid, idle, warmup_seconds, monotonic, sleep, keeper_check=None,
+                        sampling_started=None):
     warmup_started = monotonic()
     if warmup_seconds:
         sleep(warmup_seconds)
@@ -60,6 +61,8 @@ def acceptance_baseline(pid, idle, warmup_seconds, monotonic, sleep, keeper_chec
     if keeper_check:
         keeper_check("after warmup")
         keeper_check("before baseline")
+    if sampling_started:
+        sampling_started()
     row = observe_window(idle, pid, 60, require_full=True)
     if keeper_check:
         keeper_check("after baseline")
