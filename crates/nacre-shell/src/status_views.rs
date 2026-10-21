@@ -525,10 +525,21 @@ impl Status {
             control.checked = checked;
         }
         let busy = control.pending.is_some();
+        let authentication_error = candidate.state.as_ref().is_some_and(|state| {
+            state.health.available
+                && !state.health.stale
+                && state.health.error.as_ref().is_some_and(|error| {
+                    error.code == nacre_protocol::ErrorCode::Unavailable
+                        && error.retry
+                        && error.message == "Network authentication required or cancelled"
+                })
+        });
         let message = if !candidate.eligible {
             "Wi-Fi control unavailable"
         } else if busy {
             "Changing Wi-Fi…"
+        } else if authentication_error {
+            "Network authentication required or cancelled"
         } else {
             control.message.as_deref().unwrap_or("")
         };

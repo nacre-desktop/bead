@@ -4,7 +4,11 @@ GPL-3.0-only; generated Nacre contract data, retained in the GPL application.
 Original v1 frames came from nacre-desktop/nacre at
 `10e860363fb5c37631925873ea81eddebd89e012`, `protocol/fixtures`; menu and core
 examples were added with later reviewed pins. The seven `core-compat-*` files
-are byte-identical to published `83b85a1b7cba5f71578a3bf04d78a64e96553523`.
+are byte-identical to published `961de0a334259ee0f537f201ec62244e5eebfbb7`.
+The protocol crate and exported core fixtures are unchanged from the prior
+`83b85a1b7cba5f71578a3bf04d78a64e96553523` pin; the new pin carries Nacre's
+completed network-control implementation and clarified admission/authentication
+semantics.
 They are reserved contracts, not proof of runtime service availability.
 Tests parse these committed bytes and compare their JSON wire objects with the
 pinned crate's exports before replaying. Object key order is not a wire contract;

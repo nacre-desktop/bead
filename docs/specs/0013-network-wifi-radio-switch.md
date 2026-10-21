@@ -215,6 +215,24 @@ normal integration and exact-head hosted CI when F4 heavy priority permits.
 
 ## Done — published integration and exact-head CI
 
+## Published network-control adoption — 2026-10-21
+
+Pinned `nacre-protocol` to Nacre `961de0a334259ee0f537f201ec62244e5eebfbb7`;
+the protocol crate and exported core fixtures are unchanged from the prior
+`83b85a1b7cba5f71578a3bf04d78a64e96553523` pin. Consumer review confirms the
+switch gates on the exact `welcome.methods["network.set_wifi"]` v1 entry plus a
+fresh, healthy topic and matching daemon boot, never on reserved schemas.
+Successful `{changed}` replies only end pending state; checked state remains
+the topic's authoritative `wireless_enabled` readback. Method failures end
+pending state with a fixed generic UI message for permission_denied,
+stale_revision, unavailable and busy, and permit only a later deliberate click;
+there is no replay/retry. The exact fresh topic authentication health tuple
+(unavailable, retry=true, published sanitized message) maps to that fixed
+message without exposing arbitrary daemon text; a private
+fake-daemon regression test covers enabled/readback state and no automatic
+retry. `network.connect` and `network.disconnect` have no Bead affordance in
+B0013/B0009; defer those controls until an approved UI spec.
+
 Normal integration021fdaad735f3b1db835d267c117e325018d333e preserves accepted
 sourcecdd9fb2 plus current queue/spec docs. Exact-head [Rust checks39230443828](https://github.com/nacre-desktop/bead/actions/runs/39230443828)
 completed SUCCESS2026-10-19 09:37:56UTC, including fmt/Clippy/full tests,

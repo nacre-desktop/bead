@@ -160,14 +160,16 @@ No topic/method mismatch: Bead lazily leases `network` on open
 ## Protocol pin update — 2026-10-21
 
 Updated Bead's dependency from `5f4c0bf3025d5f2944b50ff5546ed7f8a3dcfe57` to
-Nacre main `83b85a1b7cba5f71578a3bf04d78a64e96553523`, whose exact-head CI is
+Nacre main `961de0a334259ee0f537f201ec62244e5eebfbb7`, whose exact-head CI is
 green. The N0003/N0005 network producer addition is compatible with this
 consumer's existing `network` topic decoding and stale/unavailable projection.
 The protocol diff since the old pin adds settings contracts and Tokio's `time`
 feature; it does not change B0009's contract. All seven `core-compat-*` fixture
 files are byte-identical to the new pin. Capability gating and status-only mode
 are unchanged. No producer-running or live-enablement claim is made; N0014
-remains the live gate.
+remains the live gate. Review at 961de0a3 confirms this read-only path does not
+invoke network methods, and its display continues to use authoritative topic
+readback only.
 
 Validation on dev-1: Bead's `ubuntu-24.04` CI job passed, including fmt, denied-
 warning Clippy, workspace/trace tests, feature checks, Luau checks, regression

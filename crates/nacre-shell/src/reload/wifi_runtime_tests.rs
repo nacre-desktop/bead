@@ -53,6 +53,73 @@ fn network(enabled: bool) -> serde_json::Value {
         "primary_connection":"wifi-connection"
     })
 }
+#[tokio::test(flavor = "current_thread")]
+async fn wifi_runtime_surfaces_authoritative_authentication_health_without_retry()
+-> Result<(), Box<dyn std::error::Error>> {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (done_tx, done_rx) = oneshot::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read, mut writer) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(read));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        framing::write(
+            &mut writer,
+            &welcome(Some(("network.set_wifi", 1)), Some(1)),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["network".into()]
+            }
+        );
+        let mut state = network(true);
+        state["health"]["error"] = serde_json::json!({
+            "code":"unavailable",
+            "message":"Network authentication required or cancelled",
+            "retry":true
+        });
+        framing::write(
+            &mut writer,
+            &Message::Snap {
+                topic: "network".into(),
+                seq: 0,
+                data: state,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Unsub {
+                topics: vec!["network".into()]
+            }
+        );
+        let _ = done_tx.send(());
+        let _ = shutdown_rx.await;
+    });
+    let client = Client::start(Config::new(lab.0.join("daemon.sock"), vec![]))?;
+    let mut runtime = controlled_runtime(&client, &lab.0.join("runtime-auth"))?;
+    until(&mut runtime, |runtime| {
+        runtime.session.stores.get("network.wifi_message")
+            == Some(&bead::core::Value::Text(
+                "Network authentication required or cancelled".into(),
+            ))
+    })
+    .await;
+    assert!(flag(&runtime, "network.wifi_enabled"));
+    assert!(flag(&runtime, "network.wifi_checked"));
+    drop(runtime);
+    tokio::time::timeout(Duration::from_secs(5), done_rx).await??;
+    Source::stop(&client).await?;
+    let _ = shutdown_tx.send(());
+    server.await?;
+    Ok(())
+}
 fn welcome(method: Option<(&str, u16)>, network_topic: Option<u16>) -> Message {
     let mut methods = nacre_protocol::core_methods();
     if let Some((name, version)) = method {
