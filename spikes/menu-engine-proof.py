@@ -49,6 +49,11 @@ def active_process_ids(client_pid, daemon_pid, descendant_ids, state_reader):
     return active, exited
 
 
+def reset_worker_tracking(workers):
+    """Keep pre-typing diagnostic worker clocks out of the serial key window."""
+    workers.clear()
+
+
 def presented_catalog(text, count):
     ready = re.search(r'MENU_RESULT ok=true catalog_rev=[1-9]\d* count=' + str(count) + r'\b', text)
     if not ready:
@@ -283,6 +288,10 @@ def sample(env, raw, compositor, stop):
                         (raw / 'idle-memory-screen.json').write_text(json.dumps(idle_memory_screen, indent=2) + '\n')
                         if second != 60:
                             time.sleep(1)
+                    # Component-diagnostic API probes happened before this
+                    # idle screen. Their workers may have expired while idle;
+                    # the per-key CPU window starts with a fresh live baseline.
+                    reset_worker_tracking(workers)
                     if compositor == 'hyprland':
                         subprocess.run(['hyprctl', 'eval', 'hl.dispatch(hl.dsp.focus({monitor="bead-bench"}))'],
                                        env=env, capture_output=True, check=True, timeout=5)

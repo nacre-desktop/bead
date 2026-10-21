@@ -16,6 +16,11 @@ PROOF_SPEC.loader.exec_module(proof)
 
 
 class B0003ArmTests(unittest.TestCase):
+    def test_diagnostic_worker_clocks_do_not_leak_into_serial_typing(self):
+        workers = {123: object(), 456: object()}
+        proof.reset_worker_tracking(workers)
+        self.assertEqual(workers, {})
+
     def test_idle_snapshot_excludes_zombies_and_records_missing_workers(self):
         states = {3: "R", 4: "Z"}
 
