@@ -8,7 +8,7 @@ local padding=kit.tokens.spacing.md
 local icon_size=kit.tokens.icons.xlarge*4/3
 local text_width=310-padding*2-icon_size-kit.tokens.spacing.md
 return kit.Panel{id="status-popout",edge=ui.resolve_for_check(ui.bind("view.edge")),
-    open=ui.bind("panel.open"),duration=kit.motion.color,width=310,height=410,padding=padding,
+    open=ui.bind("panel.open"),duration=kit.motion.color,width=310,height=ui.bind("network.height"),padding=padding,
     gap=kit.tokens.spacing.sm,radius=kit.tokens.radii.medium,fill="surface",
     ui.Text{id="heading",text=ui.bind("status.heading"),height=24,font_size=kit.tokens.text.title*4/3,color="onSurface"},
     ui.Row{id="summary",height=88,gap=kit.tokens.spacing.md,align="center",
@@ -37,5 +37,5 @@ return kit.Panel{id="status-popout",edge=ui.resolve_for_check(ui.bind("view.edge
             },
         }
     end},
-    ui.Text{id="link-message",text=ui.bind("network.link_message"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurfaceVariant"},
+    ui.Text{id="link-message",visible=ui.bind("network.link_visible"),text=ui.bind("network.link_message"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurfaceVariant"},
 }

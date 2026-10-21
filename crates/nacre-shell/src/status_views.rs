@@ -81,6 +81,12 @@ struct LinkOp {
 }
 const LINK_READBACK: Duration = Duration::from_secs(30);
 const MAX_LINK_ROWS: usize = 5;
+/// Zero-row popout height, plus each row (32 high + 8 gap) and the message line
+/// (20 high + 8 gap) only while a message shows.
+pub(crate) const NETWORK_BASE_HEIGHT: f64 = 222.;
+pub(crate) fn network_popout_height(rows: usize, message: bool) -> f64 {
+    NETWORK_BASE_HEIGHT + 40. * rows.min(MAX_LINK_ROWS) as f64 + if message { 28. } else { 0. }
+}
 struct LinkTarget {
     method: &'static str,
     params: serde_json::Value,
@@ -710,6 +716,7 @@ impl Status {
                 .collect(),
             None => Vec::new(),
         };
+        let row_count = rows.len();
         let link_message = if link_busy {
             ""
         } else {
@@ -734,6 +741,14 @@ impl Status {
             ("network.wifi_busy".into(), Value::Bool(busy)),
             ("network.wifi_message".into(), Value::Text(message.into())),
             ("network.rows".into(), Value::list(rows)),
+            (
+                "network.height".into(),
+                Value::Number(network_popout_height(row_count, !link_message.is_empty())),
+            ),
+            (
+                "network.link_visible".into(),
+                Value::Bool(!link_message.is_empty()),
+            ),
             ("network.link_message".into(), Value::Text(link_message)),
         ]);
         base

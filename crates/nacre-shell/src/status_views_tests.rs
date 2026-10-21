@@ -125,6 +125,8 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
             Value::Text("Wi-Fi control unavailable".into()),
         ),
         ("network.rows".into(), Value::list(Vec::new())),
+        ("network.height".into(), Value::Number(222.)),
+        ("network.link_visible".into(), Value::Bool(false)),
         ("network.link_message".into(), Value::Text(String::new())),
     ]);
     let h = Harness::load(
@@ -1075,5 +1077,74 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         .collect::<Vec<_>>();
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0], "close");
+    Ok(())
+}
+
+#[test]
+fn network_popout_height_follows_rows_and_message() -> Result<()> {
+    assert_eq!(crate::status_views::network_popout_height(0, false), 222.);
+    assert_eq!(crate::status_views::network_popout_height(2, false), 302.);
+    assert_eq!(crate::status_views::network_popout_height(5, false), 422.);
+    assert_eq!(crate::status_views::network_popout_height(9, true), 450.);
+    for (count, message) in [(0usize, false), (2, false), (5, false), (2, true)] {
+        let rows = (0..count)
+            .map(|i| {
+                serde_json::json!({
+                    "id": format!("ap:{i}"), "label": format!("Net {i}"),
+                    "action": "Connect", "active": false, "enabled": true
+                })
+            })
+            .collect();
+        let expected = crate::status_views::network_popout_height(count, message);
+        let initial = BTreeMap::from([
+            ("view.edge".into(), Value::Text("top".into())),
+            ("panel.open".into(), Value::Bool(true)),
+            ("status.ready".into(), Value::Bool(true)),
+            ("status.active".into(), Value::Bool(true)),
+            ("status.heading".into(), Value::Text("Network".into())),
+            ("status.icon".into(), Value::Text("wifi".into())),
+            ("status.primary".into(), Value::Text("Home".into())),
+            ("status.secondary".into(), Value::Text("Wi-Fi on".into())),
+            ("status.detail".into(), Value::Text(String::new())),
+            ("network.wifi_checked".into(), Value::Bool(true)),
+            ("network.wifi_enabled".into(), Value::Bool(true)),
+            ("network.wifi_busy".into(), Value::Bool(false)),
+            ("network.wifi_message".into(), Value::Text(String::new())),
+            ("network.rows".into(), Value::list(rows)),
+            ("network.height".into(), Value::Number(expected)),
+            ("network.link_visible".into(), Value::Bool(message)),
+            (
+                "network.link_message".into(),
+                Value::Text(if message { "Network list changed" } else { "" }.into()),
+            ),
+        ]);
+        let h = Harness::load(
+            &root(),
+            Path::new("status/network.luau"),
+            &root().join("palette.json"),
+            initial,
+            Config {
+                width: 380,
+                height: 600,
+                scale: 1.,
+            },
+        )?;
+        let panel = h
+            .scene()
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                bead::render::Primitive::Rounded { rect, .. } if (rect.w - 310.).abs() < 0.1 => {
+                    Some(*rect)
+                }
+                _ => None,
+            })
+            .expect("panel is drawn");
+        assert_eq!(
+            f64::from(panel.h),
+            expected,
+            "{count} rows, message {message}"
+        );
+    }
     Ok(())
 }

@@ -54,7 +54,7 @@ boot changes, or a 30 s deadline passes. `changed:false` clears at once. Error
 codes map to short messages (permission_denied, stale_revision, unavailable, busy,
 invalid_request/validation, timeout, other). Luau: `network.luau` rows via
 `ui.Repeat`, actions `network.connect|disconnect` registered under
-`network.control`; popout height 222 to 410 (fixed; empty rows leave blank space).
+`network.control`. The popout height is bound (`network.height`, computed in Rust): 222 plus 40 per row (32 high + 8 gap, max 5) plus 28 only while the link message shows (`network.link_visible`). The cold fallback rect (310x222) already equals the 0-row height.
 
 Tests (`reload/link_runtime_tests.rs`, fake-daemon consumer tests): row ordering and
 resolution (stale/unknown/wrong-state keys, saved-profile preference, wire shape),
@@ -68,7 +68,6 @@ plus trace test, feature checks, minimal example, Luau analyze/generated check,
 regression unittests (needed `systemd` installed in the container for guarded-capture
 tests; hosted runner has it), cargo-deny (all manifests): all green.
 
-Not done: private nested visual check (unit/consumer tests only; the 410 px popout
-and row look are unreviewed visually), memory delta (not measured; rows are at most
+Not done: private nested visual check (unit/consumer tests only; the row look is unreviewed visually; a layout test checks the panel height for 0/2/5 rows and with a message), memory delta (not measured; rows are at most
 five small list items, no new threads or allocations beyond the store list).
 Clicks are exercised through the host action entry point, not pixel hit-testing.

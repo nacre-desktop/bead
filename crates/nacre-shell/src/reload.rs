@@ -226,6 +226,14 @@ impl Runtime {
             ),
             ("network.rows".into(), bead::core::Value::list(Vec::new())),
             (
+                "network.height".into(),
+                bead::core::Value::Number(crate::status_views::NETWORK_BASE_HEIGHT),
+            ),
+            (
+                "network.link_visible".into(),
+                bead::core::Value::Bool(false),
+            ),
+            (
                 "network.link_message".into(),
                 bead::core::Value::Text(String::new()),
             ),
