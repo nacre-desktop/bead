@@ -21,7 +21,7 @@ CONTROL = ARTIFACTS / "bead-ui-control-e21caa16"
 FIXED = ARTIFACTS / "bead-ui-fixed-306474f0"
 EXPECTED_HASHES = {
     "control": "e21caa16cee883008aeceeea4bb438a2b4ee30944e6d9c8bfe4f9626373b1117",
-    "fixed": "306474f058c8a8ab044e6153b69b26e8a48bc1714bbcd8d615db20b9a51777bb",
+    "candidate": "306474f058c8a8ab044e6153b69b26e8a48bc1714bbcd8d615db20b9a51777bb",
     "helper": "4a65f4ec887bc85e93b5b862f1786fe6f1b7a811875333765ee8f8c052cce0aa",
 }
 RAW_ROOT = pathlib.Path.home() / "nacre-quiet/evidence/bead-b0002-20261021/full-batch-fresh-launchers"
@@ -61,7 +61,7 @@ def sha256(path: pathlib.Path) -> str:
 
 def artifact_hashes() -> dict[str, dict[str, str]]:
     result = {}
-    for name, path in (("control", CONTROL), ("fixed", FIXED), ("helper", HELPER)):
+    for name, path in (("control", CONTROL), ("candidate", FIXED), ("helper", HELPER)):
         actual = sha256(path)
         if actual != EXPECTED_HASHES[name]:
             raise RuntimeError(f"{name} artifact SHA-256 mismatch: {actual}")
@@ -88,6 +88,7 @@ def inherited_capture_environment(base: dict[str, str], side: str, compositor: s
     env.update(CAPTURE_CONFIG)
     env["BEAD_RAW_DIR"] = str(raw_dir)
     env["BEAD_HARDENING_BINARY"] = str(CONTROL if side == "A" else FIXED)
+    env["BEAD_MENU_ENGINE_BINARY"] = str(HELPER)
     env.pop("BEAD_DASHBOARD_OPENED_ONCE_ONLY", None)
     if compositor == "niri":
         env["BEAD_BAR_MATRIX"] = "1"
@@ -280,6 +281,7 @@ def guarded_swap_reset(raw_dir: pathlib.Path) -> None:
 
 
 def main() -> int:
+    global CONTROL, FIXED, HELPER, EXPECTED_HASHES, CAPTURE_CONFIG
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--side", choices=("A", "B"), required=True)
     parser.add_argument("--compositor", choices=("hyprland", "niri"), required=True)
@@ -287,6 +289,16 @@ def main() -> int:
     parser.add_argument("--previous-label", required=True,
                         help="last VALID arm label for this compositor, or START")
     parser.add_argument("--raw-root", type=pathlib.Path, default=RAW_ROOT)
+    parser.add_argument("--control-binary", type=pathlib.Path, default=CONTROL)
+    parser.add_argument("--control-sha256", default=EXPECTED_HASHES["control"])
+    parser.add_argument("--candidate-binary", type=pathlib.Path, default=FIXED)
+    parser.add_argument("--candidate-sha256", default=EXPECTED_HASHES["candidate"])
+    parser.add_argument("--helper-binary", type=pathlib.Path, default=HELPER)
+    parser.add_argument("--helper-sha256", default=EXPECTED_HASHES["helper"])
+    parser.add_argument("--research-tools", type=pathlib.Path, default=pathlib.Path(CAPTURE_CONFIG["BEAD_RESEARCH_TOOLS"]))
+    parser.add_argument("--cargo-target-dir", type=pathlib.Path, default=pathlib.Path(CAPTURE_CONFIG["CARGO_TARGET_DIR"]))
+    parser.add_argument("--menu-engine-bundle", type=pathlib.Path, default=pathlib.Path(CAPTURE_CONFIG["BEAD_MENU_ENGINE_BUNDLE"]))
+    parser.add_argument("--dashboard-fixtures", type=pathlib.Path, default=pathlib.Path(CAPTURE_CONFIG["BEAD_DASHBOARD_FIXTURES"]))
     parser.add_argument("--invocation-retry", action="store_true",
                         help="retry one pre-sampling invocation failure without consuming the environmental replacement")
     parser.add_argument("--environmental-replacement", choices=("scope-setup", "host-swap-in"),
@@ -295,6 +307,15 @@ def main() -> int:
     args = parser.parse_args()
     if args.label[0] != args.side:
         parser.error("--side must match the arm label")
+    CONTROL, FIXED, HELPER = args.control_binary, args.candidate_binary, args.helper_binary
+    EXPECTED_HASHES = {"control": args.control_sha256, "candidate": args.candidate_sha256,
+                       "helper": args.helper_sha256}
+    CAPTURE_CONFIG = {**CAPTURE_CONFIG,
+                      "BEAD_MENU_ENGINE_BINARY": str(HELPER),
+                      "BEAD_RESEARCH_TOOLS": str(args.research_tools),
+                      "CARGO_TARGET_DIR": str(args.cargo_target_dir),
+                      "BEAD_MENU_ENGINE_BUNDLE": str(args.menu_engine_bundle),
+                      "BEAD_DASHBOARD_FIXTURES": str(args.dashboard_fixtures)}
     raw_comp_dir = args.raw_root / args.compositor
     raw_dir = None
     stage = "preflight"

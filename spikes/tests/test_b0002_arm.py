@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "b0002-arm.py"
@@ -23,22 +24,25 @@ class B0002ArmLauncherTests(unittest.TestCase):
             "BEAD_MENU_ENGINE_BINARY": "/wrong/helper", "BEAD_DASHBOARD_OPENED_ONCE_ONLY": "1",
             "NACRE_DAEMON_SOCKET": "/wrong/socket", "API_TOKEN": "must-not-record",
         }
-        for side, artifact in (("A", "control"), ("B", "fixed")):
-            env = arm.inherited_capture_environment(base, side, "hyprland", pathlib.Path("/tmp/raw"))
-            self.assertEqual(env["BEAD_HARDENING_BINARY"], str(arm.CONTROL if side == "A" else arm.FIXED))
-            selected = arm.CONTROL if side == "A" else arm.FIXED
-            self.assertEqual(arm.sha256(selected), arm.EXPECTED_HASHES[artifact])
-            self.assertEqual(env["BEAD_MENU_ENGINE_BINARY"], str(arm.HELPER))
-            self.assertNotIn("BEAD_BAR_MATRIX", env)
-            self.assertEqual(env["BEAD_DASHBOARD_BATCH_MEDIANS"], "1")
-            self.assertEqual(env["BEAD_DASHBOARD_WARMUP_SECONDS"], "600")
-            self.assertNotIn("BEAD_DASHBOARD_OPENED_ONCE_ONLY", env)
-            self.assertNotIn("NIRI_SOCKET", env)
-            self.assertEqual(arm.artifact_hashes()["control"]["sha256"], arm.EXPECTED_HASHES["control"])
-            self.assertEqual(arm.artifact_hashes()["fixed"]["sha256"], arm.EXPECTED_HASHES["fixed"])
-            self.assertEqual(arm.artifact_hashes()["helper"]["sha256"], arm.EXPECTED_HASHES["helper"])
-        niri_env = arm.inherited_capture_environment(base, "A", "niri", pathlib.Path("/tmp/raw"))
-        self.assertEqual(niri_env["BEAD_BAR_MATRIX"], "1")
+        with tempfile.TemporaryDirectory(prefix="b0002-artifacts-test-") as temp:
+            paths = {name: pathlib.Path(temp) / name for name in ("control", "candidate", "helper")}
+            for name, path in paths.items():
+                path.write_bytes(("mock-" + name).encode())
+            hashes = {name: arm.sha256(path) for name, path in paths.items()}
+            with mock.patch.multiple(arm, CONTROL=paths["control"], FIXED=paths["candidate"],
+                                     HELPER=paths["helper"], EXPECTED_HASHES=hashes):
+                for side, artifact in (("A", "control"), ("B", "candidate")):
+                    env = arm.inherited_capture_environment(base, side, "hyprland", pathlib.Path("/tmp/raw"))
+                    self.assertEqual(env["BEAD_HARDENING_BINARY"], str(paths[artifact]))
+                    self.assertEqual(env["BEAD_MENU_ENGINE_BINARY"], str(paths["helper"]))
+                    self.assertNotIn("BEAD_BAR_MATRIX", env)
+                    self.assertEqual(env["BEAD_DASHBOARD_BATCH_MEDIANS"], "1")
+                    self.assertEqual(env["BEAD_DASHBOARD_WARMUP_SECONDS"], "600")
+                    self.assertNotIn("BEAD_DASHBOARD_OPENED_ONCE_ONLY", env)
+                    self.assertNotIn("NIRI_SOCKET", env)
+                    self.assertEqual(arm.artifact_hashes()[artifact]["sha256"], hashes[artifact])
+                niri_env = arm.inherited_capture_environment(base, "A", "niri", pathlib.Path("/tmp/raw"))
+                self.assertEqual(niri_env["BEAD_BAR_MATRIX"], "1")
 
     def test_order_and_compositor_arguments_are_fixed(self):
         self.assertEqual(arm.previous_for("A1"), "START")
@@ -129,6 +133,10 @@ class B0002ArmLauncherTests(unittest.TestCase):
     def test_dry_run_records_resolved_environment_argv_and_hashes_without_sampling(self):
         with tempfile.TemporaryDirectory(prefix="b0002-launcher-test-") as temp:
             root = pathlib.Path(temp)
+            artifacts = {name: root / name for name in ("control", "candidate", "helper")}
+            for name, path in artifacts.items():
+                path.write_bytes(("dry-run-" + name).encode())
+            hashes = {name: arm.sha256(path) for name, path in artifacts.items()}
             env = {
                 "PATH": os.environ["PATH"], "HOME": os.environ["HOME"], "USER": "tester",
                 "XDG_RUNTIME_DIR": str(root / "runtime"), "WAYLAND_DISPLAY": "wayland-test",
@@ -138,20 +146,23 @@ class B0002ArmLauncherTests(unittest.TestCase):
             }
             completed = subprocess.run(
                 [sys.executable, str(SCRIPT), "--side", "A", "--compositor", "hyprland",
-                 "--label", "A1", "--previous-label", "START", "--raw-root", str(root / "raw"), "--dry-run"],
+                 "--label", "A1", "--previous-label", "START", "--raw-root", str(root / "raw"),
+                 "--control-binary", str(artifacts["control"]), "--control-sha256", hashes["control"],
+                 "--candidate-binary", str(artifacts["candidate"]), "--candidate-sha256", hashes["candidate"],
+                 "--helper-binary", str(artifacts["helper"]), "--helper-sha256", hashes["helper"], "--dry-run"],
                 env=env, capture_output=True, text=True, check=False)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             evidence = root / "raw/hyprland/A1"
             manifest = json.loads((evidence / "capture-launch.json").read_text())
             self.assertTrue(manifest["dry_run"])
             self.assertTrue(manifest["previous_label_verified"])
-            self.assertEqual(manifest["environment"]["BEAD_MENU_ENGINE_BINARY"], str(arm.HELPER))
+            self.assertEqual(manifest["environment"]["BEAD_MENU_ENGINE_BINARY"], str(artifacts["helper"]))
             self.assertNotIn("API_TOKEN", manifest["environment"])
             self.assertEqual(manifest["environment"]["GTK_THEME"], "test-theme")
             self.assertNotIn("BEAD_BAR_MATRIX", manifest["environment"])
             self.assertEqual(manifest["argv"][-1], "--virtual120")
             self.assertEqual(json.loads((evidence / "artifact-hashes.json").read_text())["helper"]["sha256"],
-                             arm.EXPECTED_HASHES["helper"])
+                             hashes["helper"])
             self.assertFalse((evidence / "hyprland-capture-safety.json").exists())
 
 
