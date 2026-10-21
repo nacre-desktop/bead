@@ -9,9 +9,33 @@ SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "b0003-arm.py"
 SPEC = importlib.util.spec_from_file_location("b0003_arm", SCRIPT)
 arm = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(arm)
+PROOF_SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "menu-engine-proof.py"
+PROOF_SPEC = importlib.util.spec_from_file_location("menu_engine_proof", PROOF_SCRIPT)
+proof = importlib.util.module_from_spec(PROOF_SPEC)
+PROOF_SPEC.loader.exec_module(proof)
 
 
 class B0003ArmTests(unittest.TestCase):
+    def test_idle_memory_snapshot_retries_a_worker_that_exits_mid_read(self):
+        process_sets = iter(({1, 2, 3}, {1, 2}, {1, 2}))
+
+        def read_memory(pid):
+            if pid == 3:
+                raise ProcessLookupError(pid, "exited")
+            return {"swap_pss_mib": 0, "pss_mib": float(pid)}
+
+        snapshot = proof.stable_process_memory_snapshot(lambda: next(process_sets), read_memory)
+        self.assertEqual(snapshot["pids"], [1, 2])
+        self.assertEqual(snapshot["observation_retries"], 1)
+        self.assertNotIn(3, snapshot["memory"])
+
+    def test_idle_memory_snapshot_retries_a_changed_process_set(self):
+        process_sets = iter(({1, 2}, {1}, {1}, {1}))
+        snapshot = proof.stable_process_memory_snapshot(
+            lambda: next(process_sets), lambda pid: {"pss_mib": float(pid)})
+        self.assertEqual(snapshot["pids"], [1])
+        self.assertEqual(snapshot["observation_retries"], 1)
+
     def test_desktop_swap_capacity_and_pointer_target_path(self):
         self.assertEqual(arm.SWAP_SIZE_BYTES, 15_569_252_352)
         self.assertEqual(arm.pointer_target_dir(pathlib.Path('/build/target/release/examples/private-pointer')),

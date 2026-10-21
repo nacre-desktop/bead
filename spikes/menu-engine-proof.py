@@ -18,6 +18,20 @@ clocks = load('owned_clocks', ROOT / 'spikes/process-clock.py')
 menu_engine_trace = load('menu_engine_trace', ROOT / 'spikes/menu_engine_trace.py')
 
 
+def stable_process_memory_snapshot(process_ids, memory_reader, attempts=5):
+    """Read one consistent process set, retrying only a changing /proc sample."""
+    for attempt in range(attempts):
+        before = set(process_ids())
+        try:
+            memory = {pid: memory_reader(pid) for pid in sorted(before)}
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        after = set(process_ids())
+        if before == after:
+            return {'pids': sorted(before), 'memory': memory, 'observation_retries': attempt}
+    raise RuntimeError(f'no stable process memory snapshot after {attempts} attempts')
+
+
 def presented_catalog(text, count):
     ready = re.search(r'MENU_RESULT ok=true catalog_rev=[1-9]\d* count=' + str(count) + r'\b', text)
     if not ready:
@@ -215,16 +229,29 @@ def sample(env, raw, compositor, stop):
                                     and presented_catalog(t, 320), timeout=30)
                     time.sleep(1)
                     # Required quiet residency window before typing. Sample the
-                    # UI, daemon and every live worker once per second; vanished
-                    # workers are not treated as zero.
+                    # UI, daemon and stable set of live workers once per second.
+                    # Workers can expire after 30s idle; a process exiting during
+                    # /proc reads invalidates only that sample, not the arm.
                     idle_memory_screen = []
                     screen_start = time.monotonic()
+                    previous_worker_ids = set()
                     for second in range(61):
-                        live_workers = clocks.descendants(daemon)
+                        def live_processes():
+                            assert client.poll() is None, 'UI exited during idle screen'
+                            assert daemon.poll() is None, 'private daemon exited during idle screen'
+                            return {client.pid, daemon.pid, *clocks.descendants(daemon)}
+
+                        snapshot = stable_process_memory_snapshot(live_processes, matrix.measure.memory)
+                        live = snapshot['memory']
+                        worker_ids = [pid for pid in snapshot['pids'] if pid not in (client.pid, daemon.pid)]
+                        worker_id_set = set(worker_ids)
                         sample = {'second': second, 'elapsed_seconds': time.monotonic() - screen_start,
-                                  'ui': matrix.measure.memory(client.pid),
-                                  'daemon': matrix.measure.memory(daemon.pid),
-                                  'workers': [matrix.measure.memory(pid) for pid in sorted(live_workers)]}
+                                  'ui': live[client.pid], 'daemon': live[daemon.pid],
+                                  'workers': [{'pid': pid, **live[pid]} for pid in worker_ids],
+                                  'worker_count': len(worker_ids),
+                                  'workers_exited_since_previous_sample': sorted(previous_worker_ids - worker_id_set),
+                                  'observation_retries': snapshot['observation_retries']}
+                        previous_worker_ids = worker_id_set
                         sample['swap_pss_mib'] = (sample['ui']['swap_pss_mib'] +
                             sample['daemon']['swap_pss_mib'] + sum(p['swap_pss_mib'] for p in sample['workers']))
                         idle_memory_screen.append(sample)
