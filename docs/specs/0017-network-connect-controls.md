@@ -1,6 +1,6 @@
 # B0017 — Network connect/disconnect in the Bead network popout
 
-- Status: In progress (Claude Sonnet worker, lead review)
+- Status: Implemented, awaiting lead review (visual check skipped)
 - Date: 2026-10-21
 - Depends on: Nacre N0016 (`network.connect` / `network.disconnect`, main `961de0a3`+, pinned by Bead `948aa10`)
 
@@ -35,3 +35,40 @@ Unit and consumer tests for gating, pending→readback, each error class,
 stale-ID handling and no retry. Bead CI green (replicated in a container on
 dev-1). Private nested visual check on the owner's desktop only. Memory: no
 increase beyond B2 budgets for the popout (report the settled delta).
+
+## Evidence
+
+Implementation (all in `nacre-shell`; no protocol, pin or framework change):
+`status_views.rs` resolves row keys (`ap:`/`conn:` connect, `dev:` disconnect)
+against the current fresh topic at click time, builds at most five rows (access
+points active-first then strongest, then saved profiles no listed AP represents,
+only when exactly one device of the profile's kind exists), and calls
+`network.connect`/`network.disconnect` through the existing ticket API with the
+topic boot guard. A saved profile on an AP is preferred over a raw AP target.
+Each method is gated separately on `welcome.methods` (v1); unadvertised, stale or
+non-fresh state disables the row and sends nothing. After an admitted
+`changed:true` the row stays "Connecting…/Disconnecting…" (all rows disabled)
+until the topic no longer resolves the same operation, the authentication health
+error appears (rows then say "Retry"; the user clicks again, nothing auto-retries),
+boot changes, or a 30 s deadline passes. `changed:false` clears at once. Error
+codes map to short messages (permission_denied, stale_revision, unavailable, busy,
+invalid_request/validation, timeout, other). Luau: `network.luau` rows via
+`ui.Repeat`, actions `network.connect|disconnect` registered under
+`network.control`; popout height 222 to 410 (fixed; empty rows leave blank space).
+
+Tests (`reload/link_runtime_tests.rs`, fake-daemon consumer tests): row ordering and
+resolution (stale/unknown/wrong-state keys, saved-profile preference, wire shape),
+pending until readback with no optimistic state, duplicate ignored while pending,
+admission `stale_revision` message and row reusable without a repeat call, per-method
+gating including none advertised. Existing Wi-Fi tests unchanged.
+
+CI replication on dev-1 (ubuntu:24.04 container, nice 10, -j4, removed after):
+fmt, clippy `-D warnings`, service-boundary, workspace tests (310 passed, 0 failed)
+plus trace test, feature checks, minimal example, Luau analyze/generated check,
+regression unittests (needed `systemd` installed in the container for guarded-capture
+tests; hosted runner has it), cargo-deny (all manifests): all green.
+
+Not done: private nested visual check (unit/consumer tests only; the 410 px popout
+and row look are unreviewed visually), memory delta (not measured; rows are at most
+five small list items, no new threads or allocations beyond the store list).
+Clicks are exercised through the host action entry point, not pixel hit-testing.

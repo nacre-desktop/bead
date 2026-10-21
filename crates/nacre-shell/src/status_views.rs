@@ -64,9 +64,32 @@ pub struct Status {
 struct WifiControl {
     client: crate::nacre_source::Client,
     pending: Option<(String, crate::nacre_source::CallTicket)>,
+    link: Option<LinkOp>,
+    link_message: Option<String>,
     message: Option<String>,
     last_boot: Option<String>,
     checked: bool,
+}
+/// One in-flight connect/disconnect. `ticket` is the admission call; after an
+/// admitted change the row stays pending until topic readback or `deadline`.
+struct LinkOp {
+    boot: String,
+    key: String,
+    method: &'static str,
+    ticket: Option<crate::nacre_source::CallTicket>,
+    deadline: Option<std::time::Instant>,
+}
+const LINK_READBACK: Duration = Duration::from_secs(30);
+const MAX_LINK_ROWS: usize = 5;
+struct LinkTarget {
+    method: &'static str,
+    params: serde_json::Value,
+}
+struct LinkRow {
+    key: String,
+    label: String,
+    action: &'static str,
+    active: bool,
 }
 struct BluetoothControl {
     client: crate::nacre_source::Client,
@@ -118,6 +141,8 @@ impl Status {
             wifi_control: Some(RefCell::new(WifiControl {
                 client,
                 pending: None,
+                link: None,
+                link_message: None,
                 message: None,
                 last_boot: None,
                 checked: false,
@@ -221,7 +246,7 @@ impl Status {
             return;
         };
         let mut control = control.borrow_mut();
-        if control.pending.is_some() {
+        if control.pending.is_some() || control.link.is_some() {
             return;
         }
         if control
@@ -245,6 +270,64 @@ impl Status {
         ) {
             Ok(ticket) => control.pending = Some((boot, ticket)),
             Err(_) => control.message = Some("Wi-Fi change failed".into()),
+        }
+    }
+    /// Connect (`network.connect`) or disconnect (`network.disconnect`) the row
+    /// `key`. The row is re-resolved against the current fresh topic; a missing
+    /// or changed row sends nothing. Never retries.
+    pub fn network_link_action(
+        &self,
+        method: &str,
+        key: &str,
+        wake: crate::nacre_source::CallWake,
+    ) {
+        let Some(control) = &self.wifi_control else {
+            return;
+        };
+        let snapshot = self.source.snapshot();
+        let client = control.borrow().client.clone();
+        let candidate = wifi_candidate(&snapshot, &client);
+        let (Some(boot), Some(state)) = (candidate.topic_boot.clone(), candidate.state.as_ref())
+        else {
+            return;
+        };
+        let mut control = control.borrow_mut();
+        if !candidate.fresh || control.pending.is_some() || control.link.is_some() {
+            return;
+        }
+        let status = client.status();
+        let advertised = ["network.connect", "network.disconnect"]
+            .into_iter()
+            .find(|name| *name == method)
+            .and_then(|name| status.methods.get(name).map(|m| (name, m)));
+        let Some((method, advertised)) = advertised.filter(|(_, m)| m.v == 1) else {
+            return;
+        };
+        control.link_message = None;
+        let Some(target) = resolve_link(state, key).filter(|target| target.method == method) else {
+            control.link_message = Some("Network list changed".into());
+            return;
+        };
+        match client.begin_call(
+            method.into(),
+            target.params,
+            Duration::from_millis(advertised.timeout.min(10_000) as u64),
+            crate::nacre_source::CallGuard {
+                boot: boot.clone(),
+                version: 1,
+            },
+            Some(wake),
+        ) {
+            Ok(ticket) => {
+                control.link = Some(LinkOp {
+                    boot,
+                    key: key.into(),
+                    method: target.method,
+                    ticket: Some(ticket),
+                    deadline: None,
+                })
+            }
+            Err(error) => control.link_message = Some(link_error_message(&error.code)),
         }
     }
     pub fn bluetooth_action(&self, wake: crate::nacre_source::CallWake) {
@@ -485,6 +568,7 @@ impl Status {
                 .is_some_and(|previous| previous != boot)
         {
             control.message = None;
+            control.link_message = None;
         }
         if let Some(boot) = candidate.topic_boot.as_ref() {
             control.last_boot = Some(boot.clone());
@@ -534,6 +618,104 @@ impl Status {
                         && error.message == "Network authentication required or cancelled"
                 })
         });
+        if candidate
+            .topic_boot
+            .as_ref()
+            .is_some_and(|boot| control.link.as_ref().is_some_and(|op| &op.boot != boot))
+            || !candidate.link_connected
+        {
+            control.link = None;
+        }
+        let link_terminal = control
+            .link
+            .as_mut()
+            .and_then(|op| op.ticket.as_mut().and_then(|ticket| ticket.try_take()));
+        if let Some(result) = link_terminal {
+            match result {
+                Ok(payload)
+                    if payload.as_object().is_some_and(|object| {
+                        object.len() == 1
+                            && object
+                                .get("changed")
+                                .and_then(serde_json::Value::as_bool)
+                                .is_some()
+                    }) =>
+                {
+                    let changed = payload["changed"].as_bool() == Some(true);
+                    if changed && let Some(op) = control.link.as_mut() {
+                        op.ticket = None;
+                        op.deadline = Some(std::time::Instant::now() + LINK_READBACK);
+                    } else {
+                        control.link = None;
+                    }
+                }
+                Ok(_) => {
+                    control.link = None;
+                    control.link_message = Some("Network change failed".into());
+                }
+                Err(error) => {
+                    control.link = None;
+                    control.link_message = Some(link_error_message(&error.code));
+                }
+            }
+        }
+        // After admission the topic readback decides: clear once the row no longer
+        // resolves to the same operation, on authentication failure, or at deadline.
+        if let Some(op) = control.link.as_ref()
+            && op.ticket.is_none()
+            && (authentication_error
+                || op.deadline.is_some_and(|d| std::time::Instant::now() >= d)
+                || !candidate.fresh
+                || candidate.state.as_ref().is_none_or(|state| {
+                    resolve_link(state, &op.key).is_none_or(|t| t.method != op.method)
+                }))
+        {
+            control.link = None;
+        }
+        let (can_connect, can_disconnect) = {
+            let methods = client.status().methods;
+            let has = |name: &str| methods.get(name).is_some_and(|m| m.v == 1);
+            (has("network.connect"), has("network.disconnect"))
+        };
+        let link_busy = control.link.is_some();
+        let rows = match candidate.state.as_ref().filter(|_| candidate.fresh) {
+            Some(state) => link_rows(state)
+                .into_iter()
+                .map(|row| {
+                    let pending = control.link.as_ref().is_some_and(|op| op.key == row.key);
+                    let allowed = if row.active {
+                        can_disconnect
+                    } else {
+                        can_connect
+                    };
+                    let action = if pending {
+                        if row.active {
+                            "Disconnecting…"
+                        } else {
+                            "Connecting…"
+                        }
+                    } else if !row.active && authentication_error {
+                        "Retry"
+                    } else {
+                        row.action
+                    };
+                    serde_json::json!({
+                        "id": row.key,
+                        "label": row.label,
+                        "action": action,
+                        "active": row.active,
+                        "enabled": allowed && !link_busy && !busy,
+                    })
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        let link_message = if link_busy {
+            ""
+        } else {
+            control.link_message.as_deref().unwrap_or("")
+        }
+        .to_owned();
         let message = if !candidate.eligible {
             "Wi-Fi control unavailable"
         } else if busy {
@@ -551,6 +733,8 @@ impl Status {
             ),
             ("network.wifi_busy".into(), Value::Bool(busy)),
             ("network.wifi_message".into(), Value::Text(message.into())),
+            ("network.rows".into(), Value::list(rows)),
+            ("network.link_message".into(), Value::Text(link_message)),
         ]);
         base
     }
@@ -904,6 +1088,156 @@ fn bluetooth_candidate(
     }
 }
 
+fn link_error_message(code: &str) -> String {
+    match code {
+        "permission_denied" => "Network change not permitted",
+        "stale_revision" => "Network list changed; try again",
+        "unavailable" => "Network control unavailable",
+        "busy" => "Network busy; try again",
+        "invalid_request" | "validation" => "Network request rejected",
+        "timeout" => "Network change timed out",
+        _ => "Network change failed",
+    }
+    .into()
+}
+/// The single device of `kind`, optionally required to be connected.
+fn sole_device<'a>(
+    state: &'a NetworkState,
+    kind: &str,
+    connected: bool,
+) -> Option<&'a nacre_protocol::core_services::EntityId> {
+    let mut found = state.devices.order.iter().filter(|id| {
+        state
+            .devices
+            .items
+            .get(*id)
+            .is_some_and(|d| d.kind == kind && (!connected || d.connected))
+    });
+    let first = found.next()?;
+    found.next().is_none().then_some(first)
+}
+/// Row keys: `ap:<id>` / `conn:<id>` connect, `dev:<device>` disconnects.
+fn resolve_link(state: &NetworkState, key: &str) -> Option<LinkTarget> {
+    use nacre_protocol::core_services::{DeviceTarget, EntityId, NetworkConnect, NetworkTarget};
+    let (kind, id) = key.split_once(':')?;
+    let id = EntityId(id.into());
+    let connect = |device: &EntityId, target| LinkTarget {
+        method: "network.connect",
+        params: serde_json::to_value(NetworkConnect {
+            device: device.clone(),
+            target,
+        })
+        .unwrap_or_default(),
+    };
+    match kind {
+        "ap" => {
+            let ap = state.access_points.items.get(&id).filter(|ap| !ap.active)?;
+            state.devices.items.get(&ap.device)?;
+            let saved = ap
+                .connection
+                .as_ref()
+                .filter(|c| state.connections.items.get(*c).is_some_and(|c| !c.active));
+            Some(connect(
+                &ap.device,
+                saved.map_or(NetworkTarget::AccessPoint(id.clone()), |c| {
+                    NetworkTarget::Connection(c.clone())
+                }),
+            ))
+        }
+        "conn" => {
+            let connection = state.connections.items.get(&id).filter(|c| !c.active)?;
+            let device = sole_device(state, &connection.kind, false)?;
+            Some(connect(device, NetworkTarget::Connection(id)))
+        }
+        "dev" => {
+            state.devices.items.get(&id).filter(|d| d.connected)?;
+            Some(LinkTarget {
+                method: "network.disconnect",
+                params: serde_json::to_value(DeviceTarget { device: id }).unwrap_or_default(),
+            })
+        }
+        _ => None,
+    }
+}
+/// Bounded rows: access points (active first, then strongest), then saved
+/// connections that no listed access point already represents.
+fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
+    let mut rows: Vec<LinkRow> = Vec::new();
+    let mut aps: Vec<_> = state
+        .access_points
+        .order
+        .iter()
+        .filter_map(|id| state.access_points.items.get(id).map(|ap| (id, ap)))
+        .filter(|(_, ap)| state.devices.items.contains_key(&ap.device))
+        .collect();
+    aps.sort_by_key(|(_, ap)| (!ap.active, std::cmp::Reverse(ap.strength)));
+    let name = |text: &str| {
+        line(
+            if text.is_empty() {
+                "Hidden network"
+            } else {
+                text
+            },
+            28,
+        )
+    };
+    for (id, ap) in aps {
+        let key = if ap.active {
+            format!("dev:{}", ap.device.0)
+        } else {
+            format!("ap:{}", id.0)
+        };
+        if rows.iter().any(|row| row.key == key) {
+            continue;
+        }
+        rows.push(LinkRow {
+            key,
+            label: name(&ap.name),
+            action: if ap.active { "Disconnect" } else { "Connect" },
+            active: ap.active,
+        });
+    }
+    let represented: std::collections::BTreeSet<_> = state
+        .access_points
+        .items
+        .values()
+        .filter_map(|ap| ap.connection.as_ref())
+        .collect();
+    for id in &state.connections.order {
+        let Some(connection) = state.connections.items.get(id) else {
+            continue;
+        };
+        if represented.contains(id) {
+            continue;
+        }
+        let key = if connection.active {
+            match sole_device(state, &connection.kind, true) {
+                Some(device) => format!("dev:{}", device.0),
+                None => continue,
+            }
+        } else if sole_device(state, &connection.kind, false).is_some() {
+            format!("conn:{}", id.0)
+        } else {
+            continue;
+        };
+        if rows.iter().any(|row| row.key == key) {
+            continue;
+        }
+        rows.push(LinkRow {
+            key,
+            label: name(&connection.name),
+            action: if connection.active {
+                "Disconnect"
+            } else {
+                "Connect"
+            },
+            active: connection.active,
+        });
+    }
+    rows.truncate(MAX_LINK_ROWS);
+    rows
+}
+
 fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
     let primary = state.primary_connection.as_ref();
     let connection = primary.and_then(|id| state.connections.items.get(id));
@@ -1116,4 +1450,16 @@ fn line(text: &str, max: usize) -> String {
         out.push('…');
     }
     out
+}
+
+#[cfg(test)]
+pub(crate) fn link_rows_for_test(state: &NetworkState) -> Vec<String> {
+    link_rows(state).into_iter().map(|row| row.key).collect()
+}
+#[cfg(test)]
+pub(crate) fn resolve_link_for_test(
+    state: &NetworkState,
+    key: &str,
+) -> Option<(&'static str, serde_json::Value)> {
+    resolve_link(state, key).map(|target| (target.method, target.params))
 }

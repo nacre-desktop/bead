@@ -18,9 +18,9 @@ use tokio::{
 
 const WIFI_SWITCH_ID: &str = "status-popout.wifi-row.wifi-radio";
 
-struct Lab(PathBuf);
+pub(super) struct Lab(pub(super) PathBuf);
 impl Lab {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
             "wifi-runtime-{}-{}",
@@ -31,7 +31,7 @@ impl Lab {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
         Self(path)
     }
-    fn bind(&self) -> UnixListener {
+    pub(super) fn bind(&self) -> UnixListener {
         let socket = self.0.join("daemon.sock");
         let listener = UnixListener::bind(&socket).unwrap();
         std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600)).unwrap();
@@ -145,7 +145,9 @@ fn welcome(method: Option<(&str, u16)>, network_topic: Option<u16>) -> Message {
         frame_ms: None,
     }
 }
-async fn next(reader: &mut framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>) -> Message {
+pub(super) async fn next(
+    reader: &mut framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>,
+) -> Message {
     tokio::time::timeout(Duration::from_secs(5), reader.next())
         .await
         .unwrap()
@@ -581,7 +583,7 @@ fn isolate_runtime(runtime: &mut Runtime, recovery: &Path) {
     runtime.session.enable_recovery(recovery.into());
 }
 
-fn controlled_runtime(
+pub(super) fn controlled_runtime(
     client: &Client,
     recovery: &Path,
 ) -> Result<Runtime, Box<dyn std::error::Error>> {
@@ -610,14 +612,14 @@ fn controlled_runtime(
     );
     Ok(runtime)
 }
-fn project(runtime: &mut Runtime) {
+pub(super) fn project(runtime: &mut Runtime) {
     runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
     runtime.commit();
 }
 fn flag(runtime: &Runtime, name: &str) -> bool {
     runtime.session.stores.get(name) == Some(&bead::core::Value::Bool(true))
 }
-async fn until(runtime: &mut Runtime, predicate: impl Fn(&Runtime) -> bool) {
+pub(super) async fn until(runtime: &mut Runtime, predicate: impl Fn(&Runtime) -> bool) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             project(runtime);

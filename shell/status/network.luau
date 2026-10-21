@@ -8,7 +8,7 @@ local padding=kit.tokens.spacing.md
 local icon_size=kit.tokens.icons.xlarge*4/3
 local text_width=310-padding*2-icon_size-kit.tokens.spacing.md
 return kit.Panel{id="status-popout",edge=ui.resolve_for_check(ui.bind("view.edge")),
-    open=ui.bind("panel.open"),duration=kit.motion.color,width=310,height=222,padding=padding,
+    open=ui.bind("panel.open"),duration=kit.motion.color,width=310,height=410,padding=padding,
     gap=kit.tokens.spacing.sm,radius=kit.tokens.radii.medium,fill="surface",
     ui.Text{id="heading",text=ui.bind("status.heading"),height=24,font_size=kit.tokens.text.title*4/3,color="onSurface"},
     ui.Row{id="summary",height=88,gap=kit.tokens.spacing.md,align="center",
@@ -27,4 +27,15 @@ return kit.Panel{id="status-popout",edge=ui.resolve_for_check(ui.bind("view.edge
             on_activate=enabled and ui.action("network.toggle_wifi") or nil},
     },
     ui.Text{id="wifi-message",text=ui.bind("network.wifi_message"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurfaceVariant"},
+    ui.Repeat{id="links",model=ui.bind("network.rows"),key="id",render=function(item)
+        return kit.Button{id="link",height=32,padding=kit.tokens.spacing.sm,fill="transparent",
+            aria_label=item.label,
+            on_activate=item.enabled and (item.active and ui.action("network.disconnect",item.id) or ui.action("network.connect",item.id)) or nil,
+            ui.Row{id="link-row",height=28,align="center",gap=kit.tokens.spacing.md,
+                ui.Text{id="link-name",text=item.label,height=24,grow=1,font_size=kit.tokens.text.body*4/3,color=item.enabled and "onSurface" or "onSurfaceVariant"},
+                ui.Text{id="link-action",text=item.action,height=24,font_size=kit.tokens.text.caption*4/3,color=item.active and "primary" or "onSurfaceVariant"},
+            },
+        }
+    end},
+    ui.Text{id="link-message",text=ui.bind("network.link_message"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurfaceVariant"},
 }

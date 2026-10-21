@@ -124,6 +124,8 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
             "network.wifi_message".into(),
             Value::Text("Wi-Fi control unavailable".into()),
         ),
+        ("network.rows".into(), Value::list(Vec::new())),
+        ("network.link_message".into(), Value::Text(String::new())),
     ]);
     let h = Harness::load(
         &root(),

@@ -224,10 +224,21 @@ impl Runtime {
                 "network.wifi_message".into(),
                 bead::core::Value::Text(String::new()),
             ),
+            ("network.rows".into(), bead::core::Value::list(Vec::new())),
+            (
+                "network.link_message".into(),
+                bead::core::Value::Text(String::new()),
+            ),
         ]))?;
         runtime
             .actions
             .register("network.toggle_wifi", "network.control")?;
+        runtime
+            .actions
+            .register("network.connect", "network.control")?;
+        runtime
+            .actions
+            .register("network.disconnect", "network.control")?;
         runtime.actions.grant("network.control");
         Ok(runtime)
     }
@@ -895,6 +906,25 @@ impl SceneSource for Runtime {
             });
             if let Some(status) = &self.status {
                 status.wifi_action(callback);
+            }
+            let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene, false);
+        }
+        if let Some((_, name, bead::core::Value::Text(key))) = &host_action
+            && (name == "network.connect" || name == "network.disconnect")
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("network completion event channel unavailable")?;
+            let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            if let Some(status) = &self.status {
+                status.network_link_action(name, key, callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
@@ -1629,5 +1659,7 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod bluetooth_power_tests;
+#[cfg(test)]
+mod link_runtime_tests;
 #[cfg(test)]
 mod wifi_runtime_tests;

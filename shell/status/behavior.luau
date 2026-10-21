@@ -7,5 +7,7 @@ return {stores={
     close=function(s) s["panel.open"]=false end,
     -- The controlled Runtime authorizes and handles this host action.
     ["network.toggle_wifi"]=function(_) end,
+    ["network.connect"]=function(_) end,
+    ["network.disconnect"]=function(_) end,
     ["bluetooth.toggle_power"]=function(_) end,
 },computed={}}
