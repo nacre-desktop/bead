@@ -1,5 +1,46 @@
 # Roadmap and gates
 
+## Bead for others — planned after Bead's core switch on Nacre
+
+This is planned work, not authorization to start generalization now. See
+[ADR 0004](decisions/0004-structure-licensing-generalization.md).
+
+- Services without Nacre: standalone daemon using the MIT protocol or basic
+  built-in services for clock, audio, battery, network, notifications, tray,
+  media, and brightness.
+- Editor support: generate Luau types from schemas and provide `luau-lsp`
+  autocomplete and early errors.
+- “Make your first bar” template, getting-started docs, and a generic default
+  theme separate from Nacre's.
+- Sway, river, Labwc, and Wayfire adapters; validate bottom bars and panels.
+- Stable, versioned public view API with a deprecation policy.
+- Later: permissioned plugins, IME and screen-reader support, and published
+  packages.
+
+## Generalization list
+
+Record Nacre-specific assumptions found inside framework crates with a
+suggested future fix. Do not fix them as part of unrelated work.
+
+| What | Where | Suggested fix |
+| --- | --- | --- |
+| Palette parser requires Orient format version 1. | `crates/bead-render/src/lib.rs` (`Palette::parse`) | Define a framework palette contract and keep Orient conversion in a Nacre adapter. |
+| Accessibility root is named “Nacre Shell.” | `crates/bead-ui/src/accessibility.rs` (`tree`) | Use a caller-provided application label or a neutral default. |
+| Capability names match Nacre's public compositor vocabulary. | `crates/bead-backends/src/lib.rs` (`CAPABILITIES`) | Define framework-owned capability identifiers and map Nacre names in its adapter. |
+| Notification D-Bus interface is under `org.nacre.Bead`. | `crates/bead-services/src/notification_bus.rs` | Make service naming configurable or define a framework-neutral default. |
+
+## Housekeeping (later)
+
+- Move GPL `nacre-shell` and `shell/` assets to Nacre at a natural boundary so
+  Bead's repository is purely permissive.
+- Before accepting outside contributions, require DCO sign-off in CONTRIBUTING
+  in Bead, Nacre, and Orient.
+- Before publishing, choose a distinctive main crate name: `bead` and
+  `bead-core` are taken; `bead-ui`, `bead-render`, `bead-wayland`,
+  `bead-services`, `bead-test`, and `bead-backends` are available. Present it
+  as “Bead, the Nacre shell framework” to distinguish it from “Beads,” an AI
+  issue tracker. Publishing remains the owner's decision.
+
 Updated 2026-10-17. Foundation F5 and Gate C are accepted. Features9–10 use the
 shared daemon; typing targets remain open. The current Gate E target is the
 core-switch route. QML stays daily driver; no live switch or installation.

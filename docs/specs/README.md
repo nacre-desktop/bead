@@ -1,5 +1,9 @@
 # Bead implementation queue
 
+2026-10-21 owner structure/licensing decision is recorded in
+[ADR 0004](../decisions/0004-structure-licensing-generalization.md); the
+planned “Bead for others” milestone and generalization list are in the roadmap.
+
 Current owner handoff: 2026-10-20 lead transfer. F4/N9 are green. The owner
 requested finishing only the active B2 arm, releasing the desktop and stopping
 all workers for the new lead. The transfer receipt below supersedes earlier

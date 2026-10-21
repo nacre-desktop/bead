@@ -8,6 +8,7 @@ multiple-versions = "warn"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = ["https://github.com/nacre-desktop/nacre"] # Permits nacre-protocol after its MIT OR Apache-2.0 relicense; no dependency is added here.
 
 [advisories]
 # These three informational unmaintained notices concern standalone crates merged into zbus 6; the advisories report no vulnerability. Current AccessKit, AT-SPI and tray support still requires zbus 5. Upstream: https://github.com/z-galaxy/zbus/issues/2043. Revisit when AccessKit/AT-SPI/tray support zbus 6 or by 2027-01-31. This exception is limited to the three IDs below.
