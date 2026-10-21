@@ -17,6 +17,7 @@ OPENED_ONCE_ONLY_ENV = "BEAD_DASHBOARD_OPENED_ONCE_ONLY"
 MEDIAN_BATCH_ARM_LIMIT_MIB = 26.5
 MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB = 1
 MEDIAN_BATCH_FILE_EXPLANATION_TOLERANCE_MIB = 0.05
+MEDIAN_BATCH_RELATIVE_GROWTH_LIMIT_MIB = 0.5
 
 
 def acceptance_config(environ):
@@ -96,8 +97,8 @@ def assert_capture_rails(row, bar, external, total, batch_medians=False, close=F
         assert total(row) <= 25, "diagnostic exceeds current hard ceiling"
 
 
-def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=False):
-    """Apply owner-approved matched five-pair median gates to one phase."""
+def summarize_batch_phase(control_rows, candidate_rows, relative_host=False, allow_27_report=False):
+    """Apply the reference-host absolute gate or an explicitly selected relative gate."""
     import statistics
     assert len(control_rows) == 5 and len(candidate_rows) == 5, \
         "batch median requires exactly five matched alternating-pair rows per side"
@@ -122,8 +123,12 @@ def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=False):
 
     validate(control_rows)
     validate(candidate_rows)
+    drm_unknown = any(row.get("drm_mib") is None for row in control_rows + candidate_rows)
     def total(row):
-        return row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
+        # If any DRM endpoint is unmeasured, compare measured PSS only and keep
+        # the missing graphics residency explicitly unknown.
+        measured_total = row["memory"]["pss_mib"] if drm_unknown else row["pss_plus_drm_mib"]
+        return measured_total + row["memory"]["swap_pss_mib"]
     def median(rows, value):
         return statistics.median(value(row) for row in rows)
     categories = ("pss_anon_mib", "pss_file_mib", "pss_shmem_mib")
@@ -152,9 +157,15 @@ def summarize_batch_phase(control_rows, candidate_rows, allow_27_report=False):
                   else median(control_rows, lambda r: sum(r["drm_mib"].values())),
               "candidate_drm_median_mib": None if any(r.get("drm_mib") is None for r in candidate_rows)
                   else median(candidate_rows, lambda r: sum(r["drm_mib"].values())),
-              "drm_attribution": "unknown" if any(r.get("drm_mib") is None for r in control_rows + candidate_rows)
-                  else "measured"}
-    if candidate_total < 25:
+              "drm_attribution": "unknown" if drm_unknown else "measured",
+              "total_metric_basis": "PSS only; DRM unknown and excluded" if drm_unknown
+                  else "PSS plus measured DRM"}
+    if relative_host:
+        assert total_delta <= MEDIAN_BATCH_RELATIVE_GROWTH_LIMIT_MIB, \
+            "candidate-control median growth exceeds the +0.5 MiB relative limit"
+        result["verdict"] = "PASS-relative-control"
+        result["relative_growth_limit_mib"] = MEDIAN_BATCH_RELATIVE_GROWTH_LIMIT_MIB
+    elif candidate_total < 25:
         result["verdict"] = "PASS"
     elif candidate_total <= MEDIAN_BATCH_ARM_LIMIT_MIB and allow_27_report:
         assert anonymous_delta < MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB, \

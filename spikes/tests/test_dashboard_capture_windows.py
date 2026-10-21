@@ -388,6 +388,41 @@ class CaptureWindowTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "invalid or negative"):
             residency.summarize_batch_phase([base.copy() for _ in range(5)], [bad.copy() for _ in range(5)])
 
+    def test_relative_host_gate_uses_control_delta_and_preserves_unknown_drm(self):
+        def row(total, anon=5.0, shmem=1.0, drm=None):
+            file = total - anon - shmem
+            return {"pss_plus_drm_mib": total, "drm_mib": drm,
+                    "memory": {"pss_mib": total, "swap_pss_mib": 0.0,
+                               "pss_anon_mib": anon, "pss_file_mib": file,
+                               "pss_shmem_mib": shmem}}
+
+        control = [row(26.5) for _ in range(5)]
+        at_limit = [row(27.0) for _ in range(5)]
+        summary = residency.summarize_batch_phase(control, at_limit, relative_host=True)
+        self.assertEqual(summary["candidate_total_median_mib"], 27.0)
+        self.assertEqual(summary["total_delta_median_mib"], 0.5)
+        self.assertEqual(summary["verdict"], "PASS-relative-control")
+        self.assertEqual(summary["drm_attribution"], "unknown")
+        self.assertIsNone(summary["control_drm_median_mib"])
+        self.assertEqual(summary["total_metric_basis"], "PSS only; DRM unknown and excluded")
+
+        below_limit = [row(26.99) for _ in range(5)]
+        self.assertEqual(residency.summarize_batch_phase(control, below_limit, relative_host=True)["verdict"],
+                         "PASS-relative-control")
+        decreased = [row(26.0) for _ in range(5)]
+        self.assertEqual(residency.summarize_batch_phase(control, decreased, relative_host=True)["verdict"],
+                         "PASS-relative-control")
+        over_limit = [row(27.0001) for _ in range(5)]
+        with self.assertRaisesRegex(AssertionError, "relative limit"):
+            residency.summarize_batch_phase(control, over_limit, relative_host=True)
+
+        anon_at_limit = [row(26.5, anon=6.0) for _ in range(5)]
+        self.assertEqual(residency.summarize_batch_phase(control, anon_at_limit, relative_host=True)["verdict"],
+                         "PASS-relative-control")
+        anon_over = [row(26.5, anon=6.0001) for _ in range(5)]
+        with self.assertRaisesRegex(AssertionError, "anonymous growth"):
+            residency.summarize_batch_phase(control, anon_over, relative_host=True)
+
     def test_batch_summary_collects_all_phases_and_uses_27_mib_once(self):
         import tempfile
         def row(total, file):
@@ -424,6 +459,32 @@ class CaptureWindowTests(unittest.TestCase):
             self.assertIn("one-time allowance", report["phases"]["niri/opened-once"]["error"])
             self.assertTrue(output.is_file())
             self.assertEqual(json.loads(output.read_text())["phases"], report["phases"])
+
+    def test_batch_summary_selects_relative_policy_only_for_desktop_compositor(self):
+        import tempfile
+        def row(total):
+            anon, shmem = 5.0, 1.0
+            return {"pss_plus_drm_mib": total, "drm_mib": None,
+                    "memory": {"pss_mib": total, "swap_pss_mib": 0.0, "pss_anon_mib": anon,
+                               "pss_file_mib": total - anon - shmem, "pss_shmem_mib": shmem}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for compositor in batch_summary.COMPOSITORS:
+                for pair in range(1, 6):
+                    for arm, total in (("A", 26.0), ("B", 26.5)):
+                        folder = root / f"{arm}{pair}" / compositor
+                        folder.mkdir(parents=True, exist_ok=True)
+                        for phase in batch_summary.PHASES:
+                            (folder / f"{phase}.json").write_text(json.dumps(row(total)))
+            report = batch_summary.summarize(root, relative_compositors=("hyprland",),
+                                             report_path=root / "relative-summary.json")
+        self.assertTrue(report["complete"])
+        self.assertTrue(all(report["phases"][f"hyprland/{phase}"]["verdict"] == "PASS-relative-control"
+                            for phase in batch_summary.PHASES))
+        self.assertTrue(all(report["phases"][f"hyprland/{phase}"]["drm_attribution"] == "unknown"
+                            for phase in batch_summary.PHASES))
+        self.assertTrue(all("one-time allowance" in report["phases"][f"niri/{phase}"]["error"]
+                            for phase in batch_summary.PHASES))
 
     def test_batch_arm_rail_allows_median_evaluation_but_preserves_quiet_and_close_cap(self):
         total = lambda row: row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
