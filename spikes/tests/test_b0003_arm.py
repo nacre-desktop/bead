@@ -124,8 +124,11 @@ class B0003ArmTests(unittest.TestCase):
             (root / "host-swapin-delta.txt").write_text("host_swapin_delta_bytes=0\n")
             measured = root / comp
             measured.mkdir()
-            trace = "MENU_RESULT ok=true catalog_rev=8 count=320\nUI_COMMIT generation=1 update=1 source_error=false\n" + "".join(
+            trace = ("MENU_RESULT ok=true catalog_rev=8 count=320\nUI_COMMIT generation=1 update=1 source_error=false\n"
+                     + "".join(f"INPUT_RECEIVED monotonic_ns={i + 1} cpu_ns={i + 1}\n" for i in range(200))
+                     + "".join(
                 f"UI_PRESENTED generation={i} update={i} cpu_ns=100\n" for i in range(200))
+                     )
             (measured / "engine-typing.log").write_text(trace)
             (measured / "menu-engine-proof.json").write_text(__import__("json").dumps({
                 "valid": True, "profile_mode": "clocks", "keys": 200,
