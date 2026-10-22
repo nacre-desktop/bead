@@ -462,7 +462,10 @@ impl Dashboard {
             return false;
         };
         if art.as_ref().is_none_or(|(held, _)| held != path) {
-            *art = Some((path.into(), crate::player_art::thumbnail(path)));
+            *art = Some((
+                path.into(),
+                crate::player_art::thumbnail(&crate::player_art::ART, path),
+            ));
         }
         art.as_ref().is_some_and(|(_, thumb)| thumb.is_some())
     }
@@ -470,16 +473,46 @@ impl Dashboard {
     /// scene is swapped for the held thumbnail, which the scene then owns.
     pub fn attach_art(&self, scene: &mut bead::render::Scene) {
         let held = self.art.borrow();
-        let thumb = held.as_ref().and_then(|(_, t)| t.clone());
+        let art = held.as_ref().and_then(|(_, t)| t.clone());
+        let shots = self.shots.borrow();
         for draw in &mut scene.primitives {
-            if let bead::render::Primitive::Image { path, .. } = draw
-                && path.to_str() == Some("@icon:player-art")
-                && let Some(thumb) = &thumb
-            {
-                let key = std::path::PathBuf::from("@player-art/thumb.png");
-                scene.asset_data.insert(key.clone(), thumb.clone());
+            let bead::render::Primitive::Image { path, .. } = draw else {
+                continue;
+            };
+            let Some(name) = path.to_str().and_then(|s| s.strip_prefix("@icon:")) else {
+                continue;
+            };
+            let (key, thumb) = match name.strip_prefix(SHOT_ICON) {
+                Some(id) => (
+                    format!("@screenshot-thumb/{id}.png"),
+                    shots.get(id).and_then(|(_, t)| t.clone()),
+                ),
+                None if name == "player-art" => ("@player-art/thumb.png".into(), art.clone()),
+                None => continue,
+            };
+            if let Some(thumb) = thumb {
+                let key = std::path::PathBuf::from(key);
+                scene.asset_data.insert(key.clone(), thumb);
                 *path = key;
             }
+        }
+    }
+    /// Row thumbnail name for a listed capture ("" without one). Decodes once per
+    /// (id, path) and keeps only the listed captures' bytes.
+    fn shot_thumb(&self, id: &str, path: Option<&str>) -> String {
+        let mut shots = self.shots.borrow_mut();
+        let Some(path) = path else {
+            shots.remove(id);
+            return String::new();
+        };
+        if shots.get(id).is_none_or(|(held, _)| held != path) {
+            let thumb = crate::player_art::thumbnail(&crate::player_art::SHOT, path);
+            shots.insert(id.into(), (path.into(), thumb));
+        }
+        if shots[id].1.is_some() {
+            format!("{SHOT_ICON}{id}")
+        } else {
+            String::new()
         }
     }
     pub(super) fn project_more(&self, out: &mut BTreeMap<String, Value>, snapshot: &Snapshot) {
@@ -615,10 +648,15 @@ impl Dashboard {
                     },
                     64,
                 );
-                // Only the file name is shown; the absolute path never reaches the view.
+                // Only the file name is shown; the absolute path never reaches the view (the
+                // thumbnail travels as pixels in the scene, not as a path).
+                self.shots
+                    .borrow_mut()
+                    .retain(|k, _| s.items.order.iter().take(6).any(|id| id.0 == *k));
                 rows = s.items.order.iter().take(6).filter_map(|id| s.items.items.get(id).map(|e| {
                     let name = e.path.rsplit('/').next().unwrap_or("");
-                    json!({"id":id.0,"label":line(name,56),"value":tr("bead.dashboard.screenshots-open", &[]),"detail":"","act":format!("shot.open:{}", id.0)})
+                    json!({"id":id.0,"label":line(name,56),"value":tr("bead.dashboard.screenshots-open", &[]),"detail":"","act":format!("shot.open:{}", id.0),
+                        "thumb":self.shot_thumb(&id.0, e.thumb_path.as_deref())})
                 })).collect();
             }
             Extra::AiUsage(s) => {
@@ -708,6 +746,55 @@ pub(super) fn gauges(s: &DashboardSystemState) -> Vec<Json> {
         json!({"id":"gpu","label":tr("bead.dashboard.gauge-gpu", &[]),"icon":"view_in_ar","value":percent(s.gpu.as_ref().and_then(|g| g.percent)),
             "detail":gpu_detail}),
     ]
+}
+
+/// Icon-name prefix of a screenshot row's thumbnail (swapped for pixels in `attach_art`).
+const SHOT_ICON: &str = "shot-";
+
+/// The host card rows (user, OS, compositor, uptime, kernel) from
+/// `dashboard.system.host`; uptime is counted from `boot_ms` at projection, so a
+/// hidden panel schedules nothing. No `host` block means no card.
+pub(super) fn host(s: &DashboardSystemState, now: fn() -> u64, out: &mut BTreeMap<String, Value>) {
+    let Some(h) = &s.host else {
+        return;
+    };
+    let up = h
+        .boot_ms
+        .map(|boot| now().saturating_sub(boot) / 1000)
+        .or(h.uptime_s);
+    let row = |icon: &str, text: String| json!({"id":icon,"icon":icon,"text":line(&text,40)});
+    let mut rows = vec![];
+    rows.extend(h.user.as_deref().map(|u| row("badge", u.into())));
+    rows.push(row(
+        "computer",
+        h.os.clone().unwrap_or_else(|| "Linux".into()),
+    ));
+    rows.push(row(
+        "desktop_windows",
+        tr("bead.dashboard.host-compositor", &[]),
+    ));
+    rows.extend(up.map(|s| {
+        let (d, h, m) = (s / 86400, s / 3600 % 24, s / 60 % 60);
+        let args = [
+            ("days", d.to_string()),
+            ("hours", h.to_string()),
+            ("minutes", m.to_string()),
+        ];
+        let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        row(
+            "timer",
+            tr(
+                if d > 0 {
+                    "bead.dashboard.host-uptime-days"
+                } else {
+                    "bead.dashboard.host-uptime"
+                },
+                &args,
+            ),
+        )
+    }));
+    rows.extend(h.kernel.as_deref().map(|k| row("memory", k.into())));
+    out.insert("dashboard.host".into(), Value::list(rows));
 }
 
 /// Down/up throughput bars and rates from `dashboard.system.network` (bytes per

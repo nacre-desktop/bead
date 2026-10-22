@@ -17,11 +17,8 @@ published Nacre N0033 contracts can carry. Nacre QML (`NacreMediaCard`, `NacreDa
 
 ## Not done, with reasons
 
-- **Host card** (user, OS, compositor, uptime, kernel, update count): `dashboard.system` does not publish
-  these (N0033 lists the host card as not done). The QML reads `/etc/os-release` and `/proc` itself; Bead
-  must not. The System page already shows every published reading (gauges, drives, processes, updates).
-- **Screenshot thumbnails**: the `screenshots` topic carries only id and file name, and B0027 keeps the file
-  path out of the view by design. No thumbnail path is published; unchanged.
+- **Host card** and **screenshot thumbnails**: done by B0034 (Nacre N0038 publishes
+  `dashboard.system.host` and `screenshots[].thumb_path`; see `0034-dashboard-host-thumbnails.md`).
 - Spectrum/halo and the QML manual player override (needs the `audio` topic) remain out of scope.
 
 ## Memory and idle

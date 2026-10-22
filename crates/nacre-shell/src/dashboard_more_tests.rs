@@ -390,6 +390,9 @@ fn system_with_metrics() -> Json {
     data["memory"] =
         json!({"used": 6 * 1024 * 1024 * 1024_u64, "total": 16 * 1024 * 1024 * 1024_u64});
     data["gpu"] = json!({"percent": 12.0});
+    // Booted 25 h before `fixed_now`.
+    data["host"] = json!({"user":"siverteh","os":"Arch Linux","kernel":"6.12.1-arch1-1",
+        "uptime_s": 1, "boot_ms": fixed_now() - 90_000_000});
     data
 }
 
@@ -451,6 +454,131 @@ fn system_gauges_show_published_readings_and_never_invent_zero() {
     for card in rows(&unknown, "dashboard.gauges") {
         assert_eq!(card["value"], json!("—"), "{card}");
     }
+}
+
+#[test]
+fn host_card_counts_uptime_locally_and_is_absent_without_a_host_block() {
+    let model = page_view(Page::System, system_with_metrics()).project();
+    let card = rows(&model, "dashboard.host")
+        .iter()
+        .map(|r| r["text"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        card,
+        [
+            "siverteh",
+            "Arch Linux",
+            "Hyprland",
+            "Up 1d 1h 0m",
+            "6.12.1-arch1-1"
+        ]
+    );
+    // Only the daemon's boot-relative reading: members are independent and optional.
+    let mut data = system_with_metrics();
+    data["host"] = json!({"uptime_s": 3 * 3600 + 5 * 60});
+    let model = page_view(Page::System, data).project();
+    let card = rows(&model, "dashboard.host");
+    assert_eq!(card[0]["text"], json!("Linux"));
+    assert_eq!(card[2]["text"], json!("Up 3h 5m"));
+    assert_eq!(card.len(), 3);
+    assert!(
+        !page_view(Page::System, fixture("system"))
+            .project()
+            .contains_key("dashboard.host")
+    );
+}
+
+fn shots_dir() -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!(
+        "bead-shots-view-{}-{}",
+        std::process::id(),
+        unique()
+    ));
+    std::fs::create_dir_all(root.join("nacre/shell/screenshot-thumbs")).unwrap();
+    root
+}
+fn with_thumbs(paths: [&std::path::Path; 2]) -> Dashboard {
+    let mut data = fixture("screenshots");
+    data["items"]["items"]["s2"]["thumb_path"] = json!(paths[0].to_str().unwrap());
+    data["items"]["items"]["s1"]["thumb_path"] = json!(paths[1].to_str().unwrap());
+    page_view(Page::Screenshots, data)
+}
+
+#[test]
+fn screenshot_thumbnails_are_decoded_once_refused_when_unsafe_and_released_when_hidden()
+-> Result<()> {
+    let root = shots_dir();
+    let good = root.join("nacre/shell/screenshot-thumbs/good.png");
+    image::RgbaImage::from_pixel(256, 160, image::Rgba([10, 120, 200, 255])).save(&good)?;
+    let outside = root.join("outside.png");
+    std::fs::copy(&good, &outside)?;
+    let dashboard = with_thumbs([&good, &outside]);
+    let model = dashboard.project();
+    let listed = rows(&model, "dashboard.rows");
+    assert_eq!(listed[0]["thumb"], json!("shot-s2"));
+    assert_eq!(listed[1]["thumb"], json!(""), "outside the daemon cache");
+    assert!(
+        !listed[0].to_string().contains("thumbs"),
+        "no path in the view"
+    );
+    let held = dashboard.shots.borrow()["s2"].1.clone().unwrap();
+    let decoded = image::load_from_memory(&held)?;
+    assert_eq!((decoded.width(), decoded.height()), (144, 96));
+    dashboard.project();
+    assert!(Arc::ptr_eq(
+        &held,
+        &dashboard.shots.borrow()["s2"].1.clone().unwrap()
+    ));
+    // A symlink to a real PNG never reaches the decoder.
+    let link = root.join("nacre/shell/screenshot-thumbs/link.png");
+    std::os::unix::fs::symlink(&good, &link)?;
+    assert_eq!(
+        rows(&with_thumbs([&link, &link]).project(), "dashboard.rows")[0]["thumb"],
+        json!("")
+    );
+    let closed = bead::core::Stores::default()
+        .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(false))]))?;
+    dashboard.project_with_stores(&closed);
+    assert!(dashboard.shots.borrow().is_empty(), "released when hidden");
+    std::fs::remove_dir_all(root).ok();
+    Ok(())
+}
+
+#[test]
+fn host_card_and_screenshot_thumbnails_have_deterministic_pixels() -> Result<()> {
+    let root_dir = shots_dir();
+    let good = root_dir.join("nacre/shell/screenshot-thumbs/good.png");
+    image::RgbaImage::from_pixel(256, 160, image::Rgba([10, 120, 200, 255])).save(&good)?;
+    let model = with_thumbs([&good, &root_dir.join("missing.png")]).project();
+    for scale in [1., 1.5] {
+        let mut h = Harness::load_with_icons(
+            &root(),
+            Path::new("dashboard/screenshots/main.luau"),
+            &root().join("palette.json"),
+            model.clone(),
+            bead_test::Config {
+                width: 1048,
+                height: 714,
+                scale,
+            },
+            BTreeMap::from([("shot-s2".into(), root().join("sample.png"))]),
+        )?;
+        h.render()?;
+        let frame = h.render()?;
+        let golden = root().join(format!(
+            "tests/goldens/dashboard-screenshots-thumbs-{scale}.png"
+        ));
+        if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+            frame.save(&golden)?;
+        }
+        frame.compare(
+            &golden,
+            Default::default(),
+            &std::env::temp_dir().join(format!("bead-dashboard-shots-{scale}-diff")),
+        )?;
+    }
+    std::fs::remove_dir_all(root_dir).ok();
+    Ok(())
 }
 
 fn art_dir() -> std::path::PathBuf {

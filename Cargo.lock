@@ -1740,7 +1740,7 @@ dependencies = [
 [[package]]
 name = "nacre-protocol"
 version = "0.1.0-dev.2"
-source = "git+https://github.com/nacre-desktop/nacre?rev=652d6c4fcb775003e734681bb664d78582f67f1b#652d6c4fcb775003e734681bb664d78582f67f1b"
+source = "git+https://github.com/nacre-desktop/nacre?rev=3499bcbe31fd4ca50a8c297281f57203ebe9be18#3499bcbe31fd4ca50a8c297281f57203ebe9be18"
 dependencies = [
  "schemars",
  "serde",
@@ -3549,7 +3549,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

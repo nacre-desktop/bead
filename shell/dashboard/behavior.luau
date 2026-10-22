@@ -5,7 +5,7 @@ return {stores={
     ["dashboard.preview"]=false,["dashboard.ready"]=false,["dashboard.stale"]=false,
     ["dashboard.heading"]=tr("bead.dashboard.page-unavailable",{page=tr("bead.dashboard.page-system")}),["dashboard.summary"]=tr("bead.dashboard.data-pending"),
     ["dashboard.detail"]="",["dashboard.metric"]="—",
-    ["dashboard.rows"]={},["dashboard.secondary"]={},
+    ["dashboard.rows"]={},["dashboard.secondary"]={},["dashboard.host"]={},
     ["dashboard.updates"]=tr("bead.dashboard.updates-unavailable"),["dashboard.updates_detail"]="",
     ["dashboard.tabs"]={{id="today",title=tr("bead.dashboard.page-today"),icon="dashboard"},{id="weather",title=tr("bead.dashboard.page-weather"),icon="partly_cloudy_day"},{id="media",title=tr("bead.dashboard.page-media"),icon="music_note"},{id="system",title=tr("bead.dashboard.page-system"),icon="monitoring"}},
     ["dashboard.control"]=false,["dashboard.busy"]=false,["dashboard.message"]="",["dashboard.confirm"]=false,["dashboard.dnd"]=false,

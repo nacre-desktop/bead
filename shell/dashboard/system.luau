@@ -27,6 +27,13 @@ return function()
         bars("up-bars","dashboard.net_up","secondary"),
         ui.Text{id="peak",text=ui.bind("dashboard.net_peak"),width=194,height=18,font_size=12,color="onSurfaceVariant"},
     })
+    -- Host card: user, OS, compositor, uptime, kernel from `dashboard.system.host`, three per line.
+    local host={{},{}}
+    for i,item in ipairs(ui.resolve_for_check(ui.bind("dashboard.host"))) do
+        table.insert(i<=3 and host[1] or host[2],ui.Row{id="host-"..item.id,width=144,height=24,gap=4,align="center",
+            ui.Text{text=item.icon,family="Material Symbols Rounded",font_size=16,width=20,height=20,color=i%2==0 and "onSurfaceVariant" or "primary"},
+            ui.Text{text=item.text,width=120,height=18,font_size=12,color="onSurface"}})
+    end
     return ui.Box{id="system",width=940,height=562,
         ui.Row{id="metrics",position="absolute",left=0,top=0,width=940,height=258,gap=12,table.unpack(gauges)},
         ui.Column{id="disks",position="absolute",left=0,top=274,width=357,height=212,padding=16,gap=10,radius=16,fill="surfaceContainerLow",
@@ -36,12 +43,15 @@ return function()
             C.title("title",ui.bind("dashboard.heading"),539),
             C.rows("items","dashboard.rows",539,156,true,ui.tr("bead.dashboard.system-processes-none")),
         },
-        ui.Row{id="updates",position="absolute",left=0,top=498,width=940,height=64,padding=12,gap=16,radius=16,fill="surfaceContainerLow",align="center",
+        ui.Row{id="updates",position="absolute",left=0,top=498,width=460,height=64,padding=12,gap=16,radius=16,fill="surfaceContainerLow",align="center",
             ui.Text{text="package_2",family="Material Symbols Rounded",font_size=24,width=30,height=30,color="primary"},
-            ui.Column{width=870,height=40,gap=0,
-                ui.Text{text=ui.bind("dashboard.updates"),width=870,font_size=16,height=22,color="onSurface"},
-                ui.Text{text=ui.bind("dashboard.updates_detail"),width=870,font_size=12,height=18,color="onSurfaceVariant"},
+            ui.Column{width=390,height=40,gap=0,
+                ui.Text{text=ui.bind("dashboard.updates"),width=390,font_size=16,height=22,color="onSurface"},
+                ui.Text{text=ui.bind("dashboard.updates_detail"),width=390,font_size=12,height=18,color="onSurfaceVariant"},
             },
         },
+        #host[1]>0 and ui.Column{id="host",position="absolute",left=472,top=498,width=468,height=64,padding=8,gap=0,radius=16,fill="surfaceContainerLow",
+            ui.Row{id="host-1",width=444,height=24,gap=6,table.unpack(host[1])},
+            ui.Row{id="host-2",width=444,height=24,gap=6,table.unpack(host[2])}} or nil,
     }
 end

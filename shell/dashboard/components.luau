@@ -38,6 +38,25 @@ function M.lines(id,model,width,height,empty,act,enabled)
         end},
     }
 end
+-- Screenshot rows: a 72x48 thumbnail (placeholder icon without one), the file name and the action.
+function M.shots(id,model,width,height,empty,enabled)
+    if #ui.resolve_for_check(ui.bind(model))==0 then
+        return ui.Text{id=id,text=empty,width=width,height=40,font_size=14,color="onSurfaceVariant"}
+    end
+    return ui.Column{id=id,width=width,height=height,gap=4,
+        ui.Repeat{id="items",model=ui.bind(model),key="id",render=function(item)
+            return kit.Button{id="press",width=width,height=60,padding=6,radius=10,fill="transparent",aria_label=item.label,
+                on_activate=enabled and ui.action("dashboard.do",item.act) or nil,
+                ui.Row{id="row",width=width-16,height=48,gap=12,align="center",
+                    ui.Box{id="thumb",width=72,height=48,radius=6,fill="surfaceContainerHigh",
+                        item.thumb~="" and ui.Image{position="absolute",left=0,top=0,icon=item.thumb,width=72,height=48,aria_label=item.label}
+                            or ui.Text{position="absolute",left=22,top=10,width=28,height=28,text="image",family="Material Symbols Rounded",font_size=28,color="onSurfaceVariant"}},
+                    ui.Text{id="label",text=item.label,width=width-210,height=24,font_size=16,color="onSurface",shrink=0},
+                    ui.Text{id="value",text=item.value,width=70,height=22,font_size=14,text_align="right",color="primary"},
+                }}
+        end},
+    }
+end
 function M.button(id,label,action,width,selected,aria)
     width=width or 160
     return kit.Button{id=id,width=width,height=40,padding=0,radius=12,justify="center",align="center",

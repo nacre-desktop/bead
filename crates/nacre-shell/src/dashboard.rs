@@ -432,6 +432,8 @@ pub struct Dashboard {
     player: Option<Arc<dyn Source>>,
     /// Thumbnail of the active player's art, decoded once per path while visible.
     art: std::cell::RefCell<Option<Art>>,
+    /// Screenshot row thumbnails by capture id, only for the listed rows while shown.
+    shots: std::cell::RefCell<BTreeMap<String, Art>>,
     clock: Option<Arc<dyn Source>>,
     settings: Option<Arc<dyn Source>>,
     controls: Option<controls::Controls>,
@@ -454,6 +456,7 @@ impl Dashboard {
             secondary: updates,
             player: None,
             art: Default::default(),
+            shots: Default::default(),
             clock: None,
             settings: None,
             controls: None,
@@ -499,6 +502,7 @@ impl Dashboard {
         if !open {
             // Hidden: the art thumbnail is released with the card.
             *self.art.borrow_mut() = None;
+            self.shots.borrow_mut().clear();
         }
         if let Some(clock) = &self.clock {
             values.extend(crate::calendar::Calendar::new(clock.clone()).project(stores));
@@ -816,6 +820,7 @@ impl Dashboard {
                 out.insert("dashboard.secondary".into(), Value::list(disks));
                 out.insert("dashboard.gauges".into(), Value::list(controls::gauges(&s)));
                 controls::traffic(&s, &mut out);
+                controls::host(&s, self.now, &mut out);
             }
             CoreSnapshot::Notifications(s) => {
                 text(
