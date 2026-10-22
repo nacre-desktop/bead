@@ -10,6 +10,7 @@ import re
 import socket as unix_socket
 import statistics
 import subprocess
+import sys
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -66,6 +67,7 @@ def sample(env, raw, compositor, stop):
     log_path = raw/(compositor+'-per-output-'+role+'.log')
     log_path.write_text('')
     client = None
+    daemon = None
     pointer_probe = None
     result = {'compositor': compositor, 'role': role, 'binary': str(binary),
               'phases': [], 'multi_output_supported': compositor == 'hyprland',
@@ -280,6 +282,16 @@ def sample(env, raw, compositor, stop):
         command_args = [str(binary), '--bar', '--core-views', '--renderer', 'cpu',
                         '--namespace', 'bead-per-output-proof', '--command-socket', str(socket),
                         '--trace-state']
+        if os.environ.get('BEAD_PER_OUTPUT_DAEMON') == '1':
+            # B0022: same daemon-mode flags for control and candidate (empty tray, so only
+            # the route plumbing differs); the fake daemon is private and stopped below.
+            daemon_socket = pathlib.Path(env['XDG_RUNTIME_DIR'])/'fake-daemon.sock'
+            daemon = subprocess.Popen([sys.executable, str(ROOT/'spikes/fake-bar-daemon.py'),
+                                       str(daemon_socket), str(raw/(compositor+'-per-output-'+role+'-daemon.jsonl')),
+                                       'memory-boot', '--empty-tray'], env=env, start_new_session=True)
+            wait(lambda _: daemon_socket.exists(), 'fake daemon socket')
+            command_args += ['--daemon-socket', str(daemon_socket), '--ui-provider']
+            result['daemon_mode'] = True
         with log_path.open('w') as stream:
             result['client_start_monotonic_ns'] = time.monotonic_ns()
             client = subprocess.Popen(command_args, cwd=ROOT, env=env, stdout=stream,
@@ -480,6 +492,8 @@ def sample(env, raw, compositor, stop):
         result['reason'] = str(error)
         raise
     finally:
+        if daemon is not None and daemon.poll() is None:
+            daemon.terminate()
         if pointer_probe is not None:
             try:
                 measure.stop(pointer_probe.process)

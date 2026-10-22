@@ -3,7 +3,7 @@
 """Private fake N0031 daemon for the B0022 nested proof.
 
 Advertises the bar action methods (or none with --no-methods), serves a two-row
-`tray` topic, logs one JSON line per call to LOG and answers {"changed": true}.
+`tray` topic (empty with --empty-tray), logs one JSON line per call to LOG and answers {"changed": true}.
 Not a Nacre daemon: no compositor, no authority, private socket only.
 """
 import json
@@ -24,7 +24,7 @@ TRAY = {"health": {"available": True, "stale": False}, "items": {"items": {
     "order": ["sni:one", "sni:two"]}}
 
 
-def serve(path, log, methods, boot):
+def serve(path, log, methods, boot, tray):
     if os.path.exists(path):
         os.unlink(path)
     listener = socket.socket(socket.AF_UNIX)
@@ -51,7 +51,7 @@ def serve(path, log, methods, boot):
         for line in reader:
             message = json.loads(line)
             if message.get('t') == 'sub' and 'tray' in message.get('topics', []):
-                send({'t': 'snap', 'topic': 'tray', 'seq': 0, 'data': TRAY})
+                send({'t': 'snap', 'topic': 'tray', 'seq': 0, 'data': tray})
             elif message.get('t') == 'call':
                 record({'event': 'call', 'm': message['m'], 'p': message.get('p')})
                 send({'t': 'ret', 'id': message['id'], 'ok': {'changed': True}})
@@ -63,4 +63,6 @@ def serve(path, log, methods, boot):
 
 if __name__ == '__main__':
     path, log, boot = sys.argv[1:4]
-    serve(path, log, [] if '--no-methods' in sys.argv else METHODS, boot)
+    empty = {'health': TRAY['health'], 'items': {'items': {}, 'order': []}}
+    serve(path, log, [] if '--no-methods' in sys.argv else METHODS, boot,
+          empty if '--empty-tray' in sys.argv else TRAY)

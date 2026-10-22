@@ -20,22 +20,23 @@ Extra-output cost +1.862 MiB passes ~3 MiB. Named counters explain
 0.678 MiB of 1.033 MiB extra live heap, leaving ~0.356 MiB unclassified.
 Full Arch Bead CI and private lifecycle/input/idle/scale proofs pass. Niri's
 single Winit output has no supported private hotplug route; that limitation
-remains explicit. B0022's architecture blocker is cleared; its action-contract
-and remaining consumer proofs stay separate. See [B0025](specs/0025-per-output-ui-sessions.md).
+remains explicit. B0022's architecture blocker is cleared. See [B0025](specs/0025-per-output-ui-sessions.md).
 No installed-shell change or live session.
 
-## 2026-10-22 — B0022 bar composition and lifecycle
+## 2026-10-22 — B0022 bar actions on Nacre N0031 routes; review
 
-At the B0022 spec start, Wayland already created/removed primary bar surfaces
-per output and updated their geometry/scale, while the bar model was global.
-B0025 now provides accepted session isolation. Published protocol v1
-still has no daemon routes for workspace,
-focus, session, calendar peek, status adjustments, or tray actions. B0022 is
-therefore partial; see [spec 0022](specs/0022-bar-composition-lifecycle.md)
-for the versioned action matrix and contract gates. Existing reconnect tests
-fence stale daemon calls; the ignored private tray-bus supervisor covers bus
-loss and item replacement. A nested bar restart/multi-output smoke is still
-needed. No new action route was invented.
+With a daemon, the bar's workspace click/scroll, title and audio wheel, audio
+mute, battery-wheel brightness and tray activate/secondary/context/scroll are
+output-scoped N0031 calls (pin `652d6c4f`), enabled only while the Welcome
+advertises the exact method; the tray list comes from the daemon `tray` topic.
+Nothing falls back to the local compositor, audio or tray paths in daemon mode.
+B0023's assumed `session.request` shape was wrong: the published reply is
+`{changed:true}` and every non-lock action needs `confirmed:true`, so Bead now
+also confirms Suspend. Correction: QML's active-title wheel changes volume, not
+workspace. Fake-daemon tests run the real bar template for routing, capability
+gating and daemon restart; a private nested Hyprland two-output proof covers the
+same against a fake daemon. See [spec 0022](specs/0022-bar-composition-lifecycle.md).
+No installed-shell change or live session.
 
 ## 2026-10-22 — B0021 wallpaper memory fixed; review
 

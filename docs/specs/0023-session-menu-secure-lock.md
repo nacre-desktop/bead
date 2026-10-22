@@ -1,6 +1,6 @@
 # B0023 — Session menu and fail-closed lock hand-off
 
-Status: **Review — capability-gated; blocked on Nacre N0030 publishing the route.**
+Status: **Review — contract published (Nacre N0031 `session.request`, pinned `652d6c4f`); schema aligned by B0022.**
 Gap-list unit 8 (`docs/research/core-switch-gap-20261022.md`).
 
 ## Decision
@@ -18,25 +18,23 @@ Lock (`loginctl lock-session`), Log out (compositor logout), Restart
 (`systemctl reboot`), Power off (`systemctl poweroff`). QML has **no
 confirmation, no timeout and no Suspend**. The only published confirmation
 text is the launcher `power.reboot` row, "Restart the computer?".
-Bead differences, deliberate: adds Suspend; Log out, Restart and Power off ask
-once inline (no timer, Escape or Cancel dismisses); Lock and Suspend are
-immediate. The 0.18 s slide matches. Open owner question: keep the extra
+Bead differences, deliberate: adds Suspend; Log out, Suspend, Restart and Power
+off ask once inline (no timer, Escape or Cancel dismisses); Lock is immediate. The 0.18 s slide matches. Open owner question: keep the extra
 confirmations?
 
-## Contract (assumed shape, not published)
+## Contract (published by Nacre N0031)
 
-Published today: only `session.check/ready/watch` (install gate, not user
-actions) and the launcher `power` row executed by the UI provider. N0030's
-`session.request` is not on Nacre `origin/main`, so nothing is added to
-`nacre-protocol`. Bead consumes this assumed shape and is disabled until the
-Welcome advertises exactly `session.request` v1:
-
-- call `session.request` params `{action: lock|logout|suspend|reboot|shutdown}`
-- success reply `{locked:true}` for `lock`, `{accepted:true}` for the rest.
-
-Any other outcome (error, timeout, disconnect, `locked:false`, wrong or missing
-field, non-object) is a failure. Daemon error text is never shown. If N0030
-publishes a different shape, only `verdict` and the params change.
+Bead calls `session.request` v1 `{action: lock|logout|suspend|reboot|shutdown,
+confirmed: bool}` only while the Welcome advertises exactly that method.
+The reply is `{changed:true}` for every action (it records accepted execution:
+`loginctl lock-session` exit 0, compositor logout, `systemctl` exit 0). The
+daemon refuses every action except lock unless `confirmed:true`, so Bead asks
+once inline for log out, suspend, restart and power off (suspend now confirms
+too) and sends `confirmed:true` only after that step; lock sends no
+`confirmed`. Any other outcome (error, timeout, disconnect, `changed:false`,
+wrong or missing field, non-object) is a failure. Daemon error text is never
+shown. The earlier assumed `locked`/`accepted` fields and the unconfirmed
+suspend were wrong against the published schema and are removed.
 
 ## Threat model
 
@@ -81,5 +79,5 @@ None.
 
 ## Blocker
 
-Enabling needs a published `session.request` (Nacre N0030) and a producer.
-Until then the menu opens but every entry is disabled.
+None in Bead. The menu is disabled against a daemon that does not advertise
+`session.request` v1.

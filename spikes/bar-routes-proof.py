@@ -82,18 +82,21 @@ def sample(env, raw, compositor, stop):
     def hellos():
         return sum(1 for line in calls_log.read_text().splitlines() if '"event": "hello"' in line)
 
-    def click_workspace(output, offset_x):
-        found = [r for r in regions(output) if 'workspace' in r['id'] and 'workspaces' not in r['id']]
-        if not found:
-            raise RuntimeError(f'no workspace region on {output}: {[r["id"] for r in regions(output)]}')
-        x, y, w, h = found[0]['rect']
+    def click_region(output, offset_x, suffix, nth=0):
+        found = [r for r in regions(output) if r['id'].endswith(suffix)]
+        if len(found) <= nth:
+            raise RuntimeError(f'no {suffix} region on {output}: {[r["id"] for r in regions(output)]}')
+        x, y, w, h = found[nth]['rect']
         for text in (f'move {round(offset_x+x+w/2)} {round(y+h/2)} 3840 1200', 'click'):
             offset = len(pointer.lines)
             pointer.process.stdin.write(text+'\n')
             pointer.process.stdin.flush()
             pointer.wait('POINTER_DONE', offset=offset)
         time.sleep(.6)
-        return found[0]['id']
+        return found[nth]['id']
+
+    def click_region_ws(output, offset_x):
+        return click_region(output, offset_x, '.workspace')
 
     try:
         names = {m['name'] for m in monitors()}
@@ -123,38 +126,52 @@ def sample(env, raw, compositor, stop):
             clicked = {}
             for output, offset in (('bead-bench', 0), ('bead-extra', 1920)):
                 before = len(calls())
-                clicked[output] = click_workspace(output, offset)
+                clicked[output] = click_region_ws(output, offset)
                 got = wait_for(lambda: calls()[before:], f'workspace call from {output}')
                 if (got[0]['m'] != 'workspace.activate' or got[0]['p'].get('output') != output
                         or not isinstance(got[0]['p'].get('workspace'), int)):
                     raise RuntimeError(f'wrong call for {output}: {got[0]}')
             result['per_output_clicks'] = clicked
-            # Daemon down: the bar stays up, a click is not queued for later.
+            # Tray rows come from the daemon topic; a menu item asks for its context menu.
+            for nth, (method, item) in enumerate((('tray.activate', 'sni:one'),
+                                                  ('tray.context_menu', 'sni:two'))):
+                before = len(calls())
+                click_region('bead-bench', 0, '.item', nth)
+                got = wait_for(lambda: calls()[before:], f'{method} call')
+                if got[0]['m'] != method or got[0]['p'].get('item') != item:
+                    raise RuntimeError(f'wrong tray call for {item}: {got[0]}')
+            result['tray_calls'] = True
+            # Daemon down: the bar stays up with its action controls disabled, and
+            # nothing is queued for later.
+            def controls(output):
+                return [r['id'] for r in regions(output) if r['id'].endswith(('.workspace', '.item'))]
+
             daemon.terminate(); daemon.wait(timeout=5)
-            time.sleep(2)
+            wait_for(lambda: not controls('bead-bench') and not controls('bead-extra'),
+                     'controls disabled while the daemon is down')
             if ipc('state').get('surfaces') != 2:
                 raise RuntimeError('bar surfaces changed while the daemon was down')
             baseline = len(calls())
-            click_workspace('bead-bench', 0)
-            time.sleep(.5)
+            seen = hellos()
             daemon = start_daemon('proof-boot-2')
-            wait_for(lambda: hellos() >= 2, 'daemon reconnect', timeout=30)
-            time.sleep(1.5)
+            wait_for(lambda: hellos() > seen, 'daemon reconnect', timeout=30)
+            wait_for(lambda: controls('bead-bench') and controls('bead-extra'),
+                     'controls restored after reconnect', timeout=30)
+            time.sleep(1)
             if len(calls()) != baseline:
-                raise RuntimeError('a click made while the daemon was down was replayed after reconnect')
-            click_workspace('bead-bench', 0)
+                raise RuntimeError('a pending action was replayed after reconnect')
+            click_region_ws('bead-bench', 0)
             wait_for(lambda: len(calls()) == baseline+1, 'workspace call after reconnect')
             result['no_replay_after_restart'] = True
             # Registry without methods: controls are disabled, nothing is sent.
             daemon.terminate(); daemon.wait(timeout=5)
+            seen = hellos()
             daemon = start_daemon('proof-boot-3', '--no-methods')
-            wait_for(lambda: hellos() >= 3, 'method-less daemon', timeout=30)
-            time.sleep(1.5)
-            baseline = len(calls())
-            click_workspace('bead-bench', 0)
-            click_workspace('bead-extra', 1920)
-            time.sleep(.5)
-            if len(calls()) != baseline:
+            wait_for(lambda: hellos() > seen, 'method-less daemon', timeout=30)
+            wait_for(lambda: not controls('bead-bench') and not controls('bead-extra'),
+                     'controls disabled without advertised methods')
+            time.sleep(1)
+            if len(calls()) != baseline+1:
                 raise RuntimeError('a control without an advertised method sent a call')
             result['gated_without_methods'] = True
             log = client_log.read_text(errors='replace')
