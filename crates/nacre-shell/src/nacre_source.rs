@@ -51,6 +51,7 @@ impl Config {
 pub struct Status {
     pub boot: Option<String>,
     pub methods: BTreeMap<String, nacre_protocol::Method>,
+    pub topics: BTreeMap<String, u16>,
 }
 struct Shared {
     link: Publisher,
@@ -958,6 +959,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                 *status = Status {
                     boot: Some(session.boot.clone()),
                     methods: session.methods.clone(),
+                    topics: session.advertised.clone(),
                 };
             }
             for topic in shared.publishers() {

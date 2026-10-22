@@ -45,6 +45,7 @@ pub struct Packet {
     mirror: Option<Arc<Mirror>>,
     error: Option<String>,
     reload: bool,
+    wallpaper_palette: Option<std::collections::BTreeMap<String, [u8; 4]>>,
 }
 impl std::fmt::Debug for Packet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,6 +62,10 @@ impl Packet {
     pub fn is_reload(&self) -> bool {
         self.reload
     }
+    pub fn wallpaper_palette(&self) -> Option<&std::collections::BTreeMap<String, [u8; 4]>> { self.wallpaper_palette.as_ref() }
+    pub fn is_accepted(&self) -> bool { matches!(self.phase, Phase::Accepted) }
+    pub fn is_settled(&self) -> bool { matches!(self.phase, Phase::Settled) }
+    pub fn is_failed(&self) -> bool { matches!(self.phase, Phase::Failed) }
 }
 enum Job {
     PanelCenter(Option<f32>),
@@ -132,6 +137,7 @@ fn bake(
     Ok(())
 }
 impl SceneSource for Source {
+    fn wallpaper_palette_pending(&self) -> bool { true }
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let Some(factory) = self.factory.take() else {
             return;
@@ -152,6 +158,7 @@ impl SceneSource for Source {
                             mirror: None,
                             error: Some(error),
                             reload: false,
+                            wallpaper_palette: None,
                         })));
                         return;
                     }
@@ -216,6 +223,7 @@ impl SceneSource for Source {
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) => {
                             let reload = matches!(event, UiEvent::Reload);
+                            let wallpaper_palette = if let UiEvent::WallpaperPalette(values) = &event { Some(values.clone()) } else { None };
                             let _profile = bead_core::profile::Span::new("worker");
                             let started = std::time::Instant::now();
                             token += 1;
@@ -229,6 +237,7 @@ impl SceneSource for Source {
                                         mirror: Some(Arc::new(Mirror::read(source.as_ref()))),
                                         error: None,
                                         reload,
+                                        wallpaper_palette,
                                     })));
                                     continue;
                                 }
@@ -247,6 +256,7 @@ impl SceneSource for Source {
                                     mirror: None,
                                     error: Some(error),
                                     reload,
+                                    wallpaper_palette: wallpaper_palette.clone(),
                                 })));
                                 continue;
                             }
@@ -263,6 +273,7 @@ impl SceneSource for Source {
                                 mirror: None,
                                 error: fault.clone(),
                                 reload,
+                                wallpaper_palette: wallpaper_palette.clone(),
                             })));
                             // No later script event may overwrite this staged transaction before its GPU acknowledgement.
                             loop {
@@ -290,6 +301,7 @@ impl SceneSource for Source {
                                                     ))),
                                                     error: fault,
                                                     reload,
+                                                    wallpaper_palette: wallpaper_palette.clone(),
                                                 })));
                                             }
                                             Err(error) => {
@@ -304,6 +316,7 @@ impl SceneSource for Source {
                                                         ))),
                                                         error: Some(error),
                                                         reload,
+                                                        wallpaper_palette: wallpaper_palette.clone(),
                                                     })));
                                                 } else {
                                                     wakeup(UiEvent::WatchError(error));

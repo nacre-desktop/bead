@@ -204,6 +204,20 @@ fn external_palette_watch_survives_atomic_replacements() {
     drop(session);
     fs::remove_file(palette).unwrap();
 }
+
+#[test]
+fn runtime_palette_before_a_generation_commits_in_memory_without_writing_palette_file() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    session.generation = None;
+    let path = fixture.0.join("palette.json");
+    let original = fs::read(&path).unwrap();
+    let overlay = Palette(std::collections::HashMap::from([("primary".into(), [20, 40, 60, 255])]));
+    assert!(session.set_runtime_palette(overlay.clone()).unwrap().is_none());
+    assert_eq!(session.palette.get("primary").unwrap(), [20, 40, 60, 255]);
+    assert_eq!(session.runtime_palette.unwrap().get("primary").unwrap(), [20, 40, 60, 255]);
+    assert_eq!(fs::read(path).unwrap(), original);
+}
 #[test]
 fn focused_input_open_panel_and_scroll_survive_recreated_views() {
     let fixture = Fixture::new();

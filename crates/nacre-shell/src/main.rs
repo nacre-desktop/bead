@@ -20,6 +20,7 @@ mod state;
 mod status_views;
 mod tray;
 mod ui_provider;
+mod wallpaper;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
 use std::path::{Path, PathBuf};
@@ -714,6 +715,12 @@ fn start(
         scene.width = 400.;
         scene.bounds = Rect::new(-32., -32., 464., 65.);
         scene.motion = None;
+    }
+    if let Some(socket) = daemon_socket.clone() {
+        match wallpaper::Consumer::start(socket) {
+            Ok(provider) => options.wallpaper = Some(provider),
+            Err(_) => eprintln!("WALLPAPER_DISABLED code=contract_unavailable"),
+        }
     }
     if let Some(entry) = ui {
         let ui_entry_is_launcher = entry == Path::new("ui/main.luau");

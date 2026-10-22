@@ -10,6 +10,8 @@ publish = false
 bead-test = { path = "../bead-test" }
 bead={path="../bead",default-features=false}
 image = { version = "0.25", default-features = false, features = ["png"] }
+gdk-pixbuf = "0.22"
+libc = "0.2"
 niri-ipc = "=26.4.0"
 nix = {version="0.31",features=["signal","user","inotify"]}
 serde_json = "1"

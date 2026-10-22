@@ -91,6 +91,30 @@ pub struct CommandContext {
     pub panel_configured: bool,
     pub panel_view: Option<String>,
 }
+/// Output-sized pixels prepared by a product-owned passive wallpaper source.
+pub struct WallpaperFrame {
+    pub output: String,
+    pub revision: u64,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+    pub palette: bead_render::Palette,
+    /// Opaque product token keeps protocol-specific palette data paired with this raster.
+    pub commit_token: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+}
+impl std::fmt::Debug for WallpaperFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WallpaperFrame").field("output", &self.output).field("revision", &self.revision).field("width", &self.width).field("height", &self.height).finish()
+    }
+}
+pub trait WallpaperProvider: Send + Sync {
+    fn watch(&self, changed: Box<dyn Fn() + Send + Sync>) -> Result<(), String>;
+    fn prepare(&self, output: String, width: u32, height: u32) -> Result<WallpaperFrame, String>;
+    fn is_current(&self, frame: &WallpaperFrame) -> bool;
+    fn committed(&self, output: &str, revision: u64, token: &std::sync::Arc<dyn std::any::Any + Send + Sync>);
+    fn discarded(&self, output: &str, revision: u64);
+    fn output_removed(&self, output: &str);
+}
 #[derive(Clone, Debug)]
 pub enum UiEvent {
     Panel(u64, Box<UiEvent>),
@@ -118,6 +142,11 @@ pub enum UiEvent {
     Reload,
     /// Deliberately block the script executor for a bounded diagnostic interval.
     DebugScriptStall(u64),
+    WallpaperFrame(std::sync::Arc<WallpaperFrame>),
+    WallpaperRefresh,
+    WallpaperFailed(String),
+    WallpaperTick(String),
+    WallpaperPalette(std::collections::BTreeMap<String, [u8; 4]>),
     Worker(std::sync::Arc<worker::Packet>),
     Desktop(std::sync::Arc<bead_services::Snapshot>),
     Model(std::collections::BTreeMap<String, bead_core::Value>),
@@ -199,6 +228,11 @@ pub struct InputRegion {
     pub prepare_center: Option<f32>,
 }
 pub trait SceneSource {
+    /// Stage a product-provided presentation palette through the normal scene transaction.
+    fn wallpaper_palette(&mut self, palette: bead_render::Palette) -> Result<Option<Scene>, Box<dyn Error>> {
+        self.stage(UiEvent::WallpaperPalette(palette.0.into_iter().collect()))
+    }
+    fn wallpaper_palette_pending(&self) -> bool { false }
     /// Invocation coordinate along the panel's edge, in output logical pixels.
     fn panel_center(&mut self, _center: Option<f32>) {}
     fn set_idle(&mut self, _idle: bool) {}
@@ -330,6 +364,8 @@ pub struct Options {
     /// Click-through proof surfaces that reserve no desktop space.
     pub test_passive: bool,
     pub trace_state: bool,
+    /// Product-owned Nacre wallpaper consumer; framework only owns passive surfaces.
+    pub wallpaper: Option<std::sync::Arc<dyn WallpaperProvider>>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -368,6 +404,7 @@ impl Default for Options {
             test_keyboard: false,
             test_passive: false,
             trace_state: false,
+            wallpaper: None,
         }
     }
 }
@@ -437,6 +474,25 @@ struct Surface {
     presented_generation: Option<u64>,
     recovered_generation: Option<(u64, u64)>,
     ui_serial: u64,
+}
+struct WallpaperSurface {
+    output: wl_output::WlOutput,
+    name: String,
+    width: u32,
+    height: u32,
+    revision: u64,
+    scale_factor: i32,
+    layer: LayerSurface,
+    pool: SlotPool,
+    buffers: Vec<Buffer>,
+    viewport: Option<WpViewport>,
+    pixels: Option<Vec<u8>>,
+    transition: Option<WallpaperTransition>,
+}
+struct WallpaperTransition {
+    pixels: Vec<u8>,
+    target: Vec<u8>,
+    remaining: u8,
 }
 impl Drop for Surface {
     fn drop(&mut self) {

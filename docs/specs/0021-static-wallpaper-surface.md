@@ -67,6 +67,14 @@ No temporary duplicate is planned. If implementation retains a compatibility
 path or fallback beside its replacement, list it here with the exact rule:
 delete N days after the replacement is trusted.
 
+Build/runtime addition: GdkPixbuf 2.x and the PNG, JPEG, WebP, GIF and TIFF
+loader modules provide streamed decode-time scaling from the validated file
+descriptor. The CI package adds the GdkPixbuf development files; deployments
+must include the same five loader modules. Output rasters and any scaled decode
+intermediate are capped at 64 MiB and 16,384 pixels per axis, which covers 4K
+outputs. Larger outputs fail closed; the 100-million source-pixel contract cap
+continues to apply independently.
+
 ## Generalization list
 
 The first implementation must record any Nacre assumption demonstrated inside

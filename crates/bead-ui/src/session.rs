@@ -5,6 +5,8 @@ pub(super) struct Pending {
     pub(super) generation: Option<Generation>,
     pub(super) stores: Stores,
     pub(super) palette: Palette,
+    pub(super) base_palette: Palette,
+    pub(super) runtime_palette: Option<Palette>,
     pub(super) palette_bytes: Option<Vec<u8>>,
     source_root: PathBuf,
     palette_source: PathBuf,
@@ -23,6 +25,8 @@ pub struct Session {
     pub(crate) entry: PathBuf,
     pub(super) palette_path: PathBuf,
     pub(super) palette: Palette,
+    pub(super) base_palette: Palette,
+    pub(super) runtime_palette: Option<Palette>,
     pub stores: Stores,
     pub(super) generation: Option<Generation>,
     pub(super) pending: Option<Pending>,
@@ -60,7 +64,9 @@ impl Session {
                 .filter(|c| *c != std::path::Component::CurDir)
                 .collect(),
             palette_path,
-            palette,
+            palette: palette.clone(),
+            base_palette: palette,
+            runtime_palette: None,
             stores: Stores::default(),
             generation: None,
             pending: None,
@@ -218,8 +224,9 @@ impl Session {
             .load(std::sync::atomic::Ordering::SeqCst);
         let palette_bytes = fs::read(&self.palette_path)
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
-        let palette = Palette::parse(&palette_bytes)
+        let base_palette = Palette::parse(&palette_bytes)
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
+        let palette = merged_palette(&base_palette, self.runtime_palette.as_ref());
         let (generation, mut stores) =
             Generation::load(&self.root, &self.entry, &self.stores, self.attempts)?;
         if self.generation.is_none()
@@ -264,6 +271,8 @@ impl Session {
             generation: Some(generation),
             stores,
             palette,
+            base_palette,
+            runtime_palette: self.runtime_palette.clone(),
             palette_bytes: Some(palette_bytes),
             source_root: self.root.clone(),
             palette_source: self.palette_path.clone(),
@@ -294,6 +303,8 @@ impl Session {
             generation,
             stores,
             palette,
+            base_palette,
+            runtime_palette,
             nodes,
             ..
         }) = self.pending.take()
@@ -311,6 +322,8 @@ impl Session {
             }
             self.stores = stores;
             self.palette = palette;
+            self.base_palette = base_palette;
+            self.runtime_palette = runtime_palette;
             self.current = scene;
             self.current_nodes = nodes;
             self.committed_editors = self.editors.clone();
@@ -401,6 +414,8 @@ impl Session {
             generation: None,
             stores,
             palette: Palette(self.palette.0.clone()),
+            base_palette: self.base_palette.clone(),
+            runtime_palette: self.runtime_palette.clone(),
             palette_bytes: None,
             source_root: self.root.clone(),
             palette_source: self.palette_path.clone(),
@@ -463,6 +478,32 @@ impl Session {
             generation: None,
             stores: self.stores.clone(),
             palette: Palette(self.palette.0.clone()),
+            base_palette: self.base_palette.clone(),
+            runtime_palette: self.runtime_palette.clone(),
+            palette_bytes: None,
+            source_root: self.root.clone(),
+            palette_source: self.palette_path.clone(),
+            watch_revision: 0,
+            nodes,
+        });
+        Ok(Some(scene))
+    }
+    /// Stage daemon-provided presentation colors without writing the palette file.
+    pub fn set_runtime_palette(&mut self, overlay: Palette) -> Result<Option<Scene>, Diagnostic> {
+        let palette = merged_palette(&self.base_palette, Some(&overlay));
+        let Some(generation) = &self.generation else {
+            self.palette = palette;
+            self.runtime_palette = Some(overlay);
+            return Ok(None);
+        };
+        let (mut scene, nodes) = generation.materialize(&self.stores, &palette, self.viewport)?;
+        scene.font_files = self.current.font_files.clone();
+        self.pending = Some(Pending {
+            generation: None,
+            stores: self.stores.clone(),
+            palette,
+            base_palette: self.base_palette.clone(),
+            runtime_palette: Some(overlay),
             palette_bytes: None,
             source_root: self.root.clone(),
             palette_source: self.palette_path.clone(),
@@ -535,4 +576,10 @@ impl Session {
     pub fn state_summary(&self) -> String {
         serde_json::to_string(self.stores.values()).unwrap_or_default()
     }
+}
+
+fn merged_palette(base: &Palette, overlay: Option<&Palette>) -> Palette {
+    let mut colours = base.0.clone();
+    if let Some(overlay) = overlay { colours.extend(overlay.0.clone()); }
+    Palette(colours)
 }

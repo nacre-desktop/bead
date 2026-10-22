@@ -30,6 +30,7 @@ suggested future fix. Do not fix them as part of unrelated work.
 | Notification D-Bus interface is under `org.nacre.Bead`. | `crates/bead-services/src/notification_bus.rs` | Make service naming configurable or define a framework-neutral default. |
 | Script host-action allowlist names shell service routes (`services.tray`, menu actions). | `crates/bead-ui/src/script.rs` | Register host action declarations through a neutral injected interface when generalization is authorized. |
 | Transitional `Desktop` bus lane starts tray and UPower/NetworkManager/BlueZ together. | `crates/bead-services/src/runtime.rs`, `bus.rs` | Host individual lanes with injected connections during the authorized daemon migration, avoiding duplicate producer ownership. |
+| Wallpaper transition duration is matched to Nacre QML's 210 ms fade and `options.animate`. | `crates/bead-wayland/src/runtime.rs` | Pass motion policy and duration through neutral wallpaper surface options. |
 | Native bar surface and exclusive zone assume a 50-pixel Nacre header. | `crates/bead-wayland/src/runtime.rs` | Accept the bar thickness from the shell rather than fixing it in the Wayland host. |
 | Kit defaults use Nacre/Orient palette role names and icon-font family. | `crates/bead-ui/assets/kit.luau` | Inject a shell theme for palette roles, typography and component defaults. |
 

@@ -3,6 +3,13 @@
 use super::*;
 impl App {
     pub(super) fn ui(&mut self, mut event: UiEvent) {
+        match &event {
+            UiEvent::WallpaperRefresh => { self.refresh_wallpapers(); return; }
+            UiEvent::WallpaperFrame(frame) => { if let Ok(frame) = std::sync::Arc::try_unwrap(frame) { self.complete_wallpaper(frame); } return; }
+            UiEvent::WallpaperFailed(output) => { self.wallpaper_failed(&output); return; }
+            UiEvent::WallpaperTick(output) => { self.wallpaper_tick(&output); return; }
+            _ => {}
+        }
         if let UiEvent::CompanionSelect {
             view,
             output,
@@ -96,7 +103,15 @@ impl App {
                 },
             }));
         }
-        self.ui_inner(event);
+        let palette_packet = if let UiEvent::Worker(packet) = &event {
+            packet.wallpaper_palette().map(|palette| (palette.clone(), packet.is_accepted(), packet.is_settled(), packet.is_failed(), packet.has_error()))
+        } else { None };
+        let accepted = self.ui_inner(event);
+        if let Some((palette, is_accepted, is_settled, is_failed, has_error)) = palette_packet {
+            if is_settled || is_failed || is_accepted {
+                self.wallpaper_palette_settled(&palette, is_settled || (is_accepted && accepted && !has_error));
+            }
+        }
     }
     pub(super) fn ui_inner(&mut self, event: UiEvent) -> bool {
         match &event {
