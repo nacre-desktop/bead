@@ -53,3 +53,17 @@ proof markers remain explicit developer options. The UI implementation is split
 into generation, session and interaction modules; Wayland execution is split
 into runtime, transactions, rendering and protocol dispatch. Public API exports
 are retained.
+
+## Nacre tray preview
+
+The bar's private/legacy `--core-views` preview uses the existing headless tray
+host and a lazy `tray` companion panel built with Popover. It preserves submenu,
+disabled, separator and toggle state; primary, context, middle and both scroll
+axes route to SNI/DBusMenu. Attention icons have normal-icon fallback. Bounded
+plain tooltip text appears in the bar's title area, avoiding another resident
+surface. Menu state/subscriptions retire with the panel; the host survives reload.
+
+With a shared daemon client, tray rows remain hidden: the current protocol has
+reserved tray snapshots but no published producer/action contract for this path.
+There is no direct-service fallback for that mode. This is preview functionality,
+not core-switch, QML parity or memory acceptance; see [B0016](specs/0016-system-tray.md).

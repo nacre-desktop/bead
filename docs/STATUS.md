@@ -1,5 +1,18 @@
 # Status
 
+## 2026-10-22 — B0016 tray preview ready for review; core producer gate
+
+Source `6efca12` adds bounded headless SNI/DBusMenu behavior and a lazy bar menu.
+Private-bus proofs cover duplicate/custom-path items, menu/icon updates, owner
+loss, watcher takeover and session reconnect. Nested CPU input covers native
+menu open/close, both wheel axes, middle/primary activation and idle retirement.
+The shared dismissal-buffer configure failure found there is fixed. See
+[B0016](specs/0016-system-tray.md) for validation and the remaining boundaries.
+Core enablement needs published daemon hosting/action contracts; rows stay
+hidden with a shared daemon client. UI PSS+DRM+SwapPss is unmeasured, so the
+memory gate remains open. Current Nacre QML has no tray reference to compare.
+No live session, deployment or push was performed.
+
 ## 2026-10-22 — B0003 measured stage
 
 Five alternating clock-only/stage-enabled pairs per compositor and one valid

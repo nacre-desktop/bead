@@ -1,5 +1,28 @@
 # Feasibility
 
+## 2026-10-22 — B0016 tray preview boundary
+
+The existing headless tray host now supports the bar preview and lazy menus.
+Private protocol and nested CPU checks establish behavior, not memory clearance.
+Core-mode enablement still needs published daemon ownership and action contracts.
+No current QML tray was found, so no QML tray parity verdict is available.
+
+| Limit or measurement | Value |
+| --- | --- |
+| Retained item identities | 64 maximum |
+| Menu entries / nesting | 256 / 8 maximum |
+| Retained item icon bytes | 1 MiB maximum per item |
+| Menu viewport | At most 400 logical pixels high |
+| UI PSS / DRM / SwapPss | Not measured / unknown / not measured |
+
+The 25 MiB ceiling, 24.5 MiB stop line and own-bar+5 MiB close rule remain open
+for matched captures. Source bounds are not a measured memory result. zbus
+materializes wire messages before these retention caps. Additional validation
+packages: dbus, labwc, mesa, ttf-dejavu, noto-fonts and noto-fonts-emoji, installed
+only in the private CI container. No new Cargo dependencies or live changes.
+Nested opening exposed a repeated configure reattaching a busy dismissal buffer;
+the immutable pixel now attaches once. Native menu retirement is epoch-checked.
+
 
 ## 2026-10-20 — B0002 Hyprland combined-legacy stop
 

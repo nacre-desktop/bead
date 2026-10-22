@@ -29,6 +29,7 @@ suggested future fix. Do not fix them as part of unrelated work.
 | Capability names match Nacre's public compositor vocabulary. | `crates/bead-backends/src/lib.rs` (`CAPABILITIES`) | Define framework-owned capability identifiers and map Nacre names in its adapter. |
 | Notification D-Bus interface is under `org.nacre.Bead`. | `crates/bead-services/src/notification_bus.rs` | Make service naming configurable or define a framework-neutral default. |
 | Script host-action allowlist names shell service routes (`services.tray`, menu actions). | `crates/bead-ui/src/script.rs` | Register host action declarations through a neutral injected interface when generalization is authorized. |
+| Transitional `Desktop` bus lane starts tray and UPower/NetworkManager/BlueZ together. | `crates/bead-services/src/runtime.rs`, `bus.rs` | Host individual lanes with injected connections during the authorized daemon migration, avoiding duplicate producer ownership. |
 
 ## Housekeeping (later)
 
