@@ -1,31 +1,32 @@
 # Feasibility
 
-## 2026-10-22 — B0021 static wallpaper validation
+## 2026-10-22 — B0021 wallpaper memory diagnosis
 
-The Nacre N0027 consumer, secure file decoder, paired palette update and per-output background surfaces are implemented.
-The exact Bead CI replica passed in a prod Arch container on commit `3bda2ae`.
-The first private nested Hyprland run exposed 26.64 MiB settled PSS, including 10.15 MiB shared-memory PSS from its unreclaimed wallpaper buffer.
-The release-aware fix now observes `wl_buffer.release` and drops that SHM mapping, but the rerun measured 59.79 MiB settled PSS.
-The remaining file-backed and anonymous growth exceeds the owner stop line; niri and transition capture were stopped before running.
+The reported 26.64 → 59.79 MiB jump compared CPU-only release with default native GL release.
+Matched CPU builds show that buffer release works; decoder/library residency was a separate real cost.
+A short-lived companion decoder removes GdkPixbuf/Glycin and their threads from the settled UI.
+The fixed wallpaper overhead is +0.251 MiB on Hyprland and +0.619 MiB on niri, excluding niri's compositor-held wallpaper buffer.
 
-| One-output Hyprland measurement | Result |
-| --- | ---: |
-| Output mode / scale | 2880×1800 / 1.5 |
-| Poster RGBA payload | 19.78 MiB |
-| Settled nacre-shell PSS + SwapPss | 26.64 MiB |
-| PSS file-backed / anonymous / shared-memory | 13.98 / 2.51 / 10.15 MiB |
-| SwapPss / DRM | 0 / no DRM fdinfo |
+| CPU release build | Hyprland PSS; file / anon / SHM (MiB) | niri PSS; file / anon / SHM (MiB) |
+| --- | ---: | ---: |
+| Main `a6d4233` | 9.089; 7.532 / 1.293 / 0.264 | 9.019; 7.474 / 1.281 / 0.264 |
+| Pre-release cleanup `c919e34` | 25.509; 12.860 / 2.496 / 10.152 | 26.206; 13.573 / 2.480 / 10.152 |
+| Post-release cleanup `a3aaca1` | 15.295; 12.680 / 2.352 / 0.264 | 25.868; 13.228 / 2.488 / 10.152 |
+| Worker decoder `ac27ca3` | 9.340; 7.725 / 1.352 / 0.264 | 19.526; 7.925 / 1.449 / 10.152 |
 
-The initial 26.64 MiB process total exceeded the 24.5 MiB stop line; it was not a wallpaper-only delta.
+All builds used `cargo build --release -p nacre-shell --no-default-features --locked -j2`.
+Same 1×1 PNG fixture, 2880×1800 at scale 1.5; Hyprland virtual 120 Hz, niri nested 60 Hz (not physical scanout timing).
+Harness flags: `spikes/measure.py --compositor <hyprland|niri> --parent headless --runs 1 --seconds 1 --modes bead --lifecycle`, plus `--virtual120` on Hyprland; five seconds after first callback, then one second idle. niri's viewport resize proof replaces its obsolete integer-scale assertion.
+An instrumented `measure-memory.py` copy saved full smaps at the existing before/after samples; the transition copy additionally drained stdout and sampled every 25 ms.
+Private HOME/bus/runtime, desktop lock, containment/watchdog and swap gates passed. SwapPss and host swap-in were zero; no DRM fdinfo was present. Executable hashes, rollups and full per-mapping smaps were retained privately.
 
-| Hyprland post-release measurement | Result |
-| --- | ---: |
-| Output mode / scale | 2880×1800 / 1.5 |
-| Settled nacre-shell PSS + SwapPss | 59.79 MiB |
-| PSS file-backed / anonymous / shared-memory | 32.48 / 27.22 / 0.09 MiB |
-| SwapPss / DRM | 0 / no DRM fdinfo |
-
-`WALLPAPER_BUFFER_RELEASED output=bead-bench revision=1` confirms Hyprland released the buffer. Shared-memory PSS fell by 10.06 MiB, while file-backed and anonymous PSS rose versus the earlier arm; the cause is unresolved. The 59.79 MiB settled total remains above 24.5 MiB, so the owner stop line withheld niri and transition arms. The output create/remove lifecycle passed, including release markers for both `bead-test` surfaces. No installation, push or live-desktop change occurred.
+Native GL main/post measured 54.898/58.873 MiB: file 26.490/31.825, anonymous 28.320/26.961. NVIDIA compiler, LLVM and Gallium mappings plus heap account for the renderer difference; it is not a new decode Vec or a debug build.
+CPU decoder residency included 3.271 MiB Glycin PSS, 0.460 MiB GIO and 0.264 MiB GdkPixbuf. Settled threads fell from nine to three. The fixed UI no longer links those libraries.
+Heaptrack: old decoder peak live heap 75.20 MB; live heap during seconds 5–14 was constant at 535,139 bytes, with 315.72 KB remaining at exit. A longer uninstrumented post-cleanup arm settled at 15.457 MiB, ruling out a short settle window.
+Hyprland releases wallpaper SHM. niri logs `WALLPAPER_BUFFER_RETAINED ... reason=no_release`; its additional 9.889 MiB wallpaper SHM PSS remains intact, as required by the compositor fallback contract.
+One revision-1 → revision-2 crossfade passed with the small surface and private animation-policy hook: UI PSS peaked at 78.653 MiB and returned to 10.069 MiB (7.892 file, 1.387 anon, 0.791 SHM); the decoder worker is transient and is reaped before commit. Peak is UI-only, not combined worker/compositor memory.
+Full Bead CI passed in the prod Arch container, including worker pipe/identity/bounds tests. CI provisioning needed DejaVu fonts and a git snapshot for existing font/provenance tests; no desktop packages changed.
+Ship `nacre-wallpaper-decode` beside `nacre-shell`; package builds produce both. No new codec dependency, install, live run or push. Native GL's pre-existing absolute memory remains outside acceptance; this validates the original CPU comparison.
 
 ## 2026-10-22 — B0019 launcher parity diagnostic
 

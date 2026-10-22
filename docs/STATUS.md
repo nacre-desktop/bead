@@ -1,16 +1,20 @@
 # Status
 
-## 2026-10-22 — B0021 static wallpaper; release cleanup verified, memory gate blocked
+## 2026-10-22 — B0021 wallpaper memory fixed; review
 
-[B0021](specs/0021-static-wallpaper-surface.md) is unblocked by Nacre N0027,
-published at `294d3f40`. B0021 adopts the v1 active state and activation pair;
-the implementation and full prod Arch CI are complete. A private Hyprland nested
-smoke verified `wl_buffer.release` and output hotplug on 2880×1800/1.5; shared
-memory fell from 10.15 MiB to 0.09 MiB, but settled process PSS was 59.79 MiB
-(32.48 file-backed, 27.22 anonymous), above the 24.5 MiB stop line. Per the
-owner memory rule, niri and transition captures stopped. The new file-backed
-and anonymous growth is unresolved. No Nacre private-state reads, Bead-owned
-configuration writer, install or push occurred.
+[B0021](specs/0021-static-wallpaper-surface.md) memory diagnosis is complete at
+`ac27ca3`; full Bead CI passed in the prod Arch container. The earlier
+26.64 → 59.79 MiB comparison changed CPU-only release to native GL release.
+Matched CPU main/pre/post/fixed captures passed privately on both compositors.
+The companion decoder removes settled GdkPixbuf/Glycin residency: fixed UI PSS
+is 9.340 MiB on Hyprland and 19.526 MiB on niri, +0.251/+0.619 MiB over main
+after excluding niri's additional 9.889 MiB compositor-held wallpaper SHM.
+niri does not release that buffer; its documented safe fallback remains.
+A private wallpaper switch returned to 10.069 MiB after a 78.653 MiB UI-only
+transient peak. See [FEASIBILITY](../FEASIBILITY.md) for mapping/heap evidence,
+matched flags and limitations. Ship the companion beside the UI binary.
+Native GL's absolute memory is a pre-existing acceptance issue. Centre remains
+unsupported. Stop for review; no install, live desktop change or push occurred.
 
 ## 2026-10-22 — B0020 notifications/OSD spec; producer gate blocked
 

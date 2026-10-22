@@ -1,6 +1,6 @@
 # B0021 — Static wallpaper surface
 
-Status: **Contract unblocked; implementation complete; further nested validation blocked by the owner memory gate**. Nacre N0027 is published. Consumer pins
+Status: **Matched CPU memory target met; private lifecycle/switch and full CI passed; owner review**. Nacre N0027 is published. Consumer pins
 `nacre-protocol` at Nacre commit `294d3f4034e0ffc8c6ee4fe38a3ed4109aa56c84`
 (`nacre-protocol` crate `0.1.0-dev.2`, wire contract v1). No wallpaper state is
 inferred from filesystem paths; only the contract's validated local path is used.
@@ -74,7 +74,10 @@ No temporary duplicate is planned. If implementation retains a compatibility
 path or fallback beside its replacement, list it here with the exact rule:
 delete N days after the replacement is trusted.
 
-Build/runtime addition: GdkPixbuf 2.x and the PNG, JPEG, WebP, GIF and TIFF
+Build/runtime addition: install the package-built `nacre-wallpaper-decode`
+companion beside `nacre-shell`. Each decode runs once in that process; it exits
+and is reaped before the frame is committed. The UI does not link the decoder
+libraries. GdkPixbuf 2.x and the PNG, JPEG, WebP, GIF and TIFF
 loader modules provide streamed decode-time scaling from the validated file
 descriptor. The CI package adds the GdkPixbuf development files; deployments
 must include the same five loader modules. Output rasters and any scaled decode

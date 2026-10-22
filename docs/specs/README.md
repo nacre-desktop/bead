@@ -12,7 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0021 Static wallpaper](0021-static-wallpaper-surface.md) | Blocked — post-release settled PSS reached 59.79 MiB, above the 24.5 MiB owner stop line | Hyprland `wl_buffer.release` reclaimed shared memory (10.15 → 0.09 MiB); file-backed/anonymous growth remains unexplained. Prod Arch CI passed; niri/transition arms withheld by the memory gate. |
+| 0 | [B0021 Static wallpaper](0021-static-wallpaper-surface.md) | Review — matched CPU wallpaper memory target met | Worker decoder at `ac27ca3`: +0.251/+0.619 MiB H/N over main excluding niri-held SHM. Both nested lifecycles, switch and full prod Arch CI passed; no install or push. |
 | 0 | [B0020 Notifications/OSD](0020-notifications-osd-product.md) | Blocked — spec first | Nacre N0017 remains a proposal, not a published producer; timeout policy and keyboard-layout OSD contract unresolved. No runtime adoption, live ownership or push. B0019 reserved for concurrent launcher work. |
 | 4 | [B0019 Launcher parity](0019-launcher-parity.md) | In progress | Catalogue/favourites/categories, daemon ordering, input/activation and stale-result fencing; private validation, no push or live switch. |
 | 4 | [B0019 Launcher parity](0019-launcher-parity.md) | Review — implementation validated; performance/memory acceptance open | Source c8b55b5; async catalogue/favourites/group routes, ordered results, input/activation and stale fences. Full remote CI and private input/reopen passed; see spec for diagnostics and limits. No push or live switch. |
