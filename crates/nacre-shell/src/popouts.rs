@@ -141,6 +141,63 @@ pub(crate) fn core_sound_with_root(
     })
 }
 
+/// Session menu side panel (B0023). It leases nothing: the shared daemon
+/// client supplies the capability check and the single `session.request` call.
+pub fn session(
+    client: crate::nacre_source::Client,
+    palette: PathBuf,
+    colors: Palette,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    let fill = colors.get("surface")?;
+    let (width, height) = (200., 300.);
+    let mut fallback = crate::sound::fallback(fill);
+    fallback.width = width;
+    fallback.bounds = Rect::new(-32., -32., width + 64., height + 64.);
+    fallback.primitives = vec![Primitive::Rounded {
+        rect: Rect::new(0., 0., width, height),
+        radius: 12.,
+        fill,
+        border: None,
+    }];
+    if let Some(motion) = &mut fallback.motion {
+        motion.id = "session".into();
+        motion.edge = bead::core::Edge::Right;
+        motion.duration = 0.18;
+    }
+    let cold = fallback.clone();
+    Ok(PanelSpec {
+        position: Some(
+            crate::placement::Frame::default()
+                .positioner(crate::placement::Attachment::ControlCenter),
+        ),
+        engages_decorations: true,
+        passive: false,
+        keyboard_focus: true,
+        initial_open: false,
+        fallback,
+        renderer: RendererKind::Cpu,
+        factory: Arc::new(move |open| {
+            let session = bead::ui::Session::new(
+                PathBuf::from("shell"),
+                "session/main.luau".into(),
+                palette.clone(),
+                colors.clone(),
+                cold.clone(),
+            );
+            crate::reload::Runtime::panel_session(session, open)
+                .with_trace(trace)
+                .with_view_edge("right")?
+                .with_panel_geometry(width as f64, height as f64, 0.18)
+                .map_err(|error| error.to_string())?
+                .with_frame(crate::placement::Attachment::ControlCenter, &colors)
+                .and_then(|runtime| runtime.with_session_menu(client.clone()))
+                .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
+                .map_err(|e| e.to_string())
+        }),
+    })
+}
+
 pub(crate) type StatusInit = Arc<dyn Fn(&mut crate::reload::Runtime) + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

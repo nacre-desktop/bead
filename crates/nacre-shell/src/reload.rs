@@ -56,6 +56,8 @@ pub struct Runtime {
     status: Option<std::rc::Rc<crate::status_views::Status>>,
     status_subscription: Option<bead::core::source::Subscription>,
     status_control_subscription: Option<bead::core::source::Subscription>,
+    session_menu: Option<std::rc::Rc<crate::session_menu::SessionMenu>>,
+    session_menu_subscription: Option<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
@@ -238,6 +240,8 @@ impl Runtime {
             status: None,
             status_subscription: None,
             status_control_subscription: None,
+            session_menu: None,
+            session_menu_subscription: None,
             dashboard: None,
             dashboard_subscription: Vec::new(),
             launcher_memory: None,
@@ -460,6 +464,31 @@ impl Runtime {
             .register("bluetooth.toggle_power", "bluetooth.control")?;
         runtime.actions.grant("bluetooth.control");
         Ok(runtime)
+    }
+    /// Session menu panel (B0023). Controls stay disabled until the daemon
+    /// advertises `session.request` v1.
+    pub fn with_session_menu(
+        mut self,
+        client: crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.launcher.is_some()
+            || self.calendar.is_some()
+            || self.status.is_some()
+            || self.dashboard.is_some()
+            || self.session_menu.is_some()
+        {
+            return Err("one data projector per panel".into());
+        }
+        let menu = std::rc::Rc::new(crate::session_menu::SessionMenu::new(client));
+        let projector = menu.clone();
+        self.session
+            .set_projector(Box::new(move |_| Ok(projector.project())));
+        for name in ["session.select", "session.confirm", "session.cancel"] {
+            self.actions.register(name, "session.control")?;
+        }
+        self.actions.grant("session.control");
+        self.session_menu = Some(menu);
+        Ok(self)
     }
     pub fn with_core_battery_status(
         self,
@@ -1052,6 +1081,15 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=status_control_subscription"),
             }
         }
+        if let Some(menu) = &self.session_menu {
+            let wakeup = wakeup.clone();
+            match menu.subscribe(std::sync::Arc::new(move || {
+                wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
+            })) {
+                Ok(subscription) => self.session_menu_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=session_menu_subscription"),
+            }
+        }
         if let Some(dashboard) = &self.dashboard {
             match dashboard.subscribe(wakeup.clone()) {
                 Ok(subscription) => self.dashboard_subscription = subscription,
@@ -1317,6 +1355,28 @@ impl SceneSource for Runtime {
             });
             if let Some(status) = &self.status {
                 status.network_link_action(name, key, callback);
+            }
+            let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)
+            && name.starts_with("session.")
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("session completion event channel unavailable")?;
+            let wake: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            match (name.as_str(), arg) {
+                ("session.select", bead::core::Value::Text(key)) => menu.select(key, wake),
+                ("session.confirm", _) => menu.confirm(wake),
+                ("session.cancel", _) => menu.cancel(),
+                _ => {}
             }
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
@@ -1914,6 +1974,17 @@ impl SceneSource for Runtime {
                     );
                     None
                 }
+                "escape"
+                    if self
+                        .session_menu
+                        .as_ref()
+                        .is_some_and(|menu| menu.confirming()) =>
+                {
+                    if let Some(menu) = &self.session_menu {
+                        menu.cancel();
+                    }
+                    self.session.update(BTreeMap::new())?
+                }
                 "escape" if self.session.stores.get("panel.open").is_some() => {
                     self.session.update(std::collections::BTreeMap::from([(
                         "panel.open".into(),
@@ -2222,5 +2293,7 @@ mod bluetooth_power_tests;
 mod launcher_reopen_tests;
 #[cfg(test)]
 mod link_runtime_tests;
+#[cfg(test)]
+mod session_menu_runtime_tests;
 #[cfg(test)]
 mod wifi_runtime_tests;

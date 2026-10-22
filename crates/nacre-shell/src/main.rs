@@ -15,6 +15,7 @@ mod notifications;
 mod placement;
 mod popouts;
 mod reload;
+mod session_menu;
 mod sound;
 mod state;
 mod status_views;
@@ -615,6 +616,12 @@ fn start(
                     tray_selection.clone(),
                     panel_trace,
                 )?,
+            );
+        }
+        if let Some(client) = &_ui_provider {
+            views.insert(
+                "session".into(),
+                popouts::session(client.clone(), palette.clone(), colors.clone(), panel_trace)?,
             );
         }
         let status_colors = std::sync::Arc::new(colors.clone());

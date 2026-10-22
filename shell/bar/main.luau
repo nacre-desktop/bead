@@ -70,7 +70,9 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
                 glyph("calendar","calendar_month","tertiary"),
                 ui.Text{id="time",text=ui.bind("bead.desktop.clock"),width=48,shrink=0,font_size=16,height=24,family="IBM Plex Sans",color="tertiary"},
             },
-            glyph("power","power_settings_new","error"),
+            (popouts and kit.Button or ui.Row){id="power",height=30,direction=popouts and "row" or nil,align="center",padding=popouts and 0 or nil,fill=popouts and "transparent" or nil,aria_label=popouts and "Open session menu" or nil,on_activate=popouts and ui.action("view.open","session") or nil,
+                glyph("glyph","power_settings_new","error"),
+            },
         },
     },
 }
