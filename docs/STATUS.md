@@ -1,8 +1,19 @@
 # Status
 
+## 2026-10-22 — B0003 measured stage
+
+Five alternating clock-only/stage-enabled pairs per compositor and one valid
+200-key stage diagnostic per compositor were captured with the frozen B2 UI and
+real `menu.query` helper. All 10 pairs passed per-key trace, quiet, geometry,
+scope, memory and cleanup gates. Stage observation added about 0.6ms UI CPU/key;
+the first typed key remained the cold outlier. No product patch or target
+acceptance is claimed. B0003 remains in Review because exact changed-item IDs,
+query identity and RPC RTT are not present in the published markers. See the
+[measured report](research/b0003-measured-20261022.md).
+
 ## 2026-10-22 — B0002 desktop relative gate passed
 
-Desktop Hyprland and niri both passed the owner-relative gate. Candidate-minus-control medians were +0.121/+0.134/+0.219/+0.047 MiB for Hyprland and +0.237/+0.249/+0.229/−0.998 MiB for niri; anonymous deltas stayed below +1 MiB. DRM was unknown and excluded. Candidate 306474f0 / UI 7948c3c. B3 measured stage is unblocked when the lead grants the desktop heavy slot. See [the batch report](research/b0002-desktop-batch-20261021.md).
+Desktop Hyprland and niri both passed the owner-relative gate. Candidate-minus-control medians were +0.121/+0.134/+0.219/+0.047 MiB for Hyprland and +0.237/+0.249/+0.229/−0.998 MiB for niri; anonymous deltas stayed below +1 MiB. DRM was unknown and excluded. Candidate 306474f0 / UI 7948c3c. See [the batch report](research/b0002-desktop-batch-20261021.md).
 
 ## 2026-10-20 — B0002 Hyprland capture stopped at combined-legacy
 

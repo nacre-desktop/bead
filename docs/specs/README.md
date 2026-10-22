@@ -5,9 +5,10 @@
 planned “Bead for others” milestone and generalization list are in the roadmap.
 
 Current owner handoff: 2026-10-22. B2 is done after Hyprland and niri passed the
-desktop relative gate. B3 measured stage is active under the granted exclusive
-desktop slot. The dated transfer and execution receipts below remain historical
-records. [Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
+desktop relative gate. B3 has measured evidence for five pairs per compositor;
+the review remains open for the accepted trace-identity/RTT limitation. The
+dated transfer and execution receipts below remain historical records.
+[Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
@@ -15,7 +16,7 @@ records. [Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Done — 2026-10-22 | Desktop Hyprland deltas +0.121/+0.134/+0.219/+0.047 MiB; niri +0.237/+0.249/+0.229/−0.998 MiB. Anonymous growth <+1 MiB; DRM unknown and excluded. Candidate 306474f0 / UI 7948c3c. See [desktop batch report](../research/b0002-desktop-batch-20261021.md). |
-| 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Measured stage in progress under the granted exclusive desktop slot | B0003-S89afb381 accepted/CI39123319816 green; no product change in this unit. |
+| 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Review — 10 valid pairs; exact per-key item IDs/query identity and RPC RTT remain unavailable | B0003-S89afb381 accepted/CI39123319816 green. No product change or target acceptance; see [measured report](../research/b0003-measured-20261022.md). |
 | — | [B0015 Audio](0015-daemon-audio-readback-popout.md) | Done | Source dc8832fe / CI39388972154 green; docs e5fc3d88 / CI39390219914 green. Read-only capability-gated view; no producer or live claim. |
 | — | [B0011 Battery](0011-daemon-battery-status-popout.md) | Done | Sourceaf61d18/fullCI39147491406green; docs5ad2551. Lazy lease/optional readings/private lifecycle tests accepted. |
 | — | [B0010 Bluetooth](0010-daemon-bluetooth-status-popout.md) | Done | Sourcee3e417e/CI39136586458green. Capability-gated; no running producer claim. |

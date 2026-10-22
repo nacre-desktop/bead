@@ -3,7 +3,7 @@
 - ID: B0003
 - Repo: nacre-desktop/bead
 - Implementer: BEAD
-- Status: Review (B0003-S pure trace parser and tests; measured phase remains gated)
+- Status: Review (source phase accepted; measured phase run; query/result identity and RPC RTT remain unproven)
 - Depends on: source-only preparation eligible now after B0004 Done; captures require B0001/B0002 Done and exclusive grant
 - Date: 2026-10-17
 - Size: one focused session, maximum 4 hours
@@ -304,3 +304,11 @@ capacity, then recheck swap used below 64 MiB before starting. No cache drops,
 sysctl changes, or other host changes. If any condition fails, stop and report.
 The existing per-arm host swap-in, process SwapPss, containment, memory watchdog,
 source, geometry and full-window gates remain unchanged.
+
+## Measured-stage review — 2026-10-22
+
+Five alternating clock-only/stage-enabled pairs per compositor and one valid
+stage diagnostic per compositor are recorded in the [measured report](../research/b0003-measured-20261022.md).
+All capture safety, geometry, swap and memory gates passed for accepted cells.
+The per-key result-item IDs, query identity and RPC RTT are not present in the
+published markers, so B0003 remains Review/incomplete and no target is accepted.
