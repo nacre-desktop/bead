@@ -1,6 +1,6 @@
 # B0023 — Per-output UI sessions
 
-Status: **Implemented; blocked on matched desktop relative-memory acceptance**. Architecture unit consumed by
+Status: **Resumed — attribute session allocations and fix scale-resource retention**. Architecture unit consumed by
 [B0022](0022-bar-composition-lifecycle.md); action-contract blockers there remain.
 
 ## Scope and design
@@ -42,7 +42,11 @@ apply. Existing unpublished bar actions stay blocked under B0022.
 4. On the non-reference desktop, compare `origin/main` control and candidate
    with identical default-feature release builds, flags, CPU renderer, geometry
    and output count. PASS each phase if candidate median minus control median
-   is at most +0.5 MiB, with no unexplained anonymous growth above 1 MiB.
+   is at most +0.5 MiB for single-output phases, including scale changes.
+   Owner ruling 2026-10-22: intentional extra-output session state is judged
+   by the separate per-extra-output target (about 3 MiB), not the +0.5 MiB
+   same-count gate for two outputs. Attribute anonymous growth with allocation
+   counters or a profiler; share obvious immutable waste when cheap.
    This follows owner queue decision `f58558e`, reaffirmed by the lead on
    2026-10-22; the laptop absolute caps are not desktop stop conditions.
    Use five alternating control/candidate pairs per compositor. Each fresh
@@ -65,7 +69,25 @@ API remains supported compatibility, not a temporary replacement. Any temporary
 duplicate introduced later must name its path and an expiry here first:
 “delete N days after the replacement is trusted”.
 
-## Result — 2026-10-22
+## Owner continuation — 2026-10-22
+
+The measured +2.044922 MiB per extra output passes the owner's two-output
+acceptance rule; the former two-output +0.5 MiB verdict below is historical
+and superseded. Attribute the +1.433594 MiB anonymous difference using actual
+per-session allocation counters or heap profiling (behavior/markup Luau heaps,
+layout/scene storage, text/image caches and shared-memory pools). Avoid retaining
+immutable resources per session when a small sharing fix suffices.
+
+Niri scale-phase increases are a product defect to fix, not a host exception.
+Trace old-scale allocations and release them safely; repeat five alternating
+control/candidate niri pairs, requiring at most +0.5 MiB median in every phase.
+Try nested niri multi-output hotplug and document an unavailable backend route.
+Use dev-2 for builds/full Bead CI; desktop captures retain the same private HOME,
+heavy-job flock and all swap/watchdog/containment gates. After passing checks,
+update this result/B0022/queue and integrate through safe-push. No live change.
+No new temporary product implementation duplicate is planned.
+
+## Previous result — 2026-10-22
 
 Source `60896a0` implements session ownership, scoped model/input/commit routing,
 shared weak fonts/assets and immutable palette snapshots. The late output-name
