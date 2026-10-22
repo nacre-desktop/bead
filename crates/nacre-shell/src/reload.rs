@@ -4,6 +4,20 @@ use bead::render::Scene;
 use bead::wayland::{SceneSource, UiEvent};
 use std::collections::BTreeMap;
 use std::error::Error;
+fn scope_recovery(session: &mut bead::ui::Session, output: Option<&str>) {
+    if let Ok(path) = crate::state::File::path()
+        && let Some(parent) = path.parent()
+    {
+        let mut key = session.recovery_key();
+        if let Some(output) = output {
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            output.hash(&mut hash);
+            key = format!("{key}-{:016x}", hash.finish());
+        }
+        session.enable_recovery(parent.join("ui").join(key));
+    }
+}
 fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead::core::Value> {
     let mut changes = BTreeMap::from([("panel.open".into(), bead::core::Value::Bool(open))]);
     if open && launcher {
@@ -16,6 +30,7 @@ fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead
 }
 pub struct Runtime {
     pub session: bead::ui::Session,
+    output: Option<String>,
     pending: Option<Scene>,
     chrome: Option<crate::placement::Chrome>,
     launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
@@ -181,12 +196,20 @@ impl Runtime {
             })
     }
 
-    pub fn new(mut session: bead::ui::Session) -> Self {
-        if let Ok(path) = crate::state::File::path()
-            && let Some(parent) = path.parent()
-        {
-            session.enable_recovery(parent.join("ui").join(session.recovery_key()));
+    pub fn new(session: bead::ui::Session) -> Self {
+        Self::for_output(session, None)
+    }
+    pub fn for_output(mut session: bead::ui::Session, output: Option<String>) -> Self {
+        if let Some(name) = &output {
+            session.stores = session
+                .stores
+                .reconcile(&BTreeMap::from([(
+                    "bead.output.name".into(),
+                    bead::core::Value::Text(name.clone()),
+                )]))
+                .expect("valid output name store");
         }
+        scope_recovery(&mut session, output.as_deref());
         let state_file = match crate::state::File::path()
             .map_err(|e| -> Box<dyn Error> { e.into() })
             .and_then(crate::state::File::open)
@@ -202,6 +225,7 @@ impl Runtime {
         };
         Self {
             session,
+            output,
             pending: None,
             chrome: None,
             launcher: None,
@@ -879,7 +903,7 @@ impl Runtime {
         mut self,
         backend: std::sync::Arc<crate::backends::Native>,
     ) -> Result<Self, Box<dyn Error>> {
-        let values = backend_values(&backend.snapshot())?;
+        let values = backend_values(&backend.snapshot(), self.output.as_deref())?;
         self.session.stores = self.session.stores.reconcile(&values)?;
         for name in [
             "backend.workspace.switch",
@@ -1550,9 +1574,12 @@ impl SceneSource for Runtime {
             self.fonts.clear();
         }
         let scene = match event {
-            UiEvent::WallpaperPalette(values) => self
-                .session
-                .set_runtime_palette(bead::render::Palette(values.into_iter().collect()))?,
+            UiEvent::WallpaperPalette(values) => {
+                self.session
+                    .set_runtime_palette(bead::render::Palette(std::sync::Arc::new(
+                        values.into_iter().collect(),
+                    )))?
+            }
             UiEvent::Model(values) => {
                 if let Some(menu) = &mut self.tray_menu {
                     let snapshot = self
@@ -1610,6 +1637,22 @@ impl SceneSource for Runtime {
                     self.session.update(values)?
                 }
             }
+            UiEvent::OutputName(name) => {
+                self.output = Some(name.clone());
+                scope_recovery(&mut self.session, Some(&name));
+                let values = if let Some(backend) = &self.backend {
+                    backend_values(&backend.snapshot(), Some(&name))?
+                } else {
+                    BTreeMap::from([("bead.output.name".into(), bead::core::Value::Text(name))])
+                };
+                let scene = self.session.update_model(values)?;
+                // Publish a fresh accepted generation under the stable name's
+                // recovery key after this host-context transaction commits.
+                if let Some(wakeup) = &self.wakeup {
+                    wakeup(UiEvent::Reload);
+                }
+                scene
+            }
             UiEvent::Backend(snapshot) => {
                 println!(
                     "BACKEND_UPDATE backend={} connected={} workspaces={} windows={}",
@@ -1618,7 +1661,8 @@ impl SceneSource for Runtime {
                     snapshot.workspaces.len(),
                     snapshot.windows.len()
                 );
-                self.session.update_model(backend_values(&snapshot)?)?
+                self.session
+                    .update_model(backend_values(&snapshot, self.output.as_deref())?)?
             }
             UiEvent::CompanionModel(_) => {
                 return Err("companion model reached primary script".into());
@@ -1626,7 +1670,9 @@ impl SceneSource for Runtime {
             UiEvent::CompanionVisibility(_) | UiEvent::CompanionSelect { .. } => {
                 return Err("companion visibility reached script".into());
             }
-            UiEvent::Panel(_, _) => return Err("panel envelope reached script".into()),
+            UiEvent::Panel(_, _) | UiEvent::Output(_, _, _) => {
+                return Err("session envelope reached script".into());
+            }
             UiEvent::PanelVisibility(open) => {
                 if open {
                     self.tray_requested_close = false;
@@ -2152,15 +2198,45 @@ impl SceneSource for Runtime {
 
 fn backend_values(
     snapshot: &bead::backends::Snapshot,
+    output: Option<&str>,
 ) -> Result<std::collections::BTreeMap<String, bead::core::Value>, Box<dyn Error>> {
     use bead::core::Value;
+    let output_id = output.and_then(|name| {
+        snapshot
+            .outputs
+            .iter()
+            .find(|o| o.name == name)
+            .map(|o| &o.id)
+    });
+    let workspace_matches = |w: &&bead::backends::Workspace| {
+        output.is_none() || output_id.is_some_and(|id| w.output.as_ref() == Some(id))
+    };
+    let window_matches = |w: &&bead::backends::Window| {
+        output.is_none()
+            || output_id.is_some_and(|id| {
+                w.output.as_ref() == Some(id)
+                    || (w.output.is_none()
+                        && w.workspace.as_ref().is_some_and(|ws| {
+                            snapshot.workspaces.iter().any(|workspace| {
+                                &workspace.id == ws && workspace.output.as_ref() == Some(id)
+                            })
+                        }))
+            })
+    };
     let mut values = std::collections::BTreeMap::from([
+        (
+            "bead.output.name".into(),
+            Value::Text(output.unwrap_or_default().into()),
+        ),
         ("bead.connected".into(), Value::Bool(snapshot.connected)),
         (
             "bead.focused_title".into(),
             Value::Text(
                 snapshot
-                    .focused_window()
+                    .windows
+                    .iter()
+                    .filter(window_matches)
+                    .find(|w| w.focused)
                     .map_or("", |w| w.title.as_str())
                     .into(),
             ),
@@ -2181,6 +2257,7 @@ fn backend_values(
                 snapshot
                     .workspaces
                     .iter()
+                    .filter(workspace_matches)
                     .map(serde_json::to_value)
                     .collect::<Result<Vec<_>, _>>()?,
             ),
@@ -2191,6 +2268,7 @@ fn backend_values(
                 snapshot
                     .windows
                     .iter()
+                    .filter(window_matches)
                     .map(serde_json::to_value)
                     .collect::<Result<Vec<_>, _>>()?,
             ),
@@ -2335,6 +2413,8 @@ mod bluetooth_power_tests;
 mod launcher_reopen_tests;
 #[cfg(test)]
 mod link_runtime_tests;
+#[cfg(test)]
+mod output_runtime_tests;
 #[cfg(test)]
 mod session_menu_runtime_tests;
 #[cfg(test)]

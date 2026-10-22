@@ -2,9 +2,63 @@
 //! Dynamic view ownership: only small durable state survives a closed/idle view.
 use super::*;
 impl App {
+    fn notify_panel_owner(&self, event: UiEvent) {
+        let Some(sender) = &self.event_sender else {
+            return;
+        };
+        let event = if self.options.primary_factory.is_some() {
+            let Some(output) = self
+                .panel_output
+                .as_ref()
+                .map(|o| self.output_id(o))
+                .or_else(|| self.active_output.clone())
+            else {
+                return;
+            };
+            let epoch = if self.active_output.as_ref() == Some(&output) {
+                self.active_output_epoch
+            } else {
+                self.output_sessions.get(&output).map(|s| s.epoch)
+            };
+            let Some(epoch) = epoch else { return };
+            UiEvent::Output(epoch, output, Box::new(event))
+        } else {
+            event
+        };
+        let _ = sender.send(event);
+    }
+
+    fn primary_idle(&mut self, output: &wl_output::WlOutput, idle: bool) {
+        let id = self.output_id(output);
+        let source =
+            if self.options.primary_factory.is_none() || self.active_output.as_ref() == Some(&id) {
+                self.runtime.as_mut()
+            } else {
+                self.output_sessions
+                    .get_mut(&id)
+                    .and_then(|s| s.source.as_mut())
+            };
+        if let Some(source) = source {
+            source.set_idle(idle);
+        }
+    }
     pub(super) fn view_event(&mut self, panel: bool, event: UiEvent) {
         if panel && self.panel_runtime.is_some() {
             self.panel_ui(event);
+        } else if !panel && self.options.primary_factory.is_some() {
+            let output = self.active_input_output.clone().or_else(|| {
+                self.keyboard_surface.as_ref().and_then(|surface| {
+                    self.surfaces
+                        .iter()
+                        .find(|s| s.layer.wl_surface() == surface)
+                        .map(|s| s.output_name.clone())
+                })
+            });
+            if let Some(output) = output
+                && let Some(session) = self.output_sessions.get(&output)
+            {
+                self.ui(UiEvent::Output(session.epoch, output, Box::new(event)));
+            }
         } else {
             self.ui(event);
         }
@@ -60,6 +114,12 @@ impl App {
                         self.output.info(output).and_then(|info| info.logical_size)
                     {
                         value["output_size"] = serde_json::json!([size.0, size.1]);
+                        value["output"] = serde_json::Value::String(
+                            self.output
+                                .info(output)
+                                .and_then(|info| info.name)
+                                .unwrap_or_else(|| format!("output-{}", output.id().protocol_id())),
+                        );
                         if let (Some((scene, _, _)), Some(positioner)) = (
                             self.companion.as_ref(),
                             self.options
@@ -182,9 +242,7 @@ impl App {
         if self.panel_name.as_deref() == Some(name) {
             return Ok(());
         }
-        if let Some(sender) = &self.event_sender {
-            let _ = sender.send(UiEvent::PanelSelected(name.to_owned()));
-        }
+        self.notify_panel_owner(UiEvent::PanelSelected(name.to_owned()));
         let name = name.to_owned();
         let mut spec = spec.clone();
         spec.initial_open = false;
@@ -215,8 +273,14 @@ impl App {
         // View names remain application-defined; no shell geometry lives here.
         let center = center.or_else(|| {
             let name = name?;
-            self.runtime
-                .as_ref()?
+            let source = output
+                .and_then(|id| {
+                    self.output_sessions
+                        .get(id)
+                        .and_then(|session| session.source.as_ref())
+                })
+                .or(self.runtime.as_ref())?;
+            source
                 .input_regions()
                 .into_iter()
                 .find(|region| region.prepare_view.as_deref() == Some(name))?
@@ -312,8 +376,8 @@ impl App {
         if let Some(source) = &mut self.panel_runtime {
             source.panel_center(self.panel_center);
         }
-        if open && let Some(source) = &mut self.runtime {
-            source.set_idle(false);
+        if open {
+            self.primary_idle(&output, false);
         }
         if self.panel_runtime.is_some() {
             if self.panel_output.as_ref() != Some(&output)
@@ -518,9 +582,7 @@ impl App {
         if self.panel_runtime.is_none() {
             return;
         }
-        if let Some(sender) = &self.event_sender {
-            let _ = sender.send(UiEvent::PanelDismissed);
-        }
+        self.notify_panel_owner(UiEvent::PanelDismissed);
         self.panel_target = false;
         drop(self.dismiss.take());
         if let Err(error) = self.sync_all_decorations() {
@@ -552,12 +614,16 @@ impl App {
         }
     }
     pub(super) fn release_panel(&mut self) {
+        if let Some(output) = self.panel_output.clone() {
+            self.primary_idle(&output, true);
+        }
         self.panel_target = false;
         self.panel_center = None;
         self.panel_epoch = self.panel_epoch.wrapping_add(1);
         drop(self.dismiss.take());
         drop(self.panel_runtime.take());
         drop(self.companion.take());
+        self.panel_animations = Default::default();
         self.options.companion = None;
         if self.options.report.is_some() {
             self.report_surfaces.extend(
@@ -582,7 +648,9 @@ impl App {
         if self.surfaces.iter().all(|s| s.gpu.is_none()) {
             self.gpu = None;
         }
-        if let Some(source) = &mut self.runtime {
+        if self.options.primary_factory.is_none()
+            && let Some(source) = &mut self.runtime
+        {
             source.set_idle(true);
         }
         // Functional closed-idle reclamation, explicitly requested for Gate C; not a diagnostic.

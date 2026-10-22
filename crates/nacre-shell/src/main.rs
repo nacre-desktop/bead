@@ -741,12 +741,39 @@ fn start(
         let bar = options.bar;
         let brightness_client = _ui_provider.clone().filter(|_| core_views && bar);
         let trace = options.trace_state;
-        let factory: bead::wayland::worker::Factory = Box::new(move || {
-            let result =
+        // Service owners outlive individual output sessions and their workers.
+        let shared_backend = if backend_enabled {
+            Some(backends::Native::from_env()?)
+        } else {
+            None
+        };
+        let shared_desktop = bar.then(bead::services::Desktop::start);
+        if let Some(desktop) = &shared_desktop {
+            let _ = desktop_owner.set(desktop.clone());
+        }
+        let make_source = move |output: Option<String>| {
+            let entry = entry.clone();
+            let palette = palette.clone();
+            let colors = colors.clone();
+            let fallback = fallback.clone();
+            let connection_status = connection_status.clone();
+            let launcher_memory = launcher_memory.clone();
+            let tray_selection = tray_selection.clone();
+            let menu_fixture = menu_fixture.clone();
+            let daemon_socket = daemon_socket.clone();
+            let notification_bus = notification_bus.clone();
+            let notification_history = notification_history.clone();
+            let notification_owner = notification_owner.clone();
+            let shared_backend = shared_backend.clone();
+            let shared_desktop = shared_desktop.clone();
+            let desktop_owner = desktop_owner.clone();
+            let worker_fallback = fallback.clone();
+            let factory: bead::wayland::worker::Factory = Box::new(move || {
+                let result =
                 (|| -> Result<Box<dyn bead::wayland::SceneSource>, Box<dyn std::error::Error>> {
                     let session =
                         bead::ui::Session::new("shell".into(), entry, palette, colors, fallback);
-                    let runtime = reload::Runtime::new(session).with_trace(trace);
+                    let runtime = reload::Runtime::for_output(session, output).with_trace(trace);
                     let runtime = if let Some(source) = connection_status {
                         runtime.with_connection_status(source)?
                     } else {
@@ -791,13 +818,13 @@ fn start(
                     if let Some(owner) = runtime.notification_owner() {
                         let _ = notification_owner.set(owner);
                     }
-                    let runtime = if backend_enabled {
-                        runtime.with_backend(backends::Native::from_env()?)?
+                    let runtime = if let Some(backend) = shared_backend {
+                        runtime.with_backend(backend)?
                     } else {
                         runtime
                     };
-                    let runtime = if bar {
-                        runtime.with_desktop()?
+                    let runtime = if let Some(desktop) = shared_desktop {
+                        runtime.with_shared_desktop(desktop, true)?
                     } else {
                         runtime
                     };
@@ -806,11 +833,21 @@ fn start(
                     }
                     Ok(Box::new(runtime))
                 })();
-            result.map_err(|e| e.to_string())
-        });
+                result.map_err(|e| e.to_string())
+            });
+            Box::new(bead::wayland::worker::Source::new(factory, worker_fallback))
+                as Box<dyn bead::wayland::SceneSource>
+        };
         let renderer = bead::render::renderer(options.renderer)?;
-        let runtime = bead::wayland::worker::Source::new(factory, scene.clone());
-        bead::wayland::run_runtime(options, scene, renderer, Some(Box::new(runtime)))
+        if bar {
+            options.primary_factory = Some(std::sync::Arc::new(move |output| {
+                Ok(make_source(Some(output)))
+            }));
+            bead::wayland::run_runtime(options, scene, renderer, None)
+        } else {
+            let runtime = make_source(None);
+            bead::wayland::run_runtime(options, scene, renderer, Some(runtime))
+        }
     } else {
         run(options, scene)
     }

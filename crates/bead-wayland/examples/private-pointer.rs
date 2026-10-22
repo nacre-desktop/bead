@@ -41,6 +41,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let fields: Vec<_> = line.trim_matches('"').split_whitespace().collect();
         match fields.as_slice() {
             ["move", x, y] => pointer.motion_absolute(0, x.parse()?, y.parse()?, 1920, 1200),
+            ["move", x, y, width, height] => {
+                pointer.motion_absolute(0, x.parse()?, y.parse()?, width.parse()?, height.parse()?)
+            }
             ["scroll", delta] | ["scroll-horizontal", delta] => {
                 let delta: f64 = delta.parse()?;
                 if !delta.is_finite() || delta.abs() > 1000. {

@@ -1003,7 +1003,7 @@ fn load_image(path: &Path, rect: Rect, scale: f32, snapshot: Option<&[u8]>) -> R
 }
 /// Reads Orient format 1 only. Unknown metadata is intentionally ignored.
 #[derive(Clone)]
-pub struct Palette(pub HashMap<String, [u8; 4]>);
+pub struct Palette(pub std::sync::Arc<HashMap<String, [u8; 4]>>);
 impl Palette {
     pub fn read(path: &Path) -> Result<Self> {
         Self::parse(&std::fs::read(path)?)
@@ -1025,6 +1025,18 @@ impl Palette {
                 [(n >> 16) as u8, (n >> 8) as u8, n as u8, 255],
             );
         }
+        // A weak slot shares the immutable theme across independently reloaded
+        // output sessions without retaining its colours after their teardown.
+        static SHARED: std::sync::Mutex<std::sync::Weak<HashMap<String, [u8; 4]>>> =
+            std::sync::Mutex::new(std::sync::Weak::new());
+        let mut shared = SHARED.lock().unwrap_or_else(|error| error.into_inner());
+        if let Some(current) = shared.upgrade()
+            && *current == colors
+        {
+            return Ok(Self(current));
+        }
+        let colors = std::sync::Arc::new(colors);
+        *shared = std::sync::Arc::downgrade(&colors);
         Ok(Self(colors))
     }
     pub fn get(&self, name: &str) -> Result<[u8; 4]> {

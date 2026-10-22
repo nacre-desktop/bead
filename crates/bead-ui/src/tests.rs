@@ -212,10 +212,8 @@ fn runtime_palette_before_a_generation_commits_in_memory_without_writing_palette
     session.generation = None;
     let path = fixture.0.join("palette.json");
     let original = fs::read(&path).unwrap();
-    let overlay = Palette(std::collections::HashMap::from([(
-        "primary".into(),
-        [20, 40, 60, 255],
-    )]));
+    let overlay =
+        Palette(std::collections::HashMap::from([("primary".into(), [20, 40, 60, 255])]).into());
     assert!(
         session
             .set_runtime_palette(overlay.clone())

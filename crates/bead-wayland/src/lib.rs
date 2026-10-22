@@ -15,6 +15,7 @@ mod runtime;
 mod transactions;
 use runtime::App;
 pub use runtime::run_runtime;
+pub(crate) use runtime::{output_event_is_current, output_scope_matches};
 pub mod worker;
 use bead_render::{
     Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
@@ -131,6 +132,11 @@ pub trait WallpaperProvider: Send + Sync {
 }
 #[derive(Clone, Debug)]
 pub enum UiEvent {
+    /// Event delivered to one output-owned UI session. The epoch rejects callbacks
+    /// queued by a session after that output has been removed.
+    Output(u64, String, Box<UiEvent>),
+    /// The compositor may publish an output name after its initial announcement.
+    OutputName(String),
     Panel(u64, Box<UiEvent>),
     PanelVisibility(bool),
     CompanionVisibility(bool),
@@ -247,7 +253,13 @@ pub trait SceneSource {
         &mut self,
         palette: bead_render::Palette,
     ) -> Result<Option<Scene>, Box<dyn Error>> {
-        self.stage(UiEvent::WallpaperPalette(palette.0.into_iter().collect()))
+        self.stage(UiEvent::WallpaperPalette(
+            palette
+                .0
+                .iter()
+                .map(|(key, value)| (key.clone(), *value))
+                .collect(),
+        ))
     }
     fn wallpaper_palette_pending(&self) -> bool {
         false
@@ -309,6 +321,8 @@ pub type CommandMap = std::sync::Arc<
 >;
 pub type PanelFactory =
     std::sync::Arc<dyn Fn(bool) -> Result<Box<dyn SceneSource>, String> + Send + Sync>;
+pub type PrimaryFactory =
+    std::sync::Arc<dyn Fn(String) -> Result<Box<dyn SceneSource>, String> + Send + Sync>;
 /// Small static, input-transparent vector tiles outside a bar's own rectangle.
 /// The application supplies policy; Wayland only owns bounded SHM/subsurfaces.
 pub struct Decoration {
@@ -345,6 +359,8 @@ pub struct PanelSpec {
 }
 #[derive(Clone)]
 pub struct Options {
+    /// Optional per-output primary UI source. When absent the legacy shared UI is used.
+    pub primary_factory: Option<PrimaryFactory>,
     pub decorations: Option<DecorationFactory>,
     /// Standard compositor blur, only if advertised with the blur capability.
     pub background_blur: bool,
@@ -389,6 +405,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            primary_factory: None,
             decorations: None,
             background_blur: false,
             namespace: "bead-dev".into(),
@@ -452,6 +469,7 @@ struct Surface {
     background_visible:bool,
     companion: bool,
     output: wl_output::WlOutput,
+    output_name: String,
     layer: LayerSurface,
     pool: SlotPool,
     #[cfg(feature = "wgpu")]

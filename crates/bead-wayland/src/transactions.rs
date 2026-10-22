@@ -2,7 +2,117 @@
 //! Validated worker candidates and IME synchronization.
 use super::*;
 impl App {
-    pub(super) fn ui(&mut self, mut event: UiEvent) {
+    pub(super) fn ui(&mut self, event: UiEvent) {
+        if self.options.primary_factory.is_some()
+            && self.active_output.is_none()
+            && matches!(&event, UiEvent::Remote(_) | UiEvent::Accessibility { .. })
+        {
+            let requested_output = if let UiEvent::Remote(request) = &event {
+                request
+                    .call
+                    .args
+                    .iter()
+                    .find_map(|arg| arg.get("output").and_then(|v| v.as_str()))
+            } else {
+                None
+            };
+            let focused_output = self
+                .keyboard_surface
+                .as_ref()
+                .and_then(|surface| {
+                    self.surfaces
+                        .iter()
+                        .find(|s| s.layer.wl_surface() == surface)
+                        .map(|s| s.output_name.as_str())
+                })
+                .or(self.active_input_output.as_deref());
+            if let Some(id) = requested_output
+                && !self.output_sessions.contains_key(id)
+                && let UiEvent::Remote(request) = &event
+            {
+                let _ = request.reply.send(bead_services::ipc::Reply::error(
+                    request.call.id,
+                    "output",
+                    "unknown output session",
+                ));
+                return;
+            }
+            let output = requested_output
+                .or_else(|| focused_output.filter(|id| self.output_sessions.contains_key(*id)))
+                .or_else(|| self.output_sessions.keys().next().map(String::as_str));
+            if let Some(output) = output
+                && let Some(session) = self.output_sessions.get(output)
+            {
+                return self.ui(UiEvent::Output(
+                    session.epoch,
+                    output.to_owned(),
+                    Box::new(event),
+                ));
+            }
+        }
+        let event = match event {
+            UiEvent::Output(epoch, id, inner) => {
+                // Callback closures retain the announcement-time name. The
+                // lifetime epoch remains authoritative when a late name arrives.
+                let id = if self
+                    .output_sessions
+                    .get(&id)
+                    .is_some_and(|s| s.epoch == epoch)
+                {
+                    id
+                } else if let Some((current, _)) =
+                    self.output_sessions.iter().find(|(_, s)| s.epoch == epoch)
+                {
+                    current.clone()
+                } else {
+                    return;
+                };
+                let Some(mut session) = self.output_sessions.remove(&id) else {
+                    return;
+                };
+                if !output_event_is_current(Some(session.epoch), epoch) {
+                    self.output_sessions.insert(id, session);
+                    return;
+                }
+                let previous_output = self.active_output.replace(id.clone());
+                let previous_epoch = self.active_output_epoch.replace(epoch);
+                std::mem::swap(&mut self.runtime, &mut session.source);
+                std::mem::swap(&mut self.scene, &mut session.scene);
+                std::mem::swap(&mut self.animations, &mut session.animations);
+                let previous_serial = std::mem::replace(&mut self.ui_serial, session.ui_serial);
+                let previous_primary_serial =
+                    std::mem::replace(&mut self.primary_ui_serial, session.ui_serial);
+                let previous_initialized =
+                    std::mem::replace(&mut self.ui_initialized, session.initialized);
+                let was_reload = matches!(&*inner, UiEvent::Reload);
+                let wallpaper_palette = match &*inner {
+                    UiEvent::WallpaperPalette(palette) => Some(palette.clone()),
+                    _ => None,
+                };
+                self.ui(*inner);
+                if let Some(palette) = wallpaper_palette
+                    && !self
+                        .runtime
+                        .as_ref()
+                        .is_some_and(|source| source.wallpaper_palette_pending())
+                {
+                    self.wallpaper_palette_settled(&palette, true);
+                }
+                session.initialized =
+                    std::mem::replace(&mut self.ui_initialized, previous_initialized) || was_reload;
+                session.ui_serial = std::mem::replace(&mut self.ui_serial, previous_serial);
+                self.primary_ui_serial = previous_primary_serial;
+                std::mem::swap(&mut self.animations, &mut session.animations);
+                std::mem::swap(&mut self.scene, &mut session.scene);
+                std::mem::swap(&mut self.runtime, &mut session.source);
+                self.active_output = previous_output;
+                self.active_output_epoch = previous_epoch;
+                self.output_sessions.insert(id, session);
+                return;
+            }
+            event => event,
+        };
+        let mut event = event;
         event = match event {
             UiEvent::WallpaperRefresh => {
                 self.refresh_wallpapers();
@@ -31,12 +141,18 @@ impl App {
             center,
         } = event
         {
+            let output = output.or_else(|| self.active_output.clone());
             let result = if self.options.panels.is_none() {
                 Err("named panels are not configured".into())
             } else {
                 self.requested_panel_differs(Some(&view))
                     .and_then(|changed| {
-                        if toggle && self.panel_target && !changed {
+                        let output_changed = output.as_deref().is_some_and(|target| {
+                            self.panel_output
+                                .as_ref()
+                                .is_none_or(|current| self.output_id(current) != target)
+                        });
+                        if toggle && self.panel_target && !changed && !output_changed {
                             self.close_panel();
                             Ok(())
                         } else {
@@ -61,12 +177,26 @@ impl App {
                 let default_changed = self.options.panels.as_ref().is_some_and(|panels| {
                     self.panel_name.as_deref() != Some(panels.default_name())
                 });
-                if (!self.panel_target || default_changed)
-                    && let Err(e) = self.open_panel(None)
-                {
-                    eprintln!("COMPANION_ERROR {e}");
+                if !self.panel_target || default_changed {
+                    let result = if let Some(output) = self.active_output.clone() {
+                        self.request_panel(None, Some(&output), true)
+                    } else {
+                        self.open_panel(None)
+                    };
+                    if let Err(e) = result {
+                        eprintln!("COMPANION_ERROR {e}");
+                    }
                 }
             } else if self.panel_target {
+                if let (Some(owner), Some(panel_output)) = (
+                    self.active_output.as_deref(),
+                    self.panel_output
+                        .as_ref()
+                        .map(|output| self.output_id(output)),
+                ) && owner != panel_output.as_str()
+                {
+                    return;
+                }
                 self.close_panel();
             }
             return;
@@ -154,12 +284,19 @@ impl App {
             UiEvent::ClipboardRead => {
                 let panel = self.processing_panel;
                 let epoch = self.panel_epoch;
+                let output = self
+                    .active_output
+                    .as_ref()
+                    .zip(self.active_output_epoch)
+                    .map(|(id, epoch)| (epoch, id.clone()));
                 if let Some(sender) = self.event_sender.clone()
                     && let Err(error) = self.clipboard.get(move |result| match result {
                         Ok(text) => {
                             let event = UiEvent::ClipboardText(text);
                             let _ = sender.send(if panel {
                                 UiEvent::Panel(epoch, Box::new(event))
+                            } else if let Some((epoch, id)) = output {
+                                UiEvent::Output(epoch, id, Box::new(event))
                             } else {
                                 event
                             });
@@ -234,7 +371,13 @@ impl App {
                 }
                 "state" => bead_services::ipc::Reply::ok(
                     request.call.id,
-                    serde_json::json!({"surfaces":self.surfaces.len(),"panel":self.companion.is_some()}),
+                    serde_json::json!({
+                        "surfaces":self.surfaces.len(),"panel":self.companion.is_some(),
+                        "output_sessions":self.output_sessions.values().map(|session| serde_json::json!({
+                            "output":session.id,"epoch":session.epoch,"serial":session.ui_serial,
+                            "initialized":session.initialized
+                        })).collect::<Vec<_>>()
+                    }),
                 ),
                 _ => bead_services::ipc::Reply::error(
                     request.call.id,
@@ -247,7 +390,17 @@ impl App {
         }
 
         if let UiEvent::Fatal(error) = event {
-            self.fail(error);
+            if self.active_output.is_some() {
+                eprintln!(
+                    "OUTPUT_SESSION_FATAL output={} error={error}",
+                    self.active_output.as_deref().unwrap_or("")
+                );
+                if let Some(runtime) = &mut self.runtime {
+                    self.scene = runtime.error_scene(error);
+                }
+            } else {
+                self.fail(error);
+            }
             return false;
         }
         if matches!(&event, UiEvent::PanelDismissed) && self.panel_target {
@@ -261,10 +414,15 @@ impl App {
         let Some(mut runtime) = self.runtime.take() else {
             return false;
         };
+        let active_output = self.active_output.clone();
         let mut scales: Vec<_> = self
             .surfaces
             .iter()
-            .filter(|s| s.configured && s.companion == self.processing_panel)
+            .filter(|s| {
+                s.configured
+                    && s.companion == self.processing_panel
+                    && output_scope_matches(active_output.as_deref(), &s.output_name)
+            })
             .map(|s| s.scale120 as f32 / 120.)
             .collect();
         scales.sort_by(f32::total_cmp);
@@ -300,7 +458,11 @@ impl App {
                     .surfaces
                     .iter()
                     .enumerate()
-                    .filter(|(_, s)| s.configured && s.companion == self.processing_panel)
+                    .filter(|(_, s)| {
+                        s.configured
+                            && s.companion == self.processing_panel
+                            && output_scope_matches(active_output.as_deref(), &s.output_name)
+                    })
                     .map(|(i, _)| i)
                     .collect();
                 for i in indices {
@@ -382,21 +544,19 @@ impl App {
                 } else {
                     self.primary_ui_serial = self.ui_serial;
                 }
-                for surface in self
-                    .surfaces
-                    .iter_mut()
-                    .filter(|s| s.companion == self.processing_panel)
-                {
+                for surface in self.surfaces.iter_mut().filter(|s| {
+                    s.companion == self.processing_panel
+                        && output_scope_matches(active_output.as_deref(), &s.output_name)
+                }) {
                     surface.ui_serial = self.ui_serial;
                 }
                 let reopening = self.scene.motion.as_ref().is_some_and(|m| !m.open)
                     && scene.motion.as_ref().is_some_and(|m| m.open);
                 if reopening {
-                    for surface in self
-                        .surfaces
-                        .iter_mut()
-                        .filter(|s| s.companion == self.processing_panel)
-                    {
+                    for surface in self.surfaces.iter_mut().filter(|s| {
+                        s.companion == self.processing_panel
+                            && output_scope_matches(active_output.as_deref(), &s.output_name)
+                    }) {
                         surface.callbacks.invalidate();
                     }
                 }
@@ -410,11 +570,10 @@ impl App {
                         bead_core::Edge::Top => Anchor::TOP,
                         bead_core::Edge::Bottom => Anchor::BOTTOM,
                     };
-                    for surface in self
-                        .surfaces
-                        .iter()
-                        .filter(|s| s.companion == self.processing_panel)
-                    {
+                    for surface in self.surfaces.iter().filter(|s| {
+                        s.companion == self.processing_panel
+                            && output_scope_matches(active_output.as_deref(), &s.output_name)
+                    }) {
                         if self.processing_panel {
                             self.position_panel_surface(
                                 &surface.layer,
@@ -434,11 +593,10 @@ impl App {
                         + self.scene.slide.map_or(self.scene.offset.1, |s| s.open_y))
                     .ceil()
                     .max(1.) as u32;
-                    for surface in self
-                        .surfaces
-                        .iter()
-                        .filter(|s| s.companion == self.processing_panel)
-                    {
+                    for surface in self.surfaces.iter().filter(|s| {
+                        s.companion == self.processing_panel
+                            && output_scope_matches(active_output.as_deref(), &s.output_name)
+                    }) {
                         if surface.width != width || surface.height != height {
                             surface.layer.set_size(width, height);
                             surface.layer.commit();
@@ -460,14 +618,15 @@ impl App {
                     self.surfaces.len()
                 );
                 println!(
-                    "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={} companion={} source_error={}",
+                    "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={} companion={} source_error={} output={}",
                     self.scene.resource_revision,
                     reload,
                     started.elapsed().as_secs_f64() * 1000.,
                     monotonic_ns(),
                     self.ui_serial,
                     self.processing_panel,
-                    source_error
+                    source_error,
+                    self.active_output.as_deref().unwrap_or("shared")
                 );
             }
             Ok(None) => {
@@ -502,7 +661,9 @@ impl App {
         let qh = self.qh.clone();
         if !self.processing_panel {
             for i in 0..self.surfaces.len() {
-                if !self.surfaces[i].companion || self.options.panel_spec.is_none() {
+                if output_scope_matches(active_output.as_deref(), &self.surfaces[i].output_name)
+                    && (!self.surfaces[i].companion || self.options.panel_spec.is_none())
+                {
                     self.draw(i, &qh);
                 }
             }
@@ -522,12 +683,28 @@ impl App {
                 .iter()
                 .any(|s| s.companion && s.layer.wl_surface() == p)
         });
-        let source = if panel_focus && !self.processing_panel {
-            &self.panel_runtime
+        let source = if self.processing_panel {
+            self.runtime.as_ref()
+        } else if panel_focus {
+            self.panel_runtime.as_ref()
+        } else if self.options.primary_factory.is_some() {
+            let output = self.keyboard_surface.as_ref().and_then(|surface| {
+                self.surfaces
+                    .iter()
+                    .find(|s| s.layer.wl_surface() == surface)
+                    .map(|s| s.output_name.as_str())
+            });
+            if output == self.active_output.as_deref() {
+                self.runtime.as_ref()
+            } else {
+                output
+                    .and_then(|output| self.output_sessions.get(output))
+                    .and_then(|session| session.source.as_ref())
+            }
         } else {
-            &self.runtime
+            self.runtime.as_ref()
         };
-        let current = source.as_ref().and_then(|r| r.surrounding_text());
+        let current = source.and_then(|r| r.surrounding_text());
         if current == self.ime_last {
             return;
         }

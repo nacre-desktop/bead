@@ -21,6 +21,12 @@ pub(super) struct App {
     pub(super) panel_output: Option<wl_output::WlOutput>,
     pub(super) processing_panel: bool,
     pub(super) runtime: Option<Box<dyn SceneSource>>,
+    /// Per-output primary sessions used when `primary_factory` is configured.
+    pub(super) output_sessions: std::collections::BTreeMap<String, OutputSession>,
+    pub(super) active_output: Option<String>,
+    pub(super) active_output_epoch: Option<u64>,
+    pub(super) next_session_epoch: u64,
+    pub(super) active_input_output: Option<String>,
     pub(super) seat: SeatState,
     pub(super) keyboard: Option<wl_keyboard::WlKeyboard>,
     pub(super) pointer: Option<wl_pointer::WlPointer>,
@@ -65,6 +71,7 @@ pub(super) struct App {
     pub(super) wallpaper_jobs: std::collections::BTreeSet<String>,
     pub(super) wallpaper_dirty: std::collections::BTreeSet<String>,
     pub(super) wallpaper_palette: Option<std::collections::BTreeMap<String, [u8; 4]>>,
+    pub(super) wallpaper_palette_outputs: Option<PendingPalette>,
     pub(super) wallpaper_pending_frames: Vec<WallpaperFrame>,
     pub(super) report_surfaces: Vec<serde_json::Value>,
     pub(super) options: Options,
@@ -75,7 +82,34 @@ pub(super) struct App {
     pub(super) renderer: Box<dyn Renderer>,
     pub(super) companion: Option<(Scene, Box<dyn Renderer>, RendererKind)>,
     pub(super) animations: bead_core::animation::Animations,
+    pub(super) panel_animations: bead_core::animation::Animations,
 }
+
+pub(super) struct OutputSession {
+    pub(super) id: String,
+    pub(super) epoch: u64,
+    pub(super) source: Option<Box<dyn SceneSource>>,
+    pub(super) scene: Scene,
+    pub(super) ui_serial: u64,
+    pub(super) initialized: bool,
+    pub(super) animations: bead_core::animation::Animations,
+}
+
+pub(super) struct PendingPalette {
+    pub(super) palette: std::collections::BTreeMap<String, [u8; 4]>,
+    pub(super) expected: std::collections::BTreeSet<String>,
+    pub(super) settled: std::collections::BTreeSet<String>,
+    pub(super) accepted: bool,
+}
+
+pub(crate) fn output_event_is_current(current_epoch: Option<u64>, event_epoch: u64) -> bool {
+    current_epoch == Some(event_epoch)
+}
+
+pub(crate) fn output_scope_matches(active_output: Option<&str>, surface_output: &str) -> bool {
+    active_output.is_none_or(|active| active == surface_output)
+}
+
 pub fn run_runtime(
     mut options: Options,
     scene: Scene,
@@ -142,6 +176,11 @@ pub fn run_runtime(
         panel_output: None,
         processing_panel: false,
         runtime,
+        output_sessions: Default::default(),
+        active_output: None,
+        active_output_epoch: None,
+        next_session_epoch: 1,
+        active_input_output: None,
         seat: SeatState::new(&globals, &qh),
         keyboard: None,
         pointer: None,
@@ -186,6 +225,7 @@ pub fn run_runtime(
         wallpaper_jobs: Default::default(),
         wallpaper_dirty: Default::default(),
         wallpaper_palette: None,
+        wallpaper_palette_outputs: None,
         wallpaper_pending_frames: Vec::new(),
         report_surfaces: Vec::new(),
         options,
@@ -196,6 +236,7 @@ pub fn run_runtime(
         renderer,
         companion,
         animations: Default::default(),
+        panel_animations: Default::default(),
     };
     if app.options.interactive {
         for seat in app.seat.seats() {
@@ -217,7 +258,7 @@ pub fn run_runtime(
             },
         )?;
     }
-    if app.runtime.is_some() {
+    if app.runtime.is_some() || app.options.primary_factory.is_some() {
         let (sender, receiver) = calloop::channel::channel::<UiEvent>();
         loop_.handle().insert_source(receiver, |event, _, app| {
             if let calloop::channel::Event::Msg(event) = event {
@@ -421,6 +462,13 @@ pub fn run_runtime(
     Ok(())
 }
 impl App {
+    pub(super) fn output_id(&self, output: &wl_output::WlOutput) -> String {
+        self.output
+            .info(output)
+            .and_then(|i| i.name)
+            .unwrap_or_else(|| format!("output-{}", output.id().protocol_id()))
+    }
+
     pub(super) fn fail(&mut self, error: impl std::fmt::Display) {
         self.failure = Some(error.to_string());
         self.signal.stop();
@@ -616,8 +664,57 @@ impl App {
             provider.discarded(&frame.output, frame.revision);
             return;
         }
-        let palette_key: std::collections::BTreeMap<String, [u8; 4]> =
-            frame.palette.0.clone().into_iter().collect();
+        let palette_key: std::collections::BTreeMap<String, [u8; 4]> = frame
+            .palette
+            .0
+            .iter()
+            .map(|(key, value)| (key.clone(), *value))
+            .collect();
+        if self.options.primary_factory.is_some() {
+            if self.wallpaper_palette.as_ref() == Some(&palette_key)
+                || self.output_sessions.is_empty()
+            {
+                self.wallpaper_palette = Some(palette_key);
+                self.install_wallpaper(frame);
+                self.request_dirty_wallpaper(&output_name);
+                return;
+            }
+            if self
+                .wallpaper_palette_outputs
+                .as_ref()
+                .is_some_and(|pending| pending.palette == palette_key)
+            {
+                self.wallpaper_pending_frames.push(frame);
+                self.request_dirty_wallpaper(&output_name);
+                return;
+            }
+            if self.wallpaper_palette_outputs.is_some() {
+                self.discard_pending_wallpapers();
+            }
+            self.wallpaper_pending_frames.push(frame);
+            let expected = self
+                .output_sessions
+                .keys()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>();
+            self.wallpaper_palette_outputs = Some(PendingPalette {
+                palette: palette_key.clone(),
+                expected: expected.clone(),
+                settled: Default::default(),
+                accepted: true,
+            });
+            for id in expected {
+                if let Some(session) = self.output_sessions.get(&id) {
+                    self.ui(UiEvent::Output(
+                        session.epoch,
+                        id,
+                        Box::new(UiEvent::WallpaperPalette(palette_key.clone())),
+                    ));
+                }
+            }
+            self.request_dirty_wallpaper(&output_name);
+            return;
+        }
         if self.wallpaper_palette.as_ref() == Some(&palette_key) || self.runtime.is_none() {
             self.set_wallpaper_palette(palette_key);
             self.install_wallpaper(frame);
@@ -679,8 +776,12 @@ impl App {
                 }
             }
         }
-        if self.wallpaper_dirty.remove(&output_name) {
-            self.request_wallpaper(&output_name);
+        self.request_dirty_wallpaper(&output_name);
+    }
+
+    fn request_dirty_wallpaper(&mut self, output: &str) {
+        if self.wallpaper_dirty.remove(output) {
+            self.request_wallpaper(output);
         }
     }
 
@@ -751,6 +852,20 @@ impl App {
         palette: &std::collections::BTreeMap<String, [u8; 4]>,
         accepted: bool,
     ) {
+        if let Some(output) = self.active_output.clone()
+            && let Some(waiting) = &mut self.wallpaper_palette_outputs
+        {
+            if waiting.palette != *palette || !waiting.expected.contains(&output) {
+                return;
+            }
+            waiting.settled.insert(output);
+            waiting.accepted &= accepted;
+            if waiting.expected.is_subset(&waiting.settled) {
+                let waiting = self.wallpaper_palette_outputs.take().unwrap();
+                self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
+            }
+            return;
+        }
         let matching: Vec<_> = self
             .wallpaper_pending_frames
             .iter()
@@ -798,17 +913,34 @@ impl App {
                 }
             }
             self.wallpaper_pending_frames = keep;
-            if accepted {
-                self.restore_wallpaper_palette();
-            }
+            self.restore_wallpaper_palette();
         }
     }
 
     fn restore_wallpaper_palette(&mut self) {
-        if let Some(previous) = self.wallpaper_palette.clone()
-            && let Some(runtime) = &mut self.runtime
-        {
-            let _ = runtime.wallpaper_palette(bead_render::Palette(previous.into_iter().collect()));
+        let Some(previous) = self.wallpaper_palette.clone() else {
+            return;
+        };
+        if self.options.primary_factory.is_some() {
+            let sessions: Vec<_> = self
+                .output_sessions
+                .iter()
+                .map(|(id, session)| (id.clone(), session.epoch))
+                .collect();
+            for (id, epoch) in sessions {
+                self.ui(UiEvent::Output(
+                    epoch,
+                    id,
+                    Box::new(UiEvent::WallpaperPalette(previous.clone())),
+                ));
+            }
+            if self.active_output.is_some() && self.runtime.is_some() {
+                self.ui(UiEvent::WallpaperPalette(previous));
+            }
+        } else if let Some(runtime) = &mut self.runtime {
+            let _ = runtime.wallpaper_palette(bead_render::Palette(std::sync::Arc::new(
+                previous.into_iter().collect(),
+            )));
         }
     }
 
@@ -1077,9 +1209,117 @@ impl App {
 
     pub(super) fn add_output(&mut self, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
         self.ensure_wallpaper(&output, qh);
-        let primary = self.options.output.as_ref().is_none_or(|name| {
+        let output_id = self
+            .output
+            .info(&output)
+            .and_then(|i| i.name)
+            .unwrap_or_else(|| format!("output-{}", output.id().protocol_id()));
+        let eligible = self.options.output.as_ref().is_none_or(|name| {
             self.output.info(&output).and_then(|i| i.name).as_ref() == Some(name)
         });
+        let per_output = self.options.primary_factory.is_some() && eligible;
+        let primary = eligible;
+        if per_output
+            && let Some(previous) = self
+                .surfaces
+                .iter()
+                .find(|s| s.output == output)
+                .map(|s| s.output_name.clone())
+            && previous != output_id
+            && let Some(mut session) = self.output_sessions.remove(&previous)
+        {
+            let epoch = session.epoch;
+            session.id = output_id.clone();
+            self.output_sessions.insert(output_id.clone(), session);
+            for surface in self.surfaces.iter_mut().filter(|s| s.output == output) {
+                surface.output_name = output_id.clone();
+            }
+            if self.active_input_output.as_ref() == Some(&previous) {
+                self.active_input_output = Some(output_id.clone());
+            }
+            if let Some(pending) = &mut self.wallpaper_palette_outputs {
+                if pending.expected.remove(&previous) {
+                    pending.expected.insert(output_id.clone());
+                }
+                if pending.settled.remove(&previous) {
+                    pending.settled.insert(output_id.clone());
+                }
+            }
+            println!("UI_SESSION_NAMED output={output_id} previous={previous} epoch={epoch}");
+            self.ui(UiEvent::Output(
+                epoch,
+                output_id.clone(),
+                Box::new(UiEvent::OutputName(output_id.clone())),
+            ));
+        }
+        if per_output && !self.output_sessions.contains_key(&output_id) {
+            let factory = self.options.primary_factory.as_ref().unwrap();
+            let epoch = self.next_session_epoch;
+            self.next_session_epoch = self.next_session_epoch.wrapping_add(1).max(1);
+            match factory(output_id.clone()) {
+                Ok(mut source) => {
+                    if let Some(sender) = self.event_sender.clone() {
+                        let service_sender = sender.clone();
+                        let service_id = output_id.clone();
+                        source.services(Box::new(move |event| {
+                            let _ = service_sender.send(UiEvent::Output(
+                                epoch,
+                                service_id.clone(),
+                                Box::new(event),
+                            ));
+                        }));
+                        let watch_sender = sender;
+                        let watch_id = output_id.clone();
+                        if let Err(error) = source.watch(Box::new(move |result| {
+                            let event = match result {
+                                Ok(()) => UiEvent::Reload,
+                                Err(error) => UiEvent::WatchError(error),
+                            };
+                            let _ = watch_sender.send(UiEvent::Output(
+                                epoch,
+                                watch_id.clone(),
+                                Box::new(event),
+                            ));
+                        })) {
+                            eprintln!(
+                                "OUTPUT_SESSION_WATCH_ERROR output={output_id} error={error}"
+                            );
+                        }
+                    }
+                    self.output_sessions.insert(
+                        output_id.clone(),
+                        OutputSession {
+                            id: output_id.clone(),
+                            epoch,
+                            source: Some(source),
+                            scene: self.scene.clone(),
+                            ui_serial: 0,
+                            initialized: false,
+                            animations: Default::default(),
+                        },
+                    );
+                    println!("UI_SESSION_CREATED output={output_id} epoch={epoch}");
+                    let pending_palette =
+                        self.wallpaper_palette_outputs.as_mut().and_then(|pending| {
+                            pending
+                                .expected
+                                .insert(output_id.clone())
+                                .then(|| pending.palette.clone())
+                        });
+                    if let Some(palette) = pending_palette {
+                        self.ui(UiEvent::Output(
+                            epoch,
+                            output_id.clone(),
+                            Box::new(UiEvent::WallpaperPalette(palette)),
+                        ));
+                    }
+                }
+                Err(error) => {
+                    eprintln!("OUTPUT_SESSION_ERROR output={output_id} error={error}");
+                    return;
+                }
+            }
+        }
         let selected = self.options.panel_spec.is_none()
             || (self.panel_target && self.panel_output.as_ref() == Some(&output));
         if !primary && !(selected && self.companion.is_some()) {
@@ -1214,6 +1454,7 @@ impl App {
                 background_visible: false,
                 companion,
                 output: output.clone(),
+                output_name: output_id.clone(),
                 layer,
                 pool: SlotPool::new(4096, &self.shm)?,
                 #[cfg(feature = "wgpu")]

@@ -334,7 +334,7 @@ impl Generation {
             root: loader.root.clone(),
         };
         // Validate properties even when a node is currently hidden.
-        generation.scene(&stores, &Palette(std::collections::HashMap::new()), false)?;
+        generation.scene(&stores, &Palette(Default::default()), false)?;
         generation.check_sources(&loader.root)?;
         Ok((generation, stores))
     }

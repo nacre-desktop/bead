@@ -318,7 +318,7 @@ fn palette(pair: &ActiveWallpaper) -> bead::render::Palette {
                 })
         })
         .collect();
-    bead::render::Palette(colours)
+    bead::render::Palette(std::sync::Arc::new(colours))
 }
 
 /// Select an applicable topic revision; unavailable input never erases a good

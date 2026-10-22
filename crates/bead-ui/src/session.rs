@@ -579,9 +579,10 @@ impl Session {
 }
 
 fn merged_palette(base: &Palette, overlay: Option<&Palette>) -> Palette {
-    let mut colours = base.0.clone();
-    if let Some(overlay) = overlay {
-        colours.extend(overlay.0.clone());
-    }
-    Palette(colours)
+    let Some(overlay) = overlay else {
+        return base.clone();
+    };
+    let mut colours = base.0.as_ref().clone();
+    colours.extend(overlay.0.iter().map(|(key, value)| (key.clone(), *value)));
+    Palette(colours.into())
 }

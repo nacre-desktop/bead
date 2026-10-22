@@ -16,6 +16,16 @@ impl CompositorHandler for App {
             && self.surfaces[i].fractional.is_none()
         {
             self.surfaces[i].scale120 = scale.max(1) as u32 * 120;
+            if self.options.primary_factory.is_some() && !self.surfaces[i].companion {
+                let id = self.surfaces[i].output_name.clone();
+                if let Some(session) = self.output_sessions.get(&id) {
+                    self.ui(UiEvent::Output(
+                        session.epoch,
+                        id,
+                        Box::new(UiEvent::Relayout),
+                    ));
+                }
+            }
             self.draw(i, qh);
         }
     }
@@ -39,6 +49,16 @@ impl CompositorHandler for App {
             .iter()
             .position(|s| s.layer.wl_surface() == surface)
         {
+            let now_seconds = self.started.elapsed().as_secs_f64();
+            let animation_active = if self.surfaces[i].companion {
+                self.panel_animations.active(now_seconds)
+            } else if self.options.primary_factory.is_some() {
+                self.output_sessions
+                    .get(&self.surfaces[i].output_name)
+                    .is_some_and(|session| session.animations.active(now_seconds))
+            } else {
+                self.animations.active(now_seconds)
+            };
             let s = &mut self.surfaces[i];
             s.callbacks.pending = false;
             let now = Instant::now();
@@ -67,7 +87,7 @@ impl CompositorHandler for App {
                 || self.options.debug_continuous
                 || s.redraw
                 || (s.companion && self.options.lazy_gl && self.companion_policy.needs_warmup())
-                || self.animations.active(self.started.elapsed().as_secs_f64())
+                || animation_active
             {
                 self.draw(i, qh);
             }
@@ -106,6 +126,16 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
                 .position(|s| s.layer.wl_surface() == surface)
         {
             state.surfaces[i].scale120 = scale;
+            if state.options.primary_factory.is_some() && !state.surfaces[i].companion {
+                let id = state.surfaces[i].output_name.clone();
+                if let Some(session) = state.output_sessions.get(&id) {
+                    state.ui(UiEvent::Output(
+                        session.epoch,
+                        id,
+                        Box::new(UiEvent::Relayout),
+                    ));
+                }
+            }
             state.draw(i, qh);
         }
     }
@@ -137,6 +167,21 @@ impl App {
         if (companion && epoch != self.panel_epoch)
             || self.surfaces[index].recovered_generation == Some((epoch, revision))
         {
+            return;
+        }
+        if !companion && self.options.primary_factory.is_some() {
+            let output = self.surfaces[index].output_name.clone();
+            let source = if self.active_output.as_deref() == Some(output.as_str()) {
+                self.runtime.as_mut()
+            } else {
+                self.output_sessions
+                    .get_mut(&output)
+                    .and_then(|session| session.source.as_mut())
+            };
+            if let Some(source) = source {
+                source.presented(revision);
+                self.surfaces[index].recovered_generation = Some((epoch, revision));
+            }
             return;
         }
         let source = if companion {
@@ -236,7 +281,21 @@ impl OutputHandler for App {
         qh: &QueueHandle<Self>,
         output: wl_output::WlOutput,
     ) {
-        self.add_output(qh, output);
+        self.add_output(qh, output.clone());
+        if self.options.primary_factory.is_some() {
+            let id = self.output_id(&output);
+            let viewport = self.output.info(&output).and_then(|info| info.logical_size);
+            if let Some(session) = self.output_sessions.get_mut(&id)
+                && let Some(source) = &mut session.source
+                && let Some((width, height)) = viewport
+                && width > 0
+                && height > 0
+                && source.viewport(width as u32, height as u32)
+            {
+                let epoch = session.epoch;
+                self.ui(UiEvent::Output(epoch, id, Box::new(UiEvent::Relayout)));
+            }
+        }
     }
     fn output_destroyed(
         &mut self,
@@ -244,6 +303,33 @@ impl OutputHandler for App {
         _: &QueueHandle<Self>,
         output: wl_output::WlOutput,
     ) {
+        let output_id = self
+            .surfaces
+            .iter()
+            .find(|surface| surface.output == output)
+            .map(|surface| surface.output_name.clone())
+            .unwrap_or_else(|| self.output_id(&output));
+        if let Some(mut session) = self.output_sessions.remove(&output_id) {
+            session.epoch = session.epoch.wrapping_add(1);
+            session.source = None;
+            if self.active_output.as_deref() == Some(output_id.as_str()) {
+                self.active_output = None;
+                self.active_output_epoch = None;
+            }
+            println!(
+                "UI_SESSION_REMOVED output={output_id} epoch={}",
+                session.epoch
+            );
+        }
+        let finish_palette = if let Some(waiting) = &mut self.wallpaper_palette_outputs {
+            waiting.expected.remove(&output_id);
+            waiting.expected.is_subset(&waiting.settled)
+        } else {
+            false
+        };
+        if finish_palette && let Some(waiting) = self.wallpaper_palette_outputs.take() {
+            self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
+        }
         if self.panel_output.as_ref() == Some(&output) {
             self.release_panel();
         }
@@ -459,6 +545,36 @@ impl LayerShellHandler for App {
                 self.panel_ui(UiEvent::Relayout);
                 return;
             }
+            if self.options.primary_factory.is_some() && !self.surfaces[i].companion {
+                let id = self.surfaces[i].output_name.clone();
+                let viewport = self
+                    .output
+                    .info(&self.surfaces[i].output)
+                    .and_then(|info| info.logical_size)
+                    .filter(|(w, h)| *w > 0 && *h > 0);
+                if let Some(session) = self.output_sessions.get_mut(&id) {
+                    let initial_load = !session.initialized;
+                    if let (Some(source), Some((w, h))) = (&mut session.source, viewport) {
+                        source.viewport(w as u32, h as u32);
+                    }
+                    let event = if session.initialized {
+                        UiEvent::Relayout
+                    } else {
+                        UiEvent::Reload
+                    };
+                    let epoch = session.epoch;
+                    let apply_palette = initial_load && self.wallpaper_palette_outputs.is_none();
+                    self.ui(UiEvent::Output(epoch, id, Box::new(event)));
+                    if apply_palette && let Some(palette) = self.wallpaper_palette.clone() {
+                        self.ui(UiEvent::Output(
+                            epoch,
+                            self.surfaces[i].output_name.clone(),
+                            Box::new(UiEvent::WallpaperPalette(palette)),
+                        ));
+                    }
+                }
+                return;
+            }
             // One shared view fits the smallest output; anonymous layout boxes never own state.
             let viewport = self
                 .surfaces
@@ -601,19 +717,32 @@ impl PointerHandler for App {
             let surface_size = (surface.width, surface.height);
             let offset = surface.offset;
             let configured = surface.configured;
+            let surface_output_name = surface.output_name.clone();
             let hovered_output = self.output.info(&surface.output).and_then(|i| i.name);
+            self.active_input_output = Some(surface_output_name.clone());
             if panel {
                 match event.kind {
-                    PointerEventKind::Enter { .. } => self.ui(UiEvent::PointerRegion(true)),
-                    PointerEventKind::Leave { .. } => self.ui(UiEvent::PointerRegion(false)),
+                    PointerEventKind::Enter { .. } => {
+                        self.view_event(false, UiEvent::PointerRegion(true))
+                    }
+                    PointerEventKind::Leave { .. } => {
+                        self.view_event(false, UiEvent::PointerRegion(false))
+                    }
                     _ => {}
                 }
             }
             if !panel {
+                let source = if self.options.primary_factory.is_some() {
+                    self.output_sessions
+                        .get(&surface_output_name)
+                        .and_then(|s| s.source.as_ref())
+                } else {
+                    self.runtime.as_ref()
+                };
                 let hovered = if matches!(event.kind, PointerEventKind::Leave { .. }) {
                     None
                 } else {
-                    self.runtime.as_ref().and_then(|r| {
+                    source.and_then(|r| {
                         r.input_regions().into_iter().find(|r| {
                             r.prepare_panel
                                 && event.position.0 >= f64::from(r.rect.x)
@@ -681,14 +810,17 @@ impl PointerHandler for App {
             if let Some(device) = &self.cursor_device
                 && self.cursor_enter_serial != 0
             {
-                let shape = match (if panel {
-                    &self.panel_runtime
+                let output_name = self.active_input_output.as_deref();
+                let source = if panel {
+                    self.panel_runtime.as_ref()
+                } else if self.options.primary_factory.is_some() {
+                    output_name
+                        .and_then(|name| self.output_sessions.get(name))
+                        .and_then(|s| s.source.as_ref())
                 } else {
-                    &self.runtime
-                })
-                .as_ref()
-                .map(|r| r.pointer_cursor(x, y))
-                {
+                    self.runtime.as_ref()
+                };
+                let shape = match source.map(|r| r.pointer_cursor(x, y)) {
                     Some("text") => wp_cursor_shape_device_v1::Shape::Text,
                     Some("pointer") => wp_cursor_shape_device_v1::Shape::Pointer,
                     _ => wp_cursor_shape_device_v1::Shape::Default,
@@ -809,6 +941,12 @@ impl KeyboardHandler for App {
                 .iter()
                 .any(|s| s.layer.wl_surface() == surface)
         }) {
+            self.active_input_output = self.keyboard_surface.as_ref().and_then(|surface| {
+                self.surfaces
+                    .iter()
+                    .find(|s| s.layer.wl_surface() == surface)
+                    .map(|s| s.output_name.clone())
+            });
             let panel = self.keyboard_surface.as_ref().is_some_and(|surface| {
                 self.surfaces
                     .iter()
@@ -904,6 +1042,11 @@ impl Dispatch<ZwpTextInputV3, ()> for App {
     ) {
         match event {
             zwp_text_input_v3::Event::Enter { surface } => {
+                state.active_input_output = state
+                    .surfaces
+                    .iter()
+                    .find(|s| s.layer.wl_surface() == &surface)
+                    .map(|s| s.output_name.clone());
                 state.ime_surface = Some(surface);
                 state.sync_ime();
             }
@@ -926,12 +1069,15 @@ impl Dispatch<ZwpTextInputV3, ()> for App {
             }
             zwp_text_input_v3::Event::Done { .. } => {
                 let (preedit, commit, before, after) = std::mem::take(&mut state.ime_pending);
-                state.ui(UiEvent::Ime {
-                    preedit,
-                    commit,
-                    before,
-                    after,
-                });
+                state.view_event(
+                    false,
+                    UiEvent::Ime {
+                        preedit,
+                        commit,
+                        before,
+                        after,
+                    },
+                );
             }
             _ => {}
         }

@@ -182,6 +182,40 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        if self.surfaces[index].companion {
+            std::mem::swap(&mut self.animations, &mut self.panel_animations);
+            self.draw_current(index, qh);
+            std::mem::swap(&mut self.animations, &mut self.panel_animations);
+            return;
+        }
+        if self.options.primary_factory.is_some() && !self.surfaces[index].companion {
+            let id = self.surfaces[index].output_name.clone();
+            if self.active_output.as_deref() != Some(id.as_str()) {
+                if let Some(mut session) = self.output_sessions.remove(&id) {
+                    let previous_output = self.active_output.replace(id.clone());
+                    let previous_epoch = self.active_output_epoch.replace(session.epoch);
+                    std::mem::swap(&mut self.runtime, &mut session.source);
+                    std::mem::swap(&mut self.scene, &mut session.scene);
+                    std::mem::swap(&mut self.animations, &mut session.animations);
+                    let previous_serial = std::mem::replace(&mut self.ui_serial, session.ui_serial);
+                    let previous_primary_serial =
+                        std::mem::replace(&mut self.primary_ui_serial, session.ui_serial);
+                    self.draw(index, qh);
+                    session.ui_serial = std::mem::replace(&mut self.ui_serial, previous_serial);
+                    self.primary_ui_serial = previous_primary_serial;
+                    std::mem::swap(&mut self.animations, &mut session.animations);
+                    std::mem::swap(&mut self.scene, &mut session.scene);
+                    std::mem::swap(&mut self.runtime, &mut session.source);
+                    self.active_output = previous_output;
+                    self.active_output_epoch = previous_epoch;
+                    self.output_sessions.insert(id, session);
+                }
+                return;
+            }
+        }
+        self.draw_current(index, qh);
+    }
+    fn draw_current(&mut self, index: usize, qh: &QueueHandle<Self>) {
         let decoration_result = if self.surfaces[index].companion {
             self.sync_all_decorations()
         } else {
