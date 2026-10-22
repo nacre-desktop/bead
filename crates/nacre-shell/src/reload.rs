@@ -25,6 +25,7 @@ pub struct Runtime {
     subscription: Option<bead::backends::Subscription>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
     desktop_subscription: Option<bead::services::Subscription>,
+    desktop_revision: u64,
     notification_hover: Option<u32>,
     notification_primary: bool,
     fonts: crate::font_sources::Selector,
@@ -34,6 +35,7 @@ pub struct Runtime {
     menu_item: String,
     tray_anchor: Option<f32>,
     tray_close: bool,
+    tray_requested_close: bool,
     tray_enabled: bool,
     tray_hover: String,
     tray_selection: Option<crate::tray::Selection>,
@@ -103,6 +105,7 @@ impl Runtime {
             subscription: None,
             desktop: None,
             desktop_subscription: None,
+            desktop_revision: 0,
             notification_hover: None,
             notification_primary: false,
             fonts: Default::default(),
@@ -112,6 +115,7 @@ impl Runtime {
             menu_item: String::new(),
             tray_anchor: None,
             tray_close: false,
+            tray_requested_close: false,
             tray_enabled: true,
             tray_hover: String::new(),
             tray_selection: None,
@@ -612,6 +616,11 @@ impl Runtime {
                         horizontal,
                     }
                 } else if tray.item_is_menu || context_menu {
+                    if !tray.has_menu {
+                        return desktop
+                            .action(Action::TrayContextMenu { item, x: 0, y: 0 })
+                            .map_err(|e| e.into());
+                    }
                     if let Some(selection) = &self.tray_selection {
                         desktop
                             .action(Action::TrayPrepare { item: item.clone() })
@@ -1266,6 +1275,12 @@ impl SceneSource for Runtime {
                 }
             }
             UiEvent::Desktop(snapshot) => {
+                // Audio and bus callbacks can arrive on different threads.
+                // Never resurrect a removed item from an older publication.
+                if snapshot.revision < self.desktop_revision {
+                    return Ok(None);
+                }
+                self.desktop_revision = snapshot.revision;
                 if self.notification_primary
                     && let Some(owner) = &self.notifications
                 {
@@ -1278,6 +1293,14 @@ impl SceneSource for Runtime {
                 };
                 if std::mem::take(&mut self.tray_close) {
                     values.insert("panel.open".into(), bead::core::Value::Bool(false));
+                }
+                if self.tray_menu.is_some()
+                    && !self.tray_requested_close
+                    && values.get("panel.open") == Some(&bead::core::Value::Bool(false))
+                    && let Some(wakeup) = &self.wakeup
+                {
+                    self.tray_requested_close = true;
+                    wakeup(UiEvent::CompanionVisibility(false));
                 }
                 if self.bar && !self.tray_enabled {
                     values.insert("bead.desktop.tray".into(), bead::core::Value::list(vec![]));
@@ -1312,6 +1335,9 @@ impl SceneSource for Runtime {
             }
             UiEvent::Panel(_, _) => return Err("panel envelope reached script".into()),
             UiEvent::PanelVisibility(open) => {
+                if open {
+                    self.tray_requested_close = false;
+                }
                 self.session.update(std::collections::BTreeMap::from([(
                     "panel.open".into(),
                     bead::core::Value::Bool(open),

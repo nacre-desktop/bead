@@ -41,24 +41,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let fields: Vec<_> = line.trim_matches('"').split_whitespace().collect();
         match fields.as_slice() {
             ["move", x, y] => pointer.motion_absolute(0, x.parse()?, y.parse()?, 1920, 1200),
-            ["scroll", delta] => {
+            ["scroll", delta] | ["scroll-horizontal", delta] => {
                 let delta: f64 = delta.parse()?;
                 if !delta.is_finite() || delta.abs() > 1000. {
                     return Err("invalid scroll".into());
                 }
-                pointer.axis(0, wl_pointer::Axis::VerticalScroll, delta);
+                let axis = if fields[0] == "scroll-horizontal" {
+                    wl_pointer::Axis::HorizontalScroll
+                } else {
+                    wl_pointer::Axis::VerticalScroll
+                };
+                pointer.axis(0, axis, delta);
             }
-            ["click"] => {
-                pointer.button(0, 0x110, wl_pointer::ButtonState::Pressed);
+            ["click"] | ["context"] | ["middle"] => {
+                let button = match fields[0] {
+                    "context" => 0x111,
+                    "middle" => 0x112,
+                    _ => 0x110,
+                };
+                pointer.button(0, button, wl_pointer::ButtonState::Pressed);
                 pointer.frame();
-                pointer.button(0, 0x110, wl_pointer::ButtonState::Released);
+                pointer.button(0, button, wl_pointer::ButtonState::Released);
             }
             ["press"] => pointer.button(0, 0x110, wl_pointer::ButtonState::Pressed),
             ["release"] => pointer.button(0, 0x110, wl_pointer::ButtonState::Released),
             ["stop"] => break,
             _ => {
                 return Err(
-                    "expected move X Y, scroll DELTA, click, press, release or stop".into(),
+                    "expected move X Y, scroll/scroll-horizontal DELTA, click/context/middle, press, release or stop".into(),
                 );
             }
         }

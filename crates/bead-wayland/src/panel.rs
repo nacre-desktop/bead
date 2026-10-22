@@ -556,6 +556,7 @@ pub(super) struct Dismiss {
     pub layer: LayerSurface,
     pub viewport: WpViewport,
     pub buffer: smithay_client_toolkit::shm::slot::Buffer,
+    pub attached: bool,
     pub _pool: SlotPool,
 }
 impl Drop for Dismiss {
@@ -596,6 +597,7 @@ impl App {
             layer,
             viewport,
             buffer,
+            attached: false,
             _pool: pool,
         });
         Ok(())

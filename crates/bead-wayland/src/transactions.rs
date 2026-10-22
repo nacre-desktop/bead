@@ -52,6 +52,12 @@ impl App {
         }
         if let UiEvent::Panel(epoch, event) = event {
             if epoch == self.panel_epoch && self.panel_runtime.is_some() {
+                // A service-backed view can retire itself when its item vanishes.
+                // The epoch prevents an old worker from closing its replacement.
+                if matches!(&*event, UiEvent::CompanionVisibility(false)) {
+                    self.close_panel();
+                    return;
+                }
                 if matches!(&*event, UiEvent::Reload) {
                     if !self.panel_reload_pending {
                         self.panel_reload_pending = true;

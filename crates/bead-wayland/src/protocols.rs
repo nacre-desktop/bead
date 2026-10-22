@@ -268,7 +268,7 @@ impl LayerShellHandler for App {
         config: LayerSurfaceConfigure,
         _: u32,
     ) {
-        if let Some(dismiss) = &self.dismiss
+        if let Some(dismiss) = &mut self.dismiss
             && dismiss.layer == *layer
         {
             if self.options.trace_state {
@@ -300,9 +300,15 @@ impl LayerShellHandler for App {
                 .wl_surface()
                 .set_input_region(Some(region.wl_region()));
             layer.wl_surface().damage_buffer(0, 0, 1, 1);
-            if let Err(e) = dismiss.buffer.attach_to(layer.wl_surface()) {
-                self.fail(e);
-                return;
+            // The transparent pixel remains attached across configure events.
+            // Reattaching its active SCTK buffer before release is an error;
+            // only viewport and input-region state change on later configures.
+            if !dismiss.attached {
+                if let Err(e) = dismiss.buffer.attach_to(layer.wl_surface()) {
+                    self.fail(e);
+                    return;
+                }
+                dismiss.attached = true;
             }
             layer.commit();
             return;

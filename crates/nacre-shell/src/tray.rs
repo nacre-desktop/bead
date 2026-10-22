@@ -16,11 +16,13 @@ pub struct Menu {
     pub selection: Selection,
     item: String,
     path: Vec<i32>,
+    reset_scroll: bool,
 }
 impl Menu {
     pub fn new(selection: Selection) -> Self {
         Self {
             selection,
+            reset_scroll: true,
             ..Self::default()
         }
     }
@@ -49,6 +51,7 @@ impl Menu {
             })
         }) {
             self.path.push(id);
+            self.reset_scroll = true;
             true
         } else {
             false
@@ -56,6 +59,7 @@ impl Menu {
     }
     pub fn back(&mut self) {
         self.path.pop();
+        self.reset_scroll = true;
     }
     pub fn values(&mut self, snapshot: &Snapshot) -> BTreeMap<String, Value> {
         let selected = self
@@ -66,9 +70,11 @@ impl Menu {
         if self.item != selected {
             self.item = selected;
             self.path.clear();
+            self.reset_scroll = true;
         }
         if self.rows(snapshot).is_none() {
             self.path.clear();
+            self.reset_scroll = true;
         }
         let item = snapshot
             .tray
@@ -86,12 +92,27 @@ impl Menu {
                 Value::Text(item.map(|item| item.title.clone()).unwrap_or_default()),
             ),
             ("tray.rows".into(), Value::list(values)),
+            (
+                "tray.height".into(),
+                Value::Number(
+                    (56 + rows
+                        .iter()
+                        .filter(|row| row.visible)
+                        .map(|row| if row.separator { 3 } else { 32 })
+                        .sum::<usize>()
+                        .min(400))
+                    .max(96) as f64,
+                ),
+            ),
             ("tray.back".into(), Value::Bool(!self.path.is_empty())),
             (
                 "tray.empty".into(),
                 Value::Bool(rows.iter().all(|row| !row.visible)),
             ),
         ]);
+        if std::mem::take(&mut self.reset_scroll) {
+            values.insert("tray.scroll".into(), Value::Number(0.));
+        }
         if item.is_none() {
             values.insert("panel.open".into(), Value::Bool(false));
         }
@@ -110,9 +131,9 @@ pub fn spec(
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
     let mut fallback = crate::sound::fallback(colors.get("surface")?);
     fallback.width = 300.;
-    fallback.bounds = bead::render::Rect::new(-32., -32., 364., 528.);
+    fallback.bounds = bead::render::Rect::new(-32., -32., 364., 160.);
     fallback.primitives = vec![bead::render::Primitive::Rounded {
-        rect: bead::render::Rect::new(0., 0., 300., 464.),
+        rect: bead::render::Rect::new(0., 0., 300., 96.),
         radius: 12.,
         fill: colors.get("surface")?,
         border: None,
@@ -288,12 +309,32 @@ mod view_tests {
             Some(&Value::Bool(true))
         );
         runtime
-            .stage(UiEvent::Desktop(Arc::new(Snapshot::default())))
+            .stage(UiEvent::Desktop(Arc::new(Snapshot {
+                revision: 3,
+                ..Default::default()
+            })))
             .unwrap();
         runtime.commit();
         assert_eq!(
             runtime.session.stores.get("panel.open"),
             Some(&Value::Bool(false))
+        );
+        runtime
+            .stage(UiEvent::Desktop(Arc::new(Snapshot {
+                revision: 2,
+                tray: vec![bead::services::TrayItem {
+                    id: "item".into(),
+                    title: "Late stale callback".into(),
+                    visible: true,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })))
+            .unwrap();
+        runtime.commit();
+        assert_eq!(
+            runtime.session.stores.get("tray.title"),
+            Some(&Value::Text(String::new()))
         );
         drop(runtime);
         assert_eq!(desktop.subscription_count(), 0);
