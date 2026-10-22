@@ -10,6 +10,7 @@ mod materialized;
 pub mod recovery;
 pub mod schema;
 pub mod script;
+pub mod status_pill;
 mod session;
 mod watcher;
 use bead_core::{Stores, Value};
