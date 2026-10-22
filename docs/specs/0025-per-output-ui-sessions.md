@@ -64,7 +64,10 @@ apply. Existing unpublished bar actions stay blocked under B0022.
 
 ## Duplicates
 
-No temporary duplicate implementation is planned. The optional single-source
+Private calibration/profile/final binary and harness staging copies: delete 1
+day after the replacement is trusted (normally at task cleanup); retain raw
+measurement evidence, not executable staging. No product duplicate is planned.
+The optional single-source
 API remains supported compatibility, not a temporary replacement. Any temporary
 duplicate introduced later must name its path and an expiry here first:
 “delete N days after the replacement is trusted”.
