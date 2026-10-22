@@ -1546,14 +1546,22 @@ mod tests {
     fn imported_frame_releases_obsolete_local_fallback_caches() {
         let mut display = TreeCache::default();
         display.prepare(&scene(), 1.5).unwrap();
-        let old = Arc::downgrade(display.frame.as_ref().unwrap().items[0].raster.as_ref().unwrap());
+        let old = Arc::downgrade(
+            display.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap(),
+        );
         let mut worker = TreeCache::default();
         let mut ready = scene();
         worker.prepare(&ready, 1.5).unwrap();
         let imported = worker.frame.as_ref().unwrap().clone();
         ready.prepared.insert(1.5_f32.to_bits(), imported.clone());
         display.prepare(&ready, 1.5).unwrap();
-        assert!(old.upgrade().is_none(), "startup fallback is no longer retained");
+        assert!(
+            old.upgrade().is_none(),
+            "startup fallback is no longer retained"
+        );
         assert!(Arc::ptr_eq(display.frame.as_ref().unwrap(), &imported));
         assert_eq!(display.raster_budget.as_ref().unwrap().used(), 0);
         assert_eq!(display.node_budget.as_ref().unwrap().used(), 0);
