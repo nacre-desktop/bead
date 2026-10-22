@@ -9,8 +9,8 @@ pkgdesc='Bead native desktop shell for Nacre (installs beside the QML shell; sel
 arch=('x86_64')
 url='https://github.com/nacre-desktop/bead'
 license=('GPL-3.0-only')
-options=('!lto')
-depends=('glibc' 'gcc-libs' 'fontconfig' 'freetype2' 'libxkbcommon' 'wayland' 'gdk-pixbuf2' 'libpipewire' 'dbus')
+options=('!lto' '!debug')
+depends=('glibc' 'gcc-libs' 'glib2' 'fontconfig' 'libxkbcommon' 'gdk-pixbuf2' 'libpipewire')
 makedepends=('rust' 'cargo' 'clang' 'pkgconf')
 optdepends=('nacre: daemon, QML Settings/Colors/Welcome windows and the ui-shell switch')
 
