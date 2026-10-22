@@ -1,6 +1,6 @@
 # B0021 — Static wallpaper surface
 
-Status: **Contract unblocked; implementation complete; release-memory validation in progress**. Nacre N0027 is published. Consumer pins
+Status: **Contract unblocked; implementation complete; further nested validation blocked by the owner memory gate**. Nacre N0027 is published. Consumer pins
 `nacre-protocol` at Nacre commit `294d3f4034e0ffc8c6ee4fe38a3ed4109aa56c84`
 (`nacre-protocol` crate `0.1.0-dev.2`, wire contract v1). No wallpaper state is
 inferred from filesystem paths; only the contract's validated local path is used.

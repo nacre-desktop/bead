@@ -3,9 +3,10 @@
 ## 2026-10-22 — B0021 static wallpaper validation
 
 The Nacre N0027 consumer, secure file decoder, paired palette update and per-output background surfaces are implemented.
-The exact Bead CI replica passed in a dev-1 Arch container on commit `d1f1257`.
-A private nested Hyprland smoke committed the wallpaper on `bead-bench` and exercised two output create/remove cycles.
-Settled release memory crossed the owner stop line, so niri and transition capture were stopped before running.
+The exact Bead CI replica passed in a prod Arch container on commit `3bda2ae`.
+The first private nested Hyprland run exposed 26.64 MiB settled PSS, including 10.15 MiB shared-memory PSS from its unreclaimed wallpaper buffer.
+The release-aware fix now observes `wl_buffer.release` and drops that SHM mapping, but the rerun measured 59.79 MiB settled PSS.
+The remaining file-backed and anonymous growth exceeds the owner stop line; niri and transition capture were stopped before running.
 
 | One-output Hyprland measurement | Result |
 | --- | ---: |
@@ -15,7 +16,16 @@ Settled release memory crossed the owner stop line, so niri and transition captu
 | PSS file-backed / anonymous / shared-memory | 13.98 / 2.51 / 10.15 MiB |
 | SwapPss / DRM | 0 / no DRM fdinfo |
 
-The 26.64 MiB process total exceeds the 24.5 MiB stop line; it is not a wallpaper-only delta. No niri or transition PSS was measured. Output hotplug was exercised, but a wallpaper-specific release marker was not emitted on the compositor's surface-close path. No installation, push or live-desktop change occurred.
+The initial 26.64 MiB process total exceeded the 24.5 MiB stop line; it was not a wallpaper-only delta.
+
+| Hyprland post-release measurement | Result |
+| --- | ---: |
+| Output mode / scale | 2880×1800 / 1.5 |
+| Settled nacre-shell PSS + SwapPss | 59.79 MiB |
+| PSS file-backed / anonymous / shared-memory | 32.48 / 27.22 / 0.09 MiB |
+| SwapPss / DRM | 0 / no DRM fdinfo |
+
+`WALLPAPER_BUFFER_RELEASED output=bead-bench revision=1` confirms Hyprland released the buffer. Shared-memory PSS fell by 10.06 MiB, while file-backed and anonymous PSS rose versus the earlier arm; the cause is unresolved. The 59.79 MiB settled total remains above 24.5 MiB, so the owner stop line withheld niri and transition arms. The output create/remove lifecycle passed, including release markers for both `bead-test` surfaces. No installation, push or live-desktop change occurred.
 
 ## 2026-10-22 — B0019 launcher parity diagnostic
 
