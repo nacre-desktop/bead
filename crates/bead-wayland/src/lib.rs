@@ -152,6 +152,11 @@ pub enum UiEvent {
         x: f32,
         y: f32,
     },
+    HorizontalScroll {
+        x: f32,
+        y: f32,
+        delta: f64,
+    },
     Scroll {
         x: f32,
         y: f32,

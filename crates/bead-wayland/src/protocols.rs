@@ -595,14 +595,32 @@ impl PointerHandler for App {
                 PointerEventKind::Press { button: 0x112, .. } => {
                     self.view_event(panel, UiEvent::SecondaryClick { x, y })
                 }
-                PointerEventKind::Axis { vertical, .. } => self.view_event(
-                    panel,
-                    UiEvent::Scroll {
-                        x,
-                        y,
-                        delta: vertical.absolute,
-                    },
-                ),
+                PointerEventKind::Axis {
+                    vertical,
+                    horizontal,
+                    ..
+                } => {
+                    if vertical.absolute != 0. {
+                        self.view_event(
+                            panel,
+                            UiEvent::Scroll {
+                                x,
+                                y,
+                                delta: vertical.absolute,
+                            },
+                        );
+                    }
+                    if horizontal.absolute != 0. {
+                        self.view_event(
+                            panel,
+                            UiEvent::HorizontalScroll {
+                                x,
+                                y,
+                                delta: horizontal.absolute,
+                            },
+                        );
+                    }
+                }
                 _ => {}
             }
         }

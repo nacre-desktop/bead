@@ -524,6 +524,18 @@ impl Runtime {
             .session
             .stores
             .reconcile(&crate::desktop::values(&desktop.snapshot(), ""))?;
+        if bar {
+            let mut defaults = BTreeMap::new();
+            for (key, value) in [
+                ("bead.focused_title", bead::core::Value::Text(String::new())),
+                ("bead.workspaces", bead::core::Value::list(vec![])),
+            ] {
+                if self.session.stores.get(key).is_none() {
+                    defaults.insert(key.into(), value);
+                }
+            }
+            self.session.stores = self.session.stores.reconcile(&defaults)?;
+        }
         if bar && !self.tray_enabled {
             self.session.stores = self.session.stores.reconcile(&BTreeMap::from([(
                 "bead.desktop.tray".into(),
@@ -558,6 +570,7 @@ impl Runtime {
         arg: bead::core::Value,
         delta: Option<f64>,
         context_menu: bool,
+        horizontal: bool,
     ) -> Result<(), Box<dyn Error>> {
         self.actions.authorize(name)?;
         use bead::services::Action;
@@ -596,7 +609,7 @@ impl Runtime {
                     Action::TrayScroll {
                         item,
                         delta: if delta > 0. { -120 } else { 120 },
-                        horizontal: false,
+                        horizontal,
                     }
                 } else if tray.item_is_menu || context_menu {
                     if let Some(selection) = &self.tray_selection {
@@ -982,6 +995,7 @@ impl SceneSource for Runtime {
             UiEvent::Click { x, y }
             | UiEvent::ContextMenu { x, y }
             | UiEvent::SecondaryClick { x, y }
+            | UiEvent::HorizontalScroll { x, y, .. }
             | UiEvent::Scroll { x, y, .. } => self.session.action_at(*x, *y),
             UiEvent::Command { command, .. } if command == "enter" => self.session.focused_action(),
             UiEvent::Command { command, .. } if command == "left" || command == "right" => {
@@ -1000,6 +1014,13 @@ impl SceneSource for Runtime {
             && !host_action
                 .as_ref()
                 .is_some_and(|(_, name, _)| name == "services.tray.secondary")
+        {
+            return Ok(None);
+        }
+        if matches!(&event, UiEvent::HorizontalScroll { .. })
+            && !host_action
+                .as_ref()
+                .is_some_and(|(_, name, _)| name == "services.tray")
         {
             return Ok(None);
         }
@@ -1181,10 +1202,11 @@ impl SceneSource for Runtime {
         if let Some((id, name, arg)) = host_action.as_ref()
             && name.starts_with("services.")
         {
-            let delta = if let UiEvent::Scroll { delta, .. } = &event {
-                Some(*delta)
-            } else {
-                None
+            let delta = match &event {
+                UiEvent::Scroll { delta, .. } | UiEvent::HorizontalScroll { delta, .. } => {
+                    Some(*delta)
+                }
+                _ => None,
             };
             if delta.is_none() || name == "services.audio" || name == "services.tray" {
                 self.tray_anchor = self.popout_center(id, "tray");
@@ -1193,6 +1215,7 @@ impl SceneSource for Runtime {
                     arg.clone(),
                     delta,
                     matches!(event, UiEvent::ContextMenu { .. }),
+                    matches!(event, UiEvent::HorizontalScroll { .. }),
                 );
                 if name.starts_with("services.tray") || name.starts_with("services.menu") {
                     if result.is_err() {
@@ -1588,7 +1611,9 @@ impl SceneSource for Runtime {
                 }
             },
             UiEvent::WatchError(error) => return Err(error.into()),
-            UiEvent::ContextMenu { .. } | UiEvent::SecondaryClick { .. } => None,
+            UiEvent::ContextMenu { .. }
+            | UiEvent::SecondaryClick { .. }
+            | UiEvent::HorizontalScroll { .. } => None,
             UiEvent::Click { x, y } => self.session.click(x, y)?,
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
             UiEvent::Key { text, backspace } => self.session.key(&text, backspace)?,
