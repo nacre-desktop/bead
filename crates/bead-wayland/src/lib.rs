@@ -501,6 +501,7 @@ struct WallpaperSurface {
     pool: SlotPool,
     buffers: Vec<Buffer>,
     viewport: Option<WpViewport>,
+    viewport_destination: Option<(i32, i32)>,
     pixels: Option<Vec<u8>>,
     transition: Option<WallpaperTransition>,
 }

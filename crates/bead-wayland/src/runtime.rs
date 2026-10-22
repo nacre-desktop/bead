@@ -473,6 +473,7 @@ impl App {
             surface.height = height as u32;
             surface.scale_factor = scale_factor;
             surface.revision = 0;
+            surface.viewport_destination = None;
             surface.pixels = None;
             surface.transition = None;
             surface.buffers.clear();
@@ -511,6 +512,7 @@ impl App {
                 pool: SlotPool::new(4096, &self.shm)?,
                 buffers: Vec::with_capacity(2),
                 viewport,
+                viewport_destination: None,
                 pixels: None,
                 transition: None,
             })

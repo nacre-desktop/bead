@@ -336,10 +336,14 @@ impl LayerShellHandler for App {
             .find(|surface| surface.layer == *layer)
         {
             if let Some(viewport) = &surface.viewport {
-                viewport.set_destination(
+                let destination = (
                     config.new_size.0.max(1) as i32,
                     config.new_size.1.max(1) as i32,
                 );
+                if surface.viewport_destination != Some(destination) {
+                    viewport.set_destination(destination.0, destination.1);
+                    surface.viewport_destination = Some(destination);
+                }
             }
             surface.layer.commit();
             return;
