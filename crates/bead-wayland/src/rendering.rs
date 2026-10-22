@@ -45,7 +45,12 @@ impl App {
     fn trim_idle_shm(&mut self, index: usize) {
         let surface = &mut self.surfaces[index];
         if surface.shm_trim_pending
-            || surface.buffers.iter().filter(|buffer| buffer.painted).count() <= 1
+            || surface
+                .buffers
+                .iter()
+                .filter(|buffer| buffer.painted)
+                .count()
+                <= 1
         {
             return;
         }
