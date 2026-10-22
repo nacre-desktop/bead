@@ -16,6 +16,7 @@ mod nacre_source;
 mod notice_service;
 mod notifications;
 mod placement;
+mod player_art;
 mod popouts;
 mod reload;
 mod session_menu;

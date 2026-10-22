@@ -248,6 +248,12 @@ pub fn spec(
             } else {
                 secondary
             };
+            // The Today mini player shares the topic; the lease follows the visible page.
+            let player = if page == Page::Today {
+                choice.open_named("dashboard.player", "player").ok()
+            } else {
+                None
+            };
             // Tab visibility and the customization page read the revisioned store.
             let settings = choice.open_named(SETTINGS, "settings").ok();
             let controls = choice.client.clone().map(controls::Controls::new);
@@ -274,6 +280,7 @@ pub fn spec(
                     runtime.with_dashboard_view(
                         Dashboard::new(page, source, secondary, choice.fixtures.is_some())
                             .with_clock(clock)
+                            .with_player(player)
                             .with_controls(settings, controls, choice.client.clone()),
                     )
                 })
@@ -406,6 +413,8 @@ fn extra(topic: &str, data: &Json) -> Option<Extra> {
 struct Ticker {
     _stop: std::sync::mpsc::Sender<()>,
 }
+/// Art path and its thumbnail (`None` when the file was refused).
+type Art = (String, Option<Arc<[u8]>>);
 type Notify = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
 
 #[path = "dashboard_controls.rs"]
@@ -415,6 +424,10 @@ pub struct Dashboard {
     page: Page,
     source: Arc<dyn Source>,
     secondary: Option<Arc<dyn Source>>,
+    /// Today's mini player (the Media page reads its player through `secondary`).
+    player: Option<Arc<dyn Source>>,
+    /// Thumbnail of the active player's art, decoded once per path while visible.
+    art: std::cell::RefCell<Option<Art>>,
     clock: Option<Arc<dyn Source>>,
     settings: Option<Arc<dyn Source>>,
     controls: Option<controls::Controls>,
@@ -435,6 +448,8 @@ impl Dashboard {
             page,
             source,
             secondary: updates,
+            player: None,
+            art: Default::default(),
             clock: None,
             settings: None,
             controls: None,
@@ -461,16 +476,26 @@ impl Dashboard {
         self.now = now;
         self
     }
+    pub fn with_player(mut self, player: Option<Arc<dyn Source>>) -> Self {
+        self.player = player;
+        self
+    }
     pub fn with_clock(mut self, clock: Option<Arc<dyn Source>>) -> Self {
         self.clock = clock;
         self
     }
     pub fn project_with_stores(&self, stores: &bead::core::Stores) -> BTreeMap<String, Value> {
         let mut values = self.project();
-        // The countdown redraws once a second only while a session runs in an open panel.
-        let live = matches!(values.get("dashboard.state"), Some(Value::Text(t)) if t == "running" || t == "playing")
-            && stores.get("panel.open") != Some(&Value::Bool(false));
+        // The countdown redraws once a second only while a session runs in an open panel;
+        // the mini player on Today shows no position and needs no wake.
+        let open = stores.get("panel.open") != Some(&Value::Bool(false));
+        let live = matches!(values.get("dashboard.state"), Some(Value::Text(t)) if t == "running" || (t == "playing" && self.page == Page::Media))
+            && open;
         self.tick(live);
+        if !open {
+            // Hidden: the art thumbnail is released with the card.
+            *self.art.borrow_mut() = None;
+        }
         if let Some(clock) = &self.clock {
             values.extend(crate::calendar::Calendar::new(clock.clone()).project(stores));
             let snapshot = clock.snapshot();
@@ -506,6 +531,9 @@ impl Dashboard {
         }
         if let Some(secondary) = &self.secondary {
             subscriptions.push(secondary.subscribe(callback.clone())?);
+        }
+        if let Some(player) = &self.player {
+            subscriptions.push(player.subscribe(callback.clone())?);
         }
         if let Some(clock) = &self.clock {
             subscriptions.push(clock.subscribe(callback)?);
@@ -583,7 +611,7 @@ impl Dashboard {
                 );
             }
         }
-        if self.page == Page::Media {
+        if matches!(self.page, Page::Media | Page::Today) {
             self.project_player(&mut out);
         }
         if self.page == Page::Today {
@@ -745,6 +773,7 @@ impl Dashboard {
                 out.insert("dashboard.rows".into(), Value::list(rows));
                 out.insert("dashboard.secondary".into(), Value::list(disks));
                 out.insert("dashboard.gauges".into(), Value::list(controls::gauges(&s)));
+                controls::traffic(&s, &mut out);
             }
             CoreSnapshot::Notifications(s) => {
                 text(&mut out, "heading", "Recent notifications", 48);
@@ -877,18 +906,14 @@ impl Dashboard {
                     },
                     48,
                 );
-                let signal = s
-                    .access_points
-                    .items
-                    .values()
-                    .find(|ap| ap.active)
-                    .map(|ap| format!("{}%", ap.strength))
-                    .unwrap_or_else(|| "—".into());
+                let active = s.access_points.items.values().find(|ap| ap.active);
+                let signal = active.map_or("—".into(), |ap| format!("{}%", ap.strength));
                 text(&mut out, "metric", &signal, 8);
+                // Unknown frequency stays blank, never zero.
                 text(
                     &mut out,
                     "detail",
-                    "Traffic rates are not published yet",
+                    &active.and_then(frequency).unwrap_or_default(),
                     64,
                 );
                 let connections = s.connections.order.iter().take(6).filter_map(|id| s.connections.items.get(id).map(|c| json!({
@@ -902,7 +927,7 @@ impl Dashboard {
                     .filter_map(|id| {
                         s.access_points.items.get(id).map(|ap| json!({
                     "id":id,"label":line(&ap.name,28),"value":format!("{}%",ap.strength),
-                    "detail":if ap.secured {"Secured"} else {"Open"}
+                    "detail":access_detail(ap)
                 }))
                     })
                     .collect();
@@ -913,6 +938,15 @@ impl Dashboard {
         }
         out
     }
+}
+/// "Secured" or "Open", then the radio frequency when the daemon reports one.
+fn access_detail(ap: &nacre_protocol::core_services::AccessPoint) -> String {
+    let mut parts = vec![if ap.secured { "Secured" } else { "Open" }.to_string()];
+    parts.extend(frequency(ap));
+    parts.join(" · ")
+}
+fn frequency(ap: &nacre_protocol::core_services::AccessPoint) -> Option<String> {
+    ap.frequency_mhz.map(|f| format!("{f} MHz"))
 }
 fn now_ms() -> u64 {
     std::time::SystemTime::now()

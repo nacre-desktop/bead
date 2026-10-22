@@ -3,7 +3,7 @@
 use super::tests::{extra_harness, fixture, root};
 use super::*;
 use crate::nacre_source::{CallWake, Client, Config as ClientConfig};
-use bead_test::{Result, source::FakeSource};
+use bead_test::{Harness, Result, source::FakeSource};
 use nacre_protocol::{Capability, ErrorCode, Failure, Message, Reply, framing};
 use std::{os::unix::fs::PermissionsExt, time::Duration};
 use tokio::{io::BufReader, net::UnixListener, sync::mpsc};
@@ -381,6 +381,11 @@ fn media(now: fn() -> u64) -> Dashboard {
 }
 fn system_with_metrics() -> Json {
     let mut data = fixture("system");
+    data["network"] = json!([
+        {"down_bps": 200_000, "up_bps": 20_000}, {"down_bps": 900_000, "up_bps": 60_000},
+        {"down_bps": 2_500_000, "up_bps": 90_000}, {"down_bps": 1_200_000, "up_bps": 30_000},
+        {"down_bps": 300_000, "up_bps": 10_000}
+    ]);
     data["cpu_percent"] = json!(37.4);
     data["memory"] =
         json!({"used": 6 * 1024 * 1024 * 1024_u64, "total": 16 * 1024 * 1024 * 1024_u64});
@@ -440,12 +445,137 @@ fn system_gauges_show_published_readings_and_never_invent_zero() {
     assert_eq!(cards[1]["value"], json!("38%"));
     assert_eq!(cards[1]["detail"], json!("6.0 GiB / 16.0 GiB"));
     assert_eq!(cards[2]["value"], json!("12%"));
-    assert_eq!(cards[3]["value"], json!("—"));
+    assert_eq!(cards.len(), 3, "the placeholder disk card is gone");
     // The frozen fixture has none of the new members: every gauge stays unknown.
     let unknown = page_view(Page::System, fixture("system")).project();
     for card in rows(&unknown, "dashboard.gauges") {
         assert_eq!(card["value"], json!("—"), "{card}");
     }
+}
+
+fn art_dir() -> std::path::PathBuf {
+    let root =
+        std::env::temp_dir().join(format!("bead-art-view-{}-{}", std::process::id(), unique()));
+    std::fs::create_dir_all(root.join("nacre/shell/player-art")).unwrap();
+    root
+}
+fn with_art(path: &std::path::Path) -> Dashboard {
+    let mut data = fixture("player");
+    data["players"]["items"]["player-1"]["art_path"] = json!(path.to_str().unwrap());
+    Dashboard::new(
+        Page::Media,
+        Arc::new(FakeSource::new(fixture("media")).unwrap()),
+        Some(Arc::new(FakeSource::new(data).unwrap()) as Arc<dyn Source>),
+        true,
+    )
+    .with_now(fixed_now)
+}
+
+#[test]
+fn album_art_is_decoded_once_held_while_visible_and_released_when_hidden() -> Result<()> {
+    let root = art_dir();
+    let good = root.join("nacre/shell/player-art/good.png");
+    image::RgbaImage::from_pixel(300, 200, image::Rgba([10, 120, 200, 255])).save(&good)?;
+    let dashboard = with_art(&good);
+    assert_eq!(dashboard.project()["dashboard.art"], Value::Bool(true));
+    let held = dashboard
+        .art
+        .borrow()
+        .as_ref()
+        .and_then(|(_, t)| t.clone())
+        .unwrap();
+    // Projecting again reuses the thumbnail instead of decoding again.
+    dashboard.project();
+    let again = dashboard
+        .art
+        .borrow()
+        .as_ref()
+        .and_then(|(_, t)| t.clone())
+        .unwrap();
+    assert!(Arc::ptr_eq(&held, &again));
+    let closed = bead::core::Stores::default()
+        .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(false))]))?;
+    dashboard.project_with_stores(&closed);
+    assert!(dashboard.art.borrow().is_none(), "released when hidden");
+    // A file outside the daemon cache, or no art at all, shows the placeholder.
+    let outside = root.join("outside.png");
+    std::fs::copy(&good, &outside)?;
+    assert_eq!(
+        with_art(&outside).project()["dashboard.art"],
+        Value::Bool(false)
+    );
+    assert_eq!(
+        media(fixed_now).project()["dashboard.art"],
+        Value::Bool(false)
+    );
+    std::fs::remove_dir_all(root).ok();
+    Ok(())
+}
+
+#[test]
+fn today_shows_the_mini_player_only_with_a_player_and_never_ticks() -> Result<()> {
+    let today = |player: Option<Json>| {
+        Dashboard::new(
+            Page::Today,
+            Arc::new(FakeSource::new(fixture("today")).unwrap()),
+            None,
+            true,
+        )
+        .with_now(fixed_now)
+        .with_player(player.map(|d| Arc::new(FakeSource::new(d).unwrap()) as Arc<dyn Source>))
+    };
+    let model = today(Some(fixture("player"))).project();
+    assert_eq!(text(&model, "dashboard.state"), "playing");
+    assert_eq!(text(&model, "dashboard.track"), "Preview track");
+    assert_eq!(
+        text(&today(None).project(), "dashboard.state"),
+        "unavailable"
+    );
+    let dashboard = today(Some(fixture("player")));
+    let open = bead::core::Stores::default()
+        .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(true))]))?;
+    dashboard.project_with_stores(&open);
+    assert!(
+        dashboard.ticker.borrow().is_none(),
+        "no per-second wake for the mini player"
+    );
+    Ok(())
+}
+
+#[test]
+fn network_traffic_and_frequency_show_published_samples_only() {
+    let mut data = system_with_metrics();
+    data["network"] = json!([
+        {"down_bps": 2 * 1024 * 1024, "up_bps": 1024},
+        {"down_bps": 512 * 1024, "up_bps": 0}
+    ]);
+    let model = page_view(Page::System, data).project();
+    assert_eq!(text(&model, "dashboard.net_rate"), "Down 512 KiB/s");
+    assert_eq!(text(&model, "dashboard.net_up_rate"), "Up 0 KiB/s");
+    assert_eq!(text(&model, "dashboard.net_peak"), "Peak 2.0 MiB/s");
+    let down = rows(&model, "dashboard.net_down");
+    assert_eq!(down.len(), 2);
+    assert_eq!(down[0]["h"], json!(40));
+    assert_eq!(down[1]["h"], json!(10));
+    // Zero is drawn as a visible 2 px floor; no samples means no bars and no invented rate.
+    assert_eq!(rows(&model, "dashboard.net_up")[1]["h"], json!(2));
+    let none = page_view(Page::System, fixture("system")).project();
+    assert!(rows(&none, "dashboard.net_down").is_empty());
+    assert_eq!(text(&none, "dashboard.net_rate"), "—");
+    let mut wifi = fixture("network");
+    wifi["access_points"]["items"]["ap1"]["frequency_mhz"] = json!(5180);
+    let model = page_view(Page::Network, wifi).project();
+    assert_eq!(text(&model, "dashboard.detail"), "5180 MHz");
+    assert_eq!(
+        rows(&model, "dashboard.secondary")[0]["detail"],
+        json!("Secured · 5180 MHz")
+    );
+    let model = page_view(Page::Network, fixture("network")).project();
+    assert_eq!(text(&model, "dashboard.detail"), "");
+    assert_eq!(
+        rows(&model, "dashboard.secondary")[1]["detail"],
+        json!("Open")
+    );
 }
 
 #[test]
@@ -468,6 +598,66 @@ fn media_and_system_cards_have_deterministic_pixels() -> Result<()> {
                 h.render()?;
                 h
             };
+            let frame = h.render()?;
+            let golden = root().join(format!("tests/goldens/dashboard-{name}-{scale}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                Default::default(),
+                &std::env::temp_dir().join(format!("bead-dashboard-{name}-{scale}-diff")),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn album_art_seek_and_mini_player_have_deterministic_pixels() -> Result<()> {
+    let seekable = {
+        let mut data = fixture("player");
+        data["players"]["items"]["player-1"]["can_seek"] = json!(true);
+        data
+    };
+    let mut media_model = Dashboard::new(
+        Page::Media,
+        Arc::new(FakeSource::new(fixture("media"))?),
+        Some(Arc::new(FakeSource::new(seekable.clone())?) as Arc<dyn Source>),
+        true,
+    )
+    .with_now(|| 1709193600000 + 10_000)
+    .project();
+    media_model.insert("dashboard.art".into(), Value::Bool(true));
+    media_model.insert("dashboard.can_seek".into(), Value::Bool(true));
+    let mut today_model = Dashboard::new(
+        Page::Today,
+        Arc::new(FakeSource::new(fixture("today"))?),
+        None,
+        true,
+    )
+    .with_now(fixed_now)
+    .with_player(Some(Arc::new(FakeSource::new(seekable)?) as Arc<dyn Source>))
+    .project();
+    today_model.insert("dashboard.art".into(), Value::Bool(true));
+    for (page, name, model) in [
+        (Page::Media, "media-art-seek", media_model),
+        (Page::Today, "today-mini-player", today_model),
+    ] {
+        for scale in [1., 1.5] {
+            let mut h = Harness::load_with_icons(
+                &root(),
+                Path::new(&format!("dashboard/{}/main.luau", page.name())),
+                &root().join("palette.json"),
+                model.clone(),
+                bead_test::Config {
+                    width: 1048,
+                    height: 714,
+                    scale,
+                },
+                BTreeMap::from([("player-art".into(), root().join("sample.png"))]),
+            )?;
+            h.render()?;
             let frame = h.render()?;
             let golden = root().join(format!("tests/goldens/dashboard-{name}-{scale}.png"));
             if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
@@ -705,6 +895,83 @@ async fn player_controls_resolve_the_active_player_and_obey_can_flags() {
         ("player.next".into(), json!({"player":"player-1"}))
     );
     settle(&dashboard).await;
+    assert!(calls.try_recv().is_err());
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn seek_jumps_from_the_extrapolated_position_clamps_and_needs_can_seek() {
+    let (dir, client, mut calls) = lab(&["player.seek"], &[], vec![ok(), ok(), ok(), ok()]).await;
+    let view = |edit: &dyn Fn(&mut Json), now: fn() -> u64| {
+        let mut data = fixture("player");
+        edit(&mut data["players"]["items"]["player-1"]);
+        Dashboard::new(
+            Page::Media,
+            Arc::new(FakeSource::new(fixture("media")).unwrap()),
+            Some(Arc::new(FakeSource::new(data).unwrap()) as Arc<dyn Source>),
+            false,
+        )
+        .with_now(now)
+        .with_controls(
+            None,
+            Some(controls::Controls::new(client.clone())),
+            Some(client.clone()),
+        )
+    };
+    let seekable = |p: &mut Json| p["can_seek"] = json!(true);
+    // Playing: 42 s at the reading plus 10 s elapsed, jump forward 10 s.
+    let d = view(&seekable, || 1709193600000 + 10_000);
+    assert_eq!(d.project()["dashboard.can_seek"], Value::Bool(true));
+    d.act("player.seek:10", wake());
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        (
+            "player.seek".into(),
+            json!({"player":"player-1","position_ms":62_000})
+        )
+    );
+    settle(&d).await;
+    // Paused near the start: a jump back clamps to zero; near the end it clamps to the length.
+    let d = view(
+        &|p| {
+            seekable(p);
+            p["status"] = json!("paused");
+            p["position_ms"] = json!(3000);
+        },
+        fixed_now,
+    );
+    d.act("player.seek:-10", wake());
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        (
+            "player.seek".into(),
+            json!({"player":"player-1","position_ms":0})
+        )
+    );
+    settle(&d).await;
+    let d = view(
+        &|p| {
+            seekable(p);
+            p["position_ms"] = json!(175_000);
+        },
+        fixed_now,
+    );
+    d.act("player.seek:10", wake());
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        (
+            "player.seek".into(),
+            json!({"player":"player-1","position_ms":180_000})
+        )
+    );
+    settle(&d).await;
+    // can_seek false, an oversized step and a non-number send nothing.
+    let d = view(&|_| {}, fixed_now);
+    assert_eq!(d.project()["dashboard.can_seek"], Value::Bool(false));
+    d.act("player.seek:10", wake());
+    let d = view(&seekable, fixed_now);
+    d.act("player.seek:61", wake());
+    d.act("player.seek:x", wake());
     assert!(calls.try_recv().is_err());
     std::fs::remove_dir_all(dir).ok();
 }

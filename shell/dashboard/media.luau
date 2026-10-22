@@ -16,11 +16,12 @@ return function()
     local state=ui.resolve_for_check(ui.bind("dashboard.state"))
     local control=ui.resolve_for_check(ui.bind("dashboard.control"))
     local progress=ui.resolve_for_check(ui.bind("dashboard.progress"))
+    local art=ui.resolve_for_check(ui.bind("dashboard.art"))
     local live=state=="playing" or state=="paused" or state=="stopped"
     local transport
     if live then
         local function op(name,can) return control and ui.resolve_for_check(ui.bind(can)) and ui.action("dashboard.do",name) or nil end
-        transport=ui.Column{id="transport",width=520,height=96,gap=10,
+        transport=ui.Column{id="transport",width=520,height=146,gap=10,
             ui.Row{id="buttons",width=520,height=40,gap=12,
                 C.button("previous","Previous",op("player.previous","dashboard.can_previous"),110),
                 C.button("toggle",state=="playing" and "Pause" or "Play",op("player.play_pause","dashboard.can_toggle"),110),
@@ -29,12 +30,17 @@ return function()
             },
             ui.Box{id="track",width=520,height=6,radius=3,fill=ui.alpha("primary",0.16),
                 progress>0 and ui.Box{id="elapsed",width=math.max(1,math.floor(520*progress)),height=6,radius=3,fill="primary"} or nil},
+            ui.Row{id="seek",width=520,height=40,gap=12,
+                C.button("seek-back","Back 10 s",op("player.seek:-10","dashboard.can_seek"),110),
+                C.button("seek-forward","Forward 10 s",op("player.seek:10","dashboard.can_seek"),110),
+            },
         }
     end
     return ui.Box{id="media",width=940,height=562,
         ui.Column{id="player",position="absolute",left=0,top=0,width=564,height=562,padding=22,gap=20,radius=20,fill="surfaceContainer",
             ui.Box{id="artwork",width=220,height=220,radius=20,fill="surfaceContainerHigh",
-                ui.Text{position="absolute",left=70,top=66,width=80,height=88,text="music_note",family="Material Symbols Rounded",font_size=80,color="primary"},
+                art and ui.Image{position="absolute",left=0,top=0,icon="player-art",width=220,height=220,aria_label="Album art"}
+                    or ui.Text{position="absolute",left=70,top=66,width=80,height=88,text="music_note",family="Material Symbols Rounded",font_size=80,color="primary"},
             },
             C.title("title",ui.bind("dashboard.track"),520),
             ui.Text{id="description",width=520,height=72,font_size=16,color="onSurfaceVariant",text=ui.bind("dashboard.track_detail")},

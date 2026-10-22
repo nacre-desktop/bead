@@ -110,7 +110,10 @@ impl Dashboard {
             (Page::Screenshots, "shot.open") if self.holds(id) => {
                 c.submit("screenshots.open", json!({"id": id}), wake)
             }
-            (Page::Media, "player.play_pause" | "player.next" | "player.previous") => {
+            (
+                Page::Media | Page::Today,
+                "player.play_pause" | "player.next" | "player.previous",
+            ) => {
                 // The topic's own `can_*` flags gate each control.
                 if let Some((id, p)) = self.active_player()
                     && match op {
@@ -120,6 +123,20 @@ impl Dashboard {
                     }
                 {
                     c.submit(op, json!({"player": id.0}), wake)
+                }
+            }
+            (Page::Media, "player.seek") => {
+                // Relative jump from the extrapolated position, clamped to the track.
+                let Ok(step @ -60..=60) = id.parse::<i64>() else {
+                    return;
+                };
+                if let Some((player, p)) = self.active_player()
+                    && p.can_seek
+                    && let Some(at) = self.position(&p)
+                {
+                    let target =
+                        (at as i64 + step * 1000).clamp(0, p.length_ms.unwrap_or(0) as i64);
+                    c.submit(op, json!({"player": player.0, "position_ms": target}), wake)
                 }
             }
             (
@@ -154,7 +171,12 @@ impl Dashboard {
     }
     /// The daemon's current player and its state, if the topic is fresh and valid.
     fn active_player(&self) -> Option<(EntityId, Player)> {
-        let snapshot = self.secondary.as_ref()?.snapshot();
+        let source = if self.page == Page::Media {
+            self.secondary.as_ref()
+        } else {
+            self.player.as_ref()
+        };
+        let snapshot = source?.snapshot();
         let Ok(CoreSnapshot::Player(s)) = checked("dashboard.player", &snapshot.data) else {
             return None;
         };
@@ -288,7 +310,7 @@ impl Dashboard {
             Page::Screenshots => "screenshots.open",
             Page::AiUsage => "ai.usage.refresh",
             Page::Customize => "settings.set",
-            Page::Media => "player.play_pause",
+            Page::Media | Page::Today => "player.play_pause",
             Page::Notifications => "notifications.set_dnd",
             _ => "",
         };
@@ -306,7 +328,7 @@ impl Dashboard {
         out.insert("dashboard.message".into(), Value::Text(line(&message, 64)));
         out.insert("dashboard.confirm".into(), Value::Bool(confirm));
         out.insert("dashboard.customize".into(), Value::Bool(customize));
-        if self.page == Page::Media {
+        if matches!(self.page, Page::Media | Page::Today) {
             for (key, value) in [
                 ("track", "Playback unavailable"),
                 (
@@ -317,7 +339,7 @@ impl Dashboard {
                 out.entry(format!("dashboard.{key}"))
                     .or_insert(Value::Text(value.into()));
             }
-            for key in ["can_previous", "can_toggle", "can_next"] {
+            for key in ["can_previous", "can_toggle", "can_next", "can_seek", "art"] {
                 out.entry(format!("dashboard.{key}"))
                     .or_insert(Value::Bool(false));
             }
@@ -359,15 +381,7 @@ impl Dashboard {
             return;
         };
         let clock = |ms: u64| format!("{}:{:02}", ms / 60_000, ms / 1000 % 60);
-        let playing = p.status == PlayerStatus::Playing;
-        let position = p.position_ms.map(|at| {
-            let moved = if playing {
-                (self.now)().saturating_sub(p.position_updated_ms.unwrap_or(0))
-            } else {
-                0
-            };
-            (at + moved).min(p.length_ms.unwrap_or(u64::MAX))
-        });
+        let position = self.position(&p);
         let state = match p.status {
             PlayerStatus::Playing => "playing",
             PlayerStatus::Paused => "paused",
@@ -416,6 +430,55 @@ impl Dashboard {
         out.insert("dashboard.can_previous".into(), Value::Bool(p.can_previous));
         out.insert("dashboard.can_toggle".into(), Value::Bool(p.can_play_pause));
         out.insert("dashboard.can_next".into(), Value::Bool(p.can_next));
+        let seek = p.can_seek
+            && self
+                .controls
+                .as_ref()
+                .is_some_and(|c| c.ready("player.seek").is_some());
+        out.insert("dashboard.can_seek".into(), Value::Bool(seek));
+        out.insert(
+            "dashboard.art".into(),
+            Value::Bool(self.art_for(p.art_path.as_deref())),
+        );
+    }
+    /// Reading at `position_updated_ms` plus the time since, only while playing.
+    fn position(&self, p: &Player) -> Option<u64> {
+        let moved = if p.status == PlayerStatus::Playing {
+            (self.now)().saturating_sub(p.position_updated_ms.unwrap_or(0))
+        } else {
+            0
+        };
+        p.position_ms
+            .map(|at| (at + moved).min(p.length_ms.unwrap_or(u64::MAX)))
+    }
+    /// True when a thumbnail for `path` is held; decodes once per path change and
+    /// remembers a failure so a bad file is not re-read on every projection.
+    fn art_for(&self, path: Option<&str>) -> bool {
+        let mut art = self.art.borrow_mut();
+        let Some(path) = path else {
+            *art = None;
+            return false;
+        };
+        if art.as_ref().is_none_or(|(held, _)| held != path) {
+            *art = Some((path.into(), crate::player_art::thumbnail(path)));
+        }
+        art.as_ref().is_some_and(|(_, thumb)| thumb.is_some())
+    }
+    /// Gives the card's `art` image its pixels: the placeholder icon name in the
+    /// scene is swapped for the held thumbnail, which the scene then owns.
+    pub fn attach_art(&self, scene: &mut bead::render::Scene) {
+        let held = self.art.borrow();
+        let thumb = held.as_ref().and_then(|(_, t)| t.clone());
+        for draw in &mut scene.primitives {
+            if let bead::render::Primitive::Image { path, .. } = draw
+                && path.to_str() == Some("@icon:player-art")
+                && let Some(thumb) = &thumb
+            {
+                let key = std::path::PathBuf::from("@player-art/thumb.png");
+                scene.asset_data.insert(key.clone(), thumb.clone());
+                *path = key;
+            }
+        }
     }
     pub(super) fn project_more(&self, out: &mut BTreeMap<String, Value>, snapshot: &Snapshot) {
         if self.page == Page::Customize {
@@ -626,6 +689,58 @@ pub(super) fn gauges(s: &DashboardSystemState) -> Vec<Json> {
             "detail":memory.map_or("Metric unavailable".into(), |m| format!("{} / {}", bytes(m.used), bytes(m.total)))}),
         json!({"id":"gpu","label":"GPU","icon":"view_in_ar","value":percent(s.gpu.as_ref().and_then(|g| g.percent)),
             "detail":gpu_detail}),
-        json!({"id":"disk","label":"Disk","icon":"hard_drive","value":"—","detail":"See drives below"}),
     ]
+}
+
+/// Down/up throughput bars and rates from `dashboard.system.network` (bytes per
+/// second, oldest first). Bar heights share one scale so the two lines compare.
+pub(super) fn traffic(s: &DashboardSystemState, out: &mut BTreeMap<String, Value>) {
+    const BAR: u64 = 40;
+    let rate = |v: u64| {
+        if v >= 1024 * 1024 {
+            format!("{:.1} MiB/s", v as f64 / (1024. * 1024.))
+        } else {
+            format!("{:.0} KiB/s", v as f64 / 1024.)
+        }
+    };
+    let peak = s
+        .network
+        .iter()
+        .map(|n| n.down_bps.max(n.up_bps))
+        .max()
+        .unwrap_or(0);
+    let scale = peak.max(1024) as u128;
+    let bars = |pick: fn(&nacre_protocol::core_services::NetworkSample) -> u64| {
+        s.network
+            .iter()
+            .enumerate()
+            .map(|(i, n)| json!({"id": i.to_string(), "h": (u128::from(BAR) * u128::from(pick(n)) / scale).max(2) as u64}))
+            .collect::<Vec<_>>()
+    };
+    let last = s.network.last();
+    out.insert(
+        "dashboard.net_down".into(),
+        Value::list(bars(|n| n.down_bps)),
+    );
+    out.insert("dashboard.net_up".into(), Value::list(bars(|n| n.up_bps)));
+    for (key, text) in [
+        (
+            "net_rate",
+            last.map_or("—".into(), |n| format!("Down {}", rate(n.down_bps))),
+        ),
+        (
+            "net_up_rate",
+            last.map_or("—".into(), |n| format!("Up {}", rate(n.up_bps))),
+        ),
+        (
+            "net_peak",
+            if last.is_some() {
+                format!("Peak {}", rate(peak))
+            } else {
+                String::new()
+            },
+        ),
+    ] {
+        out.insert(format!("dashboard.{key}"), Value::Text(text));
+    }
 }

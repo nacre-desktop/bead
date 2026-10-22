@@ -1148,6 +1148,9 @@ impl Runtime {
             {
                 crate::desktop::icons(scene, &self.with_daemon_tray(base))?;
             }
+            if let Some(dashboard) = &self.dashboard {
+                dashboard.attach_art(scene);
+            }
             let asset_profile = bead::core::profile::Span::new("assets");
             for draw in &mut scene.primitives {
                 if let bead::render::Primitive::Image { path, .. } = draw

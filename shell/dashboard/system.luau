@@ -11,6 +11,22 @@ return function()
             ui.Text{text=metric.detail,height=40,width=186,font_size=14,color="onSurfaceVariant"},
         })
     end
+    local function bars(id,model,fill)
+        if #ui.resolve_for_check(ui.bind(model))==0 then return ui.Box{id=id,width=194,height=1} end
+        return ui.Row{id=id,width=194,height=40,gap=1,align="end",
+            ui.Repeat{id="items",model=ui.bind(model),key="id",render=function(item)
+                return ui.Box{id="bar",width=5,height=item.h,radius=1,fill=fill}
+            end},
+        }
+    end
+    table.insert(gauges,ui.Column{id="network",width=226,height=258,padding=16,gap=6,radius=20,fill="surfaceContainer",
+        C.title("title","Network",194),
+        ui.Text{id="down",text=ui.bind("dashboard.net_rate"),width=194,height=20,font_size=14,color="primary"},
+        ui.Text{id="up",text=ui.bind("dashboard.net_up_rate"),width=194,height=20,font_size=14,color="secondary"},
+        bars("down-bars","dashboard.net_down","primary"),
+        bars("up-bars","dashboard.net_up","secondary"),
+        ui.Text{id="peak",text=ui.bind("dashboard.net_peak"),width=194,height=18,font_size=12,color="onSurfaceVariant"},
+    })
     return ui.Box{id="system",width=940,height=562,
         ui.Row{id="metrics",position="absolute",left=0,top=0,width=940,height=258,gap=12,table.unpack(gauges)},
         ui.Column{id="disks",position="absolute",left=0,top=274,width=357,height=212,padding=16,gap=10,radius=16,fill="surfaceContainerLow",
