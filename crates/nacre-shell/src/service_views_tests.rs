@@ -631,7 +631,18 @@ fn live_palette_overlay_recolors_panel_views_without_reload_or_file_write() -> R
                 SURFACE,
             )])))?
             .ok_or("palette stage produced no scene")?;
-        assert!(fills(&scene), "{entry} did not take the live palette");
+        assert!(
+            fills(&scene),
+            "{entry} did not take the live palette: {:?}",
+            scene
+                .primitives
+                .iter()
+                .filter_map(|p| match p {
+                    bead::render::Primitive::Rounded { fill, .. } => Some(*fill),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        );
         // A later reload keeps the overlay; the committed file is never rewritten.
         assert!(runtime.commit());
         let reloaded = runtime.stage(UiEvent::Reload)?.ok_or("reload produced no scene")?;

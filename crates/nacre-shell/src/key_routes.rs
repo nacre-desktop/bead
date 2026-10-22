@@ -5,7 +5,10 @@
 //! interpretation and ranking stay in the daemon; the only client-side data here is
 //! the route-name table that Nacre's QML menu model also applies to bind arguments.
 use crate::nacre_source::{CallGuard, CallTicket, Client};
-use bead::{core::Value, services::ipc::Call};
+use bead::{
+    core::{Value, source::Source},
+    services::ipc::Call,
+};
 use std::{cell::RefCell, collections::BTreeMap, time::Duration};
 
 /// What a launcher-family key asks the launcher view to show.
@@ -98,56 +101,6 @@ pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
         _ => return None,
     })
 }
-fn menu_route(route: &str) -> Result<String, &'static str> {
-    let route = if route.is_empty() { "home" } else { route };
-    let valid = route.len() <= 128
-        && route
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-');
-    if !valid {
-        return Err("invalid menu route");
-    }
-    Ok(resolve(route).unwrap_or(route).to_owned())
-}
-
-/// `None` is not a launcher-family route; `Some(Err)` is one Bead refuses.
-pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
-    if call.target != "nacre" {
-        return None;
-    }
-    let arg = |i: usize| call.args.get(i).and_then(serde_json::Value::as_str);
-    let launch = |query: &str, route: Option<&str>, toggle| {
-        Ok(Launch {
-            query: query.into(),
-            route: route.map(Into::into),
-            toggle,
-        })
-    };
-    Some(match call.method.as_str() {
-        "launcher" => {
-            let query = arg(0).unwrap_or_default();
-            match query.strip_prefix(">wallpaper") {
-                Some(rest) => launch(rest.trim(), Some("style.wallpapers"), true),
-                None => launch(query, None, true),
-            }
-        }
-        "menu" => menu_route(arg(0).unwrap_or_default())
-            .and_then(|route| launch(arg(1).unwrap_or_default(), Some(&route), false)),
-        "clipboard" => launch("", Some("actions.clipboard"), true),
-        "mode" => match arg(0).unwrap_or_default() {
-            "apps" => launch("", None, true),
-            "legacy" => Err("legacy launcher mode is not implemented"),
-            name => menu_route(name)
-                .and_then(|route| launch("", Some(&route), true))
-                .and_then(|launch| match resolve(name) {
-                    Some(_) => Ok(launch),
-                    None => Err("unknown launcher mode"),
-                }),
-        },
-        _ => return None,
-    })
-}
-
 const BRIGHTNESS: &str = "brightness.adjust";
 /// QML `NacreBrightness.step` moves the focused display by five percentage points.
 const BRIGHTNESS_STEP: i64 = 5;

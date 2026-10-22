@@ -267,6 +267,19 @@
           "dynamic": false
         }
       ],
+      "method": "clipboard",
+      "parameters": [],
+      "returns": "void",
+      "source": "nacre/shell/modules/NacreShellIpc.qml:296"
+    },
+    {
+      "target_expression": "\"nacre\"",
+      "patterns": [
+        {
+          "prefix": "nacre",
+          "dynamic": false
+        }
+      ],
       "method": "session",
       "parameters": [],
       "returns": "void",

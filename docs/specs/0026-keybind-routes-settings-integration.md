@@ -81,12 +81,26 @@ sent without a retry, and uses the exact output name of the focused output.
 ## Part 2: settings, palette, i18n
 
 Palette. Bead's runtime palette is the wallpaper activation's palette (Orient
-roles) committed with its image. Finding: it reached only the bar session. A
-panel opened later, or open during a switch, kept the start-up file palette.
-Fixed in `bead-wayland`: the committed palette is recorded once
-(`set_wallpaper_palette`), staged into an open panel, and staged into every newly
-started panel before its first load. Tests: `live_palette_overlay_recolors_panel_views_without_reload_or_file_write`
-(overlay applies, survives reload, palette file untouched).
+roles) committed with its image. Two findings, both fixed:
+
+1. The palette reached only the bar session. A panel opened later, or open during
+   a switch, kept the start-up file palette. `bead-wayland` now records the
+   committed palette once (`set_wallpaper_palette`), stages it into an open panel
+   and into every newly started panel before its first load.
+2. `bead-ui` text-patching (`materialized::Cached::patch`) reused the cached
+   scene, with its baked colors, whenever markup, viewport and bindings were
+   unchanged, so a palette change alone repainted nothing. The cache now misses
+   when the palette differs (about 2 KiB held per cached view).
+
+Test: `live_palette_overlay_recolors_panel_views_without_reload_or_file_write`
+drives the calendar and session views; it failed before fix 2 and now checks that
+the overlay applies, survives a reload, and leaves the palette file untouched.
+Not covered here: the compositor-level redraw of an open panel (needs a nested
+session).
+
+Catalog. `shell/command-catalog.json` (Nacre rev 68df8dd) lacked `nacre clipboard`,
+so Super+V was refused by the provider; added, 121 routes. A scan of Nacre
+`origin/main` found no other missing `registerIpc` method.
 
 Settings. Bead reads no `settings.store.*` yet. Read-only consumers needed for
 parity are `desktop` (motion, language, nativeClipboard), `dashboard` and

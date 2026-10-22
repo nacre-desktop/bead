@@ -2,13 +2,13 @@
 use super::*;
 
 #[test]
-fn no_argument_launcher_open_leaves_saved_input_and_route_untouched() {
-    assert!(launcher_open_model(&[]).is_empty());
-}
-
-#[test]
 fn explicit_launcher_query_resets_route_selection_and_scroll() {
-    let changes = launcher_open_model(&[serde_json::Value::String("mail".into())]);
+    let changes = crate::key_routes::Launch {
+        query: "mail".into(),
+        route: None,
+        toggle: true,
+    }
+    .model();
     assert_eq!(
         changes["launcher.search.text"],
         bead::core::Value::Text("mail".into())

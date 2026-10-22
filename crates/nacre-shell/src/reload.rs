@@ -4,17 +4,6 @@ use bead::render::Scene;
 use bead::wayland::{SceneSource, UiEvent};
 use std::collections::BTreeMap;
 use std::error::Error;
-fn launcher_open_model(args: &[serde_json::Value]) -> BTreeMap<String, bead::core::Value> {
-    if args.is_empty() {
-        return BTreeMap::new();
-    }
-    crate::key_routes::Launch {
-        query: args[0].as_str().unwrap_or_default().into(),
-        route: None,
-        toggle: true,
-    }
-    .model()
-}
 fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead::core::Value> {
     let mut changes = BTreeMap::from([("panel.open".into(), bead::core::Value::Bool(open))]);
     if open && launcher {

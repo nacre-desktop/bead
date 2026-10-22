@@ -26,6 +26,8 @@ pub(super) struct Cached {
     scene: Scene,
     nodes: Vec<Node>,
     viewport: (f32, f32),
+    /// Colors are baked into the cached scene, so a palette change must miss.
+    palette: Palette,
     values: BTreeMap<String, Value>,
     structural: BTreeSet<String>,
     text: Vec<Text>,
@@ -66,6 +68,7 @@ impl Cached {
             scene: scene.clone(),
             nodes: nodes.to_vec(),
             viewport,
+            palette: Palette(palette.0.clone()),
             values: BTreeMap::new(),
             structural: BTreeSet::from(["bead.focused".into(), "bead.hovered".into()]),
             text: vec![],
@@ -212,8 +215,12 @@ impl Cached {
         &self,
         raw: &Rc<RawNode>,
         resolve: &Resolve<'_>,
+        palette: &Palette,
         viewport: (f32, f32),
     ) -> Result<Option<(Scene, Vec<Node>)>, Diagnostic> {
+        if palette.0 != self.palette.0 {
+            return Ok(None);
+        }
         if !Rc::ptr_eq(raw, &self.raw) || viewport != self.viewport {
             if bead_core::profile::enabled() {
                 println!(

@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn every_audited_route_and_selector_is_typed_and_dispatchable() {
         let c = catalog().unwrap();
-        assert_eq!(c.routes.len(), 120);
+        assert_eq!(c.routes.len(), 121);
         for route in &c.routes {
             for p in &route.patterns {
                 let args = route

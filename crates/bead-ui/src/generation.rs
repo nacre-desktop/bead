@@ -447,7 +447,7 @@ impl Generation {
                 .build(entry, &resolve)?;
             drop(markup_profile);
             if let Some(cached) = &*self.materialized.borrow()
-                && let Some(result) = cached.patch(&raw, &resolve, viewport)?
+                && let Some(result) = cached.patch(&raw, &resolve, palette, viewport)?
             {
                 return Ok(result);
             }
