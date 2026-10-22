@@ -12,7 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 2 | [B0022 Bar composition and lifecycle](0022-bar-composition-lifecycle.md) | Spec first | Per-output composition, hotplug/scale, daemon reconnect and QML-matched action inventory. B0016/B0018/B0019 are existing entry points; only their wiring/lifecycle is in scope. |
+| 2 | [B0022 Bar composition and lifecycle](0022-bar-composition-lifecycle.md) | Blocked — published action contracts and per-output view context | Existing output surface/hotplug/scale handling and reconnect/tray lifecycle tests are documented. No action routes were added because the pinned daemon method registry does not publish them; per-output content requires per-surface UI sessions. |
 | 0 | [B0021 Static wallpaper](0021-static-wallpaper-surface.md) | Review — matched CPU wallpaper memory target met | Worker decoder at `ac27ca3`: +0.251/+0.619 MiB H/N over main excluding niri-held SHM. Both nested lifecycles, switch and full prod Arch CI passed; no install or push. |
 | 0 | [B0020 Notifications/OSD](0020-notifications-osd-product.md) | Blocked — spec first | Nacre N0017 remains a proposal, not a published producer; timeout policy and keyboard-layout OSD contract unresolved. No runtime adoption, live ownership or push. B0019 reserved for concurrent launcher work. |
 | 4 | [B0019 Launcher parity](0019-launcher-parity.md) | In progress | Catalogue/favourites/categories, daemon ordering, input/activation and stale-result fencing; private validation, no push or live switch. |
