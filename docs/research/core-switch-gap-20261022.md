@@ -5,6 +5,13 @@ Scope: Bead checkout `origin/main` 463e483; Nacre comparison uses fetched
 QML tree, not the local checkout. Status means parity for the owner's laptop,
 not whether a framework primitive or fixture exists.
 
+B0019 follow-up (local review candidate): catalogue/list, engine group routes,
+favourites, async stale-result fencing, navigation and retained input are now
+implemented with private/nested proofs. Query/order identity and RPC RTT are
+available for serial traces. See [B0019](../specs/0019-launcher-parity.md) for
+results and limits; the map below records the original origin/main assessment.
+Typing target acceptance, matched memory and the Gate D decision remain open.
+
 ## Always-on parts
 
 | Part | Bead now (refs) | Nacre QML today / user-visible gap (rough size) |

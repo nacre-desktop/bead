@@ -5,9 +5,9 @@
 planned “Bead for others” milestone and generalization list are in the roadmap.
 
 Current owner handoff: 2026-10-22. B2 is done after Hyprland and niri passed the
-desktop relative gate. B3 has measured evidence for five pairs per compositor;
-the review remains open for the accepted trace-identity/RTT limitation. The
-dated transfer and execution receipts below remain historical records.
+desktop relative gate. B3 has measured evidence for five pairs per compositor.
+B0019 adds serial query/order identity and RPC RTT evidence; typing target
+acceptance remains open. The dated transfer and execution receipts below remain historical records.
 [Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
 
 | Order | Spec | Status | Eligible work |
@@ -15,13 +15,14 @@ dated transfer and execution receipts below remain historical records.
 | 0 | [B0021 Static wallpaper](0021-static-wallpaper-surface.md) | Blocked — published active selection/presentation and palette activation contract needed | Spec first; no direct Nacre state-file reads or Bead config writer. |
 | 0 | [B0020 Notifications/OSD](0020-notifications-osd-product.md) | Blocked — spec first | Nacre N0017 remains a proposal, not a published producer; timeout policy and keyboard-layout OSD contract unresolved. No runtime adoption, live ownership or push. B0019 reserved for concurrent launcher work. |
 | 4 | [B0019 Launcher parity](0019-launcher-parity.md) | In progress | Catalogue/favourites/categories, daemon ordering, input/activation and stale-result fencing; private validation, no push or live switch. |
+| 4 | [B0019 Launcher parity](0019-launcher-parity.md) | Review — implementation validated; performance/memory acceptance open | Source c8b55b5; async catalogue/favourites/group routes, ordered results, input/activation and stale fences. Full remote CI and private input/reopen passed; see spec for diagnostics and limits. No push or live switch. |
 | 0 | [B0018 Status pill](0018-control-center-status-pill.md) | Done | Source c6ba4b3; four device peek/click routes, switching and lazy close. Exact-source private CPU input and full remote Arch CI equivalent passed; no push or live switch. |
 | 0 | [B0016 System tray](0016-system-tray.md) | Review — core producer blocked | Local source6efca12; headless service, lazy preview menu and private/nested proofs. Daemon ownership/action publication and matched memory gate remain open; lead reviews/integrates, no push. |
 | 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Done | Sourcedcf541a9 integrated normally; exact-source full hostedCI39240289443 SUCCESS. Capability-gated; no producer or live enablement claim. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
 | 2 | [B0002 dashboard memory](0002-dashboard-lifecycle-memory-gate.md) | Done — 2026-10-22 | Desktop Hyprland deltas +0.121/+0.134/+0.219/+0.047 MiB; niri +0.237/+0.249/+0.229/−0.998 MiB. Anonymous growth <+1 MiB; DRM unknown and excluded. Candidate 306474f0 / UI 7948c3c. See [desktop batch report](../research/b0002-desktop-batch-20261021.md). |
-| 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Review — 10 valid pairs; exact per-key item IDs/query identity and RPC RTT remain unavailable | B0003-S89afb381 accepted/CI39123319816 green. No product change or target acceptance; see [measured report](../research/b0003-measured-20261022.md). |
+| 3 | [B0003 typing](0003-launcher-typing-investigation.md) | Review — 10 historical valid pairs; B0019 adds serial item/query identity and RPC RTT | B0003-S89afb381 accepted/CI39123319816 green. No product change or target acceptance; see [measured report](../research/b0003-measured-20261022.md). |
 | — | [B0015 Audio](0015-daemon-audio-readback-popout.md) | Done | Source dc8832fe / CI39388972154 green; docs e5fc3d88 / CI39390219914 green. Read-only capability-gated view; no producer or live claim. |
 | — | [B0011 Battery](0011-daemon-battery-status-popout.md) | Done | Sourceaf61d18/fullCI39147491406green; docs5ad2551. Lazy lease/optional readings/private lifecycle tests accepted. |
 | — | [B0010 Bluetooth](0010-daemon-bluetooth-status-popout.md) | Done | Sourcee3e417e/CI39136586458green. Capability-gated; no running producer claim. |

@@ -21,6 +21,25 @@ forbids consumer adoption before producer publication and green CI. Default
 expiry policy remains unresolved; published OSD channels have no keyboard
 layout (QML's keyboard channel means backlight). No implementation, protocol
 pin, tests, capture, live ownership or switch occurred in this documentation stage.
+## 2026-10-22 — B0019 launcher review candidate
+
+Source `c8b55b5` adds asynchronous daemon queries, same-scope pending rows,
+route/epoch fencing, favourite stars and published pin/unpin, ordered catalogue
+results and group routes, keyboard activation, and focused preserved input on
+reopen. Rows/tickets/actors retire after closed+idle; bounded scalars survive.
+Full remote Arch CI and native private input/reopen passed on both compositors.
+
+Niri's complete 200-key diagnostic measured 6.269 ms steady presented p99 and
+25.016 ms first key; steady UI CPU p99 was 5.351 ms, first-key CPU 14.777 ms.
+Hyprland's 200-key trace measured 9.871 / 25.214 ms, but its arm failed a new
+post-window harness waiter; that raw arm remains invalid. The fixed two-key
+contract smoke passed without repeating its timing window. Query/order identity
+and RPC RTT now join through exact commit/presentation; target acceptance,
+matched memory, physical timing and Gate D remain open.
+The close-memory diagnostic points to allocator residency, with only +0.262 MiB
+live heap; DRM remains unknown. See [B0019](specs/0019-launcher-parity.md) for
+full numbers, failed-attempt receipts, raw provenance and limits. No cheap
+rounded-painting change was identified. No push, live test, install or switch.
 
 ## 2026-10-22 — Laptop reference capture kit prepared
 

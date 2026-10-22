@@ -1,5 +1,32 @@
 # Feasibility
 
+## 2026-10-22 — B0019 launcher parity diagnostic
+
+Async queries retain same-scope rows, fence stale routes and preserve focused input.
+Native pin/unpin, navigation and idle-reopen proofs passed on both private compositors.
+Serial query/item identity and RPC RTT now reach exact commit/presentation joins.
+First-key CPU remains a gap; these candidate-only diagnostics do not accept Gate E.
+
+| Proof or measurement | Hyprland | niri |
+| --- | ---: | ---: |
+| 200-key diagnostic | Partial; post-check failed | Valid |
+| Steady presented p50 / p99 (ms) | 9.380 / 9.871 | 5.857 / 6.269 |
+| First-key presented / UI CPU (ms) | 25.214 / 13.905 | 25.016 / 14.777 |
+| Steady UI CPU / RPC RTT p99 (ms) | 5.119 / 2.581 | 5.351 / 2.728 |
+| Maximum closed-minus-bar PSS (MiB) | +0.989 | +0.079 |
+| UI SwapPss / DRM | 0 / unknown | 0 / unknown |
+
+Steady excludes first key. Hyprland's raw arm remains invalid after a missing
+UI_STATE waiter; the fixed two-key contract smoke passed. Niri passed all 200
+keys, refresh, pin/unpin readback and safe group activation. Private outputs
+were 2880×1800 / scale 1.5, synthetic 120 Hz / 60 Hz; no physical or matched QML
+verdict. Closed anonymous growth was investigated before further captures:
+trace live heap +0.262 MiB versus free arena +18.210 MiB supports allocator
+residency. End-of-typing niri UI PSS was 47.161 MiB; daemon 34.812 and worker
+21.066 MiB remain separate. No matched or absolute memory clearance.
+Full Arch CI passed `c8b55b5`; no renderer change, new desktop packages, push or
+live run. [B0019](docs/specs/0019-launcher-parity.md) records provenance and limits.
+
 ## 2026-10-22 — B0018 status-pill interaction
 
 One pill now routes the four existing device views through hover peeks and clicks.
