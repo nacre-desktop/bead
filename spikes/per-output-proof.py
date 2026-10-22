@@ -114,7 +114,8 @@ def sample(env, raw, compositor, stop):
         drm_known = drm is not None
         drm_mib = sum(drm.values()) if drm_known else None
         accounted = memory['pss_mib'] + memory['swap_pss_mib'] + (drm_mib or 0)
-        row = {**memory, 'drm_known': drm_known, 'drm_regions_mib': drm,
+        row = {**memory, 'monotonic_ns': time.monotonic_ns(),
+               'drm_known': drm_known, 'drm_regions_mib': drm,
                'drm_mib': drm_mib, 'pss_swap_known_drm_mib': accounted}
         # Preserve the complete kernel rollup with every sample; desktop gate is
         # a same-host, same-output-count control comparison, not an absolute cap.
@@ -279,6 +280,7 @@ def sample(env, raw, compositor, stop):
                         '--namespace', 'bead-per-output-proof', '--command-socket', str(socket),
                         '--trace-state']
         with log_path.open('w') as stream:
+            result['client_start_monotonic_ns'] = time.monotonic_ns()
             client = subprocess.Popen(command_args, cwd=ROOT, env=env, stdout=stream,
                                       stderr=subprocess.STDOUT, start_new_session=True)
             if role == 'candidate':
