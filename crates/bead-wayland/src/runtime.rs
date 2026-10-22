@@ -953,7 +953,11 @@ impl App {
     }
 
     fn schedule_wallpaper_release_poll(&mut self, output: String) {
-        let Some(surface) = self.wallpaper_surfaces.iter_mut().find(|surface| surface.name == output) else {
+        let Some(surface) = self
+            .wallpaper_surfaces
+            .iter_mut()
+            .find(|surface| surface.name == output)
+        else {
             return;
         };
         if surface.release_timer_pending {
@@ -961,14 +965,21 @@ impl App {
         }
         surface.release_timer_pending = true;
         let handle = self.loop_handle.clone();
-        if handle.insert_source(
-            Timer::from_duration(Duration::from_millis(100)),
-            move |_, _, app| {
-                app.release_wallpaper_buffers(&output);
-                TimeoutAction::Drop
-            },
-        ).is_err() {
-            if let Some(surface) = self.wallpaper_surfaces.iter_mut().find(|surface| surface.name == output) {
+        if handle
+            .insert_source(
+                Timer::from_duration(Duration::from_millis(100)),
+                move |_, _, app| {
+                    app.release_wallpaper_buffers(&output);
+                    TimeoutAction::Drop
+                },
+            )
+            .is_err()
+        {
+            if let Some(surface) = self
+                .wallpaper_surfaces
+                .iter_mut()
+                .find(|surface| surface.name == output)
+            {
                 surface.release_timer_pending = false;
             }
             eprintln!("WALLPAPER_SURFACE_ERROR code=release_timer");
@@ -976,7 +987,11 @@ impl App {
     }
 
     fn release_wallpaper_buffers(&mut self, output: &str) {
-        let Some(index) = self.wallpaper_surfaces.iter().position(|surface| surface.name == output) else {
+        let Some(index) = self
+            .wallpaper_surfaces
+            .iter()
+            .position(|surface| surface.name == output)
+        else {
             return;
         };
         self.wallpaper_surfaces[index].release_timer_pending = false;
@@ -1009,9 +1024,14 @@ impl App {
             surface.release_timer_pending = false;
             if surface.transition.is_none() {
                 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-                unsafe { libc::malloc_trim(0); }
+                unsafe {
+                    libc::malloc_trim(0);
+                }
             }
-            println!("WALLPAPER_BUFFER_RELEASED output={} revision={}", surface.name, surface.revision);
+            println!(
+                "WALLPAPER_BUFFER_RELEASED output={} revision={}",
+                surface.name, surface.revision
+            );
         } else {
             surface.release_wait_ms = surface.release_wait_ms.saturating_add(100);
             if surface.release_wait_ms <= 3000 {
@@ -1024,7 +1044,10 @@ impl App {
                 } else {
                     "unknown"
                 };
-                eprintln!("WALLPAPER_BUFFER_RETAINED output={} compositor={} reason=no_release", surface.name, compositor);
+                eprintln!(
+                    "WALLPAPER_BUFFER_RETAINED output={} compositor={} reason=no_release",
+                    surface.name, compositor
+                );
             }
         }
     }
