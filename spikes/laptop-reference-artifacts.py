@@ -76,8 +76,7 @@ def main() -> int:
     repository = subprocess.check_output(
         ["git", "-C", str(args.fixtures), "rev-parse", "--show-toplevel"], text=True).strip()
     frozen_shell = subprocess.check_output(
-        ["git", "-C", repository, "archive", args.control_revision,
-         "shell/ui", "shell/tests/icon.svg", "shell/tests/fixtures/dashboard"])
+        ["git", "-C", repository, "archive", args.control_revision, "shell"])
     bundle_root = output / "control-bundle"
     bundle_root.mkdir(mode=0o700)
     with tarfile.open(fileobj=io.BytesIO(frozen_shell), mode="r:") as archive:

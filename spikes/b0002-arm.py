@@ -382,7 +382,9 @@ def main() -> int:
     EXPECTED_HASHES = {"control": args.control_sha256, "candidate": args.candidate_sha256,
                        "helper": args.helper_sha256}
     if args.profile in ("laptop-reference", "rehearsal"):
-        if CONTROL_BUNDLE_ROOT is None or not (CONTROL_BUNDLE_ROOT / "shell/ui/main.luau").is_file():
+        if (CONTROL_BUNDLE_ROOT is None
+                or not (CONTROL_BUNDLE_ROOT / "shell/ui/main.luau").is_file()
+                or not (CONTROL_BUNDLE_ROOT / "shell/palette.json").is_file()):
             parser.error("reference profile needs the matched frozen control UI bundle")
         EXPECTED_HASHES["helper"] = None
         CAPTURE_CONFIG = {**CAPTURE_CONFIG,

@@ -84,7 +84,9 @@ def load_manifest(path: pathlib.Path) -> dict:
     if not bundle_root.is_absolute():
         bundle_root = path.parent / bundle_root
     bundle_root = bundle_root.resolve(strict=True)
-    if not (bundle_root / "shell/ui/main.luau").is_file() or not (bundle_root / "shell/tests/icon.svg").is_file():
+    if (not (bundle_root / "shell/ui/main.luau").is_file()
+            or not (bundle_root / "shell/palette.json").is_file()
+            or not (bundle_root / "shell/tests/icon.svg").is_file()):
         raise RuntimeError("matched frozen control UI bundle is incomplete")
     if canonical_tree_hash(bundle_root) != value.get("control_bundle_sha256"):
         raise RuntimeError("frozen control UI bundle hash mismatch")

@@ -7,7 +7,7 @@ Hyprland is optional and adds about 45 minutes, so run it in a separate window.
 ## Prepare and stage the artifacts
 
 The artifact bundle contains the current `main` Bead release binary, the
-original frozen control (`b01dfcca…`), its matching UI source bundle from
+original frozen control (`b01dfcca…`), its matching `shell/` source tree from
 `1cff9d17`, and a manifest. The control was recovered from the desktop's private
 B0002 archive and rehashed against its recorded identity. Keep the bundle and
 manifest together. Stage the bundle contents at:

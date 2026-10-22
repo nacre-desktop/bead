@@ -43,6 +43,7 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             bundle = artifacts / "control-bundle"
             (bundle / "shell/ui").mkdir(parents=True)
             (bundle / "shell/tests").mkdir()
+            (bundle / "shell/palette.json").write_text("{}\n")
             (bundle / "shell/ui/main.luau").write_text("return {}\n")
             (bundle / "shell/tests/icon.svg").write_text("<svg/>\n")
             fixture_root = ROOT / "shell/tests/fixtures/dashboard"
