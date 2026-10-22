@@ -178,6 +178,22 @@ fn trim_text(pixels: Pixmap) -> Result<(Pixmap, (u32, u32))> {
     ))
 }
 impl TreeCache {
+    /// Retire raster/glyph storage for scales no longer used by this view.
+    /// Presented frames retain their own resources until the caller drops them.
+    pub fn retain_scales(&mut self, scales: &[f32]) {
+        let current = |bits: u32| scales.iter().any(|scale| scale.to_bits() == bits);
+        let discarded = self.entries.keys().any(|(_, bits)| !current(*bits));
+        self.entries.retain(|(_, bits), _| current(*bits));
+        self.nodes.retain(|(_, bits), _| current(*bits));
+        if self.frame.as_ref().is_some_and(|frame| !current(frame.scale.to_bits())) {
+            self.frame = None;
+        }
+        if discarded {
+            let fonts = self.raster.fonts.take();
+            self.raster = CpuRenderer::default();
+            self.raster.fonts = fonts;
+        }
+    }
     /// Keep finished active rasters, release scratch and offscreen cache entries.
     pub fn trim_idle(&mut self) {
         self.raster = CpuRenderer::default();

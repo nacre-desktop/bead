@@ -136,6 +136,7 @@ fn bake(
     scales: &[f32],
 ) -> Result<(), String> {
     scene.prepared.clear();
+    cache.retain_scales(scales);
     for &scale in scales {
         cache.prepare(scene, scale).map_err(|e| e.to_string())?;
         if let Some(frame) = cache.frame.clone() {
