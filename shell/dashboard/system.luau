@@ -3,12 +3,12 @@ local ui=require("bead.ui")
 local C=require("./components")
 return function()
     local gauges={}
-    for _,metric in ipairs({{"CPU","developer_board"},{"Memory","memory"},{"GPU","view_in_ar"},{"Disk","hard_drive"}}) do
-        table.insert(gauges,ui.Column{id=metric[1],width=226,height=258,padding=20,gap=14,radius=20,fill="surfaceContainer",
-            ui.Text{text=metric[2],family="Material Symbols Rounded",font_size=32,width=40,height=40,color="primary"},
-            C.title("title",metric[1],186),
-            ui.Text{text="—",font_size=52,height=80,color="onSurface"},
-            ui.Text{text=metric[1]=="Disk" and "See drives below" or "Metric unavailable",height=40,width=186,font_size=14,color="onSurfaceVariant"},
+    for _,metric in ipairs(ui.resolve_for_check(ui.bind("dashboard.gauges"))) do
+        table.insert(gauges,ui.Column{id=metric.label,width=226,height=258,padding=20,gap=14,radius=20,fill="surfaceContainer",
+            ui.Text{text=metric.icon,family="Material Symbols Rounded",font_size=32,width=40,height=40,color="primary"},
+            C.title("title",metric.label,186),
+            ui.Text{text=metric.value,font_size=52,height=80,color="onSurface"},
+            ui.Text{text=metric.detail,height=40,width=186,font_size=14,color="onSurfaceVariant"},
         })
     end
     return ui.Box{id="system",width=940,height=562,

@@ -520,12 +520,20 @@ impl Runtime {
         Ok(self)
     }
     pub fn with_dashboard(
-        mut self,
+        self,
         page: crate::dashboard::Page,
         source: std::sync::Arc<dyn bead::core::source::Source>,
         updates: Option<std::sync::Arc<dyn bead::core::source::Source>>,
         clock: Option<std::sync::Arc<dyn bead::core::source::Source>>,
         preview: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.with_dashboard_view(
+            crate::dashboard::Dashboard::new(page, source, updates, preview).with_clock(clock),
+        )
+    }
+    pub fn with_dashboard_view(
+        mut self,
+        dashboard: crate::dashboard::Dashboard,
     ) -> Result<Self, Box<dyn Error>> {
         if self.launcher.is_some()
             || self.calendar.is_some()
@@ -534,15 +542,15 @@ impl Runtime {
         {
             return Err("one data projector per panel".into());
         }
-        let dashboard = std::rc::Rc::new(
-            crate::dashboard::Dashboard::new(page, source, updates, preview).with_clock(clock),
-        );
+        let dashboard = std::rc::Rc::new(dashboard);
         let projector = dashboard.clone();
         self.session.set_projector(Box::new(move |stores| {
             Ok(projector.project_with_stores(stores))
         }));
         self.actions.register("view.open", "ui.popouts")?;
         self.actions.grant("ui.popouts");
+        self.actions.register("dashboard.do", "dashboard.control")?;
+        self.actions.grant("dashboard.control");
         if let Some(chrome) = &mut self.chrome {
             chrome.set_engaged(true);
         }
@@ -1363,6 +1371,24 @@ impl SceneSource for Runtime {
             if let Some(status) = &self.status {
                 status.network_link_action(name, key, callback);
             }
+            let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(dashboard), Some((_, name, bead::core::Value::Text(arg)))) =
+            (&self.dashboard, &host_action)
+            && name == "dashboard.do"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("dashboard completion event channel unavailable")?;
+            let wake: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            dashboard.act(arg, wake);
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }

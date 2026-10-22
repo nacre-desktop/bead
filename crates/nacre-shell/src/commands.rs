@@ -283,7 +283,7 @@ mod tests {
             );
             assert_eq!(page.tab(), index);
         }
-        for index in ["-1", "4", "12", "9223372036854775807"] {
+        for index in ["-1", "12", "9223372036854775807"] {
             let call = from_strings("nacre".into(), "tab".into(), &[index.into()]).unwrap();
             assert!(map_views(call).is_err());
         }

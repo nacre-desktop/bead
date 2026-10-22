@@ -4,7 +4,11 @@ use bead::core::{
     Value,
     source::{self, Callback, Publisher, Snapshot, Source, Subscription},
 };
-use nacre_protocol::core_services::{AudioKind, CoreSnapshot};
+use nacre_protocol::{
+    core_services::{AudioKind, CoreSnapshot},
+    dashboard_extras::{DashboardExtrasSnapshot as Extra, FocusStatus},
+    settings::SettingsStore,
+};
 use serde_json::{Value as Json, json};
 use std::{
     collections::BTreeMap,
@@ -23,11 +27,43 @@ pub enum Page {
     Notifications,
     Devices,
     Network,
+    /// Daemon-hosted extras and customization (B0027).
+    Focus,
+    Clipboard,
+    AiUsage,
+    Screenshots,
+    Brain,
+    Customize,
 }
 impl Page {
     /// The four core tabs, in Nacre's tab order.
     pub const ALL: [Self; 4] = [Self::Today, Self::Weather, Self::Media, Self::System];
     pub const EXTRAS: [Self; 3] = [Self::Notifications, Self::Devices, Self::Network];
+    pub const MORE: [Self; 5] = [
+        Self::Focus,
+        Self::Clipboard,
+        Self::AiUsage,
+        Self::Screenshots,
+        Self::Brain,
+    ];
+    /// Optional pages in Nacre's registry order; customization lists exactly these.
+    pub const REGISTRY: [Self; 8] = [
+        Self::Focus,
+        Self::Notifications,
+        Self::Clipboard,
+        Self::Devices,
+        Self::Network,
+        Self::AiUsage,
+        Self::Screenshots,
+        Self::Brain,
+    ];
+    fn every() -> impl Iterator<Item = Self> {
+        Self::ALL
+            .into_iter()
+            .chain(Self::EXTRAS)
+            .chain(Self::MORE)
+            .chain([Self::Customize])
+    }
     pub fn name(self) -> &'static str {
         match self {
             Self::Today => "today",
@@ -37,6 +73,12 @@ impl Page {
             Self::Notifications => "notifications",
             Self::Devices => "devices",
             Self::Network => "network",
+            Self::Focus => "focus",
+            Self::Clipboard => "clipboard",
+            Self::AiUsage => "ai-usage",
+            Self::Screenshots => "screenshots",
+            Self::Brain => "brain",
+            Self::Customize => "customize",
         }
     }
     /// Published topic that feeds the page (and its fixture file name).
@@ -45,6 +87,12 @@ impl Page {
             Self::Notifications => "notifications".into(),
             Self::Devices => "bluetooth".into(),
             Self::Network => "network".into(),
+            Self::Focus => "dashboard.focus".into(),
+            Self::Clipboard => "clipboard".into(),
+            Self::AiUsage => "ai.usage".into(),
+            Self::Screenshots => "screenshots".into(),
+            Self::Brain => "brain.recent".into(),
+            Self::Customize => SETTINGS.into(),
             Self::Today => "dashboard.calendar".into(),
             _ => format!("dashboard.{}", self.name()),
         }
@@ -53,23 +101,27 @@ impl Page {
         match self {
             Self::Today => "calendar",
             Self::Devices => "bluetooth",
+            Self::Customize => "settings",
             other => other.name(),
         }
     }
     pub fn from_view(view: &str) -> Option<Self> {
         let name = view.strip_prefix("dashboard-")?;
-        Self::ALL
-            .into_iter()
-            .chain(Self::EXTRAS)
-            .find(|page| page.name() == name)
+        Self::every().find(|page| page.name() == name)
     }
-    /// Index in Nacre's dashboard registry (`nacre tab N`); 4 focus, 6 clipboard
-    /// and 9..11 have no published contract and stay unmapped.
+    /// Index in Nacre's dashboard registry (`nacre tab N`). Customization has no
+    /// registry slot (it reports 0 and is never mapped from an index).
     pub fn tab(self) -> usize {
         match self {
+            Self::Focus => 4,
             Self::Notifications => 5,
+            Self::Clipboard => 6,
             Self::Devices => 7,
             Self::Network => 8,
+            Self::AiUsage => 9,
+            Self::Screenshots => 10,
+            Self::Brain => 11,
+            Self::Customize => 0,
             core => Self::ALL.iter().position(|page| *page == core).unwrap_or(0),
         }
     }
@@ -77,6 +129,7 @@ impl Page {
         Self::ALL
             .into_iter()
             .chain(Self::EXTRAS)
+            .chain(Self::MORE)
             .find(|page| page.tab() == index)
     }
     pub fn title(self) -> &'static str {
@@ -88,9 +141,33 @@ impl Page {
             Self::Notifications => "Notifications",
             Self::Devices => "Devices",
             Self::Network => "Network",
+            Self::Focus => "Focus",
+            Self::Clipboard => "Clipboard",
+            Self::AiUsage => "AI usage",
+            Self::Screenshots => "Screenshots",
+            Self::Brain => "Brain",
+            Self::Customize => "Customize",
+        }
+    }
+    fn icon(self) -> &'static str {
+        match self {
+            Self::Today => "dashboard",
+            Self::Weather => "partly_cloudy_day",
+            Self::Media => "music_note",
+            Self::System => "monitoring",
+            Self::Notifications => "notifications",
+            Self::Devices => "devices",
+            Self::Network => "wifi",
+            Self::Focus => "timer",
+            Self::Clipboard => "content_paste",
+            Self::AiUsage => "data_usage",
+            Self::Screenshots => "screenshot",
+            Self::Brain => "psychology",
+            Self::Customize => "tune",
         }
     }
 }
+const SETTINGS: &str = "settings.store.dashboard-extras";
 
 /// Only transport configuration survives a page's idle retirement.
 #[derive(Clone)]
@@ -165,6 +242,15 @@ pub fn spec(
             }
             .transpose()
             .map_err(|e| e.to_string())?;
+            // Playback is optional: no daemon player topic leaves the lyrics page as is.
+            let secondary = if page == Page::Media {
+                choice.open_named("dashboard.player", "player").ok()
+            } else {
+                secondary
+            };
+            // Tab visibility and the customization page read the revisioned store.
+            let settings = choice.open_named(SETTINGS, "settings").ok();
+            let controls = choice.client.clone().map(controls::Controls::new);
             let clock = if page == Page::Today {
                 let desktop = owner.get().cloned().ok_or("bar services not ready")?;
                 Some(
@@ -185,12 +271,15 @@ pub fn spec(
                 .with_trace(trace)
                 .with_frame(attachment, &colors)
                 .and_then(|runtime| {
-                    runtime.with_dashboard(
-                        page,
-                        source,
-                        secondary,
-                        clock,
-                        choice.fixtures.is_some(),
+                    runtime.with_dashboard_view(
+                        Dashboard::new(
+                            page,
+                            source,
+                            secondary,
+                            choice.fixtures.is_some(),
+                        )
+                        .with_clock(clock)
+                        .with_controls(settings, controls, choice.client.clone()),
                     )
                 })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
@@ -221,7 +310,15 @@ impl ReadOnly {
             return Err(invalid());
         }
         let data: Json = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-        checked(topic, &data)?;
+        match topic {
+            SETTINGS => {
+                serde_json::from_value::<SettingsStore>(data.clone()).map_err(|_| invalid())?;
+            }
+            _ if extra(topic, &data).is_some() => {}
+            _ => {
+                checked(topic, &data)?;
+            }
+        }
         Ok(Self {
             publisher: Publisher::new("dashboard-fixture".into(), data)?,
         })
@@ -272,6 +369,9 @@ fn checked(topic: &str, data: &Json) -> source::Result<CoreSnapshot> {
         "dashboard.system" => {
             CoreSnapshot::System(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
         }
+        "dashboard.player" => {
+            CoreSnapshot::Player(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
         "dashboard.updates" => {
             CoreSnapshot::Updates(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
         }
@@ -295,11 +395,38 @@ fn checked(topic: &str, data: &Json) -> source::Result<CoreSnapshot> {
     Ok(snapshot)
 }
 
+/// Decode one of the five N0034 topics; `None` for any other or invalid payload.
+fn extra(topic: &str, data: &Json) -> Option<Extra> {
+    if !matches!(
+        topic,
+        "dashboard.focus" | "clipboard" | "screenshots" | "ai.usage" | "brain.recent"
+    ) {
+        return None;
+    }
+    let snapshot: Extra = serde_json::from_value(json!({"topic": topic, "data": data})).ok()?;
+    snapshot.validate().ok()?;
+    Some(snapshot)
+}
+/// Stops the one-second countdown wake when dropped.
+struct Ticker {
+    _stop: std::sync::mpsc::Sender<()>,
+}
+type Notify = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
+
+#[path = "dashboard_controls.rs"]
+mod controls;
+
 pub struct Dashboard {
     page: Page,
     source: Arc<dyn Source>,
     secondary: Option<Arc<dyn Source>>,
     clock: Option<Arc<dyn Source>>,
+    settings: Option<Arc<dyn Source>>,
+    controls: Option<controls::Controls>,
+    client: Option<crate::nacre_source::Client>,
+    notify: std::cell::RefCell<Option<Notify>>,
+    ticker: std::cell::RefCell<Option<Ticker>>,
+    now: fn() -> u64,
     preview: bool,
 }
 impl Dashboard {
@@ -314,8 +441,30 @@ impl Dashboard {
             source,
             secondary: updates,
             clock: None,
+            settings: None,
+            controls: None,
+            client: None,
+            notify: Default::default(),
+            ticker: Default::default(),
+            now: now_ms,
             preview,
         }
+    }
+    pub fn with_controls(
+        mut self,
+        settings: Option<Arc<dyn Source>>,
+        controls: Option<controls::Controls>,
+        client: Option<crate::nacre_source::Client>,
+    ) -> Self {
+        self.settings = settings;
+        self.controls = controls;
+        self.client = client;
+        self
+    }
+    #[cfg(test)]
+    fn with_now(mut self, now: fn() -> u64) -> Self {
+        self.now = now;
+        self
     }
     pub fn with_clock(mut self, clock: Option<Arc<dyn Source>>) -> Self {
         self.clock = clock;
@@ -323,6 +472,10 @@ impl Dashboard {
     }
     pub fn project_with_stores(&self, stores: &bead::core::Stores) -> BTreeMap<String, Value> {
         let mut values = self.project();
+        // The countdown redraws once a second only while a session runs in an open panel.
+        let live = matches!(values.get("dashboard.state"), Some(Value::Text(t)) if t == "running" || t == "playing")
+            && stores.get("panel.open") != Some(&Value::Bool(false));
+        self.tick(live);
         if let Some(clock) = &self.clock {
             values.extend(crate::calendar::Calendar::new(clock.clone()).project(stores));
             let snapshot = clock.snapshot();
@@ -343,9 +496,19 @@ impl Dashboard {
         &self,
         notify: Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>,
     ) -> source::Result<Vec<Subscription>> {
-        let callback: Callback =
-            Arc::new(move |_| notify(bead::wayland::UiEvent::Model(BTreeMap::new())));
+        *self.notify.borrow_mut() = Some(notify.clone());
+        let callback: Callback = {
+            let notify = notify.clone();
+            Arc::new(move |_| notify(bead::wayland::UiEvent::Model(BTreeMap::new())))
+        };
         let mut subscriptions = vec![self.source.subscribe(callback.clone())?];
+        if let Some(settings) = &self.settings {
+            subscriptions.push(settings.subscribe(callback.clone())?);
+        }
+        if let Some(client) = &self.client {
+            // Method advertisement arrives with the link, not with a topic.
+            subscriptions.push(client.subscribe(callback.clone())?);
+        }
         if let Some(secondary) = &self.secondary {
             subscriptions.push(secondary.subscribe(callback.clone())?);
         }
@@ -355,6 +518,11 @@ impl Dashboard {
         Ok(subscriptions)
     }
     pub fn project(&self) -> BTreeMap<String, Value> {
+        let mut out = self.project_page();
+        self.chrome(&mut out);
+        out
+    }
+    fn project_page(&self) -> BTreeMap<String, Value> {
         let snapshot = self.source.snapshot();
         let mut out = BTreeMap::from([
             (
@@ -420,6 +588,9 @@ impl Dashboard {
                 );
             }
         }
+        if self.page == Page::Media {
+            self.project_player(&mut out);
+        }
         if self.page == Page::Today {
             text(&mut out, "clock", "—", 16);
             if let Some(source) = &self.secondary {
@@ -452,6 +623,10 @@ impl Dashboard {
             } else {
                 text(&mut out, "summary", "Weather unavailable", 96);
             }
+        }
+        if Page::MORE.contains(&self.page) || self.page == Page::Customize {
+            self.project_more(&mut out, &snapshot);
+            return out;
         }
         let Ok(data) = checked(&self.page.topic(), &snapshot.data) else {
             return out;
@@ -574,6 +749,7 @@ impl Dashboard {
                 }))).collect();
                 out.insert("dashboard.rows".into(), Value::list(rows));
                 out.insert("dashboard.secondary".into(), Value::list(disks));
+                out.insert("dashboard.gauges".into(), Value::list(controls::gauges(&s)));
             }
             CoreSnapshot::Notifications(s) => {
                 text(&mut out, "heading", "Recent notifications", 48);
@@ -731,6 +907,11 @@ impl Dashboard {
         out
     }
 }
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
+}
 fn text(out: &mut BTreeMap<String, Value>, key: &str, value: &str, limit: usize) {
     out.insert(format!("dashboard.{key}"), Value::Text(line(value, limit)));
 }
@@ -765,3 +946,7 @@ fn bytes(value: u64) -> String {
 #[cfg(test)]
 #[path = "dashboard_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "dashboard_more_tests.rs"]
+mod more_tests;

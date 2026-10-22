@@ -2,16 +2,30 @@
 use super::*;
 use bead_test::{Config, Harness, Result, source::FakeSource};
 
-fn root() -> PathBuf {
+pub(super) fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
 }
-fn fixture(name: &str) -> Json {
+pub(super) fn fixture(name: &str) -> Json {
     let name = match name {
         "today" => "calendar",
         "devices" => "bluetooth",
+        "customize" => "settings",
         other => other,
     };
-    let folder = if matches!(name, "notifications" | "bluetooth" | "audio" | "network") {
+    let folder = if matches!(
+        name,
+        "notifications"
+            | "bluetooth"
+            | "audio"
+            | "network"
+            | "focus"
+            | "clipboard"
+            | "screenshots"
+            | "ai-usage"
+            | "brain"
+            | "settings"
+            | "player"
+    ) {
         "dashboard-extras"
     } else {
         "dashboard"
@@ -997,7 +1011,7 @@ fn today_calendar_navigation_and_agenda_scrolling_use_real_input() -> Result<()>
 fn extra_secondary(page: Page) -> Option<Json> {
     (page == Page::Devices).then(|| fixture("audio"))
 }
-fn extra_harness(page: Page, model: BTreeMap<String, Value>, scale: f32) -> Result<Harness> {
+pub(super) fn extra_harness(page: Page, model: BTreeMap<String, Value>, scale: f32) -> Result<Harness> {
     Harness::load(
         &root(),
         Path::new(&format!("dashboard/{}/main.luau", page.name())),
@@ -1032,8 +1046,8 @@ fn dashboard_extras_map_nacre_indices_and_refuse_unpublished_pages() -> Result<(
             vec![json!(format!("dashboard-{}", page.name()))]
         );
     }
-    // focus, clipboard, ai-usage, screenshots and brain have no published contract.
-    for index in [4, 6, 9, 10, 11, 12] {
+    // Only the twelve registry slots exist; the B0027 pages are covered separately.
+    for index in [12, 13] {
         assert_eq!(Page::from_tab(index), None);
         let call =
             crate::commands::from_strings("nacre".into(), "tab".into(), &[index.to_string()])?;
