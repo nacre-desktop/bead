@@ -122,9 +122,34 @@ impl Dashboard {
                     c.submit(op, json!({"player": id.0}), wake)
                 }
             }
+            (
+                Page::Notifications,
+                "notif.dismiss" | "notif.forget" | "notif.dnd" | "notif.clear",
+            ) => self.notice_call(op, id, wake),
             (Page::AiUsage, "usage.refresh") => c.submit("ai.usage.refresh", json!({}), wake),
             (Page::Customize, "tab.toggle" | "tab.up" | "tab.down") => self.customize(op, id, wake),
             _ => {}
+        }
+    }
+    /// Notification controls go through the same revision-checked plan as the
+    /// resident stack; the snapshot on screen decides what may be sent.
+    fn notice_call(&self, op: &str, id: &str, wake: CallWake) {
+        let Some(c) = &self.controls else { return };
+        let Ok(CoreSnapshot::Notifications(state)) =
+            checked("notifications", &self.source.snapshot().data)
+        else {
+            return;
+        };
+        let (name, arg) = match op {
+            "notif.dnd" => ("notifications.dnd", "toggle"),
+            "notif.clear" => ("notifications.clear", ""),
+            "notif.forget" => ("notifications.forget", id),
+            _ => ("notifications.dismiss", id),
+        };
+        match crate::notice_service::plan(name, &Value::Text(arg.into()), &state, false) {
+            Ok(crate::notice_service::Plan::Call(method, params)) => c.submit(method, params, wake),
+            Ok(_) => {}
+            Err(message) => c.say(message),
         }
     }
     /// The daemon's current player and its state, if the topic is fresh and valid.
@@ -264,6 +289,7 @@ impl Dashboard {
             Page::AiUsage => "ai.usage.refresh",
             Page::Customize => "settings.set",
             Page::Media => "player.play_pause",
+            Page::Notifications => "notifications.set_dnd",
             _ => "",
         };
         let can = |m: &str| self.controls.as_ref().is_some_and(|c| c.ready(m).is_some());

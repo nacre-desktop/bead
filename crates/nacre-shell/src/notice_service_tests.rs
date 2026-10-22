@@ -59,7 +59,10 @@ fn popup_rows_follow_popup_order_and_hide_the_default_action() {
     assert_eq!(popups[0]["urgency"], 2);
     assert_eq!(popups[0]["default"], "a2");
     // a2 is the default: only the explicit action stays a button.
-    assert_eq!(popups[0]["actions"], json!([{"id":"a1","label":"Reply"}]));
+    assert_eq!(
+        popups[0]["actions"],
+        json!([{"id":"a1","ref":"n1|2|a1","label":"Reply"}])
+    );
     assert_eq!(popups[0]["time_str"], "1m");
     assert_eq!(popups[0]["expanded"], false);
 }
@@ -99,7 +102,11 @@ fn stale_and_absent_producers_are_distinct_and_disable_popups_and_controls() {
     let v = project(Some(&s), false, &BTreeSet::new(), 0);
     assert_eq!(text(&v, "notifications.state"), "stale");
     assert!(!flag(&v, "notifications.open") && !flag(&v, "notifications.controls"));
-    assert_eq!(rows(&v, "notifications.history").len(), 2, "last-good history stays");
+    assert_eq!(
+        rows(&v, "notifications.history").len(),
+        2,
+        "last-good history stays"
+    );
     let none = project(None, false, &BTreeSet::new(), 0);
     assert_eq!(text(&none, "notifications.state"), "unavailable");
     assert_eq!(text(&none, "notifications.history_state"), "unavailable");
@@ -131,16 +138,30 @@ fn dismiss_retains_and_forget_deletes_with_the_displayed_revision() {
     let arg = Value::Text("n1|2".into());
     assert_eq!(
         call(plan("notifications.dismiss", &arg, &s, false)),
-        ("notifications.dismiss", json!({"id":"n1","revision":2,"forget":false}))
+        (
+            "notifications.dismiss",
+            json!({"id":"n1","revision":2,"forget":false})
+        )
     );
     let hist = Value::Text("h2|4".into());
     assert_eq!(
         call(plan("notifications.forget", &hist, &s, false)),
-        ("notifications.dismiss", json!({"id":"h2","revision":4,"forget":true}))
+        (
+            "notifications.dismiss",
+            json!({"id":"h2","revision":4,"forget":true})
+        )
     );
     // A replaced notice or a missing one never reaches the daemon.
     for stale in ["n1|1", "gone|2", "n1", "n1|x"] {
-        assert!(plan("notifications.dismiss", &Value::Text(stale.into()), &s, false).is_err());
+        assert!(
+            plan(
+                "notifications.dismiss",
+                &Value::Text(stale.into()),
+                &s,
+                false
+            )
+            .is_err()
+        );
     }
 }
 
@@ -150,7 +171,10 @@ fn action_buttons_need_a_live_action_on_the_displayed_revision() {
     let ok = Value::Text("n1|2|a1".into());
     assert_eq!(
         call(plan("notifications.action", &ok, &s, false)),
-        ("notifications.invoke_action", json!({"id":"n1","revision":2,"action":"a1"}))
+        (
+            "notifications.invoke_action",
+            json!({"id":"n1","revision":2,"action":"a1"})
+        )
     );
     for bad in ["n1|2|zz", "n1|3|a1", "n1|2", "h2|4|a1"] {
         assert!(plan("notifications.action", &Value::Text(bad.into()), &s, false).is_err());
@@ -161,27 +185,46 @@ fn action_buttons_need_a_live_action_on_the_displayed_revision() {
 fn card_click_invokes_the_default_only_when_the_policy_is_on() {
     let s = state(json!({}));
     let arg = Value::Text("n1|2".into());
-    assert_eq!(plan("notifications.card", &arg, &s, false), Ok(Plan::Toggle("n1".into())));
+    assert_eq!(
+        plan("notifications.card", &arg, &s, false),
+        Ok(Plan::Toggle("n1".into()))
+    );
     assert_eq!(
         call(plan("notifications.card", &arg, &s, true)),
-        ("notifications.invoke_action", json!({"id":"n1","revision":2,"action":"a2"}))
+        (
+            "notifications.invoke_action",
+            json!({"id":"n1","revision":2,"action":"a2"})
+        )
     );
     // History rows have no live actions: the card only expands.
     let hist = Value::Text("h2|4".into());
-    assert_eq!(plan("notifications.card", &hist, &s, true), Ok(Plan::Toggle("h2".into())));
+    assert_eq!(
+        plan("notifications.card", &hist, &s, true),
+        Ok(Plan::Toggle("h2".into()))
+    );
     // A notice without a default action also just expands.
-    let none = state(json!({"active":{"items":{"n1":{"app_name":"Mail","summary":"s","body":"",
+    let none = state(
+        json!({"active":{"items":{"n1":{"app_name":"Mail","summary":"s","body":"",
         "urgency":"normal","resident":false,"transient":false,"created_ms":1,
         "actions":{"items":{},"order":[]},"default_action":null,"revision":2,"retained":true,"paused":false}},
-        "order":["n1"]}}));
-    assert_eq!(plan("notifications.card", &arg, &none, true), Ok(Plan::Toggle("n1".into())));
+        "order":["n1"]}}),
+    );
+    assert_eq!(
+        plan("notifications.card", &arg, &none, true),
+        Ok(Plan::Toggle("n1".into()))
+    );
 }
 
 #[test]
 fn dnd_and_clear_use_the_published_methods() {
     let s = state(json!({}));
     assert_eq!(
-        call(plan("notifications.dnd", &Value::Text("toggle".into()), &s, false)),
+        call(plan(
+            "notifications.dnd",
+            &Value::Text("toggle".into()),
+            &s,
+            false
+        )),
         ("notifications.set_dnd", json!({"enabled":true}))
     );
     assert_eq!(
@@ -193,7 +236,12 @@ fn dnd_and_clear_use_the_published_methods() {
         ("notifications.clear", json!({"scope":"history"}))
     );
     assert_eq!(
-        call(plan("notifications.clear_popups", &Value::Bool(true), &s, false)),
+        call(plan(
+            "notifications.clear_popups",
+            &Value::Bool(true),
+            &s,
+            false
+        )),
         ("notifications.clear", json!({"scope":"popups"}))
     );
     assert!(plan("notifications.bogus", &Value::Bool(true), &s, false).is_err());
@@ -202,39 +250,96 @@ fn dnd_and_clear_use_the_published_methods() {
 #[test]
 fn hover_keys_cover_cards_buttons_and_the_osd_only() {
     let t = |s: &str| Value::Text(s.into());
-    assert_eq!(hover_key("notifications.card", &t("n1|2")), Some("n1|2".into()));
-    assert_eq!(hover_key("notifications.action", &t("n1|2|a1")), Some("n1|2".into()));
-    assert_eq!(hover_key("notifications.osd", &Value::Bool(true)), Some("osd".into()));
+    assert_eq!(
+        hover_key("notifications.card", &t("n1|2")),
+        Some("n1|2".into())
+    );
+    assert_eq!(
+        hover_key("notifications.action", &t("n1|2|a1")),
+        Some("n1|2".into())
+    );
+    assert_eq!(
+        hover_key("notifications.osd", &Value::Bool(true)),
+        Some("osd".into())
+    );
     assert_eq!(hover_key("notifications.dnd", &t("toggle")), None);
     assert_eq!(hover_key("bar.launcher", &t("x")), None);
 }
 
 fn item(channel: OsdChannel, unit: OsdUnit, value: Option<f64>, muted: Option<bool>) -> OsdItem {
-    OsdItem { serial: 1, channel, unit, value, muted, expires_ms: u64::MAX / 4 }
+    OsdItem {
+        serial: 1,
+        channel,
+        unit,
+        value,
+        muted,
+        expires_ms: u64::MAX / 4,
+    }
 }
 #[test]
 fn osd_items_map_to_the_slider_scale_and_brightness_needs_a_value() {
-    let vol = shown_from(&item(OsdChannel::Volume, OsdUnit::Linear, Some(0.125), Some(false))).unwrap();
-    assert!((vol.level - 0.5).abs() < 1e-9, "linear volume shows as its cube root");
-    let per = shown_from(&item(OsdChannel::Volume, OsdUnit::Perceptual, Some(0.5), None)).unwrap();
+    let vol = shown_from(&item(
+        OsdChannel::Volume,
+        OsdUnit::Linear,
+        Some(0.125),
+        Some(false),
+    ))
+    .unwrap();
+    assert!(
+        (vol.level - 0.5).abs() < 1e-9,
+        "linear volume shows as its cube root"
+    );
+    let per = shown_from(&item(
+        OsdChannel::Volume,
+        OsdUnit::Perceptual,
+        Some(0.5),
+        None,
+    ))
+    .unwrap();
     assert_eq!(text(&osd_values(Some(&per)), "osd.status"), "50%");
-    let muted = shown_from(&item(OsdChannel::Microphone, OsdUnit::Linear, Some(0.5), Some(true))).unwrap();
+    let muted = shown_from(&item(
+        OsdChannel::Microphone,
+        OsdUnit::Linear,
+        Some(0.5),
+        Some(true),
+    ))
+    .unwrap();
     assert_eq!(text(&osd_values(Some(&muted)), "osd.status"), "Muted");
     assert!(shown_from(&item(OsdChannel::Brightness, OsdUnit::Fraction, None, None)).is_none());
-    let br = shown_from(&item(OsdChannel::Brightness, OsdUnit::Fraction, Some(0.4), None)).unwrap();
+    let br = shown_from(&item(
+        OsdChannel::Brightness,
+        OsdUnit::Fraction,
+        Some(0.4),
+        None,
+    ))
+    .unwrap();
     let v = osd_values(Some(&br));
     assert_eq!(text(&v, "osd.label"), "Display brightness");
     assert!(matches!(v["osd.level"], Value::Number(n) if (n - 40.).abs() < 1e-9));
-    let caps = shown_from(&item(OsdChannel::Capslock, OsdUnit::Boolean, Some(1.), None)).unwrap();
+    let caps = shown_from(&item(
+        OsdChannel::Capslock,
+        OsdUnit::Boolean,
+        Some(1.),
+        None,
+    ))
+    .unwrap();
     assert_eq!(text(&osd_values(Some(&caps)), "osd.status"), "On");
     assert!(!flag(&osd_values(None), "osd.open"));
 }
 
 fn snap(data: Json, connected: bool) -> Snapshot {
-    Snapshot { epoch: "b1".into(), revision: 1, data: Arc::new(data), connected }
+    Snapshot {
+        epoch: "b1".into(),
+        revision: 1,
+        data: Arc::new(data),
+        connected,
+    }
 }
 fn shared() -> Arc<Shared> {
-    let s = Arc::new(Shared { inner: Mutex::new(Inner::default()), wake: Condvar::new() });
+    let s = Arc::new(Shared {
+        inner: Mutex::new(Inner::default()),
+        wake: Condvar::new(),
+    });
     s.lock().osd.armed = Some(Instant::now());
     s
 }
@@ -272,12 +377,29 @@ fn osd_arming_and_hover_control_the_hide_clock() {
     let now = Instant::now();
     let mut g = s.lock();
     g.osd.armed = Some(now + Duration::from_secs(5));
-    g.osd.show(Shown { channel: OsdChannel::Volume, level: 0.5, muted: false }, now);
+    g.osd.show(
+        Shown {
+            channel: OsdChannel::Volume,
+            level: 0.5,
+            muted: false,
+        },
+        now,
+    );
     assert!(g.osd.shown.is_none(), "inside the arming window");
     g.osd.armed = Some(now);
     g.osd.hovered = true;
-    g.osd.show(Shown { channel: OsdChannel::Volume, level: 0.5, muted: false }, now);
-    assert!(g.osd.shown.is_some() && g.osd.deadline.is_none(), "hover holds it open");
+    g.osd.show(
+        Shown {
+            channel: OsdChannel::Volume,
+            level: 0.5,
+            muted: false,
+        },
+        now,
+    );
+    assert!(
+        g.osd.shown.is_some() && g.osd.deadline.is_none(),
+        "hover holds it open"
+    );
 }
 
 fn audio(volume: f64, muted: bool, sink: &str) -> Json {
@@ -315,9 +437,24 @@ fn replay(transcript: &str) -> Vec<Json> {
     for line in transcript.lines() {
         match framing::decode(line.as_bytes()).unwrap() {
             Message::Snap { topic, seq, data } if topic == "notifications" => {
-                mirror.accept(Arc::new(Snapshot { epoch: "b1".into(), revision: seq, data: Arc::new(data), connected: true }), now).unwrap();
+                mirror
+                    .accept(
+                        Arc::new(Snapshot {
+                            epoch: "b1".into(),
+                            revision: seq,
+                            data: Arc::new(data),
+                            connected: true,
+                        }),
+                        now,
+                    )
+                    .unwrap();
             }
-            Message::Patch { topic, base, seq, data } if topic == "notifications" => {
+            Message::Patch {
+                topic,
+                base,
+                seq,
+                data,
+            } if topic == "notifications" => {
                 mirror.patch("b1", base, seq, &data, now).unwrap();
             }
             _ => continue,
@@ -328,7 +465,9 @@ fn replay(transcript: &str) -> Vec<Json> {
 }
 #[test]
 fn published_lifecycle_transcript_projects_every_step_and_marks_the_default_action() {
-    let steps = replay(include_str!("../tests/protocol-v1/notifications-lifecycle.jsonl"));
+    let steps = replay(include_str!(
+        "../tests/protocol-v1/notifications-lifecycle.jsonl"
+    ));
     assert!(steps.len() >= 4);
     let mut saw_replacement = false;
     for data in &steps {
@@ -337,26 +476,42 @@ fn published_lifecycle_transcript_projects_every_step_and_marks_the_default_acti
         let v = project(Some(&s), true, &BTreeSet::new(), 1_800_000_000_000);
         for r in rows(&v, "notifications.rows") {
             let default = r["default"].as_str().unwrap();
-            assert!(r["actions"].as_array().unwrap().iter().all(|a| a["id"] != default));
+            assert!(
+                r["actions"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|a| a["id"] != default)
+            );
             saw_replacement |= r["rev"] == 2 && default == "a2";
         }
     }
-    assert!(saw_replacement, "the replacement revision carries a fresh default");
+    assert!(
+        saw_replacement,
+        "the replacement revision carries a fresh default"
+    );
 }
 #[test]
 fn published_storage_and_loss_transcripts_stay_valid_and_distinguish_loading_from_error() {
-    let storage = replay(include_str!("../tests/protocol-v1/notifications-storage.jsonl"));
+    let storage = replay(include_str!(
+        "../tests/protocol-v1/notifications-storage.jsonl"
+    ));
     let phases: Vec<String> = storage
         .iter()
         .map(|d| {
             let s: NotificationsState = serde_json::from_value(d.clone()).unwrap();
             assert!(s.producer_valid());
-            text(&project(Some(&s), true, &BTreeSet::new(), 0), "notifications.history_state")
+            text(
+                &project(Some(&s), true, &BTreeSet::new(), 0),
+                "notifications.history_state",
+            )
         })
         .collect();
     assert_eq!(phases[0], "loading");
     assert!(phases.contains(&"error".to_string()) && phases.last().is_some_and(|p| p == "ready"));
-    for d in replay(include_str!("../tests/protocol-v1/notifications-loss-restart.jsonl")) {
+    for d in replay(include_str!(
+        "../tests/protocol-v1/notifications-loss-restart.jsonl"
+    )) {
         let s: NotificationsState = serde_json::from_value(d).unwrap();
         assert!(s.producer_valid());
     }
@@ -367,7 +522,10 @@ fn ownership_refusal_transcript_advertises_no_notifications_topic() {
         .lines()
         .next()
         .unwrap();
-    let Message::Welcome { topics, methods, .. } = framing::decode(first.as_bytes()).unwrap() else {
+    let Message::Welcome {
+        topics, methods, ..
+    } = framing::decode(first.as_bytes()).unwrap()
+    else {
         panic!("welcome expected");
     };
     assert!(!topics.contains_key("notifications") && methods.is_empty());
@@ -396,10 +554,21 @@ fn callbacks_keep_last_good_data_stale_and_reject_legacy_payloads() {
 fn seed_defines_every_key_the_views_bind() {
     let seeded = seed();
     for key in [
-        "notifications.rows", "notifications.open", "notifications.history", "notifications.history_count",
-        "notifications.history_more", "notifications.history_state", "notifications.state", "notifications.dnd",
-        "notifications.message", "notifications.controls", "osd.open", "osd.label", "osd.level",
-        "osd.status", "osd.muted",
+        "notifications.rows",
+        "notifications.open",
+        "notifications.history",
+        "notifications.history_count",
+        "notifications.history_more",
+        "notifications.history_state",
+        "notifications.state",
+        "notifications.dnd",
+        "notifications.message",
+        "notifications.controls",
+        "osd.open",
+        "osd.label",
+        "osd.level",
+        "osd.status",
+        "osd.muted",
     ] {
         assert!(seeded.contains_key(key), "{key}");
     }
@@ -444,7 +613,9 @@ mod daemon {
         std::thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
             let mut writer = stream.try_clone().unwrap();
-            stream.set_read_timeout(Some(Duration::from_millis(20))).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_millis(20)))
+                .unwrap();
             let mut reader = BufReader::new(stream);
             let mut welcome: Json = serde_json::from_str(
                 include_str!("../tests/protocol-v1/notifications-loss-restart.jsonl")
@@ -469,7 +640,11 @@ mod daemon {
                 let frame: Json = serde_json::from_str(&line).unwrap();
                 match frame["t"].as_str().unwrap() {
                     "hello" => send(&welcome),
-                    "sub" if frame["topics"].as_array().is_some_and(|t| t.contains(&json!("notifications"))) => {
+                    "sub"
+                        if frame["topics"]
+                            .as_array()
+                            .is_some_and(|t| t.contains(&json!("notifications"))) =>
+                    {
                         send(&json!({"t":"snap","topic":"notifications","seq":0,"data":snapshot}));
                     }
                     "call" => {
@@ -497,7 +672,10 @@ mod daemon {
         std::mem::forget(handle);
         rx
     }
-    fn until(rx: &mpsc::Receiver<BTreeMap<String, Value>>, ok: impl Fn(&BTreeMap<String, Value>) -> bool) {
+    fn until(
+        rx: &mpsc::Receiver<BTreeMap<String, Value>>,
+        ok: impl Fn(&BTreeMap<String, Value>) -> bool,
+    ) {
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
             if let Ok(m) = rx.recv_timeout(Duration::from_millis(50))
@@ -510,7 +688,9 @@ mod daemon {
     }
     fn call(calls: &mpsc::Receiver<Json>, method: &str) -> Json {
         loop {
-            let frame = calls.recv_timeout(Duration::from_secs(5)).expect("call frame");
+            let frame = calls
+                .recv_timeout(Duration::from_secs(5))
+                .expect("call frame");
             if frame["m"] == method {
                 return frame["p"].clone();
             }
@@ -522,11 +702,24 @@ mod daemon {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();
         let (socket, calls, close) = fake(&lab, json!({"notifications":1}), data);
-        let service = Service::start(socket, Options { provider: true, action_on_click: true }).unwrap();
+        let service = Service::start(
+            socket,
+            Options {
+                provider: true,
+                action_on_click: true,
+            },
+        )
+        .unwrap();
         let rx = models(&service);
-        until(&rx, |m| flag(m, "notifications.open") && flag(m, "notifications.controls"));
+        until(&rx, |m| {
+            flag(m, "notifications.open") && flag(m, "notifications.controls")
+        });
         // The provider registers (hover and suppression are provider-only).
-        assert!(calls.recv_timeout(Duration::from_secs(5)).is_ok_and(|f| f["t"] == "register"));
+        assert!(
+            calls
+                .recv_timeout(Duration::from_secs(5))
+                .is_ok_and(|f| f["t"] == "register")
+        );
         service.hover("n1|2", true);
         assert_eq!(
             call(&calls, "notifications.set_hover"),
@@ -537,23 +730,37 @@ mod daemon {
             call(&calls, "notifications.set_hover"),
             json!({"id":"n1","revision":2,"hovered":false})
         );
-        service.action("notifications.card", &Value::Text("n1|2".into())).unwrap();
+        service
+            .action("notifications.card", &Value::Text("n1|2".into()))
+            .unwrap();
         assert_eq!(
             call(&calls, "notifications.invoke_action"),
             json!({"id":"n1","revision":2,"action":"a2"})
         );
-        service.action("notifications.forget", &Value::Text("h2|4".into())).unwrap();
+        service
+            .action("notifications.forget", &Value::Text("h2|4".into()))
+            .unwrap();
         assert_eq!(
             call(&calls, "notifications.dismiss"),
             json!({"id":"h2","revision":4,"forget":true})
         );
         // A stale reference is refused locally and never reaches the daemon.
-        service.action("notifications.dismiss", &Value::Text("n1|1".into())).unwrap();
-        until(&rx, |m| text(m, "notifications.message").contains("Changed elsewhere"));
+        service
+            .action("notifications.dismiss", &Value::Text("n1|1".into()))
+            .unwrap();
+        until(&rx, |m| {
+            text(m, "notifications.message").contains("Changed elsewhere")
+        });
         // Losing the daemon keeps the display but disables popups and controls.
         close.send(()).unwrap();
-        until(&rx, |m| text(m, "notifications.state") == "stale" && !flag(m, "notifications.open"));
-        assert!(service.action("notifications.dismiss", &Value::Text("n1|2".into())).is_err());
+        until(&rx, |m| {
+            text(m, "notifications.state") == "stale" && !flag(m, "notifications.open")
+        });
+        assert!(
+            service
+                .action("notifications.dismiss", &Value::Text("n1|2".into()))
+                .is_err()
+        );
     }
 
     #[test]
@@ -561,12 +768,28 @@ mod daemon {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();
         let (socket, calls, close) = fake(&lab, json!({}), data);
-        let service = Service::start(socket, Options { provider: false, action_on_click: false }).unwrap();
+        let service = Service::start(
+            socket,
+            Options {
+                provider: false,
+                action_on_click: false,
+            },
+        )
+        .unwrap();
         let rx = models(&service);
         std::thread::sleep(Duration::from_millis(300));
-        until(&rx, |m| text(m, "notifications.state") == "unavailable" && !flag(m, "notifications.controls"));
-        assert!(service.action("notifications.dnd", &Value::Text("toggle".into())).is_err());
-        assert!(calls.recv_timeout(Duration::from_millis(200)).is_err(), "no call, no register");
+        until(&rx, |m| {
+            text(m, "notifications.state") == "unavailable" && !flag(m, "notifications.controls")
+        });
+        assert!(
+            service
+                .action("notifications.dnd", &Value::Text("toggle".into()))
+                .is_err()
+        );
+        assert!(
+            calls.recv_timeout(Duration::from_millis(200)).is_err(),
+            "no call, no register"
+        );
         let _ = close.send(());
     }
 }

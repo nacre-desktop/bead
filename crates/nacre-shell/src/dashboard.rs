@@ -758,31 +758,43 @@ impl Dashboard {
                     },
                     48,
                 );
-                // Active first, then the service-ordered history window.
+                out.insert("dashboard.dnd".into(), Value::Bool(s.do_not_disturb));
+                // Active first, then the service-ordered history window. A row's
+                // `act` carries the displayed revision; the daemon refuses a stale one.
                 let rows: Vec<Json> = s
                     .active
                     .order
                     .iter()
-                    .filter_map(|id| s.active.items.get(id).map(|n| (id, n)))
-                    .chain(
-                        s.history
-                            .order
-                            .iter()
-                            .filter_map(|id| s.history.items.get(id).map(|n| (id, n))),
-                    )
-                    .take(8)
-                    .map(|(id, n)| {
-                        json!({"id":id,"label":line(&n.summary,40),"value":line(&n.app_name,20),
-                            "detail":line(n.body.lines().next().unwrap_or(""),64)})
+                    .filter_map(|id| s.active.items.get(id).map(|n| (id, n, "Dismiss")))
+                    .chain(s.history.order.iter().filter_map(|id| {
+                        s.history.items.get(id).map(|n| (id, n, "Forget"))
+                    }))
+                    .take(12)
+                    .map(|(id, n, verb)| {
+                        let op = if verb == "Dismiss" { "dismiss" } else { "forget" };
+                        json!({"id":id,"label":line(&format!("{}: {}", n.app_name, n.summary), 52),
+                            "value":verb,"act":format!("notif.{op}:{}|{}", id.0, n.revision.unwrap_or(0))})
                     })
                     .collect();
                 text(
                     &mut out,
                     "detail",
-                    if rows.is_empty() {
-                        "No notifications"
+                    &if rows.is_empty() {
+                        "No notifications".to_owned()
+                    } else if s.history_more == Some(true) {
+                        format!(
+                            "Newest {} of {} stored are shown",
+                            s.history.items.len(),
+                            s.history_count.unwrap_or(0)
+                        )
+                    } else if s
+                        .history_storage
+                        .as_ref()
+                        .is_some_and(|h| h.error.is_some())
+                    {
+                        "History storage has a problem".to_owned()
                     } else {
-                        ""
+                        String::new()
                     },
                     48,
                 );

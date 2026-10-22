@@ -223,10 +223,7 @@ impl Notices for Owner {
         .map_err(|_| "notification server stopped")?;
         Ok(serde_json::Value::Null)
     }
-    fn command(
-        &self,
-        call: &bead::services::ipc::Call,
-    ) -> Result<serde_json::Value, &'static str> {
+    fn command(&self, call: &bead::services::ipc::Call) -> Result<serde_json::Value, &'static str> {
         match call.method.as_str() {
             "counts" => {
                 let state = self
@@ -264,7 +261,7 @@ impl Notices for Owner {
             ""
         };
         let command = match name {
-            "notifications.details" => {
+            "notifications.details" | "notifications.card" => {
                 Control::Details(text.parse().map_err(|_| "invalid notification ID")?)
             }
             "notifications.dismiss" => {

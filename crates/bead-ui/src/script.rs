@@ -115,10 +115,14 @@ impl Script {
     pub fn validate_action(&self, name: &str) -> Result<(), Diagnostic> {
         if [
             "notifications.details",
+            "notifications.card",
             "notifications.dismiss",
+            "notifications.forget",
             "notifications.action",
             "notifications.dnd",
             "notifications.clear",
+            "notifications.clear_popups",
+            "notifications.osd",
             "services.audio",
             "services.audio.volume",
             "services.tray",

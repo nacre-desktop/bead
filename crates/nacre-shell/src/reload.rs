@@ -1264,6 +1264,19 @@ impl SceneSource for Runtime {
         {
             *name = "services.tray.secondary".into();
         }
+        // Notices act on click or Enter; right-click on a card dismisses it (QML parity),
+        // while scrolling or right-clicking a button never fires an action.
+        if let Some((_, name, _)) = &mut host_action
+            && name.starts_with("notifications.")
+        {
+            match &event {
+                UiEvent::Click { .. } | UiEvent::Command { .. } => {}
+                UiEvent::ContextMenu { .. } if name == "notifications.card" => {
+                    *name = "notifications.dismiss".into();
+                }
+                _ => host_action = None,
+            }
+        }
         if matches!(&event, UiEvent::SecondaryClick { .. })
             && !host_action
                 .as_ref()

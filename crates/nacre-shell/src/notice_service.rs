@@ -103,6 +103,7 @@ fn urgency(n: &Notification) -> u8 {
     }
 }
 fn row(id: &str, n: &Notification, expanded: bool, history: bool, now: u64) -> Json {
+    let rev = n.revision.unwrap_or(0);
     let default = n.default_action.as_ref().map_or("", |d| d.0.as_str());
     // The default action is never a button; history rows have no live actions.
     let actions: Vec<Json> = if history {
@@ -113,14 +114,12 @@ fn row(id: &str, n: &Notification, expanded: bool, history: bool, now: u64) -> J
             .iter()
             .filter(|a| a.0 != default)
             .filter_map(|a| {
-                n.actions
-                    .items
-                    .get(a)
-                    .map(|x| json!({"id": a.0, "label": x.label}))
+                n.actions.items.get(a).map(
+                    |x| json!({"id": a.0, "ref": format!("{id}|{rev}|{}", a.0), "label": x.label}),
+                )
             })
             .collect()
     };
-    let rev = n.revision.unwrap_or(0);
     json!({"id": id, "rev": rev, "key": format!("{id}|{rev}"),
         "app": n.app_name, "summary": n.summary, "body": n.body,
         "icon": n.icon.clone().unwrap_or_default(), "urgency": urgency(n),
@@ -198,17 +197,21 @@ fn project(
 
 /// What one UI action turns into, decided against the current snapshot.
 #[derive(Debug, PartialEq)]
-enum Plan {
+pub(crate) enum Plan {
     Toggle(String),
     Call(&'static str, Json),
 }
-fn plan(
+pub(crate) fn plan(
     name: &str,
     arg: &Value,
     state: &NotificationsState,
     action_on_click: bool,
 ) -> Result<Plan, &'static str> {
-    let text = if let Value::Text(t) = arg { t.as_str() } else { "" };
+    let text = if let Value::Text(t) = arg {
+        t.as_str()
+    } else {
+        ""
+    };
     let mut parts = text.split('|');
     let (id, rev, extra) = (
         parts.next().unwrap_or(""),
@@ -234,7 +237,11 @@ fn plan(
         "notifications.card" => {
             let (n, rev) = notice()?;
             let live = state.active.items.keys().any(|k| k.0 == id);
-            match n.default_action.as_ref().filter(|_| action_on_click && live) {
+            match n
+                .default_action
+                .as_ref()
+                .filter(|_| action_on_click && live)
+            {
                 Some(default) => Plan::Call(
                     "notifications.invoke_action",
                     json!({"id": id, "revision": rev, "action": default.0}),
@@ -384,7 +391,10 @@ impl Shared {
 fn models(g: &Inner) -> BTreeMap<String, Value> {
     let mut out = project(g.good.as_ref(), g.live, &g.expanded, wall_ms());
     out.extend(osd_values(g.osd.shown.as_ref()));
-    out.insert("notifications.message".into(), Value::Text(g.message.clone()));
+    out.insert(
+        "notifications.message".into(),
+        Value::Text(g.message.clone()),
+    );
     out
 }
 /// Pushes the current models; wake-ups run outside the lock.
@@ -422,9 +432,10 @@ fn on_notifications(shared: &Shared, snap: &Snapshot) {
                     .map(|k| k.0.clone())
                     .collect();
                 g.expanded.retain(|k| ids.contains(k));
-                if g.hover.as_ref().is_some_and(|(id, _)| {
-                    !state.popup_order.iter().flatten().any(|p| &p.0 == id)
-                }) {
+                if g.hover
+                    .as_ref()
+                    .is_some_and(|(id, _)| !state.popup_order.iter().flatten().any(|p| &p.0 == id))
+                {
                     g.hover = None;
                 }
                 g.good = Some(state);
@@ -535,7 +546,12 @@ fn worker(shared: Arc<Shared>, client: Client) {
         if want != g.sent_inhibit && !g.denied && g.live {
             g.sent_inhibit = want;
             drop(g);
-            let _ = send(&shared, &client, "notifications.set_inhibited", json!({"inhibited": want}));
+            let _ = send(
+                &shared,
+                &client,
+                "notifications.set_inhibited",
+                json!({"inhibited": want}),
+            );
             g = shared.lock();
             continue;
         }
@@ -547,7 +563,13 @@ fn worker(shared: Arc<Shared>, client: Client) {
                 publish(&shared);
                 g = shared.lock();
             }
-            Some(d) => g = shared.wake.wait_timeout(g, d - now).unwrap_or_else(|p| p.into_inner()).0,
+            Some(d) => {
+                g = shared
+                    .wake
+                    .wait_timeout(g, d - now)
+                    .unwrap_or_else(|p| p.into_inner())
+                    .0
+            }
             None => g = shared.wake.wait(g).unwrap_or_else(|p| p.into_inner()),
         }
     }
@@ -555,13 +577,14 @@ fn worker(shared: Arc<Shared>, client: Client) {
 
 fn poll(g: &mut Inner) {
     let mut done = vec![];
-    g.calls.retain_mut(|(method, ticket)| match ticket.try_take() {
-        None => true,
-        Some(reply) => {
-            done.push((method.clone(), reply));
-            false
-        }
-    });
+    g.calls
+        .retain_mut(|(method, ticket)| match ticket.try_take() {
+            None => true,
+            Some(reply) => {
+                done.push((method.clone(), reply));
+                false
+            }
+        });
     for (method, reply) in done {
         let provider_only = matches!(
             method.as_str(),
@@ -583,7 +606,12 @@ fn poll(g: &mut Inner) {
     }
 }
 /// One published method call, only while the daemon advertises it at version 1.
-fn send(shared: &Arc<Shared>, client: &Client, method: &str, params: Json) -> Result<(), &'static str> {
+fn send(
+    shared: &Arc<Shared>,
+    client: &Client,
+    method: &str,
+    params: Json,
+) -> Result<(), &'static str> {
     let status = client.status();
     let advertised = status
         .methods
@@ -608,7 +636,13 @@ fn send(shared: &Arc<Shared>, client: &Client, method: &str, params: Json) -> Re
         return Err("Too many requests in flight");
     }
     let ticket = client
-        .begin_call(method.into(), params, timeout, CallGuard { boot, version: 1 }, Some(wake))
+        .begin_call(
+            method.into(),
+            params,
+            timeout,
+            CallGuard { boot, version: 1 },
+            Some(wake),
+        )
         .map_err(|_| "Request failed")?;
     g.calls.push((method.into(), ticket));
     Ok(())
@@ -637,7 +671,10 @@ impl Drop for Lease {
 
 impl Service {
     pub fn start(socket: std::path::PathBuf, options: Options) -> Result<Arc<Self>, String> {
-        let mut config = Config::new(socket, vec!["notifications".into(), "osd".into(), "audio".into()]);
+        let mut config = Config::new(
+            socket,
+            vec!["notifications".into(), "osd".into(), "audio".into()],
+        );
         config.client = "nacre-shell-notices".into();
         if options.provider {
             config.provider = Some((
@@ -687,7 +724,10 @@ impl Service {
             .stack_size(256 * 1024)
             .spawn(move || worker(state, link))
             .map_err(|e| e.to_string())?;
-        println!("NOTIFICATIONS_DAEMON consumer=true provider={}", options.provider);
+        println!(
+            "NOTIFICATIONS_DAEMON consumer=true provider={}",
+            options.provider
+        );
         Ok(Arc::new(Self {
             shared,
             client,
@@ -753,9 +793,15 @@ impl Notices for Service {
             current
         };
         if on && let Some((old, old_rev)) = call {
-            let _ = self.send("notifications.set_hover", json!({"id": old, "revision": old_rev, "hovered": false}));
+            let _ = self.send(
+                "notifications.set_hover",
+                json!({"id": old, "revision": old_rev, "hovered": false}),
+            );
         }
-        let _ = self.send("notifications.set_hover", json!({"id": id, "revision": rev, "hovered": on}));
+        let _ = self.send(
+            "notifications.set_hover",
+            json!({"id": id, "revision": rev, "hovered": on}),
+        );
     }
     fn action(&self, name: &str, arg: &Value) -> Result<(), String> {
         if name == "notifications.osd" {
