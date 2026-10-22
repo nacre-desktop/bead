@@ -1252,7 +1252,12 @@ impl App {
                 Box::new(UiEvent::OutputName(output_id.clone())),
             ));
         }
-        if per_output && !self.output_sessions.contains_key(&output_id) {
+        // An output transaction temporarily owns its session in the active
+        // slot. Opening its companion can re-enter here before it is restored.
+        if per_output
+            && self.active_output.as_ref() != Some(&output_id)
+            && !self.output_sessions.contains_key(&output_id)
+        {
             let factory = self.options.primary_factory.as_ref().unwrap();
             let epoch = self.next_session_epoch;
             self.next_session_epoch = self.next_session_epoch.wrapping_add(1).max(1);
