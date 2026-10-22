@@ -364,7 +364,7 @@ pub struct Options {
     /// Click-through proof surfaces that reserve no desktop space.
     pub test_passive: bool,
     pub trace_state: bool,
-    /// Product-owned Nacre wallpaper consumer; framework only owns passive surfaces.
+    /// Optional product-owned wallpaper consumer; the framework owns passive surfaces.
     pub wallpaper: Option<std::sync::Arc<dyn WallpaperProvider>>,
 }
 impl Default for Options {
