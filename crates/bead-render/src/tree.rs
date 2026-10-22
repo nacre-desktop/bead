@@ -206,6 +206,14 @@ impl TreeCache {
     }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if let Some(frame) = scene.prepared.get(&scale.to_bits()) {
+            // Worker-prepared frames own their rasters and nodes. A locally
+            // baked startup fallback is obsolete after this hand-off.
+            if !self.entries.is_empty() || !self.nodes.is_empty() {
+                self.entries.clear();
+                self.nodes.clear();
+                self.raster = CpuRenderer::default();
+                self.font_files.clear();
+            }
             self.frame = Some(frame.clone());
             return Ok(());
         }
@@ -1533,6 +1541,22 @@ mod tests {
             pixels.as_slice(),
             "returning to the original scale preserves pixels"
         );
+    }
+    #[test]
+    fn imported_frame_releases_obsolete_local_fallback_caches() {
+        let mut display = TreeCache::default();
+        display.prepare(&scene(), 1.5).unwrap();
+        let old = Arc::downgrade(display.frame.as_ref().unwrap().items[0].raster.as_ref().unwrap());
+        let mut worker = TreeCache::default();
+        let mut ready = scene();
+        worker.prepare(&ready, 1.5).unwrap();
+        let imported = worker.frame.as_ref().unwrap().clone();
+        ready.prepared.insert(1.5_f32.to_bits(), imported.clone());
+        display.prepare(&ready, 1.5).unwrap();
+        assert!(old.upgrade().is_none(), "startup fallback is no longer retained");
+        assert!(Arc::ptr_eq(display.frame.as_ref().unwrap(), &imported));
+        assert_eq!(display.raster_budget.as_ref().unwrap().used(), 0);
+        assert_eq!(display.node_budget.as_ref().unwrap().used(), 0);
     }
     #[test]
     fn replacement_raster_delta_uses_previous_paint_slot_and_repairs_exactly() {
