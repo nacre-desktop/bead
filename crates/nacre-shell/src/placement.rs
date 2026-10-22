@@ -10,6 +10,8 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug)]
 pub enum Attachment {
     Attached(Edge),
+    /// Compact Nacre control panel: joins the top frame at the usable top-right.
+    ControlCenter,
     Popout,
 }
 
@@ -126,7 +128,9 @@ impl Chrome {
             attachment,
             engaged: matches!(
                 attachment,
-                Attachment::Popout | Attachment::Attached(Edge::Left | Edge::Right)
+                Attachment::Popout
+                    | Attachment::ControlCenter
+                    | Attachment::Attached(Edge::Left | Edge::Right)
             ),
             fill: colors.get("surface")?,
             primary: colors.get("primary")?,
@@ -225,7 +229,7 @@ impl Chrome {
         let frame = Frame::default();
         let top_inset = if matches!(
             self.attachment,
-            Attachment::Popout | Attachment::Attached(Edge::Top)
+            Attachment::Popout | Attachment::ControlCenter | Attachment::Attached(Edge::Top)
         ) {
             2.
         } else {
@@ -316,6 +320,10 @@ impl Frame {
         );
         let (x, y) = match attachment {
             Attachment::Attached(edge) => attached(edge, viewport, size, 0.),
+            Attachment::ControlCenter => {
+                let (x, _) = attached(Edge::Right, viewport, size, 0.);
+                (x, 0.)
+            }
             Attachment::Popout => (
                 popout(
                     self.left,
@@ -490,5 +498,22 @@ mod tests {
         let position = Frame::default().positioner(Attachment::Popout);
         assert_eq!(position(&scene, Some(1890.), (1920, 1200)), (1568, 18));
         // Body is y=18+32=50, touching the header rather than floating at102.
+    }
+
+    #[test]
+    fn control_center_body_joins_top_frame_at_right_inset() {
+        let frame = Frame::default();
+        assert_eq!(
+            frame.panel(
+                Attachment::ControlCenter,
+                (1920., 1200.),
+                (400., 286.),
+                None,
+            ),
+            Rect::new(1510., 50., 400., 286.)
+        );
+        let scene = crate::sound::fallback([20, 20, 20, 255]);
+        let position = frame.positioner(Attachment::ControlCenter);
+        assert_eq!(position(&scene, None, (1920, 1200)), (1478, 18));
     }
 }

@@ -109,7 +109,7 @@ pub(crate) fn core_sound_with_root(
     let cold = fallback.clone();
     Ok(PanelSpec {
         position: Some(crate::placement::Frame::default().positioner(
-            crate::placement::Attachment::Attached(bead::core::Edge::Right),
+            crate::placement::Attachment::ControlCenter,
         )),
         engages_decorations: true,
         passive: false,
@@ -133,7 +133,7 @@ pub(crate) fn core_sound_with_root(
                 .with_trace(trace)
                 .with_view_edge("right")?
                 .with_frame(
-                    crate::placement::Attachment::Attached(bead::core::Edge::Right),
+                    crate::placement::Attachment::ControlCenter,
                     &colors,
                 )
                 .and_then(|runtime| runtime.with_core_audio_status(source))
@@ -250,7 +250,7 @@ fn status_at_root_mode(
     Ok(PanelSpec {
         position: Some(
             crate::placement::Frame::default().positioner(if control_panel && !peek {
-                crate::placement::Attachment::Attached(bead::core::Edge::Right)
+                crate::placement::Attachment::ControlCenter
             } else {
                 crate::placement::Attachment::Popout
             }),
@@ -324,7 +324,7 @@ fn status_at_root_mode(
                     } else if !control_panel {
                         crate::placement::Attachment::Popout
                     } else {
-                        crate::placement::Attachment::Attached(bead::core::Edge::Right)
+                        crate::placement::Attachment::ControlCenter
                     },
                     &colors,
                 )
