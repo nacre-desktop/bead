@@ -427,6 +427,7 @@ fn refresh_tray(shared: &Shared, client: &Client) {
             ),
             visible: true,
             item_is_menu: item.item_is_menu,
+            has_menu: item.menu.is_some(),
             icon_name: bounded_text(
                 &if matches!(item.status, system_tray::item::Status::NeedsAttention) {
                     item.attention_icon_name
@@ -476,6 +477,7 @@ async fn tray_action(
     let (id, operation, x, y) = match action {
         Action::TrayActivate { item, x, y } => (item, "activate", x, y),
         Action::TraySecondaryActivate { item, x, y } => (item, "secondary", x, y),
+        Action::TrayContextMenu { item, x, y } => (item, "context", x, y),
         Action::TrayScroll {
             item,
             delta,
@@ -588,6 +590,10 @@ async fn tray_action(
         match operation {
             "secondary" => proxy
                 .call::<_, _, ()>("SecondaryActivate", &(x, y))
+                .await
+                .map_err(|e| e.to_string()),
+            "context" => proxy
+                .call::<_, _, ()>("ContextMenu", &(x, y))
                 .await
                 .map_err(|e| e.to_string()),
             "scroll-horizontal" => proxy

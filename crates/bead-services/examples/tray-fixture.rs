@@ -31,6 +31,9 @@ pub fn take_calls() -> Vec<String> {
 
 struct Item {
     generation: u32,
+    identifier: &'static str,
+    title_suffix: &'static str,
+    menu_path: &'static str,
 }
 #[zbus::interface(name = "org.kde.StatusNotifierItem")]
 impl Item {
@@ -40,11 +43,14 @@ impl Item {
     }
     #[zbus(property)]
     fn id(&self) -> &str {
-        "bead-fixture"
+        self.identifier
     }
     #[zbus(property)]
     fn title(&self) -> String {
-        format!("Private tray fixture {}", self.generation)
+        format!(
+            "Private tray fixture {}{}",
+            self.generation, self.title_suffix
+        )
     }
     #[zbus(property)]
     fn status(&self) -> &str {
@@ -132,22 +138,22 @@ impl Item {
     async fn new_status(emitter: &zbus::object_server::SignalEmitter<'_>) -> zbus::Result<()>;
     #[zbus(property)]
     fn menu(&self) -> OwnedObjectPath {
-        OwnedObjectPath::try_from("/Menu").unwrap()
+        OwnedObjectPath::try_from(self.menu_path).unwrap()
     }
     fn activate(&self, x: i32, y: i32) {
-        record(format!("activate {x} {y}"));
+        record(format!("activate {} {x} {y}", self.identifier));
         println!("TRAY_ACTIVATE {x} {y}");
     }
     fn context_menu(&self, x: i32, y: i32) {
-        record(format!("context {x} {y}"));
+        record(format!("context {} {x} {y}", self.identifier));
         println!("TRAY_CONTEXT {x} {y}");
     }
     fn secondary_activate(&self, x: i32, y: i32) {
-        record(format!("secondary {x} {y}"));
+        record(format!("secondary {} {x} {y}", self.identifier));
         println!("TRAY_SECONDARY {x} {y}");
     }
     fn scroll(&self, delta: i32, orientation: &str) {
-        record(format!("scroll {delta} {orientation}"));
+        record(format!("scroll {} {delta} {orientation}", self.identifier));
         println!("TRAY_SCROLL {delta} {orientation}");
     }
 }
@@ -296,6 +302,18 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
             "/StatusNotifierItem",
             Item {
                 generation: initial_generation,
+                identifier: "bead-fixture",
+                title_suffix: "",
+                menu_path: "/Menu",
+            },
+        )?
+        .serve_at(
+            "/AlternateItem",
+            Item {
+                generation: initial_generation,
+                identifier: "bead-fixture-alternate",
+                title_suffix: " alternate",
+                menu_path: "/",
             },
         )?
         .serve_at("/Menu", Menu(generation.clone()))?
@@ -340,16 +358,18 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .get_property::<bool>("IsStatusNotifierHostRegistered")
                         .await
                         .unwrap_or(false)
-                        && watcher
-                            .call::<_, _, ()>(
-                                "RegisterStatusNotifierItem",
-                                &("/StatusNotifierItem",),
-                            )
-                            .await
-                            .is_ok()
                     {
-                        record("reregister".into());
-                        break;
+                        let mut registered = true;
+                        for path in ["/StatusNotifierItem", "/AlternateItem"] {
+                            registered &= watcher
+                                .call::<_, _, ()>("RegisterStatusNotifierItem", &(path,))
+                                .await
+                                .is_ok();
+                        }
+                        if registered {
+                            record("reregister".into());
+                            break;
+                        }
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                 }
@@ -365,6 +385,12 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
     watcher
         .call::<_, _, ()>("RegisterStatusNotifierItem", &("/StatusNotifierItem",))
+        .await?;
+    watcher
+        .call::<_, _, ()>("RegisterStatusNotifierItem", &("/StatusNotifierItem",))
+        .await?;
+    watcher
+        .call::<_, _, ()>("RegisterStatusNotifierItem", &("/AlternateItem",))
         .await?;
     println!("TRAY_FIXTURE_READY");
     if std::env::var_os("BEAD_FIXTURE_UPDATE").is_some() {

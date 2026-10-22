@@ -17,6 +17,12 @@ use std::{
 };
 use zbus::{message::Header, object_server::SignalEmitter};
 
+fn primary(items: &[bead_services::TrayItem]) -> Option<&bead_services::TrayItem> {
+    items
+        .iter()
+        .find(|item| item.id.ends_with("/StatusNotifierItem"))
+}
+
 #[derive(Default)]
 struct ForeignWatcher(Mutex<HashSet<String>>);
 #[zbus::interface(name = "org.kde.StatusNotifierWatcher")]
@@ -74,9 +80,16 @@ fn start_fixture() -> tokio::task::JoinHandle<()> {
 async fn wait_item(service: &Desktop, present: bool) -> Option<String> {
     tokio::time::timeout(Duration::from_secs(4), async {
         loop {
-            let item = service.snapshot().tray.first().map(|item| item.id.clone());
-            if item.is_some() == present {
-                return Some(item.unwrap_or_default());
+            let snapshot = service.snapshot();
+            let primary = snapshot
+                .tray
+                .iter()
+                .find(|item| item.id.ends_with("/StatusNotifierItem"));
+            if present && let Some(item) = primary {
+                return Some(item.id.clone());
+            }
+            if !present && snapshot.tray.is_empty() {
+                return Some(String::new());
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
@@ -84,6 +97,16 @@ async fn wait_item(service: &Desktop, present: bool) -> Option<String> {
     .await
     .ok()
     .flatten()
+}
+
+async fn wait_count(service: &Desktop, count: usize) {
+    tokio::time::timeout(Duration::from_secs(4), async {
+        while service.snapshot().tray.len() != count {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("tray item count timeout");
 }
 
 async fn call(service: Arc<Desktop>, action: Action) {
@@ -122,7 +145,11 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
     async fn wait_replacement(service: &Desktop, old: &str) -> Option<String> {
         tokio::time::timeout(Duration::from_secs(4), async {
             loop {
-                if let Some(item) = service.snapshot().tray.first()
+                if let Some(item) = service
+                    .snapshot()
+                    .tray
+                    .iter()
+                    .find(|item| item.id.ends_with("/StatusNotifierItem"))
                     && item.id != old
                 {
                     return item.id.clone();
@@ -137,11 +164,50 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
     let id = wait_item(&service, true)
         .await
         .expect("fake SNI item registered");
+    wait_count(&service, 2).await;
     let snapshot = service.snapshot();
-    let item = &snapshot.tray[0];
+    assert_eq!(
+        snapshot.tray.len(),
+        2,
+        "same-owner custom-path items remain distinct"
+    );
+    let item = primary(&snapshot.tray).unwrap();
     assert_eq!(item.title, "Private tray fixture 0");
     assert_eq!(item.tooltip_title, "Private tray fixture");
     assert_eq!(item.icon_pixmap.len(), 1);
+    let alternate_id = snapshot
+        .tray
+        .iter()
+        .find(|item| item.id.ends_with("/AlternateItem"))
+        .unwrap()
+        .id
+        .clone();
+    assert!(
+        !snapshot
+            .tray
+            .iter()
+            .find(|item| item.id.ends_with("/AlternateItem"))
+            .unwrap()
+            .has_menu
+    );
+    call(
+        service.clone(),
+        Action::TrayActivate {
+            item: alternate_id.clone(),
+            x: 5,
+            y: 9,
+        },
+    )
+    .await;
+    call(
+        service.clone(),
+        Action::TrayContextMenu {
+            item: alternate_id,
+            x: 6,
+            y: 10,
+        },
+    )
+    .await;
     call(
         service.clone(),
         Action::TrayActivate {
@@ -179,7 +245,7 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
     )
     .await;
     assert_eq!(
-        service.snapshot().tray[0].menu[1].children[0].label,
+        primary(&service.snapshot().tray).unwrap().menu[1].children[0].label,
         "Prepared action"
     );
     call(
@@ -207,10 +273,7 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
     );
     if std::env::var_os("BEAD_FIXTURE_UPDATE").is_some() {
         tokio::time::timeout(Duration::from_secs(2), async {
-            while service
-                .snapshot()
-                .tray
-                .first()
+            while primary(&service.snapshot().tray)
                 .is_none_or(|item| item.title != "Private tray fixture 1")
             {
                 tokio::time::sleep(Duration::from_millis(20)).await;
@@ -219,7 +282,7 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
         .await
         .expect("SNI title and icon update observed");
         tokio::time::timeout(Duration::from_secs(2), async {
-            while service.snapshot().tray.first().is_none_or(|item| {
+            while primary(&service.snapshot().tray).is_none_or(|item| {
                 item.menu
                     .first()
                     .is_none_or(|entry| entry.label != "Updated action")
@@ -232,7 +295,7 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 let snapshot = service.snapshot();
-                if snapshot.tray.first().is_some_and(|item| {
+                if primary(&snapshot.tray).is_some_and(|item| {
                     item.attention && item.icon_pixmap.first().is_some_and(|pixmap| pixmap.0 == 8)
                 }) {
                     break;
@@ -245,7 +308,7 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 let snapshot = service.snapshot();
-                if snapshot.tray.first().is_some_and(|item| {
+                if primary(&snapshot.tray).is_some_and(|item| {
                     item.attention
                         && item
                             .icon_pixmap
@@ -260,7 +323,12 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
         .await
         .expect("empty attention pixmap falls back to normal icon");
         let item = service.snapshot();
-        let ids: Vec<_> = item.tray[0].menu.iter().map(|entry| entry.id).collect();
+        let ids: Vec<_> = primary(&item.tray)
+            .unwrap()
+            .menu
+            .iter()
+            .map(|entry| entry.id)
+            .collect();
         assert_eq!(
             ids,
             [1, 2],
@@ -270,9 +338,11 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
     assert_eq!(
         fixture::take_calls(),
         [
-            "activate 4 7",
-            "secondary 4 7",
-            "scroll 1 vertical",
+            "activate bead-fixture-alternate 5 9",
+            "context bead-fixture-alternate 6 10",
+            "activate bead-fixture 4 7",
+            "secondary bead-fixture 4 7",
+            "scroll bead-fixture 1 vertical",
             "prepare 0",
             "prepare 2",
             "menu 1 clicked"
@@ -295,6 +365,7 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
         wait_item(&service, true).await.as_deref(),
         Some(replacement.as_str())
     );
+    wait_count(&service, 2).await;
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             if fixture::take_calls()
@@ -317,11 +388,11 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
         },
     )
     .await;
-    assert_eq!(fixture::take_calls(), ["activate 0 0"]);
+    assert_eq!(fixture::take_calls(), ["activate bead-fixture 0 0"]);
     fixture.abort();
     let _ = fixture.await;
     service.stop();
-    println!("TRAY_PRIVATE_BUS_PASS registration=1 actions=7 owner_loss=1 watcher_reacquire=1");
+    println!("TRAY_PRIVATE_BUS_PASS registration=2 actions=9 owner_loss=1 watcher_reacquire=1");
 }
 
 struct OwnedDaemon(Option<Child>);
@@ -462,7 +533,7 @@ async fn session_bus_eof_reconnect_supervised() {
     assert!(status.success(), "reconnect helper failed: {status}");
     daemon.stop();
     println!(
-        "TRAY_SESSION_RECONNECT_PASS initial_item=1 bus_eof=1 empty_snapshot=1 recovered_item=1 activation=1"
+        "TRAY_SESSION_RECONNECT_PASS initial_item=2 bus_eof=1 empty_snapshot=1 recovered_item=2 activation=1"
     );
 }
 
@@ -500,6 +571,7 @@ async fn session_bus_reconnect_client_helper() {
     let new_id = wait_item(&service, true)
         .await
         .expect("tray after session bus recovery");
+    wait_count(&service, 2).await;
     assert!(
         service
             .snapshot()
@@ -516,7 +588,7 @@ async fn session_bus_reconnect_client_helper() {
         },
     )
     .await;
-    assert_eq!(fixture::take_calls(), ["activate 0 0"]);
+    assert_eq!(fixture::take_calls(), ["activate bead-fixture 0 0"]);
     assert!(
         !service
             .snapshot()

@@ -141,6 +141,11 @@ impl StatusNotifierWatcher {
         let service = zbus::names::BusName::Unique(service);
 
         let item = format!("{service}{objpath}");
+        if item.len() > 512 {
+            return Err(zbus::fdo::Error::InvalidArgs(
+                "StatusNotifierItem owner and object path exceed 512 bytes".into(),
+            ));
+        }
 
         {
             let mut items = self.items.lock().expect("mutex lock should succeed");
@@ -334,6 +339,8 @@ async fn parse_service<'a>(
         ));
     }
     if service.starts_with('/') {
+        zbus::zvariant::ObjectPath::try_from(service)
+            .map_err(|error| zbus::fdo::Error::InvalidArgs(error.to_string()))?;
         // they sent us just the object path
         if let Some(sender) = hdr.sender() {
             Ok((sender.to_owned(), service))
@@ -342,8 +349,16 @@ async fn parse_service<'a>(
             Err(zbus::fdo::Error::InvalidArgs("Unknown bus address".into()))
         }
     } else {
-        // parse the bus name they gave us
-        let busname: zbus::names::BusName = match service.try_into() {
+        // Preserve a non-default object path when a notifier passes
+        // its unique or well-known bus name followed by `/object/path`.
+        let (name, path) = service
+            .find('/')
+            .map_or((service, names::ITEM_OBJECT), |slash| {
+                (&service[..slash], &service[slash..])
+            });
+        zbus::zvariant::ObjectPath::try_from(path)
+            .map_err(|error| zbus::fdo::Error::InvalidArgs(error.to_string()))?;
+        let busname: zbus::names::BusName = match name.try_into() {
             Ok(x) => x,
             Err(e) => {
                 warn!("received invalid bus name {:?}: {}", service, e);
@@ -352,14 +367,14 @@ async fn parse_service<'a>(
         };
 
         if let zbus::names::BusName::Unique(unique) = busname {
-            Ok((unique.to_owned(), names::ITEM_OBJECT))
+            Ok((unique.to_owned(), path))
         } else {
             // they gave us a "well-known name" like org.kde.StatusNotifierHost-81830-0, we need to
             // convert this into the actual identifier for their bus (e.g. :1.234), so that even if
             // they remove that well-known name it's fine.
             let dbus = zbus::fdo::DBusProxy::new(con).await?;
             match dbus.get_name_owner(busname).await {
-                Ok(owner) => Ok((owner.into_inner(), names::ITEM_OBJECT)),
+                Ok(owner) => Ok((owner.into_inner(), path)),
                 Err(e) => {
                     warn!("failed to get owner of {:?}: {}", service, e);
                     Err(e)

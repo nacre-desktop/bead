@@ -285,7 +285,10 @@ impl TryFrom<DBusProps> for StatusNotifierItem {
                     .copied()
                     .unwrap_or_default(),
                 category: props.get_category()?,
-                menu: props.get_object_path("Menu").transpose()?,
+                menu: props
+                    .get_object_path("Menu")
+                    .transpose()?
+                    .filter(|path| path != "/"),
             })
         } else {
             Err(Error::MissingProperty("Id"))

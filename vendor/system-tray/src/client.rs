@@ -24,8 +24,6 @@ use zbus::names::InterfaceName;
 use zbus::zvariant::{Array, Structure, Value};
 use zbus::{Connection, Message};
 
-use self::names::ITEM_OBJECT;
-
 /// An event emitted by the client
 /// representing a change from either the `StatusNotifierItem`
 /// or `DBusMenu` protocols.
@@ -335,6 +333,7 @@ impl Client {
         items: TrayItemMap,
     ) -> Result<()> {
         let (destination, path) = parse_address(address);
+        let item_id = format!("{destination}{path}");
 
         let properties_proxy = PropertiesProxy::builder(&connection)
             .destination(destination.to_string())?
@@ -344,23 +343,22 @@ impl Client {
 
         let properties = Self::get_item_properties(destination, &path, &properties_proxy).await?;
 
-        if !items.new_item(destination.into(), &properties) {
+        if !items.new_item(item_id.clone(), &properties) {
             return Ok(());
         }
 
-        tx.send(Event::Add(
-            destination.to_string(),
-            properties.clone().into(),
-        ))?;
+        tx.send(Event::Add(item_id.clone(), properties.clone().into()))?;
 
         {
             let connection = connection.clone();
             let destination = destination.to_string();
+            let item_id = item_id.clone();
             let items = items.clone();
             let tx = tx.clone();
 
             spawn(async move {
                 Self::watch_item_properties(
+                    &item_id,
                     &destination,
                     &path,
                     &connection,
@@ -370,7 +368,7 @@ impl Client {
                 )
                 .await?;
 
-                debug!("Stopped watching {destination}{path}");
+                debug!("Stopped watching {item_id}");
                 Ok::<(), Error>(())
             });
         }
@@ -379,12 +377,12 @@ impl Client {
             let destination = destination.to_string();
 
             tx.send(Event::Update(
-                destination.clone(),
+                item_id.clone(),
                 UpdateEvent::MenuConnect(menu.clone()),
             ))?;
 
             spawn(async move {
-                Self::watch_menu(destination, &menu, &connection, tx, items).await?;
+                Self::watch_menu(item_id, destination, &menu, &connection, tx, items).await?;
                 Ok::<(), Error>(())
             });
         }
@@ -421,6 +419,7 @@ impl Client {
     /// Watches an SNI item's properties,
     /// sending an update event whenever they change.
     async fn watch_item_properties(
+        item_id: &str,
         destination: &str,
         path: &str,
         connection: &Connection,
@@ -443,8 +442,8 @@ impl Client {
             .name_has_owner(destination.try_into().map_err(zbus::Error::from)?)
             .await?
         {
-            items.remove_item(destination);
-            tx.send(Event::Remove(destination.to_string()))?;
+            items.remove_item(item_id);
+            tx.send(Event::Remove(item_id.to_string()))?;
             return Ok(());
         }
 
@@ -457,11 +456,11 @@ impl Client {
 
                             cfg_if::cfg_if! {
                                 if #[cfg(feature = "data")] {
-                                    items.apply_update_event(destination, &event);
+                                    items.apply_update_event(item_id, &event);
                                 }
                             }
 
-                            tx.send(Event::Update(destination.to_string(), event))?;
+                            tx.send(Event::Update(item_id.to_string(), event))?;
                         }
                         Err(e) => {
                             error!("Error parsing update properties from {destination}{path}: {e:?}");
@@ -482,14 +481,14 @@ impl Client {
                                 .await
                                 .expect("Failed to open StatusNotifierWatcherProxy");
 
-                            if let Err(error) = watcher_proxy.unregister_status_notifier_item(old).await {
+                            if let Err(error) = watcher_proxy.unregister_status_notifier_item(item_id).await {
                                 error!("{error:?}");
                             }
 
 
-                            items.remove_item(destination);
+                            items.remove_item(item_id);
 
-                            tx.send(Event::Remove(destination.to_string()))?;
+                            tx.send(Event::Remove(item_id.to_string()))?;
                             break Ok(());
                         }
                     }
@@ -623,6 +622,7 @@ impl Client {
     /// Update events are then sent for any further updates
     /// until the item is removed.
     async fn watch_menu(
+        item_id: String,
         destination: String,
         menu_path: &str,
         connection: &Connection,
@@ -652,9 +652,9 @@ impl Client {
         let menu = dbus_menu_proxy.get_layout(0, -1, &[]).await?;
         let menu = TrayMenu::try_from(menu)?;
 
-        items.update_menu(&destination, &menu);
+        items.update_menu(&item_id, &menu);
 
-        tx.send(Event::Update(destination.clone(), UpdateEvent::Menu(menu)))?;
+        tx.send(Event::Update(item_id.clone(), UpdateEvent::Menu(menu)))?;
 
         loop {
             tokio::select!(
@@ -693,12 +693,12 @@ impl Client {
 
                     let menu = TrayMenu::try_from(menu)?;
 
-                    items.update_menu(&destination, &menu);
+                    items.update_menu(&item_id, &menu);
 
-                    debug!("sending new menu for '{destination}'");
+                    debug!("sending new menu for '{item_id}'");
                     trace!("new menu for '{destination}': {menu:?}");
                     tx.send(Event::Update(
-                        destination.clone(),
+                        item_id.clone(),
                         UpdateEvent::Menu(menu),
                     ))?;
                 }
@@ -712,7 +712,7 @@ impl Client {
                         .get_map()
                         .lock()
                         .expect("mutex lock should succeed")
-                        .get_mut(&destination)
+                        .get_mut(&item_id)
                     {
                         apply_menu_diffs(menu, &diffs);
                     } else {
@@ -720,7 +720,7 @@ impl Client {
                     }
 
                     tx.send(Event::Update(
-                        destination.clone(),
+                        item_id.clone(),
                         UpdateEvent::MenuDiff(diffs),
                     ))?;
 
@@ -736,9 +736,10 @@ impl Client {
         &self,
         address: String,
     ) -> Result<StatusNotifierItemProxy<'_>> {
+        let (destination, path) = parse_address(&address);
         let proxy = StatusNotifierItemProxy::builder(&self.connection)
-            .destination(address)?
-            .path(ITEM_OBJECT)?
+            .destination(destination.to_owned())?
+            .path(path)?
             .build()
             .await?;
         Ok(proxy)
@@ -749,8 +750,9 @@ impl Client {
         address: String,
         menu_path: String,
     ) -> Result<DBusMenuProxy<'_>> {
+        let (destination, _) = parse_address(&address);
         let proxy = DBusMenuProxy::builder(&self.connection)
-            .destination(address)?
+            .destination(destination.to_owned())?
             .path(menu_path)?
             .build()
             .await?;

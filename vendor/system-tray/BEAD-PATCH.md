@@ -9,7 +9,9 @@ loss or connection EOF. It reaps completed watcher JoinSet handles, subscribes
 to owner-loss before initial menu calls, checks owner presence after subscribing,
 and reacquires the host registration plus resnapshots current items when this
 connection becomes the StatusNotifierWatcher owner again. Duplicate item events
-are ignored so they cannot create duplicate property/menu tasks.
+are ignored so they cannot create duplicate property/menu tasks. Item identity
+retains the unique owner plus registered object path through snapshots, events,
+item/menu proxies and unregister calls, including multiple items from one owner.
 `AboutToShow(needsUpdate=true)` fetches and stores a bounded root layout before
 returning. LayoutUpdated signals also fetch the root tree, even when the signal
 names a submenu parent, so sibling entries are not lost. Layout signals are

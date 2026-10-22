@@ -34,13 +34,14 @@ impl TrayItemMap {
         let mut lock = self.inner.lock().expect("mutex lock should succeed");
         cfg_if::cfg_if! {
             if #[cfg(feature = "data")] {
-                if lock.contains_key(&dest) || lock.len() >= 64 { return false; }
+                if dest.len() > 512 || lock.contains_key(&dest) || lock.len() >= 64 { return false; }
                 let mut item = item.clone();
                 bound_item(&mut item);
                 lock.insert(dest, (item, None));
                 true
             }else {
                 let _ = item;
+                if dest.len() > 512 || lock.contains(&dest) || lock.len() >= 64 { return false; }
                 lock.insert(dest)
             }
         }

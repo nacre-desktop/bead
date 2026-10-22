@@ -24,6 +24,11 @@ pub enum Action {
         x: i32,
         y: i32,
     },
+    TrayContextMenu {
+        item: String,
+        x: i32,
+        y: i32,
+    },
     TrayScroll {
         item: String,
         delta: i32,

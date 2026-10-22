@@ -55,6 +55,8 @@ pub struct TrayItem {
     pub tooltip_description: String,
     pub visible: bool,
     pub item_is_menu: bool,
+    #[serde(default)]
+    pub has_menu: bool,
     pub icon_name: String,
     pub icon_theme_path: String,
     pub icon_pixmap: Vec<(i32, i32, Vec<u8>)>,
