@@ -268,7 +268,9 @@ pub fn run_runtime(
             }
         })?;
         let changed = sender.clone();
-        provider.watch(Box::new(move || { let _ = changed.send(UiEvent::WallpaperRefresh); }))?;
+        provider.watch(Box::new(move || {
+            let _ = changed.send(UiEvent::WallpaperRefresh);
+        }))?;
         app.wallpaper_sender = Some(sender);
     }
     let _commands = if let Some(path) = &app.options.command_socket {
@@ -423,19 +425,50 @@ impl App {
         self.failure = Some(error.to_string());
         self.signal.stop();
     }
-    pub(super) fn ensure_wallpaper(&mut self, output: &wl_output::WlOutput, qh: &QueueHandle<Self>) {
-        let Some(provider) = self.options.wallpaper.clone() else { return; };
-        let Some(info) = self.output.info(output) else { return; };
-        let Some(name) = info.name else { return; };
-        let Some((width, height)) = info.modes.iter().find(|mode| mode.current).map(|mode| mode.dimensions) else { return; };
-        if width <= 0 || height <= 0
+    pub(super) fn ensure_wallpaper(
+        &mut self,
+        output: &wl_output::WlOutput,
+        qh: &QueueHandle<Self>,
+    ) {
+        let Some(provider) = self.options.wallpaper.clone() else {
+            return;
+        };
+        let Some(info) = self.output.info(output) else {
+            return;
+        };
+        let Some(name) = info.name else {
+            return;
+        };
+        let Some((width, height)) = info
+            .modes
+            .iter()
+            .find(|mode| mode.current)
+            .map(|mode| mode.dimensions)
+        else {
+            return;
+        };
+        if width <= 0
+            || height <= 0
             || width as u32 > MAX_WALLPAPER_DIMENSION
             || height as u32 > MAX_WALLPAPER_DIMENSION
-            || (width as usize).checked_mul(height as usize).and_then(|pixels| pixels.checked_mul(4)).is_none_or(|bytes| bytes > MAX_WALLPAPER_RGBA_BYTES)
-        { return; }
-        if let Some(surface) = self.wallpaper_surfaces.iter_mut().find(|surface| surface.output == *output) {
+            || (width as usize)
+                .checked_mul(height as usize)
+                .and_then(|pixels| pixels.checked_mul(4))
+                .is_none_or(|bytes| bytes > MAX_WALLPAPER_RGBA_BYTES)
+        {
+            return;
+        }
+        if let Some(surface) = self
+            .wallpaper_surfaces
+            .iter_mut()
+            .find(|surface| surface.output == *output)
+        {
             let scale_factor = info.scale_factor.max(1);
-            if (surface.width, surface.height, surface.scale_factor) == (width as u32, height as u32, scale_factor) { return; }
+            if (surface.width, surface.height, surface.scale_factor)
+                == (width as u32, height as u32, scale_factor)
+            {
+                return;
+            }
             surface.width = width as u32;
             surface.height = height as u32;
             surface.scale_factor = scale_factor;
@@ -451,47 +484,109 @@ impl App {
             let surface = self.compositor.create_surface(qh);
             let empty = Region::new(&self.compositor)?;
             surface.set_input_region(Some(empty.wl_region()));
-            let viewport = self.viewporter.as_ref().map(|manager| manager.get_viewport(&surface, qh, ()));
-            let layer = self.layers.create_layer_surface(qh, surface, Layer::Background, Some("bead-wallpaper"), Some(output));
+            let viewport = self
+                .viewporter
+                .as_ref()
+                .map(|manager| manager.get_viewport(&surface, qh, ()));
+            let layer = self.layers.create_layer_surface(
+                qh,
+                surface,
+                Layer::Background,
+                Some("bead-wallpaper"),
+                Some(output),
+            );
             layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
             layer.set_size(0, 0);
             layer.set_exclusive_zone(-1);
             layer.set_keyboard_interactivity(KeyboardInteractivity::None);
             layer.commit();
-            Ok(WallpaperSurface { output: output.clone(), name: name.clone(), width: width as u32, height: height as u32, revision: 0, scale_factor: info.scale_factor.max(1), layer, pool: SlotPool::new(4096, &self.shm)?, buffers: Vec::with_capacity(2), viewport, pixels: None, transition: None })
+            Ok(WallpaperSurface {
+                output: output.clone(),
+                name: name.clone(),
+                width: width as u32,
+                height: height as u32,
+                revision: 0,
+                scale_factor: info.scale_factor.max(1),
+                layer,
+                pool: SlotPool::new(4096, &self.shm)?,
+                buffers: Vec::with_capacity(2),
+                viewport,
+                pixels: None,
+                transition: None,
+            })
         })();
         match result {
             Ok(surface) => {
-                println!("WALLPAPER_SURFACE_CREATED output={} layer=background input=empty", surface.name);
+                println!(
+                    "WALLPAPER_SURFACE_CREATED output={} layer=background input=empty",
+                    surface.name
+                );
                 self.wallpaper_surfaces.push(surface)
             }
-            Err(_) => { eprintln!("WALLPAPER_SURFACE_ERROR code=create"); return; }
+            Err(_) => {
+                eprintln!("WALLPAPER_SURFACE_ERROR code=create");
+                return;
+            }
         }
         self.prepare_wallpaper(provider, name, width as u32, height as u32);
     }
 
-    fn prepare_wallpaper(&mut self, provider: std::sync::Arc<dyn WallpaperProvider>, name: String, width: u32, height: u32) {
+    fn prepare_wallpaper(
+        &mut self,
+        provider: std::sync::Arc<dyn WallpaperProvider>,
+        name: String,
+        width: u32,
+        height: u32,
+    ) {
         if !self.wallpaper_jobs.insert(name.clone()) {
             self.wallpaper_dirty.insert(name);
             return;
         }
-        let Some(sender) = self.wallpaper_sender.clone() else { self.wallpaper_jobs.remove(&name); return; };
+        let Some(sender) = self.wallpaper_sender.clone() else {
+            self.wallpaper_jobs.remove(&name);
+            return;
+        };
         let failed_name = name.clone();
         std::thread::spawn(move || match provider.prepare(name, width, height) {
-            Ok(frame) => { let _ = sender.send(UiEvent::WallpaperFrame(std::sync::Arc::new(frame))); }
-            Err(_) => { let _ = sender.send(UiEvent::WallpaperFailed(failed_name)); }
+            Ok(frame) => {
+                let _ = sender.send(UiEvent::WallpaperFrame(std::sync::Arc::new(frame)));
+            }
+            Err(_) => {
+                let _ = sender.send(UiEvent::WallpaperFailed(failed_name));
+            }
         });
     }
 
     pub(super) fn refresh_wallpapers(&mut self) {
-        let outputs: Vec<String> = self.wallpaper_surfaces.iter().map(|surface| surface.name.clone()).collect();
-        for output in outputs { self.request_wallpaper(&output); }
+        let outputs: Vec<String> = self
+            .wallpaper_surfaces
+            .iter()
+            .map(|surface| surface.name.clone())
+            .collect();
+        for output in outputs {
+            self.request_wallpaper(&output);
+        }
     }
 
     fn request_wallpaper(&mut self, name: &str) {
-        let Some(provider) = self.options.wallpaper.clone() else { return; };
-        let Some(surface) = self.wallpaper_surfaces.iter().find(|surface| surface.name == name) else { return; };
-        let Some((width, height)) = self.output.info(&surface.output).and_then(|info| info.modes.iter().find(|mode| mode.current).map(|mode| mode.dimensions)) else { return; };
+        let Some(provider) = self.options.wallpaper.clone() else {
+            return;
+        };
+        let Some(surface) = self
+            .wallpaper_surfaces
+            .iter()
+            .find(|surface| surface.name == name)
+        else {
+            return;
+        };
+        let Some((width, height)) = self.output.info(&surface.output).and_then(|info| {
+            info.modes
+                .iter()
+                .find(|mode| mode.current)
+                .map(|mode| mode.dimensions)
+        }) else {
+            return;
+        };
         self.prepare_wallpaper(provider, name.to_owned(), width as u32, height as u32);
     }
 
@@ -499,35 +594,63 @@ impl App {
         self.wallpaper_jobs.remove(&frame.output);
         let output_name = frame.output.clone();
         if let Some(provider) = &self.options.wallpaper {
-            if !provider.is_current(&frame) { provider.discarded(&frame.output, frame.revision); return; }
+            if !provider.is_current(&frame) {
+                provider.discarded(&frame.output, frame.revision);
+                return;
+            }
         }
-        let palette_key: std::collections::BTreeMap<String, [u8; 4]> = frame.palette.0.clone().into_iter().collect();
+        let palette_key: std::collections::BTreeMap<String, [u8; 4]> =
+            frame.palette.0.clone().into_iter().collect();
         if self.wallpaper_palette.as_ref() == Some(&palette_key) || self.runtime.is_none() {
             self.wallpaper_palette = Some(palette_key);
             self.install_wallpaper(frame);
         } else {
-            if self.wallpaper_pending_frames.first().is_some_and(|pending| pending.palette.0 != frame.palette.0) {
+            if self
+                .wallpaper_pending_frames
+                .first()
+                .is_some_and(|pending| pending.palette.0 != frame.palette.0)
+            {
                 self.discard_pending_wallpapers();
             }
-            if self.wallpaper_pending_frames.first().is_some_and(|pending| pending.palette.0 == frame.palette.0) {
+            if self
+                .wallpaper_pending_frames
+                .first()
+                .is_some_and(|pending| pending.palette.0 == frame.palette.0)
+            {
                 self.wallpaper_pending_frames.push(frame);
-                if self.wallpaper_dirty.remove(&output_name) { self.request_wallpaper(&output_name); }
+                if self.wallpaper_dirty.remove(&output_name) {
+                    self.request_wallpaper(&output_name);
+                }
                 return;
             }
             let palette = frame.palette.clone();
             self.wallpaper_pending_frames.push(frame);
-            match self.runtime.as_mut().map(|runtime| runtime.wallpaper_palette(palette)) {
+            match self
+                .runtime
+                .as_mut()
+                .map(|runtime| runtime.wallpaper_palette(palette))
+            {
                 Some(Ok(Some(scene))) => {
-                    let committed = self.runtime.as_mut().is_some_and(|runtime| runtime.commit());
+                    let committed = self
+                        .runtime
+                        .as_mut()
+                        .is_some_and(|runtime| runtime.commit());
                     if committed {
                         self.scene = scene;
                         self.wallpaper_palette_settled(&palette_key, true);
                         let qh = self.qh.clone();
-                        for index in 0..self.surfaces.len() { self.draw(index, &qh); }
-                    } else { self.discard_pending_wallpapers(); }
+                        for index in 0..self.surfaces.len() {
+                            self.draw(index, &qh);
+                        }
+                    } else {
+                        self.discard_pending_wallpapers();
+                    }
                 }
                 Some(Ok(None)) => {
-                    let staged_async = self.runtime.as_ref().is_some_and(|runtime| runtime.wallpaper_palette_pending());
+                    let staged_async = self
+                        .runtime
+                        .as_ref()
+                        .is_some_and(|runtime| runtime.wallpaper_palette_pending());
                     if !staged_async {
                         self.wallpaper_palette_settled(&palette_key, true);
                     }
@@ -539,119 +662,274 @@ impl App {
                 }
             }
         }
-        if self.wallpaper_dirty.remove(&output_name) { self.request_wallpaper(&output_name); }
+        if self.wallpaper_dirty.remove(&output_name) {
+            self.request_wallpaper(&output_name);
+        }
     }
 
     pub(super) fn wallpaper_failed(&mut self, output: &str) {
         self.wallpaper_jobs.remove(output);
-        if self.wallpaper_dirty.remove(output) { self.request_wallpaper(output); }
+        if self.wallpaper_dirty.remove(output) {
+            self.request_wallpaper(output);
+        }
     }
 
-    pub(super) fn commit_pending_wallpapers(&mut self, palette: &std::collections::BTreeMap<String, [u8; 4]>) {
+    pub(super) fn commit_pending_wallpapers(
+        &mut self,
+        palette: &std::collections::BTreeMap<String, [u8; 4]>,
+    ) {
         let frames = std::mem::take(&mut self.wallpaper_pending_frames);
         let mut keep = Vec::new();
         for frame in frames {
-            let same = frame.palette.0.iter().map(|(key, value)| (key.clone(), *value)).collect::<std::collections::BTreeMap<_, _>>() == *palette;
-            if !same { keep.push(frame); continue; }
-            let current = self.options.wallpaper.as_ref().is_none_or(|provider| provider.is_current(&frame));
-            if same && current { self.install_wallpaper(frame); }
-            else if let Some(provider) = &self.options.wallpaper { provider.discarded(&frame.output, frame.revision); }
+            let same = frame
+                .palette
+                .0
+                .iter()
+                .map(|(key, value)| (key.clone(), *value))
+                .collect::<std::collections::BTreeMap<_, _>>()
+                == *palette;
+            if !same {
+                keep.push(frame);
+                continue;
+            }
+            let current = self
+                .options
+                .wallpaper
+                .as_ref()
+                .is_none_or(|provider| provider.is_current(&frame));
+            if same && current {
+                self.install_wallpaper(frame);
+            } else if let Some(provider) = &self.options.wallpaper {
+                provider.discarded(&frame.output, frame.revision);
+            }
         }
         self.wallpaper_pending_frames = keep;
     }
 
     pub(super) fn discard_pending_wallpapers(&mut self) {
         for frame in std::mem::take(&mut self.wallpaper_pending_frames) {
-            if let Some(provider) = &self.options.wallpaper { provider.discarded(&frame.output, frame.revision); }
+            if let Some(provider) = &self.options.wallpaper {
+                provider.discarded(&frame.output, frame.revision);
+            }
         }
     }
 
-    pub(super) fn wallpaper_palette_settled(&mut self, palette: &std::collections::BTreeMap<String, [u8; 4]>, accepted: bool) {
-        let matching: Vec<_> = self.wallpaper_pending_frames.iter().filter(|frame| frame.palette.0.iter().map(|(key, value)| (key.clone(), *value)).collect::<std::collections::BTreeMap<_, _>>() == *palette).collect();
+    pub(super) fn wallpaper_palette_settled(
+        &mut self,
+        palette: &std::collections::BTreeMap<String, [u8; 4]>,
+        accepted: bool,
+    ) {
+        let matching: Vec<_> = self
+            .wallpaper_pending_frames
+            .iter()
+            .filter(|frame| {
+                frame
+                    .palette
+                    .0
+                    .iter()
+                    .map(|(key, value)| (key.clone(), *value))
+                    .collect::<std::collections::BTreeMap<_, _>>()
+                    == *palette
+            })
+            .collect();
         if matching.is_empty() {
-            if accepted && self.wallpaper_palette.as_ref() != Some(palette) { self.restore_wallpaper_palette(); }
+            if accepted && self.wallpaper_palette.as_ref() != Some(palette) {
+                self.restore_wallpaper_palette();
+            }
             return;
         }
-        let has_current = matching.iter().any(|frame| self.options.wallpaper.as_ref().is_none_or(|provider| provider.is_current(frame)));
+        let has_current = matching.iter().any(|frame| {
+            self.options
+                .wallpaper
+                .as_ref()
+                .is_none_or(|provider| provider.is_current(frame))
+        });
         if accepted && has_current {
             self.wallpaper_palette = Some(palette.clone());
             self.commit_pending_wallpapers(palette);
         } else {
             let mut keep = Vec::new();
             for frame in std::mem::take(&mut self.wallpaper_pending_frames) {
-                let same = frame.palette.0.iter().map(|(key, value)| (key.clone(), *value)).collect::<std::collections::BTreeMap<_, _>>() == *palette;
+                let same = frame
+                    .palette
+                    .0
+                    .iter()
+                    .map(|(key, value)| (key.clone(), *value))
+                    .collect::<std::collections::BTreeMap<_, _>>()
+                    == *palette;
                 if same {
-                    if let Some(provider) = &self.options.wallpaper { provider.discarded(&frame.output, frame.revision); }
-                } else { keep.push(frame); }
+                    if let Some(provider) = &self.options.wallpaper {
+                        provider.discarded(&frame.output, frame.revision);
+                    }
+                } else {
+                    keep.push(frame);
+                }
             }
             self.wallpaper_pending_frames = keep;
-            if accepted { self.restore_wallpaper_palette(); }
+            if accepted {
+                self.restore_wallpaper_palette();
+            }
         }
     }
 
     fn restore_wallpaper_palette(&mut self) {
         if let Some(previous) = self.wallpaper_palette.clone()
             && let Some(runtime) = &mut self.runtime
-        { let _ = runtime.wallpaper_palette(bead_render::Palette(previous.into_iter().collect())); }
+        {
+            let _ = runtime.wallpaper_palette(bead_render::Palette(previous.into_iter().collect()));
+        }
     }
 
     pub(super) fn install_wallpaper(&mut self, frame: WallpaperFrame) {
         if let Some(provider) = &self.options.wallpaper
             && !provider.is_current(&frame)
-        { provider.discarded(&frame.output, frame.revision); return; }
-        let Some(index) = self.wallpaper_surfaces.iter().position(|surface| surface.name == frame.output) else { return; };
-        if (self.wallpaper_surfaces[index].width, self.wallpaper_surfaces[index].height) != (frame.width, frame.height) || frame.revision == 0 { return; }
-        if frame.width > MAX_WALLPAPER_DIMENSION || frame.height > MAX_WALLPAPER_DIMENSION { return; }
-        let expected = (frame.width as usize).checked_mul(frame.height as usize).and_then(|n| n.checked_mul(4));
-        if expected != Some(frame.rgba.len()) || expected.is_none_or(|bytes| bytes > MAX_WALLPAPER_RGBA_BYTES) || frame.width == 0 || frame.height == 0 { return; }
+        {
+            provider.discarded(&frame.output, frame.revision);
+            return;
+        }
+        let Some(index) = self
+            .wallpaper_surfaces
+            .iter()
+            .position(|surface| surface.name == frame.output)
+        else {
+            return;
+        };
+        if (
+            self.wallpaper_surfaces[index].width,
+            self.wallpaper_surfaces[index].height,
+        ) != (frame.width, frame.height)
+            || frame.revision == 0
+        {
+            return;
+        }
+        if frame.width > MAX_WALLPAPER_DIMENSION || frame.height > MAX_WALLPAPER_DIMENSION {
+            return;
+        }
+        let expected = (frame.width as usize)
+            .checked_mul(frame.height as usize)
+            .and_then(|n| n.checked_mul(4));
+        if expected != Some(frame.rgba.len())
+            || expected.is_none_or(|bytes| bytes > MAX_WALLPAPER_RGBA_BYTES)
+            || frame.width == 0
+            || frame.height == 0
+        {
+            return;
+        }
         let output = self.wallpaper_surfaces[index].output.clone();
         let logical = self.output.info(&output).and_then(|info| info.logical_size);
         let surface = &mut self.wallpaper_surfaces[index];
-        let old_pixels = surface.transition.take().map(|transition| transition.pixels).or_else(|| surface.pixels.take());
+        let old_pixels = surface
+            .transition
+            .take()
+            .map(|transition| transition.pixels)
+            .or_else(|| surface.pixels.take());
         let transitioning = self.options.animate && old_pixels.is_some();
         if transitioning {
-            surface.transition = Some(WallpaperTransition { pixels: old_pixels.unwrap(), target: frame.rgba, remaining: 14 });
+            surface.transition = Some(WallpaperTransition {
+                pixels: old_pixels.unwrap(),
+                target: frame.rgba,
+                remaining: 14,
+            });
         } else {
-            if attach_wallpaper_buffer(&mut surface.pool, &surface.layer, &mut surface.buffers, surface.viewport.as_ref(), surface.scale_factor, surface.width, surface.height, &frame.rgba, logical).is_err() { return; }
+            if attach_wallpaper_buffer(
+                &mut surface.pool,
+                &surface.layer,
+                &mut surface.buffers,
+                surface.viewport.as_ref(),
+                surface.scale_factor,
+                surface.width,
+                surface.height,
+                &frame.rgba,
+                logical,
+            )
+            .is_err()
+            {
+                return;
+            }
             surface.pixels = self.options.animate.then_some(frame.rgba);
         }
         surface.revision = frame.revision;
         let output = frame.output.clone();
         let revision = frame.revision;
-        if let Some(provider) = &self.options.wallpaper { provider.committed(&output, revision, &frame.commit_token); }
-        println!("WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}", frame.output, revision, frame.width, frame.height, transitioning);
-        if transitioning { self.schedule_wallpaper_tick(output); }
+        if let Some(provider) = &self.options.wallpaper {
+            provider.committed(&output, revision, &frame.commit_token);
+        }
+        println!(
+            "WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}",
+            frame.output, revision, frame.width, frame.height, transitioning
+        );
+        if transitioning {
+            self.schedule_wallpaper_tick(output);
+        }
     }
 
     pub(super) fn wallpaper_tick(&mut self, output: &str) {
-        let Some(index) = self.wallpaper_surfaces.iter().position(|surface| surface.name == output) else { return; };
+        let Some(index) = self
+            .wallpaper_surfaces
+            .iter()
+            .position(|surface| surface.name == output)
+        else {
+            return;
+        };
         let output_handle = self.wallpaper_surfaces[index].output.clone();
-        let logical = self.output.info(&output_handle).and_then(|info| info.logical_size);
+        let logical = self
+            .output
+            .info(&output_handle)
+            .and_then(|info| info.logical_size);
         let finished = {
             let surface = &mut self.wallpaper_surfaces[index];
-            let Some(transition) = surface.transition.as_mut() else { return; };
+            let Some(transition) = surface.transition.as_mut() else {
+                return;
+            };
             let remaining = transition.remaining.max(1) as u16;
             for (current, target) in transition.pixels.iter_mut().zip(transition.target.iter()) {
                 *current = ((*current as u16 * (remaining - 1) + *target as u16) / remaining) as u8;
             }
             transition.remaining = transition.remaining.saturating_sub(1);
-            if transition.remaining == 0 { transition.pixels.copy_from_slice(&transition.target); }
-            if attach_wallpaper_buffer(&mut surface.pool, &surface.layer, &mut surface.buffers, surface.viewport.as_ref(), surface.scale_factor, surface.width, surface.height, &transition.pixels, logical).is_err() { false }
-            else if transition.remaining == 0 {
+            if transition.remaining == 0 {
+                transition.pixels.copy_from_slice(&transition.target);
+            }
+            if attach_wallpaper_buffer(
+                &mut surface.pool,
+                &surface.layer,
+                &mut surface.buffers,
+                surface.viewport.as_ref(),
+                surface.scale_factor,
+                surface.width,
+                surface.height,
+                &transition.pixels,
+                logical,
+            )
+            .is_err()
+            {
+                false
+            } else if transition.remaining == 0 {
                 let transition = surface.transition.take().unwrap();
                 surface.pixels = Some(transition.target);
                 true
-            } else { false }
+            } else {
+                false
+            }
         };
-        if !finished { self.schedule_wallpaper_tick(output.to_owned()); }
+        if !finished {
+            self.schedule_wallpaper_tick(output.to_owned());
+        }
     }
 
     fn schedule_wallpaper_tick(&self, output: String) {
         let handle = self.loop_handle.clone();
-        if handle.insert_source(Timer::from_duration(Duration::from_millis(15)), move |_, _, app| {
-            app.wallpaper_tick(&output);
-            TimeoutAction::Drop
-        }).is_err() { eprintln!("WALLPAPER_SURFACE_ERROR code=transition_timer"); }
+        if handle
+            .insert_source(
+                Timer::from_duration(Duration::from_millis(15)),
+                move |_, _, app| {
+                    app.wallpaper_tick(&output);
+                    TimeoutAction::Drop
+                },
+            )
+            .is_err()
+        {
+            eprintln!("WALLPAPER_SURFACE_ERROR code=transition_timer");
+        }
     }
 
     pub(super) fn add_output(&mut self, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
@@ -863,9 +1141,15 @@ fn attach_wallpaper_buffer(
     rgba: &[u8],
     logical: Option<(i32, i32)>,
 ) -> Result<(), String> {
-    let expected = (width as usize).checked_mul(height as usize).and_then(|n| n.checked_mul(4)).ok_or("wallpaper frame too large")?;
-    if rgba.len() != expected { return Err("wallpaper frame size mismatch".into()); }
-    let stride = i32::try_from(width.checked_mul(4).ok_or("wallpaper stride overflow")?).map_err(|_| "wallpaper stride overflow")?;
+    let expected = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or("wallpaper frame too large")?;
+    if rgba.len() != expected {
+        return Err("wallpaper frame size mismatch".into());
+    }
+    let stride = i32::try_from(width.checked_mul(4).ok_or("wallpaper stride overflow")?)
+        .map_err(|_| "wallpaper stride overflow")?;
     let buffer_width = i32::try_from(width).map_err(|_| "wallpaper width overflow")?;
     let buffer_height = i32::try_from(height).map_err(|_| "wallpaper height overflow")?;
     let mut selected = None;
@@ -877,20 +1161,38 @@ fn attach_wallpaper_buffer(
         }
     }
     if selected.is_none() && buffers.len() < 2 {
-        let (buffer, bytes) = pool.create_buffer(buffer_width, buffer_height, stride, wl_shm::Format::Argb8888).map_err(|_| "wallpaper SHM allocation failed")?;
+        let (buffer, bytes) = pool
+            .create_buffer(
+                buffer_width,
+                buffer_height,
+                stride,
+                wl_shm::Format::Argb8888,
+            )
+            .map_err(|_| "wallpaper SHM allocation failed")?;
         write_bgra(bytes, rgba);
         buffers.push(buffer);
         selected = Some(buffers.len() - 1);
     }
-    let buffer = selected.and_then(|index| buffers.get(index)).ok_or("wallpaper buffers busy")?;
+    let buffer = selected
+        .and_then(|index| buffers.get(index))
+        .ok_or("wallpaper buffers busy")?;
     if let Some(viewport) = viewport {
-        if let Some((width, height)) = logical { viewport.set_destination(width.max(1), height.max(1)); }
+        if let Some((width, height)) = logical {
+            viewport.set_destination(width.max(1), height.max(1));
+        }
         layer.wl_surface().set_buffer_scale(1);
     } else {
         layer.wl_surface().set_buffer_scale(scale_factor.max(1));
     }
-    buffer.attach_to(layer.wl_surface()).map_err(|_| "wallpaper buffer still active")?;
-    layer.wl_surface().damage_buffer(0, 0, i32::try_from(width).map_err(|_| "wallpaper width overflow")?, i32::try_from(height).map_err(|_| "wallpaper height overflow")?);
+    buffer
+        .attach_to(layer.wl_surface())
+        .map_err(|_| "wallpaper buffer still active")?;
+    layer.wl_surface().damage_buffer(
+        0,
+        0,
+        i32::try_from(width).map_err(|_| "wallpaper width overflow")?,
+        i32::try_from(height).map_err(|_| "wallpaper height overflow")?,
+    );
     layer.commit();
     Ok(())
 }

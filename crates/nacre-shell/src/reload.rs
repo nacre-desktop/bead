@@ -1507,9 +1507,9 @@ impl SceneSource for Runtime {
             self.fonts.clear();
         }
         let scene = match event {
-            UiEvent::WallpaperPalette(values) => {
-                self.session.set_runtime_palette(bead::render::Palette(values.into_iter().collect()))?
-            }
+            UiEvent::WallpaperPalette(values) => self
+                .session
+                .set_runtime_palette(bead::render::Palette(values.into_iter().collect()))?,
             UiEvent::Model(values) => {
                 if let Some(menu) = &mut self.tray_menu {
                     let snapshot = self

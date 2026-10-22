@@ -104,14 +104,24 @@ pub struct WallpaperFrame {
 }
 impl std::fmt::Debug for WallpaperFrame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WallpaperFrame").field("output", &self.output).field("revision", &self.revision).field("width", &self.width).field("height", &self.height).finish()
+        f.debug_struct("WallpaperFrame")
+            .field("output", &self.output)
+            .field("revision", &self.revision)
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .finish()
     }
 }
 pub trait WallpaperProvider: Send + Sync {
     fn watch(&self, changed: Box<dyn Fn() + Send + Sync>) -> Result<(), String>;
     fn prepare(&self, output: String, width: u32, height: u32) -> Result<WallpaperFrame, String>;
     fn is_current(&self, frame: &WallpaperFrame) -> bool;
-    fn committed(&self, output: &str, revision: u64, token: &std::sync::Arc<dyn std::any::Any + Send + Sync>);
+    fn committed(
+        &self,
+        output: &str,
+        revision: u64,
+        token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    );
     fn discarded(&self, output: &str, revision: u64);
     fn output_removed(&self, output: &str);
 }
@@ -229,10 +239,15 @@ pub struct InputRegion {
 }
 pub trait SceneSource {
     /// Stage a product-provided presentation palette through the normal scene transaction.
-    fn wallpaper_palette(&mut self, palette: bead_render::Palette) -> Result<Option<Scene>, Box<dyn Error>> {
+    fn wallpaper_palette(
+        &mut self,
+        palette: bead_render::Palette,
+    ) -> Result<Option<Scene>, Box<dyn Error>> {
         self.stage(UiEvent::WallpaperPalette(palette.0.into_iter().collect()))
     }
-    fn wallpaper_palette_pending(&self) -> bool { false }
+    fn wallpaper_palette_pending(&self) -> bool {
+        false
+    }
     /// Invocation coordinate along the panel's edge, in output logical pixels.
     fn panel_center(&mut self, _center: Option<f32>) {}
     fn set_idle(&mut self, _idle: bool) {}

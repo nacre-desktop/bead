@@ -248,14 +248,38 @@ impl OutputHandler for App {
             self.release_panel();
         }
         self.surfaces.retain(|s| s.output != output);
-        let removed: Vec<String> = self.wallpaper_surfaces.iter().filter(|s| s.output == output).map(|s| s.name.clone()).collect();
+        let removed: Vec<String> = self
+            .wallpaper_surfaces
+            .iter()
+            .filter(|s| s.output == output)
+            .map(|s| s.name.clone())
+            .collect();
         self.wallpaper_surfaces.retain(|s| s.output != output);
-        if let Some(provider) = &self.options.wallpaper { for name in &removed { provider.output_removed(name); } }
-        for name in &removed { self.wallpaper_jobs.remove(name); self.wallpaper_dirty.remove(name); }
-        let discarded: Vec<_> = self.wallpaper_pending_frames.iter().filter(|frame| removed.contains(&frame.output)).map(|frame| (frame.output.clone(), frame.revision)).collect();
-        self.wallpaper_pending_frames.retain(|frame| !removed.contains(&frame.output));
-        if let Some(provider) = &self.options.wallpaper { for (name, revision) in discarded { provider.discarded(&name, revision); } }
-        for name in &removed { println!("WALLPAPER_SURFACE_RELEASED output={name}"); }
+        if let Some(provider) = &self.options.wallpaper {
+            for name in &removed {
+                provider.output_removed(name);
+            }
+        }
+        for name in &removed {
+            self.wallpaper_jobs.remove(name);
+            self.wallpaper_dirty.remove(name);
+        }
+        let discarded: Vec<_> = self
+            .wallpaper_pending_frames
+            .iter()
+            .filter(|frame| removed.contains(&frame.output))
+            .map(|frame| (frame.output.clone(), frame.revision))
+            .collect();
+        self.wallpaper_pending_frames
+            .retain(|frame| !removed.contains(&frame.output));
+        if let Some(provider) = &self.options.wallpaper {
+            for (name, revision) in discarded {
+                provider.discarded(&name, revision);
+            }
+        }
+        for name in &removed {
+            println!("WALLPAPER_SURFACE_RELEASED output={name}");
+        }
         println!("OUTPUT_REMOVED remaining={}", self.surfaces.len());
     }
 }
@@ -266,13 +290,36 @@ impl ShmHandler for App {
 }
 impl LayerShellHandler for App {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface) {
-        let removed: Vec<String> = self.wallpaper_surfaces.iter().filter(|surface| surface.layer == *layer).map(|surface| surface.name.clone()).collect();
-        self.wallpaper_surfaces.retain(|surface| surface.layer != *layer);
-        if let Some(provider) = &self.options.wallpaper { for name in &removed { provider.output_removed(name); } }
-        for name in &removed { self.wallpaper_jobs.remove(name); self.wallpaper_dirty.remove(name); }
-        let discarded: Vec<_> = self.wallpaper_pending_frames.iter().filter(|frame| removed.contains(&frame.output)).map(|frame| (frame.output.clone(), frame.revision)).collect();
-        self.wallpaper_pending_frames.retain(|frame| !removed.contains(&frame.output));
-        if let Some(provider) = &self.options.wallpaper { for (name, revision) in discarded { provider.discarded(&name, revision); } }
+        let removed: Vec<String> = self
+            .wallpaper_surfaces
+            .iter()
+            .filter(|surface| surface.layer == *layer)
+            .map(|surface| surface.name.clone())
+            .collect();
+        self.wallpaper_surfaces
+            .retain(|surface| surface.layer != *layer);
+        if let Some(provider) = &self.options.wallpaper {
+            for name in &removed {
+                provider.output_removed(name);
+            }
+        }
+        for name in &removed {
+            self.wallpaper_jobs.remove(name);
+            self.wallpaper_dirty.remove(name);
+        }
+        let discarded: Vec<_> = self
+            .wallpaper_pending_frames
+            .iter()
+            .filter(|frame| removed.contains(&frame.output))
+            .map(|frame| (frame.output.clone(), frame.revision))
+            .collect();
+        self.wallpaper_pending_frames
+            .retain(|frame| !removed.contains(&frame.output));
+        if let Some(provider) = &self.options.wallpaper {
+            for (name, revision) in discarded {
+                provider.discarded(&name, revision);
+            }
+        }
         self.surfaces.retain(|s| s.layer != *layer);
     }
     fn configure(
@@ -283,9 +330,16 @@ impl LayerShellHandler for App {
         config: LayerSurfaceConfigure,
         _: u32,
     ) {
-        if let Some(surface) = self.wallpaper_surfaces.iter_mut().find(|surface| surface.layer == *layer) {
+        if let Some(surface) = self
+            .wallpaper_surfaces
+            .iter_mut()
+            .find(|surface| surface.layer == *layer)
+        {
             if let Some(viewport) = &surface.viewport {
-                viewport.set_destination(config.new_size.0.max(1) as i32, config.new_size.1.max(1) as i32);
+                viewport.set_destination(
+                    config.new_size.0.max(1) as i32,
+                    config.new_size.1.max(1) as i32,
+                );
             }
             surface.layer.commit();
             return;
