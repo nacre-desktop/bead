@@ -265,7 +265,11 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 if expected_query_rows is not None:
                     matrix.wait_log(log,lambda t:query_presented(t[offset:],'a',expected_query_rows))
                     result['expected_query_rows']=expected_query_rows
+                if reopen_input and cycle==0:
+                    subprocess.run(['grim',str(raw/'launcher-opening.png')],env=env,capture_output=True,check=True,timeout=8)
                 time.sleep(.3)
+                if reopen_input and cycle==0:
+                    subprocess.run(['grim',str(raw/'launcher-open.png')],env=env,capture_output=True,check=True,timeout=8)
                 warm=matrix.idle(client.pid,1)
                 assert warm['memory']['swap_pss_mib']==0,'nonzero UI SwapPss with launcher open'
                 if observe:warm['external']=observe()
@@ -281,7 +285,12 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     assert json.loads(call('state',target='nacre'))['query']=='a'
                     assert 'PANEL_VIEW_STATE_RELEASED'not in matrix.log_text(log)[offset:]
                     result['quick_reopen_retains_state']=True
-                closed_at=time.monotonic_ns();call('close');closed=closed_guard(closed_at)
+                closed_at=time.monotonic_ns();call('close')
+                if reopen_input and cycle==0:
+                    subprocess.run(['grim',str(raw/'launcher-closing.png')],env=env,capture_output=True,check=True,timeout=8)
+                closed=closed_guard(closed_at)
+                if reopen_input and cycle==0:
+                    subprocess.run(['grim',str(raw/'launcher-closed.png')],env=env,capture_output=True,check=True,timeout=8)
                 closed['close_to_guard_ms']=(time.monotonic_ns()-closed_at)/1e6
                 result['cycles'].append({'cycle':cycle,'warm':warm,'closed':closed,'command_started_ns':began})
             state=json.loads(call('state',target='nacre'))

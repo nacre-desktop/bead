@@ -45,7 +45,10 @@ fn real_launcher_grid_results_and_scrolled_pixels_match_accepted_markup() -> Res
         ("scrolled", "a", 500.),
     ] {
         let mut h = harness(query, scroll)?;
-        assert_eq!(h.scene().motion.as_ref().map(|motion| motion.id.as_str()), Some("launcher"));
+        assert_eq!(
+            h.scene().motion.as_ref().map(|motion| motion.id.as_str()),
+            Some("launcher")
+        );
         let source = h.render()?;
         let width = (h.scene().bounds.w * 1.5).ceil() as u32;
         let height = (h.scene().bounds.h * 1.5).ceil() as u32;
@@ -107,23 +110,42 @@ fn real_launcher_grid_results_and_scrolled_pixels_match_accepted_markup() -> Res
             .collect::<Vec<_>>();
         let row_ids = actions
             .iter()
-            .filter_map(|node| match &node.action_arg { Some(Value::Text(id)) => Some(id.clone()), _ => None })
+            .filter_map(|node| match &node.action_arg {
+                Some(Value::Text(id)) => Some(id.clone()),
+                _ => None,
+            })
             .collect::<BTreeSet<_>>();
         let favorite_ids = favorites
             .iter()
-            .filter_map(|node| match &node.action_arg { Some(Value::Text(id)) => Some(id.clone()), _ => None })
+            .filter_map(|node| match &node.action_arg {
+                Some(Value::Text(id)) => Some(id.clone()),
+                _ => None,
+            })
             .collect::<BTreeSet<_>>();
-        assert!(favorite_ids.is_subset(&row_ids), "favorite actions must point at displayed rows");
+        assert!(
+            favorite_ids.is_subset(&row_ids),
+            "favorite actions must point at displayed rows"
+        );
         let fully_visible_rows = actions
             .iter()
             .filter(|node| {
                 let rect = bead::ui::rect(&node.draw);
-                node.clip.is_none_or(|clip| rect.x >= clip.x && rect.y >= clip.y
-                    && rect.x + rect.w <= clip.x + clip.w && rect.y + rect.h <= clip.y + clip.h)
+                node.clip.is_none_or(|clip| {
+                    rect.x >= clip.x
+                        && rect.y >= clip.y
+                        && rect.x + rect.w <= clip.x + clip.w
+                        && rect.y + rect.h <= clip.y + clip.h
+                })
             })
-            .filter_map(|node| match &node.action_arg { Some(Value::Text(id)) => Some(id.clone()), _ => None })
+            .filter_map(|node| match &node.action_arg {
+                Some(Value::Text(id)) => Some(id.clone()),
+                _ => None,
+            })
             .collect::<BTreeSet<_>>();
-        assert!(fully_visible_rows.is_subset(&favorite_ids), "every fully visible row needs its favorite action");
+        assert!(
+            fully_visible_rows.is_subset(&favorite_ids),
+            "every fully visible row needs its favorite action"
+        );
     }
     Ok(())
 }

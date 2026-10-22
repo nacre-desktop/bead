@@ -525,13 +525,33 @@ fn panel_retirement_releases_launcher_mirror_but_bar_does_not() -> Result<()> {
         .with_launcher(None)?
         .with_launcher_memory(memory.clone())?;
     let panel_values = BTreeMap::from([
-        ("launcher.search.text".into(), bead::core::Value::Text("kept query".into())),
-        ("launcher.selection".into(), bead::core::Value::Text("app-id".into())),
-        ("launcher.mode".into(), bead::core::Value::Text("apps".into())),
-        ("launcher.route".into(), bead::core::Value::Text("apps".into())),
-        ("launcher.engine_route".into(), bead::core::Value::Text(String::new())),
+        (
+            "launcher.search.text".into(),
+            bead::core::Value::Text("kept query".into()),
+        ),
+        (
+            "launcher.selection".into(),
+            bead::core::Value::Text("app-id".into()),
+        ),
+        (
+            "launcher.mode".into(),
+            bead::core::Value::Text("apps".into()),
+        ),
+        (
+            "launcher.route".into(),
+            bead::core::Value::Text("apps".into()),
+        ),
+        (
+            "launcher.engine_route".into(),
+            bead::core::Value::Text(String::new()),
+        ),
         ("launcher.scroll.y".into(), bead::core::Value::Number(42.)),
-        ("launcher.apps".into(), bead::core::Value::list(vec![serde_json::json!({"id":"large","payload":"not retained"})])),
+        (
+            "launcher.apps".into(),
+            bead::core::Value::list(vec![
+                serde_json::json!({"id":"large","payload":"not retained"}),
+            ]),
+        ),
     ]);
     panel.session.stores = panel.session.stores.reconcile(&panel_values)?;
     panel.session.stores.commit(panel_values)?;
@@ -545,10 +565,19 @@ fn panel_retirement_releases_launcher_mirror_but_bar_does_not() -> Result<()> {
     );
     drop(panel);
     let saved = memory.lock().unwrap();
-    assert_eq!(saved["launcher.search.text"], bead::core::Value::Text("kept query".into()));
-    assert_eq!(saved["launcher.selection"], bead::core::Value::Text("app-id".into()));
+    assert_eq!(
+        saved["launcher.search.text"],
+        bead::core::Value::Text("kept query".into())
+    );
+    assert_eq!(
+        saved["launcher.selection"],
+        bead::core::Value::Text("app-id".into())
+    );
     assert_eq!(saved["launcher.scroll.y"], bead::core::Value::Number(42.));
-    assert!(!saved.contains_key("launcher.apps"), "row payload is released after worker retirement");
+    assert!(
+        !saved.contains_key("launcher.apps"),
+        "row payload is released after worker retirement"
+    );
     Ok(())
 }
 

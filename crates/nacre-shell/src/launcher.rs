@@ -8,9 +8,18 @@ use nacre_protocol::menu::{
     MAX_ITEMS, MenuActivate, MenuActivated, MenuConversion, MenuQuery, MenuQueryResult,
 };
 use serde_json::{Value as Json, json};
-use std::{cell::RefCell, collections::BTreeMap, path::Path, sync::Arc, time::Duration};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, VecDeque},
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
 
 pub type Memory = Arc<std::sync::Mutex<BTreeMap<String, Value>>>;
+type MenuRequest = (String, String, String);
+type SourceStamp = (String, u64, bool);
+type PendingQuery = (MenuRequest, Option<SourceStamp>);
 /// Mirror only bounded live view state; Runtime drops it with the panel worker.
 /// Never retain catalogs, results, rasters or font pools.
 pub fn remember(stores: &Stores) -> BTreeMap<String, Value> {
@@ -408,12 +417,12 @@ impl Source for Fixture {
 
 #[derive(Default)]
 struct View {
-    request: Option<(String, String, String)>,
-    result_request: Option<(String, String, String)>,
-    pending: Option<((String, String, String), Option<(String, u64, bool)>)>,
+    request: Option<MenuRequest>,
+    result_request: Option<MenuRequest>,
+    pending: Option<PendingQuery>,
     pending_limited: bool,
     query_generation: u64,
-    pending_navigation: Option<(String, NavigationGeometry)>,
+    pending_navigation: VecDeque<(String, NavigationGeometry)>,
     actions: BTreeMap<String, String>,
     catalog_rev: u64,
     stamp: Option<(String, u64, bool)>,
@@ -427,8 +436,8 @@ struct View {
 }
 #[derive(Clone)]
 struct QueryTask {
-    request: (String, String, String),
-    stamp: Option<(String, u64, bool)>,
+    request: MenuRequest,
+    stamp: Option<SourceStamp>,
     generation: u64,
     params: Json,
 }
@@ -477,7 +486,7 @@ impl QueryActor {
             .spawn(move || {
                 runtime.block_on(async move {
                     let mut preference_task: Option<tokio::task::JoinHandle<()>> = None;
-                    let mut preference_stamp: Option<(String, u64, bool)> = None;
+                    let mut preference_stamp: Option<SourceStamp> = None;
                     let mut newest = None;
                     loop {
                         let task = if let Some(task) = newest.take() {
@@ -537,14 +546,12 @@ impl QueryActor {
                             } else { Ok(prepared) }
                         };
                         tokio::pin!(reply);
-                        let result = loop {
-                            tokio::select! {
-                                result = &mut reply => break Some(result),
-                                changed = receiver.changed() => {
-                                    if changed.is_err() || thread_cancelled.load(std::sync::atomic::Ordering::Acquire) { return; }
-                                    newest = receiver.borrow_and_update().clone();
-                                    break None;
-                                }
+                        let result = tokio::select! {
+                            result = &mut reply => Some(result),
+                            changed = receiver.changed() => {
+                                if changed.is_err() || thread_cancelled.load(std::sync::atomic::Ordering::Acquire) { return; }
+                                newest = receiver.borrow_and_update().clone();
+                                None
                             }
                         };
                         if let Some(result) = result {
@@ -589,7 +596,8 @@ impl Drop for QueryActor {
 }
 fn navigation_target(
     rows: &[Json],
-    stores: &Stores,
+    selection: &str,
+    mut scroll: f64,
     key: &str,
     geometry: NavigationGeometry,
     grid: bool,
@@ -599,12 +607,9 @@ fn navigation_target(
         "down" | "right" => 1,
         _ => return (String::new(), 0.),
     };
-    let current = match stores.get("launcher.selection") {
-        Some(Value::Text(id)) => rows
-            .iter()
-            .position(|row| row["id"].as_str() == Some(id.as_str())),
-        _ => None,
-    };
+    let current = rows
+        .iter()
+        .position(|row| row["id"].as_str() == Some(selection));
     let count = rows.len();
     if count == 0 {
         return (String::new(), 0.);
@@ -630,10 +635,6 @@ fn navigation_target(
         }
         next = candidate.rem_euclid(count as i64) as usize;
     }
-    let mut scroll = match stores.get("launcher.scroll.y") {
-        Some(Value::Number(value)) => *value,
-        _ => 0.,
-    };
     if let Some(index) = selected {
         let columns = if grid { geometry.columns.max(1) } else { 1 };
         if geometry.pitch.is_finite()
@@ -736,13 +737,17 @@ impl Menu {
         let source = self.source.as_ref().ok_or_else(|| {
             source::Error::new("unavailable", "Launcher service unavailable", true)
         })?;
-        let actor = self
-            .query_actor
-            .as_ref()
-            .ok_or_else(|| source::Error::new("unavailable", "Launcher service unavailable", true))?;
+        let actor = self.query_actor.as_ref().ok_or_else(|| {
+            source::Error::new("unavailable", "Launcher service unavailable", true)
+        })?;
         if actor
             .favorite_in_flight
-            .compare_exchange(false, true, std::sync::atomic::Ordering::AcqRel, std::sync::atomic::Ordering::Acquire)
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            )
             .is_err()
         {
             let error = source::Error::new("busy", "Favorite update is already in progress", true);
@@ -838,7 +843,12 @@ impl Menu {
             self.view.borrow_mut().force_full = true;
             expanded = self.project(stores).ok()?;
             if expanded.get("launcher.pending") == Some(&Value::Bool(true)) {
-                self.view.borrow_mut().pending_navigation = Some((key.to_owned(), geometry));
+                let mut view = self.view.borrow_mut();
+                if view.pending_navigation.len() == MAX_ITEMS {
+                    view.pending_navigation.pop_front();
+                }
+                view.pending_navigation
+                    .push_back((key.to_owned(), geometry));
                 return Some(expanded);
             }
             if !self.view.borrow().error.is_empty() {
@@ -982,7 +992,9 @@ impl Menu {
         match result {
             Ok(result) => {
                 if result.keep_open {
-                    self.view.borrow_mut().request = None;
+                    let mut view = self.view.borrow_mut();
+                    view.request = None;
+                    view.pending_navigation.clear();
                 }
                 Ok(result)
             }
@@ -1107,20 +1119,22 @@ impl Menu {
             _ => 0.,
         };
         let deferred_navigation = if reply_applied && view.error.is_empty() {
-            view.pending_navigation
-                .take()
-                .map(|(key, geometry)| {
-                    let grid = request.0.trim().is_empty() && request.1 == "apps";
-                    let (selected, next_scroll) =
-                        navigation_target(&view.rows, stores, &key, geometry, grid);
-                    selection = selected;
+            let grid = request.0.trim().is_empty() && request.1 == "apps";
+            let pending = std::mem::take(&mut view.pending_navigation);
+            if pending.is_empty() {
+                false
+            } else {
+                for (key, geometry) in pending {
+                    let (next_selection, next_scroll) =
+                        navigation_target(&view.rows, &selection, scroll, &key, geometry, grid);
+                    selection = next_selection;
                     scroll = next_scroll;
-                    true
-                })
-                .unwrap_or(false)
+                }
+                true
+            }
         } else {
             if reply_applied {
-                view.pending_navigation = None;
+                view.pending_navigation.clear();
             }
             false
         };
@@ -1142,7 +1156,7 @@ impl Menu {
                 .as_ref()
                 .is_some_and(|previous| previous != &request)
             {
-                view.pending_navigation = None;
+                view.pending_navigation.clear();
             }
             // Only edited queries use a ranked prefix. Initial/restored state,
             // catalog changes, navigation and scrolling still load the full reply.
@@ -1295,7 +1309,10 @@ impl Menu {
         } else if reset_scroll {
             view.last_scroll = 0.;
             delta.insert("launcher.scroll.y".into(), Value::Number(0.));
-        } else if view.pending.is_some() && view.total > view.rows.len() && scroll > view.last_scroll {
+        } else if view.pending.is_some()
+            && view.total > view.rows.len()
+            && scroll > view.last_scroll
+        {
             // Keep the last loaded viewport while an expansion is in flight.
         } else {
             view.last_scroll = scroll;
@@ -1374,6 +1391,7 @@ mod tests {
         Stores::default()
             .reconcile(&BTreeMap::from([
                 ("launcher.total_count".into(), Value::Number(0.)),
+                ("launcher.pending".into(), Value::Bool(false)),
                 ("launcher.search.text".into(), Value::Text(String::new())),
                 ("launcher.selection".into(), Value::Text(String::new())),
                 ("launcher.engine_route".into(), Value::Text(String::new())),
@@ -1546,14 +1564,24 @@ mod tests {
             .unwrap();
         project_wait(&menu, &stores).unwrap();
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
-        while !menu.query_actor.as_ref().unwrap().preferences_loaded.load(std::sync::atomic::Ordering::Acquire)
+        while !menu
+            .query_actor
+            .as_ref()
+            .unwrap()
+            .preferences_loaded
+            .load(std::sync::atomic::Ordering::Acquire)
             && std::time::Instant::now() < deadline
         {
             std::thread::sleep(Duration::from_millis(2));
         }
         menu.favorite("nacre-menu:apps").unwrap();
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
-        while menu.query_actor.as_ref().unwrap().favorite_in_flight.load(std::sync::atomic::Ordering::Acquire)
+        while menu
+            .query_actor
+            .as_ref()
+            .unwrap()
+            .favorite_in_flight
+            .load(std::sync::atomic::Ordering::Acquire)
             && std::time::Instant::now() < deadline
         {
             std::thread::sleep(Duration::from_millis(2));
@@ -1565,7 +1593,12 @@ mod tests {
         );
         menu.favorite("nacre-menu:apps").unwrap();
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
-        while menu.query_actor.as_ref().unwrap().favorite_in_flight.load(std::sync::atomic::Ordering::Acquire)
+        while menu
+            .query_actor
+            .as_ref()
+            .unwrap()
+            .favorite_in_flight
+            .load(std::sync::atomic::Ordering::Acquire)
             && std::time::Instant::now() < deadline
         {
             std::thread::sleep(Duration::from_millis(2));
@@ -1578,14 +1611,19 @@ mod tests {
     }
     #[test]
     fn menu_stamp_change_reloads_authoritative_favorites() {
-        let source = Arc::new(Fixture::new(json!({"queries":{"":fixture_reply("",vec![
-            json!({"id":"app","name":"Application","kind":"app"})
-        ])}})).unwrap());
+        let source = Arc::new(
+            Fixture::new(json!({"queries":{"":fixture_reply("",vec![
+                json!({"id":"app","name":"Application","kind":"app"})
+            ])}}))
+            .unwrap(),
+        );
         let menu = Menu::new(Some(source.clone())).unwrap();
-        let stores = Stores::default().reconcile(&BTreeMap::from([
-            ("launcher.search.text".into(), Value::Text(String::new())),
-            ("launcher.selection".into(), Value::Text(String::new())),
-        ])).unwrap();
+        let stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text(String::new())),
+                ("launcher.selection".into(), Value::Text(String::new())),
+            ]))
+            .unwrap();
         project_wait(&menu, &stores).unwrap();
         source.favorites.lock().unwrap().insert("app".into());
         let old_revision = source.snapshot().revision;
@@ -1596,12 +1634,27 @@ mod tests {
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
         loop {
             project_wait(&menu, &stores).unwrap();
-            if menu.query_actor.as_ref().unwrap().favorites.lock().unwrap().contains("app") { break; }
-            assert!(std::time::Instant::now() < deadline, "preference refresh did not finish");
+            if menu
+                .query_actor
+                .as_ref()
+                .unwrap()
+                .favorites
+                .lock()
+                .unwrap()
+                .contains("app")
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "preference refresh did not finish"
+            );
             std::thread::sleep(Duration::from_millis(2));
         }
         let refreshed = project_wait(&menu, &stores).unwrap();
-        assert!(matches!(&refreshed["launcher.apps"], Value::List(rows) if rows.iter().any(|row| row["id"] == "app" && row["favorite"] == true)));
+        assert!(
+            matches!(&refreshed["launcher.apps"], Value::List(rows) if rows.iter().any(|row| row["id"] == "app" && row["favorite"] == true))
+        );
     }
     #[test]
     fn slow_favorite_write_does_not_block_query_projection() {
@@ -1611,60 +1664,95 @@ mod tests {
             completed: std::sync::atomic::AtomicBool,
         }
         impl Source for SlowFavorite {
-            fn snapshot(&self) -> Arc<source::Snapshot> { self.fixture.snapshot() }
-            fn subscribe(&self, callback: source::Callback) -> source::Result<source::Subscription> { self.fixture.subscribe(callback) }
+            fn snapshot(&self) -> Arc<source::Snapshot> {
+                self.fixture.snapshot()
+            }
+            fn subscribe(
+                &self,
+                callback: source::Callback,
+            ) -> source::Result<source::Subscription> {
+                self.fixture.subscribe(callback)
+            }
             fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
                 Box::pin(async move {
                     let favorite = method == "menu.preferences" && params["action"] == "favorite";
                     if favorite {
-                        self.started.store(true, std::sync::atomic::Ordering::Release);
+                        self.started
+                            .store(true, std::sync::atomic::Ordering::Release);
                         tokio::time::sleep(Duration::from_millis(180)).await;
                     }
                     let result = self.fixture.invoke(method.clone(), params).await?;
                     if favorite {
-                        self.completed.store(true, std::sync::atomic::Ordering::Release);
+                        self.completed
+                            .store(true, std::sync::atomic::Ordering::Release);
                     }
                     Ok(result)
                 })
             }
-            fn reconnect(&self) -> source::Reply<'_> { self.fixture.reconnect() }
-            fn stop(&self) -> source::Reply<'_> { self.fixture.stop() }
+            fn reconnect(&self) -> source::Reply<'_> {
+                self.fixture.reconnect()
+            }
+            fn stop(&self) -> source::Reply<'_> {
+                self.fixture.stop()
+            }
         }
         let fixture = Fixture::new(json!({"queries":{
             "":fixture_reply("",vec![json!({"id":"app","name":"Application"})]),
             "next":fixture_reply("next",vec![json!({"id":"next","name":"Next"})])
-        }})).unwrap();
+        }}))
+        .unwrap();
         let source = Arc::new(SlowFavorite {
             fixture,
             started: false.into(),
             completed: false.into(),
         });
         let menu = Menu::new(Some(source.clone())).unwrap();
-        let mut stores = Stores::default().reconcile(&BTreeMap::from([
-            ("launcher.search.text".into(), Value::Text(String::new())),
-            ("launcher.selection".into(), Value::Text(String::new())),
-        ])).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text(String::new())),
+                ("launcher.selection".into(), Value::Text(String::new())),
+            ]))
+            .unwrap();
         let initial = project_wait(&menu, &stores).unwrap();
         stores = stores.reconcile(&initial).unwrap();
         stores.commit(initial).unwrap();
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
-        while !menu.query_actor.as_ref().unwrap().preferences_loaded.load(std::sync::atomic::Ordering::Acquire)
+        while !menu
+            .query_actor
+            .as_ref()
+            .unwrap()
+            .preferences_loaded
+            .load(std::sync::atomic::Ordering::Acquire)
             && std::time::Instant::now() < deadline
-        { std::thread::sleep(Duration::from_millis(2)); }
-        let started = std::time::Instant::now();
-        menu.favorite("app").unwrap();
-        assert!(started.elapsed() < Duration::from_millis(100), "favorite scheduling blocked the UI worker");
-        while !source.started.load(std::sync::atomic::Ordering::Acquire) && std::time::Instant::now() < deadline {
+        {
             std::thread::sleep(Duration::from_millis(2));
         }
-        stores.commit(BTreeMap::from([("launcher.search.text".into(), Value::Text("next".into()))])).unwrap();
+        let started = std::time::Instant::now();
+        menu.favorite("app").unwrap();
+        assert!(
+            started.elapsed() < Duration::from_millis(100),
+            "favorite scheduling blocked the UI worker"
+        );
+        while !source.started.load(std::sync::atomic::Ordering::Acquire)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("next".into()),
+            )]))
+            .unwrap();
         let next = project_wait(&menu, &stores).unwrap();
         stores = stores.reconcile(&next).unwrap();
         stores.commit(next).unwrap();
         assert_eq!(menu.view.borrow().rows[0]["id"], "next");
         assert!(!source.completed.load(std::sync::atomic::Ordering::Acquire));
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
-        while !source.completed.load(std::sync::atomic::Ordering::Acquire) && std::time::Instant::now() < deadline {
+        while !source.completed.load(std::sync::atomic::Ordering::Acquire)
+            && std::time::Instant::now() < deadline
+        {
             std::thread::sleep(Duration::from_millis(2));
         }
         assert!(source.completed.load(std::sync::atomic::Ordering::Acquire));
@@ -1759,6 +1847,82 @@ mod tests {
             Some(&Value::Number(320.))
         );
         assert_eq!(source.calls.lock().unwrap().len(), 3);
+    }
+    #[test]
+    fn repeated_boundary_navigation_replays_after_one_delayed_full_fetch() {
+        struct DelayedExpansion {
+            fixture: Fixture,
+            full_calls: std::sync::atomic::AtomicUsize,
+        }
+        impl Source for DelayedExpansion {
+            fn snapshot(&self) -> Arc<source::Snapshot> {
+                self.fixture.snapshot()
+            }
+            fn subscribe(
+                &self,
+                callback: source::Callback,
+            ) -> source::Result<source::Subscription> {
+                self.fixture.subscribe(callback)
+            }
+            fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+                Box::pin(async move {
+                    if method == "menu.query"
+                        && params["query"] == "a"
+                        && params.get("limit").is_none()
+                    {
+                        self.full_calls
+                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(180)).await;
+                    }
+                    self.fixture.invoke(method, params).await
+                })
+            }
+            fn reconnect(&self) -> source::Reply<'_> {
+                self.fixture.reconnect()
+            }
+            fn stop(&self) -> source::Reply<'_> {
+                self.fixture.stop()
+            }
+        }
+        let rows = (0..320)
+            .map(|index| json!({"id":format!("app{index}"),"name":format!("App {index}")}))
+            .collect::<Vec<_>>();
+        let source = Arc::new(DelayedExpansion {
+            fixture: Fixture::new(
+                json!({"queries":{"":fixture_reply("",rows.clone()),"a":fixture_reply("a",rows)}}),
+            )
+            .unwrap(),
+            full_calls: Default::default(),
+        });
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = prefix_stores();
+        edit_prefix(&menu, &mut stores);
+        let geometry = NavigationGeometry {
+            columns: 4,
+            pitch: 58.,
+            row_height: 55.,
+            viewport_height: 400.,
+        };
+        let first = menu.navigate(&stores, "up", geometry).unwrap();
+        assert_eq!(first["launcher.pending"], Value::Bool(true));
+        stores.commit(first).unwrap();
+        let second = menu.navigate(&stores, "up", geometry).unwrap();
+        assert_eq!(second["launcher.pending"], Value::Bool(true));
+        stores.commit(second).unwrap();
+        assert_eq!(menu.view.borrow().pending_navigation.len(), 2);
+        apply_projection(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(320.))
+        );
+        assert_eq!(
+            stores.get("launcher.selection"),
+            Some(&Value::Text("app318".into()))
+        );
+        assert_eq!(
+            source.full_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
     }
     #[test]
     fn scrolling_expands_prefix_before_materializing_an_unloaded_region() {
@@ -2139,7 +2303,10 @@ mod tests {
         let remembered = remember(&stores);
         assert_eq!(remembered.len(), 6);
         assert!(!remembered.contains_key("launcher.apps"));
-        assert_eq!(remembered["launcher.engine_route"], Value::Text("home".into()));
+        assert_eq!(
+            remembered["launcher.engine_route"],
+            Value::Text("home".into())
+        );
         assert!(serde_json::to_vec(&remembered).unwrap().len() < 70 * 1024);
     }
     #[test]

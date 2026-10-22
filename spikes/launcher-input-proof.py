@@ -54,11 +54,13 @@ def sample(env,raw,compositor,stop):
                 pointer=matrix.services.Probe([str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/examples/private-pointer')],env,raw/'pointer.log')
                 pointer.wait('POINTER_READY');pointer.command('move 1000 300','POINTER_DONE');time.sleep(.2)
                 key(['a'],'a','app-0001')
+                subprocess.run(['grim',str(raw/'launcher-search.png')],env=env,capture_output=True,check=True,timeout=8)
                 key(['-k','Down'],'a','app-0002')
                 key(['-k','Up'],'a','app-0001')
                 wrapped=key(['-k','Up'],'a','app-0159');assert wrapped['launcher.scroll.y']>0
                 reset=key(['b'],'ab','app-0001');assert reset['launcher.scroll.y']==0
                 cleared=key(['-M','ctrl','-k','a','-m','ctrl','-k','BackSpace'],'','');assert cleared['launcher.scroll.y']==0
+                subprocess.run(['grim',str(raw/'launcher-catalogue.png')],env=env,capture_output=True,check=True,timeout=8)
                 key(['-k','Down'],'','app-0001')
                 key(['-k','Right'],'','app-0002')
                 down=key(['-k','Down'],'');assert int(down['launcher.selection'].split('-')[-1])>3,'grid down did not use column geometry'
