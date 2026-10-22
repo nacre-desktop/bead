@@ -1,6 +1,6 @@
 # B0023 — Per-output UI sessions
 
-Status: **In progress**. Architecture unit consumed by
+Status: **Blocked at the memory stop line; unpublished implementation and remote full CI complete**. Architecture unit consumed by
 [B0022](0022-bar-composition-lifecycle.md); action-contract blockers there remain.
 
 ## Scope and design
@@ -56,3 +56,38 @@ No temporary duplicate implementation is planned. The optional single-source
 API remains supported compatibility, not a temporary replacement. Any temporary
 duplicate introduced later must name its path and an expiry here first:
 “delete N days after the replacement is trusted”.
+
+## Result — 2026-10-22
+
+Source `384b3de` implements independent sessions, output-scoped model/input/commit
+routing, teardown, shared weak fonts/images and immutable palette snapshots.
+Full `.github/workflows/ci.yml` replication passed in the isolated Arch container,
+including all permissive dependency graphs; the three output runtime tests pass.
+The Arch image needed `noto-fonts` and `ttf-dejavu` for existing renderer tests;
+no host packages changed. CI used a Git bundle to retain fixture-tree identity.
+CPU release SHA-256: `136ba835c15437f9a42bdf5dc020031b04a0c84299fc00f8c475bbca6ad0c7ef`.
+
+Private Hyprland used 2880×1800/scale 1.5/virtual 120 Hz. One output had exactly
+one session, including the late-name update; adding the second created exactly
+one more session and both committed. The first attempt exposed a late-name race;
+it collected no memory cells. The corrected run stopped during two-output sampling.
+
+| Metric (MiB) | Result |
+| --- | ---: |
+| One-output PSS, five-sample median (range) | 23.978 (23.978–23.981) |
+| One-output file / anonymous / SHM PSS | 17.841 / 5.465 / 0.672 |
+| One-output SwapPss; DRM | 0; unavailable |
+| First two-output memory screen | 26.043 |
+| Provisional screen increase over one-output median | +2.065 |
+
+The two-output screen exceeded the standing 24.5 MiB stop line. Its component
+breakdown was not retained before the guard raised; the increase cannot yet be
+attributed by residency category, and the full settled delta is **not measured**.
+No threshold was relaxed and no further capture or optimization was attempted.
+Scale/removal/re-add/input/idle proofs and the niri run remain incomplete. Niri
+multi-output hotplug is also unsupported by this harness. Both owned runs cleaned
+up with zero scope OOM counters; host swap was zero before each arm. No push or
+live change. Owner review is needed before proceeding past this stop.
+
+Size: +1,011 / −130 physical product Rust lines, excluding test modules/files
+and proof examples. No temporary implementation duplicates were introduced.

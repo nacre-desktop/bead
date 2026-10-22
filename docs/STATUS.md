@@ -1,10 +1,23 @@
 # Status
 
+## 2026-10-22 — B0023 sessions implemented; memory gate blocked
+
+Local `384b3de` gives outputs independent UI sessions and shares service owners,
+fonts, palette snapshots and image assets. Full Bead Arch CI passed. The private
+two-output CPU-bar run stopped at 26.043 MiB after a one-output median of
+23.978 MiB: provisional +2.065 MiB, without a complete two-output window or its
+residency breakdown. The 24.5 MiB stop line prevents further work or acceptance.
+The late output-name race found by the first smoke is fixed without replacing
+the session. Remaining lifecycle/input/niri proofs are incomplete; no push or
+live change. See [B0023](specs/0023-per-output-ui-sessions.md). B0022 remains blocked
+on this acceptance and its separate published action contracts.
+
 ## 2026-10-22 — B0022 bar composition and lifecycle
 
-The existing Wayland runtime creates/removes primary bar surfaces per output
-and updates surfaces for output scale/geometry changes. The shared bar model is
-still global, and published protocol v1 has no daemon routes for workspace,
+At the B0022 spec start, Wayland already created/removed primary bar surfaces
+per output and updated their geometry/scale, while the bar model was global.
+The B0023 candidate above now provides session isolation. Published protocol v1
+still has no daemon routes for workspace,
 focus, session, calendar peek, status adjustments, or tray actions. B0022 is
 therefore partial; see [spec 0022](specs/0022-bar-composition-lifecycle.md)
 for the versioned action matrix and contract gates. Existing reconnect tests

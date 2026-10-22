@@ -1,13 +1,16 @@
 # B0022 — Per-output bar composition and lifecycle
 
-Status: **Partial; protocol and per-output view blockers remain**. B0016 tray,
+Status: **Partial; protocol contracts and B0023 memory/proof acceptance remain blocked**. B0016 tray,
 B0018 status pill, and B0019 launcher are existing work and are not reopened as
 independent features here. The QML reference is Nacre `origin/main` at the task
 start. The Wayland runtime already creates one primary layer surface per
 announced output, updates it on output geometry/scale changes, and removes it
-on output destruction. The Luau runtime and backend model are shared across
-those surfaces, however, so workspace/title state and actions are not
-output-scoped yet.
+on output destruction. The local [B0023 candidate](0023-per-output-ui-sessions.md)
+now gives each output its own runtime, view state and scoped backend projection.
+Its full CI passed, but the two-output memory screen reached 26.043 MiB and
+triggered the standing 24.5 MiB stop. Remaining private lifecycle/input proofs
+are incomplete; that architecture acceptance and the published action contracts
+still block this consumer. No source from B0023 has been pushed.
 
 Output surface lifecycle is already implemented in
 `crates/bead-wayland/src/runtime.rs` and `protocols.rs`: output announcements
@@ -58,7 +61,7 @@ and lifecycle without duplicating those features.
 | QML action | Bead behavior | Protocol status at spec time |
 | --- | --- | --- |
 | App/launcher click; dashboard click | Existing launcher trigger and local `view.open` action | `ui.dispatch` v1 is published in pinned `state.jsonl` / `ui.jsonl` and Bead's provider forwards validated calls through it. The bar's current launcher/dashboard clicks are local panel actions, not daemon-backed; no published per-output route is established. |
-| Workspace activate, scroll, window focus | Not output-scoped; workspace click uses local `Backend::action` | Blocked: `nacre.workspace(int)` exists only in Nacre's shell command catalog, not the pinned daemon method registry. `backend.workspace.switch` is a direct compositor mutation and is disallowed for this parity route. No focus-window daemon method is published. |
+| Workspace activate, scroll, window focus | B0023 candidate scopes state by output; workspace click still uses local `Backend::action` | Blocked: `nacre.workspace(int)` exists only in Nacre's shell command catalog, not the pinned daemon method registry. `backend.workspace.switch` is a direct compositor mutation and is disallowed for this parity route. No focus-window daemon method is published. |
 | Active-title scroll | No matching behavior wired in Bead bar | Blocked: QML maps title scroll to adjacent workspace; same missing published workspace route and output context. |
 | Clock click/hover | Calendar view opens via Bead UI action; no hover peek parity | `ui.dispatch` v1 is generic, but `nacre.popout` is shell catalog only. No published calendar-open/peek daemon method or output argument. |
 | Power click | No action currently wired on Bead bar | `nacre.session` is shell catalog only. No published session-entry daemon method. |
@@ -72,13 +75,13 @@ command catalog. Do not wire those names as protocol calls without a published
 contract. The pinned registry also exposes `daemon.ping` and `daemon.status`;
 neither represents any of the blocked bar actions.
 
-Per-output content cannot be made correct by adding more model fields alone:
-`bead-wayland::App` owns one `SceneSource`, one committed `Scene`, and one
-primary UI serial shared by all `Surface`s. Pointer events likewise stage into
-that one source. Correct output-specific widgets/actions therefore require
-per-output UI sessions plus per-output update, commit, input, and teardown
-routing; no existing surface callback selects a session by output. This is a
-larger runtime change and is not attempted here.
+The original blocker was architectural: adding model fields could not repair
+one shared `SceneSource`, committed scene, primary UI serial and pointer target.
+B0023 implements per-output sessions, update/commit/input/teardown routing and
+late-name handling while keeping services and immutable resources shared.
+Its memory stop and incomplete private proofs now replace the missing runtime
+implementation as the architecture blocker; see its measured result before
+resuming this consumer. This does not publish any missing daemon action route.
 
 ## Acceptance
 

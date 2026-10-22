@@ -1,5 +1,27 @@
 # Feasibility
 
+## 2026-10-22 — B0023 per-output sessions: stopped at the memory gate
+
+The candidate creates one session per output, including late output names.
+The provisional extra-output screen is near 2 MiB with shared services/fonts/assets and palette snapshots.
+The first two-output sample nevertheless crosses the absolute 24.5 MiB stop line.
+The unit is blocked; this is not a completed settled-memory or lifecycle acceptance.
+
+| CPU bar, 2880×1800/1.5/virtual 120 Hz | MiB |
+| --- | ---: |
+| One output: median PSS (five samples) | 23.978 |
+| One output: file / anonymous / SHM PSS | 17.841 / 5.465 / 0.672 |
+| Two outputs: first screen, then abort | 26.043 |
+| Provisional increase; complete settled delta | +2.065; not measured |
+
+Source `384b3de`, default-feature release, renderer `cpu`; binary SHA-256
+`136ba835c15437f9a42bdf5dc020031b04a0c84299fc00f8c475bbca6ad0c7ef`.
+SwapPss was zero in the retained baseline; DRM was unavailable, not zero.
+The aborted sample's file/anonymous/SHM breakdown was not retained, so its increase
+is not attributed. No further capture/optimization or push after the stop.
+Full Arch CI passed. First smoke found and fixed a late-name duplicate-session
+race before sampling. See [B0023](docs/specs/0023-per-output-ui-sessions.md).
+
 ## 2026-10-22 — B0021 wallpaper memory diagnosis
 
 The reported 26.64 → 59.79 MiB jump compared CPU-only release with default native GL release.
