@@ -85,6 +85,18 @@ with the batch result.
   B = `306474f0`, both compositors). It starts when the desktop heavy slot is
   free.
 
+### Core-switch gap list — 2026-10-22
+
+Read-only review of what Bead still lacks before it can run the always-on parts
+on the owner's laptop: [research/core-switch-gap-20261022.md](../research/core-switch-gap-20261022.md).
+The forecast is 8–13 calendar weeks with about 3 workers and full CI per unit;
+lock and installer reviews can extend it. The order of units is Gate E
+typing/memory on the laptop reference, then bar and tray, popouts and control
+center, launcher parity, notifications and OSD, dashboard, static wallpaper,
+session and secure lock, settings/keybinds/theming, and finally packaging and
+rollback. B3 recommends a bounded investigation of rounded-row painting as its
+follow-up. This is a plan, not authorization for live validation or the switch.
+
 ### Owner rule change — relative memory gate on non-reference hosts — 2026-10-21
 
 Owner decision (2026-10-21 evening): on hosts other than the reference machine
