@@ -161,7 +161,9 @@ impl bead::wayland::WallpaperProvider for Consumer {
         if previous == current {
             return None;
         }
-        decode_pair(previous, width, height).ok().map(|decoded| decoded.rgba)
+        decode_pair(previous, width, height)
+            .ok()
+            .map(|decoded| decoded.rgba)
     }
     fn is_current(&self, frame: &bead::wayland::WallpaperFrame) -> bool {
         let Some(token) = frame.commit_token.downcast_ref::<PairToken>() else {

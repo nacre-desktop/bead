@@ -559,17 +559,19 @@ impl App {
         };
         let failed_name = name.clone();
         let animate = self.options.animate;
-        std::thread::spawn(move || match provider.prepare(name.clone(), width, height) {
-            Ok(mut frame) => {
-                if animate {
-                    frame.previous_rgba = provider.prepare_transition(&name, width, height);
+        std::thread::spawn(
+            move || match provider.prepare(name.clone(), width, height) {
+                Ok(mut frame) => {
+                    if animate {
+                        frame.previous_rgba = provider.prepare_transition(&name, width, height);
+                    }
+                    let _ = sender.send(UiEvent::WallpaperFrame(std::sync::Arc::new(frame)));
                 }
-                let _ = sender.send(UiEvent::WallpaperFrame(std::sync::Arc::new(frame)));
-            }
-            Err(_) => {
-                let _ = sender.send(UiEvent::WallpaperFailed(failed_name));
-            }
-        });
+                Err(_) => {
+                    let _ = sender.send(UiEvent::WallpaperFailed(failed_name));
+                }
+            },
+        );
     }
 
     pub(super) fn refresh_wallpapers(&mut self) {
