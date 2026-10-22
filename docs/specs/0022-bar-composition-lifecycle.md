@@ -1,18 +1,13 @@
 # B0022 — Per-output bar composition and lifecycle
 
-Status: **Partial; protocol contracts and B0025 scale-memory acceptance remain blocked**. B0016 tray,
-B0018 status pill, and B0019 launcher are existing work and are not reopened as
-independent features here. The QML reference is Nacre `origin/main` at the task
-start. The Wayland runtime already creates one primary layer surface per
-announced output, updates it on output geometry/scale changes, and removes it
-on output destruction. The local [B0025 candidate](0025-per-output-ui-sessions.md)
-now gives each output its own runtime, view state and scoped backend projection.
-The owner accepts the +2.045 MiB per-extra-output cost under its separate
-~3 MiB target; the +0.5 MiB same-count rule does not apply to intentional
-two-output session state. Niri scale-phase retention still needs correction
-and matched single-output deltas at most +0.5 MiB. That scale acceptance and
-the published action contracts block this consumer; see B0025 for the current
-allocation investigation and private proofs. No source from B0025 is pushed.
+Status: **Partial; published action contracts and remaining consumer proofs are blocked**.
+B0016 tray, B0018 status pill and B0019 launcher are existing work. The
+[B0025 implementation](0025-per-output-ui-sessions.md) gives every output its own
+runtime/view state, scoped backend projection and update/commit/input/teardown
+lifetime. Matched single-output/scale memory and extra-output acceptance pass;
+its architecture blocker is cleared. Services and immutable resources remain
+shared. The action inventory below still requires published routes, and this
+consumer must finish its own daemon/tray recovery and compositor parity proofs.
 
 Output surface lifecycle is already implemented in
 `crates/bead-wayland/src/runtime.rs` and `protocols.rs`: output announcements
@@ -81,9 +76,9 @@ The original blocker was architectural: adding model fields could not repair
 one shared `SceneSource`, committed scene, primary UI serial and pointer target.
 B0025 implements per-output sessions, update/commit/input/teardown routing and
 late-name handling while keeping services and immutable resources shared.
-Its pending niri scale-memory acceptance now replaces the missing runtime
-implementation as the architecture blocker; see its measured result before
-resuming this consumer. This does not publish any missing daemon action route.
+Its accepted memory and private lifecycle result clears the runtime architecture
+blocker. This does not publish any missing daemon action route or complete this
+consumer's independent recovery/hover/action parity checks.
 
 ## Acceptance
 

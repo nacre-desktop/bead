@@ -1,7 +1,7 @@
 # B0025 — Per-output UI sessions
 
-Status: **Blocked on authorized CI-host capacity; fixes and diagnostics await validation**. Architecture unit consumed by
-[B0022](0022-bar-composition-lifecycle.md); action-contract blockers there remain.
+Status: **Implemented; matched memory and private lifecycle checks pass**. Architecture unit consumed by
+[B0022](0022-bar-composition-lifecycle.md); its independent action-contract blockers remain.
 
 ## Scope and design
 
@@ -75,145 +75,121 @@ duplicate introduced later must name its path and an expiry here first:
 Private capture receipts originally labeled this unit B0023 refer to B0025;
 the number moved after the concurrent session-menu unit published B0023.
 
-## Owner continuation — 2026-10-22
+## Result — 2026-10-22
 
-The measured +2.044922 MiB per extra output passes the owner's two-output
-acceptance rule; the former two-output +0.5 MiB verdict below is historical
-and superseded. Attribute the +1.433594 MiB anonymous difference using actual
-per-session allocation counters or heap profiling (behavior/markup Luau heaps,
-layout/scene storage, text/image caches and shared-memory pools). Avoid retaining
-immutable resources per session when a small sharing fix suffices.
+Captured source `515ecf7` is product/proof-identical to integrated `8b1f7ba`;
+rebasing added only the main CI queue update. Control `b972a31` includes the
+session menu and keybind/palette changes. Both binaries use Rust 1.99.0,
+default features,
+`cargo build --release -p nacre-shell --locked -j2`, and
+`--bar --core-views --renderer cpu`. SHA-256 control:
+`25457830762ae5f22507479900f240639084f8fdb85affce05ca1ac59b92e79c`;
+candidate: `cd141af25e5acb7c69b295039d6b62ecad46c2b2e508a53e48002d5a60e409b4`.
 
-Niri scale-phase increases are a product defect to fix, not a host exception.
-Trace old-scale allocations and release them safely; repeat five alternating
-control/candidate niri pairs, requiring at most +0.5 MiB median in every phase.
-Try nested niri multi-output hotplug and document an unavailable backend route.
-Use the authorized CI host for builds/full Bead CI; desktop captures retain the same private HOME,
-heavy-job flock and all swap/watchdog/containment gates. After passing checks,
-update this result/B0022/queue and integrate through safe-push. No live change.
-No new temporary product implementation duplicate is planned.
+Fresh CPU pools have exactly three aligned current-size slots at geometry
+changes. Unused-scale raster/node/glyph/image caches retire without invalidating
+already presented frames; shared fonts survive. Deferred workers commit the new
+scale before painting. After callbacks are quiet for 250 ms, CPU surfaces retire
+extra painted SHM slots, repaint one current frame and return allocator slack.
+Single-frame generations also return transient heap pages once idle. The timer
+is fenced by surface identity and bounded to three seconds; later frames can
+rearm it. Importing a worker frame drops obsolete local fallback caches.
 
-## Continuation checkpoint — 2026-10-22
+Five alternating control/candidate pairs per compositor, with 10 s warmup and
+five 1 s samples per phase, give these medians of arm medians and min–max ranges.
+All single-output phases pass +0.5 MiB; the intentional second session passes
+its separate extra-output target. Geometry matches within every comparison.
 
-Candidate `05e0986` (integrated with session-menu main `c72d217`) replaces each
-CPU geometry pool with three aligned current frames, retires unused-scale
-raster/node/frame and glyph/image caches, and preserves the shared FontSystem.
-The new regression checks that presented frames survive retirement and that
-returning to the original scale preserves raster pixels. Read-only review found
-no remaining rendering hazard, but **Rust compilation/tests have not run**.
-
-Allocation diagnostics now report behavior Luau bytes, compiled markup and value
-charges, temporary markup-sandbox end-of-build bytes, source capacities, global
-cache admission and glibc live/free/mapped heap bytes at settled phases. The
-markup sandbox is dropped after building; the previous suggestion of a retained
-markup VM was incorrect. Layout's Taffy arena is temporary too. No new allocation
-values are claimed: the +1.433594 MiB anonymous attribution remains pending a
-capture, as does any further cheap sharing optimization justified by those values.
-
-The installed nested niri reports version 26.04 (8ed0da4). Read-only
-`niri msg action --help` has no virtual-output create/remove action;
-`niri msg output --help` configures only existing outputs. This harness produces
-one Winit output and no supported private hotplug route was found. Niri scale
-proof remains runnable; Hyprland supplies private multi-output lifecycle proof.
-No DRM/EDID or live-output workaround is authorized.
-
-The authorized CI host remained at its task-container cap while the build worker
-waited about 28 minutes. No container/build/test/capture started in this
-continuation. Single-file proof syntax and `git diff --check` passed; fresh Rust
-fmt/CI, allocation attribution, niri matched scale medians and safe-push remain
-blocked externally. Task staging is removed; previous evidence stays private. Current candidate
-size is +1,078 / −145 physical product Rust lines versus main `c72d217`,
-excluding test modules/files and proof examples.
-
-## Previous result — 2026-10-22
-
-Source `60896a0` implements session ownership, scoped model/input/commit routing,
-shared weak fonts/assets and immutable palette snapshots. The late output-name
-race preserves the original session; opening a companion now also preserves the
-in-flight owning session instead of creating a duplicate. Proof revision
-`8f4aad5` fixes newline handling in the final log parser. These failures remain
-in private evidence; corrected runs use fresh directories. No temporary product
-implementation duplicate was introduced.
-
-The original absolute desktop stop was incorrect and is superseded by the
-matched relative gate. Control `b83adee` has identical product source to current
-main `d1f46c7` (intervening changes are CI/docs only). Both binaries use Rust
-1.99.0, default features, `cargo build --release -p nacre-shell --locked -j2`
-and `--bar --core-views --renderer cpu`. Control SHA-256:
-`048a497d3d002d08c18290e3626f9d4ac074ce6866fa0e8810fa249f6789eb03`;
-candidate: `14511e6db0e6c34bab35efb2cd992d0d888a2731090c07cdc48a130e872cc642`.
-
-Final matched UI-process PSS (MiB): each cell is the median of five arm
-medians, with their min–max range. Every arm uses 10 s warmup and five 1 s
-samples per phase; geometry matches between roles. The complete arm medians
-and raw rollups remain in private `comparison-final.json` and capture evidence.
-
-| Phase | Control median [range] | Candidate median [range] | Delta | Gate |
+| CPU bar phase | Control median [range], MiB | Candidate median [range], MiB | Delta | Gate |
 | --- | ---: | ---: | ---: | --- |
-| Hyprland one output, 1.5 | 23.945312 [23.721680–24.031250] | 24.214844 [24.136719–24.502930] | +0.269531 | PASS |
-| Hyprland two outputs, 1.5 | 24.836914 [24.725586–24.980469] | 26.256836 [26.193359–26.540039] | +1.419922 | FAIL |
-| niri one output, initial 1.5 | 25.269531 [25.082031–25.461914] | 25.712891 [25.690430–25.832031] | +0.443359 | PASS |
-| niri one output, 1.25 | 24.767578 [24.574219–25.206055] | 25.651367 [25.628906–25.766602] | +0.883789 | FAIL |
-| niri one output, return 1.5 | 25.014648 [24.817383–25.665039] | 25.996094 [25.972656–26.111328] | +0.981445 | FAIL |
+| Hyprland one output, 1.5 | 24.688477 [24.371094–24.951172] | 23.696289 [23.502930–23.794922] | -0.992188 | PASS |
+| Hyprland two outputs, 1.5 | 25.583008 [25.171875–25.812500] | 25.558594 [25.388672–25.638672] | -0.024414 | PASS (extra-output) |
+| niri initial 1.5 | 26.152344 [25.979492–26.221680] | 24.750977 [24.720703–25.325195] | -1.401367 | PASS |
+| niri changed 1.25 | 25.605469 [25.441406–26.312500] | 24.725586 [24.678711–25.302734] | -0.879883 | PASS |
+| niri return 1.5 | 25.910156 [25.705078–26.644531] | 24.893555 [24.852539–25.834961] | -1.016602 | PASS |
 
-| Candidate minus control residency (MiB) | Anonymous | File | SHM |
+| Candidate minus control, MiB | Anonymous | File | SHM |
 | --- | ---: | ---: | ---: |
-| Hyprland one output, 1.5 | +0.308594 | +0.016602 | +0.000000 |
-| Hyprland two outputs, 1.5 | +1.433594 | -0.016602 | +0.000000 |
-| niri one output, initial 1.5 | +0.269531 | -0.020508 | +0.187500 |
-| niri one output, 1.25 | +0.265625 | -0.023438 | +0.691406 |
-| niri one output, return 1.5 | +0.230469 | -0.024414 | +0.824219 |
+| Hyprland one output, 1.5 | -0.878906 | -0.154297 | +0.000000 |
+| Hyprland two outputs, 1.5 | +0.179688 | -0.190430 | +0.000000 |
+| niri initial 1.5 | -0.710938 | -0.172852 | -0.480469 |
+| niri changed 1.25 | -0.664062 | -0.172852 | +0.000000 |
+| niri return 1.5 | -0.789062 | -0.172852 | +0.000000 |
 
-**Relative gate: FAIL.** Two-output anonymous growth is +1.433594 MiB versus
-control and is not fully attributed. Extra session VM/view/layout ownership
-is expected, but the existing Luau counter omits the markup VM and cannot
-account for every anonymous byte. Niri scale phases retain more SHM than the
-control; these are measured residency differences, not proof of buffer causality.
+Median extra-output UI PSS is **+1.862305 MiB** (range 1.818359–1.885742), passing the
+~3 MiB target. Anonymous +1.191406, file -0.000977, SHM +0.671875 MiB. Categories are
+independent medians and need not sum exactly.
 
-Separately, candidate per-extra-output PSS costs across the five arms are
-2.044922 / 2.056641 / 2.037109 / 2.041992 / 2.072266 MiB:
-**median +2.044922 MiB** (target below about 3 MiB passes). Residency delta:
-anonymous +1.375000, file −0.001953, SHM +0.671875, SwapPss 0 MiB.
-The control extra-output median is +0.880859 MiB. Category medians are reduced
-independently and need not add exactly to the median total delta. SHM is
-measured shared-mapping residency, not the total allocated buffer byte count.
+Original two-output anonymous excess versus control was +1.433594 MiB; final matched
+excess is +0.179688 MiB.
 
-The private Hyprland functional proof passes at 2880×1800/virtual 120 Hz:
-one/two outputs, prepared and presented calendar input on each clicked output,
-closed+idle release after two seconds, extra-output scale 1.5→1.25, addressed
-input widths 1920/2304 with unknown outputs rejected, removal with no stale
-commits, re-add with exactly one fresh session, and a second removal. Closed
-PSS deltas from the two-output bar are −0.291/+0.260 MiB (own-bar+5 passes).
-The re-added settled endpoint is 28.126 MiB; this lifecycle run includes warmed
-panels and is separate from the matched bar-only memory cells. Stop reports
-zero surfaces. The nested niri backend supports one window/output here; its
-1.5→1.25→1.5 geometry/commit/buffer proof runs in every matched arm. Niri
-multi-output hotplug remains unproved; no live session was used.
+SwapPss and host swap-in are zero in every final arm. DRM fdinfo is unavailable,
+not zero. Raw rollups, full smaps, arm identities, timestamps and comparisons
+remain in private evidence. The absolute reference-laptop caps were not used.
+The original niri scale deltas +0.884/+0.981 MiB failed; fresh pools alone did
+not cure residency. Final current-frame SHM is 0.671875 / 0.564453 / 0.671875 MiB
+at initial 1.5 / changed 1.25 / return 1.5. Failed intermediate and profiler
+attempts remain separate from acceptance evidence.
 
-Commands: under the desktop heavy-job flock, `python3 relative-batch.py proof`
-invokes `python3 spikes/measure.py --compositor hyprland --parent headless
---bar-ui --modes bead --runs 1 --virtual120`; `python3 relative-batch.py memory`
-runs five alternating control/candidate pairs per compositor (niri omits
-`--virtual120`). The orchestrator is private evidence; the committed proof is
-`spikes/per-output-proof.py`. Each arm uses a private HOME/D-Bus/runtime and the
-existing 12 GiB/SwapMax=0 guarded capture. All 20 final matched arms and the
-completed lifecycle proof have swap below 64 MiB before launch, zero process
-SwapPss, host swap-in and OOM deltas;
-DRM residency is unavailable, never treated as zero.
+### Allocation attribution
 
-Full `.github/workflows/ci.yml` replication on `8f4aad5` passed in the isolated
-Arch CI container: `CARGO_BUILD_JOBS=2 nice -n 10 bash /task/ci-prod-run.sh`
-(exit 0). This includes fmt, denied-warning clippy, 204 passed/1 ignored workspace
-tests, trace memory-policy tests, feature checks, facade, 58 Luau modules,
-Python suites (54/11/12/10/8), private service/tray-bus recovery and all independent
-permissive cargo-deny graphs. The three output runtime tests cover scoped
-projection, moved-window titles and independent state/reload failure; existing
-single-output tests remain green. Build prerequisites add `noto-fonts` and
-`ttf-dejavu` inside the CI container for existing renderer tests, with no host
-package changes. CI log SHA-256:
-`9c0d6f39f1005035153a6c1597b3990edc90b59b064c783265363b86411c99ed`.
+In the first final one→two-output pair, glibc live heap grows 1,083,456 B
+(1.033 MiB), free arena space grows 497,600 B (0.475 MiB), and total arena grows
+1,581,056 B (1.508 MiB); mapped heap stays zero. These are allocator counters,
+not additional PSS categories. Returning free pages reduces physical residency
+without pretending that the arena's virtual capacity disappeared.
 
-B0022's runtime implementation blocker is replaced by failed memory acceptance;
-its unpublished daemon action contracts remain independently blocked. No push,
-live change or package publication. Size: +1,014 / −132 physical product Rust
-lines versus the control, excluding test modules/files and proof examples.
+| Named second-session allocation/charge | Bytes |
+| --- | ---: |
+| Persistent behavior Luau VM | 487,712 |
+| Compiled markup | 21,149 |
+| Source vector capacities | 62,783 |
+| Materialized view, including overlapping markup values | 62,705 |
+| Computed values | 273 |
+| Glyph images / CPU rasters | 13,533 / 38,054 |
+| Retained nodes / prepared frame metadata | 15,848 / 8,419 |
+
+These typed/cache estimates total 710,476 B (0.678 MiB), leaving about 0.356 MiB
+of the live-heap increase unclassified among Rust scene/store/runtime ownership
+and allocator overhead. This is partial attribution, not byte-perfect malloc
+stack accounting. Do not add the 55,305 B markup-values charge again, or add
+heap counters to PSS. The temporary markup VM's 913,000 B end-of-build reading
+is dropped after construction; Taffy's layout arena is temporary too. The Luau
+behavior VM dominates the named retained costs, rather than a glyph cache or
+persistent layout arena. Weak font/asset indexes and font payloads stay shared.
+An obsolete local fallback cache (~67 KiB charged) was removed. Heaptrack
+preload/injection diagnostics did not complete guarded startup and contribute
+no acceptance measurements or claimed allocation stacks.
+
+### Proofs and checks
+
+The final private Hyprland proof covers one/two outputs; calendar input prepared
+and presented on each clicked output; closed+idle release; 1.5→1.25 scale;
+addressed input at widths 1920/2304 with unknown outputs rejected; removal with
+no stale commits; re-add with exactly one fresh session; and another removal.
+Closed panels are +1.043/+0.328 MiB above their own two-output bar after two
+seconds (bar+5 passes). Clean stop reports no surfaces.
+Every niri arm proves initial/changed/returned geometry, commits and buffers.
+Stock nested niri 26.04 (8ed0da4) provides one Winit output. Its action help has
+no virtual-output create/remove action, and output help configures existing
+outputs only; multi-output hotplug remains unproved on that backend. Hyprland
+provides the private multi-output lifecycle proof. No live/DRM workaround ran.
+
+Under the desktop heavy-job flock, the private driver invokes
+`python3 spikes/measure.py --compositor hyprland --parent headless --bar-ui
+--modes bead --runs 1 --virtual120`; niri substitutes `--compositor niri` and
+omits `--virtual120`. The committed harness is `spikes/per-output-proof.py`.
+Private HOMEs, buses and runtimes, 12 GiB/SwapMax=0 containment, verified scope
+membership, memory watchdog, pre-arm swap <64 MiB, and quiet gates remain active.
+
+The complete `.github/workflows/ci.yml` job passes in an isolated Arch container
+on the first available authorized CI host: fmt, clippy `-D warnings`, workspace
+and trace tests, feature checks, facade and Luau (75 modules), all five Python
+suites (54/11/12/10/8), private services/tray lifecycle, and independent framework
+cargo-deny graphs. Shell tests: 221 passed/1 ignored; renderer: 28 passed.
+The ignored tray supervisor is run separately with a private bus. New regressions
+cover presented-frame scale retirement, imported fallback-cache release and
+independent output projection/reload/failure; existing single-output tests pass.
+Product Rust size: +1,260 / −144 physical lines versus `b972a31`, excluding
+`cfg(test)` items, test files and proof examples. No temporary product duplicate,
+new system dependency, installed-shell change or live session was introduced.

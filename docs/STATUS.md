@@ -1,38 +1,25 @@
 # Status
 
-## 2026-10-22 — B0025 continuation: extra-output budget accepted; validation capacity blocked
+## 2026-10-22 — B0025 per-output sessions accepted
 
-Owner accepts the measured +2.045 MiB extra-output cost under its ~3 MiB target;
-the two-output +0.5 MiB verdict below is superseded. Anonymous allocations must
-be attributed. The candidate now replaces SHM pools at geometry changes and
-retires unused-scale raster/glyph caches while keeping fonts shared. Allocation
-diagnostics and a presented-frame lifetime/pixel regression test are added.
-No authorized CI-host slot opened during about 28 minutes of waiting. New Rust
-fmt/CI, anonymous attribution and fresh niri scale captures are unrun; each scale
-phase must pass +0.5 MiB. The reviewed fixes are unvalidated. No live change or
-push; private staging removed. See B0025 for the checkpoint.
-
-## 2026-10-22 — B0025 implemented; relative memory acceptance blocked
-
-Outputs now own independent UI sessions, output-scoped model/input/commit
-routing and teardown, with shared services/fonts/assets and palette snapshots.
-Matched desktop measurements use owner decision `f58558e`: candidate minus
-main must be at most +0.5 MiB median for the same output count and phase;
-unexplained anonymous growth above 1 MiB also blocks acceptance. The earlier
-absolute-cap stop used the wrong host gate and is superseded.
-Final same-count PSS deltas: H one/two +0.270/+1.420 MiB; N initial/1.25/return
-+0.443/+0.884/+0.981 MiB. Extra-output cost +2.045 MiB meets its separate target.
-Full Arch CI and private lifecycle/input/scale/remove/re-add proof pass.
-See [B0025](specs/0025-per-output-ui-sessions.md) for the measured spreads,
-residency breakdown and private lifecycle proofs. B0022 remains blocked on
-this memory acceptance and its separate published action contracts. No push,
-installed-shell change or live session.
+Each output now owns UI state/update/commit/input/teardown with shared services,
+fonts/assets and immutable palette data. Old-scale caches/pools and idle spare
+frames release; allocator slack is returned after quiet UI generations.
+Matched CPU PSS deltas: Hyprland one -0.992 MiB; niri initial/1.25/return
+-1.401/-0.880/-1.017 MiB.
+Extra-output cost +1.862 MiB passes ~3 MiB. Named counters explain
+0.678 MiB of 1.033 MiB extra live heap, leaving ~0.356 MiB unclassified.
+Full Arch Bead CI and private lifecycle/input/idle/scale proofs pass. Niri's
+single Winit output has no supported private hotplug route; that limitation
+remains explicit. B0022's architecture blocker is cleared; its action-contract
+and remaining consumer proofs stay separate. See [B0025](specs/0025-per-output-ui-sessions.md).
+No installed-shell change or live session.
 
 ## 2026-10-22 — B0022 bar composition and lifecycle
 
 At the B0022 spec start, Wayland already created/removed primary bar surfaces
 per output and updated their geometry/scale, while the bar model was global.
-The B0025 candidate above now provides session isolation. Published protocol v1
+B0025 now provides accepted session isolation. Published protocol v1
 still has no daemon routes for workspace,
 focus, session, calendar peek, status adjustments, or tray actions. B0022 is
 therefore partial; see [spec 0022](specs/0022-bar-composition-lifecycle.md)

@@ -1,47 +1,34 @@
 # Feasibility
 
-## 2026-10-22 — B0025 scale-retention continuation: validation blocked
+## 2026-10-22 — B0025 per-output sessions: acceptance passes
 
-Owner accepts the +2.045 MiB extra-output cost under its separate ~3 MiB target.
-The candidate replaces old geometry pools and retires unused-scale raster/glyph caches.
-Allocation counters and a presented-frame regression are implemented but unvalidated.
-Authorized CI-host capacity never opened; there are no new memory measurements or CI results.
+Outputs own runtime/view/update/commit/input lifetimes; services and immutable resources remain shared.
+Scale changes retire old caches and pools; idle release returns extra painted frames and allocator slack.
+Matched CPU release captures pass the single-output +0.5 MiB gate and the extra-output ~3 MiB target.
+The original desktop absolute-cap stop and two-output +0.5 MiB verdict are superseded by owner rulings.
 
-| Metric | Before | After candidate |
-| --- | ---: | --- |
-| niri initial / 1.25 / return PSS delta, MiB | +0.443359 / +0.883789 / +0.981445 | Unmeasured; target ≤+0.5 each |
-| Extra-output PSS, MiB | +2.044922; accepted | Unmeasured |
-| Two-output anonymous versus control, MiB | +1.433594; attribution pending | Counters added, unmeasured |
+| CPU UI PSS metric, MiB | Before | Final |
+| --- | ---: | ---: |
+| niri initial 1.5 vs control | +0.443359 | -1.401367 |
+| niri changed 1.25 vs control | +0.883789 | -0.879883 |
+| niri return 1.5 vs control | +0.981445 | -1.016602 |
+| Two-output anonymous vs control | +1.433594 | +0.179688 |
+| Extra-output candidate cost | +2.044922 | +1.862305 |
+| Hyprland one output vs control | +0.269531 | -0.992188 |
 
-The persistent behavior Lua VM is distinct from the temporary markup VM and layout arena.
-The new cache/heap counters must establish their contribution; no sharing gain is claimed.
-Read-only stock niri help exposes no private virtual-output create/remove action for the one-output Winit route.
-No new capture, Rust CI, push or live change. See [B0025](docs/specs/0025-per-output-ui-sessions.md).
-
-## 2026-10-22 — B0025 sessions: relative memory gate blocks integration
-
-Each output owns its UI state/update/commit/input lifetime while resources and services remain shared.
-The corrected private input/idle/scale/remove/re-add proof passes; full Arch Bead CI passes.
-The desktop uses the same-output-count relative gate; the earlier laptop-cap stop was incorrect.
-The extra bar fits its separate ~3 MiB target, but matched relative acceptance fails.
-
-| CPU bar phase | Control MiB | Candidate MiB | Delta MiB |
-| --- | ---: | ---: | ---: |
-| Hyprland one output, 1.5 | 23.945312 | 24.214844 | +0.269531 |
-| Hyprland two outputs, 1.5 | 24.836914 | 26.256836 | +1.419922 |
-| niri one output, initial 1.5 | 25.269531 | 25.712891 | +0.443359 |
-| niri one output, 1.25 | 24.767578 | 25.651367 | +0.883789 |
-| niri one output, return 1.5 | 25.014648 | 25.996094 | +0.981445 |
-
-The extra bar costs 2.045 MiB median (range 2.037–2.072): anonymous +1.375,
-file −0.002, SHM +0.672 MiB; SwapPss 0 and DRM unavailable, not zero.
-Residency categories are independent medians and need not sum exactly.
-Two-output anonymous growth versus control is +1.434 MiB and is not fully attributed.
-Private calendar closes are −0.291/+0.260 MiB from own bar (own-bar+5 passes).
-Niri scale commits/buffer geometry pass; niri multi-output hotplug remains unproved.
-Source `60896a0`, proof/CI `8f4aad5`; default-feature release, Rust 1.99.0, CPU.
-The final batch uses five alternating pairs per compositor, 10 s warmup + five 1 s samples per phase.
-No push or live change. Raw evidence is private; [B0025](docs/specs/0025-per-output-ui-sessions.md) records hashes, commands and spreads.
+Before/final each use their own matched main control; these are acceptance deltas, not a direct speedup study.
+Captured source/control `515ecf7`/`b972a31`; integrated `8b1f7ba` has identical product/proof files.
+Rust 1.99.0, default release features, CPU renderer.
+Five alternating pairs/compositor, 10 s warmup + five 1 s samples/phase; geometry matches.
+Median extra-output UI PSS is **+1.862305 MiB** (range 1.818359–1.885742), passing the
+~3 MiB target. Anonymous +1.191406, file -0.000977, SHM +0.671875 MiB. Categories are
+independent medians and need not sum exactly.
+SwapPss/host swap-in zero; DRM unavailable. PSS categories do not sum with heap counters.
+First-pair added malloc-live 1.033 MiB: named charges 0.678 (Luau 0.465), unclassified ~0.356 MiB.
+Free arena space +0.475 MiB is separately measured; temporary markup VM/layout arena are not retained.
+Full Arch Bead CI, private input/idle/scale/remove/re-add proof and niri scale arms pass.
+Niri Winit exposes one output and no supported private create/remove API; multi-output hotplug is unproved there.
+No live change. See [B0025](docs/specs/0025-per-output-ui-sessions.md) for hashes, ranges, counters and commands.
 
 ## 2026-10-22 — B0021 wallpaper memory diagnosis
 
