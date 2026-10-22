@@ -1,6 +1,6 @@
 # B0028 — Launcher row activation and shell hide state
 
-Status: **Review — implemented; nested smoke of hide and of a live daemon activation pending.**
+Status: **Review — implemented; hide verified in a nested session; activation verified by fixtures only (no live daemon run).**
 Closes B0026 blockers D (partly) and A. Nacre reference: `origin/main` at `dedef897`;
 protocol pin unchanged (`294d3f40`, `menu-ui-actions.jsonl` verified identical to
 Nacre `protocol/fixtures`).
@@ -108,6 +108,11 @@ None added.
 ## Acceptance
 
 Bead CI-equivalent on a remote host (fmt, clippy `-D warnings`, workspace tests,
-feature checks, Luau, services, deny). Nested smoke (follow-up on the desktop): hide
-unmaps the bar and an open panel, a second hide restores both and the reserved space,
-launcher key while hidden restores; with a daemon, a `copy` row reaches `wl-copy`.
+feature checks, Luau, services, deny). Nested smoke of hide, run on the desktop in a private headless labwc with a nested niri
+and `nacre-shell --bar --audio-panel` (debug build, `--renderer cpu`): `niri msg
+layers` lists the bar, the open panel and the dismiss catcher; after `nacre hide` it lists
+none and `bead.panel state` reports `hidden:true, surfaces:0, target_open:true`; a second
+hide restores all three; hide with the panel open and show brings the panel back;
+`nacre controls sound` while hidden shows the shell again; `nacre state` reports the real
+`hidden`; zero protocol errors. Not run: a daemon-backed activation (`copy` to `wl-copy`),
+multi-output hide, pixel capture.
