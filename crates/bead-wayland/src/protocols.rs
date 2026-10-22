@@ -345,7 +345,6 @@ impl LayerShellHandler for App {
                     surface.viewport_destination = Some(destination);
                 }
             }
-            surface.layer.commit();
             return;
         }
         if let Some(dismiss) = &mut self.dismiss
