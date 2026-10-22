@@ -1,5 +1,23 @@
 # Feasibility
 
+## 2026-10-22 — B0025 scale-retention continuation: validation blocked
+
+Owner accepts the +2.045 MiB extra-output cost under its separate ~3 MiB target.
+The candidate replaces old geometry pools and retires unused-scale raster/glyph caches.
+Allocation counters and a presented-frame regression are implemented but unvalidated.
+Authorized CI-host capacity never opened; there are no new memory measurements or CI results.
+
+| Metric | Before | After candidate |
+| --- | ---: | --- |
+| niri initial / 1.25 / return PSS delta, MiB | +0.443359 / +0.883789 / +0.981445 | Unmeasured; target ≤+0.5 each |
+| Extra-output PSS, MiB | +2.044922; accepted | Unmeasured |
+| Two-output anonymous versus control, MiB | +1.433594; attribution pending | Counters added, unmeasured |
+
+The persistent behavior Lua VM is distinct from the temporary markup VM and layout arena.
+The new cache/heap counters must establish their contribution; no sharing gain is claimed.
+Read-only stock niri help exposes no private virtual-output create/remove action for the one-output Winit route.
+No new capture, Rust CI, push or live change. See [B0025](docs/specs/0025-per-output-ui-sessions.md).
+
 ## 2026-10-22 — B0025 sessions: relative memory gate blocks integration
 
 Each output owns its UI state/update/commit/input lifetime while resources and services remain shared.

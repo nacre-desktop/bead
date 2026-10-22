@@ -1,6 +1,6 @@
 # B0025 — Per-output UI sessions
 
-Status: **Resumed — attribute session allocations and fix scale-resource retention**. Architecture unit consumed by
+Status: **Blocked on authorized CI-host capacity; fixes and diagnostics await validation**. Architecture unit consumed by
 [B0022](0022-bar-composition-lifecycle.md); action-contract blockers there remain.
 
 ## Scope and design
@@ -89,6 +89,38 @@ Use the authorized CI host for builds/full Bead CI; desktop captures retain the 
 heavy-job flock and all swap/watchdog/containment gates. After passing checks,
 update this result/B0022/queue and integrate through safe-push. No live change.
 No new temporary product implementation duplicate is planned.
+
+## Continuation checkpoint — 2026-10-22
+
+Candidate `05e0986` (integrated with session-menu main `c72d217`) replaces each
+CPU geometry pool with three aligned current frames, retires unused-scale
+raster/node/frame and glyph/image caches, and preserves the shared FontSystem.
+The new regression checks that presented frames survive retirement and that
+returning to the original scale preserves raster pixels. Read-only review found
+no remaining rendering hazard, but **Rust compilation/tests have not run**.
+
+Allocation diagnostics now report behavior Luau bytes, compiled markup and value
+charges, temporary markup-sandbox end-of-build bytes, source capacities, global
+cache admission and glibc live/free/mapped heap bytes at settled phases. The
+markup sandbox is dropped after building; the previous suggestion of a retained
+markup VM was incorrect. Layout's Taffy arena is temporary too. No new allocation
+values are claimed: the +1.433594 MiB anonymous attribution remains pending a
+capture, as does any further cheap sharing optimization justified by those values.
+
+The installed nested niri reports version 26.04 (8ed0da4). Read-only
+`niri msg action --help` has no virtual-output create/remove action;
+`niri msg output --help` configures only existing outputs. This harness produces
+one Winit output and no supported private hotplug route was found. Niri scale
+proof remains runnable; Hyprland supplies private multi-output lifecycle proof.
+No DRM/EDID or live-output workaround is authorized.
+
+The authorized CI host remained at its task-container cap while the build worker
+waited about 28 minutes. No container/build/test/capture started in this
+continuation. Single-file proof syntax and `git diff --check` passed; fresh Rust
+fmt/CI, allocation attribution, niri matched scale medians and safe-push remain
+blocked externally. Task staging is removed; previous evidence stays private. Current candidate
+size is +1,078 / −145 physical product Rust lines versus main `c72d217`,
+excluding test modules/files and proof examples.
 
 ## Previous result — 2026-10-22
 

@@ -1,14 +1,16 @@
 # Status
 
-## 2026-10-22 — B0025 continuation: extra-output budget accepted; scale fix pending
+## 2026-10-22 — B0025 continuation: extra-output budget accepted; validation capacity blocked
 
 Owner accepts the measured +2.045 MiB extra-output cost under its ~3 MiB target;
 the two-output +0.5 MiB verdict below is superseded. Anonymous allocations must
 be attributed. The candidate now replaces SHM pools at geometry changes and
 retires unused-scale raster/glyph caches while keeping fonts shared. Allocation
 diagnostics and a presented-frame lifetime/pixel regression test are added.
-Builds/full CI wait for authorized CI-host capacity; fresh private niri captures
-must pass +0.5 MiB in each single-output scale phase. No live change or push.
+No authorized CI-host slot opened during about 28 minutes of waiting. New Rust
+fmt/CI, anonymous attribution and fresh niri scale captures are unrun; each scale
+phase must pass +0.5 MiB. The reviewed fixes are unvalidated. No live change or
+push; private staging removed. See B0025 for the checkpoint.
 
 ## 2026-10-22 — B0025 implemented; relative memory acceptance blocked
 
