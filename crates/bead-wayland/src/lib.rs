@@ -501,7 +501,6 @@ struct Surface {
     visual_damage: bead_render::damage::FrameDamage,
     allocations: usize,
     shm_trim_pending: bool,
-    shm_trimmed_for: (u64, (i32, i32)),
     frames: usize,
     render_ms: Vec<f64>,
     frame_ms: Vec<f64>,

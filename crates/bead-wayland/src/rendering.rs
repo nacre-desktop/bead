@@ -44,9 +44,8 @@ fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
 impl App {
     fn trim_idle_shm(&mut self, index: usize) {
         let surface = &mut self.surfaces[index];
-        if surface.buffers.is_empty()
-            || surface.shm_trim_pending
-            || surface.shm_trimmed_for == (surface.ui_serial, surface.geometry)
+        if surface.shm_trim_pending
+            || surface.buffers.iter().filter(|buffer| buffer.painted).count() <= 1
         {
             return;
         }
@@ -57,12 +56,18 @@ impl App {
         if let Err(error) = self.loop_handle.insert_source(
             Timer::from_duration(Duration::from_millis(250)),
             move |_, _, app| {
-                let Some(index) = app.surfaces.iter().position(|s| s.layer.wl_surface() == &identity) else {
+                let Some(index) = app
+                    .surfaces
+                    .iter()
+                    .position(|s| s.layer.wl_surface() == &identity)
+                else {
                     return TimeoutAction::Drop;
                 };
                 let surface = &mut app.surfaces[index];
                 if surface.callbacks.pending
-                    || surface.last_callback.is_none_or(|last| last.elapsed() < Duration::from_millis(250))
+                    || surface
+                        .last_callback
+                        .is_none_or(|last| last.elapsed() < Duration::from_millis(250))
                 {
                     if Instant::now() < expires {
                         return TimeoutAction::ToDuration(Duration::from_millis(100));
@@ -71,8 +76,13 @@ impl App {
                     return TimeoutAction::Drop;
                 }
                 surface.shm_trim_pending = false;
-                surface.shm_trimmed_for = (surface.ui_serial, surface.geometry);
-                if surface.buffers.iter().filter(|buffer| buffer.painted).count() <= 1 {
+                if surface
+                    .buffers
+                    .iter()
+                    .filter(|buffer| buffer.painted)
+                    .count()
+                    <= 1
+                {
                     return TimeoutAction::Drop;
                 }
                 // An idle burst can have touched several reusable slots. Retire
