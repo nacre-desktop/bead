@@ -1,8 +1,24 @@
 # B0022 — Per-output bar composition and lifecycle
 
-Status: **Spec first; implementation pending**. B0016 tray, B0018 status pill,
-and B0019 launcher are existing work and are not reopened as independent
-features here. The QML reference is Nacre `origin/main` at the task start.
+Status: **Partial; protocol and per-output view blockers remain**. B0016 tray,
+B0018 status pill, and B0019 launcher are existing work and are not reopened as
+independent features here. The QML reference is Nacre `origin/main` at the task
+start. The Wayland runtime already creates one primary layer surface per
+announced output, updates it on output geometry/scale changes, and removes it
+on output destruction. The Luau runtime and backend model are shared across
+those surfaces, however, so workspace/title state and actions are not
+output-scoped yet.
+
+Output surface lifecycle is already implemented in
+`crates/bead-wayland/src/runtime.rs` and `protocols.rs`: output announcements
+create the primary surface, geometry updates reuse it, preferred scale redraws
+that surface, and output destruction removes its surface. Daemon transport
+reconnect already takes a fresh snapshot and fences queued calls by transport
+generation (`nacre_source` tests); these mechanisms do not yet prove a full bar
+survives the daemon restart in a nested multi-output session. Tray bus-loss
+recovery and item replacement are covered by the existing ignored supervised
+private-bus test `session_bus_eof_reconnect_supervised` in
+`crates/bead-services/tests/tray_private_bus.rs`.
 
 ## Objective and scope
 
@@ -41,14 +57,28 @@ and lifecycle without duplicating those features.
 
 | QML action | Bead behavior | Protocol status at spec time |
 | --- | --- | --- |
-| App/launcher and dashboard entry | Existing launcher/dashboard entry | Verify against the pinned UI provider method registry |
-| Workspace activate, scroll, and window focus | Output-scoped workspace switch/focus | No daemon route found in current Bead v1 fixtures; contract gate before wiring |
-| Active-title scroll | Previous/next workspace | No daemon route found in current Bead v1 fixtures; contract gate before wiring |
-| Clock click/hover | Calendar open/peek | Verify pinned UI provider method registry |
-| Power click | Session/power entry | Verify pinned UI provider method registry; no guessed local command |
-| Status click/scroll/hover | Existing pill/status routes | Verify pinned method per action and target output |
-| Tray activate/context/scroll/hover | Existing item/menu/tooltip routes | Verify published tray methods and reject stale item identity |
-| Pointer exit/dismiss | Close transient peek, preserve pinned panel | Local view behavior; no daemon mutation |
+| App/launcher click; dashboard click | Existing launcher trigger and local `view.open` action | `ui.dispatch` v1 is published in pinned `state.jsonl` / `ui.jsonl` and Bead's provider forwards validated calls through it. The bar's current launcher/dashboard clicks are local panel actions, not daemon-backed; no published per-output route is established. |
+| Workspace activate, scroll, window focus | Not output-scoped; workspace click uses local `Backend::action` | Blocked: `nacre.workspace(int)` exists only in Nacre's shell command catalog, not the pinned daemon method registry. `backend.workspace.switch` is a direct compositor mutation and is disallowed for this parity route. No focus-window daemon method is published. |
+| Active-title scroll | No matching behavior wired in Bead bar | Blocked: QML maps title scroll to adjacent workspace; same missing published workspace route and output context. |
+| Clock click/hover | Calendar view opens via Bead UI action; no hover peek parity | `ui.dispatch` v1 is generic, but `nacre.popout` is shell catalog only. No published calendar-open/peek daemon method or output argument. |
+| Power click | No action currently wired on Bead bar | `nacre.session` is shell catalog only. No published session-entry daemon method. |
+| Status click/scroll/hover | Existing status pill and detail views | `ui.dispatch` v1 exists; specific `nacre.controls/popout` names are shell catalog only. No published status hover/scroll or output-scoped action contract. Existing B0018 behavior remains separately implemented. |
+| Tray activate/context/menu/scroll/hover | Existing B0016 tray service and tooltip; actions use local tray service | Pinned v1 publishes `tray` state topic but no tray action methods. `ui.dispatch` does not define tray action payloads. Existing private-bus test covers loss, empty snapshot, replacement item and activation; compositor bar restart/handoff smoke remains open. |
+| Pointer exit/dismiss | Local transient-panel behavior | Local view behavior; no daemon mutation required. Pinned panel persistence/hover handoff still needs parity proof. |
+
+The generic `ui.dispatch` method is published at protocol v1, but the route
+names above are not daemon methods merely because they appear in Nacre's shell
+command catalog. Do not wire those names as protocol calls without a published
+contract. The pinned registry also exposes `daemon.ping` and `daemon.status`;
+neither represents any of the blocked bar actions.
+
+Per-output content cannot be made correct by adding more model fields alone:
+`bead-wayland::App` owns one `SceneSource`, one committed `Scene`, and one
+primary UI serial shared by all `Surface`s. Pointer events likewise stage into
+that one source. Correct output-specific widgets/actions therefore require
+per-output UI sessions plus per-output update, commit, input, and teardown
+routing; no existing surface callback selects a session by output. This is a
+larger runtime change and is not attempted here.
 
 ## Acceptance
 

@@ -1,13 +1,16 @@
 # Status
 
-## 2026-10-22 — B0022 per-output bar spec
+## 2026-10-22 — B0022 bar composition and lifecycle
 
-[B0022](specs/0022-bar-composition-lifecycle.md) scopes one output-bound bar
-per active monitor, hotplug/scale and daemon/tray recovery, plus a Nacre QML
-action inventory routed only through published protocol methods. B0016 tray,
-B0018 status pill and B0019 launcher remain existing entry points. Implementation
-is gated on verifying each action against published method metadata; unknown
-workspace, title-scroll or power routes are recorded as contract blockers.
+The existing Wayland runtime creates/removes primary bar surfaces per output
+and updates surfaces for output scale/geometry changes. The shared bar model is
+still global, and published protocol v1 has no daemon routes for workspace,
+focus, session, calendar peek, status adjustments, or tray actions. B0022 is
+therefore partial; see [spec 0022](specs/0022-bar-composition-lifecycle.md)
+for the versioned action matrix and contract gates. Existing reconnect tests
+fence stale daemon calls; the ignored private tray-bus supervisor covers bus
+loss and item replacement. A nested bar restart/multi-output smoke is still
+needed. No new action route was invented.
 
 ## 2026-10-22 — B0021 wallpaper memory fixed; review
 
