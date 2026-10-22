@@ -105,7 +105,7 @@ Catalog. `shell/command-catalog.json` (Nacre rev 68df8dd) lacked `nacre clipboar
 so Super+V was refused by the provider; added, 121 routes. A scan of Nacre
 `origin/main` found no other missing `registerIpc` method.
 
-Settings. Bead reads no `settings.store.*` yet. Read-only consumers needed for
+Settings (superseded by [B0035](0035-settings-stores.md), which adds the read-only consumers). Bead reads no `settings.store.*` yet. Read-only consumers needed for
 parity are `desktop` (motion, language, nativeClipboard), `dashboard` and
 `dashboard-extras` (B0024 deliberately left them). No Bead-owned writer is added.
 Nothing to wire without a consumer; each store lands with the view that needs it.

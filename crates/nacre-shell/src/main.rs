@@ -20,6 +20,7 @@ mod notifications;
 mod placement;
 mod player_art;
 mod popouts;
+mod prefs;
 mod reload;
 mod session_menu;
 mod sound;
@@ -587,6 +588,24 @@ fn start(
         let sink: i18n_source::Sink = std::sync::Arc::new(bead::ui::i18n::install);
         i18n_source::Service::start(std::sync::Arc::new(topic), sink).ok()
     });
+    // B0035: the owner's Nacre settings, read-only and live. Without the topics (no
+    // daemon, older daemon) every default is Nacre's, so nothing changes.
+    let _prefs = _ui_provider.as_ref().and_then(|client| {
+        let topic = |name| {
+            client
+                .topic(name)
+                .ok()
+                .map(|t| std::sync::Arc::new(t) as std::sync::Arc<dyn bead::core::source::Source>)
+        };
+        prefs::Service::start(
+            topic(prefs::DESKTOP)?,
+            topic(prefs::DASHBOARD)?,
+            std::sync::Arc::new(|p: &prefs::Prefs| {
+                bead::core::animation::set_reduced_motion(p.reduce_motion)
+            }),
+        )
+        .ok()
+    });
     let core_sound = if core_views {
         Some(popouts::core_sound(
             _ui_provider.clone(),
@@ -708,6 +727,7 @@ fn start(
                     dashboard::Choice {
                         client: _ui_provider.clone(),
                         fixtures: dashboard_fixtures.clone(),
+                        prefs: _prefs.as_ref().map(|(_, source)| source.clone()),
                     },
                     desktop_owner.clone(),
                     panel_trace,

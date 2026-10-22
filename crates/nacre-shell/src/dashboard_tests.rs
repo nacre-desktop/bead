@@ -135,6 +135,7 @@ async fn preview_fixtures_use_canonical_types_and_cannot_call_services() -> Resu
     let choice = Choice {
         client: None,
         fixtures: Some(root().join("tests/fixtures/dashboard")),
+        prefs: None,
     };
     for page in Page::ALL {
         let source = choice.open(page)?;

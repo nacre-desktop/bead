@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Stable-ID animation state lives outside views. Rendering consumes only the pose.
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    sync::atomic::{AtomicBool, Ordering},
+};
+static REDUCED: AtomicBool = AtomicBool::new(false);
+/// Process-wide reduced-motion switch: every later target is reached at once, so
+/// no curve runs and nothing keeps redrawing. Hosts set it from their own settings.
+pub fn set_reduced_motion(reduced: bool) {
+    REDUCED.store(reduced, Ordering::Relaxed);
+}
+pub fn reduced_motion() -> bool {
+    REDUCED.load(Ordering::Relaxed)
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Curve {
     EaseOut,
@@ -21,17 +33,34 @@ pub struct Animations {
 }
 impl Animations {
     pub fn target(&mut self, id: &str, target: f32, now: f64, duration: f64, curve: Curve) {
-        let current = self.value(id, now).map_or(target, |v| v.0);
+        self.target_as(reduced_motion(), id, target, now, duration, curve);
+    }
+    fn target_as(
+        &mut self,
+        reduced: bool,
+        id: &str,
+        target: f32,
+        now: f64,
+        duration: f64,
+        curve: Curve,
+    ) {
+        let current = if reduced {
+            target
+        } else {
+            self.value(id, now).map_or(target, |v| v.0)
+        };
         if self.states.get(id).is_some_and(|m| m.to == target) {
             return;
         }
+        let duration = duration.max(0.001);
         self.states.insert(
             id.into(),
             Motion {
                 from: current,
                 to: target,
-                started: now,
-                duration: duration.max(0.001),
+                // Already finished when reduced, so the pose is final and idle.
+                started: if reduced { now - duration } else { now },
+                duration,
                 curve,
             },
         );
@@ -78,6 +107,19 @@ mod tests {
         ] {
             assert_eq!(a.value("preview", time).unwrap(), (expected, time < 1.));
         }
+    }
+    #[test]
+    fn reduced_motion_reaches_every_target_at_once_and_keeps_nothing_active() {
+        let mut a = Animations::default();
+        a.target_as(false, "panel", 0., 0., 1., Curve::EaseOut);
+        a.target_as(false, "panel", 1., 0., 1., Curve::EaseOut);
+        assert_eq!(a.value("panel", 0.5).map(|v| v.1), Some(true));
+        a.target_as(true, "panel", 0., 0.5, 1., Curve::Spring);
+        assert_eq!(a.value("panel", 0.5), Some((0., false)));
+        assert!(!a.active(0.5));
+        a.target_as(true, "other", 1., 0.5, 1., Curve::EaseOut);
+        assert_eq!(a.value("other", 0.5), Some((1., false)));
+        assert!(!a.active(0.5));
     }
     #[test]
     fn reversing_and_view_reload_do_not_reset_progress() {

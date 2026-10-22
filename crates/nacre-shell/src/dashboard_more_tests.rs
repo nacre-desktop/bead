@@ -1214,3 +1214,101 @@ async fn a_store_read_error_blocks_writes_and_advertised_topics_offer_enabled_ta
     assert_eq!(today["dashboard.customize"], Value::Bool(true));
     std::fs::remove_dir_all(dir).ok();
 }
+
+/// B0035: the effective preferences Source, driven by fake `settings.store.*` topics.
+fn live_prefs() -> (
+    Arc<FakeSource>,
+    Arc<FakeSource>,
+    Arc<dyn Source>,
+    crate::prefs::Service,
+) {
+    let store = |id: &str| {
+        Arc::new(
+            FakeSource::new(
+                json!({"store": id, "rev": 1, "exists": true, "data": {}, "dirty": false}),
+            )
+            .unwrap(),
+        )
+    };
+    let (desktop, dashboard) = (store("desktop"), store("dashboard"));
+    let (service, source) = crate::prefs::Service::start(
+        desktop.clone(),
+        dashboard.clone(),
+        Arc::new(|_: &crate::prefs::Prefs| {}),
+    )
+    .unwrap();
+    (desktop, dashboard, source, service)
+}
+
+#[test]
+fn weather_follows_the_fahrenheit_preference_live() {
+    let (desktop, _dashboard, prefs, _service) = live_prefs();
+    let mut data = fixture("weather");
+    data["current"]["temperature"] = json!(10.0);
+    let weather = |prefs: Option<Arc<dyn Source>>| {
+        Dashboard::new(
+            Page::Weather,
+            Arc::new(FakeSource::new(data.clone()).unwrap()),
+            None,
+            true,
+        )
+        .with_prefs(prefs)
+        .project()
+    };
+    // 10 C; the store is empty, so Celsius like Nacre's default.
+    let celsius = weather(Some(prefs.clone()));
+    assert_eq!(text(&celsius, "dashboard.metric"), "10°");
+    desktop
+        .publish(json!({"store":"desktop","rev":2,"exists":true,"dirty":false,"data":{"weatherFahrenheit":true}}))
+        .unwrap();
+    let fahrenheit = weather(Some(prefs));
+    assert_eq!(text(&fahrenheit, "dashboard.metric"), "50°");
+    assert_ne!(
+        serde_json::to_string(&rows(&fahrenheit, "dashboard.rows")).unwrap(),
+        serde_json::to_string(&rows(&celsius, "dashboard.rows")).unwrap()
+    );
+    // Without a preferences source (preview) the page stays Celsius.
+    assert_eq!(text(&weather(None), "dashboard.metric"), "10°");
+}
+
+#[test]
+fn dashboard_wakes_on_a_preference_change_and_core_tabs_follow_dashboard_tabs() {
+    let (_desktop, dashboard_store, prefs, _service) = live_prefs();
+    let dashboard = Dashboard::new(
+        Page::Today,
+        Arc::new(ReadOnly::unavailable().unwrap()),
+        None,
+        true,
+    )
+    .with_prefs(Some(prefs));
+    let ids = |d: &Dashboard| -> Vec<String> {
+        rows(&d.project(), "dashboard.tabs")
+            .iter()
+            .map(|t| t["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+    // No `tabs` key: Nacre's registry order (media before weather).
+    assert_eq!(ids(&dashboard), ["today", "media", "weather", "system"]);
+    let woken = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = woken.clone();
+    let _subscriptions = dashboard
+        .subscribe(Arc::new(move |_| {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }))
+        .unwrap();
+    let before = woken.load(std::sync::atomic::Ordering::SeqCst);
+    dashboard_store
+        .publish(json!({"store":"dashboard","rev":2,"exists":true,"dirty":false,"data":{"tabs":["system","today","bogus"]}}))
+        .unwrap();
+    assert!(woken.load(std::sync::atomic::Ordering::SeqCst) > before);
+    assert_eq!(ids(&dashboard), ["system", "today"]);
+    // The open page is still shown when the owner hid it.
+    let weather = Dashboard::new(
+        Page::Weather,
+        Arc::new(ReadOnly::unavailable().unwrap()),
+        None,
+        true,
+    )
+    .with_prefs(dashboard.prefs.clone());
+    assert_eq!(ids(&weather), ["system", "today", "weather"]);
+}

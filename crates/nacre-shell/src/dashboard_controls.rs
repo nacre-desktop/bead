@@ -289,7 +289,16 @@ impl Dashboard {
     fn tabs(&self) -> Vec<Json> {
         let store = self.store();
         let (enabled, order) = Self::layout(store.as_ref().map(|(s, _)| s));
-        let mut pages = Page::ALL.to_vec();
+        // B0035: with a preferences source the owner's `dashboard.tabs` decides the core
+        // pages and their order; previews and fixtures keep the fixed set.
+        let mut pages = match self.prefs() {
+            Some(prefs) => prefs
+                .core_tabs
+                .iter()
+                .filter_map(|name| Page::ALL.into_iter().find(|p| p.name() == name))
+                .collect::<Vec<_>>(),
+            None => Page::ALL.to_vec(),
+        };
         pages.extend(
             order
                 .into_iter()

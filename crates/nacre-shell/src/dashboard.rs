@@ -178,6 +178,8 @@ const SETTINGS: &str = "settings.store.dashboard-extras";
 pub struct Choice {
     pub client: Option<crate::nacre_source::Client>,
     pub fixtures: Option<PathBuf>,
+    /// B0035 effective Nacre preferences; none in previews and fixture runs.
+    pub prefs: Option<Arc<dyn Source>>,
 }
 impl Choice {
     pub fn open(&self, page: Page) -> source::Result<Arc<dyn Source>> {
@@ -285,7 +287,8 @@ pub fn spec(
                         Dashboard::new(page, source, secondary, choice.fixtures.is_some())
                             .with_clock(clock)
                             .with_player(player)
-                            .with_controls(settings, controls, choice.client.clone()),
+                            .with_controls(settings, controls, choice.client.clone())
+                            .with_prefs(choice.prefs.clone()),
                     )
                 })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
@@ -436,6 +439,8 @@ pub struct Dashboard {
     shots: std::cell::RefCell<BTreeMap<String, Art>>,
     clock: Option<Arc<dyn Source>>,
     settings: Option<Arc<dyn Source>>,
+    /// Effective Nacre preferences (B0035): temperature unit and core tab order.
+    prefs: Option<Arc<dyn Source>>,
     controls: Option<controls::Controls>,
     client: Option<crate::nacre_source::Client>,
     notify: std::cell::RefCell<Option<Notify>>,
@@ -459,6 +464,7 @@ impl Dashboard {
             shots: Default::default(),
             clock: None,
             settings: None,
+            prefs: None,
             controls: None,
             client: None,
             notify: Default::default(),
@@ -477,6 +483,23 @@ impl Dashboard {
         self.controls = controls;
         self.client = client;
         self
+    }
+    pub fn with_prefs(mut self, prefs: Option<Arc<dyn Source>>) -> Self {
+        self.prefs = prefs;
+        self
+    }
+    fn prefs(&self) -> Option<crate::prefs::Prefs> {
+        self.prefs
+            .as_ref()
+            .map(|p| crate::prefs::Prefs::from_source(&**p))
+    }
+    /// A temperature in the owner's unit; the daemon publishes degrees Celsius.
+    fn degrees(&self, value: Option<f64>) -> String {
+        let fahrenheit = self.prefs().is_some_and(|p| p.fahrenheit);
+        number(
+            value.map(|v| if fahrenheit { v * 9. / 5. + 32. } else { v }),
+            "°",
+        )
     }
     #[cfg(test)]
     fn with_now(mut self, now: fn() -> u64) -> Self {
@@ -532,6 +555,9 @@ impl Dashboard {
         let mut subscriptions = vec![self.source.subscribe(callback.clone())?];
         if let Some(settings) = &self.settings {
             subscriptions.push(settings.subscribe(callback.clone())?);
+        }
+        if let Some(prefs) = &self.prefs {
+            subscriptions.push(prefs.subscribe(callback.clone())?);
         }
         if let Some(client) = &self.client {
             // Method advertisement arrives with the link, not with a topic.
@@ -635,7 +661,7 @@ impl Dashboard {
                             "summary",
                             &format!(
                                 "{}  {} · {}",
-                                number(c.temperature, "°"),
+                                self.degrees(c.temperature),
                                 c.description,
                                 c.location
                             ),
@@ -733,14 +759,14 @@ impl Dashboard {
                 };
                 text(&mut out, "heading", &current.location, 24);
                 text(&mut out, "summary", &current.description, 48);
-                text(&mut out, "metric", &number(current.temperature, "°"), 24);
+                text(&mut out, "metric", &self.degrees(current.temperature), 24);
                 text(
                     &mut out,
                     "detail",
                     &tr(
                         "bead.dashboard.weather-details",
                         &[
-                            ("feels", &number(current.feels_like, "°")),
+                            ("feels", &self.degrees(current.feels_like)),
                             ("wind", &number(current.wind, " km/h")),
                         ],
                     ),
@@ -748,10 +774,10 @@ impl Dashboard {
                 );
                 let rain = tr("bead.dashboard.weather-rain-unit", &[]);
                 let hours = current.hours.order.iter().take(8).filter_map(|id| current.hours.items.get(id).map(|h| json!({
-                    "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"value":number(h.temperature,"°"),"detail":number(h.rain,&rain)
+                    "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"value":self.degrees(h.temperature),"detail":number(h.rain,&rain)
                 }))).collect();
                 let days = current.days.order.iter().take(7).filter_map(|id| current.days.items.get(id).map(|d| json!({
-                    "id":id,"label":line(&d.date,20),"value":format!("{} / {}",number(d.low,"°"),number(d.high,"°")),"detail":number(d.rain,&rain)
+                    "id":id,"label":line(&d.date,20),"value":format!("{} / {}",self.degrees(d.low),self.degrees(d.high)),"detail":number(d.rain,&rain)
                 }))).collect();
                 out.insert("dashboard.rows".into(), Value::list(hours));
                 out.insert("dashboard.secondary".into(), Value::list(days));
