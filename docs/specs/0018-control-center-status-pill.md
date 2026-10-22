@@ -23,6 +23,14 @@ contracts. Framework behavior stays generic; shell theme owns appearance.
 | Panel opens | Hide the edge charge line immediately. |
 | Closed and idle | Release lazy panel resources using existing lifecycle policy. |
 
+Reference: `nacre/shell/modules/topbar/NacreHeader.qml`,
+`NacreHoverDwell.qml` (350 ms dwell), and
+`nacre/shell/modules/drawers/NacrePanelInput.qml`: peek expiry 120 ms;
+clicked pointer-owned controls allow 600 ms for the first header-to-panel
+crossing, then 130 ms after entering the panel. Returning to the header resets
+the initial-crossing state. Compact controls use a 280 ms OutCubic opening in
+`NacreControlCenter.qml`. Read these from Nacre `origin/main`, not its checkout.
+
 ## Scope and non-goals
 
 Implement reusable routing/state transitions in the kit/runtime and shell wiring.
