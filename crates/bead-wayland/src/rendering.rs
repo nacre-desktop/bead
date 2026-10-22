@@ -108,6 +108,10 @@ impl App {
                 surface.redraw = true;
                 println!("SHM_POOL_COMPACT output={}", surface.output_name);
                 app.draw(index, &qh);
+                #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                unsafe {
+                    libc::malloc_trim(0);
+                }
                 TimeoutAction::Drop
             },
         ) {
