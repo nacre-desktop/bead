@@ -965,11 +965,12 @@ impl App {
         }
         surface.release_timer_pending = true;
         let handle = self.loop_handle.clone();
+        let callback_output = output.clone();
         if handle
             .insert_source(
                 Timer::from_duration(Duration::from_millis(100)),
                 move |_, _, app| {
-                    app.release_wallpaper_buffers(&output);
+                    app.release_wallpaper_buffers(&callback_output);
                     TimeoutAction::Drop
                 },
             )
