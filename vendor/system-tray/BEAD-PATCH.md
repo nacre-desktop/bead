@@ -10,6 +10,13 @@ to owner-loss before initial menu calls, checks owner presence after subscribing
 and reacquires the host registration plus resnapshots current items when this
 connection becomes the StatusNotifierWatcher owner again. Duplicate item events
 are ignored so they cannot create duplicate property/menu tasks.
+`AboutToShow(needsUpdate=true)` fetches and stores a bounded root layout before
+returning. LayoutUpdated signals also fetch the root tree, even when the signal
+names a submenu parent, so sibling entries are not lost. Layout signals are
+handled inline by the existing per-menu task; they do not create debounce tasks.
+NewAttentionIcon refreshes both the theme name and bounded pixmap data so a
+NeedsAttention item can replace its icon and fall back to its normal icon when
+the attention pixmap is empty or invalid.
 
 Bound retained watcher and client item identities to 64. Validate SNI pixmap
 dimensions with checked arithmetic, retain at most eight pixmaps per property,
@@ -18,7 +25,9 @@ is control-stripped and bounded. DBusMenu trees are limited to 256 entries and
 depth 8; retained menu icon data is limited to 1 MiB total, 4 KiB per entry.
 Identity strings are limited to 512 bytes. These limits apply after zbus has
 materialized the incoming D-Bus message; transport-level message allocation is
-still controlled by zbus and remains an upstream gap.
+still controlled by zbus and remains an upstream gap. Common item, tooltip and
+menu string conversions are control-stripped and limited before client events
+are broadcast; DBusMenu property-diff batches are limited to 256 entries.
 
 The private 100-item churn proof exposed retained tasks and growing memory.
 Watcher and item caps prevent unbounded retained registrations, and stale tasks

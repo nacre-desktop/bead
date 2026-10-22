@@ -93,8 +93,12 @@ impl TrayItemMap {
             .get_mut(dest)
         {
             match event {
-                UpdateEvent::AttentionIcon(icon_name) => {
+                UpdateEvent::AttentionIcon {
+                    icon_name,
+                    icon_pixmap,
+                } => {
                     item.attention_icon_name.clone_from(icon_name);
+                    item.attention_icon_pixmap.clone_from(icon_pixmap);
                 }
                 UpdateEvent::Icon {
                     icon_name,
@@ -242,6 +246,22 @@ fn bound_menu(menu: &mut TrayMenu) {
             }
             if let Some(icon) = &mut entry.icon_name {
                 *icon = icon.chars().filter(|c| !c.is_control()).take(512).collect();
+            }
+            if let Some(display) = &mut entry.children_display {
+                *display = display
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .take(512)
+                    .collect();
+            }
+            if let Some(shortcuts) = &mut entry.shortcut {
+                shortcuts.truncate(8);
+                for shortcut in shortcuts {
+                    shortcut.truncate(8);
+                    for key in shortcut {
+                        *key = key.chars().filter(|c| !c.is_control()).take(64).collect();
+                    }
+                }
             }
             if let Some(data) = &mut entry.icon_data {
                 let keep = data.len().min(4 * 1024).min(*icon_budget);

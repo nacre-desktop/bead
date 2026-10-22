@@ -115,7 +115,7 @@ async fn connect(
                 Some(Command::Stop)|None=>return Ok(()),
                 Some(Command::Tasks(reply))=>{ let retained=tray.retained_watcher_tasks().await.unwrap_or(0); let _=reply.send((tokio::runtime::Handle::current().metrics().num_alive_tasks(),retained)); },
                 Some(Command::Action(action,reply))=>{
-                    let result=tokio::time::timeout(Duration::from_secs(2),tray_action(&tray, &tray_actions, action)).await.map_err(|_|"D-Bus action timeout".to_string()).and_then(|r|r);
+                    let result=tokio::time::timeout(Duration::from_secs(2),tray_action(shared, &tray, &tray_actions, action)).await.map_err(|_|"D-Bus action timeout".to_string()).and_then(|r|r);
                     let _=reply.send(result);
                 }
             },
@@ -468,6 +468,7 @@ fn refresh_tray(shared: &Shared, client: &Client) {
     shared.change(|s| s.tray = tray);
 }
 async fn tray_action(
+    shared: &Shared,
     client: &Client,
     connection: &Connection,
     action: Action,
@@ -542,15 +543,18 @@ async fn tray_action(
         .menu
         .clone();
     if operation == "prepare" || operation == "prepare-entry" {
-        return client
+        let changed = client
             .about_to_show_menuitem(
                 id,
                 menu_path.ok_or("tray item has no menu")?,
                 if operation == "prepare-entry" { x } else { 0 },
             )
             .await
-            .map(|_| ())
             .map_err(|e| e.to_string());
+        if changed.as_ref().is_ok_and(|updated| *updated) {
+            refresh_tray(shared, client);
+        }
+        return changed.map(|_| ());
     }
     // Client::activate suppresses some method/timeout errors; use direct zbus calls so failure is observable.
     let (destination, path) = id.split_once('/').map_or(
@@ -650,10 +654,22 @@ mod clock_tests {
             pixels: vec![],
         };
         assert!(valid_pixmaps(Some(&vec![invalid])).is_empty());
-        let child = MenuItem { id: 11, ..MenuItem::default() };
-        let parent = MenuItem { id: 10, enabled: false, submenu: vec![child.clone()], ..MenuItem::default() };
+        let child = MenuItem {
+            id: 11,
+            ..MenuItem::default()
+        };
+        let parent = MenuItem {
+            id: 10,
+            enabled: false,
+            submenu: vec![child.clone()],
+            ..MenuItem::default()
+        };
         assert!(!menu_has_clickable_leaf(&[parent], 11, true));
-        let hidden_child = MenuItem { id: 11, visible: false, ..MenuItem::default() };
+        let hidden_child = MenuItem {
+            id: 11,
+            visible: false,
+            ..MenuItem::default()
+        };
         assert!(!menu_has_clickable_leaf(&[hidden_child], 11, true));
         let mut budget = 0;
         assert!(menu(&MenuItem::default(), 0, &mut budget, true).is_none());

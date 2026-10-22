@@ -231,7 +231,7 @@ impl TryFrom<&Structure<'_>> for Tooltip {
                 .first()
                 .ok_or(Error::InvalidData("icon_name"))?
                 .downcast_ref::<&str>()
-                .map(ToString::to_string)?,
+                .map(crate::dbus::bounded_text)?,
 
             icon_data: fields
                 .get(1)
@@ -244,13 +244,13 @@ impl TryFrom<&Structure<'_>> for Tooltip {
                 .get(2)
                 .ok_or(Error::InvalidData("title"))?
                 .downcast_ref::<&str>()
-                .map(ToString::to_string)?,
+                .map(crate::dbus::bounded_text)?,
 
             description: fields
                 .get(3)
                 .ok_or(Error::InvalidData("description"))?
                 .downcast_ref::<&str>()
-                .map(ToString::to_string)?,
+                .map(crate::dbus::bounded_text)?,
         })
     }
 }

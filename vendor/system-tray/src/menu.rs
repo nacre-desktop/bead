@@ -309,12 +309,12 @@ impl MenuItem {
         if let Some(Value::Dict(dict)) = fields.next() {
             menu.children_display = dict
                 .get::<&str, &str>(&"children-display")?
-                .map(str::to_string);
+                .map(crate::dbus::bounded_text);
 
             // see: https://github.com/gnustep/libs-dbuskit/blob/4dc9b56216e46e0e385b976b0605b965509ebbbd/Bundles/DBusMenu/com.canonical.dbusmenu.xml#L76
             menu.label = dict
                 .get::<&str, &str>(&"label")?
-                .map(|label| label.replace('_', ""));
+                .map(|label| crate::dbus::bounded_text(label).replace('_', ""));
 
             if let Some(enabled) = dict.get::<&str, bool>(&"enabled")? {
                 menu.enabled = enabled;
@@ -324,7 +324,9 @@ impl MenuItem {
                 menu.visible = visible;
             }
 
-            menu.icon_name = dict.get::<&str, &str>(&"icon-name")?.map(str::to_string);
+            menu.icon_name = dict
+                .get::<&str, &str>(&"icon-name")?
+                .map(crate::dbus::bounded_text);
 
             if let Some(array) = dict.get::<&str, &Array>(&"icon-data")? {
                 menu.icon_data = Some(get_icon_data(array)?);
@@ -384,8 +386,13 @@ impl TryFrom<PropertiesUpdate<'_>> for Vec<MenuDiff> {
 
     fn try_from(value: PropertiesUpdate<'_>) -> Result<Self> {
         let mut res = HashMap::new();
+        let mut remaining = 256usize;
 
         for updated in value.updated {
+            if remaining == 0 {
+                break;
+            }
+            remaining -= 1;
             let id = updated.id;
             let update = MenuDiff {
                 id,
@@ -396,13 +403,24 @@ impl TryFrom<PropertiesUpdate<'_>> for Vec<MenuDiff> {
             res.insert(id, update);
         }
 
-        for removed in value.removed {
+        for removed in value.removed.into_iter().take(remaining) {
             let update = res.entry(removed.id).or_insert_with(|| MenuDiff {
                 id: removed.id,
                 ..Default::default()
             });
 
-            update.remove = removed.fields.iter().map(ToString::to_string).collect();
+            update.remove = removed
+                .fields
+                .iter()
+                .take(16)
+                .map(|field| {
+                    field
+                        .chars()
+                        .filter(|ch| !ch.is_control())
+                        .take(128)
+                        .collect()
+                })
+                .collect();
         }
 
         Ok(res.into_values().collect())
@@ -428,7 +446,7 @@ impl TryFrom<UpdatedProps<'_>> for MenuItemUpdate {
         Ok(Self {
             label: dict
                 .get("label")
-                .map(|v| v.downcast_ref::<&str>().map(ToString::to_string).ok()),
+                .map(|v| v.downcast_ref::<&str>().map(crate::dbus::bounded_text).ok()),
 
             enabled: dict
                 .get("enabled")
@@ -440,7 +458,7 @@ impl TryFrom<UpdatedProps<'_>> for MenuItemUpdate {
 
             icon_name: dict
                 .get("icon-name")
-                .map(|v| v.downcast_ref::<&str>().map(ToString::to_string).ok()),
+                .map(|v| v.downcast_ref::<&str>().map(crate::dbus::bounded_text).ok()),
 
             icon_data,
 

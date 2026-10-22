@@ -8,6 +8,15 @@ pub mod notifier_item_proxy;
 pub mod notifier_watcher_proxy;
 pub mod status_notifier_watcher;
 
+/// Copy untrusted bus text into a bounded, control-free display string.
+pub(crate) fn bounded_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(2048)
+        .collect()
+}
+
 /// Wrapper around map of properties fetched from a proxy.
 pub(crate) struct DBusProps(pub HashMap<String, OwnedValue>);
 
@@ -29,7 +38,7 @@ impl DBusProps {
     /// interpreting it as a `str`
     /// and converting it to a string.
     pub fn get_string(&self, key: &str) -> Option<Result<String>> {
-        self.get::<str>(key).map(|res| res.map(ToString::to_string))
+        self.get::<str>(key).map(|res| res.map(bounded_text))
     }
 
     /// Gets `key` from the map if present,
@@ -48,7 +57,7 @@ pub(crate) trait OwnedValueExt {
 impl OwnedValueExt for OwnedValue {
     fn to_string(&self) -> Result<String> {
         self.downcast_ref::<&str>()
-            .map(ToString::to_string)
+            .map(bounded_text)
             .map_err(Into::into)
     }
 }

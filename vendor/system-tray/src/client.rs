@@ -14,11 +14,10 @@ use dbus::DBusProps;
 use futures_lite::{Stream, StreamExt};
 use std::future::Future;
 use std::result;
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::spawn;
-use tokio::sync::{broadcast, mpsc};
-use tokio::time::{sleep, timeout, Instant};
+use tokio::sync::broadcast;
+use tokio::time::{sleep, timeout};
 use tracing::{debug, error, trace, warn};
 use zbus::fdo::{DBusProxy, PropertiesProxy};
 use zbus::names::InterfaceName;
@@ -45,7 +44,10 @@ pub enum Event {
 /// The specific change associated with an update event.
 #[derive(Debug, Clone)]
 pub enum UpdateEvent {
-    AttentionIcon(Option<String>),
+    AttentionIcon {
+        icon_name: Option<String>,
+        icon_pixmap: Option<Vec<IconPixmap>>,
+    },
     Icon {
         icon_name: Option<String>,
         icon_pixmap: Option<Vec<IconPixmap>>,
@@ -532,12 +534,22 @@ impl Client {
         }
 
         let property = match member.as_str() {
-            "NewAttentionIcon" => Some(AttentionIcon(
-                get_property!("AttentionIconName")?
+            "NewAttentionIcon" => {
+                let icon_name = get_property!("AttentionIconName")?
                     .as_ref()
                     .map(OwnedValueExt::to_string)
-                    .transpose()?,
-            )),
+                    .transpose()?;
+                let icon_pixmap = get_property!("AttentionIconPixmap")?
+                    .as_deref()
+                    .map(Value::downcast_ref::<&Array>)
+                    .and_then(result::Result::ok)
+                    .map(IconPixmap::from_array)
+                    .and_then(result::Result::ok);
+                Some(AttentionIcon {
+                    icon_name,
+                    icon_pixmap,
+                })
+            }
             "NewIcon" => {
                 let icon_name = get_property!("IconName")
                     .unwrap_or_else(|e| {
@@ -617,8 +629,6 @@ impl Client {
         tx: broadcast::Sender<Event>,
         items: TrayItemMap,
     ) -> Result<()> {
-        const LAYOUT_UPDATE_INTERVAL_MS: Duration = Duration::from_millis(50);
-
         let dbus_menu_proxy = DBusMenuProxy::builder(connection)
             .destination(destination.as_str())?
             .path(menu_path)?
@@ -646,9 +656,6 @@ impl Client {
 
         tx.send(Event::Update(destination.clone(), UpdateEvent::Menu(menu)))?;
 
-        let last_layout_update = Arc::new(Mutex::new(Instant::now()));
-        let (layout_tx, mut layout_rx) = mpsc::channel(4);
-
         loop {
             tokio::select!(
                 Some(signal) = disconnected.next() => {
@@ -662,26 +669,12 @@ impl Client {
 
                 Some(ev) = layout_updated.next() => {
                     trace!("received layout update");
-
-                    let now = Instant::now();
-                    *last_layout_update.lock().expect("should get lock") = now;
-
-                    let args = ev.args()?;
-
-                    let last_layout_update = last_layout_update.clone();
-                    let layout_tx = layout_tx.clone();
-                    spawn(async move {
-                        sleep(LAYOUT_UPDATE_INTERVAL_MS).await;
-                        if *last_layout_update.lock().expect("should get lock") == now {
-                            trace!("dispatching layout update");
-                            layout_tx.send(args.parent).await.expect("should send");
-                        }
-                    });
-                }
-                Some(layout_parent) = layout_rx.recv() => {
+                    let _parent = ev.args()?.parent;
                     debug!("[{destination}{menu_path}] layout update");
 
-                    let get_layout = dbus_menu_proxy.get_layout(layout_parent, -1, &[]);
+                    // The retained model is a full menu tree. A nonzero parent
+                    // response would replace that tree with a subtree and drop siblings.
+                    let get_layout = dbus_menu_proxy.get_layout(0, -1, &[]);
 
                     let menu = match timeout(Duration::from_secs(1), get_layout).await {
                         Ok(Ok(menu)) => {
@@ -806,8 +799,16 @@ impl Client {
         menu_path: String,
         id: i32,
     ) -> Result<bool> {
-        let proxy = self.get_menu_proxy(address, menu_path).await?;
-        Ok(proxy.about_to_show(id).await?)
+        let proxy = self.get_menu_proxy(address.clone(), menu_path).await?;
+        let needs_update = proxy.about_to_show(id).await?;
+        if needs_update {
+            let layout = proxy.get_layout(0, -1, &[]).await?;
+            let menu = TrayMenu::try_from(layout)?;
+            self.items.update_menu(&address, &menu);
+            self.tx
+                .send(Event::Update(address, UpdateEvent::Menu(menu)))?;
+        }
+        Ok(needs_update)
     }
 
     /// Sends an activate request for a menu item.
