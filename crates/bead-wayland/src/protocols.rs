@@ -19,7 +19,10 @@ impl CompositorHandler for App {
             if self.options.primary_factory.is_some() && !self.surfaces[i].companion {
                 let id = self.surfaces[i].output_name.clone();
                 if let Some(session) = self.output_sessions.get(&id) {
-                    let deferred = session.source.as_ref().is_some_and(|s| s.deferred_updates());
+                    let deferred = session
+                        .source
+                        .as_ref()
+                        .is_some_and(|s| s.deferred_updates());
                     self.ui(UiEvent::Output(
                         session.epoch,
                         id,
@@ -133,7 +136,10 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
             if state.options.primary_factory.is_some() && !state.surfaces[i].companion {
                 let id = state.surfaces[i].output_name.clone();
                 if let Some(session) = state.output_sessions.get(&id) {
-                    let deferred = session.source.as_ref().is_some_and(|s| s.deferred_updates());
+                    let deferred = session
+                        .source
+                        .as_ref()
+                        .is_some_and(|s| s.deferred_updates());
                     state.ui(UiEvent::Output(
                         session.epoch,
                         id,
