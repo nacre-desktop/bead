@@ -1500,6 +1500,29 @@ mod tests {
         assert_eq!(budget.used(), 0);
     }
     #[test]
+    fn scale_retirement_releases_old_rasters_after_the_presented_frame() {
+        let mut cache = TreeCache::default();
+        let scene = scene();
+        cache.prepare(&scene, 1.5).unwrap();
+        let held = cache.frame.as_ref().unwrap().clone();
+        let raster = held.items[0].raster.as_ref().unwrap();
+        let old = Arc::downgrade(raster);
+        let pixels = raster.pixels.data().to_vec();
+        cache.retain_scales(&[1.25]);
+        cache.prepare(&scene, 1.25).unwrap();
+        assert_eq!(cache.frame.as_ref().unwrap().scale, 1.25);
+        assert!(old.upgrade().is_some(), "presented frame still owns its raster");
+        drop(held);
+        assert!(old.upgrade().is_none(), "retired scale is no longer cached");
+        cache.retain_scales(&[1.5]);
+        cache.prepare(&scene, 1.5).unwrap();
+        assert_eq!(
+            cache.frame.as_ref().unwrap().items[0].raster.as_ref().unwrap().pixels.data(),
+            pixels.as_slice(),
+            "returning to the original scale preserves pixels"
+        );
+    }
+    #[test]
     fn replacement_raster_delta_uses_previous_paint_slot_and_repairs_exactly() {
         for scale in [1., 1.5] {
             for crop in [false, true] {
