@@ -146,6 +146,9 @@ fn bake(
     Ok(())
 }
 impl SceneSource for Source {
+    fn deferred_updates(&self) -> bool {
+        true
+    }
     fn wallpaper_palette_pending(&self) -> bool {
         true
     }

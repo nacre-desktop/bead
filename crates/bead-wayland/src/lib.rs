@@ -248,6 +248,10 @@ pub struct InputRegion {
     pub prepare_center: Option<f32>,
 }
 pub trait SceneSource {
+    /// Successful staging without a scene schedules a later worker event.
+    fn deferred_updates(&self) -> bool {
+        false
+    }
     /// Stage a product-provided presentation palette through the normal scene transaction.
     fn wallpaper_palette(
         &mut self,
