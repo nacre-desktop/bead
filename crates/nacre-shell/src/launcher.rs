@@ -425,7 +425,8 @@ struct View {
     pending_navigation: VecDeque<(String, NavigationGeometry)>,
     actions: BTreeMap<String, String>,
     catalog_rev: u64,
-    stamp: Option<(String, u64, bool)>,
+    stamp: Option<SourceStamp>,
+    result_stamp: Option<SourceStamp>,
     rows: Arc<Vec<Json>>,
     total: usize,
     force_full: bool,
@@ -936,15 +937,19 @@ impl Menu {
     }
     pub fn activate(&self, id: &str) -> source::Result<MenuActivated> {
         let view = self.view.borrow();
-        if self.source.as_ref().is_some_and(|source| {
-            let snapshot = source.snapshot();
-            view.stamp.as_ref()
-                != Some(&(
-                    snapshot.epoch.clone(),
-                    snapshot.revision,
-                    snapshot.connected,
-                ))
-        }) || view.result_request != view.request
+        let current = self.source.as_ref().map(|source| source.snapshot());
+        let current_stamp = current.as_ref().map(|snapshot| {
+            (
+                snapshot.epoch.clone(),
+                snapshot.revision,
+                snapshot.connected,
+            )
+        });
+        if !current.as_ref().is_some_and(|snapshot| snapshot.connected)
+            || view.result_stamp != current_stamp
+            || view.pending.is_some()
+            || !view.pending_navigation.is_empty()
+            || view.result_request != view.request
         {
             return Err(source::Error::new(
                 "stale_revision",
@@ -1085,6 +1090,7 @@ impl Menu {
                     view.message = prepared.message;
                     view.error.clear();
                     view.result_request = Some(request.clone());
+                    view.result_stamp = completion.task.stamp.clone();
                 }
                 Err(error) => {
                     if bead::core::profile::enabled() {
@@ -1189,16 +1195,25 @@ impl Menu {
                     view.pending = Some((request.clone(), stamp.clone()));
                     view.pending_limited = limited;
                 }
-                let same_scope = view
-                    .result_request
-                    .as_ref()
-                    .is_some_and(|old| old.1 == request.1 && old.2 == request.2);
+                let same_boot = match (&view.result_stamp, &stamp) {
+                    (Some(previous), Some(current)) => previous.0 == current.0,
+                    (None, None) => true,
+                    _ => false,
+                };
+                let same_scope = same_boot
+                    && view
+                        .result_request
+                        .as_ref()
+                        .is_some_and(|old| old.1 == request.1 && old.2 == request.2);
                 if !same_scope {
                     view.rows = Arc::new(Vec::new());
                     view.actions.clear();
                     view.total = 0;
                     view.error.clear();
+                    view.conversion = None;
+                    view.message.clear();
                     view.result_request = None;
+                    view.result_stamp = None;
                 }
             } else {
                 view.error = "Launcher service unavailable".into();
@@ -2361,6 +2376,109 @@ mod tests {
             .unwrap();
         assert!(
             matches!(&project_wait(&menu, &stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["name"]=="New")
+        );
+    }
+    #[test]
+    fn same_boot_disconnect_keeps_rows_but_restart_clears_rows_and_fences_activation() {
+        struct RestartSource {
+            fixture: Fixture,
+            activations: std::sync::atomic::AtomicUsize,
+        }
+        impl Source for RestartSource {
+            fn snapshot(&self) -> Arc<source::Snapshot> {
+                self.fixture.snapshot()
+            }
+            fn subscribe(
+                &self,
+                callback: source::Callback,
+            ) -> source::Result<source::Subscription> {
+                self.fixture.subscribe(callback)
+            }
+            fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+                Box::pin(async move {
+                    if method == "menu.activate" {
+                        self.activations
+                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(json!({"keep_open":false}));
+                    }
+                    if method == "menu.query" && self.snapshot().epoch == "boot-b" {
+                        tokio::time::sleep(Duration::from_millis(180)).await;
+                    }
+                    self.fixture.invoke(method, params).await
+                })
+            }
+            fn reconnect(&self) -> source::Reply<'_> {
+                self.fixture.reconnect()
+            }
+            fn stop(&self) -> source::Reply<'_> {
+                self.fixture.stop()
+            }
+        }
+        let mut reply = fixture_reply("a", vec![json!({"id":"old-app","name":"Old app"})]);
+        reply["message"] = json!("Old boot guidance");
+        let source = Arc::new(RestartSource {
+            fixture: Fixture::new(json!({"queries":{"a":reply}})).unwrap(),
+            activations: Default::default(),
+        });
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text("a".into())),
+                ("launcher.selection".into(), Value::Text("old-app".into())),
+                ("launcher.engine_route".into(), Value::Text(String::new())),
+                ("launcher.scroll.y".into(), Value::Number(0.)),
+                ("launcher.total_count".into(), Value::Number(0.)),
+                ("launcher.pending".into(), Value::Bool(false)),
+            ]))
+            .unwrap();
+        let initial = project_wait(&menu, &stores).unwrap();
+        stores = stores.reconcile(&initial).unwrap();
+        stores.commit(initial).unwrap();
+        assert_eq!(menu.view.borrow().rows[0]["id"], "old-app");
+        assert_eq!(menu.view.borrow().message, "Old boot guidance");
+
+        source.fixture.publisher.disconnect().unwrap();
+        let disconnected = menu.project(&stores).unwrap();
+        assert_eq!(disconnected["launcher.pending"], Value::Bool(true));
+        assert_eq!(disconnected["launcher.result_count"], Value::Number(1.));
+        assert_eq!(menu.view.borrow().rows[0]["id"], "old-app");
+        assert!(menu.activate("old-app").is_err());
+        assert_eq!(
+            source.activations.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+
+        source.fixture.publisher.restart("boot-b".into()).unwrap();
+        let restarted = menu.project(&stores).unwrap();
+        assert_eq!(restarted["launcher.pending"], Value::Bool(true));
+        assert_eq!(restarted["launcher.result_count"], Value::Number(0.));
+        assert!(menu.view.borrow().rows.is_empty());
+        assert_eq!(restarted["launcher.message"], Value::Text(String::new()));
+        assert!(menu.activate("old-app").is_err());
+        assert_eq!(
+            source.activations.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+
+        let data = source.fixture.snapshot().data.as_ref().clone();
+        source.fixture.publisher.publish(data).unwrap();
+        let reconnecting = menu.project(&stores).unwrap();
+        assert_eq!(reconnecting["launcher.pending"], Value::Bool(true));
+        assert_eq!(reconnecting["launcher.result_count"], Value::Number(0.));
+        assert!(menu.activate("old-app").is_err());
+        assert_eq!(
+            source.activations.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+
+        let fresh = project_wait(&menu, &stores).unwrap();
+        assert!(
+            matches!(&fresh["launcher.apps"], Value::List(rows) if rows.iter().any(|row| row["id"] == "old-app"))
+        );
+        assert!(menu.activate("old-app").is_ok());
+        assert_eq!(
+            source.activations.load(std::sync::atomic::Ordering::SeqCst),
+            1
         );
     }
     #[test]

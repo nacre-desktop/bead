@@ -354,7 +354,22 @@ mod tests {
         let projector = menu.clone();
         h.session
             .set_projector(Box::new(move |stores| projector.project(stores)));
+        let wait_for_launcher =
+            |h: &mut bead_test::Harness| -> Result<(), Box<dyn std::error::Error>> {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+                loop {
+                    h.update(std::collections::BTreeMap::new())?;
+                    if h.session.stores.get("launcher.pending") == Some(&Value::Bool(false)) {
+                        return Ok(());
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return Err("launcher query did not settle".into());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            };
         h.reload()?;
+        wait_for_launcher(&mut h)?;
         h.render()?;
         h.assert_accessible("Application 0000", accesskit::Role::Button)?;
         for (query, label) in [
@@ -372,11 +387,18 @@ mod tests {
                 "launcher.search.text".into(),
                 Value::Text(query.into()),
             )]))?;
+            wait_for_launcher(&mut h)?;
             h.render()?;
             h.assert_accessible(label, accesskit::Role::Button)?;
+            let visible_rows = h
+                .session
+                .view_nodes()
+                .iter()
+                .filter(|node| node.action.as_deref() == Some("select_app"))
+                .count();
             assert!(
-                h.session.view_nodes().len() < 100,
-                "results must stay windowed"
+                visible_rows <= 12,
+                "320-row catalogue should materialize only viewport rows plus overscan, got {visible_rows}"
             );
         }
         h.reload()?;
@@ -389,6 +411,7 @@ mod tests {
             "launcher.search.text".into(),
             Value::Text(String::new()),
         )]))?;
+        wait_for_launcher(&mut h)?;
         h.render()?;
         h.assert_accessible("Application 0000", accesskit::Role::Button)?;
         assert!(matches!(
