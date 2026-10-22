@@ -591,10 +591,11 @@ impl Runtime {
     pub fn with_brightness_keys(
         mut self,
         client: crate::nacre_source::Client,
+        osd: Option<std::path::PathBuf>,
     ) -> Result<Self, Box<dyn Error>> {
         self.actions.register("key.brightness", "key.control")?;
         self.actions.grant("key.control");
-        self.brightness = Some(crate::key_routes::Brightness::new(client));
+        self.brightness = Some(crate::key_routes::Brightness::new(client, osd));
         Ok(self)
     }
     pub fn with_popout_trigger(mut self) -> Result<Self, Box<dyn Error>> {
@@ -1961,6 +1962,9 @@ impl SceneSource for Runtime {
                     None
                 }
             }
+            // Notice and OSD sessions have no status-pill stores; their hover is the
+            // card/OSD hover key above.
+            UiEvent::PointerRegion(_) if self.notifications.is_some() => None,
             UiEvent::PointerRegion(entered) => {
                 let before = self.status_pill.clone();
                 if entered {

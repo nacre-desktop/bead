@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-23 — B0020 notifications/OSD consumer implemented (review)
+
+Bead now consumes the daemon's notifications producer (N0017 default-action marker, N0036
+brightness level): popup stack, hover pause, DND/OSD suppression, dismiss vs forget, dashboard
+history/DND controls and OSD, never owning the bus name. Private nested smoke against the real
+producer: 32/32. Memory relative gate FAILS (+1.9..+2.7 MiB Pss vs the private-owner control, CPU
+backend); unresolved. Single-UI-provider limit and missing swipe/bar-popout recorded in
+[B0020](specs/0020-notifications-osd-product.md). No live change.
+
 ## 2026-10-22 — B0025 per-output sessions accepted
 
 Each output now owns UI state/update/commit/input/teardown with shared services,

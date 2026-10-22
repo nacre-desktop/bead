@@ -833,8 +833,26 @@ impl Notices for Service {
         Ok(())
     }
     fn audio_changed(&self, _: &bead::services::Audio) {}
-    fn feedback(&self, _: &[Json]) -> Result<Json, &'static str> {
-        Err("OSD is published by the daemon")
+    /// Brightness has no published OSD topic: the key route forwards the level the
+    /// daemon read back (N0036). Volume and the rest come from the daemon topics.
+    fn feedback(&self, args: &[Json]) -> Result<Json, &'static str> {
+        let level = match args {
+            [channel, level, _] if channel == "brightness" => level.as_f64(),
+            _ => return Err("only brightness feedback is accepted"),
+        }
+        .filter(|l| l.is_finite() && (0.0..=1.0).contains(l))
+        .ok_or("brightness level must be within 0..1")?;
+        self.shared.lock().osd.show(
+            Shown {
+                channel: OsdChannel::Brightness,
+                level,
+                muted: false,
+            },
+            Instant::now(),
+        );
+        self.shared.wake.notify_all();
+        publish(&self.shared);
+        Ok(Json::Null)
     }
     fn command(&self, call: &bead::services::ipc::Call) -> Result<Json, &'static str> {
         match call.method.as_str() {

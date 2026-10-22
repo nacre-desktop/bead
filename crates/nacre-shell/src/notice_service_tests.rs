@@ -764,6 +764,42 @@ mod daemon {
     }
 
     #[test]
+    fn brightness_feedback_from_the_key_route_shows_the_osd_and_nothing_else_is_accepted() {
+        let lab = lab();
+        let data = serde_json::to_value(state(json!({}))).unwrap();
+        let (socket, _calls, close) = fake(&lab, json!({"notifications":1}), data);
+        let service = Service::start(
+            socket,
+            Options {
+                provider: false,
+                action_on_click: false,
+            },
+        )
+        .unwrap();
+        let rx = models(&service);
+        std::thread::sleep(Duration::from_millis(600));
+        service
+            .feedback(&[json!("brightness"), json!(0.4), json!(false)])
+            .unwrap();
+        until(&rx, |m| {
+            flag(m, "osd.open")
+                && text(m, "osd.label") == "Display brightness"
+                && text(m, "osd.status") == "40%"
+        });
+        assert!(
+            service
+                .feedback(&[json!("volume"), json!(0.4), json!(false)])
+                .is_err()
+        );
+        assert!(
+            service
+                .feedback(&[json!("brightness"), json!(1.5), json!(false)])
+                .is_err()
+        );
+        let _ = close.send(());
+    }
+
+    #[test]
     fn absent_capability_is_unavailable_and_sends_nothing() {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();

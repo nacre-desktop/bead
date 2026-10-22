@@ -558,6 +558,7 @@ fn start(
     if ui_notification_socket.is_some() && !register_ui_provider {
         return Err("--ui-notification-socket requires --ui-provider".into());
     }
+    let osd_socket = ui_notification_socket.clone();
     let _ui_provider = if register_ui_provider {
         Some(
             ui_provider::start(
@@ -568,7 +569,7 @@ fn start(
                     .command_socket
                     .clone()
                     .ok_or("--ui-provider requires --command-socket")?,
-                ui_notification_socket,
+                ui_notification_socket.clone(),
             )
             .map_err(|e| e.to_string())?,
         )
@@ -736,7 +737,9 @@ fn start(
         options.panel_spec = Some(bead::wayland::PanelSpec {
             position: None,
             engages_decorations: false,
-            passive: true,
+            // The daemon OSD takes pointer input (hover holds it open, as in QML); the
+            // private compatibility owner stays click-through.
+            passive: notice_daemon.is_none(),
             keyboard_focus: false,
             initial_open: false,
             fallback,
@@ -773,6 +776,7 @@ fn start(
         let fallback = scene.clone();
         let bar = options.bar;
         let brightness_client = _ui_provider.clone().filter(|_| core_views && bar);
+        let brightness_osd = osd_socket.clone();
         let trace = options.trace_state;
         // Service owners outlive individual output sessions and their workers.
         let shared_backend = if backend_enabled {
@@ -786,6 +790,7 @@ fn start(
         }
         let make_source = move |output: Option<String>| {
             let brightness_client = brightness_client.clone();
+            let brightness_osd = brightness_osd.clone();
             let entry = entry.clone();
             let palette = palette.clone();
             let colors = colors.clone();
@@ -829,7 +834,7 @@ fn start(
                         runtime
                     };
                     let runtime = if let Some(client) = brightness_client {
-                        runtime.with_brightness_keys(client)?
+                        runtime.with_brightness_keys(client, brightness_osd)?
                     } else {
                         runtime
                     };

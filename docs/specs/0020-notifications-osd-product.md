@@ -1,11 +1,11 @@
 # B0020 — Resident notifications and OSD
 
-Status: **Producer/policy gate cleared; default-action contract gap blocks implementation.**
-Gap-list unit 5 / Roadmap Feature 9. No live ownership or switch authorization.
-Producer audit pin: Nacre `f468060038edfc33b99a1b06bf773ea9ffd90b7e`
-(N0017 phases A+B, owner decisions 2026-10-22). This is the source/spec pin;
-the runtime Cargo dependency is unchanged while the consumer gate below is open.
-Implementation authorized 2026-10-22; keyboard-layout OSD explicitly deferred.
+Status: **Implemented; review.** Consumer of Nacre N0017 (default-action marker
+published at `83d73952`) and N0036 (brightness reply level, `40ba5d9b`). Gap-list
+unit 5 / Roadmap Feature 9. No live ownership or switch authorization.
+Runtime pin: nacre-protocol `652d6c4f` (contains the default-action marker; N0036
+only adds JSON reply fields Bead reads untyped, so no repin). Keyboard-layout OSD
+is deferred (no contract).
 
 ## Objective and boundaries
 
@@ -31,23 +31,10 @@ forget-delete, and immediate Notify acknowledgement with asynchronous storage.
 The earlier design-proposal/policy gate is cleared by the owner's implementation
 request. Bead remains a socket consumer; no ownership fallback or live switch.
 
-**Required default-action metadata is missing at this pin.**
-`crates/nacre-protocol/src/core_services.rs` defines `NotificationAction` with
-only `label`; `Notification` has no default-action reference. The producer's
-`daemon/notifications/model.rs::action_ids` allocates opaque IDs and retains raw
-keys privately. `active_notification` publishes every action as an ID plus label.
-Neither order, label nor opaque ID identifies the native `default` action.
-QML `NacreNotice.qml` filters that action from buttons and invokes it on card
-click when `NacreNotifications.actionOnClick` is enabled. Guessing would expose
-the wrong buttons or invoke an unrelated action. This blocks the required
-acceptance checks, not the producer's ownership/timing/storage implementation.
-
-Upstream prerequisite: publish a backwards-compatible default-action marker or
-reference, validate it against the notice/revision, and cover default versus
-explicit actions plus replacement in schema/transcripts and green producer CI.
-Then repin and resume implementation. Also verify the supported source of the
-configured action-on-click policy (frozen QML default is false); do not invent a
-new setting writer. No Nacre source is changed by this Bead task.
+Default action: `Notification.default_action` (opaque action ID or null) is hidden from
+the button row and invoked on card click only when action-on-click is on. The policy has
+no published runtime source, so the frozen QML default (off) holds; `--notification-action-on-click`
+is a launch flag, not a settings writer.
 
 Keyboard-layout OSD is a follow-up, explicitly outside B0020. Existing published
 volume/brightness topics are in scope; keyboard backlight is not keyboard layout.
@@ -69,20 +56,45 @@ Paths below are relative to `nacre/shell/`.
 | Persistence | Preserve Rust daemon's 30-day retention, existing version-1 formats and exclusions. Active retainable text restores as inert history, with no popup/action/deadline revival. Test transient/feedback exclusions, corrupt/readonly/future files, failed saves, clear-before-load tombstones and restart. Never replace this with Bead's current 256-row/3 MiB fixture store. |
 | OSD | `modules/osd/NacreOsdEvents.qml`, `NacreOsd.qml`, `NacreLevelNotice.qml`: initial-state arming 400 ms, coalesced changes, focused output, bottom overlay, frame+24 px margin, width 200..336, no keyboard focus, 150 ms fade and 2000 ms hide. Hover pauses hide and leave restarts it. Volume/brightness use real published state; repeated equal-valued events use serial identity, expired/reconnected state never replays. Keyboard layout is deferred to a follow-up contract. |
 
-## Implementation units after default-action publication
+## Implementation (as built)
 
-1. Pin the published protocol/producer. Add the concrete notifications/OSD
-   consumer in `crates/nacre-shell/src/notifications.rs` and existing daemon
-   client/runtime routing. Capability absence is unavailable/read-only; never
-   start a local bus owner as reconnect fallback. Use the existing provider
-   registration, call tickets, bounded state mirror and resync mechanisms.
-2. Wire stack, history popout/control-center notices and OSD through the
-   existing shell assets/runtime. Preserve stable IDs and local expansion;
-   release lazy history/card/image resources after closed+idle. Resident service
-   subscription and transient presentation lifecycle stay separate.
-3. Exercise the published producer on private buses, then matched nested
-   QML/Bead interactions. Update STATUS and this spec with evidence. Do not
-   declare unit 5 complete with fixture-only screenshots or transport tests.
+- `nacre-shell/src/notice_service.rs`: daemon consumer (topics `notifications`, `osd`,
+  `audio`). Pure projection of the last-good snapshot (stale/unavailable/loading/error
+  distinct), revision-checked plans for dismiss/forget/action/DND/clear, local expansion,
+  hover (`set_hover`) and OSD-visible suppression (`set_inhibited`, sent from a worker, never the
+  transport callback), OSD arming/serial/expiry/2000 ms hide with hover hold. Backend trait
+  `Notices` shared with the private compatibility owner. Launch: `nacre-shell --notification-daemon
+  SOCKET [--notification-provider] [--notification-action-on-click]`; never owns a bus name.
+- Views: `shell/notifications/main.luau` (card click, right-click dismiss, default hidden),
+  `shell/osd/main.luau` (whole card hover target), dashboard Notifications page
+  (DND, Clear history, Dismiss/Forget rows, bounded-window note).
+- OSD sources: `osd` topic when the daemon publishes it (none yet); else default-output
+  volume from the `audio` topic; brightness from the `brightness.adjust` reply
+  `level_percent` (N0036), forwarded by the bar's key route to the notice process
+  (`bead.osd show brightness`). Brightness without a value is never shown.
+- Not done / limits: swipe-dismiss (no gesture event in the framework); popout history
+  from the bar (history lives on the dashboard page); panel/session suppression (needs a
+  cross-process signal; only OSD suppression is sent); the daemon allows ONE UI provider,
+  so hover/suppression work only when the notice process is the provider
+  (`--notification-provider`) and the bar/launcher process is not: a Nacre contract decision.
+  Clear history uses scope `history` (closed records). Keyboard-layout OSD deferred.
+- Generalization list additions: bead-ui host-action allowlist is hard-coded (`script.rs`)
+  and should be host-registered; `PointerRegion` reaches every panel session.
+
+## Evidence (2026-10-22/23)
+
+- Prod Arch container: fmt, clippy `-D warnings`, 266 nacre-shell tests incl. 22 notice_service
+  tests (published lifecycle/storage/loss/ownership transcripts replayed, fake-daemon calls).
+- Nested smoke on the desktop (private dbus, labwc+niri, real `nacre-helper daemon
+  --notifications=daemon` from Nacre `652d6c4f` on the private bus, `spikes/notice-daemon-smoke.py`):
+  32/32 checks: popup, default hidden, hover pause/resume, expand, ActionInvoked, right-click
+  dismiss retained, DND no replay, shell restart, daemon loss (name unowned, no fallback), real name untouched,
+  OSD (baseline, serial repeat, 2 s hide, hover hold, brightness gate, expired, caps). OSD source was a fake
+  `osd` producer (daemon has none).
+- Memory (desktop, CPU tiny-skia, debug stripped, medians of 5, 2 runs each): candidate minus control
+  Pss idle +1.9 MiB, one popup +2.7, closed +2.3 (anon +1.6..1.9); daemon separate ~56 MiB.
+  This FAILS the +0.5 MiB relative gate; cause not yet isolated (link thread/runtime, protocol
+  decoding). Control hosted the bus in-process. Owner/lead decision needed.
 
 ## Acceptance and stop conditions
 

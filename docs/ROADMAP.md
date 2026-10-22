@@ -24,6 +24,7 @@ suggested future fix. Do not fix them as part of unrelated work.
 
 | What | Where | Suggested fix |
 | --- | --- | --- |
+| Host-action allowlist includes `notifications.*` names | `bead-ui/src/script.rs` `validate_action` | Let the host register allowed action names |
 | Palette parser requires Orient format version 1. | `crates/bead-render/src/lib.rs` (`Palette::parse`) | Define a framework palette contract and keep Orient conversion in a Nacre adapter. |
 | Accessibility root is named “Nacre Shell.” | `crates/bead-ui/src/accessibility.rs` (`tree`) | Use a caller-provided application label or a neutral default. |
 | Capability names match Nacre's public compositor vocabulary. | `crates/bead-backends/src/lib.rs` (`CAPABILITIES`) | Define framework-owned capability identifiers and map Nacre names in its adapter. |
