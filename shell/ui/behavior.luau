@@ -2,7 +2,7 @@
 return {
   stores = {
     ["panel.open"] = true, ["launcher.apps"] = {},
-    ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.result_count"]=0, ["launcher.total_count"]=0,
+    ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.pending"]=false, ["launcher.result_count"]=0, ["launcher.total_count"]=0,
     ["launcher.selection"] = "", ["launcher.route"] = "apps", ["launcher.engine_route"]="",
     ["launcher.search.text"] = "", ["launcher.scroll.y"] = 0,
     ["launcher.conversion.value"]="", ["launcher.conversion.description"]="",
@@ -10,10 +10,11 @@ return {
   },
   actions = {
     select_app = function(s,id) s["launcher.selection"] = id end,
+    toggle_favorite = function(s,id) s["launcher.selection"] = id end,
     navigate = function(s,id)
-      s["launcher.engine_route"]=""
-      s["launcher.route"]=id
-      s["launcher.mode"]=id=="apps" and "apps" or "search"
+      s["launcher.engine_route"]=id=="home" and "home" or ""
+      s["launcher.route"]=(id=="home" or id=="apps") and "apps" or id
+      s["launcher.mode"]=(id=="apps" or id=="home") and "apps" or "search"
       s["launcher.search.text"]=id=="actions" and "> " or ""
       s["launcher.selection"]=""
       s["launcher.scroll.y"]=0
@@ -25,15 +26,17 @@ return {
     ["launcher.subtitle"]=function(s) return s["launcher.grid"] and "Applications" or "Results" end,
     ["launcher.grid"]=function(s) return s["launcher.mode"]=="apps" and s["launcher.search.text"]:match("^%s*$")~=nil end,
     ["launcher.has_detail"]=function(s) return s["launcher.conversion.value"]~="" or s["launcher.conversion.description"]~="" or s["launcher.conversion.error"]~="" or s["launcher.message"]~="" end,
-    ["launcher.empty"]=function(s) return s["launcher.result_count"]==0 and s["launcher.error"]=="" and not s["launcher.has_detail"] end,
+    ["launcher.empty"]=function(s) return s["launcher.result_count"]==0 and s["launcher.error"]=="" and not s["launcher.pending"] and not s["launcher.has_detail"] end,
     ["launcher.failed"]=function(s) return s["launcher.error"]~="" end,
     ["launcher.route_title"] = function(s)
-      return ({apps="Applications",search="Search everything",actions="Actions"})[s["launcher.route"]] or "Applications"
+      return s["launcher.engine_route"]=="home" and "Favorites" or ({apps="Applications",search="Search everything",actions="Actions"})[s["launcher.route"]] or "Applications"
     end,
     ["launcher.navigation"] = function(s)
       local rows={}
-      for _,item in {{id="apps",name="Applications",icon="apps"},{id="search",name="Search",icon="search"},{id="actions",name="Actions",icon="terminal"}} do
-        table.insert(rows,{id=item.id,name=item.name,icon=item.icon,selected=s["launcher.route"]==item.id})
+      local active=s["launcher.route"]
+      if s["launcher.engine_route"]=="home" then active="home" end
+      for _,item in {{id="apps",name="Applications",icon="apps"},{id="home",name="Favorites",icon="favorite"},{id="search",name="Search",icon="search"},{id="actions",name="Actions",icon="terminal"}} do
+        table.insert(rows,{id=item.id,name=item.name,icon=item.icon,selected=active==item.id})
       end
       return rows
     end,

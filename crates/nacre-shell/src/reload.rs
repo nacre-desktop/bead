@@ -4,6 +4,47 @@ use bead::render::Scene;
 use bead::wayland::{SceneSource, UiEvent};
 use std::collections::BTreeMap;
 use std::error::Error;
+fn launcher_open_model(args: &[serde_json::Value]) -> BTreeMap<String, bead::core::Value> {
+    if args.is_empty() {
+        return BTreeMap::new();
+    }
+    let mut values = BTreeMap::from([
+        (
+            "launcher.mode".into(),
+            bead::core::Value::Text("apps".into()),
+        ),
+        (
+            "launcher.route".into(),
+            bead::core::Value::Text("apps".into()),
+        ),
+        (
+            "launcher.engine_route".into(),
+            bead::core::Value::Text(String::new()),
+        ),
+        (
+            "launcher.selection".into(),
+            bead::core::Value::Text(String::new()),
+        ),
+        ("launcher.scroll.y".into(), bead::core::Value::Number(0.)),
+    ]);
+    if let Some(query) = args.first().and_then(serde_json::Value::as_str) {
+        values.insert(
+            "launcher.search.text".into(),
+            bead::core::Value::Text(query.into()),
+        );
+    }
+    values
+}
+fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead::core::Value> {
+    let mut changes = BTreeMap::from([("panel.open".into(), bead::core::Value::Bool(open))]);
+    if open && launcher {
+        changes.insert(
+            "bead.focused".into(),
+            bead::core::Value::Text("launcher.search".into()),
+        );
+    }
+    changes
+}
 pub struct Runtime {
     pub session: bead::ui::Session,
     pending: Option<Scene>,
@@ -52,18 +93,18 @@ pub struct Runtime {
 }
 impl Drop for Runtime {
     fn drop(&mut self) {
-        // The bar mirrors legacy state while the launcher is alive. Release it
-        // after the panel's 2200 ms close grace or a named-view retirement.
-        // Worker drop joins the actor before another factory can replace it;
-        // an old epoch cannot clear a new launcher's state. Quick reopen keeps
-        // the live worker and its view state.
+        // Keep only the bounded scalar search/navigation state after idle close;
+        // rows and engine tickets remain owned by the dropped Menu projection.
         if self.launcher.is_some()
             && let Some(memory) = &self.launcher_memory
             && let Ok(mut saved) = memory.lock()
         {
-            saved.clear();
+            *saved = crate::launcher::remember(&self.session.stores);
             if self.trace {
-                println!("PANEL_VIEW_STATE_RELEASED view=launcher entries=0");
+                println!(
+                    "PANEL_VIEW_STATE_RELEASED view=launcher entries={}",
+                    saved.len()
+                );
             }
         }
     }
@@ -294,6 +335,7 @@ impl Runtime {
                 bead::core::Value::Text("launcher.search".into()),
             )]))?;
         self.actions.register("select_app", "launcher")?;
+        self.actions.register("toggle_favorite", "launcher")?;
         self.actions.grant("launcher");
         self.launcher = Some(menu);
         Ok(self)
@@ -1310,6 +1352,21 @@ impl SceneSource for Runtime {
             );
             return Ok(None);
         }
+        if let (Some(menu), Some((_, name, bead::core::Value::Text(row_id)))) =
+            (&self.launcher, &host_action)
+            && name == "toggle_favorite"
+        {
+            self.actions.authorize(name)?;
+            let changes = match menu.favorite(row_id) {
+                Ok(()) => BTreeMap::new(),
+                Err(error) => BTreeMap::from([(
+                    "launcher.error".into(),
+                    bead::core::Value::Text(error.message),
+                )]),
+            };
+            let scene = self.session.update(changes)?;
+            return self.finish_scene(scene, false);
+        }
         if let (Some(menu), UiEvent::Command { command, .. }) = (&self.launcher, &event)
             && (self.session.surrounding_text().is_some()
                 || host_action
@@ -1528,10 +1585,8 @@ impl SceneSource for Runtime {
                 if open {
                     self.tray_requested_close = false;
                 }
-                self.session.update(std::collections::BTreeMap::from([(
-                    "panel.open".into(),
-                    bead::core::Value::Bool(open),
-                )]))?
+                self.session
+                    .update(panel_visibility_changes(open, self.launcher.is_some()))?
             }
             UiEvent::Fatal(error) => return Err(error.into()),
             UiEvent::Worker(_) => return Err("worker packet cannot reach script executor".into()),
@@ -1612,38 +1667,17 @@ impl SceneSource for Runtime {
                             bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
                         }
                         ("nacre", "launcher") if self.launcher_trigger => {
-                            let values = std::collections::BTreeMap::from([
-                                (
-                                    "launcher.search.text".into(),
-                                    bead::core::Value::Text(
-                                        call.args
-                                            .first()
-                                            .and_then(serde_json::Value::as_str)
-                                            .unwrap_or("")
-                                            .into(),
-                                    ),
-                                ),
-                                (
-                                    "launcher.mode".into(),
-                                    bead::core::Value::Text("apps".into()),
-                                ),
-                                (
-                                    "launcher.route".into(),
-                                    bead::core::Value::Text("apps".into()),
-                                ),
-                                (
-                                    "launcher.selection".into(),
-                                    bead::core::Value::Text(String::new()),
-                                ),
-                                ("launcher.scroll.y".into(), bead::core::Value::Number(0.)),
-                            ]);
+                            let values = launcher_open_model(&call.args);
                             self.actions.authorize("launcher.open")?;
-                            *self
-                                .launcher_memory
-                                .as_ref()
-                                .ok_or("launcher view state unavailable")?
-                                .lock()
-                                .map_err(|_| "launcher view state unavailable")? = values.clone();
+                            if !call.args.is_empty() {
+                                *self
+                                    .launcher_memory
+                                    .as_ref()
+                                    .ok_or("launcher view state unavailable")?
+                                    .lock()
+                                    .map_err(|_| "launcher view state unavailable")? =
+                                    values.clone();
+                            }
                             let wakeup = self
                                 .wakeup
                                 .as_ref()
@@ -2177,6 +2211,8 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod bluetooth_power_tests;
+#[cfg(test)]
+mod launcher_reopen_tests;
 #[cfg(test)]
 mod link_runtime_tests;
 #[cfg(test)]

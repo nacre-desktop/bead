@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Synthetic logs for the pure serial menu-query trace validator."""
 import importlib.util
+import json
 import pathlib
 import unittest
 
@@ -24,6 +25,37 @@ def valid_trace():
 
 
 class SerialKeyTraceTests(unittest.TestCase):
+    def identity_trace(self):
+        text = valid_trace().replace('count=320', 'count=2')
+        return text + '\n' + '\n'.join([
+            'MENU_RPC_CLOCK id=41 phase=send monotonic_ns=1010',
+            'MENU_RPC_CLOCK id=41 phase=return monotonic_ns=1080',
+            'MENU_RPC_QUERY id=41 json=' + json.dumps({'query': 'ap'}),
+            'MENU_RPC_IDENTITY id=41 json=' + json.dumps({'query': 'ap', 'order': ['b', 'a']}),
+            'MENU_RESULT_IDENTITY json=' + json.dumps({'query': 'ap', 'order': ['b', 'a']}),
+        ])
+
+    def test_exact_query_order_and_rtt(self):
+        row = menu_engine_trace.parse_serial_key_trace(self.identity_trace(), 7, 'clocks', 'ap')
+        self.assertEqual(row['item_ids'], ['b', 'a'])
+        self.assertEqual(row['query'], 'ap')
+        self.assertAlmostEqual(row['rpc_rtt_ms'], 0.00007)
+
+    def test_identity_rejects_stale_query_or_reordered_projection(self):
+        text = self.identity_trace()
+        for bad in (text.replace('"query": "ap"', '"query": "old"', 1),
+                    text.replace('MENU_RESULT_IDENTITY json={"query": "ap", "order": ["b", "a"]}',
+                                 'MENU_RESULT_IDENTITY json={"query": "ap", "order": ["a", "b"]}')):
+            with self.subTest(bad=bad), self.assertRaisesRegex(AssertionError, 'identity mismatch'):
+                menu_engine_trace.parse_serial_key_trace(bad, 7, 'clocks', 'ap')
+
+    def test_identity_requires_valid_rpc_clocks(self):
+        for old, new in (('phase=send monotonic_ns=1010', 'phase=send monotonic_ns=1081'),
+                         ('phase=return monotonic_ns=1080', 'phase=return monotonic_ns=1200')):
+            with self.subTest(new=new), self.assertRaises(AssertionError):
+                menu_engine_trace.parse_serial_key_trace(self.identity_trace().replace(old, new),
+                                                         7, 'clocks', 'ap')
+
     def parse(self, text=None, expected_catalog_rev=7, profile_mode='clocks'):
         return menu_engine_trace.parse_serial_key_trace(
             valid_trace() if text is None else text, expected_catalog_rev, profile_mode)

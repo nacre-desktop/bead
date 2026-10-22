@@ -895,11 +895,23 @@ fn resolve(pending: &mut BTreeMap<Id, Pending>, id: &Id, reply: Reply) {
         call.reply.finish(result);
     }
 }
-// Numeric method readiness only: never query text or result contents.
+// Numeric timing by default; contents require a separate private-fixture opt-in.
 fn trace_menu_return(id: &Id, result: &source::Result<Value>) {
     let Id::Integer(id) = id else {
         return;
     };
+    println!(
+        "MENU_RPC_CLOCK id={id} phase=return monotonic_ns={}",
+        bead::core::profile::monotonic_ns()
+    );
+    if std::env::var_os("BEAD_PROFILE_MENU_IDENTITY").as_deref() == Some(std::ffi::OsStr::new("1"))
+        && let Ok(value) = result
+    {
+        println!(
+            "MENU_RPC_IDENTITY id={id} json={}",
+            serde_json::json!({"query":value.get("query"),"order":value.get("order")})
+        );
+    }
     match result {
         Ok(value) => match (
             value.get("catalog_rev").and_then(Value::as_u64),
@@ -1008,6 +1020,12 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                     && !claim_ticket_dispatch(&ticket.state)
                                 { drop(reply); continue; }
                                 pending.insert(id.clone(),Pending{reply,deadline,trace_menu});
+                                if trace_menu && let Id::Integer(id)=&id {
+                                    println!("MENU_RPC_CLOCK id={id} phase=send monotonic_ns={}", bead::core::profile::monotonic_ns());
+                                    if std::env::var_os("BEAD_PROFILE_MENU_IDENTITY").as_deref() == Some(std::ffi::OsStr::new("1"))
+                                        && let Message::Call { p, .. } = &message
+                                    { println!("MENU_RPC_QUERY id={id} json={}", p); }
+                                }
                                 if !tokio::time::timeout(remaining.min(Duration::from_secs(10)),send(&shared,&mut session.writer,&message)).await.is_ok_and(|r|r.is_ok()){break;}
                                 if trace_menu && let Id::Integer(id)=&id { println!("MENU_RPC_SENT id={id}"); }
                             },

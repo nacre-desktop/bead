@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Pure validation for one existing serial menu-query typing trace segment."""
+import json
 import re
 
 
-def parse_serial_key_trace(segment, expected_catalog_rev, profile_mode):
-    """Validate one input-to-presentation segment and return its measured fields."""
+def parse_serial_key_trace(segment, expected_catalog_rev, profile_mode, expected_query=None):
+    """Validate one serial key; RPC RTT includes client write/dispatch time.
+
+    Identity mode requires exactly one successful RPC and one accepted projection;
+    it deliberately refuses overlapping/burst traces rather than guessing joins.
+    """
     assert profile_mode in ('clocks', '1'), 'unknown typing profile mode'
     assert 'UI_ERROR' not in segment and 'MENU_RESULT ok=false' not in segment
 
@@ -24,6 +29,33 @@ def parse_serial_key_trace(segment, expected_catalog_rev, profile_mode):
         segment,
     )
     assert typed, 'completed RPC has no matching successful MENU_RESULT'
+
+    identity = {}
+    if expected_query is not None:
+        def record(marker):
+            matches = re.findall(marker + r' json=(.+)', segment)
+            assert len(matches) == 1, 'missing/duplicate query identity'
+            return json.loads(matches[0])
+
+        request = record(r'MENU_RPC_QUERY id=' + str(rpc_id))
+        reply = record(r'MENU_RPC_IDENTITY id=' + str(rpc_id))
+        projected = record(r'MENU_RESULT_IDENTITY')
+        assert request['query'] == reply['query'] == projected['query'] == expected_query, \
+            'query identity mismatch'
+        order = reply['order']
+        assert isinstance(order, list) and len(order) == count and \
+            all(isinstance(item, str) for item in order) and len(set(order)) == count, \
+            'invalid ordered item identity'
+        assert projected['order'] == order, 'projected item identity mismatch'
+        clocks = {}
+        for phase in ('send', 'return'):
+            values = re.findall(r'MENU_RPC_CLOCK id=' + str(rpc_id) +
+                                ' phase=' + phase + r' monotonic_ns=(\d+)', segment)
+            assert len(values) == 1, 'missing/duplicate RPC clock'
+            clocks[phase] = int(values[0])
+        assert int(received[0][0]) <= clocks['send'] < clocks['return'], 'invalid RPC clocks'
+        identity = {'query': expected_query, 'item_ids': order,
+                    'rpc_rtt_ms': (clocks['return'] - clocks['send']) / 1e6}
 
     commit_pattern = re.compile(r'UI_COMMIT generation=(\d+).*update=(\d+).*source_error=false')
     commits = [
@@ -45,6 +77,8 @@ def parse_serial_key_trace(segment, expected_catalog_rev, profile_mode):
     _generation, presented_ns, refresh, _companion, update, end_cpu = found[0].groups()
     presented_ns, end_cpu = int(presented_ns), int(end_cpu)
     assert end_cpu > cpu > 0 and presented_ns > start > 0, 'invalid input/presentation clocks'
+    if expected_query is not None:
+        assert clocks['return'] <= presented_ns, 'RPC returned after presentation'
 
     profiles = [
         {'stage': stage, 'wall_ms': float(wall), 'cpu_ms': float(stage_cpu)}
@@ -56,6 +90,7 @@ def parse_serial_key_trace(segment, expected_catalog_rev, profile_mode):
         assert not profiles, 'clock-only capture emitted stage traces'
 
     return {
+        **identity,
         'rpc_id': rpc_id,
         'busy_retries': len(busy),
         'catalog_rev': revision,

@@ -235,6 +235,7 @@ def sample(env, raw, compositor, stop):
                             'daemon_cpu_ms': (after_daemon - before_daemon) / 1e6,
                             'worker_cpu_ms': sum(value - before_workers.get(pid, 0) for pid, value in after_workers.items()) / 1e6})
                 client_env = dict(env, BEAD_PRIVATE_INPUT_PROOF='1', BEAD_PROFILE_INPUT=profile_mode,
+                                  BEAD_PROFILE_MENU_IDENTITY='1',
                                   BEAD_MATCHED_ICONS='1', BEAD_ICON_PATH=str(ROOT / 'shell/sample.svg'),
                                   DBUS_SYSTEM_BUS_ADDRESS=env['DBUS_SESSION_BUS_ADDRESS'],
                                   PIPEWIRE_REMOTE='bead-private-unavailable')
@@ -307,12 +308,21 @@ def sample(env, raw, compositor, stop):
                         before_daemon = daemon_clock.sample_ns()
                         key = ['a'] if index == 0 else ['p'] if index % 2 else ['-k', 'BackSpace']
                         subprocess.run(['wtype', '-s', '20', *key], env=env, check=True, timeout=5)
-                        matrix.wait_log(log, lambda t: re.search(r'UI_PRESENTED .*update=\d+ cpu_ns=\d+', t[offset:]), timeout=10)
+                        expected_query = 'a' if index % 2 == 0 else 'ap'
+                        def result_presented(text):
+                            try:
+                                return menu_engine_trace.parse_serial_key_trace(
+                                    text[offset:], initial['catalog_rev'], profile_mode,
+                                    expected_query=expected_query)
+                            except (AssertionError, KeyError, ValueError):
+                                return None
+                        matrix.wait_log(log, result_presented, timeout=10)
                         segment = matrix.log_text(log)[offset:]
                         after_daemon = daemon_clock.sample_ns()
                         after_workers = worker_samples()
                         trace = menu_engine_trace.parse_serial_key_trace(
-                            segment, initial['catalog_rev'], profile_mode)
+                            segment, initial['catalog_rev'], profile_mode,
+                            expected_query=expected_query)
                         rows.append(dict(index=index, rpc_id=trace['rpc_id'], busy_retries=trace['busy_retries'],
                                          catalog_rev=trace['catalog_rev'], result_count=trace['result_count'],
                                          update=trace['update'], input_ns=trace['input_ns'],
@@ -321,6 +331,8 @@ def sample(env, raw, compositor, stop):
                                          daemon_cpu_ms=(after_daemon - before_daemon) / 1e6,
                                          worker_cpu_ms=sum(value - before_workers.get(pid, 0) for pid, value in after_workers.items()) / 1e6,
                                          refresh_ns=trace['refresh_ns'], profiles=trace['profiles']))
+                        rows[-1].update(query=trace['query'], item_ids=trace['item_ids'],
+                                        rpc_rtt_ms=trace['rpc_rtt_ms'])
                         time.sleep(.04)
                     assert 'PRESENTATION clock_id=1' in matrix.log_text(log)
                     thread_profile = clocks.thread_delta(thread_before, clocks.thread_snapshot(client), len(rows)) if thread_before is not None else None
@@ -347,18 +359,50 @@ def sample(env, raw, compositor, stop):
                         'catalog_rev': revised['catalog_rev'], 'count': len(revised['order']),
                         'first': revised['order'][:3]}, indent=2) + '\n')
                     assert re.search(r'MENU_RPC_RETURN id=\d+ ok=true catalog_rev=' + str(revised['catalog_rev']) + r' count=', matrix.log_text(log)[offset:])
+                    # Contract/refresh smoke after all timing windows. Never
+                    # activate a fixture application or invoke a UI provider.
+                    favorite_id = rows[-1]['item_ids'][0]
+                    for enabled in (True, False):
+                        offset = len(matrix.log_text(log))
+                        preferences = call('menu.preferences', {
+                            'action': 'favorite', 'value': {'id': favorite_id, 'enabled': enabled}})
+                        assert preferences and (favorite_id in preferences['favorites']) == enabled
+                        def favorite_visible(text):
+                            for match in re.finditer(r'^UI_STATE (.+)$', text[offset:], re.M):
+                                state = json.loads(match[1])
+                                if any(row.get('id') == favorite_id and row.get('favorite') is enabled
+                                       for row in state.get('launcher.apps', [])):
+                                    tail = text[offset:][match.end():]
+                                    commit = re.search(r'UI_COMMIT generation=(\d+).*update=(\d+).*source_error=false', tail)
+                                    if commit and re.search(r'UI_PRESENTED generation=' + commit[1] +
+                                                            r' .*update=' + commit[2] + r' ', tail[commit.end():]):
+                                        return True
+                            return False
+                        matrix.wait_log(log, favorite_visible, timeout=10)
+                    groups = call('menu.query', {'query': 'apps', 'mode': 'search'})
+                    group_id = next((ident for ident in groups['order']
+                                     if groups['items'][ident]['kind'] == 'group'), None)
+                    assert group_id, 'published engine query returned no catalogue group'
+                    navigation = call('menu.activate', {
+                        'id': group_id, 'activation': groups['items'][group_id]['activation'],
+                        'catalog_rev': groups['catalog_rev']})
+                    assert navigation and navigation['keep_open'] and navigation['view'].get('route')
+                    (raw / 'launcher-contract-smoke.json').write_text(json.dumps({
+                        'favorite_id': favorite_id, 'pin_unpin_ui_refresh': True,
+                        'group_id': group_id, 'navigation': navigation}, indent=2) + '\n')
                     pointer.close(); pointer = None
                     stop(client); client = None
                     stop(keeper); keeper = None
                 stop_engine(); daemon = None
         result = dict(compositor=compositor, catalog_size=320, source='real nacre-daemon menu.query', keys=len(rows), rows=rows,
+                      item_identity_changes=sum(left['item_ids'] != right['item_ids'] for left, right in zip(rows, rows[1:])),
                       helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(), memory=memory,
                       cpu_method='UI: input receipt to exact presentation, process CPU; daemon/workers: high-resolution process clocks bracketing injection through presentation, includes background work',
                       worker_count=len(workers), catalog_invalidated_without_key=True,
                       idle_memory_screen=idle_memory_screen,
                       settle_seconds=settle, profile_mode=profile_mode, diagnostic=diagnostic, thread_profile=thread_profile,
                       owned_workers_cleaned=True, unknown_refresh_predictions=sum(row['refresh_ns'] is None for row in rows), valid=True)
-        for metric in ['latency_ms', 'ui_cpu_ms', 'daemon_cpu_ms', 'worker_cpu_ms']:
+        for metric in ['latency_ms', 'ui_cpu_ms', 'daemon_cpu_ms', 'worker_cpu_ms', 'rpc_rtt_ms']:
             values = [row[metric] for row in rows]
             result[metric] = {**matrix.percentiles(values), 'mean': sum(values) / len(values), 'max': max(values)}
         (raw / 'menu-engine-proof.json').write_text(json.dumps(result, indent=2) + '\n')

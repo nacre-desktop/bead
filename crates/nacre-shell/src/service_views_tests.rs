@@ -515,27 +515,40 @@ fn legacy_state_distinguishes_named_views_on_one_host() -> Result<()> {
 #[test]
 fn panel_retirement_releases_launcher_mirror_but_bar_does_not() -> Result<()> {
     let memory = crate::launcher::Memory::default();
+    let initial = BTreeMap::from([(
+        "launcher.search.text".into(),
+        bead::core::Value::Text("panel query".into()),
+    )]);
+    *memory.lock().unwrap() = initial.clone();
     let h = calendar(2026, 10, 0, 1.)?;
-    let panel = crate::reload::Runtime::new(h.session)
+    let mut panel = crate::reload::Runtime::new(h.session)
         .with_launcher(None)?
         .with_launcher_memory(memory.clone())?;
-    memory.lock().unwrap().insert(
-        "launcher.search.text".into(),
-        bead::core::Value::Text("x".repeat(65536)),
-    );
+    let panel_values = BTreeMap::from([
+        ("launcher.search.text".into(), bead::core::Value::Text("kept query".into())),
+        ("launcher.selection".into(), bead::core::Value::Text("app-id".into())),
+        ("launcher.mode".into(), bead::core::Value::Text("apps".into())),
+        ("launcher.route".into(), bead::core::Value::Text("apps".into())),
+        ("launcher.engine_route".into(), bead::core::Value::Text(String::new())),
+        ("launcher.scroll.y".into(), bead::core::Value::Number(42.)),
+        ("launcher.apps".into(), bead::core::Value::list(vec![serde_json::json!({"id":"large","payload":"not retained"})])),
+    ]);
+    panel.session.stores = panel.session.stores.reconcile(&panel_values)?;
+    panel.session.stores.commit(panel_values)?;
     let h = calendar(2026, 10, 0, 1.)?;
     let bar = crate::reload::Runtime::new(h.session).with_launcher_trigger(memory.clone())?;
     drop(bar);
     assert_eq!(
-        memory.lock().unwrap().len(),
-        1,
+        *memory.lock().unwrap(),
+        initial,
         "bar does not own panel state"
     );
     drop(panel);
-    assert!(
-        memory.lock().unwrap().is_empty(),
-        "worker retirement releases all mirrored values"
-    );
+    let saved = memory.lock().unwrap();
+    assert_eq!(saved["launcher.search.text"], bead::core::Value::Text("kept query".into()));
+    assert_eq!(saved["launcher.selection"], bead::core::Value::Text("app-id".into()));
+    assert_eq!(saved["launcher.scroll.y"], bead::core::Value::Number(42.));
+    assert!(!saved.contains_key("launcher.apps"), "row payload is released after worker retirement");
     Ok(())
 }
 

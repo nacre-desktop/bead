@@ -1,9 +1,10 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
 local kit=require("bead.kit")
-local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string",selected="boolean",description="string"}},function(p)
+local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string",selected="boolean",description="string",favorite="boolean",favoriteId="string"}},function(p)
     local item=p.item
-    return ui.Button{id="result",width="fill",height="fill",radius=10,padding_left=12,padding_right=12,padding_top=8,padding_bottom=8,fill="transparent",selected=item.selected,
+    return ui.Box{id="result-wrap",width="fill",height="fill",
+      ui.Button{id="result",width="fill",height="fill",radius=10,padding_left=12,padding_right=42,padding_top=8,padding_bottom=8,fill="transparent",selected=item.selected,
         selected_fill=ui.tint("surface","onSurface",.09),hover_fill=ui.tint("surface","onSurface",.04),
         on_activate=ui.action("select_app",item.id),aria_label=item.name,
         ui.Box{position="absolute",left=0,top=9,width=3,height=37,radius=1.5,fill="primary",visible=item.selected},
@@ -14,6 +15,13 @@ local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string
                 ui.Text{text=item.description,font_size=12,color="onSurfaceVariant",height=16},
             },
         },
+      },
+      ui.Button{id="favorite",position="absolute",right=8,top=10,width=28,height=28,radius=8,padding=0,
+        aria_label=item.favorite and "Remove from favorites" or "Add to favorites",
+        fill=item.favorite and ui.tint("surface","primary",.12) or "transparent",
+        on_activate=ui.action("toggle_favorite",item.id),
+        ui.Text{text=item.favorite and "star" or "star_outline",family="Material Symbols Rounded",width="fill",height="fill",font_size=19,text_align="center",color=item.favorite and "primary" or "onSurfaceVariant"},
+      },
     }
 end)
 return ui.component("Results",{},function(_)

@@ -73,10 +73,12 @@ def sample(env,raw,compositor,stop):
                 assert denied['launcher.error'] and client.poll()is None,'activation failure was not visible/recoverable'
                 assert 'UI_ERROR'not in matrix.log_text(log)
                 assert 'PRESENTATION clock_id=1'in matrix.log_text(log)
+                memory=matrix.measure.memory(client.pid)
+                assert memory['swap_pss_mib']==0,'nonzero UI SwapPss during launcher input smoke'
                 if pointer:pointer.close();pointer=None
                 stop(client);client=None
                 stop(keeper);keeper=None
-        result={'compositor':compositor,'catalog_size':320,'engine':False,'states':states,'valid':True}
+        result={'compositor':compositor,'catalog_size':320,'engine':False,'states':states,'memory':memory,'valid':True}
         (raw/'launcher-input-proof.json').write_text(json.dumps(result,indent=2)+'\n')
         print('LAUNCHER_INPUT_PROOF states='+str(len(states))+' valid=true',flush=True)
     finally:

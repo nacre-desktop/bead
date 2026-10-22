@@ -59,7 +59,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     if os.environ.get('BEAD_LAUNCHER_MMAP_THRESHOLD'):
         env['MALLOC_MMAP_THRESHOLD_']=os.environ['BEAD_LAUNCHER_MMAP_THRESHOLD']
     data=[{'id':f'app-{i:04}','name':f'Application {i:04}','kind':'app','description':'Application fixture','icon':'fixture'}for i in range(320)]
-    fixture=raw/'menu.json';fixture.write_text(json.dumps({'queries':{'':menu_fixtures.reply('',data),'a':menu_fixtures.reply('a',data)}}));fixture.chmod(0o600)
+    fixture=raw/'menu.json';fixture.write_text(json.dumps({'queries':{q:menu_fixtures.reply(q,data)for q in['','a','ap']}}));fixture.chmod(0o600)
     sock=pathlib.Path(env['XDG_RUNTIME_DIR'])/'launcher-command.sock'
     log=raw/'launcher.log';client=pointer=keeper=None
     engine_socket=env.get('BEAD_LAUNCHER_ENGINE_SOCKET')
@@ -73,6 +73,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     assert dashboard_default in dashboard_pages
     release_state=os.environ.get('BEAD_PANEL_IDLE_STATE')=='release'
     query_on_open=os.environ.get('BEAD_LAUNCHER_QUERY_ON_OPEN')=='1'
+    reopen_input=os.environ.get('BEAD_LAUNCHER_REOPEN_INPUT_PROOF')=='1'
     expected_query_rows=os.environ.get('BEAD_EXPECT_QUERY_ROWS')
     if expected_query_rows is not None:
         expected_query_rows=int(expected_query_rows)
@@ -148,15 +149,17 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             budget_failures.append({'code':code,'actual_mib':actual,'limit_mib':limit})
     closed_samples=[]
     def closed_guard(closed_at=None):
+        remembered_query=json.loads(call('state',target='nacre'))['query']
         state_wait(lambda s:not s['resident']and not s['target_open']and s['surfaces']==0)
         released_at=time.monotonic_ns()
         time.sleep(.4)
         sample=matrix.idle(client.pid,1)
+        assert sample['memory']['swap_pss_mib']==0,'nonzero UI SwapPss after launcher close'
         if closed_at is not None:sample['closed_idle_observed_after_ms']=(released_at-closed_at)/1e6
         if observe:sample['external']=observe()
         sample['cache_bytes']=call('state').get('cache_bytes')
         if release_state:
-            assert json.loads(call('state',target='nacre'))['query']=='','closed-idle launcher retained its view state'
+            assert json.loads(call('state',target='nacre'))['query']==remembered_query,'closed-idle launcher lost its bounded input state'
         sample['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
         index=len(closed_samples);closed_samples.append(sample)
         (raw/f'closed-{index}.json').write_text(json.dumps(sample,indent=2)+'\n')
@@ -170,7 +173,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
         return sample
     result={'compositor':compositor,'fixture_results':None if engine_socket else 320,'engine':bool(engine_socket),'cycles':[]}
     try:
-        if os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1':
+        if os.environ.get('BEAD_LAUNCHER_UI_PROVIDER')=='1' or reopen_input:
             # Match input capabilities for control and candidate before the bar
             # baseline. Registering a keyboard only during candidate Escape
             # would wrongly charge its IME/seat setup to the new service view.
@@ -202,6 +205,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 if bar['pss_plus_drm_mib']+bar['memory']['swap_pss_mib']>=24.5:
                     raise RuntimeError('reference baseline reached the 24.5 MiB stop line')
             result['bar']=bar
+            assert bar['memory']['swap_pss_mib']==0,'nonzero UI SwapPss in bar baseline'
             if observe:bar['external']=observe()
             bar['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
             (raw/'bar.json').write_text(json.dumps(bar,indent=2)+'\n')
@@ -245,16 +249,25 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                         raise
                     result['restored_mode']=restored_mode
                     call('launcher','a',target='nacre')
+                elif reopen_input and cycle>0:call('launcher',target='nacre')
                 elif query_on_open:call('launcher','a',target='nacre')
                 else:call('open')
                 matrix.wait_log(log,lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* .*companion=true',t[offset:])is not None)
-                if not query_on_open and (cycle==0 or release_state):call('launcher','a',target='nacre')
+                if not query_on_open and (cycle==0 or release_state) and not(reopen_input and cycle>0):call('launcher','a',target='nacre')
                 matrix.wait_log(log,lambda t:ui_query(t[offset:],'a'))
+                if reopen_input and cycle>0:
+                    key_offset=len(matrix.log_text(log))
+                    subprocess.run(['wtype','-s','20','p'],env=env,capture_output=True,check=True,timeout=6)
+                    matrix.wait_log(log,lambda t:query_presented(t[key_offset:],'ap'))
+                    subprocess.run(['wtype','-s','20','-k','BackSpace'],env=env,capture_output=True,check=True,timeout=6)
+                    matrix.wait_log(log,lambda t:query_presented(t[key_offset:],'a'))
+                    result['idle_reopen_input_preserved_and_focused']=True
                 if expected_query_rows is not None:
                     matrix.wait_log(log,lambda t:query_presented(t[offset:],'a',expected_query_rows))
                     result['expected_query_rows']=expected_query_rows
                 time.sleep(.3)
                 warm=matrix.idle(client.pid,1)
+                assert warm['memory']['swap_pss_mib']==0,'nonzero UI SwapPss with launcher open'
                 if observe:warm['external']=observe()
                 current=call('state')
                 warm['cache_bytes']=current.get('cache_bytes')
@@ -272,7 +285,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 closed['close_to_guard_ms']=(time.monotonic_ns()-closed_at)/1e6
                 result['cycles'].append({'cycle':cycle,'warm':warm,'closed':closed,'command_started_ns':began})
             state=json.loads(call('state',target='nacre'))
-            assert state['query']==(''if release_state else'a')and not state['launcher']and 'launcher'in state['bead']['available']
+            assert state['query']=='a'and not state['launcher']and 'launcher'in state['bead']['available']
             if core_views:
                 result['service_views']={'hover':{},'cycles':[],'status_bar_click_open':os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1','placement_bar_click_open':os.environ.get('BEAD_PLACEMENT_BAR_CLICK_PROOF')=='1'}
                 hover_views=['calendar','sound']+(['network','bluetooth','battery']if status_views else[])

@@ -17,7 +17,7 @@ fn harness(query: &str, scroll: f64) -> Result<Harness> {
         return Err("reference bundle requires explicit golden capture".into());
     }
     let root = selected.map(PathBuf::from).unwrap_or_else(root);
-    let rows=(0..320).map(|i|serde_json::json!({"id":format!("app-{i}"),"name":format!("Example application {i}"),"description":format!("Description {i}"),"icon":"fixture","selected":i==0,"disabled":i%3==2,"emoji":if i%4==0 {"A"}else{""}})).collect();
+    let rows=(0..320).map(|i|serde_json::json!({"id":format!("app-{i}"),"name":format!("Example application {i}"),"description":format!("Description {i}"),"icon":"fixture","selected":i==0,"disabled":i%3==2,"favorite":i%7==0,"favoriteId":format!("app-{i}"),"emoji":if i%4==0 {"A"}else{""}})).collect();
     Harness::load_with_icons(
         &root,
         Path::new("ui/main.luau"),
@@ -45,6 +45,7 @@ fn real_launcher_grid_results_and_scrolled_pixels_match_accepted_markup() -> Res
         ("scrolled", "a", 500.),
     ] {
         let mut h = harness(query, scroll)?;
+        assert_eq!(h.scene().motion.as_ref().map(|motion| motion.id.as_str()), Some("launcher"));
         let source = h.render()?;
         let width = (h.scene().bounds.w * 1.5).ceil() as u32;
         let height = (h.scene().bounds.h * 1.5).ceil() as u32;
@@ -98,6 +99,31 @@ fn real_launcher_grid_results_and_scrolled_pixels_match_accepted_markup() -> Res
             ids.len(),
             "each visible row must retain its own action ID"
         );
+        let favorites = h
+            .session
+            .view_nodes()
+            .iter()
+            .filter(|node| node.action.as_deref() == Some("toggle_favorite"))
+            .collect::<Vec<_>>();
+        let row_ids = actions
+            .iter()
+            .filter_map(|node| match &node.action_arg { Some(Value::Text(id)) => Some(id.clone()), _ => None })
+            .collect::<BTreeSet<_>>();
+        let favorite_ids = favorites
+            .iter()
+            .filter_map(|node| match &node.action_arg { Some(Value::Text(id)) => Some(id.clone()), _ => None })
+            .collect::<BTreeSet<_>>();
+        assert!(favorite_ids.is_subset(&row_ids), "favorite actions must point at displayed rows");
+        let fully_visible_rows = actions
+            .iter()
+            .filter(|node| {
+                let rect = bead::ui::rect(&node.draw);
+                node.clip.is_none_or(|clip| rect.x >= clip.x && rect.y >= clip.y
+                    && rect.x + rect.w <= clip.x + clip.w && rect.y + rect.h <= clip.y + clip.h)
+            })
+            .filter_map(|node| match &node.action_arg { Some(Value::Text(id)) => Some(id.clone()), _ => None })
+            .collect::<BTreeSet<_>>();
+        assert!(fully_visible_rows.is_subset(&favorite_ids), "every fully visible row needs its favorite action");
     }
     Ok(())
 }

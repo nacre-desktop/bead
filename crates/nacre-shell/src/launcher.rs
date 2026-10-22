@@ -75,6 +75,8 @@ pub fn source(
 
 /// Only display data crosses into Luau; opaque activation stays in the host.
 struct Prepared {
+    mode: String,
+    route: String,
     rows: Vec<Json>,
     total: usize,
     total_known: bool,
@@ -85,6 +87,41 @@ struct Prepared {
 }
 fn invalid_menu() -> source::Error {
     source::Error::new("validation", "Invalid menu method payload", false)
+}
+fn favorite_id(row: &Json) -> String {
+    row.get("favoriteId")
+        .and_then(Json::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            row.get("id")
+                .and_then(Json::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        })
+}
+fn parse_favorites(value: &Json) -> source::Result<std::collections::BTreeSet<String>> {
+    let strings = |key: &str| -> source::Result<()> {
+        value
+            .get(key)
+            .and_then(Json::as_array)
+            .filter(|rows| rows.iter().all(Json::is_string))
+            .map(|_| ())
+            .ok_or_else(invalid_menu)
+    };
+    strings("favorites")?;
+    strings("hidden")?;
+    strings("recent")?;
+    if !value.get("usage").is_some_and(Json::is_object) {
+        return Err(invalid_menu());
+    }
+    Ok(value["favorites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Json::as_str)
+        .map(str::to_owned)
+        .collect())
 }
 fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared> {
     let mut result: MenuQueryResult = serde_json::from_value(reply).map_err(|_| invalid_menu())?;
@@ -125,6 +162,8 @@ fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared
         rows.push(row);
     }
     Ok(Prepared {
+        mode: result.mode,
+        route: result.route,
         total: total.unwrap_or(rows.len()).max(rows.len()),
         total_known: total.is_some(),
         rows,
@@ -136,6 +175,26 @@ fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared
 }
 pub fn rows(reply: Json) -> source::Result<Vec<Json>> {
     Ok(prepare(reply, None)?.rows)
+}
+fn prepare_for(reply: Json, request: &(String, String, String)) -> source::Result<Prepared> {
+    let prepared = prepare(reply, Some(&request.0))?;
+    let expected_route = if request.2.is_empty() {
+        match request.1.as_str() {
+            "apps" => "apps",
+            "search" => "home",
+            "actions" => "actions",
+            _ => "",
+        }
+    } else {
+        request.2.as_str()
+    };
+    // The daemon owns route validity and ranking; the shell only fences replies
+    // whose echoed query scope does not match the request it issued.
+    // Re-read the typed result fields without changing or sorting its rows.
+    if prepared.mode != request.1 || prepared.route != expected_route {
+        return Err(invalid_menu());
+    }
+    Ok(prepared)
 }
 
 async fn query(source: &dyn Source, params: Json, timeout: Duration) -> source::Result<Json> {
@@ -208,6 +267,7 @@ pub(crate) fn fixture_reply(query: &str, rows: Vec<Json>) -> Json {
 /// Fixtures are keyed by the *exact* request string; unknown queries fail.
 pub struct Fixture {
     publisher: source::Publisher,
+    favorites: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
 }
 impl Fixture {
     pub fn read(path: &Path) -> source::Result<Self> {
@@ -241,6 +301,7 @@ impl Fixture {
         }
         Ok(Self {
             publisher: source::Publisher::new("menu-fixture".into(), data)?,
+            favorites: Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new())),
         })
     }
 }
@@ -252,7 +313,36 @@ impl Source for Fixture {
         self.publisher.subscribe(callback)
     }
     fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+        let saved_favorites = self.favorites.clone();
         Box::pin(async move {
+            if method == "menu.preferences" {
+                let action = params
+                    .get("action")
+                    .and_then(Json::as_str)
+                    .ok_or_else(invalid_menu)?;
+                let mut favorites = saved_favorites.lock().map_err(|_| invalid_menu())?;
+                if action == "favorite" {
+                    let value = params.get("value").ok_or_else(invalid_menu)?;
+                    let id = value
+                        .get("id")
+                        .and_then(Json::as_str)
+                        .ok_or_else(invalid_menu)?;
+                    let enabled = value
+                        .get("enabled")
+                        .and_then(Json::as_bool)
+                        .ok_or_else(invalid_menu)?;
+                    if enabled {
+                        favorites.insert(id.into());
+                    } else {
+                        favorites.remove(id);
+                    }
+                } else if action != "load" {
+                    return Err(invalid_menu());
+                }
+                return Ok(
+                    json!({"favorites":favorites.iter().cloned().collect::<Vec<_>>(),"hidden":[],"recent":[],"usage":{}}),
+                );
+            }
             if method != "menu.query" {
                 return Err(source::Error::new(
                     "unavailable",
@@ -319,6 +409,11 @@ impl Source for Fixture {
 #[derive(Default)]
 struct View {
     request: Option<(String, String, String)>,
+    result_request: Option<(String, String, String)>,
+    pending: Option<((String, String, String), Option<(String, u64, bool)>)>,
+    pending_limited: bool,
+    query_generation: u64,
+    pending_navigation: Option<(String, NavigationGeometry)>,
     actions: BTreeMap<String, String>,
     catalog_rev: u64,
     stamp: Option<(String, u64, bool)>,
@@ -329,6 +424,246 @@ struct View {
     error: String,
     conversion: Option<MenuConversion>,
     message: String,
+}
+#[derive(Clone)]
+struct QueryTask {
+    request: (String, String, String),
+    stamp: Option<(String, u64, bool)>,
+    generation: u64,
+    params: Json,
+}
+struct QueryCompletion {
+    task: QueryTask,
+    result: source::Result<Prepared>,
+}
+struct QueryActor {
+    latest: tokio::sync::watch::Sender<Option<QueryTask>>,
+    completion: Arc<std::sync::Mutex<Option<QueryCompletion>>>,
+    wake: Arc<std::sync::Mutex<Option<source::Callback>>>,
+    favorites: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+    preferences_error: Arc<std::sync::Mutex<Option<String>>>,
+    preferences_generation: Arc<std::sync::atomic::AtomicU64>,
+    preferences_loaded: Arc<std::sync::atomic::AtomicBool>,
+    favorite_in_flight: Arc<std::sync::atomic::AtomicBool>,
+    runtime_handle: tokio::runtime::Handle,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+impl QueryActor {
+    fn new(source: Arc<dyn Source>) -> Result<Self, String> {
+        let (latest, mut receiver) = tokio::sync::watch::channel(None::<QueryTask>);
+        let completion = Arc::new(std::sync::Mutex::new(None::<QueryCompletion>));
+        let wake = Arc::new(std::sync::Mutex::new(None::<source::Callback>));
+        let favorites = Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new()));
+        let preferences_error = Arc::new(std::sync::Mutex::new(None::<String>));
+        let preferences_generation = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let preferences_loaded = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let favorite_in_flight = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let done = completion.clone();
+        let notify = wake.clone();
+        let worker_favorites = favorites.clone();
+        let worker_preferences_error = preferences_error.clone();
+        let worker_preferences_generation = preferences_generation.clone();
+        let worker_preferences_loaded = preferences_loaded.clone();
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let thread_cancelled = cancelled.clone();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| format!("cannot build menu query runtime: {error}"))?;
+        let runtime_handle = runtime.handle().clone();
+        let thread = std::thread::Builder::new()
+            .name("bead-menu-query".into())
+            .spawn(move || {
+                runtime.block_on(async move {
+                    let mut preference_task: Option<tokio::task::JoinHandle<()>> = None;
+                    let mut preference_stamp: Option<(String, u64, bool)> = None;
+                    let mut newest = None;
+                    loop {
+                        let task = if let Some(task) = newest.take() {
+                            task
+                        } else {
+                            if receiver.changed().await.is_err() || thread_cancelled.load(std::sync::atomic::Ordering::Acquire) { break; }
+                            let Some(task) = receiver.borrow_and_update().clone() else { continue; };
+                            task
+                        };
+                        if preference_stamp.as_ref() != task.stamp.as_ref() {
+                            preference_stamp = task.stamp.clone();
+                            if let Some(previous) = preference_task.take() {
+                                previous.abort();
+                                let _ = previous.await;
+                            }
+                            let prefs_source = source.clone();
+                            let prefs = worker_favorites.clone();
+                            let prefs_error = worker_preferences_error.clone();
+                            let prefs_generation = worker_preferences_generation.clone();
+                            let prefs_loaded = worker_preferences_loaded.clone();
+                            let prefs_notify = notify.clone();
+                            let expected_generation = prefs_generation.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
+                            preference_task = Some(tokio::spawn(async move {
+                                let result = prefs_source
+                                    .call("menu.preferences".into(), json!({"action":"load"}), Duration::from_secs(3))
+                                    .await
+                                    .and_then(|value| parse_favorites(&value));
+                                if expected_generation == prefs_generation.load(std::sync::atomic::Ordering::Acquire) {
+                                    match result {
+                                        Ok(current) => {
+                                            if let Ok(mut saved) = prefs.lock() { *saved = current; }
+                                            if let Ok(mut error) = prefs_error.lock() { *error = None; }
+                                        }
+                                        Err(error) => if let Ok(mut saved_error) = prefs_error.lock() { *saved_error = Some(error.message); },
+                                    }
+                                    prefs_loaded.store(true, std::sync::atomic::Ordering::Release);
+                                    if let Some(callback) = prefs_notify.lock().ok().and_then(|slot| slot.clone()) {
+                                        callback(prefs_source.snapshot());
+                                    }
+                                }
+                            }));
+                        }
+                        let expected = task.request.clone();
+                        let limited = task.params.get("limit").is_some();
+                        let mut full_params = task.params.clone();
+                        if let Some(params) = full_params.as_object_mut() { params.remove("limit"); }
+                        let source_ref = source.as_ref();
+                        let params = task.params.clone();
+                        let reply = async move {
+                            let _query_span = bead::core::profile::Span::new("menu_query");
+                            let first = query(source_ref, params, Duration::from_secs(3)).await?;
+                            let prepared = prepare_for(first, &expected)?;
+                            if limited && (!prepared.total_known || (prepared.total > prepared.rows.len()
+                                && !prepared.rows.iter().any(|row| row["disabled"] != true))) {
+                                let full = query(source_ref, full_params, Duration::from_secs(3)).await?;
+                                prepare_for(full, &expected)
+                            } else { Ok(prepared) }
+                        };
+                        tokio::pin!(reply);
+                        let result = loop {
+                            tokio::select! {
+                                result = &mut reply => break Some(result),
+                                changed = receiver.changed() => {
+                                    if changed.is_err() || thread_cancelled.load(std::sync::atomic::Ordering::Acquire) { return; }
+                                    newest = receiver.borrow_and_update().clone();
+                                    break None;
+                                }
+                            }
+                        };
+                        if let Some(result) = result {
+                            if let Ok(mut slot) = done.lock() {
+                                *slot = Some(QueryCompletion { task, result });
+                            }
+                            if let Some(callback) = notify.lock().ok().and_then(|slot| slot.clone()) {
+                                callback(source.snapshot());
+                            }
+                        }
+                    }
+                });
+            })
+            .map_err(|error| format!("cannot start menu query actor: {error}"))?;
+        Ok(Self {
+            latest,
+            completion,
+            wake,
+            favorites,
+            preferences_error,
+            preferences_generation,
+            preferences_loaded,
+            favorite_in_flight,
+            runtime_handle,
+            cancelled,
+            thread: Some(thread),
+        })
+    }
+    fn schedule(&self, task: QueryTask) {
+        self.latest.send_replace(Some(task));
+    }
+}
+impl Drop for QueryActor {
+    fn drop(&mut self) {
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.latest.send_replace(None);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+fn navigation_target(
+    rows: &[Json],
+    stores: &Stores,
+    key: &str,
+    geometry: NavigationGeometry,
+    grid: bool,
+) -> (String, f64) {
+    let direction = match key {
+        "up" | "left" => -1,
+        "down" | "right" => 1,
+        _ => return (String::new(), 0.),
+    };
+    let current = match stores.get("launcher.selection") {
+        Some(Value::Text(id)) => rows
+            .iter()
+            .position(|row| row["id"].as_str() == Some(id.as_str())),
+        _ => None,
+    };
+    let count = rows.len();
+    if count == 0 {
+        return (String::new(), 0.);
+    }
+    let mut next = current.map_or(if direction > 0 { 0 } else { count - 1 }, |index| {
+        if grid && matches!(key, "up" | "down") {
+            (index as i64 + direction * geometry.columns.max(1) as i64)
+                .clamp(0, count.saturating_sub(1) as i64) as usize
+        } else {
+            (index as i64 + direction).rem_euclid(count as i64) as usize
+        }
+    });
+    let mut selected = None;
+    for _ in 0..count {
+        if rows[next]["disabled"] != true {
+            selected = Some(next);
+            break;
+        }
+        let candidate = next as i64 + direction;
+        if grid && matches!(key, "up" | "down") && !(0..count as i64).contains(&candidate) {
+            selected = current.filter(|index| rows[*index]["disabled"] != true);
+            break;
+        }
+        next = candidate.rem_euclid(count as i64) as usize;
+    }
+    let mut scroll = match stores.get("launcher.scroll.y") {
+        Some(Value::Number(value)) => *value,
+        _ => 0.,
+    };
+    if let Some(index) = selected {
+        let columns = if grid { geometry.columns.max(1) } else { 1 };
+        if geometry.pitch.is_finite()
+            && geometry.pitch > 0.
+            && geometry.row_height > 0.
+            && geometry.viewport_height > 0.
+        {
+            let top = (index / columns) as f64 * geometry.pitch;
+            let bottom = top + geometry.row_height;
+            if top < scroll {
+                scroll = top;
+            } else if bottom > scroll + geometry.viewport_height {
+                scroll = bottom - geometry.viewport_height;
+            }
+            let maximum = (count.div_ceil(columns).saturating_sub(1) as f64 * geometry.pitch
+                + geometry.row_height
+                - geometry.viewport_height)
+                .max(0.);
+            scroll = scroll.clamp(0., maximum);
+        }
+    } else {
+        scroll = 0.;
+    }
+    (
+        selected
+            .and_then(|index| rows[index]["id"].as_str())
+            .unwrap_or("")
+            .into(),
+        scroll,
+    )
 }
 #[derive(Clone, Copy)]
 pub struct NavigationGeometry {
@@ -341,9 +676,11 @@ pub struct Menu {
     source: Option<Arc<dyn Source>>,
     runtime: tokio::runtime::Runtime,
     view: RefCell<View>,
+    query_actor: Option<QueryActor>,
 }
 impl Menu {
     pub fn new(source: Option<Arc<dyn Source>>) -> Result<Self, String> {
+        let query_actor = source.clone().map(QueryActor::new).transpose()?;
         Ok(Self {
             source,
             runtime: tokio::runtime::Builder::new_current_thread()
@@ -352,16 +689,107 @@ impl Menu {
                 .build()
                 .map_err(|e| e.to_string())?,
             view: RefCell::new(View::default()),
+            query_actor,
         })
     }
     pub fn subscribe(
         &self,
         callback: source::Callback,
     ) -> source::Result<Option<source::Subscription>> {
+        if let (Some(source), Some(actor)) = (&self.source, &self.query_actor)
+            && let Ok(mut wake) = actor.wake.lock()
+        {
+            let source = source.clone();
+            let callback_for_wake = callback.clone();
+            *wake = Some(Arc::new(move |_| callback_for_wake(source.snapshot())));
+        }
         self.source
             .as_ref()
             .map(|s| s.subscribe(callback))
             .transpose()
+    }
+    pub fn favorite(&self, row_id: &str) -> source::Result<()> {
+        if self.query_actor.as_ref().is_some_and(|actor| {
+            !actor
+                .preferences_loaded
+                .load(std::sync::atomic::Ordering::Acquire)
+        }) {
+            let error = source::Error::new("busy", "Launcher preferences are still loading", true);
+            if let Some(actor) = &self.query_actor
+                && let Ok(mut saved_error) = actor.preferences_error.lock()
+            {
+                *saved_error = Some(error.message.clone());
+            }
+            return Err(error);
+        }
+        let (id, enabled) = {
+            let view = self.view.borrow();
+            let row = view
+                .rows
+                .iter()
+                .find(|row| row["id"].as_str() == Some(row_id))
+                .ok_or_else(|| {
+                    source::Error::new("unavailable", "Result is not available", true)
+                })?;
+            (favorite_id(row), row["favorite"] != true)
+        };
+        let source = self.source.as_ref().ok_or_else(|| {
+            source::Error::new("unavailable", "Launcher service unavailable", true)
+        })?;
+        let actor = self
+            .query_actor
+            .as_ref()
+            .ok_or_else(|| source::Error::new("unavailable", "Launcher service unavailable", true))?;
+        if actor
+            .favorite_in_flight
+            .compare_exchange(false, true, std::sync::atomic::Ordering::AcqRel, std::sync::atomic::Ordering::Acquire)
+            .is_err()
+        {
+            let error = source::Error::new("busy", "Favorite update is already in progress", true);
+            if let Ok(mut saved_error) = actor.preferences_error.lock() {
+                *saved_error = Some(error.message.clone());
+            }
+            return Err(error);
+        }
+        let source = source.clone();
+        let favorites = actor.favorites.clone();
+        let preferences_error = actor.preferences_error.clone();
+        let preferences_generation = actor.preferences_generation.clone();
+        let preferences_loaded = actor.preferences_loaded.clone();
+        let favorite_in_flight = actor.favorite_in_flight.clone();
+        let wake = actor.wake.clone();
+        actor.runtime_handle.spawn(async move {
+            let result = source
+                .call(
+                    "menu.preferences".into(),
+                    json!({"action":"favorite","value":{"id":id,"enabled":enabled}}),
+                    Duration::from_secs(3),
+                )
+                .await
+                .and_then(|result| parse_favorites(&result));
+            match result {
+                Ok(current) => {
+                    if let Ok(mut saved) = favorites.lock() {
+                        preferences_generation.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                        *saved = current;
+                        preferences_loaded.store(true, std::sync::atomic::Ordering::Release);
+                    }
+                    if let Ok(mut error) = preferences_error.lock() {
+                        *error = None;
+                    }
+                }
+                Err(error) => {
+                    if let Ok(mut saved_error) = preferences_error.lock() {
+                        *saved_error = Some(error.message);
+                    }
+                }
+            }
+            favorite_in_flight.store(false, std::sync::atomic::Ordering::Release);
+            if let Some(callback) = wake.lock().ok().and_then(|slot| slot.clone()) {
+                callback(source.snapshot());
+            }
+        });
+        Ok(())
     }
     /// View-only navigation through the engine's existing order, never ranking.
     pub fn navigate(
@@ -409,6 +837,10 @@ impl Menu {
             // unloaded boundary or wrapping, including disabled-row tails.
             self.view.borrow_mut().force_full = true;
             expanded = self.project(stores).ok()?;
+            if expanded.get("launcher.pending") == Some(&Value::Bool(true)) {
+                self.view.borrow_mut().pending_navigation = Some((key.to_owned(), geometry));
+                return Some(expanded);
+            }
             if !self.view.borrow().error.is_empty() {
                 return Some(expanded);
             }
@@ -494,6 +926,22 @@ impl Menu {
     }
     pub fn activate(&self, id: &str) -> source::Result<MenuActivated> {
         let view = self.view.borrow();
+        if self.source.as_ref().is_some_and(|source| {
+            let snapshot = source.snapshot();
+            view.stamp.as_ref()
+                != Some(&(
+                    snapshot.epoch.clone(),
+                    snapshot.revision,
+                    snapshot.connected,
+                ))
+        }) || view.result_request != view.request
+        {
+            return Err(source::Error::new(
+                "stale_revision",
+                "Launcher changed; query again",
+                true,
+            ));
+        }
         if !view.error.is_empty()
             || !view
                 .rows
@@ -571,7 +1019,7 @@ impl Menu {
             text("launcher.engine_route"),
         );
         let restore_mode = restored_route.then(|| request.1.clone());
-        let selection = text("launcher.selection");
+        let mut selection = text("launcher.selection");
         let choose_first =
             !request.0.trim().is_empty() || request.1 != "apps" || !request.2.is_empty();
         let stamp = self.source.as_ref().map(|s| {
@@ -579,63 +1027,19 @@ impl Menu {
             (snap.epoch.clone(), snap.revision, snap.connected)
         });
         let mut view = self.view.borrow_mut();
-        let query_changed = view
-            .request
-            .as_ref()
-            .is_some_and(|previous| previous.0 != request.0);
-        let scroll = match stores.get("launcher.scroll.y") {
-            Some(Value::Number(n)) => *n,
-            _ => 0.,
-        };
-        let expand = view.force_full
-            || (view.request.as_ref() == Some(&request)
-                && view.total > view.rows.len()
-                && scroll > 0.);
-        view.force_full = false;
-        if view.request.as_ref() != Some(&request) || view.stamp != stamp || expand {
-            // Only edited queries use a ranked prefix. Initial/restored state,
-            // catalog changes, navigation and scrolling still load the full reply.
-            // Missing optional store means an older recovery bundle: stay compatible.
-            let limited = query_changed
-                && !request.0.trim().is_empty()
-                && view.stamp == stamp
-                && !expand
-                && view
-                    .request
-                    .as_ref()
-                    .is_some_and(|old| old.1 == request.1 && old.2 == request.2)
-                && matches!(stores.get("launcher.total_count"), Some(Value::Number(_)));
-            let result = if let Some(source) = &self.source {
-                let _query = bead::core::profile::Span::new("menu_query");
-                let mut params = json!({"query":request.0,"mode":request.1,
-                    "route":if request.2.is_empty(){Json::Null}else{json!(request.2)}});
-                if limited {
-                    params["limit"] = json!(64);
-                }
-                self.runtime
-                    .block_on(query(
-                        source.as_ref(),
-                        params,
-                        Duration::from_secs(3),
-                    ))
-                    .and_then(|reply| prepare(reply, Some(request.0.as_str())))
-                    .and_then(|prepared| {
-                        if limited && (!prepared.total_known || (prepared.total > prepared.rows.len()
-                            && !prepared.rows.iter().any(|row| row["disabled"] != true))) {
-                            self.runtime.block_on(query(source.as_ref(),
-                                json!({"query":request.0,"mode":request.1,"route":if request.2.is_empty(){Json::Null}else{json!(request.2)}}),
-                                Duration::from_secs(3)))
-                                .and_then(|reply| prepare(reply, Some(request.0.as_str())))
-                        } else { Ok(prepared) }
-                    })
-            } else {
-                Err(source::Error::new(
-                    "unavailable",
-                    "Launcher service unavailable",
-                    true,
-                ))
-            };
-            match result {
+        let prior_result_request = view.result_request.clone();
+        let mut reply_applied = false;
+        if let Some(actor) = &self.query_actor
+            && let Ok(mut slot) = actor.completion.lock()
+            && let Some(completion) = slot.take()
+            && completion.task.generation == view.query_generation
+            && completion.task.request == request
+            && completion.task.stamp == stamp
+        {
+            reply_applied = true;
+            view.pending = None;
+            view.pending_limited = false;
+            match completion.result {
                 Ok(prepared) => {
                     if bead::core::profile::enabled() {
                         println!(
@@ -644,26 +1048,160 @@ impl Menu {
                             prepared.rows.len()
                         );
                     }
+                    if std::env::var_os("BEAD_PROFILE_MENU_IDENTITY").as_deref()
+                        == Some(std::ffi::OsStr::new("1"))
+                    {
+                        let identity = json!({"query":request.0,"order":prepared.rows.iter().filter_map(|row|row["id"].as_str()).collect::<Vec<_>>()});
+                        println!("MENU_RESULT_IDENTITY json={identity}");
+                    }
                     view.total = prepared.total;
-                    view.rows = Arc::new(prepared.rows);
+                    let favorites = self
+                        .query_actor
+                        .as_ref()
+                        .and_then(|actor| actor.favorites.lock().ok().map(|ids| ids.clone()))
+                        .unwrap_or_default();
+                    let mut rows = prepared.rows;
+                    for row in &mut rows {
+                        let id = favorite_id(row);
+                        row["favorite"] = Json::Bool(favorites.contains(&id));
+                        row["favoriteId"] = Json::String(id);
+                    }
+                    view.rows = Arc::new(rows);
                     view.actions = prepared.actions;
                     view.catalog_rev = prepared.catalog_rev;
                     view.conversion = prepared.conversion;
                     view.message = prepared.message;
                     view.error.clear();
+                    view.result_request = Some(request.clone());
                 }
-                Err(e) => {
+                Err(error) => {
                     if bead::core::profile::enabled() {
-                        println!("MENU_RESULT ok=false code={} retry={}", e.code, e.retry);
+                        println!(
+                            "MENU_RESULT ok=false code={} retry={}",
+                            error.code, error.retry
+                        );
                     }
-                    view.error = e.message;
+                    view.error = error.message;
                 }
             }
-            view.request = Some(request);
+        }
+        if let Some(actor) = &self.query_actor
+            && let Ok(favorites) = actor.favorites.lock()
+            && view.result_request.as_ref() == Some(&request)
+            && view
+                .rows
+                .iter()
+                .any(|row| row["favorite"].as_bool() != Some(favorites.contains(&favorite_id(row))))
+        {
+            for row in Arc::make_mut(&mut view.rows) {
+                let id = favorite_id(row);
+                row["favorite"] = Json::Bool(favorites.contains(&id));
+                row["favoriteId"] = Json::String(id);
+            }
+        }
+        let query_changed = prior_result_request
+            .as_ref()
+            .is_some_and(|previous| previous.0 != request.0);
+        let mut scroll = match stores.get("launcher.scroll.y") {
+            Some(Value::Number(n)) => *n,
+            _ => 0.,
+        };
+        let deferred_navigation = if reply_applied && view.error.is_empty() {
+            view.pending_navigation
+                .take()
+                .map(|(key, geometry)| {
+                    let grid = request.0.trim().is_empty() && request.1 == "apps";
+                    let (selected, next_scroll) =
+                        navigation_target(&view.rows, stores, &key, geometry, grid);
+                    selection = selected;
+                    scroll = next_scroll;
+                    true
+                })
+                .unwrap_or(false)
+        } else {
+            if reply_applied {
+                view.pending_navigation = None;
+            }
+            false
+        };
+        let expand = view.force_full
+            || (!query_changed
+                && view.error.is_empty()
+                && view.result_request.as_ref() == Some(&request)
+                && view.total > view.rows.len()
+                && scroll > 0.
+                && view.pending.is_none());
+        view.force_full = false;
+        let pending_matches = view.pending.as_ref() == Some(&(request.clone(), stamp.clone()))
+            && !(expand && view.pending_limited);
+        let needs_query = !pending_matches
+            && (view.request.as_ref() != Some(&request) || view.stamp != stamp || expand);
+        if needs_query {
+            if view
+                .request
+                .as_ref()
+                .is_some_and(|previous| previous != &request)
+            {
+                view.pending_navigation = None;
+            }
+            // Only edited queries use a ranked prefix. Initial/restored state,
+            // catalog changes, navigation and scrolling still load the full reply.
+            // Missing optional store means an older recovery bundle: stay compatible.
+            let limited = query_changed
+                && !request.0.trim().is_empty()
+                && view.stamp == stamp
+                && !expand
+                && view
+                    .result_request
+                    .as_ref()
+                    .is_some_and(|old| old.1 == request.1 && old.2 == request.2)
+                && matches!(stores.get("launcher.total_count"), Some(Value::Number(_)));
+            if self.source.is_some() {
+                let _query = bead::core::profile::Span::new("menu_query_schedule");
+                let mut params = json!({"query":request.0,"mode":request.1,
+                    "route":if request.2.is_empty(){Json::Null}else{json!(request.2)}});
+                if limited {
+                    params["limit"] = json!(64);
+                }
+                if let Some(actor) = &self.query_actor {
+                    view.query_generation = view.query_generation.wrapping_add(1);
+                    let task = QueryTask {
+                        request: request.clone(),
+                        stamp: stamp.clone(),
+                        generation: view.query_generation,
+                        params,
+                    };
+                    actor.schedule(task.clone());
+                    view.pending = Some((request.clone(), stamp.clone()));
+                    view.pending_limited = limited;
+                }
+                let same_scope = view
+                    .result_request
+                    .as_ref()
+                    .is_some_and(|old| old.1 == request.1 && old.2 == request.2);
+                if !same_scope {
+                    view.rows = Arc::new(Vec::new());
+                    view.actions.clear();
+                    view.total = 0;
+                    view.error.clear();
+                    view.result_request = None;
+                }
+            } else {
+                view.error = "Launcher service unavailable".into();
+            }
+            view.request = Some(request.clone());
             view.stamp = stamp;
         }
-        let reset_selection = query_changed && view.error.is_empty();
-        let keep_selection = !view.error.is_empty()
+        let reset_selection = reply_applied
+            && prior_result_request
+                .as_ref()
+                .is_some_and(|previous| previous != &request)
+            && view.error.is_empty();
+        let pending_scope_matches = prior_result_request
+            .as_ref()
+            .is_none_or(|previous| previous.1 == request.1 && previous.2 == request.2);
+        let keep_selection = (view.pending.is_some() && pending_scope_matches)
+            || !view.error.is_empty()
             || (!reset_selection
                 && view.rows.iter().any(|r| {
                     r["id"].as_str() == Some(selection.as_str()) && r["disabled"] != true
@@ -691,11 +1229,31 @@ impl Menu {
         }
         let mut delta = BTreeMap::from([
             (
+                "launcher.pending".into(),
+                Value::Bool(view.pending.is_some()),
+            ),
+            (
                 "launcher.result_count".into(),
                 Value::Number(view.rows.len() as f64),
             ),
             ("launcher.selection".into(), Value::Text(selection)),
-            ("launcher.error".into(), Value::Text(view.error.clone())),
+            (
+                "launcher.error".into(),
+                Value::Text(if view.error.is_empty() {
+                    self.query_actor
+                        .as_ref()
+                        .and_then(|actor| {
+                            actor
+                                .preferences_error
+                                .lock()
+                                .ok()
+                                .and_then(|error| error.clone())
+                        })
+                        .unwrap_or_default()
+                } else {
+                    view.error.clone()
+                }),
+            ),
         ]);
         if let Some(mode) = restore_mode {
             delta.insert("launcher.mode".into(), Value::Text(mode));
@@ -728,12 +1286,17 @@ impl Menu {
                 delta.insert(key.into(), Value::Text(value));
             }
         }
-        if !view.error.is_empty() && scroll != view.last_scroll {
+        if deferred_navigation {
+            view.last_scroll = scroll;
+            delta.insert("launcher.scroll.y".into(), Value::Number(scroll));
+        } else if !view.error.is_empty() && scroll != view.last_scroll {
             // Failed expansion keeps the last good viewport, never an unloaded region.
             delta.insert("launcher.scroll.y".into(), Value::Number(view.last_scroll));
         } else if reset_scroll {
             view.last_scroll = 0.;
             delta.insert("launcher.scroll.y".into(), Value::Number(0.));
+        } else if view.pending.is_some() && view.total > view.rows.len() && scroll > view.last_scroll {
+            // Keep the last loaded viewport while an expansion is in flight.
         } else {
             view.last_scroll = scroll;
         }
@@ -772,7 +1335,9 @@ mod tests {
         }
         fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
             Box::pin(async move {
-                self.calls.lock().unwrap().push(params.clone());
+                if method == "menu.query" {
+                    self.calls.lock().unwrap().push(params.clone());
+                }
                 if params.get("limit").is_none()
                     && self.fail_full.load(std::sync::atomic::Ordering::SeqCst)
                 {
@@ -811,12 +1376,36 @@ mod tests {
                 ("launcher.total_count".into(), Value::Number(0.)),
                 ("launcher.search.text".into(), Value::Text(String::new())),
                 ("launcher.selection".into(), Value::Text(String::new())),
+                ("launcher.engine_route".into(), Value::Text(String::new())),
                 ("launcher.scroll.y".into(), Value::Number(0.)),
             ]))
             .unwrap()
     }
+    fn project_wait(
+        menu: &Menu,
+        stores: &Stores,
+    ) -> Result<BTreeMap<String, Value>, bead::ui::Diagnostic> {
+        let mut current = stores.clone();
+        let mut aggregate = BTreeMap::new();
+        for _ in 0..400 {
+            let delta = menu.project(&current)?;
+            let pending = delta.get("launcher.pending") == Some(&Value::Bool(true));
+            aggregate.extend(delta.clone());
+            current = current
+                .reconcile(&delta)
+                .expect("test projection reconciliation");
+            current
+                .commit(delta.clone())
+                .expect("test projection delta");
+            if !pending {
+                return Ok(aggregate);
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("launcher query did not complete")
+    }
     fn apply_projection(menu: &Menu, stores: &mut Stores) {
-        let delta = menu.project(stores).unwrap();
+        let delta = project_wait(menu, stores).unwrap();
         *stores = stores.reconcile(&delta).unwrap();
         stores.commit(delta).unwrap();
     }
@@ -829,6 +1418,257 @@ mod tests {
             )]))
             .unwrap();
         apply_projection(menu, stores);
+    }
+    #[test]
+    fn latest_same_scope_query_replaces_rows_without_an_empty_frame() {
+        struct SlowSource {
+            fixture: Fixture,
+            calls: std::sync::Mutex<Vec<String>>,
+        }
+        impl Source for SlowSource {
+            fn snapshot(&self) -> Arc<source::Snapshot> {
+                self.fixture.snapshot()
+            }
+            fn subscribe(
+                &self,
+                callback: source::Callback,
+            ) -> source::Result<source::Subscription> {
+                self.fixture.subscribe(callback)
+            }
+            fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+                let fixture = &self.fixture;
+                Box::pin(async move {
+                    let query = params
+                        .get("query")
+                        .and_then(Json::as_str)
+                        .unwrap_or_default()
+                        .to_owned();
+                    if method == "menu.query" {
+                        if let Ok(mut calls) = self.calls.lock() {
+                            calls.push(query.clone());
+                        }
+                        if query == "slow" {
+                            tokio::time::sleep(Duration::from_millis(120)).await;
+                        }
+                    }
+                    fixture.invoke(method, params).await
+                })
+            }
+            fn reconnect(&self) -> source::Reply<'_> {
+                self.fixture.reconnect()
+            }
+            fn stop(&self) -> source::Reply<'_> {
+                self.fixture.stop()
+            }
+        }
+        let fixture = Fixture::new(json!({"queries":{
+            "":fixture_reply("",vec![json!({"id":"old","name":"Old"})]),
+            "slow":fixture_reply("slow",vec![json!({"id":"stale","name":"Stale"})]),
+            "latest":fixture_reply("latest",vec![json!({"id":"latest","name":"Latest"})])
+        }}))
+        .unwrap();
+        let source = Arc::new(SlowSource {
+            fixture,
+            calls: Default::default(),
+        });
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text(String::new())),
+                ("launcher.selection".into(), Value::Text(String::new())),
+                ("launcher.engine_route".into(), Value::Text(String::new())),
+                ("launcher.scroll.y".into(), Value::Number(0.)),
+            ]))
+            .unwrap();
+        let initial = project_wait(&menu, &stores).unwrap();
+        stores = stores.reconcile(&initial).unwrap();
+        stores.commit(initial).unwrap();
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("slow".into()),
+            )]))
+            .unwrap();
+        let pending = menu.project(&stores).unwrap();
+        assert_eq!(pending["launcher.pending"], Value::Bool(true));
+        assert_eq!(pending["launcher.result_count"], Value::Number(1.));
+        assert_eq!(menu.view.borrow().rows[0]["id"], "old");
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while !source
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|query| query == "slow")
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("latest".into()),
+            )]))
+            .unwrap();
+        let latest = project_wait(&menu, &stores).unwrap();
+        stores = stores.reconcile(&latest).unwrap();
+        stores.commit(latest).unwrap();
+        assert_eq!(menu.view.borrow().rows[0]["id"], "latest");
+        std::thread::sleep(Duration::from_millis(150));
+        let after_stale_delay = project_wait(&menu, &stores).unwrap();
+        assert_eq!(menu.view.borrow().rows[0]["id"], "latest");
+        assert_eq!(after_stale_delay["launcher.pending"], Value::Bool(false));
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.engine_route".into(),
+                Value::Text("home".into()),
+            )]))
+            .unwrap();
+        let switched_scope = menu.project(&stores).unwrap();
+        assert_eq!(switched_scope["launcher.pending"], Value::Bool(true));
+        assert_eq!(switched_scope["launcher.result_count"], Value::Number(0.));
+        assert!(menu.view.borrow().rows.is_empty());
+    }
+    #[test]
+    fn favorites_use_canonical_result_ids_and_published_preferences() {
+        let fixture = Fixture::new(json!({"queries":{"":fixture_reply("",vec![
+            json!({"id":"org.example.app.desktop","name":"Application","kind":"app"}),
+            json!({"id":"nacre-menu:apps","name":"Applications","kind":"group"}),
+        ])}}))
+        .unwrap();
+        let source = Arc::new(fixture);
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text(String::new())),
+                ("launcher.selection".into(), Value::Text(String::new())),
+            ]))
+            .unwrap();
+        project_wait(&menu, &stores).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while !menu.query_actor.as_ref().unwrap().preferences_loaded.load(std::sync::atomic::Ordering::Acquire)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        menu.favorite("nacre-menu:apps").unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while menu.query_actor.as_ref().unwrap().favorite_in_flight.load(std::sync::atomic::Ordering::Acquire)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(source.favorites.lock().unwrap().contains("nacre-menu:apps"));
+        let delta = project_wait(&menu, &stores).unwrap();
+        assert!(
+            matches!(&delta["launcher.apps"], Value::List(rows) if rows.iter().any(|row| row["id"] == "nacre-menu:apps" && row["favorite"] == true))
+        );
+        menu.favorite("nacre-menu:apps").unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while menu.query_actor.as_ref().unwrap().favorite_in_flight.load(std::sync::atomic::Ordering::Acquire)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(!source.favorites.lock().unwrap().contains("nacre-menu:apps"));
+        let unfavorited = project_wait(&menu, &stores).unwrap();
+        assert!(
+            matches!(&unfavorited["launcher.apps"], Value::List(rows) if rows.iter().any(|row| row["id"] == "nacre-menu:apps" && row["favorite"] == false))
+        );
+    }
+    #[test]
+    fn menu_stamp_change_reloads_authoritative_favorites() {
+        let source = Arc::new(Fixture::new(json!({"queries":{"":fixture_reply("",vec![
+            json!({"id":"app","name":"Application","kind":"app"})
+        ])}})).unwrap());
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let stores = Stores::default().reconcile(&BTreeMap::from([
+            ("launcher.search.text".into(), Value::Text(String::new())),
+            ("launcher.selection".into(), Value::Text(String::new())),
+        ])).unwrap();
+        project_wait(&menu, &stores).unwrap();
+        source.favorites.lock().unwrap().insert("app".into());
+        let old_revision = source.snapshot().revision;
+        let mut data = source.snapshot().data.as_ref().clone();
+        data["preferences_stamp"] = json!(2);
+        source.publisher.publish(data).unwrap();
+        assert_ne!(source.snapshot().revision, old_revision);
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            project_wait(&menu, &stores).unwrap();
+            if menu.query_actor.as_ref().unwrap().favorites.lock().unwrap().contains("app") { break; }
+            assert!(std::time::Instant::now() < deadline, "preference refresh did not finish");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let refreshed = project_wait(&menu, &stores).unwrap();
+        assert!(matches!(&refreshed["launcher.apps"], Value::List(rows) if rows.iter().any(|row| row["id"] == "app" && row["favorite"] == true)));
+    }
+    #[test]
+    fn slow_favorite_write_does_not_block_query_projection() {
+        struct SlowFavorite {
+            fixture: Fixture,
+            started: std::sync::atomic::AtomicBool,
+            completed: std::sync::atomic::AtomicBool,
+        }
+        impl Source for SlowFavorite {
+            fn snapshot(&self) -> Arc<source::Snapshot> { self.fixture.snapshot() }
+            fn subscribe(&self, callback: source::Callback) -> source::Result<source::Subscription> { self.fixture.subscribe(callback) }
+            fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+                Box::pin(async move {
+                    let favorite = method == "menu.preferences" && params["action"] == "favorite";
+                    if favorite {
+                        self.started.store(true, std::sync::atomic::Ordering::Release);
+                        tokio::time::sleep(Duration::from_millis(180)).await;
+                    }
+                    let result = self.fixture.invoke(method.clone(), params).await?;
+                    if favorite {
+                        self.completed.store(true, std::sync::atomic::Ordering::Release);
+                    }
+                    Ok(result)
+                })
+            }
+            fn reconnect(&self) -> source::Reply<'_> { self.fixture.reconnect() }
+            fn stop(&self) -> source::Reply<'_> { self.fixture.stop() }
+        }
+        let fixture = Fixture::new(json!({"queries":{
+            "":fixture_reply("",vec![json!({"id":"app","name":"Application"})]),
+            "next":fixture_reply("next",vec![json!({"id":"next","name":"Next"})])
+        }})).unwrap();
+        let source = Arc::new(SlowFavorite {
+            fixture,
+            started: false.into(),
+            completed: false.into(),
+        });
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = Stores::default().reconcile(&BTreeMap::from([
+            ("launcher.search.text".into(), Value::Text(String::new())),
+            ("launcher.selection".into(), Value::Text(String::new())),
+        ])).unwrap();
+        let initial = project_wait(&menu, &stores).unwrap();
+        stores = stores.reconcile(&initial).unwrap();
+        stores.commit(initial).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while !menu.query_actor.as_ref().unwrap().preferences_loaded.load(std::sync::atomic::Ordering::Acquire)
+            && std::time::Instant::now() < deadline
+        { std::thread::sleep(Duration::from_millis(2)); }
+        let started = std::time::Instant::now();
+        menu.favorite("app").unwrap();
+        assert!(started.elapsed() < Duration::from_millis(100), "favorite scheduling blocked the UI worker");
+        while !source.started.load(std::sync::atomic::Ordering::Acquire) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        stores.commit(BTreeMap::from([("launcher.search.text".into(), Value::Text("next".into()))])).unwrap();
+        let next = project_wait(&menu, &stores).unwrap();
+        stores = stores.reconcile(&next).unwrap();
+        stores.commit(next).unwrap();
+        assert_eq!(menu.view.borrow().rows[0]["id"], "next");
+        assert!(!source.completed.load(std::sync::atomic::Ordering::Acquire));
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while !source.completed.load(std::sync::atomic::Ordering::Acquire) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(source.completed.load(std::sync::atomic::Ordering::Acquire));
+        assert!(source.fixture.favorites.lock().unwrap().contains("app"));
     }
     #[test]
     fn ranked_prefix_preserves_full_extent_and_up_navigation_reaches_last_row() {
@@ -872,9 +1712,17 @@ mod tests {
         stores.commit(up).unwrap();
         apply_projection(&menu, &mut stores);
         assert_eq!(source.calls.lock().unwrap().len(), 2);
-        let delta = menu.navigate(&stores, "up", geometry).unwrap();
-        assert_eq!(delta["launcher.result_count"], Value::Number(320.));
-        assert_eq!(delta["launcher.selection"], Value::Text("app319".into()));
+        let pending = menu.navigate(&stores, "up", geometry).unwrap();
+        stores.commit(pending).unwrap();
+        apply_projection(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(320.))
+        );
+        assert_eq!(
+            stores.get("launcher.selection"),
+            Some(&Value::Text("app319".into()))
+        );
         assert!(source.calls.lock().unwrap()[2].get("limit").is_none());
         assert_eq!(menu.view.borrow().rows[319]["id"], "app319");
     }
@@ -899,9 +1747,17 @@ mod tests {
             row_height: 55.,
             viewport_height: 400.,
         };
-        let down = menu.navigate(&stores, "down", geometry).unwrap();
-        assert_eq!(down["launcher.selection"], Value::Text("app64".into()));
-        assert_eq!(down["launcher.result_count"], Value::Number(320.));
+        let pending = menu.navigate(&stores, "down", geometry).unwrap();
+        stores.commit(pending).unwrap();
+        apply_projection(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.selection"),
+            Some(&Value::Text("app64".into()))
+        );
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(320.))
+        );
         assert_eq!(source.calls.lock().unwrap().len(), 3);
     }
     #[test]
@@ -916,7 +1772,7 @@ mod tests {
                 Value::Number(12000.),
             )]))
             .unwrap();
-        let delta = menu.project(&stores).unwrap();
+        let delta = project_wait(&menu, &stores).unwrap();
         assert_eq!(delta["launcher.result_count"], Value::Number(320.));
         assert!(
             !delta.contains_key("launcher.scroll.y"),
@@ -956,7 +1812,7 @@ mod tests {
                 Value::Number(12000.),
             )]))
             .unwrap();
-        let delta = menu.project(&stores).unwrap();
+        let delta = project_wait(&menu, &stores).unwrap();
         assert_eq!(delta["launcher.scroll.y"], Value::Number(0.));
         assert_eq!(delta["launcher.result_count"], Value::Number(64.));
         assert_eq!(delta["launcher.selection"], Value::Text("app0".into()));
@@ -1147,7 +2003,7 @@ mod tests {
             let edit = BTreeMap::from([("launcher.search.text".into(), Value::Text(query.into()))]);
             stores = stores.reconcile(&edit).unwrap();
             stores.commit(edit).unwrap();
-            let projection = menu.project(&stores).unwrap();
+            let projection = project_wait(&menu, &stores).unwrap();
             stores = stores.reconcile(&projection).unwrap();
             stores.commit(projection).unwrap();
             for (key, expected) in [
@@ -1239,7 +2095,7 @@ mod tests {
             called: Default::default(),
         });
         let menu = Menu::new(Some(engine.clone())).unwrap();
-        menu.project(&Stores::default()).unwrap();
+        project_wait(&menu, &Stores::default()).unwrap();
         let result = menu.activate("chosen").unwrap();
         assert_eq!(
             engine.called.lock().unwrap().as_slice(),
@@ -1270,6 +2126,7 @@ mod tests {
                 ("launcher.selection".into(), Value::Text("id".into())),
                 ("launcher.route".into(), Value::Text("apps".into())),
                 ("launcher.mode".into(), Value::Text("apps".into())),
+                ("launcher.engine_route".into(), Value::Text("home".into())),
                 ("launcher.scroll.y".into(), Value::Number(1200.)),
                 (
                     "launcher.apps".into(),
@@ -1280,8 +2137,9 @@ mod tests {
             ]))
             .unwrap();
         let remembered = remember(&stores);
-        assert_eq!(remembered.len(), 5);
+        assert_eq!(remembered.len(), 6);
         assert!(!remembered.contains_key("launcher.apps"));
+        assert_eq!(remembered["launcher.engine_route"], Value::Text("home".into()));
         assert!(serde_json::to_vec(&remembered).unwrap().len() < 70 * 1024);
     }
     #[test]
@@ -1328,14 +2186,14 @@ mod tests {
         let menu = Menu::new(Some(source.clone())).unwrap();
         let stores = Stores::default();
         assert!(
-            matches!(&menu.project(&stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["name"]=="Old")
+            matches!(&project_wait(&menu, &stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["name"]=="Old")
         );
         source
             .publisher
             .publish(json!({"queries":{"":fixture_reply("",vec![json!({"id":"x","name":"New"})])}}))
             .unwrap();
         assert!(
-            matches!(&menu.project(&stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["name"]=="New")
+            matches!(&project_wait(&menu, &stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["name"]=="New")
         );
     }
     #[test]
@@ -1355,7 +2213,7 @@ mod tests {
                 ("launcher.scroll.y".into(), Value::Number(0.)),
             ]))
             .unwrap();
-        let initial = menu.project(&stores).unwrap();
+        let initial = project_wait(&menu, &stores).unwrap();
         stores = stores.reconcile(&initial).unwrap();
         stores.commit(initial).unwrap();
         let geometry = NavigationGeometry {
@@ -1390,7 +2248,7 @@ mod tests {
         let source =
             Arc::new(Fixture::new(json!({"queries":{"":fixture_reply("",rows)}})).unwrap());
         let menu = Menu::new(Some(source)).unwrap();
-        let initial = menu.project(&Stores::default()).unwrap();
+        let initial = project_wait(&menu, &Stores::default()).unwrap();
         let mut stores = Stores::default()
             .reconcile(&initial)
             .unwrap()
@@ -1442,7 +2300,7 @@ mod tests {
                 ("launcher.scroll.y".into(), Value::Number(123.)),
             ]))
             .unwrap();
-        let initial = menu.project(&stores).unwrap();
+        let initial = project_wait(&menu, &stores).unwrap();
         assert_eq!(initial["launcher.selection"], Value::Text("b".into()));
         stores = stores.reconcile(&initial).unwrap();
         stores.commit(initial).unwrap();
@@ -1452,7 +2310,7 @@ mod tests {
                 Value::Text("ab".into()),
             )]))
             .unwrap();
-        let changed = menu.project(&stores).unwrap();
+        let changed = project_wait(&menu, &stores).unwrap();
         assert_eq!(changed["launcher.selection"], Value::Text("a".into()));
         assert_eq!(changed["launcher.scroll.y"], Value::Number(0.));
         stores.commit(changed).unwrap();
@@ -1462,7 +2320,7 @@ mod tests {
                 Value::Text(String::new()),
             )]))
             .unwrap();
-        let grid = menu.project(&stores).unwrap();
+        let grid = project_wait(&menu, &stores).unwrap();
         assert_eq!(grid["launcher.selection"], Value::Text(String::new()));
     }
     #[test]
@@ -1481,7 +2339,7 @@ mod tests {
                 ("launcher.scroll.y".into(), Value::Number(1500.)),
             ]))
             .unwrap();
-        let initial = menu.project(&stores).unwrap();
+        let initial = project_wait(&menu, &stores).unwrap();
         assert_eq!(initial["launcher.selection"], Value::Text("item30".into()));
         assert!(
             !initial.contains_key("launcher.scroll.y"),
@@ -1495,7 +2353,7 @@ mod tests {
             .publisher
             .publish(json!({"queries":{"a":reply}}))
             .unwrap();
-        let changed = menu.project(&stores).unwrap();
+        let changed = project_wait(&menu, &stores).unwrap();
         assert_eq!(changed["launcher.selection"], Value::Text("item0".into()));
         assert_eq!(changed["launcher.scroll.y"], Value::Number(0.));
         assert_eq!(
@@ -1513,7 +2371,7 @@ mod tests {
             .unwrap(),
         );
         let menu = Menu::new(Some(source)).unwrap();
-        let initial = menu.project(&Stores::default()).unwrap();
+        let initial = project_wait(&menu, &Stores::default()).unwrap();
         let mut stores = Stores::default()
             .reconcile(&initial)
             .unwrap()
@@ -1528,7 +2386,7 @@ mod tests {
                 Value::Text("next".into()),
             )]))
             .unwrap();
-        let changes = menu.project(&stores).unwrap();
+        let changes = project_wait(&menu, &stores).unwrap();
         assert!(matches!(&changes["launcher.error"],Value::Text(error)if !error.is_empty()));
         assert!(!changes.contains_key("launcher.apps"));
         assert_eq!(menu.view.borrow().rows[0]["name"], "Original");
@@ -1548,13 +2406,17 @@ mod tests {
                 Value::Text("a".into()),
             )]))
             .unwrap();
-        let initial = menu.project(&restored).unwrap();
+        let initial = project_wait(&menu, &restored).unwrap();
         let Value::List(before) = &initial["launcher.apps"] else {
             panic!("missing model")
         };
         assert!(Arc::ptr_eq(before, &menu.view.borrow().rows));
         let mut stores = Stores::default().reconcile(&initial).unwrap();
-        assert!(!menu.project(&stores).unwrap().contains_key("launcher.apps"));
+        assert!(
+            !project_wait(&menu, &stores)
+                .unwrap()
+                .contains_key("launcher.apps")
+        );
         assert!(Arc::ptr_eq(before, &menu.view.borrow().rows));
         stores
             .commit(BTreeMap::from([(
@@ -1562,7 +2424,7 @@ mod tests {
                 Value::Text("b".into()),
             )]))
             .unwrap();
-        let next = menu.project(&stores).unwrap();
+        let next = project_wait(&menu, &stores).unwrap();
         let Value::List(after) = &next["launcher.apps"] else {
             panic!("missing changed model")
         };
@@ -1584,7 +2446,7 @@ mod tests {
             )]))
             .unwrap();
         assert!(
-            matches!(&menu.project(&stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["id"]=="a")
+            matches!(&project_wait(&menu, &stores).unwrap()["launcher.apps"],Value::List(r) if r[0]["id"]=="a")
         );
         stores
             .commit(BTreeMap::from([(
@@ -1592,7 +2454,7 @@ mod tests {
                 Value::Text("missing".into()),
             )]))
             .unwrap();
-        let v = menu.project(&stores).unwrap();
+        let v = project_wait(&menu, &stores).unwrap();
         assert!(matches!(&v["launcher.error"],Value::Text(s) if !s.is_empty()));
         assert!(
             menu.runtime
