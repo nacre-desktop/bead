@@ -752,6 +752,7 @@ fn start(
             let _ = desktop_owner.set(desktop.clone());
         }
         let make_source = move |output: Option<String>| {
+            let brightness_client = brightness_client.clone();
             let entry = entry.clone();
             let palette = palette.clone();
             let colors = colors.clone();
