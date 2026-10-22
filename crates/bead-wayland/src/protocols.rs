@@ -24,6 +24,7 @@ impl CompositorHandler for App {
                         id,
                         Box::new(UiEvent::Relayout),
                     ));
+                    return;
                 }
             }
             self.draw(i, qh);
@@ -134,6 +135,7 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
                         id,
                         Box::new(UiEvent::Relayout),
                     ));
+                    return;
                 }
             }
             state.draw(i, qh);
