@@ -1,4 +1,4 @@
-# B0023 — Per-output UI sessions
+# B0025 — Per-output UI sessions
 
 Status: **Resumed — attribute session allocations and fix scale-resource retention**. Architecture unit consumed by
 [B0022](0022-bar-composition-lifecycle.md); action-contract blockers there remain.
@@ -68,6 +68,9 @@ No temporary duplicate implementation is planned. The optional single-source
 API remains supported compatibility, not a temporary replacement. Any temporary
 duplicate introduced later must name its path and an expiry here first:
 “delete N days after the replacement is trusted”.
+
+Private capture receipts originally labeled this unit B0023 refer to B0025;
+the number moved after the concurrent session-menu unit published B0023.
 
 ## Owner continuation — 2026-10-22
 

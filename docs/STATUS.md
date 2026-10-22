@@ -1,6 +1,6 @@
 # Status
 
-## 2026-10-22 — B0023 continuation: extra-output budget accepted; scale fix pending
+## 2026-10-22 — B0025 continuation: extra-output budget accepted; scale fix pending
 
 Owner accepts the measured +2.045 MiB extra-output cost under its ~3 MiB target;
 the two-output +0.5 MiB verdict below is superseded. Anonymous allocations must
@@ -10,7 +10,7 @@ diagnostics and a presented-frame lifetime/pixel regression test are added.
 Builds/full CI wait for authorized dev-2 capacity; fresh private niri captures
 must pass +0.5 MiB in each single-output scale phase. No live change or push.
 
-## 2026-10-22 — B0023 implemented; relative memory acceptance blocked
+## 2026-10-22 — B0025 implemented; relative memory acceptance blocked
 
 Outputs now own independent UI sessions, output-scoped model/input/commit
 routing and teardown, with shared services/fonts/assets and palette snapshots.
@@ -21,7 +21,7 @@ absolute-cap stop used the wrong host gate and is superseded.
 Final same-count PSS deltas: H one/two +0.270/+1.420 MiB; N initial/1.25/return
 +0.443/+0.884/+0.981 MiB. Extra-output cost +2.045 MiB meets its separate target.
 Full Arch CI and private lifecycle/input/scale/remove/re-add proof pass.
-See [B0023](specs/0023-per-output-ui-sessions.md) for the measured spreads,
+See [B0025](specs/0025-per-output-ui-sessions.md) for the measured spreads,
 residency breakdown and private lifecycle proofs. B0022 remains blocked on
 this memory acceptance and its separate published action contracts. No push,
 installed-shell change or live session.
@@ -30,7 +30,7 @@ installed-shell change or live session.
 
 At the B0022 spec start, Wayland already created/removed primary bar surfaces
 per output and updated their geometry/scale, while the bar model was global.
-The B0023 candidate above now provides session isolation. Published protocol v1
+The B0025 candidate above now provides session isolation. Published protocol v1
 still has no daemon routes for workspace,
 focus, session, calendar peek, status adjustments, or tray actions. B0022 is
 therefore partial; see [spec 0022](specs/0022-bar-composition-lifecycle.md)

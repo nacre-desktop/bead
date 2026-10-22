@@ -1,6 +1,6 @@
 # Feasibility
 
-## 2026-10-22 — B0023 sessions: relative memory gate blocks integration
+## 2026-10-22 — B0025 sessions: relative memory gate blocks integration
 
 Each output owns its UI state/update/commit/input lifetime while resources and services remain shared.
 The corrected private input/idle/scale/remove/re-add proof passes; full Arch Bead CI passes.
@@ -23,7 +23,7 @@ Private calendar closes are −0.291/+0.260 MiB from own bar (own-bar+5 passes).
 Niri scale commits/buffer geometry pass; niri multi-output hotplug remains unproved.
 Source `60896a0`, proof/CI `8f4aad5`; default-feature release, Rust 1.99.0, CPU.
 The final batch uses five alternating pairs per compositor, 10 s warmup + five 1 s samples per phase.
-No push or live change. Raw evidence is private; [B0023](docs/specs/0023-per-output-ui-sessions.md) records hashes, commands and spreads.
+No push or live change. Raw evidence is private; [B0025](docs/specs/0025-per-output-ui-sessions.md) records hashes, commands and spreads.
 
 ## 2026-10-22 — B0021 wallpaper memory diagnosis
 
