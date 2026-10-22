@@ -182,7 +182,10 @@ impl TreeCache {
     /// Presented frames retain their own resources until the caller drops them.
     pub fn retain_scales(&mut self, scales: &[f32]) {
         let current = |bits: u32| scales.iter().any(|scale| scale.to_bits() == bits);
-        let stale_frame = self.frame.as_ref().is_some_and(|frame| !current(frame.scale.to_bits()));
+        let stale_frame = self
+            .frame
+            .as_ref()
+            .is_some_and(|frame| !current(frame.scale.to_bits()));
         let discarded = stale_frame || self.entries.keys().any(|(_, bits)| !current(*bits));
         self.entries.retain(|(_, bits), _| current(*bits));
         self.nodes.retain(|(_, bits), _| current(*bits));
@@ -1512,13 +1515,21 @@ mod tests {
         cache.retain_scales(&[1.25]);
         cache.prepare(&scene, 1.25).unwrap();
         assert_eq!(cache.frame.as_ref().unwrap().scale, 1.25);
-        assert!(old.upgrade().is_some(), "presented frame still owns its raster");
+        assert!(
+            old.upgrade().is_some(),
+            "presented frame still owns its raster"
+        );
         drop(held);
         assert!(old.upgrade().is_none(), "retired scale is no longer cached");
         cache.retain_scales(&[1.5]);
         cache.prepare(&scene, 1.5).unwrap();
         assert_eq!(
-            cache.frame.as_ref().unwrap().items[0].raster.as_ref().unwrap().pixels.data(),
+            cache.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap()
+                .pixels
+                .data(),
             pixels.as_slice(),
             "returning to the original scale preserves pixels"
         );

@@ -575,7 +575,11 @@ impl Session {
             self.generation
                 .as_ref()
                 .map_or(0, |g| g.script.memory_bytes()),
-            self.generation.as_ref().map_or(0, |g| g.sources.values().map(Vec::capacity).sum::<usize>())
+            self.generation.as_ref().map_or(0, |g| g
+                .sources
+                .values()
+                .map(Vec::capacity)
+                .sum::<usize>())
         )
     }
     pub fn state_summary(&self) -> String {
