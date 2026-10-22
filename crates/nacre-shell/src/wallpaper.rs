@@ -578,10 +578,10 @@ impl CommitState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bead::wayland::WallpaperProvider as _;
     use image::ImageEncoder;
     use nacre_protocol::{Capability, Message, Method, Reply, framing};
     use std::os::unix::fs::PermissionsExt;
-    use bead::wayland::WallpaperProvider as _;
 
     #[test]
     fn stale_unavailable_and_superseded_activation_keep_last_good_pair() {
