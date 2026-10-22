@@ -1,10 +1,11 @@
 # B0020 — Resident notifications and OSD
 
-Status: **Blocked before implementation — producer publication and policy decisions.**
+Status: **Producer/policy gate cleared; default-action contract gap blocks implementation.**
 Gap-list unit 5 / Roadmap Feature 9. No live ownership or switch authorization.
-Spec first, 2026-10-22. Fetched Bead `origin/main` is `155709c`; its highest
-spec is B0018. Reserve B0019 for the concurrent launcher worker and use B0020
-(highest observed + 2), as requested. No push from this task.
+Producer audit pin: Nacre `f468060038edfc33b99a1b06bf773ea9ffd90b7e`
+(N0017 phases A+B, owner decisions 2026-10-22). This is the source/spec pin;
+the runtime Cargo dependency is unchanged while the consumer gate below is open.
+Implementation authorized 2026-10-22; keyboard-layout OSD explicitly deferred.
 
 ## Objective and boundaries
 
@@ -19,32 +20,38 @@ placement, Orient roles, daemon routing and policy belong in GPL `nacre-shell`
 and `shell/`. ADR 0004 applies; any newly exposed framework assumptions go in
 the ROADMAP Generalization list, without unrelated generalization work.
 
-## Contract gate — actual evidence
+## Published producer and remaining contract gate
 
-Nacre fetched `origin/main` `aa32dbf82b66570c74b3774101f954de7ce0367a`:
-`docs/specs/0017-daemon-notifications-contract.md` explicitly says **design
-proposal**, with no runtime/schema publication or consumer adoption authorized.
-Its phase D requires usable producer publication plus green CI before Bead
-pins/adopts. Standing rules likewise prohibit adoption of reserved capabilities.
-This task does not authorize editing Nacre or implementing that proposal here.
+Nacre `f468060038edfc33b99a1b06bf773ea9ffd90b7e` publishes the managed
+notifications producer, protocol types/schemas and six generated transcripts:
+`notifications-{lifecycle,controls,errors,loss-restart,ownership,storage}.jsonl`.
+N0017 owner decisions accept separate managed ownership opt-in, bounded admission
+and history with no paging, frozen configured QML timing, dismiss-retain/explicit
+forget-delete, and immediate Notify acknowledgement with asynchronous storage.
+The earlier design-proposal/policy gate is cleared by the owner's implementation
+request. Bead remains a socket consumer; no ownership fallback or live switch.
 
-Published reserved types in `crates/nacre-protocol/src/core_services.rs` include
-NotificationsState, popup_order/inhibited, history storage and OsdState. They
-do not establish a usable notifications producer or its proposed six methods.
-Notification revision/retained/paused and history_more in N0017 are proposals,
-not current published fields. OSD channels are volume, brightness, microphone,
-capslock; there is no keyboard-layout channel. The existing QML `keyboard`
-channel is keyboard **backlight**, not layout.
+**Required default-action metadata is missing at this pin.**
+`crates/nacre-protocol/src/core_services.rs` defines `NotificationAction` with
+only `label`; `Notification` has no default-action reference. The producer's
+`daemon/notifications/model.rs::action_ids` allocates opaque IDs and retains raw
+keys privately. `active_notification` publishes every action as an ID plus label.
+Neither order, label nor opaque ID identifies the native `default` action.
+QML `NacreNotice.qml` filters that action from buttons and invokes it on card
+click when `NacreNotifications.actionOnClick` is enabled. Guessing would expose
+the wrong buttons or invoke an unrelated action. This blocks the required
+acceptance checks, not the producer's ownership/timing/storage implementation.
 
-Unblock only after Nacre publishes producer source, schemas/transcripts and
-exact-source green CI; record its revision and capabilities before coding.
-Resolve default expiry/popup policy and dismissal/forget mapping through N0017.
-Obtain a newly agreed and published keyboard-layout OSD contract/behaviour, or
-an explicit owner decision deferring layout. Do not reinterpret it as backlight.
-Full QML OSD parity also includes output selection, keyboard backlight, DND,
-night-light and power profile; these are absent from the current OsdChannel
-enum and require published contracts before adoption. Microphone/capslock are
-already represented, but their presence alone does not prove producer support.
+Upstream prerequisite: publish a backwards-compatible default-action marker or
+reference, validate it against the notice/revision, and cover default versus
+explicit actions plus replacement in schema/transcripts and green producer CI.
+Then repin and resume implementation. Also verify the supported source of the
+configured action-on-click policy (frozen QML default is false); do not invent a
+new setting writer. No Nacre source is changed by this Bead task.
+
+Keyboard-layout OSD is a follow-up, explicitly outside B0020. Existing published
+volume/brightness topics are in scope; keyboard backlight is not keyboard layout.
+Other QML-only OSD channels require their own published contracts before adoption.
 
 ## Behaviour to match
 
@@ -55,14 +62,14 @@ Paths below are relative to `nacre/shell/`.
 | --- | --- |
 | Stack placement | `modules/drawers/NacrePanelHost.qml`, `modules/notifications/NacreNotificationStack.qml`: usable top-right, 424 px outer width capped by parent, 12 px insets, 8 px spacing, height bounded to parent minus 24; clipped scrolling. Match stacking order, replacement position and output selection against QML. |
 | Transitions | Stack reveal 230 ms OutCubic; card insertion fade 160 ms. Retire exiting rows and hover state after hide/destruction; no permanently retained view resources. |
-| Expiry/replacement | `services/NacreNotificationEntry.qml`: replacement keeps identity, updates content and restarts presentation; native positive timeout closes, zero has no native expiry, -1 resolves to 5000 ms in QML. Popup-only hide after 10 s for no-expiry or >10 s notices. Hover pauses both clocks. Bead's current critical -1 persistent policy differs: require the producer policy decision, never silently change it. |
+| Expiry/replacement | `services/NacreNotificationEntry.qml`: replacement keeps identity, updates content and restarts presentation; native positive timeout closes; -1 resolves to the configured QML default for every urgency. Zero has no native expiry but hides its popup after that configured default (currently 5000 ms); only positive timeouts >10 s use a separate 10 s popup clock. `expire:false` disables both clocks. Hover pauses both producer clocks; Bead never computes expiry. |
 | Notice/actions | `modules/notifications/NacreNotice.qml`: plain text, critical/error border; expanded summary/body limits 6/12 lines; expand/dismiss, right-click and swipe >=30% width dismiss. Default action omitted from buttons; card invokes it only when action-on-click policy enables it, otherwise expands. Nondefault actions shown expanded; history has no live actions. |
 | Suppression | DND plus UI inhibition hides popups; leaving suppression never replays. Producer expiry continues. Panel/session/OSD suppression follows PanelHost. Clear hover on hidden/destroyed surfaces and provider disconnect. Native inhibition is tested separately; it is not established by QML visuals alone. |
-| History/DND | `modules/bar/popouts/NacreHistoryPopup.qml`, `modules/controlcenter/` notices, `services/NacreNotifs.qml`: newest first, loading/empty/error distinct, DND uses sole daemon settings writer, clear scope follows published contract. No mutation through old direct settings/history paths. |
+| History/DND | `modules/bar/popouts/NacreHistoryPopup.qml`, `modules/controlcenter/` notices, `services/NacreNotifs.qml`: newest first, loading/empty/error distinct, DND uses sole daemon settings writer, clear scope follows published contract. Dismiss retains; only explicit Forget (`forget:true`) or clear deletes. No mutation through old direct settings/history paths. Display the bounded newest history window, total count and `history_more` separately; loading, bus health and `history_storage` readiness/writability/errors remain distinct. No v1 pagination. |
 | Persistence | Preserve Rust daemon's 30-day retention, existing version-1 formats and exclusions. Active retainable text restores as inert history, with no popup/action/deadline revival. Test transient/feedback exclusions, corrupt/readonly/future files, failed saves, clear-before-load tombstones and restart. Never replace this with Bead's current 256-row/3 MiB fixture store. |
 | OSD | `modules/osd/NacreOsdEvents.qml`, `NacreOsd.qml`, `NacreLevelNotice.qml`: initial-state arming 400 ms, coalesced changes, focused output, bottom overlay, frame+24 px margin, width 200..336, no keyboard focus, 150 ms fade and 2000 ms hide. Hover pauses hide and leave restarts it. Volume/brightness use real published state; repeated equal-valued events use serial identity, expired/reconnected state never replays. Keyboard layout remains contract-blocked. |
 
-## Implementation units after unblock
+## Implementation units after default-action publication
 
 1. Pin the published protocol/producer. Add the concrete notifications/OSD
    consumer in `crates/nacre-shell/src/notifications.rs` and existing daemon
@@ -119,9 +126,15 @@ Paths below are relative to `nacre/shell/`.
 - QML always-on notification/history/OSD views remain the daily-driver reference.
   Delete **7 days after the replacement is trusted**, defined as owner-approved
   core switch plus a stable week and rollback review. Removal needs owner approval.
-- This documentation-only blocked stage creates no new implementation duplicate.
+- This contract-audit stage creates no new implementation duplicate.
 
-## Execution receipt
+## Execution receipt — 2026-10-22
 
-Spec and reference audit only. Product implementation, full CI and nested proof
-are pending the producer/policy gate above; no runtime or dependency pin changed.
+Audited the exact producer pin, protocol action types, native-to-opaque mapping,
+and frozen QML default-action/timer policy via read-only `git show origin/main`.
+The general producer/policy blocker is resolved; default-action parity remains
+contract-blocked. Incomplete consumer/assets drafts were not integrated. No
+product lines, runtime pin, bus ownership, live state or installed files changed.
+Full Bead CI receipt is recorded in STATUS; no nested or memory result is claimed
+for this documentation-only update. Resume with the additive upstream marker,
+then complete the implementation and original private/nested acceptance checks.

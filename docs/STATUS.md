@@ -28,15 +28,21 @@ matched flags and limitations. Ship the companion beside the UI binary.
 Native GL's absolute memory is a pre-existing acceptance issue. Centre remains
 unsupported. Stop for review; no install, live desktop change or push occurred.
 
-## 2026-10-22 — B0020 notifications/OSD spec; producer gate blocked
+## 2026-10-22 — B0020 producer published; default-action contract gap
 
-[B0020](specs/0020-notifications-osd-product.md) records the resident product,
-QML behaviour, private-bus ownership safety, acceptance checks and temporary
-duplicate expiry. Nacre `aa32dbf` still marks N0017 as a design proposal and
-forbids consumer adoption before producer publication and green CI. Default
-expiry policy remains unresolved; published OSD channels have no keyboard
-layout (QML's keyboard channel means backlight). No implementation, protocol
-pin, tests, capture, live ownership or switch occurred in this documentation stage.
+[B0020](specs/0020-notifications-osd-product.md) now pins Nacre producer source
+`f468060038edfc33b99a1b06bf773ea9ffd90b7e`; N0017 phases A+B and owner policy
+decisions clear the former producer/policy gate. Zero-timeout popup hiding uses
+the configured QML default; dismiss retains and explicit Forget deletes. History
+is bounded with independent storage health. Keyboard-layout OSD is deferred.
+Implementation remains blocked on a narrower published-contract gap: actions
+have opaque IDs and labels, but no default-action marker/reference. QML needs it
+to filter buttons and optionally invoke the default on card click. Do not infer
+it from action order/labels/IDs. Upstream must publish and test the additive
+metadata before repinning; no producer edit or partial consumer was integrated.
+Product line delta is +0/-0. No nested test, memory delta, install or live change.
+Full remote Bead CI: pending for this documentation-only audit.
+
 ## 2026-10-22 — B0019 launcher review candidate
 
 Source `c8b55b5` adds asynchronous daemon queries, same-scope pending rows,
