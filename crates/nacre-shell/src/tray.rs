@@ -271,6 +271,15 @@ mod view_tests {
                 id: "item".into(),
                 visible: true,
                 title: "Fixture".into(),
+                menu: (1..=40)
+                    .map(|id| MenuEntry {
+                        id,
+                        label: format!("Entry {id}"),
+                        enabled: true,
+                        visible: true,
+                        ..Default::default()
+                    })
+                    .collect(),
                 ..Default::default()
             }],
             ..Default::default()
@@ -282,6 +291,24 @@ mod view_tests {
         assert_eq!(
             runtime.session.stores.get("panel.open"),
             Some(&Value::Bool(true))
+        );
+        let node = runtime
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| node.action.as_deref() == Some("services.menu"))
+            .unwrap();
+        let rect = bead::ui::rect(&node.draw);
+        runtime
+            .stage(UiEvent::Scroll {
+                x: rect.x + rect.w / 2.,
+                y: rect.y + rect.h / 2.,
+                delta: 30.,
+            })
+            .unwrap();
+        runtime.commit();
+        assert!(
+            matches!(runtime.session.stores.get("tray.scroll"),Some(Value::Number(value)) if *value > 0.)
         );
         runtime
             .stage(UiEvent::Command {

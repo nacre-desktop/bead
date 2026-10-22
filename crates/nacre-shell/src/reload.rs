@@ -1210,6 +1210,11 @@ impl SceneSource for Runtime {
         }
         if let Some((id, name, arg)) = host_action.as_ref()
             && name.starts_with("services.")
+            && (!matches!(
+                &event,
+                UiEvent::Scroll { .. } | UiEvent::HorizontalScroll { .. }
+            ) || name == "services.audio"
+                || name == "services.tray")
         {
             let delta = match &event {
                 UiEvent::Scroll { delta, .. } | UiEvent::HorizontalScroll { delta, .. } => {
