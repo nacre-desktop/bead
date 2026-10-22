@@ -87,6 +87,19 @@ with the batch result.
   B = `306474f0`, both compositors). It starts when the desktop heavy slot is
   free.
 
+### Owner decision — laptop reference memory capture — 2026-10-22
+
+Owner chose option (a): Bead's absolute memory gate is measured on the laptop
+(the reference machine) in a supervised capture. The owner picks an idle
+window of about 30–45 minutes, and the capture runs in a private nested
+session only, under the standing capture gates; the live desktop is never
+touched. The lead prepares the harness in advance, so the capture starts when
+the owner signals. Re-forecast: the observed unit throughput (B0016 tray about
+4 h, B0018 control center about 5 h of worker time with full CI) suggests about
+3–5 weeks to the core switch, against the gap review's conservative 8–13 weeks.
+Serial gates remain: secure-lock review, installer/rollback rehearsal and the
+owner's live-switch validation.
+
 ### Core-switch gap list — 2026-10-22
 
 Read-only review of what Bead still lacks before it can run the always-on parts
