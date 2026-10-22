@@ -108,9 +108,10 @@ pub(crate) fn core_sound_with_root(
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
-        position: Some(crate::placement::Frame::default().positioner(
-            crate::placement::Attachment::ControlCenter,
-        )),
+        position: Some(
+            crate::placement::Frame::default()
+                .positioner(crate::placement::Attachment::ControlCenter),
+        ),
         engages_decorations: true,
         passive: false,
         keyboard_focus: true,
@@ -132,10 +133,7 @@ pub(crate) fn core_sound_with_root(
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
                 .with_view_edge("right")?
-                .with_frame(
-                    crate::placement::Attachment::ControlCenter,
-                    &colors,
-                )
+                .with_frame(crate::placement::Attachment::ControlCenter, &colors)
                 .and_then(|runtime| runtime.with_core_audio_status(source))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
