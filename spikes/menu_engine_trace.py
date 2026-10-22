@@ -103,3 +103,21 @@ def parse_serial_key_trace(segment, expected_catalog_rev, profile_mode, expected
         'refresh_ns': int(refresh) or None,
         'profiles': profiles,
     }
+
+
+def accepted_result_presented(segment, expected_query, required_item):
+    """Observe a refresh without UI_STATE logging in the measured process.
+
+    Preference readback is checked by the caller; this proves the refreshed
+    projection containing that item reached its committed presentation.
+    """
+    for result in re.finditer(r'^MENU_RESULT_IDENTITY json=(.+)$', segment, re.M):
+        identity = json.loads(result[1])
+        if identity.get('query') != expected_query or required_item not in identity.get('order', []):
+            continue
+        tail = segment[result.end():]
+        commit = re.search(r'UI_COMMIT generation=(\d+).*update=(\d+).*source_error=false', tail)
+        if commit and re.search(r'UI_PRESENTED generation=' + commit[1] +
+                                r' .*update=' + commit[2] + r' ', tail[commit.end():]):
+            return True
+    return False

@@ -368,16 +368,11 @@ def sample(env, raw, compositor, stop):
                             'action': 'favorite', 'value': {'id': favorite_id, 'enabled': enabled}})
                         assert preferences and (favorite_id in preferences['favorites']) == enabled
                         def favorite_visible(text):
-                            for match in re.finditer(r'^UI_STATE (.+)$', text[offset:], re.M):
-                                state = json.loads(match[1])
-                                if any(row.get('id') == favorite_id and row.get('favorite') is enabled
-                                       for row in state.get('launcher.apps', [])):
-                                    tail = text[offset:][match.end():]
-                                    commit = re.search(r'UI_COMMIT generation=(\d+).*update=(\d+).*source_error=false', tail)
-                                    if commit and re.search(r'UI_PRESENTED generation=' + commit[1] +
-                                                            r' .*update=' + commit[2] + r' ', tail[commit.end():]):
-                                        return True
-                            return False
+                            # Do not enable UI_STATE during typing: it changes
+                            # the measured window. The RPC above proves the
+                            # authoritative value; observe its refresh here.
+                            return menu_engine_trace.accepted_result_presented(
+                                text[offset:], rows[-1]['query'], favorite_id)
                         matrix.wait_log(log, favorite_visible, timeout=10)
                     groups = call('menu.query', {'query': 'apps', 'mode': 'search'})
                     group_id = next((ident for ident in groups['order']

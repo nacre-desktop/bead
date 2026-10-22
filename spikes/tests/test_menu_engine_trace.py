@@ -35,6 +35,18 @@ class SerialKeyTraceTests(unittest.TestCase):
             'MENU_RESULT_IDENTITY json=' + json.dumps({'query': 'ap', 'order': ['b', 'a']}),
         ])
 
+    def test_refresh_without_ui_state_requires_identity_commit_and_presentation(self):
+        identity = 'MENU_RESULT_IDENTITY json=' + json.dumps({'query': 'ap', 'order': ['b', 'a']})
+        commit = 'UI_COMMIT generation=3 update=4 source_error=false'
+        presented = 'UI_PRESENTED generation=3 monotonic_ns=1100 refresh_ns=0 companion=none update=4 cpu_ns=2100'
+        observe = menu_engine_trace.accepted_result_presented
+        self.assertTrue(observe('\n'.join([identity, commit, presented]), 'ap', 'b'))
+        for lines, query, item in (([identity, presented, commit], 'ap', 'b'),
+                                   ([identity, commit], 'ap', 'b'),
+                                   ([identity, commit, presented], 'old', 'b'),
+                                   ([identity, commit, presented], 'ap', 'missing')):
+            self.assertFalse(observe('\n'.join(lines), query, item))
+
     def test_exact_query_order_and_rtt(self):
         row = menu_engine_trace.parse_serial_key_trace(self.identity_trace(), 7, 'clocks', 'ap')
         self.assertEqual(row['item_ids'], ['b', 'a'])
