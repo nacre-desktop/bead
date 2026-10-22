@@ -581,6 +581,7 @@ mod tests {
     use image::ImageEncoder;
     use nacre_protocol::{Capability, Message, Method, Reply, framing};
     use std::os::unix::fs::PermissionsExt;
+    use bead::wayland::WallpaperProvider as _;
 
     #[test]
     fn stale_unavailable_and_superseded_activation_keep_last_good_pair() {
@@ -745,7 +746,7 @@ mod tests {
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let (read, mut write) = stream.into_split();
-            let mut reader = framing::Reader::new(BufReader::new(read));
+            let mut reader = framing::Reader::new(tokio::io::BufReader::new(read));
             assert!(matches!(
                 reader.next().await.unwrap().unwrap(),
                 Message::Hello { .. }
