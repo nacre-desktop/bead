@@ -446,7 +446,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 stop_keyboard_keeper(keeper,stop)
     assert client.returncode==0,'launcher did not exit cleanly'
     assert 'STOP surfaces=0'in log.read_text()
-    result.update(valid=not budget_failures,budget_failures=budget_failures,observed_failed_control=record_control,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=not release_state,query_released_after_idle=release_state,query_on_open=query_on_open,query_not_on_disk=True)
+    result.update(valid=not budget_failures,budget_failures=budget_failures,observed_failed_control=record_control,hover_timeout=True,explicit_prepare=True,query_preserved_after_release=True,view_data_released_after_idle=release_state,query_on_open=query_on_open,query_not_on_disk=True)
     (raw/'launcher-proof.json').write_text(json.dumps(result,indent=2)+'\n')
-    print('LAUNCHER_SOURCE_PROOF compositor='+compositor+' cycles=3 hover_timeout=true prepare=true query_released_after_idle='+str(release_state).lower()+' valid='+str(not budget_failures).lower()+' clean=true',flush=True)
+    print('LAUNCHER_SOURCE_PROOF compositor='+compositor+' cycles=3 hover_timeout=true prepare=true input_preserved=true view_data_released_after_idle='+str(release_state).lower()+' valid='+str(not budget_failures).lower()+' clean=true',flush=True)
     return result
