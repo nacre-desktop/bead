@@ -12,7 +12,7 @@ dated transfer and execution receipts below remain historical records.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0018 Status pill](0018-control-center-status-pill.md) | In progress | Hover peek, clicked right-edge panels and switching; private/nested proof, full dev-1 CI; no push. |
+| 0 | [B0018 Status pill](0018-control-center-status-pill.md) | Done | Source c6ba4b3; four device peek/click routes, switching and lazy close. Exact-source private CPU input and full remote Arch CI equivalent passed; no push or live switch. |
 | 0 | [B0016 System tray](0016-system-tray.md) | Review — core producer blocked | Local source6efca12; headless service, lazy preview menu and private/nested proofs. Daemon ownership/action publication and matched memory gate remain open; lead reviews/integrates, no push. |
 | 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Done | Sourcedcf541a9 integrated normally; exact-source full hostedCI39240289443 SUCCESS. Capability-gated; no producer or live enablement claim. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |

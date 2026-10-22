@@ -1,5 +1,31 @@
 # Feasibility
 
+## 2026-10-22 — B0018 status-pill interaction
+
+One pill now routes the four existing device views through hover peeks and clicks.
+Peeks remain nonmodal; clicks open compact panels at the usable top-right.
+Private native input and full CI establish behavior; physical timing and memory remain unmeasured.
+The existing QML placement/status goldens remain unchanged and pass.
+
+| Configuration or proof | Result |
+| --- | --- |
+| Icon center spacing / clicked body | 26 px / 400×286 px |
+| Configured dwell / peek leave | 350 / 120 ms |
+| Initial crossing / entered-panel leave | 600 / 130 ms |
+| Peek / clicked reveal | 230 ms InOutCubic / 280 ms OutCubic |
+| Machine / native input-bound unit tests | 17 / 3 passed |
+| Observed smoke hover / pointer-away close | 0.401–0.476 s / 0.164–0.179 s |
+| UI PSS / DRM / SwapPss | Not measured / unknown / not measured |
+
+Source `c6ba4b3` passed the full remote Arch workflow and exact-source nested
+Labwc CPU smoke. Observed times include IPC/polling; they are not matched QML
+or physical scanout measurements. Native proof found a warmed preview without
+a surface; input-bound review also corrected shadow padding over the bar.
+An existing watchdog deadline flaked once; unchanged isolated/full reruns
+passed, cause unconfirmed.
+Test prerequisite addition: `ttf-dejavu` inside the CI container only.
+The baseline has no edge-charge graphic. No live switch, install or push occurred.
+
 ## 2026-10-22 — B0016 tray preview boundary
 
 The existing headless tray host now supports the bar preview and lazy menus.

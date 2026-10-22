@@ -1,5 +1,24 @@
 # Status
 
+## 2026-10-22 — B0018 status-pill routing complete
+
+Source `c6ba4b3` groups the right-side icons in one pill and routes the four
+existing device views through nonmodal hover peeks and compact top-right
+control panels. Other icons retain hover/pointer behavior while peeks are
+suppressed; native click switches content, pointer-away and Escape close, and
+closed/idle resources retire. Shell code owns appearance and timing policy.
+Requested B0017 was renumbered because 0017 already covers network controls.
+
+Exact-source private nested CPU input and the full remote Arch CI equivalent
+passed, including the existing matched QML placement/status goldens. Native
+testing found missing surfaces for warmed peeks; input-bound review also fixed
+shadow input over the bar. One existing watchdog deadline failed once; isolated
+and complete unchanged reruns passed, without establishing a cause or relaxing
+a deadline.
+See [B0018](specs/0018-control-center-status-pill.md) for source/binary identity
+and validation. The baseline has no edge-charge graphic; no edge activation,
+new controls/providers, live switch, memory clearance, install or push is claimed.
+
 ## 2026-10-22 — B0016 tray preview ready for review; core producer gate
 
 Source `6efca12` adds bounded headless SNI/DBusMenu behavior and a lazy bar menu.
