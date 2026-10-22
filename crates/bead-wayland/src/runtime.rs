@@ -476,9 +476,10 @@ impl App {
             return;
         }
         let Some(sender) = self.wallpaper_sender.clone() else { self.wallpaper_jobs.remove(&name); return; };
+        let failed_name = name.clone();
         std::thread::spawn(move || match provider.prepare(name, width, height) {
             Ok(frame) => { let _ = sender.send(UiEvent::WallpaperFrame(std::sync::Arc::new(frame))); }
-            Err(_) => { let _ = sender.send(UiEvent::WallpaperFailed(name)); }
+            Err(_) => { let _ = sender.send(UiEvent::WallpaperFailed(failed_name)); }
         });
     }
 

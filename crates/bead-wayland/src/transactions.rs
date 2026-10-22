@@ -3,13 +3,16 @@
 use super::*;
 impl App {
     pub(super) fn ui(&mut self, mut event: UiEvent) {
-        match &event {
+        event = match event {
             UiEvent::WallpaperRefresh => { self.refresh_wallpapers(); return; }
-            UiEvent::WallpaperFrame(frame) => { if let Ok(frame) = std::sync::Arc::try_unwrap(frame) { self.complete_wallpaper(frame); } return; }
+            UiEvent::WallpaperFrame(frame) => {
+                if let Ok(frame) = std::sync::Arc::try_unwrap(frame) { self.complete_wallpaper(frame); }
+                return;
+            }
             UiEvent::WallpaperFailed(output) => { self.wallpaper_failed(&output); return; }
             UiEvent::WallpaperTick(output) => { self.wallpaper_tick(&output); return; }
-            _ => {}
-        }
+            other => other,
+        };
         if let UiEvent::CompanionSelect {
             view,
             output,
