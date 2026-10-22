@@ -1,7 +1,9 @@
 # B0021 — Static wallpaper surface
 
-Status: **Blocked on published selection/presentation contract**. Spec first;
-implementation must not infer wallpaper state from filesystem paths.
+Status: **Unblocked — Nacre N0027 published**. Consumer pins
+`nacre-protocol` at Nacre commit `294d3f4034e0ffc8c6ee4fe38a3ed4109aa56c84`
+(`nacre-protocol` crate `0.1.0-dev.2`, wire contract v1). No wallpaper state is
+inferred from filesystem paths; only the contract's validated local path is used.
 
 ## Objective and scope
 
@@ -22,15 +24,10 @@ config writer. Read-only Bead dependency on the MIT OR Apache-2.0
 
 ## Contract gate
 
-The current published `wallpaper.watch` topic contains only `available`, opaque
-source `generations`, and optional `error`. It signals input changes but does
-not identify the selected image or publish its presentation/palette. Nacre's
-`wallpaper/last.txt`, `presentation.json`, and helper `--stream-presentation`
-are implementation details, not published contracts. Before product code,
-use a published daemon method/topic that provides the active static image and
-presentation, and the published activation/palette route. If no such contract
-is available, stop here and request that migration publish it; do not read or
-write Nacre private state files from Bead and do not add a Bead-owned writer.
+Subscribe to `wallpaper.active` v1 and invoke `wallpaper.activate({revision})`
+v1. Pin protocol types, schemas and goldens through the exact dependency revision
+above. Treat unavailable/stale/malformed state as a retain-last-good event.
+Never read Nacre private state files or add a Bead-owned writer.
 
 ## Non-goals
 
@@ -69,6 +66,12 @@ live desktop, installed Nacre, config, keybinding, autostart, or unit changes.
 No temporary duplicate is planned. If implementation retains a compatibility
 path or fallback beside its replacement, list it here with the exact rule:
 delete N days after the replacement is trusted.
+
+## Generalization list
+
+The first implementation must record any Nacre assumption demonstrated inside
+framework crates in `docs/ROADMAP.md`; keep wallpaper selection, palette policy,
+and contract handling in `nacre-shell`.
 
 ## Reference audit
 
