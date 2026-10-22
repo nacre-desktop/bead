@@ -16,7 +16,7 @@ impl App {
         }
         let result = match call.method.as_str() {
             "state" => {
-                let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count()});
+                let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count(),"keyboard_focus":self.options.panel_spec.as_ref().is_some_and(|spec| spec.keyboard_focus),"dismiss_active":self.dismiss.is_some()});
                 if let Some(name) = &self.panel_name {
                     value["view"] = serde_json::Value::String(name.clone());
                 }
@@ -51,6 +51,55 @@ impl App {
                             .find(|s| s.companion)
                             .map(|s| [s.width, s.height])
                     );
+                    if let Some(output) = self.panel_output.as_ref().or_else(|| {
+                        self.surfaces
+                            .iter()
+                            .find(|surface| !surface.companion)
+                            .map(|surface| &surface.output)
+                    }) && let Some(size) =
+                        self.output.info(output).and_then(|info| info.logical_size)
+                    {
+                        value["output_size"] = serde_json::json!([size.0, size.1]);
+                        if let (Some((scene, _, _)), Some(positioner)) = (
+                            self.companion.as_ref(),
+                            self.options
+                                .panel_spec
+                                .as_ref()
+                                .and_then(|spec| spec.position.as_ref()),
+                        ) {
+                            let (x, y) = positioner(scene, self.panel_center, size);
+                            value["origin"] = serde_json::json!([x, y]);
+                        }
+                    }
+                    if let Some((scene, _, _)) = &self.companion
+                        && let Some(motion) = &scene.motion
+                    {
+                        value["edge"] =
+                            serde_json::json!(format!("{:?}", motion.edge).to_lowercase());
+                    }
+                    if let Some((scene, _, _)) = &self.companion {
+                        value["scene_bounds"] = serde_json::json!([
+                            scene.bounds.x,
+                            scene.bounds.y,
+                            scene.bounds.w,
+                            scene.bounds.h
+                        ]);
+                        if let Some(rect) = scene
+                            .layers
+                            .iter()
+                            .find(|layer| layer.parent.is_none())
+                            .map(|layer| {
+                                [
+                                    layer.bounds.x,
+                                    layer.bounds.y,
+                                    layer.bounds.w,
+                                    layer.bounds.h,
+                                ]
+                            })
+                        {
+                            value["content_frame"] = serde_json::json!(rect);
+                        }
+                    }
                 }
                 Ok(value)
             }
@@ -132,6 +181,9 @@ impl App {
         let (name, spec) = panels.resolve(name)?;
         if self.panel_name.as_deref() == Some(name) {
             return Ok(());
+        }
+        if let Some(sender) = &self.event_sender {
+            let _ = sender.send(UiEvent::PanelSelected(name.to_owned()));
         }
         let name = name.to_owned();
         let mut spec = spec.clone();
@@ -265,12 +317,12 @@ impl App {
         }
         if self.panel_runtime.is_some() {
             if self.panel_output.as_ref() != Some(&output)
-                || (!spec.passive && self.dismiss.is_none())
+                || (spec.keyboard_focus != self.dismiss.is_some())
             {
                 drop(self.dismiss.take());
                 self.surfaces.retain(|s| !s.companion);
                 self.panel_output = Some(output.clone());
-                if !spec.passive {
+                if spec.keyboard_focus {
                     self.create_dismiss(&output)?;
                 }
                 let qh = self.qh.clone();
@@ -299,7 +351,7 @@ impl App {
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_output = Some(output.clone());
-        if open && !spec.passive {
+        if open && spec.keyboard_focus {
             self.create_dismiss(&output)?;
         }
         self.companion_policy = Default::default();
@@ -425,7 +477,11 @@ impl App {
         self.options.bar = false;
         self.options.panel = true;
         self.options.content_size = true;
-        self.options.keyboard_focus = !self.options.panel_spec.as_ref().is_some_and(|s| s.passive);
+        self.options.keyboard_focus = self
+            .options
+            .panel_spec
+            .as_ref()
+            .is_some_and(|s| s.keyboard_focus);
         let changed = self.ui_inner(event);
         self.options.bar = bar;
         self.options.panel = panel;
@@ -457,6 +513,9 @@ impl App {
     pub(super) fn close_panel(&mut self) {
         if self.panel_runtime.is_none() {
             return;
+        }
+        if let Some(sender) = &self.event_sender {
+            let _ = sender.send(UiEvent::PanelDismissed);
         }
         self.panel_target = false;
         drop(self.dismiss.take());

@@ -96,6 +96,9 @@ pub enum UiEvent {
     Panel(u64, Box<UiEvent>),
     PanelVisibility(bool),
     CompanionVisibility(bool),
+    PointerRegion(bool),
+    PanelDismissed,
+    PanelSelected(String),
     CompanionSelect {
         view: String,
         output: Option<String>,
@@ -120,6 +123,9 @@ pub enum UiEvent {
     Model(std::collections::BTreeMap<String, bead_core::Value>),
     Backend(std::sync::Arc<bead_backends::Snapshot>),
     Relayout,
+    Timer {
+        token: u64,
+    },
     Hover {
         x: f32,
         y: f32,
@@ -276,6 +282,8 @@ pub struct PanelSpec {
     pub engages_decorations: bool,
     /// Passive notices never create a dismissal layer or request keyboard focus.
     pub passive: bool,
+    /// Request keyboard focus and an outside-dismiss layer while the panel is open.
+    pub keyboard_focus: bool,
     pub initial_open: bool,
     pub factory: PanelFactory,
     pub fallback: Scene,
@@ -402,6 +410,7 @@ struct Surface {
     ready: bool,
     callbacks: policy::Callbacks,
     input_visible: Option<bool>,
+    keyboard_visible: Option<bool>,
     redraw: bool,
     fractional: Option<WpFractionalScaleV1>,
     viewport: Option<WpViewport>,

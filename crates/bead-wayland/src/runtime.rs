@@ -508,7 +508,12 @@ impl App {
             });
             layer.set_keyboard_interactivity(
                 if !self.options.test_passive
-                    && ((companion && self.options.panel_spec.as_ref().is_some_and(|s| !s.passive))
+                    && ((companion
+                        && self
+                            .options
+                            .panel_spec
+                            .as_ref()
+                            .is_some_and(|s| s.keyboard_focus))
                         || (self.options.test_keyboard && !companion))
                 {
                     KeyboardInteractivity::Exclusive
@@ -545,6 +550,7 @@ impl App {
                 ready: false,
                 callbacks: Default::default(),
                 input_visible: None,
+                keyboard_visible: None,
                 redraw: false,
                 fractional,
                 viewport,

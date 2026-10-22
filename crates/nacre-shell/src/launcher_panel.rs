@@ -36,6 +36,7 @@ pub fn spec(
         ),
         engages_decorations: false,
         passive: false,
+        keyboard_focus: true,
         initial_open: false,
         fallback,
         renderer: bead::render::RendererKind::Cpu,

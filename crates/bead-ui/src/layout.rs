@@ -546,6 +546,8 @@ impl ViewSpec {
                         open: boolean(p, "open", true, source)?,
                         duration: f64::from(number(p, "duration", 0.2, source)?),
                         spring: text(p, "transition", "ease", source)? == "spring",
+                        curve: (text(p, "transition", "ease", source)? == "ease-in-out")
+                            .then_some(bead_core::animation::Curve::EaseInOut),
                         edge: serde_json::from_value(
                             p.get("edge")
                                 .cloned()

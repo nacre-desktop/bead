@@ -39,6 +39,10 @@ pub struct Runtime {
     tray_enabled: bool,
     tray_hover: String,
     tray_selection: Option<crate::tray::Selection>,
+    status_pill: bead::ui::status_pill::StatusPill,
+    status_pill_epoch: u64,
+    status_pill_scheduled: Option<std::time::Instant>,
+    status_pill_route: Option<String>,
     tray_menu: Option<crate::tray::Menu>,
     pending_focus: Option<String>,
     bar: bool,
@@ -65,6 +69,104 @@ impl Drop for Runtime {
     }
 }
 impl Runtime {
+    fn publish_status_pill(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
+        let values = BTreeMap::from([
+            (
+                "status.hovered".into(),
+                bead::core::Value::Text(self.status_pill.hovered().unwrap_or("").into()),
+            ),
+            (
+                "status.peek.visible".into(),
+                bead::core::Value::Bool(self.status_pill.peek().is_some()),
+            ),
+            (
+                "status.peek.kind".into(),
+                bead::core::Value::Text(self.status_pill.peek().unwrap_or("").into()),
+            ),
+            (
+                "status.panel.kind".into(),
+                bead::core::Value::Text(self.status_pill.panel().unwrap_or("").into()),
+            ),
+        ]);
+        self.session.update(values).map_err(Into::into)
+    }
+
+    fn schedule_status_pill(&mut self) {
+        let deadline = self.status_pill.next_deadline();
+        if deadline == self.status_pill_scheduled {
+            return;
+        }
+        self.status_pill_epoch = self.status_pill_epoch.wrapping_add(1);
+        self.status_pill_scheduled = deadline;
+        let Some(deadline) = deadline else { return };
+        let delay = deadline.saturating_duration_since(std::time::Instant::now());
+        let epoch = self.status_pill_epoch;
+        let Some(wakeup) = self.wakeup.clone() else {
+            return;
+        };
+        std::thread::spawn(move || {
+            std::thread::sleep(delay);
+            wakeup(UiEvent::Timer { token: epoch });
+        });
+    }
+
+    fn sync_status_peek_route(&mut self) -> Result<(), Box<dyn Error>> {
+        let desired = self
+            .status_pill
+            .panel()
+            .map(|kind| {
+                if kind == "audio" {
+                    "sound".to_owned()
+                } else {
+                    kind.to_owned()
+                }
+            })
+            .or_else(|| {
+                self.status_pill
+                    .peek()
+                    .map(|kind| format!("peek-{}", if kind == "sound" { "audio" } else { kind }))
+            });
+        if desired == self.status_pill_route {
+            return Ok(());
+        }
+        if let Some(view) = desired {
+            let center = view
+                .strip_prefix("peek-")
+                .and_then(|item| self.status_icon_center(item));
+            self.wakeup
+                .as_ref()
+                .ok_or("status panel event channel unavailable")?(
+                UiEvent::CompanionSelect {
+                    view: view.clone(),
+                    output: None,
+                    toggle: false,
+                    center,
+                },
+            );
+            self.status_pill_route = Some(view);
+        } else if self.status_pill_route.take().is_some() {
+            if let Some(wakeup) = &self.wakeup {
+                wakeup(UiEvent::CompanionVisibility(false));
+            }
+        }
+        Ok(())
+    }
+
+    fn status_icon_center(&self, item: &str) -> Option<f32> {
+        let arg = if item == "audio" { "audio" } else { item };
+        self.session
+            .view_nodes()
+            .iter()
+            .find(|node| {
+                node.action.as_deref() == Some("status.pill.open")
+                    && node.action_arg == Some(bead::core::Value::Text(arg.into()))
+            })
+            .map(|node| {
+                let rect = bead::ui::rect(&node.draw);
+                rect.x + rect.w / 2.
+            })
+    }
+
     pub fn new(mut session: bead::ui::Session) -> Self {
         if let Ok(path) = crate::state::File::path()
             && let Some(parent) = path.parent()
@@ -119,6 +221,15 @@ impl Runtime {
             tray_enabled: true,
             tray_hover: String::new(),
             tray_selection: None,
+            status_pill: bead::ui::status_pill::StatusPill::new(bead::ui::status_pill::Timings {
+                peek_dwell: std::time::Duration::from_millis(350),
+                peek_exit: std::time::Duration::from_millis(120),
+                panel_crossing: std::time::Duration::from_millis(600),
+                panel_exit: std::time::Duration::from_millis(130),
+            }),
+            status_pill_epoch: 0,
+            status_pill_scheduled: None,
+            status_pill_route: None,
             tray_menu: None,
             pending_focus: None,
             bar: false,
@@ -401,6 +512,7 @@ impl Runtime {
     }
     pub fn with_popout_trigger(mut self) -> Result<Self, Box<dyn Error>> {
         self.actions.register("view.open", "ui.popouts")?;
+        self.actions.register("status.pill.open", "ui.popouts")?;
         self.actions.grant("ui.popouts");
         self.session.stores = self
             .session
@@ -414,11 +526,12 @@ impl Runtime {
     fn popout_center(&self, id: &str, view: &str) -> Option<f32> {
         // Sound remains a side panel. Top-bar popouts center on their own
         // invoking control, including keyboard activation.
-        (self.bar
+        ((self.bar
             && matches!(
                 view,
                 "calendar" | "network" | "bluetooth" | "battery" | "tray"
             ))
+            || (self.bar && view.starts_with("peek-")))
         .then(|| {
             self.session
                 .view_nodes()
@@ -768,6 +881,34 @@ impl Runtime {
         self.chrome = Some(crate::placement::Chrome::new(attachment, colors)?);
         Ok(self)
     }
+    pub fn with_view_edge(mut self, edge: &str) -> Result<Self, String> {
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&BTreeMap::from([(
+                "view.edge".into(),
+                bead::core::Value::Text(edge.into()),
+            )]))
+            .map_err(|error| error.to_string())?;
+        Ok(self)
+    }
+    pub fn with_panel_geometry(
+        mut self,
+        width: f64,
+        height: f64,
+        duration: f64,
+    ) -> Result<Self, String> {
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&BTreeMap::from([
+                ("view.width".into(), bead::core::Value::Number(width)),
+                ("view.height".into(), bead::core::Value::Number(height)),
+                ("view.duration".into(), bead::core::Value::Number(duration)),
+            ]))
+            .map_err(|error| error.to_string())?;
+        Ok(self)
+    }
     fn finish_scene(
         &mut self,
         mut scene: Option<Scene>,
@@ -917,6 +1058,7 @@ impl SceneSource for Runtime {
                     id: node.id.clone(),
                     prepare_panel: self.bar
                         && (node.action.as_deref() == Some("view.open")
+                            || node.action.as_deref() == Some("status.pill.open")
                             || node.action.as_deref()
                                 == Some(if self.launcher_trigger {
                                     "launcher.open"
@@ -929,12 +1071,32 @@ impl SceneSource for Runtime {
                         } else {
                             None
                         }
+                    } else if self.bar && node.action.as_deref() == Some("status.pill.open") {
+                        if let Some(bead::core::Value::Text(view)) = &node.action_arg {
+                            Some(format!(
+                                "peek-{}",
+                                if view == "sound" { "audio" } else { view }
+                            ))
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     },
-                    prepare_center: if node.action.as_deref() == Some("view.open") {
+                    prepare_center: if matches!(
+                        node.action.as_deref(),
+                        Some("view.open" | "status.pill.open")
+                    ) {
                         if let Some(bead::core::Value::Text(view)) = &node.action_arg {
-                            self.popout_center(&node.id, view)
+                            if node.action.as_deref() == Some("status.pill.open") {
+                                let peek = format!(
+                                    "peek-{}",
+                                    if view == "sound" { "audio" } else { view }
+                                );
+                                self.popout_center(&node.id, &peek)
+                            } else {
+                                self.popout_center(&node.id, view)
+                            }
                         } else {
                             None
                         }
@@ -1040,11 +1202,34 @@ impl SceneSource for Runtime {
         {
             *name = "services.audio".into();
         }
+        if let Some((_, name, arg)) = &mut host_action
+            && name == "status.pill.open"
+            && *arg == bead::core::Value::Text("audio".into())
+            && matches!(&event, UiEvent::Scroll { .. })
+        {
+            *name = "services.audio".into();
+        }
+        if let Some((_, name, bead::core::Value::Text(view))) = &host_action
+            && name == "status.pill.open"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.status_pill.click_icon(view.clone());
+            self.schedule_status_pill();
+            let scene = self.publish_status_pill()?;
+            self.actions.authorize(name)?;
+            self.sync_status_peek_route()?;
+            return self.finish_scene(scene, false);
+        }
         if let Some((id, name, bead::core::Value::Text(view))) = &host_action
             && name == "view.open"
             && (matches!(&event, UiEvent::Click { .. })
                 || matches!(&event, UiEvent::Command {command,..} if command == "enter"))
         {
+            self.status_pill.escape();
+            self.status_pill_route = None;
+            self.schedule_status_pill();
+            let scene = self.publish_status_pill()?;
             self.actions.authorize(name)?;
             self.wakeup
                 .as_ref()
@@ -1054,7 +1239,7 @@ impl SceneSource for Runtime {
                 toggle: true,
                 center: self.popout_center(id, view),
             });
-            return Ok(None);
+            return self.finish_scene(scene, false);
         }
         if let Some((_, name, _)) = &host_action
             && name == "network.toggle_wifi"
@@ -1546,6 +1731,58 @@ impl SceneSource for Runtime {
                 let _ = request.reply.send(reply);
                 None
             }
+            UiEvent::Timer { token } => {
+                if token == self.status_pill_epoch {
+                    let before = self.status_pill.clone();
+                    self.status_pill.advance(std::time::Instant::now());
+                    self.schedule_status_pill();
+                    if before.peek() != self.status_pill.peek()
+                        || before.panel() != self.status_pill.panel()
+                    {
+                        self.sync_status_peek_route()?;
+                    }
+                    self.publish_status_pill()?
+                } else {
+                    None
+                }
+            }
+            UiEvent::PointerRegion(entered) => {
+                let before = self.status_pill.clone();
+                if entered {
+                    self.status_pill.enter_region();
+                } else {
+                    self.status_pill.leave_region(std::time::Instant::now());
+                }
+                self.schedule_status_pill();
+                if before.peek() != self.status_pill.peek() {
+                    self.sync_status_peek_route()?;
+                }
+                self.publish_status_pill()?
+            }
+            UiEvent::PanelDismissed => {
+                if self.status_pill_route.is_some() {
+                    self.status_pill.escape();
+                    self.status_pill_route = None;
+                    self.schedule_status_pill();
+                    self.publish_status_pill()?
+                } else {
+                    None
+                }
+            }
+            UiEvent::PanelSelected(view) => {
+                if self
+                    .status_pill_route
+                    .as_deref()
+                    .is_some_and(|route| route != view)
+                {
+                    self.status_pill.escape();
+                    self.status_pill_route = None;
+                    self.schedule_status_pill();
+                    self.publish_status_pill()?
+                } else {
+                    None
+                }
+            }
             UiEvent::Reload => Some(self.session.reload()?),
             UiEvent::Relayout => self.session.relayout()?,
             UiEvent::Accessibility {
@@ -1554,7 +1791,33 @@ impl SceneSource for Runtime {
                 value,
             } => self.session.accessibility_action(target, &action, value)?,
             UiEvent::Hover { x, y } => {
+                let before = self.status_pill.clone();
+                let pill_item = self.session.action_at(x, y).and_then(|(_, name, arg)| {
+                    if name == "status.pill.open" {
+                        if let bead::core::Value::Text(view) = arg {
+                            Some(view)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                });
                 let hovered = self.session.hover(x, y)?;
+                let pill = if self.bar {
+                    if let Some(item) = pill_item {
+                        self.status_pill.enter_icon(item, std::time::Instant::now());
+                    } else {
+                        self.status_pill.leave_region(std::time::Instant::now());
+                    }
+                    self.schedule_status_pill();
+                    self.publish_status_pill()?
+                } else {
+                    None
+                };
+                if before.peek() != self.status_pill.peek() {
+                    self.sync_status_peek_route()?;
+                }
                 if self.bar && self.menu_item.is_empty() {
                     self.tray_hover = self
                         .session
@@ -1579,8 +1842,9 @@ impl SceneSource for Runtime {
                     self.session
                         .update(crate::desktop::tooltip_values(&snapshot, &self.tray_hover))?
                         .or(hovered)
+                        .or(pill)
                 } else {
-                    hovered
+                    hovered.or(pill)
                 }
             }
             UiEvent::Drag { x, y } => self.session.drag(x, y)?,
@@ -1618,6 +1882,12 @@ impl SceneSource for Runtime {
                         "panel.open".into(),
                         bead::core::Value::Bool(false),
                     )]))?
+                }
+                "escape" if self.bar => {
+                    self.status_pill.escape();
+                    self.sync_status_peek_route()?;
+                    self.schedule_status_pill();
+                    self.publish_status_pill()?
                 }
                 "tab" => self.session.focus_next(shift)?,
                 "enter" => self.session.activate_focused()?,

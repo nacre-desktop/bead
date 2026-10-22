@@ -246,6 +246,65 @@ fn read_only_status_popouts_have_populated_goldens_at_both_scales() -> Result<()
     }
     Ok(())
 }
+
+#[test]
+fn clicked_status_factories_use_right_edge_control_geometry_and_peeks_stay_small() -> Result<()> {
+    use std::sync::{Arc, OnceLock};
+    let palette_path = root().join("palette.json");
+    let colors = Arc::new(bead::render::Palette::read(&palette_path)?);
+    let palette = Arc::new(palette_path);
+    let owner = Arc::new(OnceLock::new());
+    let status = crate::popouts::status(
+        Kind::Battery,
+        palette.clone(),
+        colors.clone(),
+        owner.clone(),
+        None,
+        16.,
+        false,
+    )?;
+    assert_eq!(status.fallback.width, 400.);
+    assert!(matches!(
+        status.fallback.motion.as_ref().map(|motion| motion.edge),
+        Some(bead::core::Edge::Right)
+    ));
+    assert_eq!(
+        status
+            .fallback
+            .motion
+            .as_ref()
+            .map(|motion| motion.duration),
+        Some(0.28)
+    );
+    let position = status
+        .position
+        .as_ref()
+        .ok_or("control panel positioner missing")?;
+    let (x, _) = position(&status.fallback, None, (1920, 1200));
+    assert_eq!(
+        x + 32 + 400,
+        1910,
+        "visible control frame keeps the shell's right inset"
+    );
+
+    let peek =
+        crate::popouts::status_peek(Kind::Battery, palette, colors, owner, None, 16., false)?;
+    assert_eq!(peek.fallback.width, 190.);
+    assert!(matches!(
+        peek.fallback.motion.as_ref().map(|motion| motion.edge),
+        Some(bead::core::Edge::Top)
+    ));
+    assert_eq!(
+        peek.fallback.motion.as_ref().map(|motion| motion.duration),
+        Some(0.23)
+    );
+    assert!(!peek.passive, "pointer may cross into the quick-info panel");
+    assert!(
+        !peek.keyboard_focus,
+        "hover previews do not claim keyboard focus"
+    );
+    Ok(())
+}
 #[test]
 fn status_source_wakes_are_noop_when_unchanged_keep_last_data_and_release_on_drop() -> Result<()> {
     use bead::wayland::{SceneSource, UiEvent};

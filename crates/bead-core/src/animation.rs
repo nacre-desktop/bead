@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Stable-ID animation state lives outside views. Rendering consumes only the pose.
 use std::collections::BTreeMap;
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Curve {
     EaseOut,
+    EaseInOut,
     Spring,
 }
 #[derive(Clone, Copy)]
@@ -40,6 +41,13 @@ impl Animations {
         let t = ((now - motion.started) / motion.duration).clamp(0., 1.) as f32;
         let progress = match motion.curve {
             Curve::EaseOut => 1. - (1. - t).powi(3),
+            Curve::EaseInOut => {
+                if t < 0.5 {
+                    4. * t.powi(3)
+                } else {
+                    1. - (-2. * t + 2.).powi(3) / 2.
+                }
+            }
             Curve::Spring => {
                 let x = 8. * t;
                 (1. - (1. + x) * (-x).exp()) / (1. - 9. * (-8_f32).exp())
@@ -56,6 +64,21 @@ impl Animations {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cubic_in_out_has_symmetric_endpoints_midpoint_and_quarters() {
+        let mut a = Animations::default();
+        a.target("preview", 0., 0., 1., Curve::EaseInOut);
+        a.target("preview", 1., 0., 1., Curve::EaseInOut);
+        for (time, expected) in [
+            (0., 0.),
+            (0.25, 0.0625),
+            (0.5, 0.5),
+            (0.75, 0.9375),
+            (1., 1.),
+        ] {
+            assert_eq!(a.value("preview", time).unwrap(), (expected, time < 1.));
+        }
+    }
     #[test]
     fn reversing_and_view_reload_do_not_reset_progress() {
         let mut a = Animations::default();

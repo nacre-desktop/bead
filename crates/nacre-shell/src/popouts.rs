@@ -35,6 +35,7 @@ pub fn calendar(
         ),
         engages_decorations: true,
         passive: false,
+        keyboard_focus: true,
         initial_open: false,
         fallback,
         renderer: RendererKind::Cpu,
@@ -69,14 +70,14 @@ pub fn status(
     radius: f32,
     trace: bool,
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
-    status_at_root(
+    status_at_root_mode(
         kind,
         palette,
         colors,
         owner,
         client,
-        (radius, trace),
-        ("shell".into(), None),
+        (radius, trace, StatusPanelMode::Control),
+        (PathBuf::from("shell"), None),
     )
 }
 
@@ -103,6 +104,7 @@ pub(crate) fn core_sound_with_root(
     if let Some(motion) = &mut fallback.motion {
         motion.id = "sound-output".into();
         motion.edge = bead::core::Edge::Right;
+        motion.duration = 0.28;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
@@ -111,6 +113,7 @@ pub(crate) fn core_sound_with_root(
         )),
         engages_decorations: true,
         passive: false,
+        keyboard_focus: true,
         initial_open: false,
         fallback,
         renderer: RendererKind::Cpu,
@@ -128,6 +131,7 @@ pub(crate) fn core_sound_with_root(
             );
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
+                .with_view_edge("right")?
                 .with_frame(
                     crate::placement::Attachment::Attached(bead::core::Edge::Right),
                     &colors,
@@ -141,8 +145,37 @@ pub(crate) fn core_sound_with_root(
 
 pub(crate) type StatusInit = Arc<dyn Fn(&mut crate::reload::Runtime) + Send + Sync>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StatusPanelMode {
+    #[cfg(test)]
+    Legacy,
+    Peek,
+    Control,
+}
+
+pub(crate) fn status_peek(
+    kind: crate::status_views::Kind,
+    palette: Arc<PathBuf>,
+    colors: Arc<Palette>,
+    owner: Arc<OnceLock<Arc<bead::services::Desktop>>>,
+    client: Option<crate::nacre_source::Client>,
+    radius: f32,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    status_at_root_mode(
+        kind,
+        palette,
+        colors,
+        owner,
+        client,
+        (radius, trace, StatusPanelMode::Peek),
+        (PathBuf::from("shell"), None),
+    )
+}
+
 /// Private fixtures supply a root and scoped initialization without changing
 /// the process environment or the factory used in production.
+#[cfg(test)]
 pub(crate) fn status_at_root(
     kind: crate::status_views::Kind,
     palette: Arc<PathBuf>,
@@ -152,29 +185,79 @@ pub(crate) fn status_at_root(
     style: (f32, bool),
     fixture: (PathBuf, Option<StatusInit>),
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
-    let (radius, trace) = style;
+    status_at_root_mode(
+        kind,
+        palette,
+        colors,
+        owner,
+        client,
+        (style.0, style.1, StatusPanelMode::Legacy),
+        fixture,
+    )
+}
+
+fn status_at_root_mode(
+    kind: crate::status_views::Kind,
+    palette: Arc<PathBuf>,
+    colors: Arc<Palette>,
+    owner: Arc<OnceLock<Arc<bead::services::Desktop>>>,
+    client: Option<crate::nacre_source::Client>,
+    style: (f32, bool, StatusPanelMode),
+    fixture: (PathBuf, Option<StatusInit>),
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    let (radius, trace, mode) = style;
+    let peek = mode == StatusPanelMode::Peek;
+    let control_panel = mode == StatusPanelMode::Control;
     let (root, initialize) = fixture;
     let fill = colors.get("surface")?;
+    let (panel_width, panel_height) = if peek {
+        (190., 72.)
+    } else if control_panel {
+        (400., 286.)
+    } else {
+        (310., 222.)
+    };
     let mut fallback = crate::sound::fallback(fill);
-    fallback.width = 310.;
-    fallback.bounds = Rect::new(-32., -32., 374., 286.);
+    fallback.width = panel_width;
+    fallback.bounds = if peek {
+        Rect::new(-24., -24., 238., 112.)
+    } else {
+        Rect::new(-32., -32., panel_width + 64., panel_height + 64.)
+    };
     fallback.primitives = vec![Primitive::Rounded {
-        rect: Rect::new(0., 0., 310., 222.),
+        rect: Rect::new(0., 0., panel_width, panel_height),
         radius,
         fill,
         border: None,
     }];
     if let Some(motion) = &mut fallback.motion {
         motion.id = "status-popout".into();
-        motion.edge = bead::core::Edge::Top;
+        motion.curve = peek.then_some(bead::core::animation::Curve::EaseInOut);
+        motion.edge = if peek || !control_panel {
+            bead::core::Edge::Top
+        } else {
+            bead::core::Edge::Right
+        };
+        motion.duration = if peek {
+            0.23
+        } else if control_panel {
+            0.28
+        } else {
+            0.2
+        };
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
         position: Some(
-            crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+            crate::placement::Frame::default().positioner(if control_panel && !peek {
+                crate::placement::Attachment::Attached(bead::core::Edge::Right)
+            } else {
+                crate::placement::Attachment::Popout
+            }),
         ),
-        engages_decorations: true,
+        engages_decorations: !peek,
         passive: false,
+        keyboard_focus: !peek,
         initial_open: false,
         fallback,
         renderer: RendererKind::Cpu,
@@ -185,7 +268,9 @@ pub(crate) fn status_at_root(
                 matches!(kind, crate::status_views::Kind::Bluetooth) && client.is_some();
             let session = bead::ui::Session::new(
                 root.clone(),
-                if controlled_network {
+                if peek {
+                    "status/peek.luau"
+                } else if controlled_network {
                     "status/network.luau"
                 } else if controlled_bluetooth {
                     "status/bluetooth.luau"
@@ -201,7 +286,7 @@ pub(crate) fn status_at_root(
                 crate::status_views::Kind::Network => Some("network"),
                 crate::status_views::Kind::Bluetooth => Some("bluetooth"),
                 crate::status_views::Kind::Battery => Some("battery"),
-                crate::status_views::Kind::Audio => None,
+                crate::status_views::Kind::Audio => Some("audio"),
             }
             .filter(|_| client.is_some());
             let source: Arc<dyn bead::core::source::Source> = if let Some(topic) = typed_topic {
@@ -216,7 +301,33 @@ pub(crate) fn status_at_root(
             };
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_frame(crate::placement::Attachment::Popout, &colors)
+                .with_view_edge(if peek || !control_panel {
+                    "top"
+                } else {
+                    "right"
+                })?
+                .with_panel_geometry(
+                    panel_width as f64,
+                    panel_height as f64,
+                    if peek {
+                        0.23
+                    } else if control_panel {
+                        0.28
+                    } else {
+                        0.2
+                    },
+                )
+                .map_err(|error| error.to_string())?
+                .with_frame(
+                    if peek {
+                        crate::placement::Attachment::Popout
+                    } else if !control_panel {
+                        crate::placement::Attachment::Popout
+                    } else {
+                        crate::placement::Attachment::Attached(bead::core::Edge::Right)
+                    },
+                    &colors,
+                )
                 .and_then(|runtime| match typed_topic {
                     Some("network") if controlled_network => runtime.with_core_network_control(
                         source,
@@ -236,6 +347,7 @@ pub(crate) fn status_at_root(
                         ),
                     Some("bluetooth") => runtime.with_core_bluetooth_status(source),
                     Some("battery") => runtime.with_core_battery_status(source),
+                    Some("audio") => runtime.with_core_audio_status(source),
                     _ => runtime.with_status(kind, source),
                 })
                 .map(|mut runtime| {

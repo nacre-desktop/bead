@@ -36,6 +36,25 @@ fn session(f: &Fixture) -> Session {
     session
 }
 #[test]
+fn panel_transition_selects_cubic_in_out_without_changing_legacy_curves() {
+    use bead_core::animation::Curve;
+    for (transition, curve, spring) in [
+        ("ease-in-out", Some(Curve::EaseInOut), false),
+        ("ease", None, false),
+        ("spring", None, true),
+    ] {
+        let f = fixture();
+        fs::write(f.0.join("ui/main.luau"), format!(
+            "local ui=require(\"bead.ui\"); return ui.Panel{{id=\"preview\",width=200,height=100,open=true,duration=0.5,transition={transition:?}}}"
+        )).unwrap();
+        let s = session(&f);
+        let motion = s.current.motion.as_ref().unwrap();
+        assert_eq!(motion.curve, curve);
+        assert_eq!(motion.spring, spring);
+        assert_eq!(motion.duration, 0.5);
+    }
+}
+#[test]
 fn sdk_brush_helpers_preserve_values_coercion_and_reject_bad_arguments() {
     use crate::frontend::{FrontEnd, LuauFrontEnd, Sources};
     let entry = Path::new("ui/main.luau");
@@ -670,6 +689,7 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
             open: false,
             duration: 0.2,
             spring: false,
+            curve: None,
             edge: bead_core::Edge::Right,
             slide_distance: None,
         });

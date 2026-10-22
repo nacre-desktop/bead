@@ -334,6 +334,7 @@ fn start(
             open: true,
             duration: 0.2,
             spring: false,
+            curve: None,
             edge: panel_edge,
             slide_distance: None,
         });
@@ -497,6 +498,7 @@ fn start(
             ),
             engages_decorations: true,
             passive: false,
+            keyboard_focus: true,
             initial_open: state::File::path()
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
                 .and_then(state::File::open)
@@ -633,6 +635,25 @@ fn start(
                 )?,
             );
         }
+        for kind in [
+            status_views::Kind::Network,
+            status_views::Kind::Bluetooth,
+            status_views::Kind::Battery,
+            status_views::Kind::Audio,
+        ] {
+            views.insert(
+                format!("peek-{}", kind.name()),
+                popouts::status_peek(
+                    kind,
+                    status_palette.clone(),
+                    status_colors.clone(),
+                    desktop_owner.clone(),
+                    _ui_provider.clone(),
+                    status_radius,
+                    panel_trace,
+                )?,
+            );
+        }
         for page in dashboard::Page::ALL {
             views.insert(
                 format!("dashboard-{}", page.name()),
@@ -669,6 +690,7 @@ fn start(
             position: None,
             engages_decorations: false,
             passive: true,
+            keyboard_focus: false,
             initial_open: false,
             fallback,
             renderer: bead::render::RendererKind::Cpu,

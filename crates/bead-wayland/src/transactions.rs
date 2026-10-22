@@ -185,7 +185,7 @@ impl App {
                     bead_services::ipc::Reply::ok(
                         request.call.id,
                         serde_json::json!({
-                            "regions":self.runtime.as_ref().map(|r|r.input_regions().into_iter().map(|r|serde_json::json!({"id":r.id,"rect":[r.rect.x,r.rect.y,r.rect.w,r.rect.h]})).collect::<Vec<_>>()).unwrap_or_default(),
+                            "regions":self.runtime.as_ref().map(|r|r.input_regions().into_iter().map(|r|serde_json::json!({"id":r.id,"rect":[r.rect.x,r.rect.y,r.rect.w,r.rect.h],"cursor":r.cursor})).collect::<Vec<_>>()).unwrap_or_default(),
                             "offset":[self.scene.offset.0,self.scene.offset.1],"size":[self.scene.bounds.w,self.scene.bounds.h]
                         }),
                     )
@@ -206,6 +206,14 @@ impl App {
 
         if let UiEvent::Fatal(error) = event {
             self.fail(error);
+            return false;
+        }
+        if matches!(&event, UiEvent::PanelDismissed) && self.panel_target {
+            return false;
+        }
+        if let UiEvent::PanelSelected(view) = &event
+            && self.panel_name.as_deref() != Some(view.as_str())
+        {
             return false;
         }
         let Some(mut runtime) = self.runtime.take() else {

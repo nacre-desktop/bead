@@ -23,6 +23,7 @@ return function(ui, tokens)
     function kit.IconButton(p)
         return kit.Button(props(p,{width=40,padding=tokens.spacing.xs,family="Material Symbols Rounded",font_size=tokens.icons.large*4/3}))
     end
+    function kit.StatusIcon(p) return kit.Button(p) end
     function kit.Switch(p)
         local checked=value(p.checked,false)
         local out=props(p,{width=48,height=28,padding=4,radius=tokens.radii.full,

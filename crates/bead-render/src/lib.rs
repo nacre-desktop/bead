@@ -148,6 +148,8 @@ pub struct Motion {
     pub open: bool,
     pub duration: f64,
     pub spring: bool,
+    /// Explicit easing overrides the legacy spring/ease-out selection.
+    pub curve: Option<bead_core::animation::Curve>,
     pub edge: bead_core::Edge,
     pub slide_distance: Option<f32>,
 }

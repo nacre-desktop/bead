@@ -336,9 +336,9 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
     assert!(
         regions
             .iter()
-            .any(|r| r.prepare_view.as_deref() == Some("sound")
+            .any(|r| r.prepare_view.as_deref() == Some("peek-audio")
                 && r.prepare_panel
-                && r.prepare_center.is_none())
+                && r.prepare_center == Some(audio.0))
     );
     events.lock().unwrap().clear();
     runtime.stage(UiEvent::Click {
@@ -362,6 +362,82 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
         1,
         "scroll must not open or toggle a popout"
     );
+    host.stop();
+    Ok(())
+}
+
+#[test]
+fn status_pill_click_routes_switch_escape_and_reopen() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    use std::sync::{Arc, Mutex};
+    let mut values = super::initial_models()?;
+    values.insert("bar.popouts".into(), Value::Bool(true));
+    let h = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 70,
+            scale: 1.5,
+        },
+    )?;
+    let target = |label: &str| -> Result<(f32, f32)> {
+        let node = h
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| node.label == label)
+            .ok_or("status target missing")?;
+        let rect = bead::ui::rect(&node.draw);
+        Ok((rect.x + rect.w / 2., rect.y + rect.h / 2.))
+    };
+    let network = target("Open network status")?;
+    let bluetooth = target("Open Bluetooth status")?;
+    let host = bead::services::Desktop::start_config(bead::services::Config {
+        audio: false,
+        bus: false,
+    });
+    let mut runtime = crate::reload::Runtime::new(h.session)
+        .with_shared_desktop(host.clone(), true)?
+        .with_popout_trigger()?;
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let output = events.clone();
+    runtime.services(Box::new(move |event| output.lock().unwrap().push(event)));
+    events.lock().unwrap().clear();
+
+    runtime.stage(UiEvent::Click {
+        x: network.0,
+        y: network.1,
+    })?;
+    assert!(matches!(events.lock().unwrap().as_slice(),
+        [UiEvent::CompanionSelect { view, toggle:false, center:None, .. }]
+            if view == "network"));
+    events.lock().unwrap().clear();
+    runtime.stage(UiEvent::Click {
+        x: bluetooth.0,
+        y: bluetooth.1,
+    })?;
+    assert!(matches!(events.lock().unwrap().as_slice(),
+        [UiEvent::CompanionSelect { view, toggle:false, center:None, .. }]
+            if view == "bluetooth"));
+    events.lock().unwrap().clear();
+    runtime.stage(UiEvent::Command {
+        command: "escape".into(),
+        shift: false,
+    })?;
+    assert!(matches!(
+        events.lock().unwrap().as_slice(),
+        [UiEvent::CompanionVisibility(false)]
+    ));
+    events.lock().unwrap().clear();
+    runtime.stage(UiEvent::Click {
+        x: network.0,
+        y: network.1,
+    })?;
+    assert!(matches!(events.lock().unwrap().as_slice(),
+        [UiEvent::CompanionSelect { view, toggle:false, .. }] if view == "network"));
     host.stop();
     Ok(())
 }

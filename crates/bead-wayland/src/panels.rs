@@ -140,6 +140,7 @@ mod tests {
             position: None,
             engages_decorations: false,
             passive: false,
+            keyboard_focus: true,
             initial_open: false,
             factory: std::sync::Arc::new(move |_| {
                 calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

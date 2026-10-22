@@ -198,11 +198,11 @@ impl App {
                     } else {
                         motion.duration
                     },
-                    if motion.spring {
+                    motion.curve.unwrap_or(if motion.spring {
                         bead_core::animation::Curve::Spring
                     } else {
                         bead_core::animation::Curve::EaseOut
-                    },
+                    }),
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
                 scene.opacity = progress;
@@ -277,12 +277,9 @@ impl App {
                 && (!s.companion || self.options.panel_spec.is_some())
                 && scene.motion.is_some()
             {
-                let passive = s.companion
-                    && self
-                        .options
-                        .panel_spec
-                        .as_ref()
-                        .is_some_and(|spec| spec.passive);
+                let spec = self.options.panel_spec.as_ref();
+                let passive = s.companion && spec.is_some_and(|spec| spec.passive);
+                let keyboard_focus = !s.companion || spec.is_some_and(|spec| spec.keyboard_focus);
                 let visible = scene.opacity > 0.001
                     && if s.companion && self.options.panel_spec.is_some() {
                         self.panel_target
@@ -298,21 +295,27 @@ impl App {
                             .wl_surface()
                             .set_input_region(Some(empty.wl_region()));
                     }
-                    s.layer.set_keyboard_interactivity(
-                        if self.options.test_passive
-                            || passive
-                            || !visible
-                            || (!self.options.keyboard_focus && !s.companion)
-                        {
-                            KeyboardInteractivity::None
-                        } else if self.options.test_keyboard || s.companion {
-                            KeyboardInteractivity::Exclusive
-                        } else {
-                            KeyboardInteractivity::OnDemand
-                        },
-                    );
                     s.input_visible = Some(visible);
                     println!("PANEL_INPUT visible={visible}");
+                }
+                let focus_visible = visible
+                    && !self.options.test_passive
+                    && !passive
+                    && if s.companion {
+                        keyboard_focus
+                    } else {
+                        self.options.keyboard_focus || self.options.test_keyboard
+                    };
+                if s.keyboard_visible != Some(focus_visible) {
+                    let interactivity = if !focus_visible {
+                        KeyboardInteractivity::None
+                    } else if self.options.test_keyboard || s.companion {
+                        KeyboardInteractivity::Exclusive
+                    } else {
+                        KeyboardInteractivity::OnDemand
+                    };
+                    s.layer.set_keyboard_interactivity(interactivity);
+                    s.keyboard_visible = Some(focus_visible);
                 }
             }
             s.offset = scene.offset;

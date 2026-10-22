@@ -127,6 +127,7 @@ impl Script {
             "services.menu.back",
             "services.tray.secondary",
             "view.open",
+            "status.pill.open",
             "backend.workspace.switch",
             "backend.window.focus",
             "backend.window.close",

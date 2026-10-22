@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
 local kit=require("bead.kit")
-return kit.Panel{id="sound",edge="right",open=ui.bind("panel.open"),width=400,height=286,padding=20,gap=14,
+return kit.Panel{id="sound",edge="right",open=ui.bind("panel.open"),duration=0.28,width=400,height=286,padding=20,gap=14,
  ui.Row{width=360,height=32,align="center",justify="space-between",
   ui.Text{id="title",text="Sound output",font_size=kit.tokens.text.title*4/3,height=30,width=0,grow=1,shrink=1},
   kit.IconButton{id="close",text="close",aria_label="Close sound output",width=32,height=32,on_activate=ui.action("close")},

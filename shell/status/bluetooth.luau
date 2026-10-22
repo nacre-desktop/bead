@@ -7,9 +7,12 @@ local visible=ui.resolve_for_check(ui.bind("bluetooth.power_visible"))
 local enabled=ui.resolve_for_check(ui.bind("bluetooth.power_enabled"))
 local padding=kit.tokens.spacing.md
 local icon_size=kit.tokens.icons.xlarge*4/3
-local text_width=310-padding*2-icon_size-kit.tokens.spacing.md
+local width=ui.resolve_for_check(ui.bind("view.width"))
+local height=ui.resolve_for_check(ui.bind("view.height"))
+local duration=ui.resolve_for_check(ui.bind("view.duration"))
+local text_width=width-padding*2-icon_size-kit.tokens.spacing.md
 return kit.Panel{id="status-popout",edge=ui.resolve_for_check(ui.bind("view.edge")),
-    open=ui.bind("panel.open"),duration=kit.motion.color,width=310,height=222,padding=padding,
+    open=ui.bind("panel.open"),duration=duration,width=width,height=height,padding=padding,
     gap=kit.tokens.spacing.sm,radius=kit.tokens.radii.medium,fill="surface",
     ui.Text{id="heading",text=ui.bind("status.heading"),height=24,font_size=kit.tokens.text.title*4/3,color="onSurface"},
     ui.Row{id="summary",height=88,gap=kit.tokens.spacing.md,align="center",

@@ -289,12 +289,43 @@ impl LayerShellHandler for App {
                 }
             };
             if !self.options.test_passive {
-                region.add(
-                    0,
-                    0,
-                    config.new_size.0.max(1) as i32,
-                    config.new_size.1.max(1) as i32,
-                );
+                let width = config.new_size.0.max(1) as i32;
+                let height = config.new_size.1.max(1) as i32;
+                let bar_extent = if self.options.bar {
+                    self.surfaces
+                        .iter()
+                        .find(|surface| {
+                            !surface.companion
+                                && self.panel_output.as_ref() == Some(&surface.output)
+                        })
+                        .map(|surface| match self.options.edge {
+                            bead_core::Edge::Top | bead_core::Edge::Bottom => surface.height as i32,
+                            bead_core::Edge::Left | bead_core::Edge::Right => surface.width as i32,
+                        })
+                        .unwrap_or(0)
+                        .clamp(
+                            0,
+                            if matches!(
+                                self.options.edge,
+                                bead_core::Edge::Top | bead_core::Edge::Bottom
+                            ) {
+                                height
+                            } else {
+                                width
+                            },
+                        )
+                } else {
+                    0
+                };
+                let (x, y, w, h) = match self.options.edge {
+                    bead_core::Edge::Top => (0, bar_extent, width, height - bar_extent),
+                    bead_core::Edge::Bottom => (0, 0, width, height - bar_extent),
+                    bead_core::Edge::Left => (bar_extent, 0, width - bar_extent, height),
+                    bead_core::Edge::Right => (0, 0, width - bar_extent, height),
+                };
+                if w > 0 && h > 0 {
+                    region.add(x, y, w, h);
+                }
             }
             layer
                 .wl_surface()
@@ -492,6 +523,13 @@ impl PointerHandler for App {
             let offset = surface.offset;
             let configured = surface.configured;
             let hovered_output = self.output.info(&surface.output).and_then(|i| i.name);
+            if panel {
+                match event.kind {
+                    PointerEventKind::Enter { .. } => self.ui(UiEvent::PointerRegion(true)),
+                    PointerEventKind::Leave { .. } => self.ui(UiEvent::PointerRegion(false)),
+                    _ => {}
+                }
+            }
             if !panel {
                 let hovered = if matches!(event.kind, PointerEventKind::Leave { .. }) {
                     None
