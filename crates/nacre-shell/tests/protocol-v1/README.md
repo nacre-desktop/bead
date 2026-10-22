@@ -11,3 +11,7 @@ Tests parse these committed bytes and compare their JSON wire objects with the
 pinned crate's exports before replaying. Object key order is not a wire contract;
 array order and every field remain checked. Update only with a reviewed protocol pin.
 No protocol dependency or fixture is embedded in a Bead framework crate.
+
+B0020 adds the six `notifications-*.jsonl` producer transcripts from Nacre
+`652d6c4f` (N0017 default-action marker included); `notice_service` tests replay
+them through the bounded mirror.

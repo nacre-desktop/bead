@@ -55,12 +55,12 @@ pub struct Runtime {
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
     desktop_subscription: Option<bead::services::Subscription>,
     desktop_revision: u64,
-    notification_hover: Option<u32>,
+    notification_hover: Option<String>,
     notification_primary: bool,
     fonts: crate::font_sources::Selector,
     trace: bool,
-    notifications: Option<std::sync::Arc<crate::notifications::Owner>>,
-    notification_subscription: Option<crate::notifications::Subscription>,
+    notifications: Option<std::sync::Arc<dyn crate::notifications::Notices>>,
+    notification_subscription: Option<crate::notifications::Handle>,
     menu_item: String,
     tray_anchor: Option<f32>,
     tray_close: bool,
@@ -636,52 +636,45 @@ impl Runtime {
         self
     }
     pub fn with_notifications(
-        mut self,
+        self,
         socket: std::path::PathBuf,
         history: std::path::PathBuf,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.with_notification_service(std::sync::Arc::new(crate::notifications::Owner::start(
+            socket, history,
+        )?))
+    }
+    /// The primary notice session over a private owner or the daemon consumer.
+    pub fn with_notification_service(
+        mut self,
+        service: std::sync::Arc<dyn crate::notifications::Notices>,
     ) -> Result<Self, Box<dyn Error>> {
         self.session.stores = self
             .session
             .stores
-            .reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
-        for name in [
-            "notifications.details",
-            "notifications.dismiss",
-            "notifications.action",
-            "notifications.dnd",
-            "notifications.feedback",
-            "notifications.clear",
-        ] {
+            .reconcile(&crate::notice_service::seed())?;
+        for name in crate::notice_service::ACTIONS {
             self.actions.register(name, "notifications")?;
         }
         self.actions.grant("notifications");
         self.notification_primary = true;
         self.state_file = None;
-        self.notifications = Some(std::sync::Arc::new(crate::notifications::Owner::start(
-            socket, history,
-        )?));
+        self.notifications = Some(service);
         Ok(self)
     }
-    pub fn notification_owner(&self) -> Option<std::sync::Arc<crate::notifications::Owner>> {
+    pub fn notification_owner(&self) -> Option<std::sync::Arc<dyn crate::notifications::Notices>> {
         self.notifications.clone()
     }
     pub fn with_notification_owner(
         mut self,
-        owner: std::sync::Arc<crate::notifications::Owner>,
+        owner: std::sync::Arc<dyn crate::notifications::Notices>,
         open: bool,
     ) -> Result<Self, Box<dyn Error>> {
         self.session.stores = self
             .session
             .stores
-            .reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
-        for name in [
-            "notifications.details",
-            "notifications.dismiss",
-            "notifications.action",
-            "notifications.dnd",
-            "notifications.feedback",
-            "notifications.clear",
-        ] {
+            .reconcile(&crate::notice_service::seed())?;
+        for name in crate::notice_service::ACTIONS {
             self.actions.register(name, "notifications")?;
         }
         self.actions.grant("notifications");
@@ -1238,23 +1231,17 @@ impl SceneSource for Runtime {
         if let UiEvent::Hover { x, y } = &event
             && let Some(owner) = &self.notifications
         {
-            let next = self.session.action_at(*x, *y).and_then(|(_, name, arg)| {
-                if !name.starts_with("notifications.") {
-                    return None;
-                }
-                if let bead::core::Value::Text(id) = arg {
-                    id.split('|').next().and_then(|id| id.parse::<u32>().ok())
-                } else {
-                    None
-                }
-            });
+            let next = self
+                .session
+                .action_at(*x, *y)
+                .and_then(|(_, name, arg)| crate::notice_service::hover_key(&name, &arg));
             if next != self.notification_hover {
-                if let Some(id) = self.notification_hover.take() {
-                    owner.hover(id, false);
+                if let Some(key) = self.notification_hover.take() {
+                    owner.hover(&key, false);
                 }
-                if let Some(id) = next {
-                    owner.hover(id, true);
-                    self.notification_hover = Some(id);
+                if let Some(key) = next {
+                    owner.hover(&key, true);
+                    self.notification_hover = Some(key);
                 }
             }
         }

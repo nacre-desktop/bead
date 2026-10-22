@@ -12,6 +12,7 @@ mod launcher;
 mod launcher_panel;
 mod memory_policy;
 mod nacre_source;
+mod notice_service;
 mod notifications;
 mod placement;
 mod popouts;
@@ -103,6 +104,9 @@ fn start(
     let mut core_views = false;
     let mut notification_bus = None;
     let mut notification_history = None;
+    let mut notice_daemon: Option<std::path::PathBuf> = None;
+    let mut notice_provider = false;
+    let mut notice_action_on_click = false;
     let mut panel_edge = bead::core::Edge::Right;
     let default_panel_renderer = if cfg!(feature = "native-gl") {
         bead::render::RendererKind::FemtovgGl
@@ -130,11 +134,16 @@ fn start(
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bar-panel" => bar_panel = true,
-            "--notification-bus" => {
-                notification_bus = Some(std::path::PathBuf::from(
+            "--notification-bus" | "--notification-daemon" => {
+                let path = std::path::PathBuf::from(
                     args.next()
-                        .ok_or("--notification-bus needs a new private socket path")?,
-                ));
+                        .ok_or("--notification-bus/--notification-daemon needs a socket path")?,
+                );
+                if arg == "--notification-bus" {
+                    notification_bus = Some(path);
+                } else {
+                    notice_daemon = Some(path);
+                }
                 ui = Some("notifications/main.luau".into());
                 options.panel = true;
                 options.content_size = true;
@@ -144,6 +153,8 @@ fn start(
                 options.renderer = bead::render::RendererKind::Cpu;
                 options.auto_fallback = false;
             }
+            "--notification-provider" => notice_provider = true,
+            "--notification-action-on-click" => notice_action_on_click = true,
             "--notification-history" => {
                 notification_history = Some(std::path::PathBuf::from(
                     args.next().ok_or("--notification-history needs path")?,
@@ -435,10 +446,17 @@ fn start(
         );
         return Ok(());
     }
-    if notification_bus.is_some() && (audio_panel || options.bar) {
+    if notification_bus.is_some() && notice_daemon.is_some() {
+        return Err("--notification-bus and --notification-daemon are mutually exclusive".into());
+    }
+    if (notice_provider || notice_action_on_click) && notice_daemon.is_none() {
+        return Err("--notification-provider and --notification-action-on-click require --notification-daemon".into());
+    }
+    let notification_mode = notification_bus.is_some() || notice_daemon.is_some();
+    if notification_mode && (audio_panel || options.bar) {
         return Err("notification service mode uses independent private notice/OSD surfaces; combine no bar/audio mode flags".into());
     }
-    if launcher_panel && (!options.bar || audio_panel || notification_bus.is_some()) {
+    if launcher_panel && (!options.bar || audio_panel || notification_mode) {
         return Err("--launcher-panel requires a bar and no other panel family".into());
     }
     if audio_panel && !options.bar {
@@ -687,7 +705,22 @@ fn start(
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
     }
     let notification_owner = std::sync::Arc::new(std::sync::OnceLock::new());
-    if notification_bus.is_some() {
+    let notice_service = match &notice_daemon {
+        Some(socket) => {
+            let service = notice_service::Service::start(
+                socket.clone(),
+                notice_service::Options {
+                    provider: notice_provider,
+                    action_on_click: notice_action_on_click,
+                },
+            )?;
+            let dynamic: std::sync::Arc<dyn notifications::Notices> = service;
+            let _ = notification_owner.set(dynamic.clone());
+            Some(dynamic)
+        }
+        None => None,
+    };
+    if notification_mode {
         let owner = notification_owner.clone();
         let colors = colors.clone();
         let palette = palette.clone();
@@ -765,6 +798,7 @@ fn start(
             let notification_bus = notification_bus.clone();
             let notification_history = notification_history.clone();
             let notification_owner = notification_owner.clone();
+            let notice_service = notice_service.clone();
             let shared_backend = shared_backend.clone();
             let shared_desktop = shared_desktop.clone();
             let desktop_owner = desktop_owner.clone();
@@ -806,7 +840,9 @@ fn start(
                     } else {
                         runtime
                     };
-                    let runtime = if let Some(socket) = notification_bus {
+                    let runtime = if let Some(service) = notice_service {
+                        runtime.with_notification_service(service)?
+                    } else if let Some(socket) = notification_bus {
                         let history = notification_history.ok_or(
                             "--notification-bus requires --notification-history (private state)",
                         )?;

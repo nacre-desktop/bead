@@ -12,7 +12,20 @@ use std::{
     sync::{Arc, Mutex},
 };
 type ControlFn = Arc<dyn Fn(Control) -> Result<(), String> + Send + Sync>;
-type Wakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
+pub type Wakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
+/// Keeps a view subscription alive; dropping it unsubscribes.
+pub type Handle = Box<dyn std::any::Any + Send>;
+/// What the shell's notice and OSD surfaces need from a notification backend: the
+/// private compatibility owner below or the daemon consumer in `notice_service`.
+pub trait Notices: Send + Sync {
+    fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Handle;
+    /// `key` is `id[|revision]` of the card under the pointer, or `osd`.
+    fn hover(&self, key: &str, on: bool);
+    fn action(&self, name: &str, arg: &Value) -> Result<(), String>;
+    fn audio_changed(&self, audio: &bead::services::Audio);
+    fn feedback(&self, args: &[serde_json::Value]) -> Result<serde_json::Value, &'static str>;
+    fn command(&self, call: &bead::services::ipc::Call) -> Result<serde_json::Value, &'static str>;
+}
 struct Shared {
     last: serde_json::Value,
     mirror: Mirror,
@@ -127,7 +140,9 @@ impl Owner {
     fn control(&self, action: Control) -> Result<(), String> {
         (self.control)(action)
     }
-    pub fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Subscription {
+}
+impl Notices for Owner {
+    fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Handle {
         let (last, id) = if let Ok(mut state) = self.shared.lock() {
             state.next += 1;
             let id = state.next;
@@ -140,12 +155,12 @@ impl Owner {
             wakeup(UiEvent::CompanionVisibility(last["osd"].is_object()));
         }
         wakeup(UiEvent::Model(values(&last)));
-        Subscription {
+        Box::new(Subscription {
             shared: Arc::downgrade(&self.shared),
             id,
-        }
+        })
     }
-    pub fn audio_changed(&self, audio: &bead::services::Audio) {
+    fn audio_changed(&self, audio: &bead::services::Audio) {
         let previous = if let Ok(mut state) = self.shared.lock() {
             state.audio.replace(audio.clone())
         } else {
@@ -178,10 +193,12 @@ impl Owner {
             }
         }
     }
-    pub fn hover(&self, id: u32, value: bool) {
-        let _ = self.control(Control::Hover(id, value));
+    fn hover(&self, key: &str, value: bool) {
+        if let Some(id) = key.split('|').next().and_then(|id| id.parse().ok()) {
+            let _ = self.control(Control::Hover(id, value));
+        }
     }
-    pub fn feedback(&self, args: &[serde_json::Value]) -> Result<serde_json::Value, &'static str> {
+    fn feedback(&self, args: &[serde_json::Value]) -> Result<serde_json::Value, &'static str> {
         if args.len() != 3 {
             return Err("OSD show needs channel, normalized level and muted boolean");
         }
@@ -206,7 +223,7 @@ impl Owner {
         .map_err(|_| "notification server stopped")?;
         Ok(serde_json::Value::Null)
     }
-    pub fn command(
+    fn command(
         &self,
         call: &bead::services::ipc::Call,
     ) -> Result<serde_json::Value, &'static str> {
@@ -240,7 +257,7 @@ impl Owner {
             _ => Err("unknown notification command"),
         }
     }
-    pub fn action(&self, name: &str, arg: &Value) -> Result<(), String> {
+    fn action(&self, name: &str, arg: &Value) -> Result<(), String> {
         let text = if let Value::Text(s) = arg {
             s.as_str()
         } else {

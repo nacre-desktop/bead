@@ -1,0 +1,44 @@
+{"t":"register","provider":"ui","methods":{"ui.dispatch":1}}
+{"t":"snap","topic":"notifications","seq":0,"data":{"health":{"available":true,"stale":false},"do_not_disturb":false,"active":{"items":{"notice-b1-g1-n1":{"app_name":"Fixture","summary":"Original","body":"Safe fixture text","urgency":"normal","resident":false,"transient":false,"created_ms":1800000000000,"actions":{"items":{"a1":{"label":"Open"},"a3":{"label":"Snooze"}},"order":["a1","a3"]},"default_action":"a1","timeout_ms":5000,"remaining_ms":5000,"expires_ms":1800000005000,"revision":1,"retained":true,"paused":false}},"order":["notice-b1-g1-n1"]},"history":{"items":{},"order":[]},"popup_order":["notice-b1-g1-n1"],"inhibited":false,"history_count":1,"history_more":false,"history_storage":{"ready":true,"writable":true}}}
+{"t":"patch","topic":"notifications","base":0,"seq":1,"data":{"active":{"items":{"notice-b1-g1-n1":{"summary":"Replacement","created_ms":1800000001000,"revision":2,"actions":{"items":{"a1":null,"a2":{"label":"Open updated"},"a3":null},"order":["a2"]},"default_action":"a2"}},"order":["notice-b1-g1-n1"]}}}
+{"t":"ev","topic":"notifications","name":"updated","seq":1,"data":{"id":"notice-b1-g1-n1","revision":2,"state_seq":1}}
+{"t":"call","id":19,"m":"notifications.invoke_action","p":{"id":"notice-b1-g1-n1","revision":1,"action":"a1"},"timeout":3000}
+{"t":"ret","id":19,"err":{"code":"stale_revision","message":"Request failed","retry":true}}
+{"t":"call","id":11,"m":"notifications.set_hover","p":{"id":"notice-b1-g1-n1","revision":2,"hovered":true},"timeout":3000}
+{"t":"patch","topic":"notifications","base":1,"seq":2,"data":{"active":{"items":{"notice-b1-g1-n1":{"remaining_ms":3000,"paused":true,"expires_ms":null}},"order":["notice-b1-g1-n1"]}}}
+{"t":"ev","topic":"notifications","name":"presentation_changed","seq":2,"data":{"state_seq":2}}
+{"t":"ret","id":11,"ok":{"changed":true}}
+{"t":"call","id":12,"m":"notifications.set_hover","p":{"id":"notice-b1-g1-n1","revision":2,"hovered":false},"timeout":3000}
+{"t":"patch","topic":"notifications","base":2,"seq":3,"data":{"active":{"items":{"notice-b1-g1-n1":{"remaining_ms":3000,"paused":false,"expires_ms":1800000005000}},"order":["notice-b1-g1-n1"]}}}
+{"t":"ev","topic":"notifications","name":"presentation_changed","seq":3,"data":{"state_seq":3}}
+{"t":"ret","id":12,"ok":{"changed":true}}
+{"t":"call","id":20,"m":"notifications.set_dnd","p":{"enabled":true},"timeout":3000}
+{"t":"patch","topic":"notifications","base":3,"seq":4,"data":{"do_not_disturb":true,"inhibited":true,"popup_order":[]}}
+{"t":"ev","topic":"notifications","name":"dnd_changed","seq":4,"data":{"enabled":true,"state_seq":4}}
+{"t":"ret","id":20,"ok":{"changed":true}}
+{"t":"call","id":21,"m":"notifications.set_dnd","p":{"enabled":false},"timeout":3000}
+{"t":"patch","topic":"notifications","base":4,"seq":5,"data":{"do_not_disturb":false,"inhibited":false,"popup_order":[]}}
+{"t":"ev","topic":"notifications","name":"dnd_changed","seq":5,"data":{"enabled":false,"state_seq":5}}
+{"t":"ret","id":21,"ok":{"changed":true}}
+{"t":"register","provider":"ui","methods":{"ui.dispatch":1}}
+{"t":"call","id":22,"m":"notifications.set_inhibited","p":{"inhibited":true},"timeout":3000}
+{"t":"patch","topic":"notifications","base":5,"seq":6,"data":{"inhibited":true,"popup_order":[]}}
+{"t":"ev","topic":"notifications","name":"presentation_changed","seq":6,"data":{"state_seq":6}}
+{"t":"ret","id":22,"ok":{"changed":true}}
+{"t":"call","id":23,"m":"notifications.set_inhibited","p":{"inhibited":false},"timeout":3000}
+{"t":"patch","topic":"notifications","base":6,"seq":7,"data":{"inhibited":false,"popup_order":[]}}
+{"t":"ev","topic":"notifications","name":"presentation_changed","seq":7,"data":{"state_seq":7}}
+{"t":"ret","id":23,"ok":{"changed":true}}
+{"t":"call","id":1,"m":"notifications.invoke_action","p":{"id":"notice-b1-g1-n1","revision":2,"action":"a2"},"timeout":3000}
+{"t":"patch","topic":"notifications","base":7,"seq":8,"data":{"active":{"items":{"notice-b1-g1-n1":null},"order":[]},"history":{"items":{"notice-b1-g1-n1":{"app_name":"Fixture","summary":"Replacement","body":"Safe fixture text","urgency":"normal","resident":false,"transient":false,"created_ms":1800000001000,"actions":{"items":{},"order":[]},"default_action":null,"timeout_ms":5000,"paused":false,"retained":true,"revision":2}},"order":["notice-b1-g1-n1"]},"popup_order":[],"history_count":1}}
+{"t":"ev","topic":"notifications","name":"action","seq":8,"data":{"id":"notice-b1-g1-n1","revision":2,"action":"a2","state_seq":8}}
+{"t":"ev","topic":"notifications","name":"closed","seq":9,"data":{"id":"notice-b1-g1-n1","reason":"dismissed","state_seq":8}}
+{"t":"ret","id":1,"ok":{"changed":true}}
+{"t":"call","id":2,"m":"notifications.dismiss","p":{"id":"notice-b1-g1-n1","revision":2,"forget":true},"timeout":3000}
+{"t":"patch","topic":"notifications","base":8,"seq":9,"data":{"history":{"items":{"notice-b1-g1-n1":null},"order":[]},"history_count":0}}
+{"t":"ev","topic":"notifications","name":"history_changed","seq":10,"data":{"state_seq":9}}
+{"t":"ret","id":2,"ok":{"changed":true}}
+{"t":"patch","topic":"notifications","base":9,"seq":10,"data":{"active":{"items":{"notice-b1-g1-n2":{"app_name":"Fixture","summary":"Transient arrival","body":"Safe fixture text","urgency":"normal","resident":false,"transient":true,"created_ms":1800000000000,"actions":{"items":{"a1":{"label":"Open"},"a3":{"label":"Snooze"}},"order":["a1","a3"]},"default_action":"a1","timeout_ms":5000,"remaining_ms":5000,"expires_ms":1800000005000,"revision":1,"retained":false,"paused":false}},"order":["notice-b1-g1-n2"]},"history_count":0,"popup_order":["notice-b1-g1-n2"]}}
+{"t":"ev","topic":"notifications","name":"shown","seq":11,"data":{"id":"notice-b1-g1-n2","revision":1,"state_seq":10}}
+{"t":"patch","topic":"notifications","base":10,"seq":11,"data":{"active":{"items":{"notice-b1-g1-n2":null},"order":[]},"history_count":0,"popup_order":[]}}
+{"t":"ev","topic":"notifications","name":"closed","seq":12,"data":{"id":"notice-b1-g1-n2","reason":"expired","state_seq":11}}
