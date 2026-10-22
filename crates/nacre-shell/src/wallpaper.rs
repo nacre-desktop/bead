@@ -150,9 +150,18 @@ impl bead::wayland::WallpaperProvider for Consumer {
             width: decoded.width,
             height: decoded.height,
             rgba: decoded.rgba,
+            previous_rgba: None,
             palette,
             commit_token,
         })
+    }
+    fn prepare_transition(&self, output: &str, width: u32, height: u32) -> Option<Vec<u8>> {
+        let previous = self.displayed.lock().ok()?.get(output)?.clone();
+        let current = self.state().ok()?.outputs.get(output)?.clone();
+        if previous == current {
+            return None;
+        }
+        decode_pair(previous, width, height).ok().map(|decoded| decoded.rgba)
     }
     fn is_current(&self, frame: &bead::wayland::WallpaperFrame) -> bool {
         let Some(token) = frame.commit_token.downcast_ref::<PairToken>() else {
@@ -220,6 +229,13 @@ pub(crate) fn decode(
         .get(output)
         .ok_or("output has no wallpaper")?
         .clone();
+    decode_pair(pair, width, height)
+}
+
+fn decode_pair(pair: ActiveWallpaper, width: u32, height: u32) -> Result<Decoded, String> {
+    if width == 0 || height == 0 {
+        return Err("wallpaper unavailable".into());
+    }
     let file = open_validated(&pair)?;
     let before = file
         .metadata()

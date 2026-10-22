@@ -98,6 +98,7 @@ pub struct WallpaperFrame {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
+    pub previous_rgba: Option<Vec<u8>>,
     pub palette: bead_render::Palette,
     /// Opaque product token keeps protocol-specific palette data paired with this raster.
     pub commit_token: std::sync::Arc<dyn std::any::Any + Send + Sync>,
@@ -115,6 +116,9 @@ impl std::fmt::Debug for WallpaperFrame {
 pub trait WallpaperProvider: Send + Sync {
     fn watch(&self, changed: Box<dyn Fn() + Send + Sync>) -> Result<(), String>;
     fn prepare(&self, output: String, width: u32, height: u32) -> Result<WallpaperFrame, String>;
+    fn prepare_transition(&self, _output: &str, _width: u32, _height: u32) -> Option<Vec<u8>> {
+        None
+    }
     fn is_current(&self, frame: &WallpaperFrame) -> bool;
     fn committed(
         &self,

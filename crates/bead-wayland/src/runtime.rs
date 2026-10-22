@@ -558,8 +558,12 @@ impl App {
             return;
         };
         let failed_name = name.clone();
-        std::thread::spawn(move || match provider.prepare(name, width, height) {
-            Ok(frame) => {
+        let animate = self.options.animate;
+        std::thread::spawn(move || match provider.prepare(name.clone(), width, height) {
+            Ok(mut frame) => {
+                if animate {
+                    frame.previous_rgba = provider.prepare_transition(&name, width, height);
+                }
                 let _ = sender.send(UiEvent::WallpaperFrame(std::sync::Arc::new(frame)));
             }
             Err(_) => {
@@ -833,7 +837,8 @@ impl App {
             .transition
             .take()
             .map(|transition| transition.pixels)
-            .or_else(|| surface.pixels.take());
+            .or_else(|| surface.pixels.take())
+            .or(frame.previous_rgba);
         let transitioning = self.options.animate && old_pixels.is_some();
         if transitioning {
             surface.transition = Some(WallpaperTransition {
