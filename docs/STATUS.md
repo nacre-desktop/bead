@@ -10,6 +10,9 @@ The private desktop rehearsal completed all six Niri arms in 41m18s; geometry,
 scope/OOM, host swap-in and close checks passed for every arm. Desktop DRM
 fdinfo was unavailable, so its summary is **REHEARSAL ONLY** with PSS-only
 relative deltas, not a laptop verdict.
+Two earlier A1 rehearsal attempts stopped before valid windows while the frozen
+shell bundle and UI-only fixture observer were corrected; their partial outputs
+remain separate and invalid.
 The laptop GPU path has not been inspected and no laptop capture was run; the
 prepared reference capture still awaits the owner's signal and AC idle window.
 
