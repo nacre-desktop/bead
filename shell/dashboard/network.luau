@@ -10,12 +10,12 @@ return function()
             ui.Text{id="details",text=ui.bind("dashboard.detail"),font_size=14,height=24,width=520,color="onSurfaceVariant"},
         },
         ui.Column{id="connections",position="absolute",left=0,top=252,width=564,height=310,padding=16,gap=12,radius=16,fill="surfaceContainerLow",
-            C.title("title","Connections",532),
-            C.rows("items","dashboard.rows",532,240,false,"No connections"),
+            C.title("title",ui.tr("bead.dashboard.network-connections"),532),
+            C.rows("items","dashboard.rows",532,240,false,ui.tr("bead.dashboard.network-none")),
         },
         ui.Column{id="access",position="absolute",left=580,top=0,width=360,height=562,padding=16,gap=12,radius=16,fill="surfaceContainerLow",
-            C.title("title","Wi-Fi networks",328),
-            C.rows("items","dashboard.secondary",328,470,false,"No networks in range"),
+            C.title("title",ui.tr("bead.dashboard.network-wifi"),328),
+            C.rows("items","dashboard.secondary",328,470,false,ui.tr("bead.dashboard.network-wifi-none")),
         },
     }
 end

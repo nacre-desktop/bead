@@ -327,7 +327,7 @@ fn dashboard_navigation_routes_every_core_tab() -> Result<()> {
             if tab == page {
                 assert!(
                     harness.scene().primitives.iter().any(|primitive| {
-                        matches!(primitive, bead::render::Primitive::Text { text, .. } if text == tab.title())
+                        matches!(primitive, bead::render::Primitive::Text { text, .. } if *text == tab.title())
                     }),
                     "selected {} tab must render its label",
                     tab.name()
@@ -1234,7 +1234,7 @@ fn dashboard_extras_have_deterministic_pixels_and_only_navigation_actions() -> R
             );
             let frame = h.render()?;
             assert!(h.scene().primitives.iter().any(|p| matches!(
-                p, bead::render::Primitive::Text { text, .. } if text == page.title())));
+                p, bead::render::Primitive::Text { text, .. } if *text == page.title())));
             let golden = root().join(format!(
                 "tests/goldens/dashboard-{}-{scale}.png",
                 page.name()

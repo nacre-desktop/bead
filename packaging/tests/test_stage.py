@@ -30,6 +30,7 @@ class StageTests(unittest.TestCase):
         self.assertTrue((installed / "lib/bead/nacre-wallpaper-decode").is_file())
         self.assertTrue((installed / "share/bead/shell/bar/main.luau").is_file())
         self.assertFalse((installed / "share/bead/shell/tests").exists())
+        self.assertFalse((installed / "share/bead/shell/i18n").exists())
         self.assertTrue((installed / "share/licenses/bead-shell/LICENSE-GPL-3.0").is_file())
         self.assertEqual({p.name for p in dest.iterdir()}, {"usr"})
 

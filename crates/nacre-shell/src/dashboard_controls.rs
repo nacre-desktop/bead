@@ -4,6 +4,7 @@
 //! while the connected daemon advertises the exact method at version 1; a
 //! call is never retried and the topic stays the only source of truth.
 use super::*;
+use crate::i18n::tr;
 use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
 use nacre_protocol::core_services::{DashboardSystemState, EntityId, Player, PlayerStatus};
 use std::{cell::RefCell, time::Duration};
@@ -43,7 +44,7 @@ impl Controls {
         state.message.clear();
         state.confirm = false;
         let Some((boot, timeout)) = self.ready(method) else {
-            state.message = "Unavailable right now".into();
+            state.message = "bead.dashboard.unavailable-now".into();
             return;
         };
         match self.client.begin_call(
@@ -54,7 +55,7 @@ impl Controls {
             Some(wake),
         ) {
             Ok(ticket) => state.pending = Some(ticket),
-            Err(_) => state.message = "Request failed".into(),
+            Err(_) => state.message = "bead.common.request-failed".into(),
         }
     }
     fn say(&self, message: &str) {
@@ -69,13 +70,17 @@ impl Controls {
             state.pending = None;
             state.message = match reply {
                 Ok(_) => String::new(),
-                Err(e) if e.code == "stale_revision" => "Changed elsewhere; try again".into(),
-                Err(_) => "Request failed".into(),
+                Err(e) if e.code == "stale_revision" => "bead.common.changed-elsewhere".into(),
+                Err(_) => "bead.common.request-failed".into(),
             };
         }
         (
             state.pending.is_some(),
-            state.message.clone(),
+            if state.message.is_empty() {
+                String::new()
+            } else {
+                crate::i18n::tr(&state.message, &[])
+            },
             state.confirm,
         )
     }
@@ -235,7 +240,7 @@ impl Dashboard {
             return;
         };
         if !connected || store.error.is_some() {
-            c.say("Settings are unavailable");
+            c.say("bead.dashboard.settings-unavailable");
             return;
         }
         let Some(page) = Page::REGISTRY.into_iter().find(|p| p.name() == id) else {
@@ -330,14 +335,11 @@ impl Dashboard {
         out.insert("dashboard.customize".into(), Value::Bool(customize));
         if matches!(self.page, Page::Media | Page::Today) {
             for (key, value) in [
-                ("track", "Playback unavailable"),
-                (
-                    "track_detail",
-                    "Playback details and controls are not available yet",
-                ),
+                ("track", "bead.dashboard.playback-unavailable"),
+                ("track_detail", "bead.dashboard.playback-unavailable-detail"),
             ] {
                 out.entry(format!("dashboard.{key}"))
-                    .or_insert(Value::Text(value.into()));
+                    .or_insert_with(|| Value::Text(tr(value, &[])));
             }
             for key in ["can_previous", "can_toggle", "can_next", "can_seek", "art"] {
                 out.entry(format!("dashboard.{key}"))
@@ -391,10 +393,10 @@ impl Dashboard {
         text(
             out,
             "track",
-            if p.title.is_empty() {
-                "Unknown track"
+            &if p.title.is_empty() {
+                tr("bead.dashboard.media-unknown-track", &[])
             } else {
-                &p.title
+                p.title.clone()
             },
             64,
         );
@@ -490,17 +492,22 @@ impl Dashboard {
                 "dashboard.stale".into(),
                 Value::Bool(!connected || store.error.is_some()),
             );
-            text(out, "heading", "Dashboard pages", 48);
+            text(
+                out,
+                "heading",
+                &tr("bead.dashboard.customize-heading", &[]),
+                48,
+            );
             text(
                 out,
                 "summary",
-                "Choose the optional pages and their order",
+                &tr("bead.dashboard.customize-hint", &[]),
                 64,
             );
             let (enabled, order) = Self::layout(Some(&store));
             let rows = order.iter().map(|p| {
                 let name = p.name();
-                json!({"id":name,"label":p.title(),"value":if enabled.contains(p) {"On"} else {"Off"},
+                json!({"id":name,"label":p.title(),"value":tr(if enabled.contains(p) {"bead.common.on"} else {"bead.common.off"}, &[]),
                     "detail":"","toggle":format!("tab.toggle:{name}"),
                     "up":format!("tab.up:{name}"),"down":format!("tab.down:{name}")})
             });
@@ -537,13 +544,13 @@ impl Dashboard {
                     _ => None,
                 };
                 let (state, heading) = match s.status {
-                    FocusStatus::Idle => ("idle", "Ready when you are"),
-                    FocusStatus::Running => ("running", "Focus"),
-                    FocusStatus::Paused => ("paused", "Paused"),
-                    FocusStatus::Done => ("done", "Session complete"),
+                    FocusStatus::Idle => ("idle", "bead.dashboard.focus-idle"),
+                    FocusStatus::Running => ("running", "bead.dashboard.focus-running"),
+                    FocusStatus::Paused => ("paused", "bead.dashboard.focus-paused"),
+                    FocusStatus::Done => ("done", "bead.dashboard.focus-done"),
                 };
                 text(out, "state", state, 12);
-                text(out, "heading", heading, 32);
+                text(out, "heading", &tr(heading, &[]), 32);
                 text(
                     out,
                     "metric",
@@ -553,10 +560,10 @@ impl Dashboard {
                 text(
                     out,
                     "summary",
-                    if s.owns_dnd {
-                        "Do not disturb stays on until this session ends"
+                    &if s.owns_dnd {
+                        tr("bead.dashboard.focus-dnd", &[])
                     } else {
-                        ""
+                        String::new()
                     },
                     64,
                 );
@@ -569,50 +576,60 @@ impl Dashboard {
                 out.insert("dashboard.progress".into(), Value::Number(progress));
             }
             Extra::Clipboard(s) => {
-                text(out, "heading", "Clipboard history", 48);
+                text(
+                    out,
+                    "heading",
+                    &tr("bead.dashboard.clipboard-heading", &[]),
+                    48,
+                );
                 text(
                     out,
                     "detail",
-                    if s.entries.order.is_empty() {
-                        "Your next copy will appear here"
+                    &if s.entries.order.is_empty() {
+                        tr("bead.dashboard.clipboard-empty", &[])
                     } else {
-                        ""
+                        String::new()
                     },
                     48,
                 );
                 rows = s.entries.order.iter().take(7).filter_map(|id| s.entries.items.get(id).map(|e| {
                     json!({"id":id.0,"label":line(&e.preview,72),
-                        "value":if e.kind == nacre_protocol::dashboard_extras::ClipKind::Image {"Image"} else {"Text"},
+                        "value":tr(if e.kind == nacre_protocol::dashboard_extras::ClipKind::Image {"bead.dashboard.clipboard-image"} else {"bead.dashboard.clipboard-text"}, &[]),
                         "detail":"","act":format!("clip.copy:{}", id.0)})
                 })).collect();
             }
             Extra::Screenshots(s) => {
-                text(out, "heading", "Recent screenshots", 48);
+                text(
+                    out,
+                    "heading",
+                    &tr("bead.dashboard.screenshots-heading", &[]),
+                    48,
+                );
                 text(
                     out,
                     "detail",
-                    if s.items.order.is_empty() {
-                        "Captures saved to Pictures/Screenshots appear here"
+                    &if s.items.order.is_empty() {
+                        tr("bead.dashboard.screenshots-empty", &[])
                     } else {
-                        ""
+                        String::new()
                     },
                     64,
                 );
                 // Only the file name is shown; the absolute path never reaches the view.
                 rows = s.items.order.iter().take(6).filter_map(|id| s.items.items.get(id).map(|e| {
                     let name = e.path.rsplit('/').next().unwrap_or("");
-                    json!({"id":id.0,"label":line(name,56),"value":"Open","detail":"","act":format!("shot.open:{}", id.0)})
+                    json!({"id":id.0,"label":line(name,56),"value":tr("bead.dashboard.screenshots-open", &[]),"detail":"","act":format!("shot.open:{}", id.0)})
                 })).collect();
             }
             Extra::AiUsage(s) => {
-                text(out, "heading", "AI usage", 48);
+                text(out, "heading", &Page::AiUsage.title(), 48);
                 text(
                     out,
                     "detail",
-                    if s.providers.order.is_empty() {
-                        "Refresh to read usage"
+                    &if s.providers.order.is_empty() {
+                        tr("bead.dashboard.ai-usage-empty", &[])
                     } else {
-                        ""
+                        String::new()
                     },
                     48,
                 );
@@ -628,14 +645,14 @@ impl Dashboard {
                 rows.truncate(14);
             }
             Extra::BrainRecent(s) => {
-                text(out, "heading", "Recent notes", 48);
+                text(out, "heading", &tr("bead.dashboard.brain-heading", &[]), 48);
                 text(
                     out,
                     "detail",
-                    if s.notes.order.is_empty() {
-                        "No notes yet"
+                    &if s.notes.order.is_empty() {
+                        tr("bead.dashboard.brain-empty", &[])
                     } else {
-                        ""
+                        String::new()
                     },
                     48,
                 );
@@ -672,7 +689,8 @@ pub(super) fn gauges(s: &DashboardSystemState) -> Vec<Json> {
         v.filter(|v| v.is_finite())
             .map_or("—".into(), |v| format!("{v:.0}%"))
     };
-    let mut gpu_detail = "Metric unavailable".to_string();
+    let unavailable = || tr("bead.dashboard.gauge-unavailable", &[]);
+    let mut gpu_detail = unavailable();
     if let Some((used, total)) = s
         .gpu
         .as_ref()
@@ -682,12 +700,12 @@ pub(super) fn gauges(s: &DashboardSystemState) -> Vec<Json> {
     }
     let memory = s.memory.as_ref();
     vec![
-        json!({"id":"cpu","label":"CPU","icon":"developer_board","value":percent(s.cpu_percent),
-            "detail":if s.cpu_percent.is_some() {"Busy share"} else {"Metric unavailable"}}),
-        json!({"id":"memory","label":"Memory","icon":"memory",
+        json!({"id":"cpu","label":tr("bead.dashboard.gauge-cpu", &[]),"icon":"developer_board","value":percent(s.cpu_percent),
+            "detail":if s.cpu_percent.is_some() {tr("bead.dashboard.gauge-cpu-detail", &[])} else {unavailable()}}),
+        json!({"id":"memory","label":tr("bead.dashboard.gauge-memory", &[]),"icon":"memory",
             "value":percent(memory.map(|m| m.used as f64 * 100. / m.total as f64)),
-            "detail":memory.map_or("Metric unavailable".into(), |m| format!("{} / {}", bytes(m.used), bytes(m.total)))}),
-        json!({"id":"gpu","label":"GPU","icon":"view_in_ar","value":percent(s.gpu.as_ref().and_then(|g| g.percent)),
+            "detail":memory.map_or_else(unavailable, |m| format!("{} / {}", bytes(m.used), bytes(m.total)))}),
+        json!({"id":"gpu","label":tr("bead.dashboard.gauge-gpu", &[]),"icon":"view_in_ar","value":percent(s.gpu.as_ref().and_then(|g| g.percent)),
             "detail":gpu_detail}),
     ]
 }
@@ -726,16 +744,23 @@ pub(super) fn traffic(s: &DashboardSystemState, out: &mut BTreeMap<String, Value
     for (key, text) in [
         (
             "net_rate",
-            last.map_or("—".into(), |n| format!("Down {}", rate(n.down_bps))),
+            last.map_or("—".into(), |n| {
+                tr(
+                    "bead.dashboard.network-down",
+                    &[("rate", &rate(n.down_bps))],
+                )
+            }),
         ),
         (
             "net_up_rate",
-            last.map_or("—".into(), |n| format!("Up {}", rate(n.up_bps))),
+            last.map_or("—".into(), |n| {
+                tr("bead.dashboard.network-up", &[("rate", &rate(n.up_bps))])
+            }),
         ),
         (
             "net_peak",
             if last.is_some() {
-                format!("Peak {}", rate(peak))
+                tr("bead.dashboard.network-peak", &[("rate", &rate(peak))])
             } else {
                 String::new()
             },

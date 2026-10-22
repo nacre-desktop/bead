@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Date inputs come from the host; only the displayed month belongs to this view.
-local months={"January","February","March","April","May","June","July","August","September","October","November","December"}
-local weekdays={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}
+local months={"bead.common.month-january","bead.common.month-february","bead.common.month-march","bead.common.month-april","bead.common.month-may","bead.common.month-june","bead.common.month-july","bead.common.month-august","bead.common.month-september","bead.common.month-october","bead.common.month-november","bead.common.month-december"}
+local weekdays={"bead.common.weekday-short-sun","bead.common.weekday-short-mon","bead.common.weekday-short-tue","bead.common.weekday-short-wed","bead.common.weekday-short-thu","bead.common.weekday-short-fri","bead.common.weekday-short-sat"}
 local function daysInMonth(year,month)
     if month==2 then return year%4==0 and (year%100~=0 or year%400==0) and 29 or 28 end
     return ({31,28,31,30,31,30,31,31,30,31,30,31})[month]
@@ -40,7 +40,7 @@ return {
     computed={
         ["calendar.title"]=function(s)
             local y,m=displayed(s)
-            return months[m].." "..tostring(y)
+            return tr("bead.common.month-year",{month=tr(months[m]),year=y})
         end,
         ["calendar.weekdays"]=function(s)
             local first=s["calendar.first_weekday"]
@@ -48,7 +48,7 @@ return {
             local out={}
             for i=0,6 do
                 local day=(first+i)%7
-                out[i+1]={id="weekday-"..day,name=weekdays[day+1]}
+                out[i+1]={id="weekday-"..day,name=tr(weekdays[day+1])}
             end
             return out
         end,

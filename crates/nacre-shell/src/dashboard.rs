@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Lazy dashboard projections. No service/backend, polling, ranking or actions.
+use crate::i18n::{tr, tr_n};
 use bead::core::{
     Value,
     source::{self, Callback, Publisher, Snapshot, Source, Subscription},
@@ -132,22 +133,25 @@ impl Page {
             .chain(Self::MORE)
             .find(|page| page.tab() == index)
     }
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::Today => "Today",
-            Self::Weather => "Weather",
-            Self::Media => "Media",
-            Self::System => "System",
-            Self::Notifications => "Notifications",
-            Self::Devices => "Devices",
-            Self::Network => "Network",
-            Self::Focus => "Focus",
-            Self::Clipboard => "Clipboard",
-            Self::AiUsage => "AI usage",
-            Self::Screenshots => "Screenshots",
-            Self::Brain => "Brain",
-            Self::Customize => "Customize",
-        }
+    pub fn title(self) -> String {
+        tr(
+            match self {
+                Self::Today => "bead.dashboard.page-today",
+                Self::Weather => "bead.dashboard.page-weather",
+                Self::Media => "bead.dashboard.page-media",
+                Self::System => "bead.dashboard.page-system",
+                Self::Notifications => "bead.dashboard.page-notifications",
+                Self::Devices => "bead.dashboard.page-devices",
+                Self::Network => "bead.dashboard.page-network",
+                Self::Focus => "bead.dashboard.page-focus",
+                Self::Clipboard => "bead.dashboard.page-clipboard",
+                Self::AiUsage => "bead.dashboard.page-ai-usage",
+                Self::Screenshots => "bead.dashboard.page-screenshots",
+                Self::Brain => "bead.dashboard.page-brain",
+                Self::Customize => "bead.dashboard.page-customize",
+            },
+            &[],
+        )
     }
     fn icon(self) -> &'static str {
         match self {
@@ -552,20 +556,20 @@ impl Dashboard {
                 "dashboard.page".into(),
                 Value::Text(self.page.name().into()),
             ),
-            (
-                "dashboard.title".into(),
-                Value::Text(self.page.title().into()),
-            ),
+            ("dashboard.title".into(), Value::Text(self.page.title())),
             ("dashboard.preview".into(), Value::Bool(self.preview)),
             ("dashboard.ready".into(), Value::Bool(false)),
             ("dashboard.stale".into(), Value::Bool(false)),
             (
                 "dashboard.heading".into(),
-                Value::Text(format!("{} unavailable", self.page.title())),
+                Value::Text(tr(
+                    "bead.dashboard.page-unavailable",
+                    &[("page", &self.page.title())],
+                )),
             ),
             (
                 "dashboard.summary".into(),
-                Value::Text("Data is not available yet".into()),
+                Value::Text(tr("bead.dashboard.data-pending", &[])),
             ),
             ("dashboard.detail".into(), Value::Text(String::new())),
             ("dashboard.metric".into(), Value::Text("—".into())),
@@ -573,7 +577,7 @@ impl Dashboard {
             ("dashboard.secondary".into(), Value::list(Vec::new())),
             (
                 "dashboard.updates".into(),
-                Value::Text("Updates unavailable".into()),
+                Value::Text(tr("bead.dashboard.updates-unavailable", &[])),
             ),
             (
                 "dashboard.updates_detail".into(),
@@ -592,9 +596,9 @@ impl Dashboard {
                         &mut out,
                         "updates",
                         &if count == 0 {
-                            "Up to date".into()
+                            tr("bead.dashboard.updates-current", &[])
                         } else {
-                            format!("{count} updates")
+                            tr_n("bead.dashboard.updates-count", u64::from(count), &[])
                         },
                         48,
                     );
@@ -602,10 +606,10 @@ impl Dashboard {
                 text(
                     &mut out,
                     "updates_detail",
-                    if s.health.stale || !update.connected {
-                        "Stale data"
+                    &if s.health.stale || !update.connected {
+                        tr("bead.dashboard.state-stale", &[])
                     } else {
-                        &s.text
+                        s.text.clone()
                     },
                     80,
                 );
@@ -634,17 +638,32 @@ impl Dashboard {
                             96,
                         );
                     } else {
-                        text(&mut out, "summary", "Weather unavailable", 96);
+                        text(
+                            &mut out,
+                            "summary",
+                            &tr("bead.dashboard.weather-unavailable", &[]),
+                            96,
+                        );
                     }
                     out.insert(
                         "dashboard.stale".into(),
                         Value::Bool(s.health.stale || !weather.connected),
                     );
                 } else {
-                    text(&mut out, "summary", "Weather unavailable", 96);
+                    text(
+                        &mut out,
+                        "summary",
+                        &tr("bead.dashboard.weather-unavailable", &[]),
+                        96,
+                    );
                 }
             } else {
-                text(&mut out, "summary", "Weather unavailable", 96);
+                text(
+                    &mut out,
+                    "summary",
+                    &tr("bead.dashboard.weather-unavailable", &[]),
+                    96,
+                );
             }
         }
         if Page::MORE.contains(&self.page) || self.page == Page::Customize {
@@ -678,18 +697,23 @@ impl Dashboard {
         }
         match data {
             CoreSnapshot::Calendar(s) => {
-                text(&mut out, "heading", "Upcoming events", 48);
+                text(
+                    &mut out,
+                    "heading",
+                    &tr("bead.dashboard.calendar-heading", &[]),
+                    48,
+                );
                 text(
                     &mut out,
                     "detail",
-                    if s.configured {
+                    &if s.configured {
                         if s.events.order.is_empty() {
-                            "No upcoming events"
+                            tr("bead.dashboard.calendar-none", &[])
                         } else {
-                            ""
+                            String::new()
                         }
                     } else {
-                        "Calendar is not configured"
+                        tr("bead.dashboard.calendar-unconfigured", &[])
                     },
                     80,
                 );
@@ -709,18 +733,21 @@ impl Dashboard {
                 text(
                     &mut out,
                     "detail",
-                    &format!(
-                        "Feels like {}    Wind {}",
-                        number(current.feels_like, "°"),
-                        number(current.wind, " km/h")
+                    &tr(
+                        "bead.dashboard.weather-details",
+                        &[
+                            ("feels", &number(current.feels_like, "°")),
+                            ("wind", &number(current.wind, " km/h")),
+                        ],
                     ),
                     96,
                 );
+                let rain = tr("bead.dashboard.weather-rain-unit", &[]);
                 let hours = current.hours.order.iter().take(8).filter_map(|id| current.hours.items.get(id).map(|h| json!({
-                    "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"value":number(h.temperature,"°"),"detail":number(h.rain,"% rain")
+                    "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"value":number(h.temperature,"°"),"detail":number(h.rain,&rain)
                 }))).collect();
                 let days = current.days.order.iter().take(7).filter_map(|id| current.days.items.get(id).map(|d| json!({
-                    "id":id,"label":line(&d.date,20),"value":format!("{} / {}",number(d.low,"°"),number(d.high,"°")),"detail":number(d.rain,"% rain")
+                    "id":id,"label":line(&d.date,20),"value":format!("{} / {}",number(d.low,"°"),number(d.high,"°")),"detail":number(d.rain,&rain)
                 }))).collect();
                 out.insert("dashboard.rows".into(), Value::list(hours));
                 out.insert("dashboard.secondary".into(), Value::list(days));
@@ -728,7 +755,12 @@ impl Dashboard {
             CoreSnapshot::Media(s) => {
                 // This topic is lyrics/palette enrichment. It does not claim a
                 // playback identity, progress clock or transport capability.
-                text(&mut out, "heading", "Lyrics", 48);
+                text(
+                    &mut out,
+                    "heading",
+                    &tr("bead.dashboard.media-lyrics", &[]),
+                    48,
+                );
                 text(&mut out, "summary", &s.lyrics_message, 120);
                 text(&mut out, "detail", &s.plain, 320);
                 let rows = s
@@ -747,12 +779,22 @@ impl Dashboard {
                 out.insert("dashboard.rows".into(), Value::list(rows));
             }
             CoreSnapshot::System(s) => {
-                text(&mut out, "heading", "Top processes", 48);
-                text(&mut out, "summary", "Memory", 48);
+                text(
+                    &mut out,
+                    "heading",
+                    &tr("bead.dashboard.system-processes", &[]),
+                    48,
+                );
+                text(
+                    &mut out,
+                    "summary",
+                    &tr("bead.dashboard.gauge-memory", &[]),
+                    48,
+                );
                 text(
                     &mut out,
                     "detail",
-                    "CPU values are accumulated process time",
+                    &tr("bead.dashboard.system-cpu-note", &[]),
                     80,
                 );
                 let mut processes = s
@@ -765,10 +807,10 @@ impl Dashboard {
                     b.memory.cmp(&a.memory).then_with(|| aid.cmp(bid))
                 });
                 let rows = processes.into_iter().take(5).map(|(id,p)| json!({
-                    "id":id,"label":line(&p.name,20),"value":bytes(p.memory),"detail":format!("{:.1} s CPU",p.cpu_seconds)
+                    "id":id,"label":line(&p.name,20),"value":bytes(p.memory),"detail":tr("bead.dashboard.system-process-cpu", &[("seconds", &format!("{:.1}", p.cpu_seconds))])
                 })).collect();
                 let disks = s.disks.order.iter().take(4).filter_map(|id| s.disks.items.get(id).map(|d| json!({
-                    "id":id,"label":line(&d.path,10),"value":format!("{} / {}",bytes(d.used),bytes(d.total)),"detail":"Used / total"
+                    "id":id,"label":line(&d.path,10),"value":format!("{} / {}",bytes(d.used),bytes(d.total)),"detail":tr("bead.dashboard.system-drive-detail", &[])
                 }))).collect();
                 out.insert("dashboard.rows".into(), Value::list(rows));
                 out.insert("dashboard.secondary".into(), Value::list(disks));
@@ -776,15 +818,23 @@ impl Dashboard {
                 controls::traffic(&s, &mut out);
             }
             CoreSnapshot::Notifications(s) => {
-                text(&mut out, "heading", "Recent notifications", 48);
+                text(
+                    &mut out,
+                    "heading",
+                    &tr("bead.dashboard.notifications-heading", &[]),
+                    48,
+                );
                 text(
                     &mut out,
                     "summary",
-                    if s.do_not_disturb {
-                        "Do not disturb is on"
-                    } else {
-                        "Do not disturb is off"
-                    },
+                    &tr(
+                        if s.do_not_disturb {
+                            "bead.dashboard.dnd-summary-on"
+                        } else {
+                            "bead.dashboard.dnd-summary-off"
+                        },
+                        &[],
+                    ),
                     48,
                 );
                 out.insert("dashboard.dnd".into(), Value::Bool(s.do_not_disturb));
@@ -794,13 +844,20 @@ impl Dashboard {
                     .active
                     .order
                     .iter()
-                    .filter_map(|id| s.active.items.get(id).map(|n| (id, n, "Dismiss")))
+                    .filter_map(|id| s.active.items.get(id).map(|n| (id, n, "dismiss")))
                     .chain(s.history.order.iter().filter_map(|id| {
-                        s.history.items.get(id).map(|n| (id, n, "Forget"))
+                        s.history.items.get(id).map(|n| (id, n, "forget"))
                     }))
                     .take(12)
-                    .map(|(id, n, verb)| {
-                        let op = if verb == "Dismiss" { "dismiss" } else { "forget" };
+                    .map(|(id, n, op)| {
+                        let verb = tr(
+                            if op == "dismiss" {
+                                "bead.dashboard.notification-dismiss"
+                            } else {
+                                "bead.dashboard.notification-forget"
+                            },
+                            &[],
+                        );
                         json!({"id":id,"label":line(&format!("{}: {}", n.app_name, n.summary), 52),
                             "value":verb,"act":format!("notif.{op}:{}|{}", id.0, n.revision.unwrap_or(0))})
                     })
@@ -809,19 +866,21 @@ impl Dashboard {
                     &mut out,
                     "detail",
                     &if rows.is_empty() {
-                        "No notifications".to_owned()
+                        tr("bead.dashboard.notifications-none", &[])
                     } else if s.history_more == Some(true) {
-                        format!(
-                            "Newest {} of {} stored are shown",
-                            s.history.items.len(),
-                            s.history_count.unwrap_or(0)
+                        tr(
+                            "bead.dashboard.notifications-shown",
+                            &[
+                                ("shown", &s.history.items.len().to_string()),
+                                ("total", &s.history_count.unwrap_or(0).to_string()),
+                            ],
                         )
                     } else if s
                         .history_storage
                         .as_ref()
                         .is_some_and(|h| h.error.is_some())
                     {
-                        "History storage has a problem".to_owned()
+                        tr("bead.dashboard.notifications-storage-problem", &[])
                     } else {
                         String::new()
                     },
@@ -831,15 +890,18 @@ impl Dashboard {
             }
             CoreSnapshot::Bluetooth(s) => {
                 let powered = s.adapters.items.values().any(|a| a.powered);
-                text(&mut out, "heading", "Bluetooth", 48);
+                text(&mut out, "heading", &tr("bead.panel.bluetooth", &[]), 48);
                 text(
                     &mut out,
                     "summary",
-                    match (s.adapters.items.is_empty(), powered) {
-                        (true, _) => "No adapter",
-                        (_, true) => "Powered on",
-                        _ => "Powered off",
-                    },
+                    &tr(
+                        match (s.adapters.items.is_empty(), powered) {
+                            (true, _) => "bead.dashboard.bluetooth-no-adapter",
+                            (_, true) => "bead.dashboard.bluetooth-on",
+                            _ => "bead.dashboard.bluetooth-off",
+                        },
+                        &[],
+                    ),
                     48,
                 );
                 let mut devices = s
@@ -852,7 +914,7 @@ impl Dashboard {
                 devices.sort_by_key(|(_, d)| !d.connected); // stable: keeps service order
                 let rows = devices.into_iter().take(6).map(|(id,d)| json!({
                     "id":id,"label":line(&d.name,28),
-                    "value":match d.battery {Some(b) => format!("{b}% battery"), None if d.connected => "Connected".into(), None => "Saved".into()},
+                    "value":match d.battery {Some(b) => tr("bead.dashboard.bluetooth-battery", &[("percent", &b.to_string())]), None if d.connected => tr("bead.common.connected", &[]), None => tr("bead.dashboard.bluetooth-saved", &[])},
                     "detail":""
                 })).collect();
                 out.insert("dashboard.rows".into(), Value::list(rows));
@@ -874,8 +936,8 @@ impl Dashboard {
                                 let default = a.default_output.as_ref() == Some(id)
                                     || a.default_input.as_ref() == Some(id);
                                 json!({"id":id,"label":line(&n.name,28),
-                                "value":if n.kind == AudioKind::Output {"Output"} else {"Input"},
-                                "detail":if default {"Default"} else {""}})
+                                "value":tr(if n.kind == AudioKind::Output {"bead.dashboard.audio-output"} else {"bead.dashboard.audio-input"}, &[]),
+                                "detail":if default {tr("bead.dashboard.audio-default", &[])} else {String::new()}})
                             })
                             .collect();
                         out.insert("dashboard.secondary".into(), Value::list(nodes));
@@ -893,17 +955,21 @@ impl Dashboard {
                 text(
                     &mut out,
                     "heading",
-                    primary.map_or("Not connected", |c| &c.name),
+                    &primary
+                        .map_or_else(|| tr("bead.common.not-connected", &[]), |c| c.name.clone()),
                     32,
                 );
                 text(
                     &mut out,
                     "summary",
-                    if s.wireless_enabled {
-                        "Wi-Fi is on"
-                    } else {
-                        "Wi-Fi is off"
-                    },
+                    &tr(
+                        if s.wireless_enabled {
+                            "bead.dashboard.network-wifi-on"
+                        } else {
+                            "bead.dashboard.network-wifi-off"
+                        },
+                        &[],
+                    ),
                     48,
                 );
                 let active = s.access_points.items.values().find(|ap| ap.active);
@@ -917,7 +983,7 @@ impl Dashboard {
                     64,
                 );
                 let connections = s.connections.order.iter().take(6).filter_map(|id| s.connections.items.get(id).map(|c| json!({
-                    "id":id,"label":line(&c.name,28),"value":if c.active {"Active"} else {""},"detail":line(&c.kind,20)
+                    "id":id,"label":line(&c.name,28),"value":if c.active {tr("bead.dashboard.network-active", &[])} else {String::new()},"detail":line(&c.kind,20)
                 }))).collect();
                 let networks = s
                     .access_points
@@ -941,7 +1007,14 @@ impl Dashboard {
 }
 /// "Secured" or "Open", then the radio frequency when the daemon reports one.
 fn access_detail(ap: &nacre_protocol::core_services::AccessPoint) -> String {
-    let mut parts = vec![if ap.secured { "Secured" } else { "Open" }.to_string()];
+    let mut parts = vec![tr(
+        if ap.secured {
+            "bead.dashboard.network-secured"
+        } else {
+            "bead.dashboard.network-open"
+        },
+        &[],
+    )];
     parts.extend(frequency(ap));
     parts.join(" · ")
 }

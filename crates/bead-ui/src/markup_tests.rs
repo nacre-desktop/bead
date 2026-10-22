@@ -1042,3 +1042,93 @@ return ui.Panel{id='root',width=200,height=120,
     assert_eq!(raw.children[4].children.len(), 1);
     assert_eq!(raw.children[4].children[0].props["id"], "kept");
 }
+
+static CATALOG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+fn texts(session: &Session) -> Vec<String> {
+    session
+        .current
+        .primitives
+        .iter()
+        .filter_map(|p| match p {
+            Primitive::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+#[test]
+fn tr_reaches_markup_and_behaviour_and_a_catalog_change_redraws_on_reload() {
+    use crate::i18n::{self, Entries, Message};
+    let _lock = CATALOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    i18n::set_builtin(
+        r#"{"test.hello":"Hello {name}","test.items":{"one":"{count} item","other":"{count} items"},"test.only-english":"English only"}"#,
+    );
+    i18n::clear();
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={}, actions={}, computed={["label"]=function(_) return tr("test.items",{count=2}) end}}"#,
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=400,height=240,padding=12,ui.Column{gap=8,
+ ui.Text{id="a",text=ui.tr("test.hello",{name="Ada"}),height=20},
+ ui.Text{id="b",text=ui.tr("test.items",{count=1}),height=20},
+ ui.Text{id="c",text=ui.bind("label"),height=20},
+ ui.Text{id="d",text=ui.tr("test.only-english"),height=20},
+ ui.Text{id="e",text=ui.tr("test.missing"),height=20}}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    assert_eq!(
+        texts(&s),
+        [
+            "Hello Ada",
+            "1 item",
+            "2 items",
+            "English only",
+            "test.missing"
+        ]
+    );
+    // Language switch en -> pseudo: new text for two ids; the third falls back to English.
+    let pseudo = Entries::from([
+        (
+            "test.hello".into(),
+            Message::Text("[!! Hello {name} !!]".into()),
+        ),
+        (
+            "test.items".into(),
+            Message::Plural {
+                one: "[!! {count} item !!]".into(),
+                other: "[!! {count} items !!]".into(),
+            },
+        ),
+    ]);
+    let changed = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let seen = changed.clone();
+    let _subscription = i18n::on_change(move || {
+        seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    });
+    i18n::install(2, pseudo.clone());
+    i18n::install(2, pseudo);
+    assert_eq!(changed.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(i18n::revision(), 2);
+    let scene = s.reload().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        texts(&s),
+        [
+            "[!! Hello Ada !!]",
+            "[!! 1 item !!]",
+            "[!! 2 items !!]",
+            "English only",
+            "test.missing"
+        ]
+    );
+    i18n::clear();
+    assert_eq!(i18n::resident_bytes(), 0);
+    let scene = s.reload().unwrap();
+    s.commit(scene);
+    assert_eq!(texts(&s)[0], "Hello Ada");
+}

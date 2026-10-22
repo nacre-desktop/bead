@@ -5,6 +5,7 @@
 //! snapshots, keeps local expansion/hover/OSD-hide state, and sends the published
 //! revision-checked methods. It never starts a bus owner or replays a mutation.
 use crate::{
+    i18n::tr,
     nacre_source::{CallGuard, CallTicket, CallWake, Client, Config},
     notifications::{Handle, Notices, Wakeup},
 };
@@ -227,10 +228,10 @@ pub(crate) fn plan(
             .chain(state.history.items.iter())
             .find(|(k, _)| k.0 == id)
             .map(|(_, n)| n)
-            .ok_or("Changed elsewhere; try again")?;
+            .ok_or("bead.common.changed-elsewhere")?;
         (n.revision == Some(rev))
             .then_some((n, rev))
-            .ok_or("Changed elsewhere; try again")
+            .ok_or("bead.common.changed-elsewhere")
     };
     Ok(match name {
         "notifications.details" => Plan::Toggle(id.into()),
@@ -261,7 +262,7 @@ pub(crate) fn plan(
             let action = extra.ok_or("invalid action reference")?;
             let live = state.active.items.keys().any(|k| k.0 == id);
             if !live || !n.actions.items.keys().any(|a| a.0 == action) {
-                return Err("Changed elsewhere; try again");
+                return Err("bead.common.changed-elsewhere");
             }
             Plan::Call(
                 "notifications.invoke_action",
@@ -311,22 +312,29 @@ fn osd_values(shown: Option<&Shown>) -> BTreeMap<String, Value> {
     };
     let caps = s.channel == OsdChannel::Capslock;
     let label = match s.channel {
-        OsdChannel::Brightness => "Display brightness",
-        OsdChannel::Microphone => "Microphone",
-        OsdChannel::Capslock => "Caps lock",
-        OsdChannel::Volume => "Volume",
+        OsdChannel::Brightness => "bead.osd.brightness",
+        OsdChannel::Microphone => "bead.osd.microphone",
+        OsdChannel::Capslock => "bead.osd.capslock",
+        OsdChannel::Volume => "bead.osd.volume",
     };
     let status = if caps {
-        if s.level > 0. { "On" } else { "Off" }.to_owned()
+        tr(
+            if s.level > 0. {
+                "bead.osd.on"
+            } else {
+                "bead.osd.off"
+            },
+            &[],
+        )
     } else if s.muted {
-        "Muted".into()
+        tr("bead.osd.muted", &[])
     } else {
         format!("{:.0}%", s.level * 100.)
     };
     BTreeMap::from([
         ("osd.open".into(), Value::Bool(true)),
         ("osd.muted".into(), Value::Bool(s.muted)),
-        ("osd.label".into(), Value::Text(label.into())),
+        ("osd.label".into(), Value::Text(tr(label, &[]))),
         (
             "osd.level".into(),
             Value::Number(if caps {
@@ -393,7 +401,11 @@ fn models(g: &Inner) -> BTreeMap<String, Value> {
     out.extend(osd_values(g.osd.shown.as_ref()));
     out.insert(
         "notifications.message".into(),
-        Value::Text(g.message.clone()),
+        Value::Text(if g.message.is_empty() {
+            String::new()
+        } else {
+            tr(&g.message, &[])
+        }),
     );
     out
 }
@@ -599,9 +611,9 @@ fn poll(g: &mut Inner) {
             Err(e) if provider_only && e.code == "permission_denied" => g.denied = true,
             Err(_) if provider_only => {}
             Err(e) if e.code == "stale_revision" => {
-                g.message = "Changed elsewhere; try again".into();
+                g.message = "bead.common.changed-elsewhere".into();
             }
-            Err(_) => g.message = "Request failed".into(),
+            Err(_) => g.message = "bead.common.request-failed".into(),
         }
     }
 }
@@ -617,10 +629,13 @@ fn send(
         .methods
         .get(method)
         .filter(|m| m.v == 1)
-        .ok_or("Notifications are unavailable")?;
-    let boot = status.boot.clone().ok_or("Notifications are unavailable")?;
+        .ok_or("bead.notifications.unavailable")?;
+    let boot = status
+        .boot
+        .clone()
+        .ok_or("bead.notifications.unavailable")?;
     if !client.snapshot().connected {
-        return Err("Notifications are unavailable");
+        return Err("bead.notifications.unavailable");
     }
     let timeout = Duration::from_millis(u64::from(advertised.timeout).clamp(1, 10_000));
     let weak: Weak<Shared> = Arc::downgrade(shared);
@@ -643,7 +658,7 @@ fn send(
             CallGuard { boot, version: 1 },
             Some(wake),
         )
-        .map_err(|_| "Request failed")?;
+        .map_err(|_| "bead.common.request-failed")?;
     g.calls.push((method.into(), ticket));
     Ok(())
 }
@@ -810,9 +825,12 @@ impl Notices for Service {
         let planned = {
             let g = self.shared.lock();
             if !g.live {
-                return Err("Notifications are unavailable".into());
+                return Err(tr("bead.notifications.unavailable", &[]));
             }
-            let state = g.good.as_ref().ok_or("Notifications are unavailable")?;
+            let state = g
+                .good
+                .as_ref()
+                .ok_or_else(|| tr("bead.notifications.unavailable", &[]))?;
             plan(name, arg, state, self.action_on_click)
         };
         match planned {

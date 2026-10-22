@@ -5,16 +5,16 @@ local enabled=ui.resolve_for_check(ui.bind("session.enabled")) and not ui.resolv
 local question=ui.resolve_for_check(ui.bind("session.confirm"))
 local padding=kit.tokens.spacing.md
 local entries={
-    {"lock","Lock","lock"},{"logout","Log out","logout"},{"suspend","Suspend","bedtime"},
-    {"reboot","Restart","restart_alt"},{"shutdown","Power off","power_settings_new"},
+    {"lock",ui.tr("bead.panel.session-lock"),"lock"},{"logout",ui.tr("bead.panel.session-logout"),"logout"},{"suspend",ui.tr("bead.panel.session-suspend"),"bedtime"},
+    {"reboot",ui.tr("bead.panel.session-reboot"),"restart_alt"},{"shutdown",ui.tr("bead.panel.session-shutdown"),"power_settings_new"},
 }
 local children={}
 if question~="" then
     table.insert(children,ui.Text{id="question",text=ui.bind("session.confirm"),height=48,font_size=kit.tokens.text.body*4/3,color="onSurface"})
-    table.insert(children,kit.Button{id="confirm",aria_label="Confirm",on_activate=enabled and ui.action("session.confirm") or nil,
-        ui.Text{id="confirm-label",text="Confirm",height=24,font_size=kit.tokens.text.body*4/3,color="error"}})
-    table.insert(children,kit.Button{id="cancel",aria_label="Cancel",on_activate=ui.action("session.cancel"),
-        ui.Text{id="cancel-label",text="Cancel",height=24,font_size=kit.tokens.text.body*4/3,color="onSurface"}})
+    table.insert(children,kit.Button{id="confirm",aria_label=ui.tr("bead.common.confirm"),on_activate=enabled and ui.action("session.confirm") or nil,
+        ui.Text{id="confirm-label",text=ui.tr("bead.common.confirm"),height=24,font_size=kit.tokens.text.body*4/3,color="error"}})
+    table.insert(children,kit.Button{id="cancel",aria_label=ui.tr("bead.common.cancel"),on_activate=ui.action("session.cancel"),
+        ui.Text{id="cancel-label",text=ui.tr("bead.common.cancel"),height=24,font_size=kit.tokens.text.body*4/3,color="onSurface"}})
 else
     for _,entry in ipairs(entries) do
         local key,label,glyph=entry[1],entry[2],entry[3]

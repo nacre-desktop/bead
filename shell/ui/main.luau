@@ -33,13 +33,13 @@ return kit.Panel {edge="top",id="launcher",width=1100,height=590,max_width="90%"
             ui.Text{text=ui.bind("launcher.subtitle"),color="onSurfaceVariant",font_size=13.333,height=20},
             ui.Text{id="source-error",text=ui.bind("launcher.error"),visible=ui.bind("launcher.failed"),color="error",font_size=13.333,height=20},
             detail,
-            ui.Text{id="no-results",text="No results",visible=ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
+            ui.Text{id="no-results",text=ui.tr("bead.launcher.no-results"),visible=ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
             detail_only and ui.Box{grow=1} or ui.resolve_for_check(ui.bind("launcher.grid"))
                 and ui.Box{id="grid-host",grow=1,AppGrid{}}
                 or ui.Box{id="results-host",grow=1,Results{}},
             ui.Box{height=10},
         },
     },
-    kit.TextInput{id="search",text=ui.bind("launcher.search.text"),placeholder="Search everything…",
+    kit.TextInput{id="search",text=ui.bind("launcher.search.text"),placeholder=ui.tr("bead.launcher.search-placeholder"),
         height=49,padding=15,radius=10,font_size=16,width="fill"},
 }

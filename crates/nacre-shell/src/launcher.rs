@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! View projection of ordered engine results. No catalog, providers or ranking.
+use crate::i18n::tr;
 use bead::core::{
     Stores, Value,
     source::{self, Source},
@@ -716,7 +717,8 @@ impl Menu {
                 .preferences_loaded
                 .load(std::sync::atomic::Ordering::Acquire)
         }) {
-            let error = source::Error::new("busy", "Launcher preferences are still loading", true);
+            let error =
+                source::Error::new("busy", &tr("bead.launcher.preferences-loading", &[]), true);
             if let Some(actor) = &self.query_actor
                 && let Ok(mut saved_error) = actor.preferences_error.lock()
             {
@@ -731,15 +733,27 @@ impl Menu {
                 .iter()
                 .find(|row| row["id"].as_str() == Some(row_id))
                 .ok_or_else(|| {
-                    source::Error::new("unavailable", "Result is not available", true)
+                    source::Error::new(
+                        "unavailable",
+                        &tr("bead.launcher.result-unavailable", &[]),
+                        true,
+                    )
                 })?;
             (favorite_id(row), row["favorite"] != true)
         };
         let source = self.source.as_ref().ok_or_else(|| {
-            source::Error::new("unavailable", "Launcher service unavailable", true)
+            source::Error::new(
+                "unavailable",
+                &tr("bead.launcher.service-unavailable", &[]),
+                true,
+            )
         })?;
         let actor = self.query_actor.as_ref().ok_or_else(|| {
-            source::Error::new("unavailable", "Launcher service unavailable", true)
+            source::Error::new(
+                "unavailable",
+                &tr("bead.launcher.service-unavailable", &[]),
+                true,
+            )
         })?;
         if actor
             .favorite_in_flight
@@ -751,7 +765,7 @@ impl Menu {
             )
             .is_err()
         {
-            let error = source::Error::new("busy", "Favorite update is already in progress", true);
+            let error = source::Error::new("busy", &tr("bead.launcher.favorite-busy", &[]), true);
             if let Ok(mut saved_error) = actor.preferences_error.lock() {
                 *saved_error = Some(error.message.clone());
             }
@@ -953,7 +967,7 @@ impl Menu {
         {
             return Err(source::Error::new(
                 "stale_revision",
-                "Launcher changed; query again",
+                &tr("bead.launcher.changed", &[]),
                 true,
             ));
         }
@@ -965,21 +979,29 @@ impl Menu {
         {
             return Err(source::Error::new(
                 "unavailable",
-                "Result is not available",
+                &tr("bead.launcher.result-unavailable", &[]),
                 true,
             ));
         }
         let request = MenuActivate {
             id: id.into(),
             activation: view.actions.get(id).cloned().ok_or_else(|| {
-                source::Error::new("unavailable", "Result has no activation descriptor", false)
+                source::Error::new(
+                    "unavailable",
+                    &tr("bead.launcher.no-activation", &[]),
+                    false,
+                )
             })?,
             catalog_rev: view.catalog_rev,
         };
         request.validate().map_err(|_| invalid_menu())?;
         drop(view);
         let source = self.source.as_ref().ok_or_else(|| {
-            source::Error::new("unavailable", "Launcher service unavailable", true)
+            source::Error::new(
+                "unavailable",
+                &tr("bead.launcher.service-unavailable", &[]),
+                true,
+            )
         })?;
         let result = self
             .runtime
@@ -1222,7 +1244,7 @@ impl Menu {
                     view.result_stamp = None;
                 }
             } else {
-                view.error = "Launcher service unavailable".into();
+                view.error = tr("bead.launcher.service-unavailable", &[]);
             }
             view.request = Some(request.clone());
             view.stamp = stamp;

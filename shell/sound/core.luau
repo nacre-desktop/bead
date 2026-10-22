@@ -3,8 +3,8 @@ local ui=require("bead.ui")
 local kit=require("bead.kit")
 return kit.Panel{id="sound",edge="right",open=ui.bind("panel.open"),duration=0.28,width=400,height=286,padding=20,gap=14,
  ui.Row{width=360,height=32,align="center",justify="space-between",
-  ui.Text{id="title",text="Sound output",font_size=kit.tokens.text.title*4/3,height=30,width=0,grow=1,shrink=1},
-  kit.IconButton{id="close",text="close",aria_label="Close sound output",width=32,height=32,on_activate=ui.action("close")},
+  ui.Text{id="title",text=ui.tr("bead.panel.sound-title"),font_size=kit.tokens.text.title*4/3,height=30,width=0,grow=1,shrink=1},
+  kit.IconButton{id="close",text="close",aria_label=ui.tr("bead.panel.sound-close"),width=32,height=32,on_activate=ui.action("close")},
  },
  ui.Text{id="device",width=360,text=ui.bind("status.device"),height=38,font_size=16,color="onSurfaceVariant"},
  ui.Text{id="volume",width=360,text=ui.bind("status.primary"),height=48,font_size=32,color="primary"},

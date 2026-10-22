@@ -33,9 +33,9 @@ return kit.Panel{id="dashboard",edge="top",open=ui.bind("panel.open"),duration=k
     ui.Row{id="navigation",position="absolute",left=24,top=12,width=936,height=44,table.unpack(nav)},
     ui.Box{id="stage",position="absolute",left=22,top=68,width=940,height=562,content()},
     ui.Text{id="state",position="absolute",left=24,top=632,width=936,height=16,font_size=12,text_align="right",
-        text=preview and (stale and "Preview data · Stale" or "Preview data") or stale and "Stale data" or "",color=stale and not preview and "error" or "onSurfaceVariant"},
+        text=preview and (stale and ui.tr("bead.dashboard.state-preview-stale") or ui.tr("bead.dashboard.state-preview")) or stale and ui.tr("bead.dashboard.state-stale") or "",color=stale and not preview and "error" or "onSurfaceVariant"},
     message~="" and ui.Text{id="message",position="absolute",left=24,top=632,width=600,height=16,font_size=12,text=ui.bind("dashboard.message"),color="error"} or nil,
     customize and message=="" and kit.Button{id="customize",position="absolute",left=24,top=626,width=170,height=24,padding=0,radius=8,fill="transparent",
-        aria_label="Customize pages",on_activate=ui.action("view.open","dashboard-customize"),
-        ui.Text{id="customize-label",text="Customize pages",width=170,height=16,font_size=12,color="onSurfaceVariant"}} or nil,
+        aria_label=ui.tr("bead.dashboard.customize-pages"),on_activate=ui.action("view.open","dashboard-customize"),
+        ui.Text{id="customize-label",text=ui.tr("bead.dashboard.customize-pages"),width=170,height=16,font_size=12,color="onSurfaceVariant"}} or nil,
 }

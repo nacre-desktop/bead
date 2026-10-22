@@ -6,10 +6,10 @@ return function()
     local confirm=ui.resolve_for_check(ui.bind("dashboard.confirm"))
     local buttons={}
     if confirm then
-        table.insert(buttons,C.button("clear","Clear all",control and ui.action("dashboard.do","clip.clear") or nil,130))
-        table.insert(buttons,C.button("cancel","Cancel",ui.action("dashboard.do","clip.cancel"),110))
+        table.insert(buttons,C.button("clear",ui.tr("bead.dashboard.clipboard-clear-confirm"),control and ui.action("dashboard.do","clip.clear") or nil,130))
+        table.insert(buttons,C.button("cancel",ui.tr("bead.common.cancel"),ui.action("dashboard.do","clip.cancel"),110))
     else
-        table.insert(buttons,C.button("ask","Clear history",control and ui.action("dashboard.do","clip.ask") or nil,150))
+        table.insert(buttons,C.button("ask",ui.tr("bead.dashboard.clipboard-clear"),control and ui.action("dashboard.do","clip.ask") or nil,150))
     end
     return ui.Column{id="clipboard",width=940,height=562,padding=22,gap=12,radius=20,fill="surfaceContainer",
         ui.Row{id="header",width=896,height=40,gap=12,align="center",

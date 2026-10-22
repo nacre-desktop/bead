@@ -14,7 +14,7 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
             },
         },
         ui.Button{id="favorite",position="absolute",right=3,top=3,width=26,height=26,radius=8,padding=0,
-            aria_label=p.item.favorite and "Remove from favorites" or "Add to favorites",
+            aria_label=p.item.favorite and ui.tr("bead.launcher.favorite-remove") or ui.tr("bead.launcher.favorite-add"),
             fill=p.item.favorite and ui.tint("surface","primary",.12) or "transparent",
             on_activate=ui.action("toggle_favorite",p.item.id),
             ui.Text{text=p.item.favorite and "star" or "star_outline",family="Material Symbols Rounded",width="fill",height="fill",font_size=18,text_align="center",color=p.item.favorite and "primary" or "onSurfaceVariant"},

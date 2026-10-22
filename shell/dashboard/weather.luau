@@ -10,7 +10,7 @@ return function()
             ui.Text{id="details",text=ui.bind("dashboard.detail"),font_size=14,height=48,width=520,color="onSurfaceVariant"},
         },
         ui.Column{id="hourly",position="absolute",left=0,top=310,width=564,height=252,padding=16,gap=12,radius=16,fill="surfaceContainerLow",
-            C.title("title","Next hours",532),
+            C.title("title",ui.tr("bead.dashboard.weather-hours"),532),
             ui.Row{id="hours",height=170,gap=8,
                 ui.Repeat{id="items",model=ui.bind("dashboard.rows"),key="id",render=function(item)
                     return ui.Column{id="hour",width=59,height=160,gap=12,align="center",
@@ -22,8 +22,8 @@ return function()
             },
         },
         ui.Column{id="outlook",position="absolute",left=580,top=0,width=360,height=562,padding=16,gap=16,radius=16,fill="surfaceContainerLow",
-            C.title("title","Daily outlook",328),
-            C.rows("days","dashboard.secondary",328,470,false,"Forecast unavailable"),
+            C.title("title",ui.tr("bead.dashboard.weather-days"),328),
+            C.rows("days","dashboard.secondary",328,470,false,ui.tr("bead.dashboard.weather-none")),
         },
     }
 end

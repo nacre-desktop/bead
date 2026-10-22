@@ -288,10 +288,10 @@ pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
     let muted = osd["muted"].as_bool().unwrap_or(false);
     let value = osd["value"].as_f64().unwrap_or(0.);
     let label = match channel {
-        "brightness" => "Display brightness",
-        "microphone" => "Microphone",
-        "capslock" => "Caps lock",
-        _ => "Volume",
+        "brightness" => "bead.osd.brightness",
+        "microphone" => "bead.osd.microphone",
+        "capslock" => "bead.osd.capslock",
+        _ => "bead.osd.volume",
     };
     BTreeMap::from([
         (
@@ -309,7 +309,7 @@ pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
         ),
         ("osd.open".into(), Value::Bool(osd.is_object())),
         ("osd.muted".into(), Value::Bool(muted)),
-        ("osd.label".into(), Value::Text(label.into())),
+        ("osd.label".into(), Value::Text(crate::i18n::tr(label, &[]))),
         (
             "osd.level".into(),
             Value::Number(if channel == "capslock" {
@@ -321,13 +321,16 @@ pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
         (
             "osd.status".into(),
             Value::Text(if channel == "capslock" {
-                if value > 0. {
-                    "On".into()
-                } else {
-                    "Off".into()
-                }
+                crate::i18n::tr(
+                    if value > 0. {
+                        "bead.osd.on"
+                    } else {
+                        "bead.osd.off"
+                    },
+                    &[],
+                )
             } else if muted {
-                "Muted".into()
+                crate::i18n::tr("bead.osd.muted", &[])
             } else {
                 format!("{:.0}%", value * 100.)
             }),

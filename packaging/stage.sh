@@ -10,8 +10,8 @@ base=$dest$prefix
 install -Dm755 "$build/nacre-shell" "$base/lib/bead/nacre-shell"
 install -Dm755 "$build/nacre-wallpaper-decode" "$base/lib/bead/nacre-wallpaper-decode"
 install -Dm755 "$root/packaging/bin/bead-shell" "$base/bin/bead-shell"
-# Test fixtures and goldens stay out of the install; the UI bundle is the Luau tree.
-(cd "$root/shell" && find . -path ./tests -prune -o -type f -print) | while read -r file; do
+# Test fixtures, goldens and the message tables (embedded in the binary) stay out of the install; the UI bundle is the Luau tree.
+(cd "$root/shell" && find . \( -path ./tests -o -path ./i18n \) -prune -o -type f -print) | while read -r file; do
 	install -Dm644 "$root/shell/$file" "$base/share/bead/shell/$file"
 done
 install -Dm644 "$root/LICENSE-GPL-3.0" "$base/share/licenses/bead-shell/LICENSE-GPL-3.0"

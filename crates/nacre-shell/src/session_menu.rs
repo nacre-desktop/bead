@@ -7,6 +7,7 @@
 //! the published reply `{changed:true}`; every other outcome is an error and
 //! nothing is shown as locked or done. Every action except lock is sent with
 //! `confirmed:true`, and only after the local confirmation step.
+use crate::i18n::tr;
 use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
 use bead::core::{Value, source::Source};
 use std::{cell::RefCell, collections::BTreeMap, time::Duration};
@@ -41,21 +42,21 @@ impl Action {
             Self::Shutdown => "shutdown",
         }
     }
-    /// N0031 requires confirmation for everything except lock; the daemon
+    /// Message ids (translated when projected). N0031 requires confirmation for everything except lock; the daemon
     /// refuses an unconfirmed request, so the menu always asks first.
     fn confirm(self) -> Option<&'static str> {
         match self {
-            Self::Logout => Some("Log out of this session?"),
-            Self::Suspend => Some("Suspend the computer?"),
-            Self::Reboot => Some("Restart the computer?"),
-            Self::Shutdown => Some("Power off the computer?"),
+            Self::Logout => Some("bead.panel.session-confirm-logout"),
+            Self::Suspend => Some("bead.panel.session-confirm-suspend"),
+            Self::Reboot => Some("bead.panel.session-confirm-reboot"),
+            Self::Shutdown => Some("bead.panel.session-confirm-shutdown"),
             Self::Lock => None,
         }
     }
     fn failure(self) -> &'static str {
         match self {
-            Self::Lock => "Screen lock was not confirmed. Lock the screen another way.",
-            _ => "Session request failed",
+            Self::Lock => "bead.panel.session-lock-failed",
+            _ => "bead.panel.session-failed",
         }
     }
 }
@@ -133,7 +134,7 @@ impl SessionMenu {
         if self.ready().is_none() {
             let mut state = self.state.borrow_mut();
             state.phase = Phase::Idle;
-            state.message = "Session control unavailable".into();
+            state.message = "bead.panel.session-unavailable".into();
             return;
         }
         if action.confirm().is_some() {
@@ -161,7 +162,7 @@ impl SessionMenu {
         state.message.clear();
         let Some((boot, timeout)) = self.ready() else {
             state.phase = Phase::Idle;
-            state.message = "Session control unavailable".into();
+            state.message = "bead.panel.session-unavailable".into();
             return;
         };
         match self.client.begin_call(
@@ -202,8 +203,16 @@ impl SessionMenu {
             state.phase = Phase::Idle;
         }
         let (confirm, action) = match &state.phase {
-            Phase::Confirm(action) => (action.confirm().unwrap_or(""), action.key()),
-            _ => ("", ""),
+            Phase::Confirm(action) => (
+                action.confirm().map_or(String::new(), |id| tr(id, &[])),
+                action.key(),
+            ),
+            _ => (String::new(), ""),
+        };
+        let message = if state.message.is_empty() {
+            String::new()
+        } else {
+            tr(&state.message, &[])
         };
         let mut stores = BTreeMap::from([
             ("session.enabled".into(), Value::Bool(ready)),
@@ -211,9 +220,9 @@ impl SessionMenu {
                 "session.busy".into(),
                 Value::Bool(matches!(state.phase, Phase::Pending(..))),
             ),
-            ("session.confirm".into(), Value::Text(confirm.into())),
+            ("session.confirm".into(), Value::Text(confirm)),
             ("session.confirm_action".into(), Value::Text(action.into())),
-            ("session.message".into(), Value::Text(state.message.clone())),
+            ("session.message".into(), Value::Text(message)),
         ]);
         if std::mem::take(&mut state.done) {
             stores.insert("panel.open".into(), Value::Bool(false));

@@ -10,13 +10,13 @@ return function()
     local buttons={}
     if live then
         local op=state=="running" and "focus.pause" or "focus.resume"
-        table.insert(buttons,C.button("main",state=="running" and "Pause" or "Resume",control and ui.action("dashboard.do",op) or nil))
-        table.insert(buttons,C.button("stop","Stop",control and ui.action("dashboard.do","focus.stop") or nil))
+        table.insert(buttons,C.button("main",state=="running" and ui.tr("bead.dashboard.pause") or ui.tr("bead.dashboard.focus-resume"),control and ui.action("dashboard.do",op) or nil))
+        table.insert(buttons,C.button("stop",ui.tr("bead.dashboard.focus-stop"),control and ui.action("dashboard.do","focus.stop") or nil))
     else
         for _,m in ipairs({15,25,50}) do
-            table.insert(buttons,C.button("min"..m,m.." min",ui.action("focus_minutes",m),110,minutes==m))
+            table.insert(buttons,C.button("min"..m,ui.tr("bead.dashboard.focus-minutes",{count=m}),ui.action("focus_minutes",m),110,minutes==m))
         end
-        table.insert(buttons,C.button("start","Start focus",control and ui.action("dashboard.do","focus.start:"..tostring(minutes)) or nil))
+        table.insert(buttons,C.button("start",ui.tr("bead.dashboard.focus-start"),control and ui.action("dashboard.do","focus.start:"..tostring(minutes)) or nil))
     end
     return ui.Column{id="focus",width=940,height=562,padding=22,gap=18,radius=20,fill="surfaceContainer",align="center",justify="center",
         ui.Text{id="status",text=ui.bind("dashboard.heading"),width=896,height=28,font_size=20,text_align="center",color="onSurfaceVariant"},

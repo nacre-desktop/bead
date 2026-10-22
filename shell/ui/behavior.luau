@@ -23,19 +23,19 @@ return {
   },
   computed = {
     ["launcher.results"]=function(s) return not s["launcher.grid"] end,
-    ["launcher.subtitle"]=function(s) return s["launcher.grid"] and "Applications" or "Results" end,
+    ["launcher.subtitle"]=function(s) return s["launcher.grid"] and tr("bead.launcher.apps") or tr("bead.launcher.results") end,
     ["launcher.grid"]=function(s) return s["launcher.mode"]=="apps" and s["launcher.search.text"]:match("^%s*$")~=nil end,
     ["launcher.has_detail"]=function(s) return s["launcher.conversion.value"]~="" or s["launcher.conversion.description"]~="" or s["launcher.conversion.error"]~="" or s["launcher.message"]~="" end,
     ["launcher.empty"]=function(s) return s["launcher.result_count"]==0 and s["launcher.error"]=="" and not s["launcher.pending"] and not s["launcher.has_detail"] end,
     ["launcher.failed"]=function(s) return s["launcher.error"]~="" end,
     ["launcher.route_title"] = function(s)
-      return s["launcher.engine_route"]=="home" and "Favorites" or ({apps="Applications",search="Search everything",actions="Actions"})[s["launcher.route"]] or "Applications"
+      return s["launcher.engine_route"]=="home" and tr("bead.launcher.favorites") or ({apps=tr("bead.launcher.apps"),search=tr("bead.launcher.search-everything"),actions=tr("bead.launcher.actions")})[s["launcher.route"]] or tr("bead.launcher.apps")
     end,
     ["launcher.navigation"] = function(s)
       local rows={}
       local active=s["launcher.route"]
       if s["launcher.engine_route"]=="home" then active="home" end
-      for _,item in {{id="apps",name="Applications",icon="apps"},{id="home",name="Favorites",icon="favorite"},{id="search",name="Search",icon="search"},{id="actions",name="Actions",icon="terminal"}} do
+      for _,item in {{id="apps",name=tr("bead.launcher.apps"),icon="apps"},{id="home",name=tr("bead.launcher.favorites"),icon="favorite"},{id="search",name=tr("bead.launcher.search"),icon="search"},{id="actions",name=tr("bead.launcher.actions"),icon="terminal"}} do
         table.insert(rows,{id=item.id,name=item.name,icon=item.icon,selected=active==item.id})
       end
       return rows

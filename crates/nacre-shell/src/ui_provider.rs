@@ -213,7 +213,8 @@ pub fn start(
             false,
         ));
     }
-    let mut config = crate::nacre_source::Config::new(daemon, vec!["menu".into(), "tray".into()]);
+    let mut config =
+        crate::nacre_source::Config::new(daemon, vec!["menu".into(), "tray".into(), "i18n".into()]);
     let slot: Arc<OnceLock<crate::nacre_source::WeakClient>> = Default::default();
     let own = slot.clone();
     config.provider = Some((

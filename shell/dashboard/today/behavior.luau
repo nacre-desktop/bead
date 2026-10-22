@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Date inputs come from the host; only the displayed month belongs to this view.
-local months={"January","February","March","April","May","June","July","August","September","October","November","December"}
-local weekdays={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}
+local months={"bead.common.month-january","bead.common.month-february","bead.common.month-march","bead.common.month-april","bead.common.month-may","bead.common.month-june","bead.common.month-july","bead.common.month-august","bead.common.month-september","bead.common.month-october","bead.common.month-november","bead.common.month-december"}
+local weekdays={"bead.common.weekday-short-sun","bead.common.weekday-short-mon","bead.common.weekday-short-tue","bead.common.weekday-short-wed","bead.common.weekday-short-thu","bead.common.weekday-short-fri","bead.common.weekday-short-sat"}
 local function daysInMonth(year,month)
     if month==2 then return year%4==0 and (year%100~=0 or year%400==0) and 29 or 28 end
     return ({31,28,31,30,31,30,31,31,30,31,30,31})[month]
@@ -40,7 +40,7 @@ local base = {
     computed={
         ["calendar.title"]=function(s)
             local y,m=displayed(s)
-            return months[m].." "..tostring(y)
+            return tr("bead.common.month-year",{month=tr(months[m]),year=y})
         end,
         ["calendar.weekdays"]=function(s)
             local first=s["calendar.first_weekday"]
@@ -48,7 +48,7 @@ local base = {
             local out={}
             for i=0,6 do
                 local day=(first+i)%7
-                out[i+1]={id="weekday-"..day,name=weekdays[day+1]}
+                out[i+1]={id="weekday-"..day,name=tr(weekdays[day+1])}
             end
             return out
         end,
@@ -86,18 +86,18 @@ local base = {
 -- SPDX-License-Identifier: GPL-3.0-only
 local dashboard={stores={
     ["panel.open"]=true,["view.edge"]="top",
-    ["dashboard.page"]="today",["dashboard.title"]="Today",
+    ["dashboard.page"]="today",["dashboard.title"]=tr("bead.dashboard.page-today"),
     ["dashboard.clock"]="—",["dashboard.agenda.scroll.y"]=0,
     ["dashboard.preview"]=false,["dashboard.ready"]=false,["dashboard.stale"]=false,
-    ["dashboard.heading"]="System unavailable",["dashboard.summary"]="Data is not available yet",
+    ["dashboard.heading"]=tr("bead.dashboard.page-unavailable",{page=tr("bead.dashboard.page-system")}),["dashboard.summary"]=tr("bead.dashboard.data-pending"),
     ["dashboard.detail"]="",["dashboard.metric"]="—",
     ["dashboard.rows"]={},["dashboard.secondary"]={},
-    ["dashboard.updates"]="Updates unavailable",["dashboard.updates_detail"]="",
-    ["dashboard.tabs"]={{id="today",title="Today",icon="dashboard"},{id="weather",title="Weather",icon="partly_cloudy_day"},{id="media",title="Media",icon="music_note"},{id="system",title="System",icon="monitoring"}},
+    ["dashboard.updates"]=tr("bead.dashboard.updates-unavailable"),["dashboard.updates_detail"]="",
+    ["dashboard.tabs"]={{id="today",title=tr("bead.dashboard.page-today"),icon="dashboard"},{id="weather",title=tr("bead.dashboard.page-weather"),icon="partly_cloudy_day"},{id="media",title=tr("bead.dashboard.page-media"),icon="music_note"},{id="system",title=tr("bead.dashboard.page-system"),icon="monitoring"}},
     ["dashboard.control"]=false,["dashboard.busy"]=false,["dashboard.message"]="",["dashboard.confirm"]=false,
-        ["dashboard.track"]="Playback unavailable",["dashboard.track_detail"]="Playback details and controls are not available yet",
+        ["dashboard.track"]=tr("bead.dashboard.playback-unavailable"),["dashboard.track_detail"]=tr("bead.dashboard.playback-unavailable-detail"),
     ["dashboard.can_previous"]=false,["dashboard.can_toggle"]=false,["dashboard.can_next"]=false,
-    ["dashboard.gauges"]={{id="cpu",label="CPU",icon="developer_board",value="—",detail="Metric unavailable"},{id="memory",label="Memory",icon="memory",value="—",detail="Metric unavailable"},{id="gpu",label="GPU",icon="view_in_ar",value="—",detail="Metric unavailable"}},
+    ["dashboard.gauges"]={{id="cpu",label=tr("bead.dashboard.gauge-cpu"),icon="developer_board",value="—",detail=tr("bead.dashboard.gauge-unavailable")},{id="memory",label=tr("bead.dashboard.gauge-memory"),icon="memory",value="—",detail=tr("bead.dashboard.gauge-unavailable")},{id="gpu",label=tr("bead.dashboard.gauge-gpu"),icon="view_in_ar",value="—",detail=tr("bead.dashboard.gauge-unavailable")}},
     ["dashboard.can_seek"]=false,["dashboard.art"]=false,
     ["dashboard.net_down"]={},["dashboard.net_up"]={},["dashboard.net_rate"]="—",["dashboard.net_up_rate"]="—",["dashboard.net_peak"]="",
     ["dashboard.customize"]=false,["dashboard.state"]="unavailable",["dashboard.progress"]=0,["dashboard.minutes"]=25,
@@ -106,13 +106,13 @@ local dashboard={stores={
 for key,value in pairs(dashboard.stores) do base.stores[key]=value end
 base.computed["dashboard.date"]=function(s)
     local y,m,d=string.match(s["calendar.today"],"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
-    if not y then return "Date unavailable" end
+    if not y then return tr("bead.dashboard.date-unavailable") end
     local year,month,day=tonumber(y),tonumber(m),tonumber(d)
-    if not valid(year,month) or day<1 or day>daysInMonth(year,month) then return "Date unavailable" end
+    if not valid(year,month) or day<1 or day>daysInMonth(year,month) then return tr("bead.dashboard.date-unavailable") end
     local adjusted=month<3 and year-1 or year
     local offsets={0,3,2,5,0,3,5,1,4,6,2,4}
     local weekday=(adjusted+math.floor(adjusted/4)-math.floor(adjusted/100)+math.floor(adjusted/400)+offsets[month]+day)%7
-    local names={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"}
-    return names[weekday+1]..", "..day.." "..months[month]
+    local names={"bead.common.weekday-long-sunday","bead.common.weekday-long-monday","bead.common.weekday-long-tuesday","bead.common.weekday-long-wednesday","bead.common.weekday-long-thursday","bead.common.weekday-long-friday","bead.common.weekday-long-saturday"}
+    return tr("bead.dashboard.date-line",{weekday=tr(names[weekday+1]),day=day,month=tr(months[month])})
 end
 return base

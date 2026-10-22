@@ -77,6 +77,7 @@ export type SDK = {
     component:(string,any,any)->any,
     resolve_for_check:(any)->any,
     model_count:(any)->number,
+    tr:(string,any?)->string,
 }
 local sdk:SDK = {} :: any
 return sdk

@@ -13,8 +13,8 @@ return function()
     return ui.Box{id="calendar",width=280,height=282,
         ui.Text{id="heading",position="absolute",left=38,top=7,width=204,height=20,
             text=ui.bind("calendar.title"),font_size=kit.tokens.text.body*4/3,text_align="center"},
-        monthButton("previous","chevron_left","Previous month",-1,0),
-        monthButton("next","chevron_right","Next month",1,246),
+        monthButton("previous","chevron_left",ui.tr("bead.panel.calendar-previous"),-1,0),
+        monthButton("next","chevron_right",ui.tr("bead.panel.calendar-next"),1,246),
         ui.Grid{id="weekdays",position="absolute",left=0,top=40,width=280,columns=7,row_height=28,
             ui.Repeat{id="names",model=ui.bind("calendar.weekdays"),key="id",render=function(item)
                 return ui.Box{id="cell",width=40,height=28,

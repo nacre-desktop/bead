@@ -15,9 +15,9 @@ return function()
         ui.Repeat{id="items",model=ui.bind("dashboard.rows"),key="id",render=function(item)
             return ui.Row{id="row",width=896,height=44,gap=8,align="center",
                 ui.Text{id="label",text=item.label,width=560,height=24,font_size=16,color="onSurface",shrink=0},
-                C.button("toggle",item.value,control and ui.action("dashboard.do",item.toggle) or nil,100,false,"Show or hide page"),
-                icon("up","arrow_upward","Move up",control and ui.action("dashboard.do",item.up) or nil),
-                icon("down","arrow_downward","Move down",control and ui.action("dashboard.do",item.down) or nil),
+                C.button("toggle",item.value,control and ui.action("dashboard.do",item.toggle) or nil,100,false,ui.tr("bead.dashboard.page-toggle")),
+                icon("up","arrow_upward",ui.tr("bead.dashboard.page-up"),control and ui.action("dashboard.do",item.up) or nil),
+                icon("down","arrow_downward",ui.tr("bead.dashboard.page-down"),control and ui.action("dashboard.do",item.down) or nil),
             }
         end},
     }

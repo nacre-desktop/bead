@@ -50,6 +50,7 @@ impl Script {
         let name = path.to_string_lossy();
         let exports = (|| -> mlua::Result<Table> {
             lua.set_memory_limit(8 * 1024 * 1024)?;
+            lua.globals().set("tr", crate::i18n::lua_function(&lua)?)?;
             lua.sandbox(true)?;
             lua.load(bytes).set_name(format!("@{name}")).eval()
         })()

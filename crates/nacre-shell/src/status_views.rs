@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Read-only projections of the existing hosted Desktop Source, not new backends.
+use crate::i18n::{tr, tr_n};
 use bead::core::{
     Value,
     source::{self, Source},
@@ -35,13 +36,16 @@ impl Kind {
             Self::Audio => |s| serde_json::json!({"audio":s.audio}),
         }
     }
-    fn title(self) -> &'static str {
-        match self {
-            Self::Network => "Network",
-            Self::Bluetooth => "Bluetooth",
-            Self::Battery => "Battery",
-            Self::Audio => "Sound output",
-        }
+    fn title(self) -> String {
+        tr(
+            match self {
+                Self::Network => "bead.panel.network-title",
+                Self::Bluetooth => "bead.panel.bluetooth",
+                Self::Battery => "bead.panel.battery-title",
+                Self::Audio => "bead.panel.sound-title",
+            },
+            &[],
+        )
     }
     fn icon(self) -> &'static str {
         match self {
@@ -275,7 +279,7 @@ impl Status {
             Some(wake),
         ) {
             Ok(ticket) => control.pending = Some((boot, ticket)),
-            Err(_) => control.message = Some("Wi-Fi change failed".into()),
+            Err(_) => control.message = Some(tr("bead.panel.wifi-change-failed", &[])),
         }
     }
     /// Connect (`network.connect`) or disconnect (`network.disconnect`) the row
@@ -311,7 +315,7 @@ impl Status {
         };
         control.link_message = None;
         let Some(target) = resolve_link(state, key).filter(|target| target.method == method) else {
-            control.link_message = Some("Network list changed".into());
+            control.link_message = Some(tr("bead.panel.network-list-changed", &[]));
             return;
         };
         match client.begin_call(
@@ -378,7 +382,7 @@ impl Status {
             Some(wake),
         ) {
             Ok(ticket) => control.pending = Some((boot, adapter_id, ticket)),
-            Err(_) => control.message = Some("Bluetooth power change failed".into()),
+            Err(_) => control.message = Some(tr("bead.panel.bluetooth-power-failed", &[])),
         }
     }
     pub fn project(&self) -> BTreeMap<String, Value> {
@@ -398,8 +402,11 @@ impl Status {
         let available = data["available"].as_bool() == Some(true);
         let text = |key: &str| data[key].as_str();
         let boolean = |key: &str| data[key].as_bool();
-        let mut primary = format!("{} unavailable", self.kind.title());
-        let mut secondary = "Status data unavailable".to_owned();
+        let mut primary = tr(
+            "bead.panel.status-unavailable",
+            &[("name", &self.kind.title())],
+        );
+        let mut secondary = tr("bead.panel.status-data-unavailable", &[]);
         let mut detail = String::new();
         let mut ready = false;
         let mut active = false;
@@ -413,17 +420,23 @@ impl Status {
                     primary = if connected {
                         text("name")
                             .filter(|s| !s.is_empty())
-                            .unwrap_or("Connected")
-                            .into()
+                            .map_or_else(|| tr("bead.common.connected", &[]), str::to_owned)
                     } else {
-                        "Not connected".into()
+                        tr("bead.common.not-connected", &[])
                     };
-                    secondary = if wireless { "Wi-Fi on" } else { "Wi-Fi off" }.into();
+                    secondary = tr(
+                        if wireless {
+                            "bead.panel.wifi-on"
+                        } else {
+                            "bead.panel.wifi-off"
+                        },
+                        &[],
+                    );
                     detail = data["strength"]
                         .as_u64()
                         .filter(|n| *n <= 100)
-                        .map(|n| format!("Signal strength {n}%"))
-                        .unwrap_or_else(|| "Connection controls unavailable".into());
+                        .map(|n| tr("bead.panel.signal-strength", &[("percent", &n.to_string())]))
+                        .unwrap_or_else(|| tr("bead.panel.connection-controls-unavailable", &[]));
                 }
             }
             Kind::Bluetooth if available => {
@@ -434,24 +447,26 @@ impl Status {
                     ready = true;
                     active = powered;
                     primary = if !powered {
-                        "Bluetooth off".into()
+                        tr("bead.panel.bluetooth-off", &[])
                     } else if devices.is_empty() {
-                        "Bluetooth on".into()
+                        tr("bead.panel.bluetooth-on", &[])
                     } else {
-                        format!(
-                            "{} device{} connected",
-                            devices.len(),
-                            if devices.len() == 1 { "" } else { "s" }
+                        tr_n(
+                            "bead.panel.bluetooth-devices-connected",
+                            devices.len() as u64,
+                            &[],
                         )
                     };
-                    secondary = if !powered {
-                        "Power is off"
-                    } else if devices.is_empty() {
-                        "No devices connected"
-                    } else {
-                        "Bluetooth on"
-                    }
-                    .into();
+                    secondary = tr(
+                        if !powered {
+                            "bead.panel.bluetooth-power-off"
+                        } else if devices.is_empty() {
+                            "bead.panel.bluetooth-none-connected"
+                        } else {
+                            "bead.panel.bluetooth-on"
+                        },
+                        &[],
+                    );
                     detail = if powered && !devices.is_empty() {
                         devices
                             .iter()
@@ -461,7 +476,7 @@ impl Status {
                             .collect::<Vec<_>>()
                             .join(", ")
                     } else {
-                        "Device controls unavailable".into()
+                        tr("bead.panel.bluetooth-device-controls-unavailable", &[])
                     };
                 }
             }
@@ -476,8 +491,15 @@ impl Status {
                     active = true;
                     primary = format!("{percent:.0}%");
                     // The current host has no on-battery or time estimate field.
-                    secondary = if charging { "Charging" } else { "Not charging" }.into();
-                    detail = "Power profiles unavailable".into();
+                    secondary = tr(
+                        if charging {
+                            "bead.panel.battery-charging"
+                        } else {
+                            "bead.panel.battery-not-charging"
+                        },
+                        &[],
+                    );
+                    detail = tr("bead.panel.battery-profiles-unavailable", &[]);
                 }
             }
             _ => {}
@@ -485,10 +507,7 @@ impl Status {
         BTreeMap::from([
             ("status.ready".into(), Value::Bool(ready)),
             ("status.active".into(), Value::Bool(active)),
-            (
-                "status.heading".into(),
-                Value::Text(self.kind.title().into()),
-            ),
+            ("status.heading".into(), Value::Text(self.kind.title())),
             ("status.icon".into(), Value::Text(self.kind.icon().into())),
             ("status.primary".into(), Value::Text(line(&primary, 32))),
             ("status.kind".into(), Value::Text(self.kind.name().into())),
@@ -520,11 +539,14 @@ impl Status {
             return core_network_values(
                 display,
                 true,
-                if state.wireless_enabled {
-                    "Wi-Fi on"
-                } else {
-                    "Wi-Fi off"
-                },
+                &tr(
+                    if state.wireless_enabled {
+                        "bead.panel.wifi-on"
+                    } else {
+                        "bead.panel.wifi-off"
+                    },
+                    &[],
+                ),
             );
         }
 
@@ -533,7 +555,7 @@ impl Status {
             BTreeMap::from([
                 (
                     "status.primary".into(),
-                    Value::Text("Network unavailable".into()),
+                    Value::Text(tr("bead.panel.network-unavailable", &[])),
                 ),
                 ("status.detail".into(), Value::Text(String::new())),
                 ("status.active".into(), Value::Bool(false)),
@@ -542,16 +564,19 @@ impl Status {
         display.insert("status.ready".into(), Value::Bool(false));
         display.insert(
             "status.secondary".into(),
-            Value::Text(
+            Value::Text(tr(
                 if cached.is_some() {
-                    "Status stale"
+                    "bead.panel.status-stale"
                 } else {
-                    "Status data unavailable"
-                }
-                .into(),
-            ),
+                    "bead.panel.status-data-unavailable"
+                },
+                &[],
+            )),
         );
-        display.insert("status.heading".into(), Value::Text("Network".into()));
+        display.insert(
+            "status.heading".into(),
+            Value::Text(tr("bead.panel.network-title", &[])),
+        );
         display.insert("status.icon".into(), Value::Text("wifi".into()));
         display.insert("status.kind".into(), Value::Text("network".into()));
         display
@@ -603,7 +628,7 @@ impl Status {
                 {
                     None
                 }
-                _ => Some("Wi-Fi change failed".into()),
+                _ => Some(tr("bead.panel.wifi-change-failed", &[])),
             };
         }
         let checked = candidate
@@ -657,7 +682,7 @@ impl Status {
                 }
                 Ok(_) => {
                     control.link = None;
-                    control.link_message = Some("Network change failed".into());
+                    control.link_message = Some(tr("bead.panel.network-change-failed", &[]));
                 }
                 Err(error) => {
                     control.link = None;
@@ -694,17 +719,20 @@ impl Status {
                     } else {
                         can_connect
                     };
-                    let action = if pending {
-                        if row.active {
-                            "Disconnecting…"
+                    let action = tr(
+                        if pending {
+                            if row.active {
+                                "bead.panel.network-disconnecting"
+                            } else {
+                                "bead.panel.network-connecting"
+                            }
+                        } else if !row.active && authentication_error {
+                            "bead.panel.network-retry"
                         } else {
-                            "Connecting…"
-                        }
-                    } else if !row.active && authentication_error {
-                        "Retry"
-                    } else {
-                        row.action
-                    };
+                            row.action
+                        },
+                        &[],
+                    );
                     serde_json::json!({
                         "id": row.key,
                         "label": row.label,
@@ -724,13 +752,13 @@ impl Status {
         }
         .to_owned();
         let message = if !candidate.eligible {
-            "Wi-Fi control unavailable"
+            tr("bead.panel.wifi-control-unavailable", &[])
         } else if busy {
-            "Changing Wi-Fi…"
+            tr("bead.panel.wifi-changing", &[])
         } else if authentication_error {
-            "Network authentication required or cancelled"
+            tr("bead.panel.network-auth-required", &[])
         } else {
-            control.message.as_deref().unwrap_or("")
+            control.message.clone().unwrap_or_default()
         };
         base.extend([
             ("network.wifi_checked".into(), Value::Bool(control.checked)),
@@ -739,7 +767,7 @@ impl Status {
                 Value::Bool(candidate.eligible && !busy),
             ),
             ("network.wifi_busy".into(), Value::Bool(busy)),
-            ("network.wifi_message".into(), Value::Text(message.into())),
+            ("network.wifi_message".into(), Value::Text(message)),
             ("network.rows".into(), Value::list(rows)),
             (
                 "network.height".into(),
@@ -773,13 +801,16 @@ impl Status {
             });
         if fresh && let Some(CoreSnapshot::Bluetooth(state)) = bluetooth {
             let display = core_bluetooth_display(&state);
-            let secondary = if display["status.active"] == Value::Bool(true) {
-                "Bluetooth on"
-            } else {
-                "Bluetooth off"
-            };
+            let secondary = tr(
+                if display["status.active"] == Value::Bool(true) {
+                    "bead.panel.bluetooth-on"
+                } else {
+                    "bead.panel.bluetooth-off"
+                },
+                &[],
+            );
             *self.last_good.borrow_mut() = Some(display.clone());
-            return core_bluetooth_values(display, true, secondary);
+            return core_bluetooth_values(display, true, &secondary);
         }
 
         let cached = self.last_good.borrow().clone();
@@ -787,7 +818,7 @@ impl Status {
             BTreeMap::from([
                 (
                     "status.primary".into(),
-                    Value::Text("Bluetooth unavailable".into()),
+                    Value::Text(tr("bead.panel.bluetooth-unavailable", &[])),
                 ),
                 ("status.detail".into(), Value::Text(String::new())),
                 ("status.active".into(), Value::Bool(false)),
@@ -796,16 +827,19 @@ impl Status {
         display.insert("status.ready".into(), Value::Bool(false));
         display.insert(
             "status.secondary".into(),
-            Value::Text(
+            Value::Text(tr(
                 if cached.is_some() {
-                    "Status stale"
+                    "bead.panel.status-stale"
                 } else {
-                    "Status data unavailable"
-                }
-                .into(),
-            ),
+                    "bead.panel.status-data-unavailable"
+                },
+                &[],
+            )),
         );
-        display.insert("status.heading".into(), Value::Text("Bluetooth".into()));
+        display.insert(
+            "status.heading".into(),
+            Value::Text(tr("bead.panel.bluetooth", &[])),
+        );
         display.insert("status.icon".into(), Value::Text("bluetooth".into()));
         display.insert("status.kind".into(), Value::Text("bluetooth".into()));
         display
@@ -864,7 +898,7 @@ impl Status {
                 {
                     None
                 }
-                _ => Some("Bluetooth power change failed".into()),
+                _ => Some(tr("bead.panel.bluetooth-power-failed", &[])),
             };
         }
         if candidate.fresh {
@@ -875,11 +909,11 @@ impl Status {
         }
         let busy = control.pending.is_some();
         let message = if !candidate.eligible {
-            "Bluetooth power control unavailable"
+            tr("bead.panel.bluetooth-power-unavailable", &[])
         } else if busy {
-            "Changing Bluetooth power…"
+            tr("bead.panel.bluetooth-power-changing", &[])
         } else {
-            control.message.as_deref().unwrap_or("")
+            control.message.clone().unwrap_or_default()
         };
         base.extend([
             (
@@ -895,10 +929,7 @@ impl Status {
                 Value::Bool(candidate.eligible && !busy),
             ),
             ("bluetooth.power_busy".into(), Value::Bool(busy)),
-            (
-                "bluetooth.power_message".into(),
-                Value::Text(message.into()),
-            ),
+            ("bluetooth.power_message".into(), Value::Text(message)),
         ]);
         base
     }
@@ -915,13 +946,16 @@ impl Status {
             });
         if fresh && let Some(CoreSnapshot::Battery(state)) = battery {
             let display = core_battery_display(&state);
-            let secondary = match state.charging {
-                Some(true) => "Charging",
-                Some(false) => "Not charging",
-                None => "Charging state unknown",
-            };
+            let secondary = tr(
+                match state.charging {
+                    Some(true) => "bead.panel.battery-charging",
+                    Some(false) => "bead.panel.battery-not-charging",
+                    None => "bead.panel.battery-charging-unknown",
+                },
+                &[],
+            );
             *self.last_good.borrow_mut() = Some(display.clone());
-            return core_battery_values(display, true, secondary);
+            return core_battery_values(display, true, &secondary);
         }
 
         let cached = self.last_good.borrow().clone();
@@ -929,7 +963,7 @@ impl Status {
             BTreeMap::from([
                 (
                     "status.primary".into(),
-                    Value::Text("Battery unavailable".into()),
+                    Value::Text(tr("bead.panel.battery-unavailable", &[])),
                 ),
                 ("status.detail".into(), Value::Text(String::new())),
                 ("status.active".into(), Value::Bool(false)),
@@ -938,16 +972,19 @@ impl Status {
         display.insert("status.ready".into(), Value::Bool(false));
         display.insert(
             "status.secondary".into(),
-            Value::Text(
+            Value::Text(tr(
                 if cached.is_some() {
-                    "Status stale"
+                    "bead.panel.status-stale"
                 } else {
-                    "Status data unavailable"
-                }
-                .into(),
-            ),
+                    "bead.panel.status-data-unavailable"
+                },
+                &[],
+            )),
         );
-        display.insert("status.heading".into(), Value::Text("Battery".into()));
+        display.insert(
+            "status.heading".into(),
+            Value::Text(tr("bead.panel.battery-title", &[])),
+        );
         display.insert("status.icon".into(), Value::Text("battery_full".into()));
         display.insert("status.kind".into(), Value::Text("battery".into()));
         display
@@ -966,22 +1003,22 @@ impl Status {
         if fresh && let Some(CoreSnapshot::Audio(state)) = audio {
             let display = core_audio_display(&state);
             *self.last_good.borrow_mut() = Some(display.clone());
-            return core_audio_values(display, true, "Audio status available");
+            return core_audio_values(display, true, &tr("bead.panel.audio-available", &[]));
         }
         let cached = self.last_good.borrow().clone();
         let mut display = cached.clone().unwrap_or_else(|| {
             BTreeMap::from([
                 (
                     "status.primary".into(),
-                    Value::Text("Audio unavailable".into()),
+                    Value::Text(tr("bead.panel.audio-unavailable", &[])),
                 ),
                 (
                     "status.device".into(),
-                    Value::Text("Output unavailable".into()),
+                    Value::Text(tr("bead.panel.audio-output-unavailable", &[])),
                 ),
                 (
                     "status.mute".into(),
-                    Value::Text("Mute state unknown".into()),
+                    Value::Text(tr("bead.panel.audio-mute-unknown", &[])),
                 ),
                 ("status.active".into(), Value::Bool(false)),
             ])
@@ -989,16 +1026,19 @@ impl Status {
         display.insert("status.ready".into(), Value::Bool(false));
         display.insert(
             "status.health".into(),
-            Value::Text(
+            Value::Text(tr(
                 if cached.is_some() {
-                    "Status stale"
+                    "bead.panel.status-stale"
                 } else {
-                    "Status data unavailable"
-                }
-                .into(),
-            ),
+                    "bead.panel.status-data-unavailable"
+                },
+                &[],
+            )),
         );
-        display.insert("status.heading".into(), Value::Text("Sound output".into()));
+        display.insert(
+            "status.heading".into(),
+            Value::Text(tr("bead.panel.sound-title", &[])),
+        );
         display.insert("status.icon".into(), Value::Text("volume_up".into()));
         display.insert("status.kind".into(), Value::Text("audio".into()));
         display
@@ -1104,16 +1144,16 @@ fn bluetooth_candidate(
 }
 
 fn link_error_message(code: &str) -> String {
-    match code {
-        "permission_denied" => "Network change not permitted",
-        "stale_revision" => "Network list changed; try again",
-        "unavailable" => "Network control unavailable",
-        "busy" => "Network busy; try again",
-        "invalid_request" | "validation" => "Network request rejected",
-        "timeout" => "Network change timed out",
-        _ => "Network change failed",
-    }
-    .into()
+    let id = match code {
+        "permission_denied" => "bead.panel.network-not-permitted",
+        "stale_revision" => "bead.panel.network-list-changed-retry",
+        "unavailable" => "bead.panel.network-control-unavailable",
+        "busy" => "bead.panel.network-busy",
+        "invalid_request" | "validation" => "bead.panel.network-rejected",
+        "timeout" => "bead.panel.network-timed-out",
+        _ => "bead.panel.network-change-failed",
+    };
+    tr(id, &[])
 }
 /// The single device of `kind`, optionally required to be connected.
 fn sole_device<'a>(
@@ -1188,10 +1228,10 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
     aps.sort_by_key(|(_, ap)| (!ap.active, std::cmp::Reverse(ap.strength)));
     let name = |text: &str| {
         line(
-            if text.is_empty() {
-                "Hidden network"
+            &if text.is_empty() {
+                tr("bead.panel.network-hidden", &[])
             } else {
-                text
+                text.to_owned()
             },
             28,
         )
@@ -1208,7 +1248,11 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
         rows.push(LinkRow {
             key,
             label: name(&ap.name),
-            action: if ap.active { "Disconnect" } else { "Connect" },
+            action: if ap.active {
+                "bead.panel.network-disconnect"
+            } else {
+                "bead.panel.network-connect"
+            },
             active: ap.active,
         });
     }
@@ -1242,9 +1286,9 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
             key,
             label: name(&connection.name),
             action: if connection.active {
-                "Disconnect"
+                "bead.panel.network-disconnect"
             } else {
-                "Connect"
+                "bead.panel.network-connect"
             },
             active: connection.active,
         });
@@ -1267,22 +1311,30 @@ fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
     let connection_name = connection
         .map(|connection| connection.name.as_str())
         .filter(|name| !name.is_empty())
-        .unwrap_or("Connected");
+        .map_or_else(|| tr("bead.common.connected", &[]), str::to_owned);
     let primary_text = matching_ap
-        .map(|ap| ap.name.as_str())
+        .map(|ap| ap.name.clone())
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| {
             if connection.is_some() {
                 connection_name
             } else {
-                "Not connected"
+                tr("bead.common.not-connected", &[])
             }
         });
     let detail = matching_ap
-        .map(|ap| format!("Signal strength {}%", ap.strength))
-        .unwrap_or_else(|| "Connection controls unavailable".into());
+        .map(|ap| {
+            tr(
+                "bead.panel.signal-strength",
+                &[("percent", &ap.strength.to_string())],
+            )
+        })
+        .unwrap_or_else(|| tr("bead.panel.connection-controls-unavailable", &[]));
     BTreeMap::from([
-        ("status.primary".into(), Value::Text(line(primary_text, 32))),
+        (
+            "status.primary".into(),
+            Value::Text(line(&primary_text, 32)),
+        ),
         ("status.detail".into(), Value::Text(line(&detail, 48))),
         (
             "status.active".into(),
@@ -1297,7 +1349,10 @@ fn core_network_values(
     secondary: &str,
 ) -> BTreeMap<String, Value> {
     display.insert("status.ready".into(), Value::Bool(ready));
-    display.insert("status.heading".into(), Value::Text("Network".into()));
+    display.insert(
+        "status.heading".into(),
+        Value::Text(tr("bead.panel.network-title", &[])),
+    );
     display.insert("status.icon".into(), Value::Text("wifi".into()));
     display.insert("status.kind".into(), Value::Text("network".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
@@ -1320,20 +1375,24 @@ fn core_bluetooth_display(state: &BluetoothState) -> BTreeMap<String, Value> {
         })
         .collect::<Vec<_>>();
     let primary = if !powered {
-        "Bluetooth off".to_owned()
+        tr("bead.panel.bluetooth-off", &[])
     } else if let Some(device) = connected.first() {
         if device.name.is_empty() {
-            "Connected device".to_owned()
+            tr("bead.panel.bluetooth-device-connected", &[])
         } else {
             device.name.clone()
         }
     } else {
-        "No connected devices".to_owned()
+        tr("bead.panel.bluetooth-none", &[])
     };
     let detail = if connected.is_empty() {
-        "Connection controls unavailable".to_owned()
+        tr("bead.panel.connection-controls-unavailable", &[])
     } else {
-        format!("{} connected devices", connected.len())
+        tr_n(
+            "bead.panel.bluetooth-devices-detail",
+            connected.len() as u64,
+            &[],
+        )
     };
     BTreeMap::from([
         ("status.primary".into(), Value::Text(line(&primary, 32))),
@@ -1347,7 +1406,10 @@ fn core_bluetooth_values(
     secondary: &str,
 ) -> BTreeMap<String, Value> {
     display.insert("status.ready".into(), Value::Bool(ready));
-    display.insert("status.heading".into(), Value::Text("Bluetooth".into()));
+    display.insert(
+        "status.heading".into(),
+        Value::Text(tr("bead.panel.bluetooth", &[])),
+    );
     display.insert("status.icon".into(), Value::Text("bluetooth".into()));
     display.insert("status.kind".into(), Value::Text("bluetooth".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
@@ -1357,12 +1419,12 @@ fn core_battery_display(state: &BatteryState) -> BTreeMap<String, Value> {
     let primary = state
         .percentage
         .map(|percentage| format!("{percentage:.0}%"))
-        .unwrap_or_else(|| "Battery level unknown".into());
+        .unwrap_or_else(|| tr("bead.panel.battery-level-unknown", &[]));
     BTreeMap::from([
         ("status.primary".into(), Value::Text(line(&primary, 32))),
         (
             "status.detail".into(),
-            Value::Text("Power controls unavailable".into()),
+            Value::Text(tr("bead.panel.battery-controls-unavailable", &[])),
         ),
         (
             "status.active".into(),
@@ -1376,7 +1438,10 @@ fn core_battery_values(
     secondary: &str,
 ) -> BTreeMap<String, Value> {
     display.insert("status.ready".into(), Value::Bool(ready));
-    display.insert("status.heading".into(), Value::Text("Battery".into()));
+    display.insert(
+        "status.heading".into(),
+        Value::Text(tr("bead.panel.battery-title", &[])),
+    );
     display.insert("status.icon".into(), Value::Text("battery_full".into()));
     display.insert("status.kind".into(), Value::Text("battery".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
@@ -1392,15 +1457,15 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
         return BTreeMap::from([
             (
                 "status.primary".into(),
-                Value::Text("Output unavailable".into()),
+                Value::Text(tr("bead.panel.audio-output-unavailable", &[])),
             ),
             (
                 "status.device".into(),
-                Value::Text("Output unavailable".into()),
+                Value::Text(tr("bead.panel.audio-output-unavailable", &[])),
             ),
             (
                 "status.mute".into(),
-                Value::Text("Mute state unknown".into()),
+                Value::Text(tr("bead.panel.audio-mute-unknown", &[])),
             ),
             ("status.active".into(), Value::Bool(false)),
         ]);
@@ -1411,33 +1476,34 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
                 .perceptual_volume
                 .filter(|v| v.is_finite() && *v >= 0.0)
                 .and_then(audio_percent),
-            readback
-                .muted
-                .map(|m| if m { "Muted" } else { "Not muted" }.to_owned()),
+            readback.muted.map(muted_text),
         )
     } else if node.ready {
         (
             audio_percent(node.volume.cbrt()),
-            Some(if node.muted { "Muted" } else { "Not muted" }.to_owned()),
+            Some(muted_text(node.muted)),
         )
     } else {
         (None, None)
     };
     let device = if node.name.trim().is_empty() {
-        "Default output"
+        tr("bead.panel.audio-default-output", &[])
     } else {
-        &node.name
+        node.name.clone()
     };
-    let active = muted.as_deref() == Some("Muted");
+    let active = muted.as_deref() == Some(muted_text(true).as_str());
     BTreeMap::from([
         (
             "status.primary".into(),
-            Value::Text(line(&volume.unwrap_or_else(|| "Volume unknown".into()), 24)),
+            Value::Text(line(
+                &volume.unwrap_or_else(|| tr("bead.panel.audio-volume-unknown", &[])),
+                24,
+            )),
         ),
-        ("status.device".into(), Value::Text(line(device, 40))),
+        ("status.device".into(), Value::Text(line(&device, 40))),
         (
             "status.mute".into(),
-            Value::Text(muted.unwrap_or_else(|| "Mute state unknown".into())),
+            Value::Text(muted.unwrap_or_else(|| tr("bead.panel.audio-mute-unknown", &[]))),
         ),
         ("status.active".into(), Value::Bool(active)),
     ])
@@ -1449,10 +1515,23 @@ fn core_audio_values(
 ) -> BTreeMap<String, Value> {
     display.insert("status.ready".into(), Value::Bool(ready));
     display.insert("status.health".into(), Value::Text(health.into()));
-    display.insert("status.heading".into(), Value::Text("Sound output".into()));
+    display.insert(
+        "status.heading".into(),
+        Value::Text(tr("bead.panel.sound-title", &[])),
+    );
     display.insert("status.icon".into(), Value::Text("volume_up".into()));
     display.insert("status.kind".into(), Value::Text("audio".into()));
     display
+}
+fn muted_text(muted: bool) -> String {
+    tr(
+        if muted {
+            "bead.panel.audio-muted"
+        } else {
+            "bead.panel.audio-not-muted"
+        },
+        &[],
+    )
 }
 fn audio_percent(perceptual: f64) -> Option<String> {
     let percent = perceptual * 100.0;

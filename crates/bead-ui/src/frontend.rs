@@ -231,6 +231,7 @@ impl FrontEnd for LuauFrontEnd {
                         Ok(value)
                     })?,
                 )?;
+                sdk.set("tr", crate::i18n::lua_function(&lua)?)?;
                 sdk.set(
                     "model_count",
                     scope.create_function(|_, model: Table| {

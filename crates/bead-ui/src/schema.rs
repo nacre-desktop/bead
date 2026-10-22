@@ -20,6 +20,7 @@ pub fn luau() -> String {
         ("component", "(string,any,any)->any"),
         ("resolve_for_check", "(any)->any"),
         ("model_count", "(any)->number"),
+        ("tr", "(string,any?)->string"),
     ] {
         out.push_str(&format!("    {name}:{ty},\n"));
     }

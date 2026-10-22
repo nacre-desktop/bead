@@ -17,7 +17,7 @@ local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string
         },
       },
       ui.Button{id="favorite",position="absolute",right=8,top=10,width=28,height=28,radius=8,padding=0,
-        aria_label=item.favorite and "Remove from favorites" or "Add to favorites",
+        aria_label=item.favorite and ui.tr("bead.launcher.favorite-remove") or ui.tr("bead.launcher.favorite-add"),
         fill=item.favorite and ui.tint("surface","primary",.12) or "transparent",
         on_activate=ui.action("toggle_favorite",item.id),
         ui.Text{text=item.favorite and "star" or "star_outline",family="Material Symbols Rounded",width="fill",height="fill",font_size=19,text_align="center",color=item.favorite and "primary" or "onSurfaceVariant"},

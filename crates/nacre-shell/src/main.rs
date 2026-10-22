@@ -8,6 +8,8 @@ mod dashboard;
 mod desktop;
 mod font_sources;
 mod headless;
+mod i18n;
+mod i18n_source;
 mod key_routes;
 mod launcher;
 mod launcher_panel;
@@ -578,6 +580,13 @@ fn start(
     } else {
         None
     };
+    // N0035 catalog for the `bead` namespace; without the topic the built-in English stays.
+    i18n::init();
+    let _i18n_service = _ui_provider.as_ref().and_then(|client| {
+        let topic = client.topic("i18n").ok()?;
+        let sink: i18n_source::Sink = std::sync::Arc::new(bead::ui::i18n::install);
+        i18n_source::Service::start(std::sync::Arc::new(topic), sink).ok()
+    });
     let core_sound = if core_views {
         Some(popouts::core_sound(
             _ui_provider.clone(),

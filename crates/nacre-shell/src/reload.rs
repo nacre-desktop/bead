@@ -37,6 +37,7 @@ pub struct Runtime {
     launcher_subscription: Option<bead::core::source::Subscription>,
     calendar: Option<std::rc::Rc<crate::calendar::Calendar>>,
     calendar_subscription: Option<bead::core::source::Subscription>,
+    i18n_subscription: Option<bead::ui::i18n::Subscription>,
     status: Option<std::rc::Rc<crate::status_views::Status>>,
     status_subscription: Option<bead::core::source::Subscription>,
     status_control_subscription: Option<bead::core::source::Subscription>,
@@ -205,6 +206,7 @@ impl Runtime {
         Self::for_output(session, None)
     }
     pub fn for_output(mut session: bead::ui::Session, output: Option<String>) -> Self {
+        crate::i18n::init();
         if let Some(name) = &output {
             session.stores = session
                 .stores
@@ -237,6 +239,7 @@ impl Runtime {
             launcher_subscription: None,
             calendar: None,
             calendar_subscription: None,
+            i18n_subscription: None,
             status: None,
             status_subscription: None,
             status_control_subscription: None,
@@ -1244,6 +1247,15 @@ impl SceneSource for Runtime {
                 Ok(subscription) => self.tray_topic_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=tray_topic_subscription"),
             }
+        }
+        // A language switch rebuilds the views from the new catalog, then lets the
+        // Rust-side projectors rewrite their text (live refresh, no restart).
+        {
+            let wakeup = wakeup.clone();
+            self.i18n_subscription = Some(bead::ui::i18n::on_change(move || {
+                wakeup(UiEvent::Reload);
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            }));
         }
         if let Some(calendar) = &self.calendar {
             match calendar.subscribe(wakeup.clone()) {

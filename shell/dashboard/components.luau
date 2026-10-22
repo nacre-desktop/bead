@@ -4,7 +4,7 @@ local kit=require("bead.kit")
 local M={}
 function M.rows(id,model,width,height,compact,empty)
     if #ui.resolve_for_check(ui.bind(model))==0 then
-        return ui.Text{id=id,text=empty or "Data unavailable",width=width,height=40,font_size=14,color="onSurfaceVariant"}
+        return ui.Text{id=id,text=empty or ui.tr("bead.dashboard.data-unavailable"),width=width,height=40,font_size=14,color="onSurfaceVariant"}
     end
     return ui.Column{id=id,width=width,height=height,gap=compact and 4 or 8,
         ui.Repeat{id="items",model=ui.bind(model),key="id",render=function(item)

@@ -3,6 +3,7 @@
 pub mod accessibility;
 pub mod frontend;
 mod generation;
+pub mod i18n;
 pub mod input;
 mod interaction;
 pub mod layout;
