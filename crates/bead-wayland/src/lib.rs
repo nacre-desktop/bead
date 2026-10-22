@@ -4,6 +4,7 @@ mod accessibility;
 mod background;
 mod clipboard;
 mod decorations;
+mod hidden;
 mod panel;
 mod panels;
 pub use panels::Panels;
@@ -91,6 +92,7 @@ pub struct CommandContext {
     pub panel_open: bool,
     pub panel_configured: bool,
     pub panel_view: Option<String>,
+    pub hidden: bool,
 }
 /// Output-sized pixels prepared by a product-owned passive wallpaper source.
 pub struct WallpaperFrame {
@@ -140,6 +142,8 @@ pub enum UiEvent {
     Panel(u64, Box<UiEvent>),
     PanelVisibility(bool),
     CompanionVisibility(bool),
+    /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.
+    ShellHidden(Option<bool>),
     PointerRegion(bool),
     PanelDismissed,
     PanelSelected(String),

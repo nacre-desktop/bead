@@ -32,14 +32,14 @@ workspace and window binds do not touch the shell and are unaffected.
 | Super+Ctrl+Space | `nacre mode palette` | Launcher route `style` | Partial, note 3 |
 | Super+O | `drawers toggle dashboard` | Dashboard panel toggle | Done |
 | XF86MonBrightness Up/Down | `brightness step up\|down` | Daemon `brightness.adjust {output, delta:±5}` on the focused output | B0026, note 4 |
-| Super+Z | `nacre hide` | Closes the open panel only | Partial, blocker A |
+| Super+Z | `nacre hide` | Shell-wide hide/show toggle like QML (B0028) | Done (B0028), nested smoke pending |
 | XF86KbdBrightness Up/Down | `keyboardLight step up\|down` | `unavailable` | Blocked, blocker B |
 | Super+A | `nacre left` | `unavailable` (no AI sidebar) | Blocked, blocker C |
 
 Totals: 16 commands. Fully mapped 10 (launcher, wallpaper, clipboard, emoji,
 capture, power, shortcuts, dashboard, brightness up, brightness down).
-Mapped with a different presentation 2 (overview, palette). Partial 1 (hide).
-Blocked 3 (keyboard light up/down, AI sidebar).
+Mapped with a different presentation 2 (overview, palette). Hide was partial and is
+done in B0028. Blocked 3 (keyboard light up/down, AI sidebar).
 
 Notes. (1) QML's wallpaper and clipboard modes are native views; Bead shows the
 engine's route in the launcher view. (2) The route opens and lists; activating a
@@ -61,7 +61,8 @@ sent without a retry, and uses the exact output name of the focused output.
 
 ## Blockers (exact)
 
-- **A. hide/show frame.** Bead has no hidden state for bar and panel surfaces;
+- **A. hide/show frame. Resolved by B0028** (`bead-wayland` unmaps bar and panel
+  surfaces; text below is the original finding). Bead has no hidden state for bar and panel surfaces;
   `nacre hide` only dismisses an open panel. Needs a bead-wayland surface
   hide/show request (framework, generic) plus a bar toggle.
 - **B. Keyboard backlight.** No published method. `brightness.*` is output-scoped
@@ -69,7 +70,9 @@ sent without a retry, and uses the exact output name of the focused output.
   e.g. `keyboard_light.adjust` v1.
 - **C. AI sidebar** (`left`, `leftDrawer`). Bead has no AI/Brain drawer; belongs
   to the Nacre AI/Brain surface units, not core-switch.
-- **D. `ui.menu.activate`.** The daemon forwards every non-application launcher
+- **D. `ui.menu.activate`. Resolved by B0028 for copy, copy-clip, command, power and
+  route rows; wallpaper, tool and form rows still refuse** (text below is the original
+  finding). The daemon forwards every non-application launcher
   row (copy, copy-clip, power, capture, wallpaper, workflow, settings, ...) to the
   provider's `ui.menu.activate` v1. Bead registers only `ui.dispatch`, so those
   rows cannot be activated. This blocks the useful end of emoji, clipboard,

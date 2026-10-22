@@ -114,6 +114,14 @@ impl Drop for Owner {
 }
 #[derive(Clone)]
 pub struct Client(Arc<Owner>);
+/// Lets a provider handler reach its own client without keeping it alive.
+#[derive(Clone)]
+pub struct WeakClient(std::sync::Weak<Owner>);
+impl WeakClient {
+    pub fn upgrade(&self) -> Option<Client> {
+        self.0.upgrade().map(Client)
+    }
+}
 pub struct Topic {
     client: Client,
     publisher: Publisher,
@@ -458,6 +466,9 @@ impl Client {
         })))
     }
     /// Always-available local monitor, not an external daemon topic.
+    pub fn downgrade(&self) -> WeakClient {
+        WeakClient(Arc::downgrade(&self.0))
+    }
     pub fn connection(&self) -> Topic {
         Topic {
             client: self.clone(),

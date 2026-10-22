@@ -1694,7 +1694,9 @@ impl SceneSource for Runtime {
             UiEvent::CompanionModel(_) => {
                 return Err("companion model reached primary script".into());
             }
-            UiEvent::CompanionVisibility(_) | UiEvent::CompanionSelect { .. } => {
+            UiEvent::CompanionVisibility(_)
+            | UiEvent::CompanionSelect { .. }
+            | UiEvent::ShellHidden(_) => {
                 return Err("companion visibility reached script".into());
             }
             UiEvent::Panel(_, _) | UiEvent::Output(_, _, _) => {
@@ -1776,6 +1778,7 @@ impl SceneSource for Runtime {
                             {
                                 wakeup(UiEvent::CompanionVisibility(false));
                             } else {
+                                wakeup(UiEvent::ShellHidden(Some(false)));
                                 wakeup(UiEvent::CompanionSelect {
                                     view: "dashboard-today".into(),
                                     output: call.output.clone(),
@@ -1818,6 +1821,7 @@ impl SceneSource for Runtime {
                                             .map_err(|_| "launcher view state unavailable")? =
                                             values.clone();
                                         self.last_launch = Some(launch);
+                                        wakeup(UiEvent::ShellHidden(Some(false)));
                                         wakeup(UiEvent::CompanionVisibility(true));
                                         wakeup(UiEvent::CompanionModel(values));
                                     }
@@ -1894,7 +1898,7 @@ impl SceneSource for Runtime {
                             };
                             let core_views = self.session.stores.get("bar.popouts")
                                 == Some(&bead::core::Value::Bool(true));
-                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":request.context.panel_open && dashboard_page.is_some(),"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":dashboard_page.map(|page| page.tab()).unwrap_or(0),"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":false,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar","network-status","bluetooth-status","battery-status","dashboard"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":request.context.panel_open && dashboard_page.is_some(),"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":dashboard_page.map(|page| page.tab()).unwrap_or(0),"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":request.context.hidden,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar","network-status","bluetooth-status","battery-status","dashboard"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
                             #[cfg(all(feature = "trace", target_os = "linux", target_env = "gnu"))]
                             let state = {
                                 let mut state = state;

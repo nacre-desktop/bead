@@ -266,6 +266,9 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        if self.hidden {
+            return;
+        }
         if self.surfaces[index].companion {
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
             self.draw_current(index, qh);

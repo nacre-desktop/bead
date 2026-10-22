@@ -130,6 +130,10 @@ impl App {
             }
             other => other,
         };
+        if let UiEvent::ShellHidden(state) = event {
+            self.set_hidden(state.unwrap_or(!self.hidden));
+            return;
+        }
         if let UiEvent::CompanionSelect {
             view,
             output,
@@ -137,6 +141,10 @@ impl App {
             center,
         } = event
         {
+            // Automatic peeks stay suppressed while hidden; explicit opens clear it first.
+            if self.hidden {
+                return;
+            }
             let output = output.or_else(|| self.active_output.clone());
             let result = if self.options.panels.is_none() {
                 Err("named panels are not configured".into())
@@ -169,6 +177,10 @@ impl App {
         }
 
         if let UiEvent::CompanionVisibility(open) = event {
+            // Feedback surfaces stay suppressed while hidden; explicit opens clear it first.
+            if open && self.hidden {
+                return;
+            }
             if open {
                 let default_changed = self.options.panels.as_ref().is_some_and(|panels| {
                     self.panel_name.as_deref() != Some(panels.default_name())
@@ -240,6 +252,7 @@ impl App {
                     panel_open: self.panel_target,
                     panel_configured: self.options.panel_spec.is_some(),
                     panel_view: self.panel_name.clone(),
+                    hidden: self.hidden,
                 },
             }));
         }

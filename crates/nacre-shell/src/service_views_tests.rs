@@ -478,6 +478,7 @@ fn legacy_state_distinguishes_named_views_on_one_host() -> Result<()> {
                 panel_open: open,
                 panel_configured: true,
                 panel_view: Some(view.into()),
+                hidden: false,
             },
         })))?;
         let response = received.recv_timeout(std::time::Duration::from_secs(1))?;
@@ -542,6 +543,7 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
                 panel_open: open,
                 panel_configured: true,
                 panel_view: Some("launcher".into()),
+                hidden: false,
             },
         })))?;
         Ok(received.recv_timeout(std::time::Duration::from_secs(1))?)
@@ -555,6 +557,7 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
         assert!(matches!(
             events.lock().unwrap().as_slice(),
             [
+                UiEvent::ShellHidden(Some(false)),
                 UiEvent::CompanionVisibility(true),
                 UiEvent::CompanionModel(_)
             ]
@@ -572,6 +575,7 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
     assert!(matches!(
         events.lock().unwrap().as_slice(),
         [
+            UiEvent::ShellHidden(Some(false)),
             UiEvent::CompanionVisibility(true),
             UiEvent::CompanionModel(_),
             UiEvent::CompanionVisibility(false)
@@ -584,6 +588,7 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
     assert!(matches!(
         events.lock().unwrap().as_slice(),
         [
+            UiEvent::ShellHidden(Some(false)),
             UiEvent::CompanionVisibility(true),
             UiEvent::CompanionModel(_)
         ]

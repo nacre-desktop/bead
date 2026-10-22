@@ -70,7 +70,7 @@ impl App {
         }
         let result = match call.method.as_str() {
             "state" => {
-                let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count(),"keyboard_focus":self.options.panel_spec.as_ref().is_some_and(|spec| spec.keyboard_focus),"dismiss_active":self.dismiss.is_some()});
+                let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count(),"keyboard_focus":self.options.panel_spec.as_ref().is_some_and(|spec| spec.keyboard_focus),"dismiss_active":self.dismiss.is_some(),"hidden":self.hidden});
                 if let Some(name) = &self.panel_name {
                     value["view"] = serde_json::Value::String(name.clone());
                 }
@@ -172,7 +172,14 @@ impl App {
                 }
                 Ok(value)
             }
+            "hide" => {
+                self.set_hidden(!self.hidden);
+                Ok(serde_json::Value::Null)
+            }
             "prepare" | "open" | "toggle" => {
+                if call.method != "prepare" {
+                    self.set_hidden(false);
+                }
                 let name = call.args.first().and_then(serde_json::Value::as_str);
                 let output = call
                     .output

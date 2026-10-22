@@ -1004,7 +1004,13 @@ impl Menu {
                 Ok(result)
             }
             Err(e) => {
-                self.view.borrow_mut().error = e.message.clone();
+                let mut view = self.view.borrow_mut();
+                view.error = e.message.clone();
+                if e.code == "stale_revision" {
+                    // Same as QML: drop the stale rows and query again.
+                    view.request = None;
+                    view.result_stamp = None;
+                }
                 Err(e)
             }
         }
@@ -2293,6 +2299,57 @@ mod tests {
         );
         assert!(menu.activate("not-in-result").is_err());
         assert_eq!(engine.called.lock().unwrap().len(), 1);
+    }
+    #[test]
+    fn daemon_stale_revision_drops_the_rows_and_queries_again_like_qml() {
+        struct Engine {
+            publisher: source::Publisher,
+            queries: std::sync::atomic::AtomicUsize,
+        }
+        impl Source for Engine {
+            fn snapshot(&self) -> Arc<source::Snapshot> {
+                self.publisher.snapshot()
+            }
+            fn subscribe(&self, cb: source::Callback) -> source::Result<source::Subscription> {
+                self.publisher.subscribe(cb)
+            }
+            fn invoke(&self, method: String, params: Json) -> source::Reply<'_> {
+                Box::pin(async move {
+                    if method == "menu.query" {
+                        self.queries
+                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(fixture_reply(
+                            params["query"].as_str().unwrap_or(""),
+                            vec![json!({"id":"chosen","name":"Fixture"})],
+                        ));
+                    }
+                    Err(source::Error::new(
+                        "stale_revision",
+                        "Catalog changed; query again",
+                        true,
+                    ))
+                })
+            }
+            fn reconnect(&self) -> source::Reply<'_> {
+                Box::pin(async { Ok(Json::Null) })
+            }
+            fn stop(&self) -> source::Reply<'_> {
+                Box::pin(async { Ok(Json::Null) })
+            }
+        }
+        let engine = Arc::new(Engine {
+            publisher: source::Publisher::new("test".into(), json!({})).unwrap(),
+            queries: Default::default(),
+        });
+        let menu = Menu::new(Some(engine.clone())).unwrap();
+        project_wait(&menu, &Stores::default()).unwrap();
+        let before = engine.queries.load(std::sync::atomic::Ordering::SeqCst);
+        let error = menu.activate("chosen").err().unwrap();
+        assert_eq!(error.code, "stale_revision");
+        assert!(menu.view.borrow().result_stamp.is_none());
+        project_wait(&menu, &Stores::default()).unwrap();
+        assert!(engine.queries.load(std::sync::atomic::Ordering::SeqCst) > before);
+        assert!(menu.view.borrow().rows.iter().any(|r| r["id"] == "chosen"));
     }
     #[test]
     fn live_memory_mirrors_only_bounded_scalar_view_state() {

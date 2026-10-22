@@ -1963,7 +1963,8 @@ async fn actual_provider_with_pending_menu(golden: &str) {
     let server = tokio::spawn(async move {
         let ui = fixture("ui");
         let (mut reader, mut writer) = accepted(&listener).await;
-        assert_eq!(next(&mut reader).await, ui[0]);
+        // The product provider registers both published methods.
+        assert_eq!(next(&mut reader).await, fixture("menu-ui-actions")[0]);
         let observed = next(&mut reader).await;
         let Message::Call { id, m, p, .. } = observed else {
             panic!("outbound menu call expected")
@@ -2012,6 +2013,47 @@ async fn actual_provider_with_pending_menu(golden: &str) {
     assert_eq!(handled.load(Ordering::SeqCst), 1);
     provider.control(true).await.unwrap();
     server.await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn actual_provider_acks_published_rows_and_refuses_unknown_operations() {
+    // Rows 15/16 and 17/18 of the published transcript: a literal-argv command row
+    // (acknowledged with keep_open:false before anything runs; the missing program
+    // only logs) and an operation this UI does not know.
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let golden = fixture("menu-ui-actions");
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        assert_eq!(next(&mut reader).await, golden[0]);
+        framing::write(&mut writer, &golden[15]).await.unwrap();
+        assert_eq!(next(&mut reader).await, golden[16]);
+        framing::write(&mut writer, &golden[17]).await.unwrap();
+        // The handler adds its dispatch state to every refusal; the published
+        // code, message and retry flag must match.
+        let (
+            Message::Ret {
+                reply: Reply::Err { err: want },
+                ..
+            },
+            Message::Ret {
+                reply: Reply::Err { err },
+                ..
+            },
+        ) = (&golden[18], next(&mut reader).await)
+        else {
+            panic!("refusal expected")
+        };
+        assert_eq!(
+            (&err.code, &err.message, err.retry),
+            (&want.code, &want.message, want.retry)
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    });
+    let ui_path = lab.0.join("ui.sock");
+    let provider = crate::ui_provider::start(lab.socket(), ui_path, None).unwrap();
+    server.await.unwrap();
+    provider.control(true).await.unwrap();
 }
 
 fn provider_config(socket: PathBuf, action: Action) -> Config {

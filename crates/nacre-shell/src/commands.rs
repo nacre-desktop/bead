@@ -235,6 +235,12 @@ pub fn map(mut call: Call) -> Result<Call, Reply> {
         return Ok(call);
     }
     validate(&call)?;
+    if call.target == "nacre" && call.method == "hide" {
+        // QML toggles one shell-wide hidden flag; panels keep their state.
+        call.target = "bead.panel".into();
+        call.args.clear();
+        return Ok(call);
+    }
     let method = match (call.target.as_str(), call.method.as_str()) {
         ("nacre", "popout" | "controls")
             if call
@@ -245,7 +251,7 @@ pub fn map(mut call: Call) -> Result<Call, Reply> {
         {
             Some("open")
         }
-        ("nacre", "close" | "hide") => Some("close"),
+        ("nacre", "close") => Some("close"),
         ("drawers", "toggle") if call.args.first().and_then(|v| v.as_str()) == Some("sound") => {
             Some("toggle")
         }
@@ -266,6 +272,24 @@ fn fixture_catalog() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hide_is_one_shell_wide_toggle_and_close_still_closes_the_panel() {
+        let hide = from_strings("nacre".into(), "hide".into(), &[]).unwrap();
+        for mapped in [
+            map(hide.clone()).unwrap(),
+            map_views(hide.clone()).unwrap(),
+            map_launcher(hide).unwrap(),
+        ] {
+            assert_eq!(
+                (mapped.target.as_str(), mapped.method.as_str()),
+                ("bead.panel", "hide")
+            );
+            assert!(mapped.args.is_empty());
+        }
+        let close = from_strings("nacre".into(), "close".into(), &[]).unwrap();
+        let mapped = map(close).unwrap();
+        assert_eq!(mapped.method, "close");
+    }
     #[test]
     fn core_dashboard_tab_routes_keep_canonical_indices_and_refuse_extras() {
         for (index, page) in crate::dashboard::Page::ALL.into_iter().enumerate() {
