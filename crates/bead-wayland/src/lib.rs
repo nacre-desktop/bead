@@ -496,6 +496,8 @@ struct WallpaperSurface {
     width: u32,
     height: u32,
     revision: u64,
+    release_wait_ms: u32,
+    release_timer_pending: bool,
     scale_factor: i32,
     layer: LayerSurface,
     pool: SlotPool,

@@ -1,6 +1,6 @@
 # B0021 — Static wallpaper surface
 
-Status: **Contract unblocked; implementation complete; additional nested validation blocked by the owner memory gate**. Nacre N0027 is published. Consumer pins
+Status: **Contract unblocked; implementation complete; release-memory validation in progress**. Nacre N0027 is published. Consumer pins
 `nacre-protocol` at Nacre commit `294d3f4034e0ffc8c6ee4fe38a3ed4109aa56c84`
 (`nacre-protocol` crate `0.1.0-dev.2`, wire contract v1). No wallpaper state is
 inferred from filesystem paths; only the contract's validated local path is used.
@@ -49,7 +49,12 @@ the roadmap generalization list only if implementation demonstrates one.
   previous image.
 - Image memory is bounded to one decoded current image per output plus at most
   one output-sized transition image while switching; no retained full-size
-  source copies. Report settled and transition PSS per output when measurable.
+  source copies. Once the compositor sends `wl_buffer.release`, destroy the
+  client buffer and SHM pool/memfd, and retain only wallpaper metadata. If a
+  compositor does not release within 3 seconds, log its identity and preserve
+  the existing SHM resources there. Reconfiguration securely reopens and
+  decodes at the new output size. Report settled and transition PSS per output
+  when measurable.
 - Cover initial state, switch, palette pairing, invalid image, daemon loss and
   recovery, two outputs, output removal, and idle resource release with focused
   tests/proofs. Run the full desktop CI job in the dev-1 Arch container.
@@ -59,7 +64,7 @@ the roadmap generalization list only if implementation demonstrates one.
 
 ## Validation boundary and duplicates
 
-Build/CI only in the task's uniquely named dev-1 Arch container, with `nice -n 10` and Cargo `-j2`; remove its container, image, and build directory after.
+Build/CI only in the task's uniquely named prod Arch container, with `nice -n 10` and Cargo `-j2`; remove its container and build directory after.
 Nested proof only on the owner's desktop under the lock and private HOME. No
 live desktop, installed Nacre, config, keybinding, autostart, or unit changes.
 

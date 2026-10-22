@@ -477,6 +477,13 @@ impl App {
             surface.pixels = None;
             surface.transition = None;
             surface.buffers.clear();
+            if let Ok(pool) = SlotPool::new(4096, &self.shm) {
+                surface.pool = pool;
+            } else {
+                eprintln!("WALLPAPER_SURFACE_ERROR code=pool_recreate");
+            }
+            surface.release_wait_ms = 0;
+            surface.release_timer_pending = false;
             let _ = surface;
             self.prepare_wallpaper(provider, name, width as u32, height as u32);
             return;
@@ -507,6 +514,8 @@ impl App {
                 width: width as u32,
                 height: height as u32,
                 revision: 0,
+                release_wait_ms: 0,
+                release_timer_pending: false,
                 scale_factor: info.scale_factor.max(1),
                 layer,
                 pool: SlotPool::new(4096, &self.shm)?,
@@ -832,6 +841,7 @@ impl App {
                 target: frame.rgba,
                 remaining: 14,
             });
+            surface.pixels = None;
         } else {
             if attach_wallpaper_buffer(
                 WallpaperBufferTarget {
@@ -852,6 +862,7 @@ impl App {
             }
             surface.pixels = self.options.animate.then_some(frame.rgba);
         }
+        surface.release_wait_ms = 0;
         surface.revision = frame.revision;
         let output = frame.output.clone();
         let revision = frame.revision;
@@ -865,6 +876,7 @@ impl App {
         if transitioning {
             self.schedule_wallpaper_tick(output);
         }
+        self.schedule_wallpaper_release_poll(frame.output.clone());
     }
 
     pub(super) fn wallpaper_tick(&mut self, output: &str) {
@@ -911,7 +923,8 @@ impl App {
                 false
             } else if transition.remaining == 0 {
                 let transition = surface.transition.take().unwrap();
-                surface.pixels = Some(transition.target);
+                surface.pixels = Some(transition.pixels);
+                drop(transition.target);
                 true
             } else {
                 false
@@ -920,6 +933,7 @@ impl App {
         if !finished {
             self.schedule_wallpaper_tick(output.to_owned());
         }
+        self.schedule_wallpaper_release_poll(output.to_owned());
     }
 
     fn schedule_wallpaper_tick(&self, output: String) {
@@ -935,6 +949,83 @@ impl App {
             .is_err()
         {
             eprintln!("WALLPAPER_SURFACE_ERROR code=transition_timer");
+        }
+    }
+
+    fn schedule_wallpaper_release_poll(&mut self, output: String) {
+        let Some(surface) = self.wallpaper_surfaces.iter_mut().find(|surface| surface.name == output) else {
+            return;
+        };
+        if surface.release_timer_pending {
+            return;
+        }
+        surface.release_timer_pending = true;
+        let handle = self.loop_handle.clone();
+        if handle.insert_source(
+            Timer::from_duration(Duration::from_millis(100)),
+            move |_, _, app| {
+                app.release_wallpaper_buffers(&output);
+                TimeoutAction::Drop
+            },
+        ).is_err() {
+            if let Some(surface) = self.wallpaper_surfaces.iter_mut().find(|surface| surface.name == output) {
+                surface.release_timer_pending = false;
+            }
+            eprintln!("WALLPAPER_SURFACE_ERROR code=release_timer");
+        }
+    }
+
+    fn release_wallpaper_buffers(&mut self, output: &str) {
+        let Some(index) = self.wallpaper_surfaces.iter().position(|surface| surface.name == output) else {
+            return;
+        };
+        self.wallpaper_surfaces[index].release_timer_pending = false;
+        if self.wallpaper_surfaces[index].buffers.is_empty() {
+            return;
+        }
+        let released = self.wallpaper_surfaces[index]
+            .buffers
+            .iter_mut()
+            .all(|buffer| !buffer.slot().has_active_buffers());
+        let replacement_pool = if released {
+            match SlotPool::new(4096, &self.shm) {
+                Ok(pool) => Some(pool),
+                Err(_) => {
+                    eprintln!("WALLPAPER_SURFACE_ERROR code=pool_recreate");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let surface = &mut self.wallpaper_surfaces[index];
+        if released {
+            surface.buffers.clear();
+            surface.pixels = None;
+            if let Some(pool) = replacement_pool {
+                surface.pool = pool;
+            }
+            surface.release_wait_ms = 0;
+            surface.release_timer_pending = false;
+            if surface.transition.is_none() {
+                #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                unsafe { libc::malloc_trim(0); }
+            }
+            println!("WALLPAPER_BUFFER_RELEASED output={} revision={}", surface.name, surface.revision);
+        } else {
+            surface.release_wait_ms = surface.release_wait_ms.saturating_add(100);
+            if surface.release_wait_ms <= 3000 {
+                self.schedule_wallpaper_release_poll(output.to_owned());
+            } else if surface.release_wait_ms == 3100 {
+                let compositor = if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
+                    "hyprland"
+                } else if std::env::var_os("NIRI_SOCKET").is_some() {
+                    "niri"
+                } else {
+                    "unknown"
+                };
+                eprintln!("WALLPAPER_BUFFER_RETAINED output={} compositor={} reason=no_release", surface.name, compositor);
+            }
         }
     }
 
