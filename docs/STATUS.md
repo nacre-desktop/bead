@@ -1,5 +1,17 @@
 # Status
 
+## 2026-10-22 — B0021 static wallpaper spec; published contract blocked
+
+[B0021](specs/0021-static-wallpaper-surface.md) defines the passive static
+wallpaper surface, Nacre fill/crop and short crossfade behavior, output-sized
+decode/resource release, and private validation boundaries. Audit of Nacre
+`origin/main` (`aa32dbf`) found that published `wallpaper.watch` reports only
+opaque input generations; published settings do not provide the active image
+and paired presentation palette. Nacre's selection files/helper stream remain
+implementation details. Runtime work is blocked until migration publishes the
+selection/presentation and palette activation contract. No code, build, CI,
+nested session, private state read, or push was performed.
+
 ## 2026-10-22 — B0020 notifications/OSD spec; producer gate blocked
 
 [B0020](specs/0020-notifications-osd-product.md) records the resident product,

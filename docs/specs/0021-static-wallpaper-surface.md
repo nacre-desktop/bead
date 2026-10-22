@@ -62,8 +62,7 @@ the roadmap generalization list only if implementation demonstrates one.
 
 ## Validation boundary and duplicates
 
-Build/CI only in the task's uniquely named dev-1 Arch container, with `nice -n
-10` and Cargo `-j2`; remove its container, image, and build directory after.
+Build/CI only in the task's uniquely named dev-1 Arch container, with `nice -n 10` and Cargo `-j2`; remove its container, image, and build directory after.
 Nested proof only on the owner's desktop under the lock and private HOME. No
 live desktop, installed Nacre, config, keybinding, autostart, or unit changes.
 
