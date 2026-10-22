@@ -318,6 +318,7 @@ impl App {
         if self.panel_runtime.is_some() {
             if self.panel_output.as_ref() != Some(&output)
                 || (spec.keyboard_focus != self.dismiss.is_some())
+                || (open && !self.surfaces.iter().any(|surface| surface.companion))
             {
                 drop(self.dismiss.take());
                 self.surfaces.retain(|s| !s.companion);

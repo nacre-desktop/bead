@@ -410,6 +410,7 @@ struct Surface {
     ready: bool,
     callbacks: policy::Callbacks,
     input_visible: Option<bool>,
+    input_rect: Option<[i32; 4]>,
     keyboard_visible: Option<bool>,
     redraw: bool,
     fractional: Option<WpFractionalScaleV1>,

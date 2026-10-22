@@ -550,6 +550,7 @@ impl App {
                 ready: false,
                 callbacks: Default::default(),
                 input_visible: None,
+                input_rect: None,
                 keyboard_visible: None,
                 redraw: false,
                 fractional,

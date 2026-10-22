@@ -1,6 +1,46 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
+
+/// Shadows reserve buffer space, but must not intercept adjacent controls.
+/// Retained layout bounds survive a shell replacing its background primitive.
+fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
+    let body = scene
+        .layers
+        .iter()
+        .find(|layer| layer.parent.is_none())
+        .map(|layer| layer.bounds)
+        .or_else(|| {
+            scene
+                .primitives
+                .iter()
+                .find_map(|primitive| match primitive {
+                    bead_render::Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => {
+                        Some(*rect)
+                    }
+                    _ => None,
+                })
+        })?;
+    let painted = body.translated(scene.offset.0, scene.offset.1);
+    // An entering panel may slide across adjacent surfaces. Keep hit testing
+    // inside its final content footprint throughout the animation.
+    let clip = if scene.motion.is_some() {
+        body.translated(-scene.bounds.x, -scene.bounds.y)
+    } else {
+        painted
+    };
+    let x = painted.x.max(clip.x).floor();
+    let y = painted.y.max(clip.y).floor();
+    let right = (painted.x + painted.w).min(clip.x + clip.w).ceil();
+    let bottom = (painted.y + painted.h).min(clip.y + clip.h).ceil();
+    Some([
+        x as i32,
+        y as i32,
+        (right - x).max(0.) as i32,
+        (bottom - y).max(0.) as i32,
+    ])
+}
+
 impl App {
     pub(super) fn update_companion_policy(
         &mut self,
@@ -286,9 +326,25 @@ impl App {
                     } else {
                         scene.motion.as_ref().is_none_or(|m| m.open)
                     };
-                if s.input_visible != Some(visible) {
+                let input_rect = if visible && s.companion && !passive && !self.options.test_passive
+                {
+                    content_input_rect(&scene)
+                } else {
+                    None
+                };
+                if s.input_visible != Some(visible) || s.input_rect != input_rect {
                     if visible && !self.options.test_passive && !passive {
-                        s.layer.wl_surface().set_input_region(None);
+                        if let Some([x, y, w, h]) = input_rect {
+                            let region = Region::new(&self.compositor)?;
+                            if w > 0 && h > 0 {
+                                region.add(x, y, w, h);
+                            }
+                            s.layer
+                                .wl_surface()
+                                .set_input_region(Some(region.wl_region()));
+                        } else {
+                            s.layer.wl_surface().set_input_region(None);
+                        }
                     } else {
                         let empty = Region::new(&self.compositor)?;
                         s.layer
@@ -296,6 +352,7 @@ impl App {
                             .set_input_region(Some(empty.wl_region()));
                     }
                     s.input_visible = Some(visible);
+                    s.input_rect = input_rect;
                     println!("PANEL_INPUT visible={visible}");
                 }
                 let focus_visible = visible
@@ -1016,5 +1073,83 @@ mod repair_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+    fn scene() -> Scene {
+        let body = Rect::new(0., 0., 200., 100.);
+        Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 0,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![bead_render::SceneLayer {
+                id: "content".into(),
+                parent: None,
+                own: 0..2,
+                subtree_end: 2,
+                bounds: body,
+            }],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 200.,
+            slide: None,
+            primitives: vec![
+                bead_render::Primitive::Rounded {
+                    rect: Rect::new(0., 0., 0., 0.),
+                    radius: 0.,
+                    fill: [0; 4],
+                    border: None,
+                },
+                bead_render::Primitive::Rounded {
+                    rect: body,
+                    radius: 8.,
+                    fill: [20; 4],
+                    border: None,
+                },
+            ],
+            offset: (32., 32.),
+            bounds: Rect::new(-32., -32., 264., 164.),
+        }
+    }
+    #[test]
+    fn painted_content_excludes_shadow_and_survives_background_replacement() {
+        let mut scene = scene();
+        assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 100]));
+        scene.primitives.clear();
+        assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 100]));
+        scene.offset = (-10.5, 5.25);
+        assert_eq!(content_input_rect(&scene), Some([-11, 5, 201, 101]));
+    }
+    #[test]
+    fn unretained_fallback_skips_empty_shadow_placeholder() {
+        let mut scene = scene();
+        scene.layers.clear();
+        assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 100]));
+        scene.primitives.clear();
+        assert_eq!(content_input_rect(&scene), None);
+    }
+    #[test]
+    fn entering_panel_never_captures_above_its_final_content_footprint() {
+        let mut scene = scene();
+        scene.motion = Some(bead_render::Motion {
+            id: "content".into(),
+            open: true,
+            duration: 0.5,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+        });
+        scene.offset = (32., -18.);
+        assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 50]));
+        scene.offset = (32., -100.);
+        assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 0]));
+        scene.offset = (32., 32.);
+        assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 100]));
     }
 }
