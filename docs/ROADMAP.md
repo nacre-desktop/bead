@@ -63,6 +63,19 @@ append FEASIBILITY.md with time/LOC/numbers/problems/verdict; update STATUS.md;
 commit/push main (public by owner request); provide one command/what to inspect; **stop for next**.
 Do not bundle unrequested later features into the current proof.
 
+## Clean-up passes and duplicate expiry — owner 2026-10-22
+
+- Every temporary duplicate (old harness or measurement-tool versions,
+  fallback paths, preview-only paths kept beside a replacement) records an
+  expiry in its spec: "delete N days after the replacement is trusted". Prefer
+  the simplest design that meets the acceptance checks.
+- Pass (b), after Bead's core switch on Nacre: retire the always-on QML shell
+  on the Nacre side, and remove Bead preview/fallback paths that only existed
+  to coexist with it. This pairs with the Housekeeping move of nacre-shell into
+  the Nacre repo.
+- Input: Nacre's docs/research/bloat-audit-20261022.md (Bead section). The
+  owner decides what is removed.
+
 ## Phase 0 — current
 
 Scope/source/protocol/renderer/UI/service/prior-art research, blank renderer spikes,
