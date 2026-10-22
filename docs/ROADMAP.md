@@ -63,6 +63,18 @@ append FEASIBILITY.md with time/LOC/numbers/problems/verdict; update STATUS.md;
 commit/push main (public by owner request); provide one command/what to inspect; **stop for next**.
 Do not bundle unrequested later features into the current proof.
 
+## Release readiness — owner direction 2026-10-22
+
+A public release or announcement of Nacre waits for Bead to be daily-usable
+and switched on the owner's machines, and for both repos to be cleaned
+(legacy test code, superseded harness versions and preview-only paths
+removed). Phases and the target window (about early December) are tracked in
+Nacre's queue (docs/specs/README.md, "Release readiness"). Bead's part is the
+core-switch unit sequence (research/core-switch-gap-20261022.md), with daemon
+contracts scheduled ahead of the Bead units that need them, then release
+hardening: a generic default theme, getting-started docs, DCO/CONTRIBUTING
+and crate naming. Publishing stays an owner decision.
+
 ## Clean-up passes and duplicate expiry — owner 2026-10-22
 
 - Every temporary duplicate (old harness or measurement-tool versions,
