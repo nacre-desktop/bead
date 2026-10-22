@@ -42,6 +42,64 @@ fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
 }
 
 impl App {
+    fn trim_idle_shm(&mut self, index: usize) {
+        let surface = &mut self.surfaces[index];
+        if surface.buffers.is_empty()
+            || surface.shm_trim_pending
+            || surface.shm_trimmed_for == (surface.ui_serial, surface.geometry)
+        {
+            return;
+        }
+        surface.shm_trim_pending = true;
+        let identity = surface.layer.wl_surface().clone();
+        let qh = self.qh.clone();
+        let expires = Instant::now() + Duration::from_secs(3);
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(Duration::from_millis(250)),
+            move |_, _, app| {
+                let Some(index) = app.surfaces.iter().position(|s| s.layer.wl_surface() == &identity) else {
+                    return TimeoutAction::Drop;
+                };
+                let surface = &mut app.surfaces[index];
+                if surface.callbacks.pending
+                    || surface.last_callback.is_none_or(|last| last.elapsed() < Duration::from_millis(250))
+                {
+                    if Instant::now() < expires {
+                        return TimeoutAction::ToDuration(Duration::from_millis(100));
+                    }
+                    surface.shm_trim_pending = false;
+                    return TimeoutAction::Drop;
+                }
+                surface.shm_trim_pending = false;
+                surface.shm_trimmed_for = (surface.ui_serial, surface.geometry);
+                if surface.buffers.iter().filter(|buffer| buffer.painted).count() <= 1 {
+                    return TimeoutAction::Drop;
+                }
+                // An idle burst can have touched several reusable slots. Retire
+                // that pool and repaint one current frame, instead of retaining
+                // spare frame pages indefinitely. Active old buffers remain
+                // compositor-owned until release, as during a geometry change.
+                let pool = match SlotPool::new(4096, &app.shm) {
+                    Ok(pool) => pool,
+                    Err(error) => {
+                        app.fail(error);
+                        return TimeoutAction::Drop;
+                    }
+                };
+                surface.buffers.clear();
+                surface.pool = pool;
+                surface.previous = None;
+                surface.visual_damage = Default::default();
+                surface.redraw = true;
+                println!("SHM_POOL_COMPACT output={}", surface.output_name);
+                app.draw(index, &qh);
+                TimeoutAction::Drop
+            },
+        ) {
+            self.surfaces[index].shm_trim_pending = false;
+            self.fail(error);
+        }
+    }
     pub(super) fn update_companion_policy(
         &mut self,
         index: usize,
@@ -710,7 +768,7 @@ impl App {
             if !cfg!(target_endian = "little") {
                 return Err("CPU renderer currently requires little endian".into());
             }
-            if s.geometry != (w, h) || s.format != format {
+            if s.geometry != (w, h) || s.format != format || s.buffers.is_empty() {
                 s.buffers.clear();
                 s.geometry = (w, h);
                 s.format = format;
@@ -736,6 +794,7 @@ impl App {
                     s.buffers.push(Reusable {
                         buffer,
                         pending: vec![Damage::full(w as u32, h as u32)],
+                        painted: false,
                     });
                     s.allocations += 1;
                 }
@@ -761,6 +820,7 @@ impl App {
                 .iter_mut()
                 .find(|b| !b.buffer.slot().has_active_buffers())
                 .ok_or("three buffers still in use at callback")?;
+            b.painted = true;
             let bounding = b
                 .pending
                 .iter()
@@ -890,6 +950,9 @@ impl App {
             ) {
                 self.fail(error);
             }
+        }
+        if result.is_ok() {
+            self.trim_idle_shm(index);
         }
         if let Err(e) = result {
             #[cfg(any(feature = "native-gl", feature = "wgpu"))]

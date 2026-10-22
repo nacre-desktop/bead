@@ -1485,6 +1485,8 @@ impl App {
                 previous: None,
                 visual_damage: Default::default(),
                 allocations: 0,
+                shm_trim_pending: false,
+                shm_trimmed_for: (0, (0, 0)),
                 frames: 0,
                 render_ms: Vec::new(),
                 frame_ms: Vec::new(),

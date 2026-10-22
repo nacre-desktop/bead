@@ -166,6 +166,7 @@ def sample(env, raw, compositor, stop):
                 resources[output.group(1) if output else 'shared'] = {
                     key: int(value) for key, value in re.findall(r'\b(\w+)=(\d+)', line)}
         result['resources_by_output'] = resources
+        (raw/(label+'-smaps.txt')).write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
         print('PER_OUTPUT_MEMORY '+json.dumps({k:v for k,v in result.items() if k != 'samples'}, sort_keys=True), flush=True)
         result['role'] = role
         return result
