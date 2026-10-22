@@ -1,6 +1,6 @@
 # B0023 — Per-output UI sessions
 
-Status: **Blocked at the memory stop line; unpublished implementation and remote full CI complete**. Architecture unit consumed by
+Status: **Resumed — matched desktop relative-memory gate and remaining private proofs**. Architecture unit consumed by
 [B0022](0022-bar-composition-lifecycle.md); action-contract blockers there remain.
 
 ## Scope and design
@@ -39,12 +39,20 @@ apply. Existing unpublished bar actions stay blocked under B0022.
    Run private nested virtual-output smoke on the authorized desktop under its
    heavy-job flock: one/two outputs, hotplug add/remove and scale change. Record
    source/profile/hash and exact commands, never claim physical scanout parity.
-4. Compare settled one/two-output bar PSS, reporting delta (target well under
-   +3 MiB/output), anonymous/file-backed, SwapPss and DRM (unknown stays unknown).
-   Use matched geometry/renderer and report individual samples. This unit's
-   incremental one/two-output comparison is a bounded diagnostic, not the
-   default five-pair core-switch acceptance gate. Preserve all capture swap,
-   containment/watchdog/quiet gates and the 24.5 MiB settled stop line.
+4. On the non-reference desktop, compare `origin/main` control and candidate
+   with identical default-feature release builds, flags, CPU renderer, geometry
+   and output count. PASS each phase if candidate median minus control median
+   is at most +0.5 MiB, with no unexplained anonymous growth above 1 MiB.
+   This follows owner queue decision `f58558e`, reaffirmed by the lead on
+   2026-10-22; the laptop absolute caps are not desktop stop conditions.
+   Use five alternating control/candidate pairs per compositor. Each fresh
+   private arm warms each phase for 10 seconds, then retains five 1-second
+   samples; this unit uses a bounded bar diagnostic rather than B0002's long
+   page-residency warmups. Hyprland phases are one/two outputs; niri phases are
+   one output at the initial and changed scales. Report arm medians/spreads,
+   anonymous/file/SHM PSS, SwapPss and DRM (unknown stays unknown). Separately
+   report candidate two-output minus one-output cost, targeting about 3 MiB or
+   less per extra bar. Preserve all swap, containment/watchdog and quiet gates.
    Stop on failed safety gates or unavailable authorized hosts; no laptop tests.
 5. Update STATUS, this result and B0022's architecture blocker. Report added /
    removed product lines. Full CI precedes normal safe-push integration; never
@@ -57,7 +65,7 @@ API remains supported compatibility, not a temporary replacement. Any temporary
 duplicate introduced later must name its path and an expiry here first:
 “delete N days after the replacement is trusted”.
 
-## Result — 2026-10-22
+## Initial result — 2026-10-22 (absolute desktop stop superseded)
 
 Source `384b3de` implements independent sessions, output-scoped model/input/commit
 routing, teardown, shared weak fonts/images and immutable palette snapshots.
@@ -80,14 +88,15 @@ it collected no memory cells. The corrected run stopped during two-output sampli
 | First two-output memory screen | 26.043 |
 | Provisional screen increase over one-output median | +2.065 |
 
-The two-output screen exceeded the standing 24.5 MiB stop line. Its component
+The initial harness incorrectly applied the laptop 24.5 MiB stop to the desktop. Its component
 breakdown was not retained before the guard raised; the increase cannot yet be
 attributed by residency category, and the full settled delta is **not measured**.
 No threshold was relaxed and no further capture or optimization was attempted.
 Scale/removal/re-add/input/idle proofs and the niri run remain incomplete. Niri
 multi-output hotplug is also unsupported by this harness. Both owned runs cleaned
 up with zero scope OOM counters; host swap was zero before each arm. No push or
-live change. Owner review is needed before proceeding past this stop.
+live change. The lead has authorized continuation under the relative gate above;
+the historical incomplete screen is not an acceptance result.
 
 Size: +1,011 / −130 physical product Rust lines, excluding test modules/files
 and proof examples. No temporary implementation duplicates were introduced.

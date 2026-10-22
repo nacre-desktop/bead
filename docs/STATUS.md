@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-22 — B0023 resumed under the desktop relative gate
+
+The lead confirmed queue decision `f58558e`: on the desktop, compare candidate
+against main on the same host and at the same output count; the gate is at most
++0.5 MiB median per phase, with no unexplained anonymous growth above 1 MiB.
+The earlier absolute-cap stop below used the wrong host gate. Matched control /
+candidate captures and the remaining lifecycle/input/niri proofs are in progress;
+the extra-output cost remains a separate metric. No live change is authorized.
+
 ## 2026-10-22 — B0023 sessions implemented; memory gate blocked
 
 Local `384b3de` gives outputs independent UI sessions and shares service owners,
