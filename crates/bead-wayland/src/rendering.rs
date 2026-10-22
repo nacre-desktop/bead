@@ -328,7 +328,7 @@ impl App {
                     };
                 let input_rect = if visible && s.companion && !passive && !self.options.test_passive
                 {
-                    content_input_rect(&scene)
+                    content_input_rect(scene)
                 } else {
                     None
                 };
