@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-22 — B0020 notifications/OSD spec; producer gate blocked
+
+[B0020](specs/0020-notifications-osd-product.md) records the resident product,
+QML behaviour, private-bus ownership safety, acceptance checks and temporary
+duplicate expiry. Nacre `aa32dbf` still marks N0017 as a design proposal and
+forbids consumer adoption before producer publication and green CI. Default
+expiry policy remains unresolved; published OSD channels have no keyboard
+layout (QML's keyboard channel means backlight). No implementation, protocol
+pin, tests, capture, live ownership or switch occurred in this documentation stage.
+
 ## 2026-10-22 — Laptop reference capture kit prepared
 
 The [runbook](research/laptop-reference-capture-runbook.md) now provides a
