@@ -80,6 +80,17 @@ def load_manifest(path: pathlib.Path) -> dict:
             or fixture_tree != FROZEN_FIXTURE_GIT_TREE):
         raise RuntimeError("dashboard fixtures do not match the frozen B0002 control tree")
     value["dashboard_fixtures"] = str(fixture_root)
+    bundle_root = pathlib.Path(value.get("control_bundle_root", ""))
+    if not bundle_root.is_absolute():
+        bundle_root = path.parent / bundle_root
+    bundle_root = bundle_root.resolve(strict=True)
+    if not (bundle_root / "shell/ui/main.luau").is_file() or not (bundle_root / "shell/tests/icon.svg").is_file():
+        raise RuntimeError("matched frozen control UI bundle is incomplete")
+    if canonical_tree_hash(bundle_root) != value.get("control_bundle_sha256"):
+        raise RuntimeError("frozen control UI bundle hash mismatch")
+    if canonical_tree_hash(bundle_root / "shell/tests/fixtures/dashboard") != fixture_hash:
+        raise RuntimeError("frozen control dashboard fixtures differ from candidate fixtures")
+    value["control_bundle_root"] = str(bundle_root)
     return value
 
 
@@ -334,6 +345,7 @@ def arm_command(args, manifest: dict, compositor: str, label: str, previous: str
                "--label", label, "--previous-label", previous, "--raw-root", str(raw_root),
                "--control-binary", control["path"], "--control-sha256", control["sha256"],
                "--candidate-binary", candidate["path"], "--candidate-sha256", candidate["sha256"],
+               "--control-bundle-root", manifest["control_bundle_root"],
                "--profile", profile, "--max-load", str(args.max_load), "--forbid-nacre-lead"]
     return command
 

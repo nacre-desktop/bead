@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Package the frozen control and current Bead UI for the laptop capture."""
 import argparse
+import io
 import hashlib
 import json
 import pathlib
 import shutil
 import subprocess
+import tarfile
 
 
 FROZEN_FIXTURE_GIT_TREE = "51dbf56ff49bf55656d7f04257f532dde73ece47"
@@ -71,6 +73,22 @@ def main() -> int:
         destination.chmod(0o700)
         artifacts[key] = {"path": f"{key}/nacre-shell", "sha256": digest(destination),
                           "source_revision": revision}
+    repository = subprocess.check_output(
+        ["git", "-C", str(args.fixtures), "rev-parse", "--show-toplevel"], text=True).strip()
+    frozen_shell = subprocess.check_output(
+        ["git", "-C", repository, "archive", args.control_revision,
+         "shell/ui", "shell/tests/icon.svg", "shell/tests/fixtures/dashboard"])
+    bundle_root = output / "control-bundle"
+    bundle_root.mkdir(mode=0o700)
+    with tarfile.open(fileobj=io.BytesIO(frozen_shell), mode="r:") as archive:
+        members = archive.getmembers()
+        if any(pathlib.PurePosixPath(member.name).is_absolute()
+               or ".." in pathlib.PurePosixPath(member.name).parts for member in members):
+            parser.error("frozen control bundle contains an unsafe archive path")
+        archive.extractall(bundle_root)
+    frozen_fixture_hash = tree_digest(bundle_root / "shell/tests/fixtures/dashboard")
+    if frozen_fixture_hash != tree_digest(args.fixtures.resolve()):
+        parser.error("frozen control bundle and current main dashboard fixtures differ")
     original_sha = "b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b"
     original_identity = artifacts["control"]["sha256"] == original_sha
     if args.control_kind == "original-frozen" and not original_identity:
@@ -81,6 +99,8 @@ def main() -> int:
         "exact_original_binary_identity": original_identity,
     })
     manifest = {"schema_version": 1, **artifacts,
+                "control_bundle_root": "control-bundle",
+                "control_bundle_sha256": tree_digest(bundle_root),
                 "dashboard_fixtures_sha256": tree_digest(args.fixtures.resolve()),
                 "dashboard_fixtures_git_tree": candidate_tree,
                 "toolchain": "pinned Bead CI Rust 1.99.0; release profile",
@@ -91,6 +111,7 @@ def main() -> int:
     print(json.dumps({"output": str(output), "control_sha256": artifacts["control"]["sha256"],
                       "candidate_sha256": artifacts["candidate"]["sha256"],
                       "control_exact_original": artifacts["control"]["exact_original_binary_identity"],
+                      "control_bundle_sha256": manifest["control_bundle_sha256"],
                       "fixtures_sha256": manifest["dashboard_fixtures_sha256"]}, sort_keys=True))
     return 0
 

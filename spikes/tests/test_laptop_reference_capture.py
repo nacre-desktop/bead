@@ -1,8 +1,10 @@
 import importlib.util
 import json
 import pathlib
+import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -17,6 +19,7 @@ def load(name, path):
 
 capture = load("laptop_reference_capture", ROOT / "spikes/laptop-reference-capture.py")
 measure = load("measure_for_laptop_capture", ROOT / "spikes/measure.py")
+arm = load("b0002_arm_for_laptop_capture", ROOT / "spikes/b0002-arm.py")
 
 
 def sample(total, anon=5.0, drm=None):
@@ -28,6 +31,62 @@ def sample(total, anon=5.0, drm=None):
 
 
 class LaptopReferenceCaptureTests(unittest.TestCase):
+    def test_manifest_pins_binaries_frozen_bundle_and_shared_fixtures(self):
+        with tempfile.TemporaryDirectory(prefix="bead-reference-manifest-") as temp:
+            root = pathlib.Path(temp)
+            artifacts = root / "artifacts"
+            artifacts.mkdir()
+            control = artifacts / "control"
+            candidate = artifacts / "candidate"
+            control.write_bytes(b"frozen-control")
+            candidate.write_bytes(b"main-candidate")
+            bundle = artifacts / "control-bundle"
+            (bundle / "shell/ui").mkdir(parents=True)
+            (bundle / "shell/tests").mkdir()
+            (bundle / "shell/ui/main.luau").write_text("return {}\n")
+            (bundle / "shell/tests/icon.svg").write_text("<svg/>\n")
+            fixture_root = ROOT / "shell/tests/fixtures/dashboard"
+            shutil.copytree(fixture_root, bundle / "shell/tests/fixtures/dashboard")
+            expected_control = capture.sha256(control)
+            value = {
+                "schema_version": 1,
+                "control": {"path": "control", "sha256": expected_control,
+                            "exact_original_binary_identity": True},
+                "candidate": {"path": "candidate", "sha256": capture.sha256(candidate)},
+                "control_bundle_root": "control-bundle",
+                "control_bundle_sha256": capture.canonical_tree_hash(bundle),
+                "dashboard_fixtures_sha256": capture.canonical_tree_hash(fixture_root),
+                "dashboard_fixtures_git_tree": capture.FROZEN_FIXTURE_GIT_TREE,
+            }
+            manifest = artifacts / "manifest.json"
+            manifest.write_text(json.dumps(value))
+            with mock.patch.object(capture, "FROZEN_CONTROL_SHA256", expected_control):
+                loaded = capture.load_manifest(manifest)
+            self.assertEqual(loaded["control_bundle_root"], str(bundle.resolve()))
+            self.assertEqual(loaded["dashboard_fixtures"], str(fixture_root.resolve()))
+
+    def test_control_and_candidate_use_their_matched_ui_bundle_roots(self):
+        with tempfile.TemporaryDirectory(prefix="bead-reference-bundles-") as temp:
+            control_bundle = pathlib.Path(temp) / "control-bundle"
+            control_bundle.mkdir()
+            control_binary = pathlib.Path(temp) / "control"
+            candidate_binary = pathlib.Path(temp) / "candidate"
+            helper = pathlib.Path(temp) / "unused-helper"
+            with mock.patch.multiple(arm, CAPTURE_PROFILE="rehearsal", CONTROL_BUNDLE_ROOT=control_bundle,
+                                    CONTROL=control_binary, FIXED=candidate_binary, HELPER=helper):
+                control_env = arm.inherited_capture_environment(
+                    {"PATH": "/usr/bin", "XDG_RUNTIME_DIR": "/run/user/1000"},
+                    "A", "niri", pathlib.Path(temp) / "raw-a")
+                candidate_env = arm.inherited_capture_environment(
+                    {"PATH": "/usr/bin", "XDG_RUNTIME_DIR": "/run/user/1000"},
+                    "B", "niri", pathlib.Path(temp) / "raw-b")
+            self.assertEqual(control_env["BEAD_HARDENING_BUNDLE_ROOT"], str(control_bundle))
+            self.assertEqual(control_env["BEAD_DASHBOARD_FIXTURES"],
+                             str(control_bundle / "shell/tests/fixtures/dashboard"))
+            self.assertEqual(candidate_env["BEAD_HARDENING_BUNDLE_ROOT"], str(ROOT))
+            self.assertEqual(candidate_env["BEAD_DASHBOARD_FIXTURES"],
+                             str(ROOT / "shell/tests/fixtures/dashboard"))
+
     def make_batch(self, root, drm=True):
         for compositor in ("niri",):
             for side in ("A", "B"):

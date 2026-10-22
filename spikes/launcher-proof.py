@@ -41,11 +41,12 @@ def build_launcher_command(binary,core_views,source_args,sock,raw,dashboard_view
 
 def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     acceptance=dashboard_residency.acceptance_config(os.environ)
+    bundle_root=pathlib.Path(bundle_root or os.environ.get('BEAD_HARDENING_BUNDLE_ROOT',ROOT)).resolve()
     runtime=pathlib.Path(env['XDG_RUNTIME_DIR']).resolve()
     assert runtime!=pathlib.Path(f'/run/user/{os.getuid()}'),'live runtime refused'
     assert pathlib.Path(env['WAYLAND_DISPLAY']).resolve().is_relative_to(runtime),'live display refused'
     binary=os.environ.get('BEAD_HARDENING_BINARY',str(pathlib.Path(os.environ['CARGO_TARGET_DIR'])/'release/nacre-shell'))
-    env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_MATCHED_ICONS':'1','BEAD_ICON_PATH':str(ROOT/'shell/tests/icon.svg'),'DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
+    env={**env,'BEAD_PRIVATE_INPUT_PROOF':'1','BEAD_MATCHED_ICONS':'1','BEAD_ICON_PATH':str(bundle_root/'shell/tests/icon.svg'),'DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-unavailable'}
     if os.environ.get('BEAD_LAUNCHER_MMAP_THRESHOLD'):
         env['MALLOC_MMAP_THRESHOLD_']=os.environ['BEAD_LAUNCHER_MMAP_THRESHOLD']
     data=[{'id':f'app-{i:04}','name':f'Application {i:04}','kind':'app','description':'Application fixture','icon':'fixture'}for i in range(320)]

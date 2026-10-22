@@ -29,6 +29,7 @@ LABELS = [f"{side}{pair}" for pair in range(1, 6) for side in "AB"]
 PHASES = ("never", "once", "several", "combined")
 MIB = 1024 * 1024
 CAPTURE_PROFILE = "legacy"
+CONTROL_BUNDLE_ROOT: pathlib.Path | None = None
 # Host-gate parameters (set from arguments; defaults keep the original behaviour).
 HOST_GATES = {"max_load": None, "forbid_nacre_lead": False, "opened_once_only": False}
 CAPTURE_CONFIG = {
@@ -105,6 +106,11 @@ def inherited_capture_environment(base: dict[str, str], side: str, compositor: s
     env["BEAD_MENU_ENGINE_BINARY"] = str(HELPER)
     if CAPTURE_PROFILE != "legacy":
         env.pop("BEAD_MENU_ENGINE_BINARY", None)
+        if CONTROL_BUNDLE_ROOT is None:
+            raise RuntimeError("reference profile requires the frozen control UI bundle")
+        bundle_root = CONTROL_BUNDLE_ROOT if side == "A" else ROOT
+        env["BEAD_HARDENING_BUNDLE_ROOT"] = str(bundle_root)
+        env["BEAD_DASHBOARD_FIXTURES"] = str(bundle_root / "shell/tests/fixtures/dashboard")
     env.pop("BEAD_DASHBOARD_OPENED_ONCE_ONLY", None)
     if HOST_GATES["opened_once_only"]:
         env["BEAD_DASHBOARD_OPENED_ONCE_ONLY"] = "1"
@@ -334,7 +340,7 @@ def guarded_swap_reset(raw_dir: pathlib.Path) -> None:
 
 
 def main() -> int:
-    global CONTROL, FIXED, HELPER, EXPECTED_HASHES, CAPTURE_CONFIG, CAPTURE_PROFILE
+    global CONTROL, FIXED, HELPER, EXPECTED_HASHES, CAPTURE_CONFIG, CAPTURE_PROFILE, CONTROL_BUNDLE_ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--side", choices=("A", "B"), required=True)
     parser.add_argument("--compositor", choices=("hyprland", "niri"), required=True)
@@ -346,6 +352,7 @@ def main() -> int:
     parser.add_argument("--control-sha256", default=EXPECTED_HASHES["control"])
     parser.add_argument("--candidate-binary", type=pathlib.Path, default=FIXED)
     parser.add_argument("--candidate-sha256", default=EXPECTED_HASHES["candidate"])
+    parser.add_argument("--control-bundle-root", type=pathlib.Path)
     parser.add_argument("--helper-binary", type=pathlib.Path, default=HELPER)
     parser.add_argument("--helper-sha256", default=EXPECTED_HASHES["helper"])
     parser.add_argument("--research-tools", type=pathlib.Path, default=pathlib.Path(CAPTURE_CONFIG["BEAD_RESEARCH_TOOLS"]))
@@ -368,12 +375,15 @@ def main() -> int:
     if args.label[0] != args.side:
         parser.error("--side must match the arm label")
     CAPTURE_PROFILE = args.profile
+    CONTROL_BUNDLE_ROOT = args.control_bundle_root.resolve(strict=True) if args.control_bundle_root else None
     HOST_GATES.update(max_load=args.max_load, forbid_nacre_lead=args.forbid_nacre_lead,
                       opened_once_only=args.opened_once_only)
     CONTROL, FIXED, HELPER = args.control_binary, args.candidate_binary, args.helper_binary
     EXPECTED_HASHES = {"control": args.control_sha256, "candidate": args.candidate_sha256,
                        "helper": args.helper_sha256}
     if args.profile in ("laptop-reference", "rehearsal"):
+        if CONTROL_BUNDLE_ROOT is None or not (CONTROL_BUNDLE_ROOT / "shell/ui/main.luau").is_file():
+            parser.error("reference profile needs the matched frozen control UI bundle")
         EXPECTED_HASHES["helper"] = None
         CAPTURE_CONFIG = {**CAPTURE_CONFIG,
             "BEAD_HARDENING": "launcher",
