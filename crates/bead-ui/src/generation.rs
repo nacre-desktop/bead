@@ -1,6 +1,71 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Tracked source loading and format-independent generation materialization.
 use super::*;
+struct WeakAsset {
+    data: std::sync::Weak<[u8]>,
+    charge: bead_core::cache::Charge,
+}
+type AssetWeakIndex = std::collections::HashMap<PathBuf, WeakAsset>;
+static ASSET_WEAK_INDEX: std::sync::OnceLock<std::sync::Mutex<AssetWeakIndex>> =
+    std::sync::OnceLock::new();
+fn intern_asset(path: &Path, bytes: Vec<u8>) -> std::sync::Arc<[u8]> {
+    let index = ASSET_WEAK_INDEX.get_or_init(|| std::sync::Mutex::new(AssetWeakIndex::new()));
+    let mut index = index.lock().unwrap_or_else(|poison| poison.into_inner());
+    index.retain(|_, value| value.data.strong_count() != 0);
+    if let Some(existing) = index.get(path).and_then(|entry| entry.data.upgrade())
+        && existing.as_ref() == bytes.as_slice()
+    {
+        return existing;
+    }
+    let data: std::sync::Arc<[u8]> = std::sync::Arc::from(bytes);
+    let key = path.to_path_buf();
+    let charge_bytes = std::mem::size_of::<(PathBuf, WeakAsset)>() + key.capacity();
+    let budget = bead_core::cache::Budget::new("weak-ui-asset-index", 64 * 1024);
+    let Ok(charge) = budget.reserve(charge_bytes) else {
+        return data;
+    };
+    index.remove(path);
+    while index.len() >= 128
+        || index
+            .values()
+            .map(|entry| entry.charge.bytes())
+            .sum::<usize>()
+            + charge_bytes
+            > 64 * 1024
+    {
+        if let Some(oldest) = index.keys().next().cloned() {
+            index.remove(&oldest);
+        } else {
+            break;
+        }
+    }
+    index.insert(
+        key,
+        WeakAsset {
+            data: std::sync::Arc::downgrade(&data),
+            charge,
+        },
+    );
+    data
+}
+
+#[cfg(test)]
+mod asset_sharing_tests {
+    use super::*;
+    #[test]
+    fn equal_asset_snapshots_share_but_changed_bytes_and_idle_release_do_not() {
+        let path = Path::new("/asset-sharing-proof/icon.svg");
+        let a = intern_asset(path, b"original".to_vec());
+        let b = intern_asset(path, b"original".to_vec());
+        assert!(std::sync::Arc::ptr_eq(&a, &b));
+        let changed = intern_asset(path, b"changed".to_vec());
+        assert_eq!(a.as_ref(), b"original");
+        assert!(!std::sync::Arc::ptr_eq(&a, &changed));
+        let weak = std::sync::Arc::downgrade(&changed);
+        drop(changed);
+        assert!(weak.upgrade().is_none());
+    }
+}
 fn locate_nodes(path: &Path, bytes: &[u8], nodes: &mut [Node]) {
     let source = String::from_utf8_lossy(bytes);
     let mut offset = 0;
@@ -236,7 +301,7 @@ impl Generation {
                 bead_render::validate_asset(path, &bytes)
                     .map_err(|e| Diagnostic::new(path, 1, 1, e))?;
                 *path = loader.root.join(&*path);
-                assets.insert(path.clone(), std::sync::Arc::from(bytes));
+                assets.insert(path.clone(), intern_asset(path, bytes));
             }
             for action in [&node.action, &node.scroll].into_iter().flatten() {
                 script.validate_action(action)?;
@@ -380,7 +445,10 @@ impl Generation {
                         .any(|s| ext == *s)
                 })
             })
-            .map(|(path, data)| (loader.root.join(path), std::sync::Arc::from(data.clone())))
+            .map(|(path, data)| {
+                let full = loader.root.join(path);
+                (full.clone(), intern_asset(&full, data.clone()))
+            })
             .collect();
         let markup_frontend = Some(frontend::LuauFrontEnd::new(entry, &loader.sources)?);
         let generation = Self {

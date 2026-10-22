@@ -4,7 +4,7 @@ use cosmic_text::{
     Attrs, Buffer, Color as TextColor, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, VecDeque},
     error::Error,
     path::Path,
     time::Instant,
@@ -356,8 +356,12 @@ struct FontPoolIndex {
     fonts: std::sync::Weak<std::sync::Mutex<FontSystem>>,
     _charge: bead_core::cache::Charge,
 }
-std::thread_local! {
-    static FONT_POOL_INDEX: std::cell::RefCell<Option<FontPoolIndex>> = const { std::cell::RefCell::new(None) };
+const FONT_POOL_MAX_ENTRIES: usize = 8;
+const FONT_POOL_MAX_BYTES: usize = 512 * 1024;
+static FONT_POOL_INDEX: std::sync::OnceLock<std::sync::Mutex<VecDeque<FontPoolIndex>>> =
+    std::sync::OnceLock::new();
+fn font_pool_index() -> &'static std::sync::Mutex<VecDeque<FontPoolIndex>> {
+    FONT_POOL_INDEX.get_or_init(|| std::sync::Mutex::new(VecDeque::new()))
 }
 fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
     let fresh =
@@ -384,14 +388,22 @@ fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
             },
         });
     }
-    if let Some(fonts) = FONT_POOL_INDEX.with(|slot| {
-        slot.borrow()
-            .as_ref()
-            .filter(|cached| cached.stamp == stamp && cached.locale == locale)
-            .and_then(|cached| cached.fonts.upgrade())
-    }) {
-        return Ok(fonts);
+    let mut index = font_pool_index()
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    index.retain(|cached| cached.fonts.strong_count() != 0);
+    if let Some(position) = index
+        .iter()
+        .position(|cached| cached.stamp == stamp && cached.locale == locale)
+    {
+        let cached = index.remove(position).expect("position came from index");
+        if let Some(fonts) = cached.fonts.upgrade() {
+            index.push_back(cached);
+            return Ok(fonts);
+        }
     }
+    // Keep construction under the short index lock so simultaneous output workers
+    // cannot load the same font set twice.
     let fonts = fresh()?;
     let bytes = std::mem::size_of::<FontPoolIndex>()
         + stamp.capacity() * std::mem::size_of::<FontStamp>()
@@ -399,19 +411,25 @@ fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
         + locale.capacity()
         + std::mem::size_of::<std::sync::Mutex<FontSystem>>()
         + 2 * std::mem::size_of::<usize>();
-    let budget = bead_core::cache::Budget::new("weak-font-pool-index", 512 * 1024);
-    FONT_POOL_INDEX.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        *slot = None;
-        if let Ok(charge) = budget.reserve(bytes) {
-            *slot = Some(FontPoolIndex {
+    let budget = bead_core::cache::Budget::new("weak-font-pool-index", FONT_POOL_MAX_BYTES);
+    if let Ok(charge) = budget.reserve(bytes) {
+        while index.len() >= FONT_POOL_MAX_ENTRIES
+            || index.iter().map(|item| item._charge.bytes()).sum::<usize>() + bytes
+                > FONT_POOL_MAX_BYTES
+        {
+            if index.pop_front().is_none() {
+                break;
+            }
+        }
+        if bytes <= FONT_POOL_MAX_BYTES {
+            index.push_back(FontPoolIndex {
                 stamp,
                 locale,
                 fonts: std::sync::Arc::downgrade(&fonts),
                 _charge: charge,
             });
         }
-    });
+    }
     // Only the renderer/caller owns font data; the bounded index cannot keep it
     // alive after the existing idle/close teardown drops the renderer's pool.
     Ok(fonts)
@@ -1091,12 +1109,11 @@ mod tests {
         }
     }
     #[test]
-    fn caret_uses_existing_font_pool_with_exact_advances_and_no_strong_index_owner() {
+    fn caret_uses_existing_font_pool_with_exact_advances() {
         let scene = font_pool_scene();
         let mut renderer = CpuRenderer::default();
         renderer.prepare(&scene, 1.).unwrap();
         let held = renderer.fonts.as_ref().unwrap().clone();
-        let weak = std::sync::Arc::downgrade(&held);
         assert!(std::sync::Arc::ptr_eq(&held, &scene_fonts(&scene).unwrap()));
         let mut fresh = load_scene_fonts(&scene).unwrap();
         let text = "office café";
@@ -1110,13 +1127,56 @@ mod tests {
                 boundary_x(&mut fresh, text, boundary, "IBM Plex Sans", 17., 240.).unwrap()
             );
         }
-        FONT_POOL_INDEX
-            .with(|slot| assert!(slot.borrow().as_ref().unwrap()._charge.bytes() <= 512 * 1024));
+        let index = font_pool_index().lock().unwrap();
+        assert!(
+            index.iter().map(|item| item._charge.bytes()).sum::<usize>() <= FONT_POOL_MAX_BYTES
+        );
+        drop(index);
         drop(held);
         drop(renderer);
+    }
+    #[test]
+    fn font_pool_is_shared_between_workers_and_releases_weakly() {
+        struct Temp(std::path::PathBuf);
+        impl Drop for Temp {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("bead-font-workers-{}-{nonce}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let guard = Temp(dir);
+        let mut scene = font_pool_scene();
+        let path = guard.0.join("shared.ttf");
+        std::fs::copy(&scene.font_files[0], &path).unwrap();
+        scene.font_files = vec![path];
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let workers = (0..2)
+            .map(|_| {
+                let scene = scene.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    scene_fonts(&scene).unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+        barrier.wait();
+        let a = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        assert!(std::sync::Arc::ptr_eq(&a[0], &a[1]));
+        let weak = std::sync::Arc::downgrade(&a[0]);
+        drop(a);
         assert!(
             weak.upgrade().is_none(),
-            "the index must not retain the font system after renderer teardown"
+            "global index must not own font data"
         );
     }
     #[test]
