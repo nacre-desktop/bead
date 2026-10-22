@@ -46,12 +46,13 @@ impl App {
         let surface = &mut self.surfaces[index];
         if surface.shm_trim_pending
             || surface.buffers.is_empty()
-            || (surface.heap_trimmed_ui_serial == surface.ui_serial && surface
-                .buffers
-                .iter()
-                .filter(|buffer| buffer.painted)
-                .count()
-                <= 1)
+            || (surface.heap_trimmed_ui_serial == surface.ui_serial
+                && surface
+                    .buffers
+                    .iter()
+                    .filter(|buffer| buffer.painted)
+                    .count()
+                    <= 1)
         {
             return;
         }
