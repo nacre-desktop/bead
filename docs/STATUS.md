@@ -1,5 +1,18 @@
 # Status
 
+## 2026-10-22 — Laptop reference capture kit prepared
+
+The [runbook](research/laptop-reference-capture-runbook.md) now provides a
+single owner-signaled Niri command, with optional Hyprland timing. The artifact
+manifest pins the recovered frozen control binary and matching frozen `shell/`
+tree against the current main candidate. Exact-source Bead CI passed on dev-1.
+The private desktop rehearsal completed all six Niri arms in 41m18s; geometry,
+scope/OOM, host swap-in and close checks passed for every arm. Desktop DRM
+fdinfo was unavailable, so its summary is **REHEARSAL ONLY** with PSS-only
+relative deltas, not a laptop verdict.
+The laptop GPU path has not been inspected and no laptop capture was run; the
+prepared reference capture still awaits the owner's signal and AC idle window.
+
 ## 2026-10-22 — B0018 status-pill routing complete
 
 Source `c6ba4b3` groups the right-side icons in one pill and routes the four
