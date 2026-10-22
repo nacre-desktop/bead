@@ -50,6 +50,11 @@ pub struct Runtime {
     launcher_trigger: bool,
     last_launch: Option<crate::key_routes::Launch>,
     brightness: Option<crate::key_routes::Brightness>,
+    routes: Option<std::rc::Rc<crate::bar_routes::Routes>>,
+    routes_subscription: Option<bead::core::source::Subscription>,
+    tray_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    tray_topic_subscription: Option<bead::core::source::Subscription>,
+    daemon_tray: std::sync::Arc<std::sync::Mutex<Vec<bead::services::TrayItem>>>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
     subscription: Option<bead::backends::Subscription>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
@@ -245,6 +250,11 @@ impl Runtime {
             launcher_trigger: false,
             last_launch: None,
             brightness: None,
+            routes: None,
+            routes_subscription: None,
+            tray_topic: None,
+            tray_topic_subscription: None,
+            daemon_tray: Default::default(),
             backend: None,
             subscription: None,
             desktop: None,
@@ -586,6 +596,140 @@ impl Runtime {
                 bead::core::Value::Bool(true),
             )]))?;
         Ok(self)
+    }
+    /// B0022 daemon bar routes (N0031). The bar's workspace, title, pill and tray
+    /// actions become output-scoped daemon calls, gated on the welcome registry,
+    /// and the tray list comes from the daemon `tray` topic. Bar-only; the
+    /// local compositor/tray action paths stay for daemon-less preview runs.
+    pub fn with_bar_routes(
+        mut self,
+        client: crate::nacre_source::Client,
+        tray: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let routes = crate::bar_routes::Routes::new(client);
+        let mut defaults = routes.stores();
+        defaults.insert(
+            "bead.desktop.tray".into(),
+            bead::core::Value::list(crate::bar_routes::tray_rows(
+                &crate::bar_routes::tray_items(&tray.snapshot().data),
+            )),
+        );
+        *self.daemon_tray.lock().unwrap_or_else(|e| e.into_inner()) =
+            crate::bar_routes::tray_items(&tray.snapshot().data);
+        self.session.stores = self.session.stores.reconcile(&defaults)?;
+        self.actions.register("bar.title", "bar.routes")?;
+        self.actions.grant("bar.routes");
+        self.routes = Some(std::rc::Rc::new(routes));
+        self.tray_topic = Some(tray);
+        Ok(self)
+    }
+    /// The desktop snapshot with the daemon's tray rows when the bar uses them.
+    fn with_daemon_tray(
+        &self,
+        snapshot: std::sync::Arc<bead::services::Snapshot>,
+    ) -> std::sync::Arc<bead::services::Snapshot> {
+        if self.tray_topic.is_none() {
+            return snapshot;
+        }
+        let mut merged = (*snapshot).clone();
+        merged.tray = self
+            .daemon_tray
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        std::sync::Arc::new(merged)
+    }
+    /// Which daemon route, if any, an event on a bar control means. The route is
+    /// chosen from the event and control alone; availability is the daemon's
+    /// advertised registry, checked when the call is made.
+    fn bar_route(
+        &self,
+        event: &UiEvent,
+        id: &str,
+        name: &str,
+        arg: &bead::core::Value,
+    ) -> Option<crate::bar_routes::Route> {
+        use crate::bar_routes::Route;
+        let text = match arg {
+            bead::core::Value::Text(text) => text.as_str(),
+            _ => "",
+        };
+        let press = matches!(event, UiEvent::Click { .. })
+            || matches!(event, UiEvent::Command { command, .. } if command == "enter");
+        let wheel_up = |delta: f64| delta > 0.;
+        let tray = |method| {
+            let x = self.popout_center(id, "tray").unwrap_or(0.);
+            Route::Tray {
+                method,
+                item: text.into(),
+                x: x.round().clamp(0., 32767.) as i16,
+                y: 25,
+            }
+        };
+        match (name, event) {
+            ("backend.workspace.switch", _) if press => {
+                // This output's own row model (B0025), never another output's.
+                let Some(bead::core::Value::List(rows)) =
+                    self.session.stores.get("bead.workspaces")
+                else {
+                    return None;
+                };
+                let index = rows.iter().find(|w| w["id"] == text)?["index"].as_i64()?;
+                Some(Route::WorkspaceActivate {
+                    slot: u16::try_from(index)
+                        .ok()
+                        .filter(|i| (1..=255).contains(i))?,
+                })
+            }
+            ("backend.workspace.switch", UiEvent::Scroll { delta, .. }) => {
+                Some(Route::WorkspaceScroll {
+                    forward: !wheel_up(*delta),
+                })
+            }
+            ("bar.title" | "services.audio", UiEvent::Scroll { delta, .. }) => {
+                Some(Route::Volume {
+                    up: wheel_up(*delta),
+                })
+            }
+            ("status.pill.open", UiEvent::Scroll { delta, .. }) if text == "battery" => {
+                Some(Route::Brightness {
+                    up: wheel_up(*delta),
+                })
+            }
+            ("status.pill.open" | "services.audio", UiEvent::SecondaryClick { .. })
+                if text.is_empty() || text == "audio" =>
+            {
+                Some(Route::Mute)
+            }
+            ("services.tray", _) if press => {
+                let menu = self
+                    .daemon_tray
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .iter()
+                    .any(|item| item.id == text && item.item_is_menu);
+                Some(tray(if menu {
+                    "tray.context_menu"
+                } else {
+                    "tray.activate"
+                }))
+            }
+            ("services.tray", UiEvent::ContextMenu { .. }) => Some(tray("tray.context_menu")),
+            ("services.tray.secondary", UiEvent::SecondaryClick { .. }) => {
+                Some(tray("tray.secondary_activate"))
+            }
+            ("services.tray", UiEvent::Scroll { delta, .. }) => Some(Route::TrayScroll {
+                item: text.into(),
+                horizontal: false,
+                up: wheel_up(*delta),
+            }),
+            ("services.tray", UiEvent::HorizontalScroll { delta, .. }) => Some(Route::TrayScroll {
+                item: text.into(),
+                horizontal: true,
+                up: wheel_up(*delta),
+            }),
+            _ => None,
+        }
     }
     /// `brightness step` keys; disabled until the daemon advertises `brightness.adjust` v1.
     pub fn with_brightness_keys(
@@ -996,8 +1140,13 @@ impl Runtime {
         reload: bool,
     ) -> Result<Option<Scene>, Box<dyn Error>> {
         if let Some(scene) = &mut scene {
-            if let Some(desktop) = &self.desktop {
-                crate::desktop::icons(scene, &desktop.snapshot())?;
+            if let Some(base) = self
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.snapshot())
+                .or_else(|| self.tray_topic.is_some().then(Default::default))
+            {
+                crate::desktop::icons(scene, &self.with_daemon_tray(base))?;
             }
             let asset_profile = bead::core::profile::Span::new("assets");
             for draw in &mut scene.primitives {
@@ -1068,6 +1217,29 @@ impl SceneSource for Runtime {
             })) {
                 Ok(subscription) => self.connection_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=connection_subscription"),
+            }
+        }
+        if let Some(routes) = &self.routes {
+            let wakeup = wakeup.clone();
+            match routes.watch(move |stores| wakeup(UiEvent::Model(stores))) {
+                Ok(subscription) => self.routes_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=bar_routes_subscription"),
+            }
+        }
+        if let Some(tray) = &self.tray_topic {
+            let wakeup = wakeup.clone();
+            let rows = self.daemon_tray.clone();
+            match tray.subscribe(std::sync::Arc::new(move |snapshot| {
+                let items = crate::bar_routes::tray_items(&snapshot.data);
+                let list = bead::core::Value::list(crate::bar_routes::tray_rows(&items));
+                *rows.lock().unwrap_or_else(|e| e.into_inner()) = items;
+                wakeup(UiEvent::Model(BTreeMap::from([(
+                    "bead.desktop.tray".into(),
+                    list,
+                )])));
+            })) {
+                Ok(subscription) => self.tray_topic_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=tray_topic_subscription"),
             }
         }
         if let Some(calendar) = &self.calendar {
@@ -1279,9 +1451,10 @@ impl SceneSource for Runtime {
             }
         }
         if matches!(&event, UiEvent::SecondaryClick { .. })
-            && !host_action
-                .as_ref()
-                .is_some_and(|(_, name, _)| name == "services.tray.secondary")
+            && !host_action.as_ref().is_some_and(|(id, name, arg)| {
+                name == "services.tray.secondary"
+                    || (self.routes.is_some() && self.bar_route(&event, id, name, arg).is_some())
+            })
         {
             return Ok(None);
         }
@@ -1545,6 +1718,32 @@ impl SceneSource for Runtime {
                 .action(name, arg)?;
             return Ok(None);
         }
+        if let Some(routes) = &self.routes
+            && let Some((id, name, arg)) = host_action.as_ref()
+            && (name.starts_with("services.")
+                || name == "bar.title"
+                || name == "backend.workspace.switch"
+                || (name == "status.pill.open"
+                    && matches!(
+                        event,
+                        UiEvent::Scroll { .. } | UiEvent::SecondaryClick { .. }
+                    )))
+        {
+            // Daemon bar mode: the published route or nothing. Unrouted events
+            // (and controls the daemon does not advertise) never fall back to
+            // the local compositor, audio or tray paths.
+            self.actions.authorize(name)?;
+            if let Some(route) = self.bar_route(&event, id, name, arg)
+                && let Err(reason) =
+                    routes.send(&route, self.output.as_deref(), std::sync::Arc::new(|| {}))
+            {
+                eprintln!(
+                    "BAR_ACTION_REFUSED method={} reason={reason}",
+                    route.method()
+                );
+            }
+            return Ok(None);
+        }
         if let Some((id, name, arg)) = host_action.as_ref()
             && name.starts_with("services.")
             && (!matches!(
@@ -1629,6 +1828,7 @@ impl SceneSource for Runtime {
                     return Ok(None);
                 }
                 self.desktop_revision = snapshot.revision;
+                let snapshot = self.with_daemon_tray(snapshot);
                 if self.notification_primary
                     && let Some(owner) = &self.notifications
                 {
@@ -1650,7 +1850,7 @@ impl SceneSource for Runtime {
                     self.tray_requested_close = true;
                     wakeup(UiEvent::CompanionVisibility(false));
                 }
-                if self.bar && !self.tray_enabled {
+                if self.bar && !self.tray_enabled && self.tray_topic.is_none() {
                     values.insert("bead.desktop.tray".into(), bead::core::Value::list(vec![]));
                 }
                 if self.bar && self.menu_item.is_empty() {
@@ -2054,11 +2254,12 @@ impl SceneSource for Runtime {
                             }
                         })
                         .unwrap_or_default();
-                    let snapshot = self
-                        .desktop
-                        .as_ref()
-                        .ok_or("desktop unavailable")?
-                        .snapshot();
+                    let snapshot = self.with_daemon_tray(
+                        self.desktop
+                            .as_ref()
+                            .ok_or("desktop unavailable")?
+                            .snapshot(),
+                    );
                     self.session
                         .update(crate::desktop::tooltip_values(&snapshot, &self.tray_hover))?
                         .or(hovered)
@@ -2442,6 +2643,8 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+mod bar_routes_runtime_tests;
 #[cfg(test)]
 mod bluetooth_power_tests;
 #[cfg(test)]

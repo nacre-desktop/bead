@@ -130,6 +130,7 @@ impl Script {
             "services.menu.open",
             "services.menu.back",
             "services.tray.secondary",
+            "bar.title",
             "view.open",
             "status.pill.open",
             "backend.workspace.switch",

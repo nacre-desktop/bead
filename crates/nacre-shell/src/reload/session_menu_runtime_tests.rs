@@ -94,8 +94,8 @@ async fn panel_lock_and_restart_confirmation_end_to_end() {
     let (dir, menu, mut calls) = lab(
         true,
         vec![
-            ok(serde_json::json!({"locked":false})),
-            ok(serde_json::json!({"accepted":true})),
+            ok(serde_json::json!({"changed":false})),
+            ok(serde_json::json!({"changed":true})),
         ],
     )
     .await;
@@ -129,7 +129,7 @@ async fn panel_lock_and_restart_confirmation_end_to_end() {
     press(&mut runtime, "confirm");
     assert_eq!(
         calls.recv().await.unwrap(),
-        serde_json::json!({"action":"reboot"})
+        serde_json::json!({"action":"reboot","confirmed":true})
     );
     for _ in 0..500 {
         refresh(&mut runtime);

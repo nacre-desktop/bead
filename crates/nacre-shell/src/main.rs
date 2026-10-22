@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod backends;
+mod bar_routes;
 mod calendar;
 mod commands;
 mod contour;
@@ -777,6 +778,20 @@ fn start(
         let bar = options.bar;
         let brightness_client = _ui_provider.clone().filter(|_| core_views && bar);
         let brightness_osd = osd_socket.clone();
+        // B0022: with a daemon, bar actions are N0031 calls and the tray is its topic.
+        let bar_routes = brightness_client
+            .as_ref()
+            .map(|client| {
+                client.topic("tray").map(|topic| {
+                    (
+                        client.clone(),
+                        std::sync::Arc::new(topic)
+                            as std::sync::Arc<dyn bead::core::source::Source>,
+                    )
+                })
+            })
+            .transpose()
+            .map_err(|e| e.to_string())?;
         let trace = options.trace_state;
         // Service owners outlive individual output sessions and their workers.
         let shared_backend = if backend_enabled {
@@ -791,6 +806,7 @@ fn start(
         let make_source = move |output: Option<String>| {
             let brightness_client = brightness_client.clone();
             let brightness_osd = brightness_osd.clone();
+            let bar_routes = bar_routes.clone();
             let entry = entry.clone();
             let palette = palette.clone();
             let colors = colors.clone();
@@ -873,6 +889,11 @@ fn start(
                     if let Some(desktop) = runtime.desktop_owner() {
                         let _ = desktop_owner.set(desktop);
                     }
+                    let runtime = if let Some((client, tray)) = bar_routes {
+                        runtime.with_bar_routes(client, tray)?
+                    } else {
+                        runtime
+                    };
                     Ok(Box::new(runtime))
                 })();
                 result.map_err(|e| e.to_string())

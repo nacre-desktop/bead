@@ -2,10 +2,11 @@
 //! B0023 session menu: lock, log out, suspend, restart, power off.
 //!
 //! Bead never locks or powers anything itself. Each action is one daemon call,
-//! `session.request` v1 `{action}`, enabled only while the connected daemon
-//! advertises that exact method. Success is accepted only on an explicit
-//! positive reply (`locked:true` for lock, `accepted:true` otherwise); every
-//! other outcome is an error and nothing is shown as locked or done.
+//! `session.request` v1 `{action, confirmed}` (N0031), enabled only while the
+//! connected daemon advertises that exact method. Success is accepted only on
+//! the published reply `{changed:true}`; every other outcome is an error and
+//! nothing is shown as locked or done. Every action except lock is sent with
+//! `confirmed:true`, and only after the local confirmation step.
 use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
 use bead::core::{Value, source::Source};
 use std::{cell::RefCell, collections::BTreeMap, time::Duration};
@@ -40,13 +41,15 @@ impl Action {
             Self::Shutdown => "shutdown",
         }
     }
-    /// Destructive actions ask first; lock and suspend are immediate.
+    /// N0031 requires confirmation for everything except lock; the daemon
+    /// refuses an unconfirmed request, so the menu always asks first.
     fn confirm(self) -> Option<&'static str> {
         match self {
             Self::Logout => Some("Log out of this session?"),
+            Self::Suspend => Some("Suspend the computer?"),
             Self::Reboot => Some("Restart the computer?"),
             Self::Shutdown => Some("Power off the computer?"),
-            Self::Lock | Self::Suspend => None,
+            Self::Lock => None,
         }
     }
     fn failure(self) -> &'static str {
@@ -63,13 +66,8 @@ fn verdict(
     action: Action,
     reply: &Result<serde_json::Value, bead::core::source::Error>,
 ) -> Result<(), &'static str> {
-    let field = if action == Action::Lock {
-        "locked"
-    } else {
-        "accepted"
-    };
     match reply {
-        Ok(value) if value.get(field) == Some(&serde_json::Value::Bool(true)) => Ok(()),
+        Ok(value) if value.get("changed") == Some(&serde_json::Value::Bool(true)) => Ok(()),
         Ok(_) | Err(_) => Err(action.failure()),
     }
 }
@@ -168,7 +166,11 @@ impl SessionMenu {
         };
         match self.client.begin_call(
             METHOD.into(),
-            serde_json::json!({"action": action.key()}),
+            if action.confirm().is_some() {
+                serde_json::json!({"action": action.key(), "confirmed": true})
+            } else {
+                serde_json::json!({"action": action.key()})
+            },
             timeout,
             CallGuard { boot, version: 1 },
             Some(wake),
@@ -329,12 +331,13 @@ pub(crate) mod tests {
     #[test]
     fn verdict_accepts_only_the_explicit_positive_field() {
         let err = || Err(bead::core::source::Error::new("unavailable", "x", true));
-        assert!(verdict(Action::Lock, &Ok(serde_json::json!({"locked":true}))).is_ok());
-        assert!(verdict(Action::Reboot, &Ok(serde_json::json!({"accepted":true}))).is_ok());
+        assert!(verdict(Action::Lock, &Ok(serde_json::json!({"changed":true}))).is_ok());
+        assert!(verdict(Action::Reboot, &Ok(serde_json::json!({"changed":true}))).is_ok());
         for reply in [
-            Ok(serde_json::json!({"locked":false})),
+            Ok(serde_json::json!({"changed":false})),
             Ok(serde_json::json!({"accepted":true})),
-            Ok(serde_json::json!({"locked":"true"})),
+            Ok(serde_json::json!({"locked":true})),
+            Ok(serde_json::json!({"changed":"true"})),
             Ok(serde_json::json!({})),
             Ok(serde_json::Value::Null),
             err(),
@@ -351,7 +354,7 @@ pub(crate) mod tests {
             .into_iter()
             .map(|key| Action::parse(key).unwrap().confirm().is_some())
             .collect();
-        assert_eq!(asks, [false, true, false, true, true]);
+        assert_eq!(asks, [false, true, true, true, true]);
         assert!(Action::parse("hibernate").is_none());
     }
 
@@ -375,7 +378,7 @@ pub(crate) mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn lock_closes_only_on_confirmed_lock() {
-        let (dir, menu, mut calls) = lab(true, vec![ok(serde_json::json!({"locked":true}))]).await;
+        let (dir, menu, mut calls) = lab(true, vec![ok(serde_json::json!({"changed":true}))]).await;
         assert_eq!(menu.project()["session.enabled"], Value::Bool(true));
         menu.select("lock", wake());
         assert_eq!(
@@ -397,7 +400,7 @@ pub(crate) mod tests {
             true,
             vec![
                 ok(serde_json::json!({"accepted":true})),
-                ok(serde_json::json!({"locked":false})),
+                ok(serde_json::json!({"changed":false})),
                 failure,
             ],
         )
@@ -419,8 +422,7 @@ pub(crate) mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn restart_needs_confirmation_cancel_sends_nothing_and_busy_blocks() {
-        let (dir, menu, mut calls) =
-            lab(true, vec![ok(serde_json::json!({"accepted":true}))]).await;
+        let (dir, menu, mut calls) = lab(true, vec![ok(serde_json::json!({"changed":true}))]).await;
         menu.select("reboot", wake());
         let stores = menu.project();
         assert_eq!(text(&stores, "session.confirm"), "Restart the computer?");
@@ -438,7 +440,7 @@ pub(crate) mod tests {
         menu.confirm(wake());
         assert_eq!(
             calls.recv().await.unwrap(),
-            serde_json::json!({"action":"reboot"})
+            serde_json::json!({"action":"reboot","confirmed":true})
         );
         assert!(calls.try_recv().is_err(), "only one request in flight");
         let stores = settle(&menu).await;
