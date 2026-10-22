@@ -286,7 +286,11 @@ fn clicked_status_factories_use_right_edge_control_geometry_and_peeks_stay_small
         1910,
         "visible control frame keeps the shell's right inset"
     );
-    assert_eq!(y + 32, 50, "visible control frame begins at the usable top edge");
+    assert_eq!(
+        y + 32,
+        50,
+        "visible control frame begins at the usable top edge"
+    );
 
     let peek =
         crate::popouts::status_peek(Kind::Battery, palette, colors, owner, None, 16., false)?;
