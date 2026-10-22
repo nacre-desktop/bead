@@ -52,7 +52,9 @@ the roadmap generalization list only if implementation demonstrates one.
   source copies. Once the compositor sends `wl_buffer.release`, destroy the
   client buffer and SHM pool/memfd, and retain only wallpaper metadata. If a
   compositor does not release within 3 seconds, log its identity and preserve
-  the existing SHM resources there. Reconfiguration securely reopens and
+  the existing SHM resources there. Animated switches securely reopen and
+  decode the previous metadata pair at output size for the transition; they do
+  not rely on a settled raster copy. Reconfiguration securely reopens and
   decodes at the new output size. Report settled and transition PSS per output
   when measurable.
 - Cover initial state, switch, palette pairing, invalid image, daemon loss and
