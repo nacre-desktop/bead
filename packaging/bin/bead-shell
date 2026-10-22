@@ -1,0 +1,32 @@
+#!/bin/sh
+# Bead launcher (GPL-3.0-only). Relocatable: finds its binaries and bundle from its own prefix.
+#   bead-shell start   run the always-on UI against the Nacre daemon (what nacre-shell.service runs)
+#   bead-shell check   verify the install without a display or a daemon
+set -eu
+self=$(readlink -f -- "$0")
+prefix=${self%/bin/*}
+lib=$prefix/lib/bead
+share=$prefix/share/bead
+case ${1:-} in
+check)
+	for file in "$lib/nacre-shell" "$lib/nacre-wallpaper-decode"; do
+		[ -x "$file" ] || { echo "bead-shell: missing executable $file" >&2; exit 1; }
+	done
+	for entry in ui bar popouts sound status; do
+		[ -f "$share/shell/$entry/main.luau" ] || { echo "bead-shell: missing bundle entry $entry" >&2; exit 1; }
+	done
+	[ -f "$share/shell/palette.json" ] || { echo "bead-shell: missing palette" >&2; exit 1; }
+	exec "$lib/nacre-shell" --help >/dev/null
+	;;
+start)
+	: "${XDG_RUNTIME_DIR:?bead-shell start needs a user session}"
+	cd "$share"
+	exec "$lib/nacre-shell" --bar --core-views --ui-provider \
+		--daemon-socket "$XDG_RUNTIME_DIR/nacre/daemon.sock" \
+		--command-socket "$XDG_RUNTIME_DIR/nacre/bead-command.sock"
+	;;
+*)
+	echo "usage: bead-shell start|check" >&2
+	exit 2
+	;;
+esac

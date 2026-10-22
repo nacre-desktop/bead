@@ -1,0 +1,25 @@
+# Candidate in-tree recipe: builds the checkout it sits in. A published recipe would pin a commit
+# like Nacre's, which is an owner step. Separate from the nacre package family on purpose: the
+# shells install side by side and are selected by `nacre ui-shell`, never by package install.
+# Maintainer: siverteh <92440237+Siverteh@users.noreply.github.com>
+pkgname=bead-shell
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Bead native desktop shell for Nacre (installs beside the QML shell; selected by nacre ui-shell)'
+arch=('x86_64')
+url='https://github.com/nacre-desktop/bead'
+license=('GPL-3.0-only')
+options=('!lto')
+depends=('glibc' 'gcc-libs' 'fontconfig' 'freetype2' 'libxkbcommon' 'wayland' 'gdk-pixbuf2' 'libpipewire' 'dbus')
+makedepends=('rust' 'cargo' 'clang' 'pkgconf')
+optdepends=('nacre: daemon, QML Settings/Colors/Welcome windows and the ui-shell switch')
+
+build() {
+  cd "$startdir/../.."
+  cargo build --release --locked -p nacre-shell --target-dir "$srcdir/target"
+}
+
+package() {
+  cd "$startdir/../.."
+  packaging/stage.sh "$pkgdir" /usr "$srcdir/target/release"
+}
