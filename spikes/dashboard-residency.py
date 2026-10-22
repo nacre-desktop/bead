@@ -86,6 +86,10 @@ def observe_window(idle, pid, seconds, require_full=False):
 def assert_capture_rails(row, bar, external, total, batch_medians=False, close=False):
     assert row["memory"]["swap_pss_mib"] == 0, "UI swap invalidates comparison"
     assert all(x["memory"]["swap_pss_mib"] == 0 for x in external["processes"]), "daemon swap invalidates comparison"
+    if os.environ.get("BEAD_REFERENCE_ABSOLUTE_GATE") == "1":
+        assert row.get("drm_mib") is not None, "reference-host absolute gate requires measured DRM; unknown is not zero"
+        if not close:
+            assert total(row) < 24.5, "settled reference UI reached the 24.5 MiB stop line"
     if not batch_medians or close:
         assert total(row) <= total(bar) + 5, "closed exceeds own bar+5 MiB"
     if batch_medians:

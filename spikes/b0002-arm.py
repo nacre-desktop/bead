@@ -28,7 +28,7 @@ RAW_ROOT = pathlib.Path.home() / "nacre-quiet/evidence/bead-b0002-20261021/full-
 LABELS = [f"{side}{pair}" for pair in range(1, 6) for side in "AB"]
 PHASES = ("never", "once", "several", "combined")
 MIB = 1024 * 1024
-SWAP_SIZE_BYTES = 32_972_468_224
+CAPTURE_PROFILE = "legacy"
 # Host-gate parameters (set from arguments; defaults keep the original behaviour).
 HOST_GATES = {"max_load": None, "forbid_nacre_lead": False, "opened_once_only": False}
 CAPTURE_CONFIG = {
@@ -72,7 +72,10 @@ def sha256(path: pathlib.Path) -> str:
 
 def artifact_hashes() -> dict[str, dict[str, str]]:
     result = {}
-    for name, path in (("control", CONTROL), ("candidate", FIXED), ("helper", HELPER)):
+    artifacts = [("control", CONTROL), ("candidate", FIXED)]
+    if EXPECTED_HASHES.get("helper") is not None:
+        artifacts.append(("helper", HELPER))
+    for name, path in artifacts:
         actual = sha256(path)
         if actual != EXPECTED_HASHES[name]:
             raise RuntimeError(f"{name} artifact SHA-256 mismatch: {actual}")
@@ -100,6 +103,8 @@ def inherited_capture_environment(base: dict[str, str], side: str, compositor: s
     env["BEAD_RAW_DIR"] = str(raw_dir)
     env["BEAD_HARDENING_BINARY"] = str(CONTROL if side == "A" else FIXED)
     env["BEAD_MENU_ENGINE_BINARY"] = str(HELPER)
+    if CAPTURE_PROFILE != "legacy":
+        env.pop("BEAD_MENU_ENGINE_BINARY", None)
     env.pop("BEAD_DASHBOARD_OPENED_ONCE_ONLY", None)
     if HOST_GATES["opened_once_only"]:
         env["BEAD_DASHBOARD_OPENED_ONCE_ONLY"] = "1"
@@ -254,10 +259,9 @@ def save_json(path: pathlib.Path, value) -> None:
 
 
 def check_idle_host() -> None:
-    if subprocess.run(["pgrep", "-x", "cargo"], capture_output=True).returncode == 0:
-        raise RuntimeError("cargo is running on the capture host")
-    if subprocess.run(["pgrep", "-x", "rustc"], capture_output=True).returncode == 0:
-        raise RuntimeError("rustc is running on the capture host")
+    for name in ("cargo", "rustc", "gcc", "cc1", "cc1plus", "clang", "cmake", "ninja", "make"):
+        if subprocess.run(["pgrep", "-x", name], capture_output=True).returncode == 0:
+            raise RuntimeError(f"heavy build process is running on the capture host: {name}")
     scopes = subprocess.run(["systemctl", "--user", "list-units", "--type=scope", "--state=running", "--no-legend"],
                             check=True, capture_output=True, text=True).stdout
     if "bead-capture" in scopes:
@@ -269,7 +273,7 @@ def check_idle_host() -> None:
     if HOST_GATES["forbid_nacre_lead"]:
         found = subprocess.run(["pgrep", "-fa", "nacre-lead"], capture_output=True, text=True).stdout.splitlines()
         # The shared lock holder (our own flock/tmux wrapper) legitimately mentions the lock path.
-        own = ("desktop-heavy.lock", "pgrep", "b0002-arm.py", "drivers/batch.py")
+        own = ("desktop-heavy.lock", "pgrep", "b0002-arm.py", "laptop-reference-capture.py", "drivers/batch.py")
         others = [line for line in found if not any(token in line for token in own)]
         if others:
             raise RuntimeError("other nacre-lead sessions are running: " + " | ".join(others)[:300])
@@ -281,7 +285,7 @@ def memavailable_and_swap() -> tuple[int, int]:
     if len(rows) != 1:
         raise RuntimeError(f"expected only the zram swap device, found {rows!r}")
     row = rows[0].split()
-    if row[0] != "/dev/zram0" or row[1] != "partition":
+    if row[0] != "/dev/zram0" or row[1] not in ("partition", "file"):
         raise RuntimeError(f"unexpected swap device: {row!r}")
     used = int(row[3]) * 1024
     return memavailable, used
@@ -298,18 +302,25 @@ def log_swap_state(raw_dir: pathlib.Path, suffix: str) -> None:
 
 def guarded_swap_reset(raw_dir: pathlib.Path) -> None:
     check_idle_host()
-    log_swap_state(raw_dir, "before-reset")
-    (raw_dir / "swap-reset-command.txt").write_text(
-        "sudo -n /usr/bin/swapoff -a && sudo -n /usr/bin/swapon -p 100 /dev/zram0\n")
+    log_swap_state(raw_dir, "before-arm")
     available, used = memavailable_and_swap()
+    before = pathlib.Path("/proc/swaps").read_text().splitlines()[1].split()
+    size_before = int(before[2]) * 1024
+    priority_before = int(before[4])
+    reset = used >= 64 * MIB
     (raw_dir / "swap-precondition.txt").write_text(
         f"MemAvailable_bytes={available}\nswap_used_bytes={used}\n"
-        f"required_strictly_greater_than_bytes={used + 8 * 1024**3}\n")
-    if available <= used + 8 * 1024**3:
-        raise RuntimeError(f"MemAvailable {available} is not greater than swap_used+8GiB ({used + 8*1024**3})")
-    subprocess.run(["/bin/bash", "-lc",
-                    "sudo -n /usr/bin/swapoff -a && sudo -n /usr/bin/swapon -p 100 /dev/zram0"], check=True)
-    log_swap_state(raw_dir, "after-reset")
+        f"required_strictly_greater_than_bytes={used + 8 * 1024**3}\n"
+        f"swap_capacity_before_bytes={size_before}\nswap_priority_before={priority_before}\n")
+    (raw_dir / "swap-reset-command.txt").write_text(
+        "sudo -n /usr/bin/swapoff -a && sudo -n /usr/bin/swapon -p 100 /dev/zram0\n"
+        if reset else "not run: swap already below 64 MiB\n")
+    if reset:
+        if available <= used + 8 * 1024**3:
+            raise RuntimeError(f"MemAvailable {available} is not greater than swap_used+8GiB ({used + 8*1024**3})")
+        subprocess.run(["/bin/bash", "-lc",
+                        "sudo -n /usr/bin/swapoff -a && sudo -n /usr/bin/swapon -p 100 /dev/zram0"], check=True)
+    log_swap_state(raw_dir, "after-arm-preflight")
     rows = pathlib.Path("/proc/swaps").read_text().splitlines()[1:]
     if len(rows) != 1:
         raise RuntimeError(f"zram did not return as the only swap device: {rows!r}")
@@ -317,12 +328,13 @@ def guarded_swap_reset(raw_dir: pathlib.Path) -> None:
     size = int(row[2]) * 1024
     used = int(row[3]) * 1024
     priority = int(row[4])
-    if row[0] != "/dev/zram0" or size != SWAP_SIZE_BYTES or priority != 100 or used >= 64 * MIB:
+    expected_priority = 100 if reset else priority_before
+    if row[0] != "/dev/zram0" or size != size_before or priority != expected_priority or used >= 64 * MIB:
         raise RuntimeError(f"zram post-reset verification failed: {row!r}")
 
 
 def main() -> int:
-    global CONTROL, FIXED, HELPER, EXPECTED_HASHES, CAPTURE_CONFIG, SWAP_SIZE_BYTES
+    global CONTROL, FIXED, HELPER, EXPECTED_HASHES, CAPTURE_CONFIG, CAPTURE_PROFILE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--side", choices=("A", "B"), required=True)
     parser.add_argument("--compositor", choices=("hyprland", "niri"), required=True)
@@ -345,8 +357,7 @@ def main() -> int:
     parser.add_argument("--environmental-replacement", choices=("scope-setup", "host-swap-in"),
                         help="use the single authorized cell replacement after an environmental failure")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--swap-size-bytes", type=int, default=SWAP_SIZE_BYTES,
-                        help="expected /dev/zram0 size after the reset")
+    parser.add_argument("--profile", choices=("legacy", "laptop-reference", "rehearsal"), default="legacy")
     parser.add_argument("--opened-once-only", action="store_true",
                         help="diagnostic mode: BEAD_DASHBOARD_OPENED_ONCE_ONLY=1, only the opened-once phase")
     parser.add_argument("--max-load", type=float, default=None,
@@ -356,18 +367,45 @@ def main() -> int:
     args = parser.parse_args()
     if args.label[0] != args.side:
         parser.error("--side must match the arm label")
-    SWAP_SIZE_BYTES = args.swap_size_bytes
+    CAPTURE_PROFILE = args.profile
     HOST_GATES.update(max_load=args.max_load, forbid_nacre_lead=args.forbid_nacre_lead,
                       opened_once_only=args.opened_once_only)
     CONTROL, FIXED, HELPER = args.control_binary, args.candidate_binary, args.helper_binary
     EXPECTED_HASHES = {"control": args.control_sha256, "candidate": args.candidate_sha256,
                        "helper": args.helper_sha256}
+    if args.profile in ("laptop-reference", "rehearsal"):
+        EXPECTED_HASHES["helper"] = None
+        CAPTURE_CONFIG = {**CAPTURE_CONFIG,
+            "BEAD_HARDENING": "launcher",
+            "BEAD_CORE_VIEWS_PROOF": "1", "BEAD_CORE_STATUS_PROOF": "1",
+            "BEAD_DASHBOARD_VIEWS_PROOF": "1",
+            "BEAD_DASHBOARD_FIXTURES": str(ROOT / "shell/tests/fixtures/dashboard"),
+            "BEAD_PANEL_IDLE_STATE": "release", "BEAD_DASHBOARD_RESIDENCY": "1",
+            "BEAD_DASHBOARD_PAGES": "today,weather,media,system",
+            "BEAD_DASHBOARD_RESIDENCY_SLOTS": "4", "BEAD_DASHBOARD_RESIDENCY_LEGACY": "1",
+            "BEAD_DASHBOARD_ACCEPTANCE": "1", "BEAD_DASHBOARD_BATCH_MEDIANS": "1",
+            "BEAD_DASHBOARD_WARMUP_SECONDS": "0",
+            "CARGO_TARGET_DIR": str(ROOT / "target")}
+        if args.profile == "laptop-reference":
+            CAPTURE_CONFIG["BEAD_REQUIRE_DRM"] = "1"
+            CAPTURE_CONFIG["BEAD_REFERENCE_ABSOLUTE_GATE"] = "1"
     CAPTURE_CONFIG = {**CAPTURE_CONFIG,
                       "BEAD_MENU_ENGINE_BINARY": str(HELPER),
                       "BEAD_RESEARCH_TOOLS": str(args.research_tools),
                       "CARGO_TARGET_DIR": str(args.cargo_target_dir),
                       "BEAD_MENU_ENGINE_BUNDLE": str(args.menu_engine_bundle),
                       "BEAD_DASHBOARD_FIXTURES": str(args.dashboard_fixtures)}
+    if args.profile in ("laptop-reference", "rehearsal"):
+        CAPTURE_CONFIG.update({
+            "BEAD_RESEARCH_TOOLS": str(args.research_tools),
+            "CARGO_TARGET_DIR": str(ROOT / "target"),
+            "BEAD_DASHBOARD_FIXTURES": str(ROOT / "shell/tests/fixtures/dashboard"),
+        })
+        CAPTURE_CONFIG.pop("BEAD_MENU_ENGINE_BINARY", None)
+        CAPTURE_CONFIG.pop("BEAD_MENU_ENGINE_BUNDLE", None)
+        if args.profile == "rehearsal":
+            CAPTURE_CONFIG.pop("BEAD_REQUIRE_DRM", None)
+            CAPTURE_CONFIG.pop("BEAD_REFERENCE_ABSOLUTE_GATE", None)
     raw_comp_dir = args.raw_root / args.compositor
     raw_dir = None
     stage = "preflight"
@@ -404,7 +442,8 @@ def main() -> int:
             "cwd": str(ROOT),
             "replacement_kind": "invocation" if args.invocation_retry else args.environmental_replacement,
             "dry_run": args.dry_run, "opened_once_only": args.opened_once_only,
-            "swap_size_bytes": args.swap_size_bytes, "max_load": args.max_load,
+            "max_load": args.max_load,
+            "capture_profile": args.profile,
         })
         save_json(raw_dir / "artifact-hashes.json", hashes)
         (raw_dir / "argv.json").write_text(json.dumps(argv, indent=2) + "\n")

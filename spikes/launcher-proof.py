@@ -185,6 +185,11 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 (raw/'dashboard-residency-baseline.json').write_text(json.dumps(baseline_timing,indent=2)+'\n')
             else:
                 bar=matrix.idle(client.pid,2)
+            if os.environ.get('BEAD_REFERENCE_ABSOLUTE_GATE')=='1':
+                if bar.get('drm_mib') is None:
+                    raise RuntimeError('reference baseline lacks DRM fdinfo; absolute laptop verdict is unavailable')
+                if bar['pss_plus_drm_mib']+bar['memory']['swap_pss_mib']>=24.5:
+                    raise RuntimeError('reference baseline reached the 24.5 MiB stop line')
             result['bar']=bar
             if observe:bar['external']=observe()
             bar['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')

@@ -91,25 +91,43 @@ def stop(process):
             process.wait(timeout=5)
 
 
-def drm_memory(pid):
-    # Deduplicate descriptors sharing a DRM client, prefer modern totals to legacy aliases.
+def parse_drm_fdinfo(contents):
+    """Aggregate fdinfo memory once per DRM client, preferring total/resident/legacy."""
     clients={}
-    for p in pathlib.Path(f'/proc/{pid}/fdinfo').glob('*'):
-        try:fields=dict(line.split(':',1) for line in p.read_text().splitlines() if line.startswith('drm-'))
-        except (OSError,ValueError):continue
-        if not any(k.startswith(('drm-total-','drm-memory-')) for k in fields):continue
-        key=(fields.get('drm-driver',''),fields.get('drm-pdev',''),fields.get('drm-client-id',p.name))
+    for index,text in enumerate(contents):
+        try:fields={key:value.strip() for key,value in
+                    (line.split(':',1) for line in text.splitlines() if line.startswith('drm-'))}
+        except ValueError:continue
+        if not any(k.startswith(('drm-total-','drm-resident-','drm-memory-')) for k in fields):continue
+        key=(fields.get('drm-driver',''),fields.get('drm-pdev',''),fields.get('drm-client-id',str(index)))
         values={}
-        for prefix in ['drm-memory-','drm-total-']:
+        for prefix,priority in (('drm-memory-',1),('drm-resident-',2),('drm-total-',3)):
             for k,v in fields.items():
-                if k.startswith(prefix):
-                    words=v.split();scale={'KiB':1024,'MiB':1024**2,'GiB':1024**3,'B':1}.get(words[1] if len(words)>1 else 'B',1)
-                    values[k[len(prefix):]]=int(words[0])*scale/1024**2
+                if not k.startswith(prefix):continue
+                words=v.split()
+                if not words or not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?',words[0]):continue
+                scale={'KiB':1024,'MiB':1024**2,'GiB':1024**3,'B':1}.get(words[1] if len(words)>1 else 'B',1)
+                region=k[len(prefix):]
+                prior=values.get(region)
+                if prior is None or priority>prior[0]:values[region]=(priority,float(words[0])*scale/1024**2)
+        values={region:value for region,(_,value) in values.items()}
         clients[key]=values
     regions={}
-    for values in clients.values():
-        for k,v in values.items():regions[k]=regions.get(k,0)+v
+    for (driver,pdev,_),values in clients.items():
+        device=f"{driver or 'unknown'}@{pdev or 'unknown'}"
+        for k,v in values.items():
+            key=f"{device}/{k}"
+            regions[key]=regions.get(key,0)+v
     return regions or None
+
+
+def drm_memory(pid):
+    # drm-memory-* is a deprecated amdgpu alias for drm-resident-*.
+    contents=[]
+    for path in pathlib.Path(f'/proc/{pid}/fdinfo').glob('*'):
+        try:contents.append(path.read_text())
+        except OSError:continue
+    return parse_drm_fdinfo(contents)
 
 def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
     label=f'{mode}-{layout}-{run}'
@@ -656,6 +674,26 @@ def main():
                 time.sleep(0.1)
             else:
                 raise RuntimeError('Nested niri did not create a Wayland socket')
+            private_runtime = pathlib.Path(env['XDG_RUNTIME_DIR']).resolve()
+            display_path = pathlib.Path(env['WAYLAND_DISPLAY'])
+            if not display_path.is_absolute():
+                display_path = private_runtime / display_path
+            display_path = display_path.resolve()
+            runtime_mode = private_runtime.stat().st_mode & 0o777
+            isolation = {
+                'private_xdg_runtime_dir': str(private_runtime),
+                'private_wayland_display': str(display_path),
+                'runtime_is_task_private': private_runtime.name == 'r' and private_runtime.parent.name.startswith('bd-'),
+                'runtime_mode_octal': oct(runtime_mode),
+                'runtime_has_no_group_or_other_access': runtime_mode & 0o077 == 0,
+                'wayland_socket_inside_private_runtime': display_path.is_relative_to(private_runtime),
+                'nested_compositor': args.compositor,
+            }
+            if not all(isolation[key] for key in (
+                    'runtime_is_task_private', 'runtime_has_no_group_or_other_access',
+                    'wayland_socket_inside_private_runtime')):
+                raise RuntimeError('nested compositor escaped its private XDG runtime/display')
+            (raw / 'session-isolation.json').write_text(json.dumps(isolation, indent=2) + '\n')
             if args.virtual120:
                 if args.compositor!='hyprland':raise RuntimeError('virtual120 needs isolated Hyprland')
                 signatures=[]
