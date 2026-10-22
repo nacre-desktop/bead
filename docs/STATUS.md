@@ -1,25 +1,20 @@
 # Status
 
-## 2026-10-22 — B0023 resumed under the desktop relative gate
+## 2026-10-22 — B0023 implemented; relative memory acceptance blocked
 
-The lead confirmed queue decision `f58558e`: on the desktop, compare candidate
-against main on the same host and at the same output count; the gate is at most
-+0.5 MiB median per phase, with no unexplained anonymous growth above 1 MiB.
-The earlier absolute-cap stop below used the wrong host gate. Matched control /
-candidate captures and the remaining lifecycle/input/niri proofs are in progress;
-the extra-output cost remains a separate metric. No live change is authorized.
-
-## 2026-10-22 — B0023 sessions implemented; memory gate blocked
-
-Local `384b3de` gives outputs independent UI sessions and shares service owners,
-fonts, palette snapshots and image assets. Full Bead Arch CI passed. The private
-two-output CPU-bar run stopped at 26.043 MiB after a one-output median of
-23.978 MiB: provisional +2.065 MiB, without a complete two-output window or its
-residency breakdown. The 24.5 MiB stop line prevents further work or acceptance.
-The late output-name race found by the first smoke is fixed without replacing
-the session. Remaining lifecycle/input/niri proofs are incomplete; no push or
-live change. See [B0023](specs/0023-per-output-ui-sessions.md). B0022 remains blocked
-on this acceptance and its separate published action contracts.
+Outputs now own independent UI sessions, output-scoped model/input/commit
+routing and teardown, with shared services/fonts/assets and palette snapshots.
+Matched desktop measurements use owner decision `f58558e`: candidate minus
+main must be at most +0.5 MiB median for the same output count and phase;
+unexplained anonymous growth above 1 MiB also blocks acceptance. The earlier
+absolute-cap stop used the wrong host gate and is superseded.
+Final same-count PSS deltas: H one/two +0.270/+1.420 MiB; N initial/1.25/return
++0.443/+0.884/+0.981 MiB. Extra-output cost +2.045 MiB meets its separate target.
+Full Arch CI and private lifecycle/input/scale/remove/re-add proof pass.
+See [B0023](specs/0023-per-output-ui-sessions.md) for the measured spreads,
+residency breakdown and private lifecycle proofs. B0022 remains blocked on
+this memory acceptance and its separate published action contracts. No push,
+installed-shell change or live session.
 
 ## 2026-10-22 — B0022 bar composition and lifecycle
 

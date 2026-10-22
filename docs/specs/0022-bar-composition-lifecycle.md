@@ -7,10 +7,11 @@ start. The Wayland runtime already creates one primary layer surface per
 announced output, updates it on output geometry/scale changes, and removes it
 on output destruction. The local [B0023 candidate](0023-per-output-ui-sessions.md)
 now gives each output its own runtime, view state and scoped backend projection.
-Its full CI passed, but the two-output memory screen reached 26.043 MiB and
-triggered the standing 24.5 MiB stop. Remaining private lifecycle/input proofs
-are incomplete; that architecture acceptance and the published action contracts
-still block this consumer. No source from B0023 has been pushed.
+Its full CI passed, but matched desktop control/candidate measurements fail
+the relative memory gate (at most +0.5 MiB per phase). The laptop absolute
+cap does not apply to this host. Architecture acceptance and the published
+action contracts still block this consumer; see B0023 for measured deltas and
+private lifecycle proofs. No source from B0023 has been pushed.
 
 Output surface lifecycle is already implemented in
 `crates/bead-wayland/src/runtime.rs` and `protocols.rs`: output announcements
@@ -79,7 +80,7 @@ The original blocker was architectural: adding model fields could not repair
 one shared `SceneSource`, committed scene, primary UI serial and pointer target.
 B0023 implements per-output sessions, update/commit/input/teardown routing and
 late-name handling while keeping services and immutable resources shared.
-Its memory stop and incomplete private proofs now replace the missing runtime
+Its failed relative-memory gate now replaces the missing runtime
 implementation as the architecture blocker; see its measured result before
 resuming this consumer. This does not publish any missing daemon action route.
 

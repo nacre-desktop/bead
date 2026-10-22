@@ -1,26 +1,29 @@
 # Feasibility
 
-## 2026-10-22 — B0023 per-output sessions: stopped at the memory gate
+## 2026-10-22 — B0023 sessions: relative memory gate blocks integration
 
-The candidate creates one session per output, including late output names.
-The provisional extra-output screen is near 2 MiB with shared services/fonts/assets and palette snapshots.
-The first two-output sample nevertheless crosses the absolute 24.5 MiB stop line.
-The unit is blocked; this is not a completed settled-memory or lifecycle acceptance.
+Each output owns its UI state/update/commit/input lifetime while resources and services remain shared.
+The corrected private input/idle/scale/remove/re-add proof passes; full Arch Bead CI passes.
+The desktop uses the same-output-count relative gate; the earlier laptop-cap stop was incorrect.
+The extra bar fits its separate ~3 MiB target, but matched relative acceptance fails.
 
-| CPU bar, 2880×1800/1.5/virtual 120 Hz | MiB |
-| --- | ---: |
-| One output: median PSS (five samples) | 23.978 |
-| One output: file / anonymous / SHM PSS | 17.841 / 5.465 / 0.672 |
-| Two outputs: first screen, then abort | 26.043 |
-| Provisional increase; complete settled delta | +2.065; not measured |
+| CPU bar phase | Control MiB | Candidate MiB | Delta MiB |
+| --- | ---: | ---: | ---: |
+| Hyprland one output, 1.5 | 23.945312 | 24.214844 | +0.269531 |
+| Hyprland two outputs, 1.5 | 24.836914 | 26.256836 | +1.419922 |
+| niri one output, initial 1.5 | 25.269531 | 25.712891 | +0.443359 |
+| niri one output, 1.25 | 24.767578 | 25.651367 | +0.883789 |
+| niri one output, return 1.5 | 25.014648 | 25.996094 | +0.981445 |
 
-Source `384b3de`, default-feature release, renderer `cpu`; binary SHA-256
-`136ba835c15437f9a42bdf5dc020031b04a0c84299fc00f8c475bbca6ad0c7ef`.
-SwapPss was zero in the retained baseline; DRM was unavailable, not zero.
-The aborted sample's file/anonymous/SHM breakdown was not retained, so its increase
-is not attributed. No further capture/optimization or push after the stop.
-Full Arch CI passed. First smoke found and fixed a late-name duplicate-session
-race before sampling. See [B0023](docs/specs/0023-per-output-ui-sessions.md).
+The extra bar costs 2.045 MiB median (range 2.037–2.072): anonymous +1.375,
+file −0.002, SHM +0.672 MiB; SwapPss 0 and DRM unavailable, not zero.
+Residency categories are independent medians and need not sum exactly.
+Two-output anonymous growth versus control is +1.434 MiB and is not fully attributed.
+Private calendar closes are −0.291/+0.260 MiB from own bar (own-bar+5 passes).
+Niri scale commits/buffer geometry pass; niri multi-output hotplug remains unproved.
+Source `60896a0`, proof/CI `8f4aad5`; default-feature release, Rust 1.99.0, CPU.
+The final batch uses five alternating pairs per compositor, 10 s warmup + five 1 s samples per phase.
+No push or live change. Raw evidence is private; [B0023](docs/specs/0023-per-output-ui-sessions.md) records hashes, commands and spreads.
 
 ## 2026-10-22 — B0021 wallpaper memory diagnosis
 
