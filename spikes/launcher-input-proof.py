@@ -55,6 +55,19 @@ def sample(env,raw,compositor,stop):
                 pointer.wait('POINTER_READY');pointer.command('move 1000 300','POINTER_DONE');time.sleep(.2)
                 key(['a'],'a','app-0001')
                 subprocess.run(['grim',str(raw/'launcher-search.png')],env=env,capture_output=True,check=True,timeout=8)
+                # The first row is deliberately disabled: a missed star cannot
+                # activate anything, even in this fixture-only proof.
+                for enabled in (True,False):
+                    offset=len(matrix.log_text(log))
+                    pointer.command('move 1462 140','POINTER_DONE')
+                    pointer.command('click','POINTER_DONE')
+                    def favorite_presented(text):
+                        state=presented_state(text[offset:],'a','app-0001')
+                        return state and any(row['id']=='app-0000' and row.get('favorite')is enabled
+                                             for row in state.get('launcher.apps',[]))
+                    matrix.wait_log(log,favorite_presented,timeout=8)
+                    if enabled:
+                        subprocess.run(['grim',str(raw/'launcher-favorite.png')],env=env,capture_output=True,check=True,timeout=8)
                 key(['-k','Down'],'a','app-0002')
                 key(['-k','Up'],'a','app-0001')
                 wrapped=key(['-k','Up'],'a','app-0159');assert wrapped['launcher.scroll.y']>0
@@ -80,7 +93,7 @@ def sample(env,raw,compositor,stop):
                 if pointer:pointer.close();pointer=None
                 stop(client);client=None
                 stop(keeper);keeper=None
-        result={'compositor':compositor,'catalog_size':320,'engine':False,'states':states,'memory':memory,'valid':True}
+        result={'compositor':compositor,'catalog_size':320,'engine':False,'states':states,'favorite_pointer_pin_unpin':True,'memory':memory,'valid':True}
         (raw/'launcher-input-proof.json').write_text(json.dumps(result,indent=2)+'\n')
         print('LAUNCHER_INPUT_PROOF states='+str(len(states))+' valid=true',flush=True)
     finally:

@@ -249,7 +249,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                         raise
                     result['restored_mode']=restored_mode
                     call('launcher','a',target='nacre')
-                elif reopen_input and cycle>0:call('launcher',target='nacre')
+                elif reopen_input and cycle>0:call('open')
                 elif query_on_open:call('launcher','a',target='nacre')
                 else:call('open')
                 matrix.wait_log(log,lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* .*companion=true',t[offset:])is not None)
