@@ -317,9 +317,7 @@ fn status_at_root_mode(
                 )
                 .map_err(|error| error.to_string())?
                 .with_frame(
-                    if peek {
-                        crate::placement::Attachment::Popout
-                    } else if !control_panel {
+                    if peek || !control_panel {
                         crate::placement::Attachment::Popout
                     } else {
                         crate::placement::Attachment::ControlCenter

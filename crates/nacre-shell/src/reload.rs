@@ -144,10 +144,10 @@ impl Runtime {
                 },
             );
             self.status_pill_route = Some(view);
-        } else if self.status_pill_route.take().is_some() {
-            if let Some(wakeup) = &self.wakeup {
-                wakeup(UiEvent::CompanionVisibility(false));
-            }
+        } else if self.status_pill_route.take().is_some()
+            && let Some(wakeup) = &self.wakeup
+        {
+            wakeup(UiEvent::CompanionVisibility(false));
         }
         Ok(())
     }
