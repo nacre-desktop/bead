@@ -12,6 +12,7 @@ dated transfer and execution receipts below remain historical records.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
+| 0 | [B0016 System tray](0016-system-tray.md) | In progress | Headless SNI/DBusMenu hardening and private-bus proofs; bar/menu view. Local review only; no live ownership. |
 | 0 | [B0014 Bluetooth single-adapter power](0014-bluetooth-single-adapter-power.md) | Done | Sourcedcf541a9 integrated normally; exact-source full hostedCI39240289443 SUCCESS. Capability-gated; no producer or live enablement claim. |
 | 0 | [B0013 Wi-Fi radio switch](0013-network-wifi-radio-switch.md) | Done | Sourcecdd9fb2 integrated021fdaad; exact-headCI39230443828 SUCCESS. Capability-gated, no live producer/enablement claim. |
 | 1 | [B0012 light measurement prep](0012-measurement-readiness-light-prep.md) | Done: light prep accepted | Report14b93337 accepted; command routing and geometry/scope gaps recorded. No runtime/tool changes or captures. |
