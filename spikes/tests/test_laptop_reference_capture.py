@@ -20,6 +20,7 @@ def load(name, path):
 capture = load("laptop_reference_capture", ROOT / "spikes/laptop-reference-capture.py")
 measure = load("measure_for_laptop_capture", ROOT / "spikes/measure.py")
 arm = load("b0002_arm_for_laptop_capture", ROOT / "spikes/b0002-arm.py")
+launcher_proof = load("launcher_proof_for_laptop_capture", ROOT / "spikes/launcher-proof.py")
 
 
 def sample(total, anon=5.0, drm=None):
@@ -31,6 +32,14 @@ def sample(total, anon=5.0, drm=None):
 
 
 class LaptopReferenceCaptureTests(unittest.TestCase):
+    def test_fixture_lane_uses_empty_external_observer_and_engine_lane_requires_one(self):
+        fixture_observer = launcher_proof.default_external_observer(None, None)
+        self.assertEqual(fixture_observer(), {
+            "processes": [], "pss_plus_drm_swap_mib": 0.0,
+            "source": "UI-only menu fixture; no external process"})
+        with self.assertRaisesRegex(RuntimeError, "requires an external-process observer"):
+            launcher_proof.default_external_observer(None, "/run/menu-engine.sock")
+
     def test_manifest_pins_binaries_frozen_bundle_and_shared_fixtures(self):
         with tempfile.TemporaryDirectory(prefix="bead-reference-manifest-") as temp:
             root = pathlib.Path(temp)

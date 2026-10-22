@@ -24,6 +24,15 @@ def stop_keyboard_keeper(keeper, stop):
     if keeper is not None:
         stop(keeper)
 
+
+def default_external_observer(observer, engine_socket):
+    if observer is not None:
+        return observer
+    if engine_socket:
+        raise RuntimeError('a shared launcher engine requires an external-process observer')
+    return lambda: {'processes': [], 'pss_plus_drm_swap_mib': 0.0,
+                    'source': 'UI-only menu fixture; no external process'}
+
 def build_launcher_command(binary,core_views,source_args,sock,raw,dashboard_views,status_views,
                            dashboard_fixtures,provider,engine_socket,compositor,acceptance):
     lifetime=1800 if acceptance is not None else (300 if core_views else 180)
@@ -54,6 +63,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     sock=pathlib.Path(env['XDG_RUNTIME_DIR'])/'launcher-command.sock'
     log=raw/'launcher.log';client=pointer=keeper=None
     engine_socket=env.get('BEAD_LAUNCHER_ENGINE_SOCKET')
+    observe=default_external_observer(observe,engine_socket)
     core_views=os.environ.get('BEAD_CORE_VIEWS_PROOF')=='1'
     status_views=os.environ.get('BEAD_CORE_STATUS_PROOF')=='1'
     dashboard_views=os.environ.get('BEAD_DASHBOARD_VIEWS_PROOF')=='1'
