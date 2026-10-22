@@ -14,9 +14,32 @@ use tokio::sync::mpsc;
 pub enum Action {
     Volume(f64),
     Mute(bool),
-    TrayActivate { item: String, x: i32, y: i32 },
-    TrayMenu { item: String, entry: i32 },
-    TrayPrepare { item: String },
+    TrayActivate {
+        item: String,
+        x: i32,
+        y: i32,
+    },
+    TraySecondaryActivate {
+        item: String,
+        x: i32,
+        y: i32,
+    },
+    TrayScroll {
+        item: String,
+        delta: i32,
+        horizontal: bool,
+    },
+    TrayMenu {
+        item: String,
+        entry: i32,
+    },
+    TrayPrepare {
+        item: String,
+    },
+    TrayPrepareEntry {
+        item: String,
+        entry: i32,
+    },
 }
 #[derive(Debug)]
 pub(crate) enum Command {

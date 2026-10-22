@@ -278,6 +278,8 @@ impl Client {
         {
             let tx = tx.clone();
             let items = items.clone();
+            let connection = connection.clone();
+            let host_name = wellknown.to_string();
 
             let dbus_proxy = DBusProxy::new(&connection).await?;
 
@@ -289,6 +291,20 @@ impl Client {
                     if body.name == names::WATCHER_BUS {
                         for dest in items.clear_items() {
                             tx.send(Event::Remove(dest))?;
+                        }
+                        let watcher = StatusNotifierWatcherProxy::new(&connection).await?;
+                        watcher.register_status_notifier_host(&host_name).await?;
+                        for item in watcher.registered_status_notifier_items().await? {
+                            if let Err(error) = Client::handle_item(
+                                &item,
+                                connection.clone(),
+                                tx.clone(),
+                                items.clone(),
+                            )
+                            .await
+                            {
+                                error!("failed to resnapshot tray item {item} after watcher acquisition: {error}");
+                            }
                         }
                     }
                 }
@@ -326,7 +342,9 @@ impl Client {
 
         let properties = Self::get_item_properties(destination, &path, &properties_proxy).await?;
 
-        items.new_item(destination.into(), &properties);
+        if !items.new_item(destination.into(), &properties) {
+            return Ok(());
+        }
 
         tx.send(Event::Add(
             destination.to_string(),
@@ -419,7 +437,10 @@ impl Client {
         let mut disconnect_stream = dbus_proxy.receive_name_owner_changed().await?;
         let mut props_changed = notifier_item_proxy.inner().receive_all_signals().await?;
         // Subscribe before checking, so an already-exited owner cannot strand this task.
-        if !dbus_proxy.name_has_owner(destination.try_into().map_err(zbus::Error::from)?).await? {
+        if !dbus_proxy
+            .name_has_owner(destination.try_into().map_err(zbus::Error::from)?)
+            .await?
+        {
             items.remove_item(destination);
             tx.send(Event::Remove(destination.to_string()))?;
             return Ok(());
@@ -610,7 +631,12 @@ impl Client {
         let mut disconnected = dbus_proxy.receive_name_owner_changed().await?;
         let mut layout_updated = dbus_menu_proxy.receive_layout_updated().await?;
         let mut properties_updated = dbus_menu_proxy.receive_items_properties_updated().await?;
-        if !dbus_proxy.name_has_owner(destination.as_str().try_into().map_err(zbus::Error::from)?).await? { return Ok(()); }
+        if !dbus_proxy
+            .name_has_owner(destination.as_str().try_into().map_err(zbus::Error::from)?)
+            .await?
+        {
+            return Ok(());
+        }
 
         debug!("[{destination}{menu_path}] getting initial menu");
         let menu = dbus_menu_proxy.get_layout(0, -1, &[]).await?;
@@ -757,8 +783,12 @@ impl Client {
 
     /// Owned watcher handles, including completed tasks awaiting reaping.
     pub async fn retained_watcher_tasks(&self) -> Result<usize> {
-        let watcher=self.connection.object_server().interface::<_,StatusNotifierWatcher>(names::WATCHER_OBJECT).await?;
-        let count=watcher.get().await.owned_task_count();
+        let watcher = self
+            .connection
+            .object_server()
+            .interface::<_, StatusNotifierWatcher>(names::WATCHER_OBJECT)
+            .await?;
+        let count = watcher.get().await.owned_task_count();
         Ok(count)
     }
 

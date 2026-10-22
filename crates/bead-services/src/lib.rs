@@ -49,6 +49,10 @@ pub struct MenuEntry {
 pub struct TrayItem {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub tooltip_title: String,
+    #[serde(default)]
+    pub tooltip_description: String,
     pub visible: bool,
     pub item_is_menu: bool,
     pub icon_name: String,

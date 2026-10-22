@@ -156,6 +156,7 @@ impl IconPixmap {
     pub fn from_array(array: &Array) -> Result<Vec<Self>> {
         array
             .iter()
+            .take(8)
             .map(|pixmap| {
                 let structure = pixmap.downcast_ref::<&Structure>()?;
                 let fields = structure.fields();
@@ -166,14 +167,33 @@ impl IconPixmap {
                     .downcast_ref::<i32>()?;
 
                 let height = fields
-                    .first()
+                    .get(1)
                     .ok_or(Error::InvalidData("invalid or missing width"))?
                     .downcast_ref::<i32>()?;
+
+                let expected = usize::try_from(width)
+                    .ok()
+                    .and_then(|w| usize::try_from(height).ok().and_then(|h| w.checked_mul(h)))
+                    .and_then(|area| area.checked_mul(4))
+                    .filter(|bytes| {
+                        width > 0
+                            && height > 0
+                            && width <= 256
+                            && height <= 256
+                            && *bytes <= 1024 * 1024
+                    })
+                    .ok_or(Error::InvalidData("invalid or oversized pixmap dimensions"))?;
 
                 let pixel_values = fields
                     .get(2)
                     .ok_or(Error::InvalidData("invalid or missing pixel values"))?
                     .downcast_ref::<&Array>()?;
+
+                if pixel_values.len() != expected {
+                    return Err(Error::InvalidData(
+                        "pixmap byte count does not match dimensions",
+                    ));
+                }
 
                 let pixels = pixel_values
                     .iter()

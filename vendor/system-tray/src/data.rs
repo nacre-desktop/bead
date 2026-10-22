@@ -30,14 +30,18 @@ impl TrayItemMap {
         self.inner.clone()
     }
 
-    pub(crate) fn new_item(&self, dest: String, item: &StatusNotifierItem) {
+    pub(crate) fn new_item(&self, dest: String, item: &StatusNotifierItem) -> bool {
         let mut lock = self.inner.lock().expect("mutex lock should succeed");
         cfg_if::cfg_if! {
             if #[cfg(feature = "data")] {
-                lock.insert(dest, (item.clone(), None));
+                if lock.contains_key(&dest) || lock.len() >= 64 { return false; }
+                let mut item = item.clone();
+                bound_item(&mut item);
+                lock.insert(dest, (item, None));
+                true
             }else {
                 let _ = item;
-                lock.insert(dest);
+                lock.insert(dest)
             }
         }
     }
@@ -67,7 +71,9 @@ impl TrayItemMap {
                         .lock()
                         .expect("should get lock")
                         .get_mut(dest) {
-                    menu_cache.replace(menu.clone());
+                    let mut menu = menu.clone();
+                    bound_menu(&mut menu);
+                    menu_cache.replace(menu);
                 } else {
                     tracing::error!("could not find item in state");
                 }
@@ -109,10 +115,147 @@ impl TrayItemMap {
                     }
                 }
             }
+            bound_item(item);
+            if let Some(menu) = menu {
+                bound_menu(menu);
+            }
         } else {
             error!("could not find item in state");
         }
     }
+}
+
+#[cfg(feature = "data")]
+fn bounded(value: &mut Option<String>, max: usize) {
+    if let Some(text) = value {
+        *text = text.chars().filter(|c| !c.is_control()).take(max).collect();
+    }
+}
+
+#[cfg(feature = "data")]
+fn bound_item(item: &mut StatusNotifierItem) {
+    const ICON_BYTES: usize = 1024 * 1024;
+    bounded(&mut item.title, 512);
+    bounded(&mut item.icon_theme_path, 1024);
+    bounded(&mut item.icon_name, 512);
+    bounded(&mut item.overlay_icon_name, 512);
+    bounded(&mut item.attention_icon_name, 512);
+    bounded(&mut item.attention_movie_name, 512);
+    let mut remaining = ICON_BYTES;
+    for list in [
+        &mut item.icon_pixmap,
+        &mut item.overlay_icon_pixmap,
+        &mut item.attention_icon_pixmap,
+    ] {
+        if let Some(pixmaps) = list {
+            pixmaps.retain_mut(|pixmap| {
+                let expected = usize::try_from(pixmap.width)
+                    .ok()
+                    .and_then(|w| {
+                        usize::try_from(pixmap.height)
+                            .ok()
+                            .and_then(|h| w.checked_mul(h))
+                    })
+                    .and_then(|area| area.checked_mul(4));
+                let Some(bytes) = expected.filter(|bytes| {
+                    pixmap.width > 0
+                        && pixmap.height > 0
+                        && pixmap.width <= 256
+                        && pixmap.height <= 256
+                        && *bytes == pixmap.pixels.len()
+                        && *bytes <= remaining
+                }) else {
+                    return false;
+                };
+                remaining -= bytes;
+                true
+            });
+        }
+    }
+    if let Some(tip) = &mut item.tool_tip {
+        tip.icon_name = tip
+            .icon_name
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(512)
+            .collect();
+        tip.title = tip
+            .title
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(512)
+            .collect();
+        tip.description = tip
+            .description
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(2048)
+            .collect();
+        tip.icon_data.retain_mut(|pixmap| {
+            let Some(bytes) = usize::try_from(pixmap.width)
+                .ok()
+                .and_then(|w| {
+                    usize::try_from(pixmap.height)
+                        .ok()
+                        .and_then(|h| w.checked_mul(h))
+                })
+                .and_then(|n| n.checked_mul(4))
+            else {
+                return false;
+            };
+            if pixmap.width <= 0
+                || pixmap.height <= 0
+                || pixmap.width > 256
+                || pixmap.height > 256
+                || bytes != pixmap.pixels.len()
+                || bytes > remaining
+            {
+                return false;
+            }
+            remaining -= bytes;
+            true
+        });
+    }
+}
+
+#[cfg(feature = "data")]
+fn bound_menu(menu: &mut TrayMenu) {
+    fn trim(
+        entries: &mut Vec<MenuItem>,
+        depth: usize,
+        budget: &mut usize,
+        icon_budget: &mut usize,
+    ) {
+        if depth > 8 {
+            entries.clear();
+            return;
+        }
+        entries.truncate(*budget);
+        *budget -= entries.len();
+        for entry in entries {
+            if let Some(label) = &mut entry.label {
+                *label = label
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .take(512)
+                    .collect();
+            }
+            if let Some(icon) = &mut entry.icon_name {
+                *icon = icon.chars().filter(|c| !c.is_control()).take(512).collect();
+            }
+            if let Some(data) = &mut entry.icon_data {
+                let keep = data.len().min(4 * 1024).min(*icon_budget);
+                if keep < data.len() {
+                    *data = data[..keep].to_vec();
+                }
+                *icon_budget -= keep;
+            }
+            trim(&mut entry.submenu, depth + 1, budget, icon_budget);
+        }
+    }
+    let mut budget = 256;
+    let mut icon_budget = 1024 * 1024;
+    trim(&mut menu.submenus, 0, &mut budget, &mut icon_budget);
 }
 
 pub fn apply_menu_diffs(tray_menu: &mut TrayMenu, diffs: &[MenuDiff]) {

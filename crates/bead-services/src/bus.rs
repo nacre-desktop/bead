@@ -302,17 +302,94 @@ async fn refresh_sensors(shared: &Shared, connection: &Connection) {
         s.bluetooth = bluetooth;
     });
 }
-fn menu(entry: &MenuItem) -> MenuEntry {
+const MAX_TRAY_ITEMS: usize = 64;
+const MAX_MENU_DEPTH: usize = 8;
+const MAX_MENU_ENTRIES: usize = 256;
+const MAX_TRAY_PIXMAP_BYTES: usize = 1024 * 1024;
+
+fn bounded_text(value: &str, limit: usize) -> String {
+    value
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(limit)
+        .collect()
+}
+
+fn valid_pixmaps(pixmaps: Option<&Vec<system_tray::item::IconPixmap>>) -> Vec<(i32, i32, Vec<u8>)> {
+    let mut total = 0usize;
+    pixmaps
+        .into_iter()
+        .flatten()
+        .filter_map(|p| {
+            let expected = usize::try_from(p.width)
+                .ok()?
+                .checked_mul(usize::try_from(p.height).ok()?)?
+                .checked_mul(4)?;
+            if p.width <= 0
+                || p.height <= 0
+                || p.width > 256
+                || p.height > 256
+                || expected != p.pixels.len()
+                || total.saturating_add(expected) > MAX_TRAY_PIXMAP_BYTES
+            {
+                return None;
+            }
+            total += expected;
+            Some((p.width, p.height, p.pixels.clone()))
+        })
+        .collect()
+}
+
+fn menu_has_clickable_leaf(entries: &[MenuItem], id: i32, ancestors_enabled: bool) -> bool {
+    entries.iter().any(|entry| {
+        let available = ancestors_enabled
+            && entry.enabled
+            && entry.visible
+            && !matches!(entry.menu_type, MenuType::Separator);
+        if entry.id == id {
+            available && entry.submenu.is_empty()
+        } else {
+            menu_has_clickable_leaf(&entry.submenu, id, available)
+        }
+    })
+}
+
+fn menu_has_visible_enabled_submenu(
+    entries: &[MenuItem],
+    id: i32,
+    ancestors_enabled: bool,
+) -> bool {
+    entries.iter().any(|entry| {
+        let available = ancestors_enabled
+            && entry.enabled
+            && entry.visible
+            && !matches!(entry.menu_type, MenuType::Separator);
+        if entry.id == id {
+            available && !entry.submenu.is_empty()
+        } else {
+            menu_has_visible_enabled_submenu(&entry.submenu, id, available)
+        }
+    })
+}
+
+fn menu(
+    entry: &MenuItem,
+    depth: usize,
+    budget: &mut usize,
+    parent_enabled: bool,
+) -> Option<MenuEntry> {
+    if depth > MAX_MENU_DEPTH || *budget == 0 {
+        return None;
+    }
+    *budget -= 1;
+    let enabled = entry.enabled && parent_enabled;
     MenuEntry {
         id: entry.id,
-        label: entry
-            .label
-            .clone()
-            .unwrap_or_default()
+        label: bounded_text(entry.label.as_deref().unwrap_or_default(), 512)
             .replace("__", "\0")
             .replace('_', "")
             .replace('\0', "_"),
-        enabled: entry.enabled,
+        enabled,
         visible: entry.visible,
         separator: matches!(entry.menu_type, MenuType::Separator),
         checked: match entry.toggle_state {
@@ -320,52 +397,70 @@ fn menu(entry: &MenuItem) -> MenuEntry {
             ToggleState::Off => Some(false),
             _ => None,
         },
-        children: entry.submenu.iter().map(menu).collect(),
+        children: entry
+            .submenu
+            .iter()
+            .filter_map(|child| menu(child, depth + 1, budget, enabled))
+            .collect(),
     }
+    .into()
 }
 fn refresh_tray(shared: &Shared, client: &Client) {
     let items = client.items();
     let items = items.lock().unwrap_or_else(crate::runtime::poisoned);
     let mut tray: Vec<_> = items
         .iter()
+        .filter(|(_, (item, _))| item.status != system_tray::item::Status::Passive)
+        .take(MAX_TRAY_ITEMS)
         .map(|(id, (item, layout))| TrayItem {
-            id: id.clone(),
-            title: item.title.clone().unwrap_or_default(),
-            visible: item.status != system_tray::item::Status::Passive,
-            item_is_menu: item.item_is_menu,
-            icon_name: if matches!(item.status, system_tray::item::Status::NeedsAttention) {
-                item.attention_icon_name
-                    .clone()
-                    .filter(|s| !s.is_empty())
-                    .or_else(|| item.icon_name.clone())
-            } else {
-                item.icon_name.clone()
-            }
-            .unwrap_or_default(),
-            icon_theme_path: item.icon_theme_path.clone().unwrap_or_default(),
-            icon_pixmap: (if matches!(item.status, system_tray::item::Status::NeedsAttention) {
-                item.attention_icon_pixmap
+            id: bounded_text(id, 512),
+            title: bounded_text(item.title.as_deref().unwrap_or_default(), 512),
+            tooltip_title: bounded_text(
+                item.tool_tip.as_ref().map_or("", |tip| tip.title.as_str()),
+                512,
+            ),
+            tooltip_description: bounded_text(
+                item.tool_tip
                     .as_ref()
-                    .filter(|p| !p.is_empty())
-                    .or(item.icon_pixmap.as_ref())
+                    .map_or("", |tip| tip.description.as_str()),
+                2048,
+            ),
+            visible: true,
+            item_is_menu: item.item_is_menu,
+            icon_name: bounded_text(
+                &if matches!(item.status, system_tray::item::Status::NeedsAttention) {
+                    item.attention_icon_name
+                        .clone()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| item.icon_name.clone())
+                } else {
+                    item.icon_name.clone()
+                }
+                .unwrap_or_default(),
+                512,
+            ),
+            icon_theme_path: bounded_text(
+                item.icon_theme_path.as_deref().unwrap_or_default(),
+                1024,
+            ),
+            icon_pixmap: if matches!(item.status, system_tray::item::Status::NeedsAttention) {
+                let attention = valid_pixmaps(item.attention_icon_pixmap.as_ref());
+                if attention.is_empty() {
+                    valid_pixmaps(item.icon_pixmap.as_ref())
+                } else {
+                    attention
+                }
             } else {
-                item.icon_pixmap.as_ref()
-            })
-            .into_iter()
-            .flatten()
-            .filter(|p| {
-                p.width > 0
-                    && p.height > 0
-                    && p.width <= 512
-                    && p.height <= 512
-                    && p.pixels.len() == (p.width * p.height * 4) as usize
-            })
-            .map(|p| (p.width, p.height, p.pixels.clone()))
-            .collect(),
+                valid_pixmaps(item.icon_pixmap.as_ref())
+            },
             attention: matches!(item.status, system_tray::item::Status::NeedsAttention),
-            menu: layout
-                .as_ref()
-                .map_or_else(Vec::new, |m| m.submenus.iter().map(menu).collect()),
+            menu: layout.as_ref().map_or_else(Vec::new, |m| {
+                let mut budget = MAX_MENU_ENTRIES;
+                m.submenus
+                    .iter()
+                    .filter_map(|entry| menu(entry, 0, &mut budget, true))
+                    .collect()
+            }),
         })
         .collect();
     tray.sort_by(|a, b| a.id.cmp(&b.id));
@@ -377,12 +472,66 @@ async fn tray_action(
     connection: &Connection,
     action: Action,
 ) -> Result<(), String> {
-    let (id, entry, prepare, x, y) = match action {
-        Action::TrayActivate { item, x, y } => (item, None, false, x, y),
-        Action::TrayMenu { item, entry } => (item, Some(entry), false, 0, 0),
-        Action::TrayPrepare { item } => (item, None, true, 0, 0),
+    let (id, operation, x, y) = match action {
+        Action::TrayActivate { item, x, y } => (item, "activate", x, y),
+        Action::TraySecondaryActivate { item, x, y } => (item, "secondary", x, y),
+        Action::TrayScroll {
+            item,
+            delta,
+            horizontal,
+        } => (
+            item,
+            if horizontal {
+                "scroll-horizontal"
+            } else {
+                "scroll-vertical"
+            },
+            delta,
+            0,
+        ),
+        Action::TrayMenu { item, entry } => {
+            let items = client.items();
+            let current = items.lock().map_err(|_| "tray lock poisoned")?;
+            let menu = current
+                .get(&item)
+                .and_then(|(_, layout)| layout.as_ref())
+                .ok_or("tray item has no current menu")?;
+            if !menu_has_clickable_leaf(&menu.submenus, entry, true) {
+                return Err("unknown, stale, or disabled tray menu entry".into());
+            }
+            drop(current);
+            (item, "menu", entry, 0)
+        }
+        Action::TrayPrepareEntry { item, entry } => {
+            let items = client.items();
+            let current = items.lock().map_err(|_| "tray lock poisoned")?;
+            let menu = current
+                .get(&item)
+                .and_then(|(_, layout)| layout.as_ref())
+                .ok_or("tray item has no current menu")?;
+            if !menu_has_visible_enabled_submenu(&menu.submenus, entry, true) {
+                return Err("unknown, stale, or disabled tray submenu".into());
+            }
+            drop(current);
+            (item, "prepare-entry", entry, 0)
+        }
+        Action::TrayPrepare { item } => (item, "prepare", 0, 0),
         _ => return Err("wrong service action".into()),
     };
+    if id.len() > 512 {
+        return Err("tray item identity exceeds 512 bytes".into());
+    }
+    if operation.starts_with("scroll") && !(-120..=120).contains(&x) {
+        return Err("tray scroll delta exceeds the supported range".into());
+    }
+    let items = client.items();
+    let item_is_menu = items
+        .lock()
+        .map_err(|_| "tray lock poisoned")?
+        .get(&id)
+        .ok_or("unknown/stale tray item")?
+        .0
+        .item_is_menu;
     let menu_path = client
         .items()
         .lock()
@@ -392,9 +541,13 @@ async fn tray_action(
         .0
         .menu
         .clone();
-    if prepare {
+    if operation == "prepare" || operation == "prepare-entry" {
         return client
-            .about_to_show_menuitem(id, menu_path.ok_or("tray item has no menu")?, 0)
+            .about_to_show_menuitem(
+                id,
+                menu_path.ok_or("tray item has no menu")?,
+                if operation == "prepare-entry" { x } else { 0 },
+            )
             .await
             .map(|_| ())
             .map_err(|e| e.to_string());
@@ -404,7 +557,7 @@ async fn tray_action(
         (id.as_str(), "/StatusNotifierItem".to_string()),
         |(name, path)| (name, format!("/{path}")),
     );
-    if let Some(entry) = entry {
+    if operation == "menu" {
         let proxy = Proxy::new(
             connection,
             destination,
@@ -420,22 +573,36 @@ async fn tray_action(
         proxy
             .call::<_, _, ()>(
                 "Event",
-                &(
-                    entry,
-                    "clicked",
-                    zbus::zvariant::Value::from(0i32),
-                    timestamp,
-                ),
+                &(x, "clicked", zbus::zvariant::Value::from(0i32), timestamp),
             )
             .await
             .map_err(|e| e.to_string())
     } else {
-        Proxy::new(connection, destination, path, "org.kde.StatusNotifierItem")
+        let proxy = Proxy::new(connection, destination, path, "org.kde.StatusNotifierItem")
             .await
-            .map_err(|e| e.to_string())?
-            .call::<_, _, ()>("Activate", &(x, y))
-            .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        match operation {
+            "secondary" => proxy
+                .call::<_, _, ()>("SecondaryActivate", &(x, y))
+                .await
+                .map_err(|e| e.to_string()),
+            "scroll-horizontal" => proxy
+                .call::<_, _, ()>("Scroll", &(x, "horizontal"))
+                .await
+                .map_err(|e| e.to_string()),
+            "scroll-vertical" => proxy
+                .call::<_, _, ()>("Scroll", &(x, "vertical"))
+                .await
+                .map_err(|e| e.to_string()),
+            _ if item_is_menu => proxy
+                .call::<_, _, ()>("ContextMenu", &(x, y))
+                .await
+                .map_err(|e| e.to_string()),
+            _ => proxy
+                .call::<_, _, ()>("Activate", &(x, y))
+                .await
+                .map_err(|e| e.to_string()),
+        }
     }
 }
 
@@ -472,5 +639,23 @@ mod clock_tests {
         old.as_object_mut().unwrap().remove("date");
         let decoded: crate::Snapshot = serde_json::from_value(old).unwrap();
         assert!(decoded.date.is_none());
+    }
+
+    #[test]
+    fn tray_projection_bounds_text_pixmaps_and_menu_depth() {
+        assert_eq!(bounded_text("a\n\u{7f}b", 1), "a");
+        let invalid = system_tray::item::IconPixmap {
+            width: i32::MAX,
+            height: i32::MAX,
+            pixels: vec![],
+        };
+        assert!(valid_pixmaps(Some(&vec![invalid])).is_empty());
+        let child = MenuItem { id: 11, ..MenuItem::default() };
+        let parent = MenuItem { id: 10, enabled: false, submenu: vec![child.clone()], ..MenuItem::default() };
+        assert!(!menu_has_clickable_leaf(&[parent], 11, true));
+        let hidden_child = MenuItem { id: 11, visible: false, ..MenuItem::default() };
+        assert!(!menu_has_clickable_leaf(&[hidden_child], 11, true));
+        let mut budget = 0;
+        assert!(menu(&MenuItem::default(), 0, &mut budget, true).is_none());
     }
 }

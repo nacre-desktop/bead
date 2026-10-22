@@ -37,8 +37,10 @@ impl StatusNotifierWatcher {
         #[zbus(signal_emitter)] signal_emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
         // Completed JoinSet tasks retain their allocation until joined.
-        while let Some(result)=self.tasks.try_join_next() {
-            if let Err(error)=result { warn!("watcher task failed: {error}"); }
+        while let Some(result) = self.tasks.try_join_next() {
+            if let Err(error) = result {
+                warn!("watcher task failed: {error}");
+            }
         }
         // TODO: right now, we convert everything to the unique bus name (something like :1.234).
         //  However, it might make more sense to listen to the actual name they give us, so that if
@@ -130,8 +132,10 @@ impl StatusNotifierWatcher {
         #[zbus(signal_emitter)] signal_emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
         // Completed JoinSet tasks retain their allocation until joined.
-        while let Some(result)=self.tasks.try_join_next() {
-            if let Err(error)=result { warn!("watcher task failed: {error}"); }
+        while let Some(result) = self.tasks.try_join_next() {
+            if let Err(error) = result {
+                warn!("watcher task failed: {error}");
+            }
         }
         let (service, objpath) = parse_service(service, hdr, con).await?;
         let service = zbus::names::BusName::Unique(service);
@@ -140,6 +144,11 @@ impl StatusNotifierWatcher {
 
         {
             let mut items = self.items.lock().expect("mutex lock should succeed");
+            if !items.contains(&item) && items.len() >= 64 {
+                return Err(zbus::fdo::Error::Failed(
+                    "StatusNotifierWatcher item limit reached (64)".into(),
+                ));
+            }
             if !items.insert(item.clone()) {
                 // we're already tracking them
                 info!("new item: {} (duplicate)", item);
@@ -198,8 +207,10 @@ impl StatusNotifierWatcher {
         debug!("received item unregister: {service}");
 
         // Completed JoinSet tasks retain their allocation until joined.
-        while let Some(result)=self.tasks.try_join_next() {
-            if let Err(error)=result { warn!("watcher task failed: {error}"); }
+        while let Some(result) = self.tasks.try_join_next() {
+            if let Err(error) = result {
+                warn!("watcher task failed: {error}");
+            }
         }
         let (service, objpath) = parse_service(service, hdr, con).await?;
         let service = zbus::names::BusName::Unique(service);
@@ -254,7 +265,9 @@ impl StatusNotifierWatcher {
     }
 
     /// Attach and run the Watcher (in the background) on a connection.
-    pub(crate) fn owned_task_count(&self) -> usize { self.tasks.len() }
+    pub(crate) fn owned_task_count(&self) -> usize {
+        self.tasks.len()
+    }
 
     pub async fn attach_to(self, con: &zbus::Connection) -> zbus::Result<()> {
         if !con.object_server().at(names::WATCHER_OBJECT, self).await? {
@@ -315,6 +328,11 @@ async fn parse_service<'a>(
     hdr: Header<'_>,
     con: &Connection,
 ) -> zbus::fdo::Result<(zbus::names::UniqueName<'static>, &'a str)> {
+    if service.len() > 512 {
+        return Err(zbus::fdo::Error::InvalidArgs(
+            "StatusNotifierItem identity exceeds 512 bytes".into(),
+        ));
+    }
     if service.starts_with('/') {
         // they sent us just the object path
         if let Some(sender) = hdr.sender() {

@@ -259,12 +259,15 @@ impl TryFrom<MenuLayout> for TrayMenu {
     type Error = Error;
 
     fn try_from(value: MenuLayout) -> Result<Self> {
-        let submenus = value
-            .fields
-            .submenus
-            .iter()
-            .map(MenuItem::try_from)
-            .collect::<std::result::Result<_, _>>()?;
+        let mut budget = 256;
+        let mut submenus = Vec::new();
+        for child in &value.fields.submenus {
+            if budget == 0 {
+                break;
+            }
+            let child = MenuItem::try_from_bounded(child, 0, &mut budget)?;
+            submenus.push(child);
+        }
 
         Ok(Self {
             id: value.id,
@@ -277,6 +280,16 @@ impl TryFrom<&OwnedValue> for MenuItem {
     type Error = Error;
 
     fn try_from(value: &OwnedValue) -> Result<Self> {
+        Self::try_from_bounded(value, 0, &mut 256)
+    }
+}
+
+impl MenuItem {
+    fn try_from_bounded(value: &OwnedValue, depth: usize, budget: &mut usize) -> Result<Self> {
+        if depth > 8 || *budget == 0 {
+            return Err(Error::InvalidData("menu exceeds depth or entry limit"));
+        }
+        *budget -= 1;
         let structure = value.downcast_ref::<&Structure>()?;
 
         let mut fields = structure.fields().iter();
@@ -351,8 +364,11 @@ impl TryFrom<&OwnedValue> for MenuItem {
         if let Some(Value::Array(array)) = fields.next() {
             let mut submenu = vec![];
             for value in array.iter() {
+                if *budget == 0 {
+                    break;
+                }
                 let value = OwnedValue::try_from(value)?;
-                let menu = MenuItem::try_from(&value)?;
+                let menu = MenuItem::try_from_bounded(&value, depth + 1, budget)?;
                 submenu.push(menu);
             }
 
@@ -444,6 +460,7 @@ impl TryFrom<UpdatedProps<'_>> for MenuItemUpdate {
 fn get_icon_data(array: &Array) -> Result<Vec<u8>> {
     array
         .iter()
+        .take(4 * 1024)
         .map(|v| v.downcast_ref::<u8>().map_err(Into::into))
         .collect::<Result<Vec<_>>>()
 }
