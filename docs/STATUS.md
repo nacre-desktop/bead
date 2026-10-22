@@ -41,7 +41,14 @@ to filter buttons and optionally invoke the default on card click. Do not infer
 it from action order/labels/IDs. Upstream must publish and test the additive
 metadata before repinning; no producer edit or partial consumer was integrated.
 Product line delta is +0/-0. No nested test, memory delta, install or live change.
-Full remote Bead CI: pending for this documentation-only audit.
+Full `.github/workflows/ci.yml` equivalent ran on source `4434768` in the
+PROD Arch container: fmt, warnings-denied Clippy, workspace/trace tests, renderer
+configurations, facade/headless/Luau checks, capture regressions, private services
+and SNI/DBusMenu lifecycles, and all cargo-deny graphs passed. The first archive
+transfer omitted Git metadata, failing two revision-dependent Python suites;
+after restoring the exact Git commit, their reruns passed 10/10 and 8/8 tests.
+All 28 checks passed across the full run and those environment-only reruns.
+This receipt changes documentation only; it is not a product-parity claim.
 
 ## 2026-10-22 — B0019 launcher review candidate
 

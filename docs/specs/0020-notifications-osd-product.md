@@ -67,7 +67,7 @@ Paths below are relative to `nacre/shell/`.
 | Suppression | DND plus UI inhibition hides popups; leaving suppression never replays. Producer expiry continues. Panel/session/OSD suppression follows PanelHost. Clear hover on hidden/destroyed surfaces and provider disconnect. Native inhibition is tested separately; it is not established by QML visuals alone. |
 | History/DND | `modules/bar/popouts/NacreHistoryPopup.qml`, `modules/controlcenter/` notices, `services/NacreNotifs.qml`: newest first, loading/empty/error distinct, DND uses sole daemon settings writer, clear scope follows published contract. Dismiss retains; only explicit Forget (`forget:true`) or clear deletes. No mutation through old direct settings/history paths. Display the bounded newest history window, total count and `history_more` separately; loading, bus health and `history_storage` readiness/writability/errors remain distinct. No v1 pagination. |
 | Persistence | Preserve Rust daemon's 30-day retention, existing version-1 formats and exclusions. Active retainable text restores as inert history, with no popup/action/deadline revival. Test transient/feedback exclusions, corrupt/readonly/future files, failed saves, clear-before-load tombstones and restart. Never replace this with Bead's current 256-row/3 MiB fixture store. |
-| OSD | `modules/osd/NacreOsdEvents.qml`, `NacreOsd.qml`, `NacreLevelNotice.qml`: initial-state arming 400 ms, coalesced changes, focused output, bottom overlay, frame+24 px margin, width 200..336, no keyboard focus, 150 ms fade and 2000 ms hide. Hover pauses hide and leave restarts it. Volume/brightness use real published state; repeated equal-valued events use serial identity, expired/reconnected state never replays. Keyboard layout remains contract-blocked. |
+| OSD | `modules/osd/NacreOsdEvents.qml`, `NacreOsd.qml`, `NacreLevelNotice.qml`: initial-state arming 400 ms, coalesced changes, focused output, bottom overlay, frame+24 px margin, width 200..336, no keyboard focus, 150 ms fade and 2000 ms hide. Hover pauses hide and leave restarts it. Volume/brightness use real published state; repeated equal-valued events use serial identity, expired/reconnected state never replays. Keyboard layout is deferred to a follow-up contract. |
 
 ## Implementation units after default-action publication
 
@@ -102,7 +102,7 @@ Paths below are relative to `nacre/shell/`.
   never starts two writers. An unrelated owner means refusal. Live switch,
   activation files, units, install and deployment remain owner gates.
 - Full `.github/workflows/ci.yml` equivalent in a uniquely named Arch container
-  on dev-1 via SSH/tmux: fmt, warnings-denied Clippy, workspace/trace tests,
+  on PROD via SSH/tmux: fmt, warnings-denied Clippy, workspace/trace tests,
   boundary check, renderer configurations, facade/headless/Luau schema,
   capture regressions, private services/tray lifecycle and all cargo-deny graphs.
   Commands `nice -n 10`; Cargo -j2. Remove task containers/images/build directories.
