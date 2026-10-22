@@ -619,7 +619,7 @@ impl App {
         let palette_key: std::collections::BTreeMap<String, [u8; 4]> =
             frame.palette.0.clone().into_iter().collect();
         if self.wallpaper_palette.as_ref() == Some(&palette_key) || self.runtime.is_none() {
-            self.wallpaper_palette = Some(palette_key);
+            self.set_wallpaper_palette(palette_key);
             self.install_wallpaper(frame);
         } else {
             if self
@@ -674,7 +674,7 @@ impl App {
                 }
                 Some(Err(_)) => self.discard_pending_wallpapers(),
                 None => {
-                    self.wallpaper_palette = Some(palette_key.clone());
+                    self.set_wallpaper_palette(palette_key.clone());
                     self.commit_pending_wallpapers(&palette_key);
                 }
             }
@@ -731,6 +731,21 @@ impl App {
         }
     }
 
+    /// Record the committed presentation palette and give an open panel the same
+    /// colors; a panel opened later receives it in `start_panel`.
+    pub(super) fn set_wallpaper_palette(
+        &mut self,
+        palette: std::collections::BTreeMap<String, [u8; 4]>,
+    ) {
+        if self.wallpaper_palette.as_ref() == Some(&palette) {
+            return;
+        }
+        self.wallpaper_palette = Some(palette.clone());
+        if self.panel_runtime.is_some() {
+            self.panel_ui(UiEvent::WallpaperPalette(palette));
+        }
+    }
+
     pub(super) fn wallpaper_palette_settled(
         &mut self,
         palette: &std::collections::BTreeMap<String, [u8; 4]>,
@@ -762,7 +777,7 @@ impl App {
                 .is_none_or(|provider| provider.is_current(frame))
         });
         if accepted && has_current {
-            self.wallpaper_palette = Some(palette.clone());
+            self.set_wallpaper_palette(palette.clone());
             self.commit_pending_wallpapers(palette);
         } else {
             let mut keep = Vec::new();

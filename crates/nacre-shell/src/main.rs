@@ -7,6 +7,7 @@ mod dashboard;
 mod desktop;
 mod font_sources;
 mod headless;
+mod key_routes;
 mod launcher;
 mod launcher_panel;
 mod memory_policy;
@@ -738,6 +739,7 @@ fn start(
         let ui_entry_is_launcher = entry == Path::new("ui/main.luau");
         let fallback = scene.clone();
         let bar = options.bar;
+        let brightness_client = _ui_provider.clone().filter(|_| core_views && bar);
         let trace = options.trace_state;
         let factory: bead::wayland::worker::Factory = Box::new(move || {
             let result =
@@ -761,6 +763,11 @@ fn start(
                         runtime
                             .with_popout_trigger()?
                             .with_tray_bar(tray_selection.clone(), tray_preview)
+                    } else {
+                        runtime
+                    };
+                    let runtime = if let Some(client) = brightness_client {
+                        runtime.with_brightness_keys(client)?
                     } else {
                         runtime
                     };

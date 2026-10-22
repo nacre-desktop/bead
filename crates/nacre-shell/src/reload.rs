@@ -8,32 +8,12 @@ fn launcher_open_model(args: &[serde_json::Value]) -> BTreeMap<String, bead::cor
     if args.is_empty() {
         return BTreeMap::new();
     }
-    let mut values = BTreeMap::from([
-        (
-            "launcher.mode".into(),
-            bead::core::Value::Text("apps".into()),
-        ),
-        (
-            "launcher.route".into(),
-            bead::core::Value::Text("apps".into()),
-        ),
-        (
-            "launcher.engine_route".into(),
-            bead::core::Value::Text(String::new()),
-        ),
-        (
-            "launcher.selection".into(),
-            bead::core::Value::Text(String::new()),
-        ),
-        ("launcher.scroll.y".into(), bead::core::Value::Number(0.)),
-    ]);
-    if let Some(query) = args.first().and_then(serde_json::Value::as_str) {
-        values.insert(
-            "launcher.search.text".into(),
-            bead::core::Value::Text(query.into()),
-        );
+    crate::key_routes::Launch {
+        query: args[0].as_str().unwrap_or_default().into(),
+        route: None,
+        toggle: true,
     }
-    values
+    .model()
 }
 fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead::core::Value> {
     let mut changes = BTreeMap::from([("panel.open".into(), bead::core::Value::Bool(open))]);
@@ -64,6 +44,8 @@ pub struct Runtime {
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
     launcher_trigger: bool,
+    last_launch: Option<crate::key_routes::Launch>,
+    brightness: Option<crate::key_routes::Brightness>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
     subscription: Option<bead::backends::Subscription>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
@@ -248,6 +230,8 @@ impl Runtime {
             connection_status: None,
             connection_subscription: None,
             launcher_trigger: false,
+            last_launch: None,
+            brightness: None,
             backend: None,
             subscription: None,
             desktop: None,
@@ -579,6 +563,16 @@ impl Runtime {
                 "bar.launcher".into(),
                 bead::core::Value::Bool(true),
             )]))?;
+        Ok(self)
+    }
+    /// `brightness step` keys; disabled until the daemon advertises `brightness.adjust` v1.
+    pub fn with_brightness_keys(
+        mut self,
+        client: crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.actions.register("key.brightness", "key.control")?;
+        self.actions.grant("key.control");
+        self.brightness = Some(crate::key_routes::Brightness::new(client));
         Ok(self)
     }
     pub fn with_popout_trigger(mut self) -> Result<Self, Box<dyn Error>> {
@@ -1729,25 +1723,87 @@ impl SceneSource for Runtime {
                             }
                             bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
                         }
-                        ("nacre", "launcher") if self.launcher_trigger => {
-                            let values = launcher_open_model(&call.args);
-                            self.actions.authorize("launcher.open")?;
-                            if !call.args.is_empty() {
-                                *self
-                                    .launcher_memory
-                                    .as_ref()
-                                    .ok_or("launcher view state unavailable")?
-                                    .lock()
-                                    .map_err(|_| "launcher view state unavailable")? =
-                                    values.clone();
+                        ("nacre", "launcher" | "menu" | "clipboard" | "mode")
+                            if self.launcher_trigger =>
+                        {
+                            match crate::key_routes::launcher(call) {
+                                Some(Ok(launch)) => {
+                                    self.actions.authorize("launcher.open")?;
+                                    let wakeup = self
+                                        .wakeup
+                                        .as_ref()
+                                        .ok_or("launcher event channel unavailable")?;
+                                    let showing = request.context.panel_open
+                                        && request
+                                            .context
+                                            .panel_view
+                                            .as_deref()
+                                            .unwrap_or("launcher")
+                                            == "launcher";
+                                    if launch.toggle
+                                        && showing
+                                        && self.last_launch.as_ref() == Some(&launch)
+                                    {
+                                        self.last_launch = None;
+                                        wakeup(UiEvent::CompanionVisibility(false));
+                                    } else {
+                                        let values = launch.model();
+                                        *self
+                                            .launcher_memory
+                                            .as_ref()
+                                            .ok_or("launcher view state unavailable")?
+                                            .lock()
+                                            .map_err(|_| "launcher view state unavailable")? =
+                                            values.clone();
+                                        self.last_launch = Some(launch);
+                                        wakeup(UiEvent::CompanionVisibility(true));
+                                        wakeup(UiEvent::CompanionModel(values));
+                                    }
+                                    bead::services::ipc::Reply::ok(
+                                        call.id,
+                                        serde_json::Value::Null,
+                                    )
+                                }
+                                Some(Err(message)) => bead::services::ipc::Reply::error(
+                                    call.id,
+                                    "unavailable",
+                                    message,
+                                ),
+                                None => bead::services::ipc::Reply::error(
+                                    call.id,
+                                    "unavailable",
+                                    "compatibility route belongs to a later native feature",
+                                ),
                             }
-                            let wakeup = self
-                                .wakeup
+                        }
+                        ("brightness", "step") if self.brightness.is_some() => {
+                            self.actions.authorize("key.brightness")?;
+                            let output = self.backend.as_ref().and_then(|backend| {
+                                let snapshot = backend.snapshot();
+                                snapshot
+                                    .outputs
+                                    .iter()
+                                    .find(|output| output.focused)
+                                    .or(snapshot.outputs.first())
+                                    .map(|output| output.name.clone())
+                            });
+                            let direction = call.args[0].as_str().unwrap_or_default();
+                            match self
+                                .brightness
                                 .as_ref()
-                                .ok_or("launcher event channel unavailable")?;
-                            wakeup(UiEvent::CompanionVisibility(true));
-                            wakeup(UiEvent::CompanionModel(values));
-                            bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                                .ok_or("brightness keys unavailable")?
+                                .step(direction, output.as_deref())
+                            {
+                                Ok(()) => bead::services::ipc::Reply::ok(
+                                    call.id,
+                                    serde_json::Value::Null,
+                                ),
+                                Err(message) => bead::services::ipc::Reply::error(
+                                    call.id,
+                                    "unavailable",
+                                    message,
+                                ),
+                            }
                         }
                         ("nacre", "state") => {
                             let snapshot = self.backend.as_ref().map(|b| b.snapshot());
@@ -1857,6 +1913,7 @@ impl SceneSource for Runtime {
                 self.publish_status_pill()?
             }
             UiEvent::PanelDismissed => {
+                self.last_launch = None;
                 if self.status_pill_route.is_some() {
                     self.status_pill.escape();
                     self.status_pill_route = None;

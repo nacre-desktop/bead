@@ -1,0 +1,287 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! B0026 keybind routes. The compositor binds call `nacrectl ui TARGET METHOD ARGS`,
+//! the daemon forwards `ui.dispatch` to the UI provider, and this module gives the
+//! launcher-family routes and the brightness step keys their Bead meaning. Menu
+//! interpretation and ranking stay in the daemon; the only client-side data here is
+//! the route-name table that Nacre's QML menu model also applies to bind arguments.
+use crate::nacre_source::{CallGuard, CallTicket, Client};
+use bead::{core::Value, services::ipc::Call};
+use std::{cell::RefCell, collections::BTreeMap, time::Duration};
+
+/// What a launcher-family key asks the launcher view to show.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Launch {
+    pub query: String,
+    /// Daemon menu route id; `None` is the plain application list.
+    pub route: Option<String>,
+    /// QML `openMode` closes an already-open identical request; `openMenu` does not.
+    pub toggle: bool,
+}
+impl Launch {
+    pub fn model(&self) -> BTreeMap<String, Value> {
+        let text = |s: &str| Value::Text(s.into());
+        BTreeMap::from([
+            ("launcher.mode".into(), text("apps")),
+            ("launcher.route".into(), text("apps")),
+            (
+                "launcher.engine_route".into(),
+                text(self.route.as_deref().unwrap_or("")),
+            ),
+            ("launcher.selection".into(), text("")),
+            ("launcher.scroll.y".into(), Value::Number(0.)),
+            ("launcher.search.text".into(), text(&self.query)),
+        ])
+    }
+}
+
+/// Nacre's menu route aliases (`nacre-menu` `route_alias`). The daemon resolves
+/// them too, but echoes the resolved id and the launcher fences replies by the
+/// requested route, so Bead sends the resolved id.
+fn resolve(route: &str) -> Option<&'static str> {
+    Some(match route {
+        "favorites" => "home",
+        "all" => "apps",
+        "settings" => "setup",
+        "system" => "power",
+        "clipboard" => "actions.clipboard",
+        "keys" => "learn.shortcuts",
+        "overview" => "actions.windows",
+        "palette" => "style",
+        "wallpaper" => "style.wallpapers",
+        _ => return None,
+    })
+}
+fn menu_route(route: &str) -> Result<String, &'static str> {
+    let route = if route.is_empty() { "home" } else { route };
+    let valid = route.len() <= 128
+        && route
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-');
+    if !valid {
+        return Err("invalid menu route");
+    }
+    Ok(resolve(route).unwrap_or(route).to_owned())
+}
+
+/// `None` is not a launcher-family route; `Some(Err)` is one Bead refuses.
+pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
+    if call.target != "nacre" {
+        return None;
+    }
+    let arg = |i: usize| call.args.get(i).and_then(serde_json::Value::as_str);
+    let launch = |query: &str, route: Option<&str>, toggle| {
+        Ok(Launch {
+            query: query.into(),
+            route: route.map(Into::into),
+            toggle,
+        })
+    };
+    Some(match call.method.as_str() {
+        "launcher" => {
+            let query = arg(0).unwrap_or_default();
+            match query.strip_prefix(">wallpaper") {
+                Some(rest) => launch(rest.trim(), Some("style.wallpapers"), true),
+                None => launch(query, None, true),
+            }
+        }
+        "menu" => menu_route(arg(0).unwrap_or_default())
+            .and_then(|route| launch(arg(1).unwrap_or_default(), Some(&route), false)),
+        "clipboard" => launch("", Some("actions.clipboard"), true),
+        "mode" => match arg(0).unwrap_or_default() {
+            "apps" => launch("", None, true),
+            "legacy" => Err("legacy launcher mode is not implemented"),
+            name @ ("wallpaper" | "palette" | "overview" | "clipboard" | "keys") => {
+                launch("", resolve(name), true)
+            }
+            _ => Err("unknown launcher mode"),
+        },
+        _ => return None,
+    })
+}
+fn menu_route(route: &str) -> Result<String, &'static str> {
+    let route = if route.is_empty() { "home" } else { route };
+    let valid = route.len() <= 128
+        && route
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-');
+    if !valid {
+        return Err("invalid menu route");
+    }
+    Ok(resolve(route).unwrap_or(route).to_owned())
+}
+
+/// `None` is not a launcher-family route; `Some(Err)` is one Bead refuses.
+pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
+    if call.target != "nacre" {
+        return None;
+    }
+    let arg = |i: usize| call.args.get(i).and_then(serde_json::Value::as_str);
+    let launch = |query: &str, route: Option<&str>, toggle| {
+        Ok(Launch {
+            query: query.into(),
+            route: route.map(Into::into),
+            toggle,
+        })
+    };
+    Some(match call.method.as_str() {
+        "launcher" => {
+            let query = arg(0).unwrap_or_default();
+            match query.strip_prefix(">wallpaper") {
+                Some(rest) => launch(rest.trim(), Some("style.wallpapers"), true),
+                None => launch(query, None, true),
+            }
+        }
+        "menu" => menu_route(arg(0).unwrap_or_default())
+            .and_then(|route| launch(arg(1).unwrap_or_default(), Some(&route), false)),
+        "clipboard" => launch("", Some("actions.clipboard"), true),
+        "mode" => match arg(0).unwrap_or_default() {
+            "apps" => launch("", None, true),
+            "legacy" => Err("legacy launcher mode is not implemented"),
+            name => menu_route(name)
+                .and_then(|route| launch("", Some(&route), true))
+                .and_then(|launch| match resolve(name) {
+                    Some(_) => Ok(launch),
+                    None => Err("unknown launcher mode"),
+                }),
+        },
+        _ => return None,
+    })
+}
+
+const BRIGHTNESS: &str = "brightness.adjust";
+/// QML `NacreBrightness.step` moves the focused display by five percentage points.
+const BRIGHTNESS_STEP: i64 = 5;
+
+/// `nacrectl ui brightness step up|down` as one daemon `brightness.adjust` call
+/// (N0031) on the focused output. Enabled only while the connected daemon
+/// advertises exactly that method at version 1. One call at a time: the daemon
+/// rejects concurrent brightness admission, so a held key never queues.
+pub struct Brightness {
+    client: Client,
+    pending: RefCell<Option<CallTicket>>,
+}
+impl Brightness {
+    pub fn new(client: Client) -> Self {
+        Self {
+            client,
+            pending: RefCell::new(None),
+        }
+    }
+    pub fn step(&self, direction: &str, output: Option<&str>) -> Result<(), &'static str> {
+        let delta = match direction {
+            "up" => BRIGHTNESS_STEP,
+            "down" => -BRIGHTNESS_STEP,
+            _ => return Err("invalid brightness direction"),
+        };
+        let output = output.ok_or("no output is available")?;
+        let status = self.client.status();
+        let method = status
+            .methods
+            .get(BRIGHTNESS)
+            .filter(|m| m.v == 1)
+            .ok_or("brightness control is unavailable")?;
+        if !self.client.snapshot().connected {
+            return Err("brightness control is unavailable");
+        }
+        let boot = status.boot.ok_or("brightness control is unavailable")?;
+        let mut pending = self.pending.borrow_mut();
+        if let Some(ticket) = pending.as_mut() {
+            if ticket.try_take().is_none() {
+                return Err("brightness change in progress");
+            }
+            *pending = None;
+        }
+        let timeout = Duration::from_millis(u64::from(method.timeout).clamp(1, 60_000));
+        let ticket = self
+            .client
+            .begin_call(
+                BRIGHTNESS.into(),
+                serde_json::json!({"output": output, "delta": delta}),
+                timeout,
+                CallGuard { boot, version: 1 },
+                None,
+            )
+            .map_err(|_| "brightness request was not sent")?;
+        *pending = Some(ticket);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    fn call(method: &str, args: &[&str]) -> Call {
+        crate::commands::from_strings(
+            "nacre".into(),
+            method.into(),
+            &args.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        )
+        .unwrap()
+    }
+    fn routed(method: &str, args: &[&str]) -> Launch {
+        launcher(&call(method, args)).unwrap().unwrap()
+    }
+    /// Every launcher-family command the owner's niri and Hyprland binds issue.
+    #[test]
+    fn owner_bind_commands_map_to_launcher_routes() {
+        let l = routed("launcher", &[""]);
+        assert_eq!((l.query.as_str(), l.route, l.toggle), ("", None, true));
+        let l = routed("launcher", &[">wallpaper "]);
+        assert_eq!(
+            (l.query.as_str(), l.route.as_deref(), l.toggle),
+            ("", Some("style.wallpapers"), true)
+        );
+        let l = routed("clipboard", &[]);
+        assert_eq!(l.route.as_deref(), Some("actions.clipboard"));
+        for (route, id) in [
+            ("actions.emoji", "actions.emoji"),
+            ("actions.capture", "actions.capture"),
+            ("learn.shortcuts", "learn.shortcuts"),
+            ("power", "power"),
+        ] {
+            let l = routed("menu", &[route, ""]);
+            assert_eq!((l.route.as_deref(), l.toggle), (Some(id), false));
+        }
+        for (mode, id) in [
+            ("overview", "actions.windows"),
+            ("palette", "style"),
+            ("clipboard", "actions.clipboard"),
+            ("keys", "learn.shortcuts"),
+            ("wallpaper", "style.wallpapers"),
+        ] {
+            assert_eq!(routed("mode", &[mode]).route.as_deref(), Some(id), "{mode}");
+        }
+        assert_eq!(routed("mode", &["apps"]).route, None);
+    }
+    #[test]
+    fn refusals_and_unrelated_routes_are_explicit() {
+        assert!(launcher(&call("mode", &["legacy"])).unwrap().is_err());
+        assert!(launcher(&call("mode", &["nonsense"])).unwrap().is_err());
+        assert!(launcher(&call("menu", &["Bad Route!", ""])).unwrap().is_err());
+        assert_eq!(routed("menu", &["", "q"]).route.as_deref(), Some("home"));
+        assert_eq!(routed("menu", &["", "q"]).query, "q");
+        assert!(launcher(&call("hide", &[])).is_none());
+        let other = Call {
+            version: 1,
+            id: 1,
+            target: "drawers".into(),
+            method: "launcher".into(),
+            args: vec![json!("x")],
+            output: None,
+        };
+        assert!(launcher(&other).is_none());
+    }
+    #[test]
+    fn launch_model_replaces_route_and_query_state() {
+        let model = routed("menu", &["actions.emoji", "smile"]).model();
+        assert_eq!(
+            model["launcher.engine_route"],
+            Value::Text("actions.emoji".into())
+        );
+        assert_eq!(model["launcher.search.text"], Value::Text("smile".into()));
+        assert_eq!(model["launcher.mode"], Value::Text("apps".into()));
+        let plain = routed("launcher", &["a"]).model();
+        assert_eq!(plain["launcher.engine_route"], Value::Text(String::new()));
+    }
+}

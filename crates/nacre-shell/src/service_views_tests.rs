@@ -513,6 +513,135 @@ fn legacy_state_distinguishes_named_views_on_one_host() -> Result<()> {
 }
 
 #[test]
+fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Result<()> {
+    use bead::wayland::{CommandContext, Remote, SceneSource, UiEvent};
+    use std::sync::{Arc, Mutex};
+    let h = calendar(2024, 2, 1, 1.)?;
+    let memory = crate::launcher::Memory::default();
+    let mut runtime = crate::reload::Runtime::new(h.session)
+        .with_launcher_trigger(memory.clone())?
+        .with_popout_trigger()?;
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let output = events.clone();
+    runtime.services(Box::new(move |event| output.lock().unwrap().push(event)));
+    events.lock().unwrap().clear();
+    let mut send = |target: &str, method: &str, args: &[&str], open: bool| -> Result<bead::services::ipc::Reply> {
+        let (reply, received) = std::sync::mpsc::sync_channel(1);
+        runtime.stage(UiEvent::Remote(std::sync::Arc::new(Remote {
+            call: crate::commands::from_strings(
+                target.into(),
+                method.into(),
+                &args.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            )?,
+            reply,
+            context: CommandContext {
+                panel_open: open,
+                panel_configured: true,
+                panel_view: Some("launcher".into()),
+            },
+        })))?;
+        Ok(received.recv_timeout(std::time::Duration::from_secs(1))?)
+    };
+    let route = |memory: &crate::launcher::Memory| {
+        memory.lock().unwrap()["launcher.engine_route"].clone()
+    };
+    // Super+X: menu route, never a toggle.
+    for open in [false, true] {
+        events.lock().unwrap().clear();
+        assert!(send("nacre", "menu", &["power", ""], open)?.error.is_none());
+        assert!(matches!(
+            events.lock().unwrap().as_slice(),
+            [UiEvent::CompanionVisibility(true), UiEvent::CompanionModel(_)]
+        ));
+        assert_eq!(route(&memory), Value::Text("power".into()));
+    }
+    // Super+Tab: the overview alias resolves to the window list route.
+    events.lock().unwrap().clear();
+    assert!(send("nacre", "mode", &["overview"], false)?.error.is_none());
+    assert_eq!(route(&memory), Value::Text("actions.windows".into()));
+    // Super+Space twice: the second identical press closes the open launcher.
+    events.lock().unwrap().clear();
+    assert!(send("nacre", "launcher", &[""], false)?.error.is_none());
+    assert!(send("nacre", "launcher", &[""], true)?.error.is_none());
+    assert!(matches!(
+        events.lock().unwrap().as_slice(),
+        [
+            UiEvent::CompanionVisibility(true),
+            UiEvent::CompanionModel(_),
+            UiEvent::CompanionVisibility(false)
+        ]
+    ));
+    // Super+V is the clipboard route and a different request replaces the launcher.
+    events.lock().unwrap().clear();
+    assert!(send("nacre", "clipboard", &[], true)?.error.is_none());
+    assert_eq!(route(&memory), Value::Text("actions.clipboard".into()));
+    assert!(matches!(
+        events.lock().unwrap().as_slice(),
+        [UiEvent::CompanionVisibility(true), UiEvent::CompanionModel(_)]
+    ));
+    // Refused or unpublished routes fail explicitly and leave the launcher alone.
+    events.lock().unwrap().clear();
+    for (target, method, args) in [
+        ("nacre", "mode", &["legacy"][..]),
+        ("nacre", "left", &[][..]),
+        ("keyboardLight", "step", &["up"][..]),
+        ("brightness", "step", &["up"][..]),
+    ] {
+        let reply = send(target, method, args, false)?;
+        assert_eq!(reply.error.as_ref().map(|e| e.code.as_str()), Some("unavailable"));
+    }
+    assert!(events.lock().unwrap().is_empty());
+    Ok(())
+}
+
+/// A wallpaper-driven palette reaches panel executors too: `bead-wayland` stages
+/// the same `WallpaperPalette` event into an open or newly opened panel.
+#[test]
+fn live_palette_overlay_recolors_panel_views_without_reload_or_file_write() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    const SURFACE: [u8; 4] = [1, 2, 3, 255];
+    let palette_file = root().join("palette.json");
+    let before = std::fs::read(&palette_file)?;
+    let entries = [
+        ("popouts/main.luau", BTreeMap::new()),
+        ("session/main.luau", BTreeMap::new()),
+    ];
+    for (entry, fixture) in entries {
+        let h = Harness::load(
+            &root(),
+            Path::new(entry),
+            &palette_file,
+            fixture,
+            Config {
+                width: 380,
+                height: 380,
+                scale: 1.,
+            },
+        )?;
+        let fills = |scene: &bead::render::Scene| {
+            scene.primitives.iter().any(|p| {
+                matches!(p, bead::render::Primitive::Rounded { fill, .. } if *fill == SURFACE)
+            })
+        };
+        assert!(!fills(h.scene()), "{entry} starts with the file palette");
+        let mut runtime = crate::reload::Runtime::new(h.session);
+        let scene = runtime
+            .stage(UiEvent::WallpaperPalette(BTreeMap::from([(
+                "surface".to_string(),
+                SURFACE,
+            )])))?
+            .ok_or("palette stage produced no scene")?;
+        assert!(fills(&scene), "{entry} did not take the live palette");
+        // A later reload keeps the overlay; the committed file is never rewritten.
+        assert!(runtime.commit());
+        let reloaded = runtime.stage(UiEvent::Reload)?.ok_or("reload produced no scene")?;
+        assert!(fills(&reloaded), "{entry} lost the live palette on reload");
+    }
+    assert_eq!(std::fs::read(&palette_file)?, before);
+    Ok(())
+}
+
+#[test]
 fn panel_retirement_releases_launcher_mirror_but_bar_does_not() -> Result<()> {
     let memory = crate::launcher::Memory::default();
     let initial = BTreeMap::from([(

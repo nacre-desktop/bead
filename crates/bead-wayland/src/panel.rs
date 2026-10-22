@@ -413,6 +413,9 @@ impl App {
         if open {
             self.add_output(&qh, output);
         }
+        if let Some(palette) = self.wallpaper_palette.clone() {
+            self.panel_ui(UiEvent::WallpaperPalette(palette));
+        }
         self.panel_ui(UiEvent::Reload);
         if !open {
             self.loop_handle
