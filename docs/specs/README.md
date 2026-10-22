@@ -91,6 +91,21 @@ with the batch result.
   B = `306474f0`, both compositors). It starts when the desktop heavy slot is
   free.
 
+### Lead note — render backend and the niri wallpaper buffer — 2026-10-22
+
+B0021 measurements (9be5869) showed two things that matter for the memory gate:
+1. **Render backend dominates absolute PSS.** Matched CPU-rendered builds idle
+   at about 9 MiB (Bead main, 2880×1800@1.5). The same builds with native GL on
+   the NVIDIA desktop measured about 55 MiB, because of driver, LLVM and Gallium
+   mappings. The absolute 25 MiB gate is only meaningful with the backend
+   recorded. The laptop reference capture (Intel i915) must log the backend and
+   should run both CPU and native GL if time allows.
+2. **niri keeps wl_shm wallpaper buffers referenced** (no release), so a static
+   wallpaper costs about 10 MiB of SHM PSS on niri, against +0.25 MiB on
+   Hyprland where the buffer is released. Count it separately from UI overhead
+   and compare it with the QML shell's own wallpaper cost. A dmabuf/GPU-texture
+   path is a possible follow-up.
+
 ### Owner decision — laptop reference memory capture — 2026-10-22
 
 Owner chose option (a): Bead's absolute memory gate is measured on the laptop
