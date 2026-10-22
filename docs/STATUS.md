@@ -7,7 +7,7 @@ the two-output +0.5 MiB verdict below is superseded. Anonymous allocations must
 be attributed. The candidate now replaces SHM pools at geometry changes and
 retires unused-scale raster/glyph caches while keeping fonts shared. Allocation
 diagnostics and a presented-frame lifetime/pixel regression test are added.
-Builds/full CI wait for authorized dev-2 capacity; fresh private niri captures
+Builds/full CI wait for authorized CI-host capacity; fresh private niri captures
 must pass +0.5 MiB in each single-output scale phase. No live change or push.
 
 ## 2026-10-22 — B0025 implemented; relative memory acceptance blocked

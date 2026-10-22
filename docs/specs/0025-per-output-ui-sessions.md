@@ -85,7 +85,7 @@ Niri scale-phase increases are a product defect to fix, not a host exception.
 Trace old-scale allocations and release them safely; repeat five alternating
 control/candidate niri pairs, requiring at most +0.5 MiB median in every phase.
 Try nested niri multi-output hotplug and document an unavailable backend route.
-Use dev-2 for builds/full Bead CI; desktop captures retain the same private HOME,
+Use the authorized CI host for builds/full Bead CI; desktop captures retain the same private HOME,
 heavy-job flock and all swap/watchdog/containment gates. After passing checks,
 update this result/B0022/queue and integrate through safe-push. No live change.
 No new temporary product implementation duplicate is planned.
