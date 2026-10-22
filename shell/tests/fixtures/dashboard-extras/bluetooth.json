@@ -1,0 +1,12 @@
+{
+  "health": {"available": true, "stale": false},
+  "adapters": {"items": {"hci0": {"name": "Adapter", "powered": true, "discovering": false}}, "order": ["hci0"]},
+  "devices": {
+    "items": {
+      "headset": {"adapter": "hci0", "name": "Preview headset", "connected": true, "paired": true, "trusted": true, "pairing": false, "battery": 80},
+      "keyboard": {"adapter": "hci0", "name": "Preview keyboard", "connected": false, "paired": true, "trusted": true, "pairing": false},
+      "nearby": {"adapter": "hci0", "name": "Unpaired device", "connected": false, "paired": false, "trusted": false, "pairing": false}
+    },
+    "order": ["keyboard", "headset", "nearby"]
+  }
+}

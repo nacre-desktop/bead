@@ -6,9 +6,18 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
 }
 fn fixture(name: &str) -> Json {
-    let name = if name == "today" { "calendar" } else { name };
+    let name = match name {
+        "today" => "calendar",
+        "devices" => "bluetooth",
+        other => other,
+    };
+    let folder = if matches!(name, "notifications" | "bluetooth" | "audio" | "network") {
+        "dashboard-extras"
+    } else {
+        "dashboard"
+    };
     serde_json::from_slice(
-        &std::fs::read(root().join(format!("tests/fixtures/dashboard/{name}.json"))).unwrap(),
+        &std::fs::read(root().join(format!("tests/fixtures/{folder}/{name}.json"))).unwrap(),
     )
     .unwrap()
 }
@@ -535,7 +544,7 @@ fn dashboard_closed_page_releases_sources() -> Result<()> {
         let secondary = match page {
             Page::Today => Some(Arc::new(FakeSource::new(fixture("weather"))?)),
             Page::System => Some(Arc::new(FakeSource::new(fixture("updates"))?)),
-            Page::Weather | Page::Media => None,
+            _ => None,
         };
         let clock = (page == Page::Today)
             .then(|| Arc::new(FakeSource::new(json!({"clock":"10:00"})).unwrap()));
@@ -982,5 +991,245 @@ fn today_calendar_navigation_and_agenda_scrolling_use_real_input() -> Result<()>
             .filter_map(|n| n.action.as_deref())
             .all(|a| matches!(a, "view.open" | "calendar_month"))
     );
+    Ok(())
+}
+
+fn extra_secondary(page: Page) -> Option<Json> {
+    (page == Page::Devices).then(|| fixture("audio"))
+}
+fn extra_harness(page: Page, model: BTreeMap<String, Value>, scale: f32) -> Result<Harness> {
+    Harness::load(
+        &root(),
+        Path::new(&format!("dashboard/{}/main.luau", page.name())),
+        &root().join("palette.json"),
+        model,
+        Config {
+            width: 1048,
+            height: 714,
+            scale,
+        },
+    )
+}
+
+#[test]
+fn dashboard_extras_map_nacre_indices_and_refuse_unpublished_pages() -> Result<()> {
+    for (index, page) in [
+        (5, Page::Notifications),
+        (7, Page::Devices),
+        (8, Page::Network),
+    ] {
+        assert_eq!(Page::from_tab(index), Some(page));
+        assert_eq!(page.tab(), index);
+        assert_eq!(
+            Page::from_view(&format!("dashboard-{}", page.name())),
+            Some(page)
+        );
+        let call =
+            crate::commands::from_strings("nacre".into(), "tab".into(), &[index.to_string()])?;
+        let mapped = crate::commands::map_views(call).expect("published extra routes");
+        assert_eq!(
+            mapped.args,
+            vec![json!(format!("dashboard-{}", page.name()))]
+        );
+    }
+    // focus, clipboard, ai-usage, screenshots and brain have no published contract.
+    for index in [4, 6, 9, 10, 11, 12] {
+        assert_eq!(Page::from_tab(index), None);
+        let call =
+            crate::commands::from_strings("nacre".into(), "tab".into(), &[index.to_string()])?;
+        assert!(crate::commands::map_views(call).is_err());
+    }
+    Ok(())
+}
+
+#[test]
+fn dashboard_extras_have_complete_state_defaults_and_project_rows() -> Result<()> {
+    for page in Page::EXTRAS {
+        let harness = extra_harness(page, BTreeMap::new(), 1.)?;
+        let defaults = harness.session.stores.values();
+        let unavailable =
+            Dashboard::new(page, Arc::new(ReadOnly::unavailable()?), None, false).project();
+        assert_eq!(unavailable["dashboard.ready"], Value::Bool(false));
+        assert!(!unavailable.contains_key("dashboard.clock"));
+
+        let data = fixture(page.name());
+        assert!(checked(&page.topic(), &data)?.valid());
+        let secondary = extra_secondary(page);
+        if let Some(audio) = &secondary {
+            assert!(checked("audio", audio)?.valid());
+        }
+        let projected = view(page, data, secondary).project();
+        assert_eq!(projected["dashboard.ready"], Value::Bool(true));
+        assert_eq!(projected["dashboard.stale"], Value::Bool(false));
+        for key in projected.keys().filter(|key| key.starts_with("dashboard.")) {
+            assert!(
+                defaults.contains_key(key),
+                "{} state key {key}",
+                page.name()
+            );
+        }
+        let rows = |key: &str| match &projected[key] {
+            Value::List(list) => list.len(),
+            other => panic!("{other:?}"),
+        };
+        match page {
+            // Active first, then history in service order.
+            Page::Notifications => assert_eq!(rows("dashboard.rows"), 3),
+            // Unpaired devices are hidden; connected devices sort first.
+            Page::Devices => {
+                assert_eq!(rows("dashboard.rows"), 2);
+                assert_eq!(rows("dashboard.secondary"), 2, "outputs and inputs only");
+                assert_eq!(
+                    projected["dashboard.summary"],
+                    Value::Text("Powered on".into())
+                );
+            }
+            Page::Network => {
+                assert_eq!(rows("dashboard.rows"), 2);
+                assert_eq!(rows("dashboard.secondary"), 2);
+                assert_eq!(projected["dashboard.metric"], Value::Text("72%".into()));
+                assert_eq!(
+                    projected["dashboard.heading"],
+                    Value::Text("Preview network".into())
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn dashboard_extras_keep_unknown_and_invalid_data_unavailable_and_stale_on_disconnect() -> Result<()>
+{
+    for page in Page::EXTRAS {
+        let invalid = view(
+            page,
+            json!({"health":{"available":true,"stale":false}}),
+            None,
+        )
+        .project();
+        assert_eq!(invalid["dashboard.ready"], Value::Bool(false), "{page:?}");
+        let mut stale = fixture(page.name());
+        stale["health"]["stale"] = json!(true);
+        let projected = view(page, stale, extra_secondary(page)).project();
+        assert_eq!(projected["dashboard.stale"], Value::Bool(true), "{page:?}");
+        let source = Arc::new(FakeSource::new(fixture(page.name()))?);
+        let dashboard = Dashboard::new(page, source.clone(), None, true);
+        let before = dashboard.project();
+        source.disconnect()?;
+        let mut after = dashboard.project();
+        assert_eq!(
+            after.insert("dashboard.stale".into(), Value::Bool(false)),
+            Some(Value::Bool(true))
+        );
+        assert_eq!(before, after, "{page:?} keeps the last good projection");
+    }
+    // Network without a primary connection or active AP never invents a signal.
+    let mut data = fixture("network");
+    data["primary_connection"] = Json::Null;
+    data["access_points"]["items"]["ap1"]["active"] = json!(false);
+    let projected = view(Page::Network, data, None).project();
+    assert_eq!(projected["dashboard.metric"], Value::Text("—".into()));
+    assert_eq!(
+        projected["dashboard.heading"],
+        Value::Text("Not connected".into())
+    );
+    Ok(())
+}
+
+#[test]
+fn dashboard_extras_release_sources_on_retirement() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    for page in Page::EXTRAS {
+        let main = Arc::new(FakeSource::new(fixture(page.name()))?);
+        let secondary = extra_secondary(page).map(|d| Arc::new(FakeSource::new(d).unwrap()));
+        let before = (
+            Arc::strong_count(&main),
+            secondary.as_ref().map(Arc::strong_count),
+        );
+        let mut harness = extra_harness(page, BTreeMap::new(), 1.)?;
+        harness.render()?;
+        let mut runtime = crate::reload::Runtime::new(harness.session).with_dashboard(
+            page,
+            main.clone(),
+            secondary.as_ref().map(|s| s.clone() as Arc<dyn Source>),
+            None,
+            false,
+        )?;
+        let events = Arc::new(AtomicUsize::new(0));
+        let counter = events.clone();
+        runtime.services(Box::new(move |_: UiEvent| {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }));
+        let scene = runtime
+            .session
+            .update_model(BTreeMap::new())?
+            .ok_or("page state")?;
+        runtime.session.commit(scene);
+        assert_eq!(
+            runtime.session.stores.get("dashboard.ready"),
+            Some(&Value::Bool(true))
+        );
+        let subscribed = events.load(Ordering::Relaxed);
+        assert!(subscribed > 0);
+        drop(runtime);
+        assert_eq!(
+            (
+                Arc::strong_count(&main),
+                secondary.as_ref().map(Arc::strong_count)
+            ),
+            before
+        );
+        main.publish(fixture(page.name()))?;
+        assert_eq!(
+            events.load(Ordering::Relaxed),
+            subscribed,
+            "{page:?} callbacks stop"
+        );
+        assert_eq!(main.calls(), 0, "extras are read-only");
+    }
+    Ok(())
+}
+
+#[test]
+fn dashboard_extras_have_deterministic_pixels_and_only_navigation_actions() -> Result<()> {
+    for page in Page::EXTRAS {
+        for scale in [1., 1.5] {
+            let model = view(page, fixture(page.name()), extra_secondary(page)).project();
+            let mut h = extra_harness(page, model, scale)?;
+            for node in h.session.view_nodes() {
+                assert!(
+                    matches!(node.action.as_deref(), None | Some("view.open")),
+                    "extras execute nothing"
+                );
+            }
+            assert_eq!(
+                h.session
+                    .view_nodes()
+                    .iter()
+                    .filter(|n| n.action.is_some())
+                    .count(),
+                4,
+                "four core tabs; the selected extra tab is not an action"
+            );
+            let frame = h.render()?;
+            assert!(h.scene().primitives.iter().any(|p| matches!(
+                p, bead::render::Primitive::Text { text, .. } if text == page.title())));
+            let golden = root().join(format!(
+                "tests/goldens/dashboard-{}-{scale}.png",
+                page.name()
+            ));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                Default::default(),
+                &std::env::temp_dir().join(format!("bead-dashboard-{}-{scale}-diff", page.name())),
+            )?;
+        }
+    }
     Ok(())
 }

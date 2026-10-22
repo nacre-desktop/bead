@@ -1,0 +1,16 @@
+{
+  "health": {"available": true, "stale": false},
+  "do_not_disturb": false,
+  "active": {
+    "items": {"n3": {"app_name": "Mail", "summary": "Build finished", "body": "All checks passed\nSecond line", "urgency": "normal", "resident": false, "transient": false, "created_ms": 1709193600000, "actions": {"items": {}, "order": []}, "revision": 3, "retained": true, "paused": false}},
+    "order": ["n3"]
+  },
+  "history": {
+    "items": {
+      "n2": {"app_name": "Calendar", "summary": "Standup in 10 minutes", "body": "Room 4", "urgency": "low", "resident": false, "transient": false, "created_ms": 1709193500000, "actions": {"items": {}, "order": []}, "revision": 2, "retained": true, "paused": false},
+      "n1": {"app_name": "Updates", "summary": "12 packages can be updated", "body": "", "urgency": "normal", "resident": false, "transient": false, "created_ms": 1709193400000, "actions": {"items": {}, "order": []}, "revision": 1, "retained": true, "paused": false}
+    },
+    "order": ["n2", "n1"]
+  },
+  "history_count": 3
+}

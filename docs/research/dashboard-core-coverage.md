@@ -78,3 +78,8 @@ in `crates/bead-wayland/src/panel.rs` at Bead base
 `service_views_tests::panel_retirement_releases_launcher_mirror_but_bar_does_not`
 test concerns launcher/bar ownership, not the timer. No new timer or residency
 measurement was run under B0001.
+
+B0024 follow-up: the Notifications, Devices and Network extras (QML `extras/NacreNotificationsExtra`,
+`NacreDevicesExtra`, `NacreNetworkExtra`) are covered read-only from published topics; their
+traffic sparkline, actions and tab customization remain blocked or deferred, see
+[B0024](../specs/0024-dashboard-extras-parity.md).

@@ -1,0 +1,38 @@
+{
+  "health": {
+    "available": true,
+    "stale": false
+  },
+  "nodes": {
+    "items": {
+      "out": {
+        "name": "Preview speakers",
+        "kind": "output",
+        "volume": 0.5,
+        "muted": false,
+        "ready": true
+      },
+      "mic": {
+        "name": "Preview microphone",
+        "kind": "input",
+        "volume": 0.7,
+        "muted": false,
+        "ready": true
+      },
+      "app": {
+        "name": "Preview player",
+        "kind": "playback",
+        "volume": 1.0,
+        "muted": false,
+        "ready": true
+      }
+    },
+    "order": [
+      "out",
+      "mic",
+      "app"
+    ]
+  },
+  "default_output": "out",
+  "default_input": "mic"
+}

@@ -657,7 +657,10 @@ fn start(
                 )?,
             );
         }
-        for page in dashboard::Page::ALL {
+        for page in dashboard::Page::ALL
+            .into_iter()
+            .chain(dashboard::Page::EXTRAS)
+        {
             views.insert(
                 format!("dashboard-{}", page.name()),
                 dashboard::spec(

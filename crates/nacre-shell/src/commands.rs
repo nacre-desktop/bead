@@ -186,7 +186,7 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
         let page = call.args[0]
             .as_u64()
             .and_then(|index| usize::try_from(index).ok())
-            .and_then(|index| crate::dashboard::Page::ALL.get(index))
+            .and_then(crate::dashboard::Page::from_tab)
             .ok_or_else(|| {
                 Reply::error(call.id, "unavailable", "dashboard tab is not implemented")
             })?;

@@ -4,7 +4,7 @@ use bead::core::{
     Value,
     source::{self, Callback, Publisher, Snapshot, Source, Subscription},
 };
-use nacre_protocol::core_services::CoreSnapshot;
+use nacre_protocol::core_services::{AudioKind, CoreSnapshot};
 use serde_json::{Value as Json, json};
 use std::{
     collections::BTreeMap,
@@ -19,33 +19,65 @@ pub enum Page {
     Weather,
     Media,
     System,
+    /// Optional read-only extras from published core topics (B0024).
+    Notifications,
+    Devices,
+    Network,
 }
 impl Page {
+    /// The four core tabs, in Nacre's tab order.
     pub const ALL: [Self; 4] = [Self::Today, Self::Weather, Self::Media, Self::System];
+    pub const EXTRAS: [Self; 3] = [Self::Notifications, Self::Devices, Self::Network];
     pub fn name(self) -> &'static str {
         match self {
             Self::Today => "today",
             Self::Weather => "weather",
             Self::Media => "media",
             Self::System => "system",
+            Self::Notifications => "notifications",
+            Self::Devices => "devices",
+            Self::Network => "network",
         }
     }
+    /// Published topic that feeds the page (and its fixture file name).
     pub fn topic(self) -> String {
-        format!(
-            "dashboard.{}",
-            if self == Self::Today {
-                "calendar"
-            } else {
-                self.name()
-            }
-        )
+        match self {
+            Self::Notifications => "notifications".into(),
+            Self::Devices => "bluetooth".into(),
+            Self::Network => "network".into(),
+            Self::Today => "dashboard.calendar".into(),
+            _ => format!("dashboard.{}", self.name()),
+        }
+    }
+    fn fixture(self) -> &'static str {
+        match self {
+            Self::Today => "calendar",
+            Self::Devices => "bluetooth",
+            other => other.name(),
+        }
     }
     pub fn from_view(view: &str) -> Option<Self> {
         let name = view.strip_prefix("dashboard-")?;
-        Self::ALL.into_iter().find(|page| page.name() == name)
+        Self::ALL
+            .into_iter()
+            .chain(Self::EXTRAS)
+            .find(|page| page.name() == name)
     }
+    /// Index in Nacre's dashboard registry (`nacre tab N`); 4 focus, 6 clipboard
+    /// and 9..11 have no published contract and stay unmapped.
     pub fn tab(self) -> usize {
-        Self::ALL.iter().position(|page| *page == self).unwrap_or(0)
+        match self {
+            Self::Notifications => 5,
+            Self::Devices => 7,
+            Self::Network => 8,
+            core => Self::ALL.iter().position(|page| *page == core).unwrap_or(0),
+        }
+    }
+    pub fn from_tab(index: usize) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .chain(Self::EXTRAS)
+            .find(|page| page.tab() == index)
     }
     pub fn title(self) -> &'static str {
         match self {
@@ -53,6 +85,9 @@ impl Page {
             Self::Weather => "Weather",
             Self::Media => "Media",
             Self::System => "System",
+            Self::Notifications => "Notifications",
+            Self::Devices => "Devices",
+            Self::Network => "Network",
         }
     }
 }
@@ -65,21 +100,18 @@ pub struct Choice {
 }
 impl Choice {
     pub fn open(&self, page: Page) -> source::Result<Arc<dyn Source>> {
-        self.open_named(
-            &page.topic(),
-            if page == Page::Today {
-                "calendar"
-            } else {
-                page.name()
-            },
-        )
+        self.open_named(&page.topic(), page.fixture())
     }
     fn open_named(&self, topic: &str, fixture: &str) -> source::Result<Arc<dyn Source>> {
         if let Some(directory) = &self.fixtures {
-            return Ok(Arc::new(ReadOnly::fixture(
-                &directory.join(format!("{fixture}.json")),
-                topic,
-            )?));
+            // Extras' fixtures live beside the frozen core fixture tree.
+            let mut path = directory.join(format!("{fixture}.json"));
+            if !path.exists() {
+                path = directory
+                    .with_file_name("dashboard-extras")
+                    .join(format!("{fixture}.json"));
+            }
+            return Ok(Arc::new(ReadOnly::fixture(&path, topic)?));
         }
         if let Some(client) = &self.client {
             return Ok(Arc::new(client.lease_topic(topic)?));
@@ -128,6 +160,7 @@ pub fn spec(
             let secondary = match page {
                 Page::Today => Some(choice.open_named("dashboard.weather", "weather")),
                 Page::System => Some(choice.open_named("dashboard.updates", "updates")),
+                Page::Devices => Some(choice.open_named("audio", "audio")),
                 _ => None,
             }
             .transpose()
@@ -241,6 +274,18 @@ fn checked(topic: &str, data: &Json) -> source::Result<CoreSnapshot> {
         }
         "dashboard.updates" => {
             CoreSnapshot::Updates(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
+        "notifications" => CoreSnapshot::Notifications(
+            serde_json::from_value(data.clone()).map_err(|_| invalid())?,
+        ),
+        "bluetooth" => {
+            CoreSnapshot::Bluetooth(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
+        "audio" => {
+            CoreSnapshot::Audio(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
+        }
+        "network" => {
+            CoreSnapshot::Network(serde_json::from_value(data.clone()).map_err(|_| invalid())?)
         }
         _ => return Err(invalid()),
     };
@@ -416,6 +461,9 @@ impl Dashboard {
             CoreSnapshot::Weather(s) => &s.health,
             CoreSnapshot::Media(s) => &s.health,
             CoreSnapshot::System(s) => &s.health,
+            CoreSnapshot::Notifications(s) => &s.health,
+            CoreSnapshot::Bluetooth(s) => &s.health,
+            CoreSnapshot::Network(s) => &s.health,
             _ => return out,
         };
         out.insert("dashboard.ready".into(), Value::Bool(health.available));
@@ -526,6 +574,157 @@ impl Dashboard {
                 }))).collect();
                 out.insert("dashboard.rows".into(), Value::list(rows));
                 out.insert("dashboard.secondary".into(), Value::list(disks));
+            }
+            CoreSnapshot::Notifications(s) => {
+                text(&mut out, "heading", "Recent notifications", 48);
+                text(
+                    &mut out,
+                    "summary",
+                    if s.do_not_disturb {
+                        "Do not disturb is on"
+                    } else {
+                        "Do not disturb is off"
+                    },
+                    48,
+                );
+                // Active first, then the service-ordered history window.
+                let rows: Vec<Json> = s
+                    .active
+                    .order
+                    .iter()
+                    .filter_map(|id| s.active.items.get(id).map(|n| (id, n)))
+                    .chain(
+                        s.history
+                            .order
+                            .iter()
+                            .filter_map(|id| s.history.items.get(id).map(|n| (id, n))),
+                    )
+                    .take(8)
+                    .map(|(id, n)| {
+                        json!({"id":id,"label":line(&n.summary,40),"value":line(&n.app_name,20),
+                            "detail":line(n.body.lines().next().unwrap_or(""),64)})
+                    })
+                    .collect();
+                text(
+                    &mut out,
+                    "detail",
+                    if rows.is_empty() {
+                        "No notifications"
+                    } else {
+                        ""
+                    },
+                    48,
+                );
+                out.insert("dashboard.rows".into(), Value::list(rows));
+            }
+            CoreSnapshot::Bluetooth(s) => {
+                let powered = s.adapters.items.values().any(|a| a.powered);
+                text(&mut out, "heading", "Bluetooth", 48);
+                text(
+                    &mut out,
+                    "summary",
+                    match (s.adapters.items.is_empty(), powered) {
+                        (true, _) => "No adapter",
+                        (_, true) => "Powered on",
+                        _ => "Powered off",
+                    },
+                    48,
+                );
+                let mut devices = s
+                    .devices
+                    .order
+                    .iter()
+                    .filter_map(|id| s.devices.items.get(id).map(|d| (id, d)))
+                    .filter(|(_, d)| d.paired || d.connected)
+                    .collect::<Vec<_>>();
+                devices.sort_by_key(|(_, d)| !d.connected); // stable: keeps service order
+                let rows = devices.into_iter().take(6).map(|(id,d)| json!({
+                    "id":id,"label":line(&d.name,28),
+                    "value":match d.battery {Some(b) => format!("{b}% battery"), None if d.connected => "Connected".into(), None => "Saved".into()},
+                    "detail":""
+                })).collect();
+                out.insert("dashboard.rows".into(), Value::list(rows));
+                if let Some(audio) = &self.secondary {
+                    let audio = audio.snapshot();
+                    if let Ok(CoreSnapshot::Audio(a)) = checked("audio", &audio.data)
+                        && a.health.available
+                    {
+                        let nodes = a
+                            .nodes
+                            .order
+                            .iter()
+                            .filter_map(|id| a.nodes.items.get(id).map(|n| (id, n)))
+                            .filter(|(_, n)| {
+                                n.ready && matches!(n.kind, AudioKind::Output | AudioKind::Input)
+                            })
+                            .take(6)
+                            .map(|(id, n)| {
+                                let default = a.default_output.as_ref() == Some(id)
+                                    || a.default_input.as_ref() == Some(id);
+                                json!({"id":id,"label":line(&n.name,28),
+                                "value":if n.kind == AudioKind::Output {"Output"} else {"Input"},
+                                "detail":if default {"Default"} else {""}})
+                            })
+                            .collect();
+                        out.insert("dashboard.secondary".into(), Value::list(nodes));
+                        if a.health.stale || !audio.connected {
+                            out.insert("dashboard.stale".into(), Value::Bool(true));
+                        }
+                    }
+                }
+            }
+            CoreSnapshot::Network(s) => {
+                let primary = s
+                    .primary_connection
+                    .as_ref()
+                    .and_then(|id| s.connections.items.get(id));
+                text(
+                    &mut out,
+                    "heading",
+                    primary.map_or("Not connected", |c| &c.name),
+                    32,
+                );
+                text(
+                    &mut out,
+                    "summary",
+                    if s.wireless_enabled {
+                        "Wi-Fi is on"
+                    } else {
+                        "Wi-Fi is off"
+                    },
+                    48,
+                );
+                let signal = s
+                    .access_points
+                    .items
+                    .values()
+                    .find(|ap| ap.active)
+                    .map(|ap| format!("{}%", ap.strength))
+                    .unwrap_or_else(|| "—".into());
+                text(&mut out, "metric", &signal, 8);
+                text(
+                    &mut out,
+                    "detail",
+                    "Traffic rates are not published yet",
+                    64,
+                );
+                let connections = s.connections.order.iter().take(6).filter_map(|id| s.connections.items.get(id).map(|c| json!({
+                    "id":id,"label":line(&c.name,28),"value":if c.active {"Active"} else {""},"detail":line(&c.kind,20)
+                }))).collect();
+                let networks = s
+                    .access_points
+                    .order
+                    .iter()
+                    .take(6)
+                    .filter_map(|id| {
+                        s.access_points.items.get(id).map(|ap| json!({
+                    "id":id,"label":line(&ap.name,28),"value":format!("{}%",ap.strength),
+                    "detail":if ap.secured {"Secured"} else {"Open"}
+                }))
+                    })
+                    .collect();
+                out.insert("dashboard.rows".into(), Value::list(connections));
+                out.insert("dashboard.secondary".into(), Value::list(networks));
             }
             _ => {}
         }
