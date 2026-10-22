@@ -48,7 +48,7 @@ panel closes, the session stops, or the page retires. Media position is extrapol
 
 ## Not done (one line each)
 
-Seek and album art/halo/mini player/overview media card; network sparkline, `frequency_mhz`, host card,
+Seek, album art, mini player and network sparkline moved to B0031. Halo/overview card; host card,
 GPU memory card; screenshot thumbnails (copy/trash actions); weather photo, lyrics and palette toggles;
 Focus dial ring and saved default minutes. A `--dashboard-fixtures` run shows artificial data only.
 
