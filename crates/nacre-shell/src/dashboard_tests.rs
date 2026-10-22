@@ -1011,7 +1011,11 @@ fn today_calendar_navigation_and_agenda_scrolling_use_real_input() -> Result<()>
 fn extra_secondary(page: Page) -> Option<Json> {
     (page == Page::Devices).then(|| fixture("audio"))
 }
-pub(super) fn extra_harness(page: Page, model: BTreeMap<String, Value>, scale: f32) -> Result<Harness> {
+pub(super) fn extra_harness(
+    page: Page,
+    model: BTreeMap<String, Value>,
+    scale: f32,
+) -> Result<Harness> {
     Harness::load(
         &root(),
         Path::new(&format!("dashboard/{}/main.luau", page.name())),

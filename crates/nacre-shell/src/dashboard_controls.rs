@@ -123,9 +123,7 @@ impl Dashboard {
                 }
             }
             (Page::AiUsage, "usage.refresh") => c.submit("ai.usage.refresh", json!({}), wake),
-            (Page::Customize, "tab.toggle" | "tab.up" | "tab.down") => {
-                self.customize(op, id, wake)
-            }
+            (Page::Customize, "tab.toggle" | "tab.up" | "tab.down") => self.customize(op, id, wake),
             _ => {}
         }
     }
@@ -205,7 +203,10 @@ impl Dashboard {
                 }
                 None => on.push(page),
             }
-            ("enabled", order.into_iter().filter(|p| on.contains(p)).collect())
+            (
+                "enabled",
+                order.into_iter().filter(|p| on.contains(p)).collect(),
+            )
         } else {
             let at = order.iter().position(|p| *p == page).unwrap_or(0);
             let to = if op == "tab.up" {
@@ -252,7 +253,10 @@ impl Dashboard {
     }
     /// Stores shared by every page: navigation and call state.
     pub(super) fn chrome(&self, out: &mut BTreeMap<String, Value>) {
-        let (busy, message, confirm) = self.controls.as_ref().map_or_else(Default::default, |c| c.poll());
+        let (busy, message, confirm) = self
+            .controls
+            .as_ref()
+            .map_or_else(Default::default, |c| c.poll());
         let method = match self.page {
             Page::Focus => "focus.start",
             Page::Clipboard => "clipboard.copy",
@@ -268,7 +272,10 @@ impl Dashboard {
             && self.store().is_some()
             && self.offered(Page::Customize);
         out.insert("dashboard.tabs".into(), Value::list(self.tabs()));
-        out.insert("dashboard.control".into(), Value::Bool(!busy && can(method)));
+        out.insert(
+            "dashboard.control".into(),
+            Value::Bool(!busy && can(method)),
+        );
         out.insert("dashboard.busy".into(), Value::Bool(busy));
         out.insert("dashboard.message".into(), Value::Text(line(&message, 64)));
         out.insert("dashboard.confirm".into(), Value::Bool(confirm));
@@ -344,7 +351,11 @@ impl Dashboard {
         text(
             out,
             "track",
-            if p.title.is_empty() { "Unknown track" } else { &p.title },
+            if p.title.is_empty() {
+                "Unknown track"
+            } else {
+                &p.title
+            },
             64,
         );
         let who = [p.artist.as_str(), p.album.as_str()]
@@ -352,7 +363,16 @@ impl Dashboard {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join(" · ");
-        text(out, "track_detail", &if who.is_empty() { p.identity.clone() } else { who }, 96);
+        text(
+            out,
+            "track_detail",
+            &if who.is_empty() {
+                p.identity.clone()
+            } else {
+                who
+            },
+            96,
+        );
         text(
             out,
             "metric",
@@ -363,7 +383,9 @@ impl Dashboard {
             },
             16,
         );
-        let progress = position.zip(p.length_ms).map_or(0., |(at, len)| at as f64 / len as f64);
+        let progress = position
+            .zip(p.length_ms)
+            .map_or(0., |(at, len)| at as f64 / len as f64);
         out.insert("dashboard.progress".into(), Value::Number(progress));
         out.insert("dashboard.can_previous".into(), Value::Bool(p.can_previous));
         out.insert("dashboard.can_toggle".into(), Value::Bool(p.can_play_pause));
@@ -380,7 +402,12 @@ impl Dashboard {
                 Value::Bool(!connected || store.error.is_some()),
             );
             text(out, "heading", "Dashboard pages", 48);
-            text(out, "summary", "Choose the optional pages and their order", 64);
+            text(
+                out,
+                "summary",
+                "Choose the optional pages and their order",
+                64,
+            );
             let (enabled, order) = Self::layout(Some(&store));
             let rows = order.iter().map(|p| {
                 let name = p.name();
@@ -414,9 +441,9 @@ impl Dashboard {
         match data {
             Extra::Focus(s) => {
                 let remaining = match s.status {
-                    FocusStatus::Running => s.deadline_ms.map(|d| {
-                        d.saturating_sub((self.now)()).div_ceil(1000).min(10_800) as u32
-                    }),
+                    FocusStatus::Running => s
+                        .deadline_ms
+                        .map(|d| d.saturating_sub((self.now)()).div_ceil(1000).min(10_800) as u32),
                     FocusStatus::Paused => s.remaining_s,
                     _ => None,
                 };
@@ -445,7 +472,9 @@ impl Dashboard {
                     64,
                 );
                 let progress = match remaining {
-                    Some(r) if s.total_s > 0 => 1. - f64::from(r.min(s.total_s)) / f64::from(s.total_s),
+                    Some(r) if s.total_s > 0 => {
+                        1. - f64::from(r.min(s.total_s)) / f64::from(s.total_s)
+                    }
                     _ => 0.,
                 };
                 out.insert("dashboard.progress".into(), Value::Number(progress));
@@ -521,12 +550,26 @@ impl Dashboard {
                     },
                     48,
                 );
-                rows = s.notes.order.iter().filter_map(|id| s.notes.items.get(id).map(|n| {
-                    json!({"id":id.0,"label":line(&n.title,56),"value":"","detail":""})
-                })).collect();
-                secondary = s.tasks.order.iter().filter_map(|id| s.tasks.items.get(id).map(|t| {
-                    json!({"id":id.0,"label":line(&t.text,72),"value":"","detail":""})
-                })).collect();
+                rows = s
+                    .notes
+                    .order
+                    .iter()
+                    .filter_map(|id| {
+                        s.notes.items.get(id).map(
+                            |n| json!({"id":id.0,"label":line(&n.title,56),"value":"","detail":""}),
+                        )
+                    })
+                    .collect();
+                secondary = s
+                    .tasks
+                    .order
+                    .iter()
+                    .filter_map(|id| {
+                        s.tasks.items.get(id).map(
+                            |t| json!({"id":id.0,"label":line(&t.text,72),"value":"","detail":""}),
+                        )
+                    })
+                    .collect();
             }
         }
         out.insert("dashboard.rows".into(), Value::list(rows));
@@ -536,9 +579,16 @@ impl Dashboard {
 
 /// CPU, memory, GPU and drive cards. Unknown readings stay "—", never zero.
 pub(super) fn gauges(s: &DashboardSystemState) -> Vec<Json> {
-    let percent = |v: Option<f64>| v.filter(|v| v.is_finite()).map_or("—".into(), |v| format!("{v:.0}%"));
+    let percent = |v: Option<f64>| {
+        v.filter(|v| v.is_finite())
+            .map_or("—".into(), |v| format!("{v:.0}%"))
+    };
     let mut gpu_detail = "Metric unavailable".to_string();
-    if let Some((used, total)) = s.gpu.as_ref().and_then(|g| g.memory_used.zip(g.memory_total)) {
+    if let Some((used, total)) = s
+        .gpu
+        .as_ref()
+        .and_then(|g| g.memory_used.zip(g.memory_total))
+    {
         gpu_detail = format!("{} / {}", bytes(used), bytes(total));
     }
     let memory = s.memory.as_ref();

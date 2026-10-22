@@ -519,6 +519,7 @@ impl Runtime {
         self.status = Some(status);
         Ok(self)
     }
+    #[cfg(test)]
     pub fn with_dashboard(
         self,
         page: crate::dashboard::Page,

@@ -272,14 +272,9 @@ pub fn spec(
                 .with_frame(attachment, &colors)
                 .and_then(|runtime| {
                     runtime.with_dashboard_view(
-                        Dashboard::new(
-                            page,
-                            source,
-                            secondary,
-                            choice.fixtures.is_some(),
-                        )
-                        .with_clock(clock)
-                        .with_controls(settings, controls, choice.client.clone()),
+                        Dashboard::new(page, source, secondary, choice.fixtures.is_some())
+                            .with_clock(clock)
+                            .with_controls(settings, controls, choice.client.clone()),
                     )
                 })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
