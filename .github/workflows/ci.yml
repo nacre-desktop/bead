@@ -3,21 +3,43 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+concurrency:
+  group: bead-ci-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ${{ fromJSON(vars.NACRE_CI_RUNNER || '["self-hosted","linux","nacre-ci"]') }}
+    env:
+      HOME: /github/home
+      CARGO_HOME: /github/home/.cargo
+      RUSTUP_HOME: /github/home/.rustup
+    container:
+      image: ubuntu:24.04
+      options: --cpus=10 --memory=28g
+    defaults:
+      run:
+        shell: nice -n 10 bash -e -o pipefail {0}
     steps:
+      - name: Prepare Ubuntu container
+        run: |
+          mkdir -p "$HOME" "$CARGO_HOME/bin"
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          apt-get update -qq
+          apt-get install -y ca-certificates build-essential curl git python3 unzip libwayland-dev libfontconfig1-dev libxkbcommon-dev libpipewire-0.3-dev libclang-dev libgdk-pixbuf-2.0-dev pkg-config dbus
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, verified 2026-10-13
-      - name: Native client build prerequisites
-        run: sudo apt-get update -qq && sudo apt-get install -y libwayland-dev libfontconfig1-dev libxkbcommon-dev libpipewire-0.3-dev libclang-dev libgdk-pixbuf-2.0-dev pkg-config dbus
       - name: Rust toolchain
-        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
+          cache: false
       - name: Formatting
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -j2 -- -D warnings
       - name: Headless services dependency boundary
         run: python3 tools/check-service-boundary.py
       - name: Tests
@@ -40,7 +62,7 @@ jobs:
       - name: Facade, headless UI and Luau schema
         shell: bash
         run: |
-          cargo run -p bead --example minimal -- --check
+          cargo run -p bead --example minimal --locked -j2 -- --check
           cargo build -p nacre-shell --no-default-features --locked -j2
           target/debug/nacre-shell --check shell/ui/main.luau
           mkdir -p "$RUNNER_TEMP/luau"
