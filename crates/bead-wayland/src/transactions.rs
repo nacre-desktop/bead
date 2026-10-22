@@ -131,13 +131,13 @@ impl App {
             None
         };
         let accepted = self.ui_inner(event);
-        if let Some((palette, is_accepted, is_settled, is_failed, has_error)) = palette_packet {
-            if is_settled || is_failed || is_accepted {
-                self.wallpaper_palette_settled(
-                    &palette,
-                    is_settled || (is_accepted && accepted && !has_error),
-                );
-            }
+        if let Some((palette, is_accepted, is_settled, is_failed, has_error)) = palette_packet
+            && (is_settled || is_failed || is_accepted)
+        {
+            self.wallpaper_palette_settled(
+                &palette,
+                is_settled || (is_accepted && accepted && !has_error),
+            );
         }
     }
     pub(super) fn ui_inner(&mut self, event: UiEvent) -> bool {

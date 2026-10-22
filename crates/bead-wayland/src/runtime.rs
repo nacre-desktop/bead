@@ -593,11 +593,11 @@ impl App {
     pub(super) fn complete_wallpaper(&mut self, frame: WallpaperFrame) {
         self.wallpaper_jobs.remove(&frame.output);
         let output_name = frame.output.clone();
-        if let Some(provider) = &self.options.wallpaper {
-            if !provider.is_current(&frame) {
-                provider.discarded(&frame.output, frame.revision);
-                return;
-            }
+        if let Some(provider) = &self.options.wallpaper
+            && !provider.is_current(&frame)
+        {
+            provider.discarded(&frame.output, frame.revision);
+            return;
         }
         let palette_key: std::collections::BTreeMap<String, [u8; 4]> =
             frame.palette.0.clone().into_iter().collect();
@@ -832,15 +832,17 @@ impl App {
             });
         } else {
             if attach_wallpaper_buffer(
-                &mut surface.pool,
-                &surface.layer,
-                &mut surface.buffers,
-                surface.viewport.as_ref(),
-                surface.scale_factor,
-                surface.width,
-                surface.height,
+                WallpaperBufferTarget {
+                    pool: &mut surface.pool,
+                    layer: &surface.layer,
+                    buffers: &mut surface.buffers,
+                    viewport: surface.viewport.as_ref(),
+                    scale_factor: surface.scale_factor,
+                    width: surface.width,
+                    height: surface.height,
+                    logical,
+                },
                 &frame.rgba,
-                logical,
             )
             .is_err()
             {
@@ -890,15 +892,17 @@ impl App {
                 transition.pixels.copy_from_slice(&transition.target);
             }
             if attach_wallpaper_buffer(
-                &mut surface.pool,
-                &surface.layer,
-                &mut surface.buffers,
-                surface.viewport.as_ref(),
-                surface.scale_factor,
-                surface.width,
-                surface.height,
+                WallpaperBufferTarget {
+                    pool: &mut surface.pool,
+                    layer: &surface.layer,
+                    buffers: &mut surface.buffers,
+                    viewport: surface.viewport.as_ref(),
+                    scale_factor: surface.scale_factor,
+                    width: surface.width,
+                    height: surface.height,
+                    logical,
+                },
                 &transition.pixels,
-                logical,
             )
             .is_err()
             {
@@ -1130,17 +1134,28 @@ impl App {
     }
 }
 
-fn attach_wallpaper_buffer(
-    pool: &mut SlotPool,
-    layer: &LayerSurface,
-    buffers: &mut Vec<smithay_client_toolkit::shm::slot::Buffer>,
-    viewport: Option<&WpViewport>,
+struct WallpaperBufferTarget<'a> {
+    pool: &'a mut SlotPool,
+    layer: &'a LayerSurface,
+    buffers: &'a mut Vec<smithay_client_toolkit::shm::slot::Buffer>,
+    viewport: Option<&'a WpViewport>,
     scale_factor: i32,
     width: u32,
     height: u32,
-    rgba: &[u8],
     logical: Option<(i32, i32)>,
-) -> Result<(), String> {
+}
+
+fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Result<(), String> {
+    let WallpaperBufferTarget {
+        pool,
+        layer,
+        buffers,
+        viewport,
+        scale_factor,
+        width,
+        height,
+        logical,
+    } = target;
     let expected = (width as usize)
         .checked_mul(height as usize)
         .and_then(|n| n.checked_mul(4))
@@ -1198,7 +1213,10 @@ fn attach_wallpaper_buffer(
 }
 
 fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {
-    for (pixel, rgba) in bytes.chunks_exact_mut(4).zip(rgba.chunks_exact(4)) {
-        pixel.copy_from_slice(&[rgba[2], rgba[1], rgba[0], rgba[3]]);
+    let (pixels, pixel_remainder) = bytes.as_chunks_mut::<4>();
+    let (colors, color_remainder) = rgba.as_chunks::<4>();
+    debug_assert!(pixel_remainder.is_empty() && color_remainder.is_empty());
+    for (pixel, color) in pixels.iter_mut().zip(colors) {
+        *pixel = [color[2], color[1], color[0], color[3]];
     }
 }
