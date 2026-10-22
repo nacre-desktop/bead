@@ -3,8 +3,10 @@
 Bead's `.github/workflows/ci.yml` `check` job runs for pushes to
 `refs/heads/main` and maintainer-started `workflow_dispatch` runs. Its job guard
 skips dispatches on any other ref. It runs in a resource-capped Ubuntu 24.04
-container (10 CPUs, 28 GiB) and selects the `nacre-ci` organization runner group
-through the `NACRE_CI_RUNNER` repository variable. The other group consumer is
+container capped at 10 CPUs and 28 GiB on the self-hosted runner, and selects
+the `nacre-ci` organization runner group through the `NACRE_CI_RUNNER`
+repository variable. The cap is omitted for the hosted `ubuntu-24.04` fallback,
+which uses its hosted VM's resource limits. The other group consumer is
 Nacre's `.github/workflows/check.yml` `desktop` and `fresh-install` jobs, which
 run on pushes and maintainer-started `workflow_dispatch` at `refs/heads/main`,
 with job guards skipping dispatches on other refs. Scope the group to exactly

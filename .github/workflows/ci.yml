@@ -18,7 +18,7 @@ jobs:
       RUSTUP_HOME: /github/home/.rustup
     container:
       image: ubuntu:24.04
-      options: --cpus=10 --memory=28g
+      options: ${{ !contains(vars.NACRE_CI_RUNNER, 'ubuntu-') && '--cpus=10 --memory=28g' || '' }}
     defaults:
       run:
         shell: nice -n 10 bash -e -o pipefail {0}
