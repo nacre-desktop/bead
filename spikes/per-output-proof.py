@@ -321,14 +321,20 @@ def sample(env, raw, compositor, stop):
                 x, y, width, height = calendar['rect']
                 click_rows = []
                 for output_name, offset_x in (('bead-bench', 0), ('bead-extra', 1920)):
+                    click_offset = len(text_log().splitlines())
                     px = round(offset_x+x+width/2)
                     py = round(y+height/2)
                     pointer_command(f'move {px} {py} 3840 1200')
                     pointer_command('click')
                     opened = wait_panel(lambda state, expected=output_name: state.get('target_open')
+                                        and state.get('prepared') and state.get('surfaces') == 1
                                         and state.get('output') == expected
                                         and state.get('view') == 'calendar',
                                         f'calendar click routed to {output_name}')
+                    wait(lambda data, start=click_offset: any(
+                        line.startswith('UI_PRESENTED ') and 'companion=true' in line
+                        for line in data.splitlines()[start:]), f'calendar frame on {output_name}')
+                    time.sleep(.3)
                     click_rows.append({'clicked_output': output_name, 'pointer_xy': [px, py],
                                        'target_open': opened['target_open'],
                                        'output': opened['output'], 'view': opened['view']})
@@ -368,7 +374,7 @@ def sample(env, raw, compositor, stop):
                     if reply.get('error') or reply['result']['size'][0] != width:
                         raise RuntimeError(f'addressed input regions selected the wrong output: {name}: {reply!r}')
                 unknown = addressed_regions('missing-output')
-                if unknown.get('error', {}).get('code') != 'output':
+                if (unknown.get('error') or {}).get('code') != 'output':
                     raise RuntimeError(f'unknown output request did not fail closed: {unknown!r}')
                 result['addressed_input_widths'] = {name: reply['result']['size'][0] for name, reply in addressed.items()}
                 result['unknown_output_rejected'] = True
