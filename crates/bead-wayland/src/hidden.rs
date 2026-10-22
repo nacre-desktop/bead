@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Shell-wide hide: unmap every bar and panel layer surface, keep all view state,
-//! and remap on show. Unmapping drops the surface's exclusive zone, input region and
-//! keyboard focus together, so windows regain the space. Wallpaper surfaces are
-//! separate and untouched.
+//! Shell-wide hide: destroy every bar and panel layer surface, keep all view state,
+//! and recreate them on show. Destroying drops the exclusive zone, input region and
+//! keyboard focus together, so windows regain the space. Layer-shell resets a merely
+//! unmapped surface to its initial state, so recreating through `add_output` (the
+//! start-up and hot-plug path) is the one place that owns anchors, size and margins.
+//! Wallpaper surfaces are separate and untouched.
 use super::*;
 impl App {
     pub(super) fn set_hidden(&mut self, hidden: bool) {
@@ -10,19 +12,10 @@ impl App {
             return;
         }
         self.hidden = hidden;
+        // The dismiss catcher would otherwise keep swallowing clicks.
+        drop(self.dismiss.take());
+        self.surfaces.clear();
         if hidden {
-            // The dismiss catcher would otherwise keep swallowing clicks.
-            drop(self.dismiss.take());
-            for s in &mut self.surfaces {
-                s.layer.wl_surface().attach(None, 0, 0);
-                s.layer.commit();
-                s.configured = false;
-                s.redraw = false;
-                s.callbacks.invalidate();
-                s.decorations = None;
-                s.previous = None;
-                s.visual_damage = Default::default();
-            }
             return;
         }
         let keyboard_dismiss = self.panel_target
@@ -38,14 +31,9 @@ impl App {
             self.fail(error);
         }
         let qh = self.qh.clone();
-        for i in 0..self.surfaces.len() {
-            if self.surfaces[i].configured {
-                // Created while hidden: never mapped, so no new configure will come.
-                self.draw(i, &qh);
-            } else {
-                // Remap handshake: commit without a buffer, then draw on configure.
-                self.surfaces[i].layer.commit();
-            }
+        let outputs: Vec<_> = self.output.outputs().collect();
+        for output in outputs {
+            self.add_output(&qh, output);
         }
     }
 }

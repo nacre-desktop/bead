@@ -62,13 +62,16 @@ no such handling at all yet (gap, unchanged).
 Bead (`bead-wayland/src/hidden.rs`, generic):
 - `App.hidden`; `nacre hide` maps to `bead.panel hide` (toggle), replacing the old
   panel-close mapping. `nacre close` still closes the panel.
-- Hiding unmaps every bar and panel layer surface (null buffer + commit), drops the
-  dismiss catcher and frame tiles, and resets frame callbacks. The compositor releases
-  the exclusive zone, input region and keyboard focus with the mapping. Wallpaper
-  surfaces are separate and not touched. Panel runtime, view and model stay alive.
-- Showing re-creates the dismiss catcher when a keyboard panel is open, commits the
-  unmapped surfaces for a fresh configure (layer-shell remap handshake) and draws.
-  Surfaces created while hidden (output hot-plug) never map until shown.
+- Hiding destroys every bar and panel layer surface and the dismiss catcher; the
+  compositor releases the exclusive zone, input region and keyboard focus with them.
+  (A merely unmapped layer surface is reset to its initial state and must be given
+  its anchors and size again; first nested run confirmed the compositor rejects a
+  bare remap with a protocol error, so show goes through `add_output`, the start-up
+  and hot-plug path, which owns that geometry.) Wallpaper surfaces are separate and
+  not touched. Panel runtime, view and model stay alive, and a panel that was open
+  comes back with its surface.
+- Showing re-creates the dismiss catcher when a keyboard panel is open and then the
+  surfaces of every output. Outputs added while hidden create nothing until shown.
 - `draw` returns early while hidden, so no stray redraw can remap a surface.
 - Explicit opens clear hidden first: `bead.panel open|toggle`, the launcher-family key
   routes and the dashboard toggle (`UiEvent::ShellHidden(Some(false))`). Automatic

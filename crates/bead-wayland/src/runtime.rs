@@ -1211,6 +1211,9 @@ impl App {
 
     pub(super) fn add_output(&mut self, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
         self.ensure_wallpaper(&output, qh);
+        if self.hidden {
+            return;
+        }
         let output_id = self
             .output
             .info(&output)
