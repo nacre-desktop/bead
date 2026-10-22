@@ -421,8 +421,8 @@ def sample(env, raw, compositor, stop):
         final_log = text_log()
         if 'UI_ERROR ' in final_log or 'OUTPUT_SESSION_ERROR ' in final_log:
             raise RuntimeError('per-output proof logged a UI or session error')
-        commit_names = set(re.findall(r'\bUI_COMMIT .*?\boutput=([^ ]+)', final_log))
-        created_names = set(re.findall(r'\bUI_SESSION_(?:CREATED|NAMED) output=([^ ]+)', final_log))
+        commit_names = set(re.findall(r'\bUI_COMMIT .*?\boutput=(\S+)', final_log))
+        created_names = set(re.findall(r'\bUI_SESSION_(?:CREATED|NAMED) output=(\S+)', final_log))
         result['created_outputs'] = sorted(created_names)
         result['committed_outputs'] = sorted(commit_names)
         if role == 'candidate' and compositor == 'hyprland' and (not {'bead-bench', 'bead-extra'} <= created_names
