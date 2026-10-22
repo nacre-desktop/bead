@@ -18,9 +18,25 @@ measure = importlib.util.module_from_spec(_measure_spec)
 _measure_spec.loader.exec_module(measure)
 
 
+def record_pool_bounds(result, log):
+    if result['role'] != 'candidate':
+        return
+    rows = [dict((key, int(value)) for key, value in re.findall(
+        r'\b(pool_bytes|buffer_bytes)=(\d+)', line))
+        for line in log.splitlines()
+        if line.startswith('BUFFER output=') and ' allocation_count=' in line]
+    if not rows or any('pool_bytes' not in row or 'buffer_bytes' not in row for row in rows):
+        raise RuntimeError('candidate must report shared-memory pool and frame byte counts')
+    for row in rows:
+        if row['pool_bytes'] != 3*((row['buffer_bytes']+63)//64)*64:
+            raise RuntimeError(f'geometry pool retained more than three current frames: {row}')
+    result['bounded_geometry_pools'] = rows
+
+
 def finish_memory_only(result, client, stop, text_log, pswpin_pages):
     if 'UI_ERROR ' in text_log() or 'OUTPUT_SESSION_ERROR ' in text_log():
         raise RuntimeError('per-output proof logged a UI or session error')
+    record_pool_bounds(result, text_log())
     stop(client)
     if client.returncode != 0:
         raise RuntimeError(f'memory-only shell exited {client.returncode}')
@@ -135,6 +151,16 @@ def sample(env, raw, compositor, stop):
         result['drm_unknown_samples'] = sum(not row['drm_known'] for row in rows)
         result['pss_swap_known_drm_median_mib'] = statistics.median(
             row['pss_swap_known_drm_mib'] for row in rows)
+        diagnostics = ipc('state')
+        result['cache_bytes'] = diagnostics.get('cache_bytes')
+        result['heap_bytes'] = diagnostics.get('heap_bytes')
+        resources = {}
+        for line in text_log().splitlines():
+            if line.startswith('UI_RESOURCES '):
+                output = re.search(r'\boutput=(\S+)', line)
+                resources[output.group(1) if output else 'shared'] = {
+                    key: int(value) for key, value in re.findall(r'\b(\w+)=(\d+)', line)}
+        result['resources_by_output'] = resources
         print('PER_OUTPUT_MEMORY '+json.dumps({k:v for k,v in result.items() if k != 'samples'}, sort_keys=True), flush=True)
         result['role'] = role
         return result
@@ -421,6 +447,7 @@ def sample(env, raw, compositor, stop):
         final_log = text_log()
         if 'UI_ERROR ' in final_log or 'OUTPUT_SESSION_ERROR ' in final_log:
             raise RuntimeError('per-output proof logged a UI or session error')
+        record_pool_bounds(result, final_log)
         commit_names = set(re.findall(r'\bUI_COMMIT .*?\boutput=(\S+)', final_log))
         created_names = set(re.findall(r'\bUI_SESSION_(?:CREATED|NAMED) output=(\S+)', final_log))
         result['created_outputs'] = sorted(created_names)

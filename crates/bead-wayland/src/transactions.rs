@@ -607,11 +607,12 @@ impl App {
                 );
                 let (layers, images) = self.renderer.resource_counts();
                 println!(
-                    "UI_RESOURCES {} layers={} gpu_images={} surfaces={}",
+                    "UI_RESOURCES {} layers={} gpu_images={} surfaces={} output={}",
                     runtime.resource_counts(),
                     layers,
                     images,
-                    self.surfaces.len()
+                    self.surfaces.len(),
+                    active_output.as_deref().unwrap_or("shared")
                 );
                 println!(
                     "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={} companion={} source_error={} output={}",

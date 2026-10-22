@@ -117,6 +117,7 @@ pub struct LuauFrontEnd {
     install: Vec<u8>,
     _compiled_charge: bead_core::cache::Charge,
     values_budget: bead_core::cache::Budget,
+    vm_build_bytes: std::cell::Cell<usize>,
 }
 impl LuauFrontEnd {
     pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
@@ -161,10 +162,18 @@ impl LuauFrontEnd {
                 8 * bead_core::cache::MIB,
             ),
             compiled,
+            vm_build_bytes: std::cell::Cell::new(0),
             materialized: RefCell::new(None),
             kit,
             install,
         })
+    }
+    pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
+        (
+            self._compiled_charge.bytes(),
+            self.values_budget.used(),
+            self.vm_build_bytes.get(),
+        )
     }
 }
 impl FrontEnd for LuauFrontEnd {
@@ -354,6 +363,9 @@ impl FrontEnd for LuauFrontEnd {
                 lua.from_value(node)
             })
         })();
+        // The markup sandbox is temporary; this is its end-of-build allocation,
+        // not a retained VM or an allocator high-water estimate.
+        self.vm_build_bytes.set(lua.used_memory());
         let result = result
             .map(std::rc::Rc::new)
             .map_err(|error| diagnostic(entry, error));

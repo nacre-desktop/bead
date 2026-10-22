@@ -77,6 +77,15 @@ impl App {
                 if self.options.trace_state {
                     value["cache_bytes"] =
                         serde_json::to_value(bead_core::cache::report()).unwrap_or_default();
+                    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                    {
+                        // SAFETY: read-only, by-value glibc allocator accounting.
+                        let heap = unsafe { libc::mallinfo2() };
+                        value["heap_bytes"] = serde_json::json!({
+                            "live": heap.uordblks, "free": heap.fordblks,
+                            "mapped": heap.hblkhd, "arena": heap.arena
+                        });
+                    }
                     value["prepare_regions"] = serde_json::json!(
                         self.runtime
                             .as_ref()

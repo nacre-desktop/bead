@@ -558,8 +558,12 @@ impl Session {
         self.current.asset_data.get(path).cloned()
     }
     pub fn resource_counts(&self) -> String {
+        let (compiled, values, markup_vm) = self
+            .generation
+            .as_ref()
+            .map_or((0, 0, 0), Generation::markup_resource_bytes);
         format!(
-            "stores={} nodes={} watchers={} subscriptions={} bindings={} sources={} luau_bytes={}",
+            "stores={} nodes={} watchers={} subscriptions={} bindings={} sources={} luau_bytes={} markup_compiled_bytes={compiled} markup_values_bytes={values} markup_vm_build_bytes={markup_vm} source_bytes={}",
             self.stores.values().len(),
             self.current_nodes.len(),
             usize::from(self.watcher.is_some()),
@@ -570,7 +574,8 @@ impl Session {
             self.generation.as_ref().map_or(0, |g| g.sources.len()),
             self.generation
                 .as_ref()
-                .map_or(0, |g| g.script.memory_bytes())
+                .map_or(0, |g| g.script.memory_bytes()),
+            self.generation.as_ref().map_or(0, |g| g.sources.values().map(Vec::capacity).sum::<usize>())
         )
     }
     pub fn state_summary(&self) -> String {

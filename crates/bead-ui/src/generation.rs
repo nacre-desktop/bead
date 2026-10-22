@@ -161,6 +161,11 @@ impl Loader {
     }
 }
 impl Generation {
+    pub(super) fn markup_resource_bytes(&self) -> (usize, usize, usize) {
+        self.markup_frontend
+            .as_ref()
+            .map_or((0, 0, 0), frontend::LuauFrontEnd::resource_bytes)
+    }
     /// Entire candidate graph is parsed before live stores or views change.
     pub fn load(
         root: &Path,

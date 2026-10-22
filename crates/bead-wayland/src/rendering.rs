@@ -715,13 +715,13 @@ impl App {
                 s.geometry = (w, h);
                 s.format = format;
                 s.previous = None;
-                // SCTK defers active-buffer destruction until release. A fresh pool
-                // can drop our large mapping without reusing compositor-owned bytes.
-                if s.pool.len() > size * 6 {
-                    s.pool = SlotPool::new(size * 3, &self.shm)?;
-                } else {
-                    s.pool.resize(size * 3)?;
-                }
+                // Pools only grow, and an old geometry's active slots cannot be
+                // reused yet. Start a bounded pool for this geometry instead of
+                // retaining old-scale pages or growing around those slots.
+                // SCTK defers active wl_buffer destruction until release; the
+                // compositor retains its backing even after our mapping drops.
+                // SlotPool rounds each slot to a 64-byte boundary.
+                s.pool = SlotPool::new(size.next_multiple_of(64) * 3, &self.shm)?;
                 for _ in 0..3 {
                     let (buffer, _) = s.pool.create_buffer(
                         w,
@@ -740,13 +740,14 @@ impl App {
                     s.allocations += 1;
                 }
                 println!(
-                    "BUFFER output={} logical={}x{} physical={}x{} scale={scale} format={format:?} allocation_count={}",
+                    "BUFFER output={} logical={}x{} physical={}x{} scale={scale} format={format:?} allocation_count={} pool_bytes={} buffer_bytes={size}",
                     s.output.id().protocol_id(),
                     s.width,
                     s.height,
                     w,
                     h,
-                    s.allocations
+                    s.allocations,
+                    s.pool.len()
                 );
             }
             let current = scene.bounds();
