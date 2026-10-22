@@ -18,6 +18,7 @@ mod reload;
 mod sound;
 mod state;
 mod status_views;
+mod tray;
 mod ui_provider;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
@@ -472,6 +473,7 @@ fn start(
         return run(options, scene);
     }
     let desktop_owner = std::sync::Arc::new(std::sync::OnceLock::new());
+    let tray_selection = tray::Selection::default();
     let panel_trace = options.trace_state;
     if core_views && options.bar {
         options.decorations = Some(
@@ -558,6 +560,7 @@ fn start(
     } else {
         None
     };
+    let tray_preview = _ui_provider.is_none();
     let connection_status = _ui_provider.as_ref().map(|client| {
         std::sync::Arc::new(client.connection()) as std::sync::Arc<dyn bead::core::source::Source>
     });
@@ -597,6 +600,18 @@ fn start(
             ("sound".into(), core_sound.ok_or("sound view missing")?),
             ("calendar".into(), calendar),
         ]);
+        if tray_preview {
+            views.insert(
+                "tray".into(),
+                tray::spec(
+                    palette.clone(),
+                    colors.clone(),
+                    desktop_owner.clone(),
+                    tray_selection.clone(),
+                    panel_trace,
+                )?,
+            );
+        }
         let status_colors = std::sync::Arc::new(colors.clone());
         let status_palette = std::sync::Arc::new(palette.clone());
         let status_scale: serde_json::Value =
@@ -702,7 +717,9 @@ fn start(
                         runtime
                     };
                     let runtime = if core_views && bar {
-                        runtime.with_popout_trigger()?
+                        runtime
+                            .with_popout_trigger()?
+                            .with_tray_bar(tray_selection.clone(), tray_preview)
                     } else {
                         runtime
                     };

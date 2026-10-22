@@ -37,9 +37,59 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         ("bead.desktop.battery.value".into(), Value::Text(s.battery.percentage.map_or("—".into(), |n| format!("{n:.0}")))),
         ("bead.desktop.network".into(), Value::Text(if s.network.connected { "wifi" } else { "wifi_off" }.into())),
         ("bead.desktop.bluetooth".into(), Value::Text(if s.bluetooth.powered { "bluetooth" } else { "bluetooth_disabled" }.into())),
-        ("bead.desktop.tray".into(), Value::list(s.tray.iter().filter(|t| t.visible).map(|t|serde_json::json!({"id":t.id,"title":t.title,"icon":format!("tray:{}",t.id)})).collect())),
+        ("bead.desktop.tray".into(), Value::list(s.tray.iter().filter(|t| t.visible).map(|t|serde_json::json!({"id":t.id,"title":t.title,"icon":format!("tray:{}",t.id),"attention":t.attention})).collect())),
         ("bead.desktop.menu".into(), Value::list(menu)),
+        ("bead.desktop.tray.tooltip".into(),Value::Text(String::new())),
+        ("bead.desktop.tray.tooltip.visible".into(),Value::Bool(false)),
     ])
+}
+
+pub fn tooltip_values(snapshot: &Snapshot, id: &str) -> BTreeMap<String, Value> {
+    let text = snapshot
+        .tray
+        .iter()
+        .find(|item| item.id == id && item.visible)
+        .map(|item| {
+            let title = if item.tooltip_title.is_empty() {
+                &item.title
+            } else {
+                &item.tooltip_title
+            };
+            if item.tooltip_description.is_empty() {
+                title.clone()
+            } else {
+                format!("{title} — {}", item.tooltip_description)
+            }
+        })
+        .unwrap_or_default();
+    BTreeMap::from([
+        (
+            "bead.desktop.tray.tooltip.visible".into(),
+            Value::Bool(!text.is_empty()),
+        ),
+        (
+            "bead.desktop.titlevisible".into(),
+            Value::Bool(text.is_empty()),
+        ),
+        ("bead.desktop.tray.tooltip".into(), Value::Text(text)),
+    ])
+}
+fn read_icon_file(path: &std::path::Path, limit: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_NONBLOCK)
+        .open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(std::io::Error::other("icon is not a regular file"));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(std::io::Error::other("icon exceeds byte limit"));
+    }
+    Ok(bytes)
 }
 
 fn valid_pixmap(p: &(i32, i32, Vec<u8>)) -> bool {
@@ -61,7 +111,9 @@ fn named_icon(item: &bead::services::TrayItem) -> Option<std::path::PathBuf> {
         let root = PathBuf::from(&item.icon_theme_path);
         let mut directories = vec![root.clone()];
         // IconThemePath may point to a flat app directory or a normal indexed theme.
-        if let Ok(index) = std::fs::read_to_string(root.join("index.theme")) {
+        if let Ok(index) = read_icon_file(&root.join("index.theme"), 64 * 1024)
+            .and_then(|bytes| String::from_utf8(bytes).map_err(std::io::Error::other))
+        {
             for line in index.lines() {
                 if let Some(list) = line
                     .strip_prefix("Directories=")
@@ -69,7 +121,8 @@ fn named_icon(item: &bead::services::TrayItem) -> Option<std::path::PathBuf> {
                 {
                     directories.extend(
                         list.split(',')
-                            .filter(|s| !s.is_empty())
+                            .filter(|s| !s.is_empty() && !s.split('/').any(|part| part == ".."))
+                            .take(128)
                             .map(|s| root.join(s.trim())),
                     );
                 }
@@ -107,13 +160,14 @@ pub fn icons(
         let Some(id) = path.to_str().and_then(|p| p.strip_prefix("@icon:tray:")) else {
             continue;
         };
+        let missing = bead::services::TrayItem::default();
         let item = snapshot
             .tray
             .iter()
             .find(|item| item.id == id)
-            .ok_or("tray icon disappeared")?;
+            .unwrap_or(&missing);
         if let Some(named) = named_icon(item)
-            && let Ok(bytes) = std::fs::read(&named)
+            && let Ok(bytes) = read_icon_file(&named, 4 * 1024 * 1024)
             && bead::render::validate_asset(&named, &bytes).is_ok()
         {
             scene
@@ -139,7 +193,7 @@ pub fn icons(
                 .unwrap_or_else(|| "shell/sample.svg".into());
             scene.asset_data.insert(
                 fallback.clone(),
-                std::sync::Arc::from(std::fs::read(&fallback)?),
+                std::sync::Arc::from(read_icon_file(&fallback, 4 * 1024 * 1024)?),
             );
             *path = fallback;
             continue;

@@ -140,6 +140,10 @@ pub enum UiEvent {
         after: u32,
     },
     WatchError(String),
+    SecondaryClick {
+        x: f32,
+        y: f32,
+    },
     ContextMenu {
         x: f32,
         y: f32,

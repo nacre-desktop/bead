@@ -28,6 +28,7 @@ suggested future fix. Do not fix them as part of unrelated work.
 | Accessibility root is named “Nacre Shell.” | `crates/bead-ui/src/accessibility.rs` (`tree`) | Use a caller-provided application label or a neutral default. |
 | Capability names match Nacre's public compositor vocabulary. | `crates/bead-backends/src/lib.rs` (`CAPABILITIES`) | Define framework-owned capability identifiers and map Nacre names in its adapter. |
 | Notification D-Bus interface is under `org.nacre.Bead`. | `crates/bead-services/src/notification_bus.rs` | Make service naming configurable or define a framework-neutral default. |
+| Script host-action allowlist names shell service routes (`services.tray`, menu actions). | `crates/bead-ui/src/script.rs` | Register host action declarations through a neutral injected interface when generalization is authorized. |
 
 ## Housekeeping (later)
 

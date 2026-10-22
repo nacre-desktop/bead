@@ -32,6 +32,12 @@ pub struct Runtime {
     notifications: Option<std::sync::Arc<crate::notifications::Owner>>,
     notification_subscription: Option<crate::notifications::Subscription>,
     menu_item: String,
+    tray_anchor: Option<f32>,
+    tray_close: bool,
+    tray_enabled: bool,
+    tray_hover: String,
+    tray_selection: Option<crate::tray::Selection>,
+    tray_menu: Option<crate::tray::Menu>,
     pending_focus: Option<String>,
     bar: bool,
     state_file: Option<crate::state::File>,
@@ -104,6 +110,12 @@ impl Runtime {
             notifications: None,
             notification_subscription: None,
             menu_item: String::new(),
+            tray_anchor: None,
+            tray_close: false,
+            tray_enabled: true,
+            tray_hover: String::new(),
+            tray_selection: None,
+            tray_menu: None,
             pending_focus: None,
             bar: false,
             state_file,
@@ -398,18 +410,22 @@ impl Runtime {
     fn popout_center(&self, id: &str, view: &str) -> Option<f32> {
         // Sound remains a side panel. Top-bar popouts center on their own
         // invoking control, including keyboard activation.
-        (self.bar && matches!(view, "calendar" | "network" | "bluetooth" | "battery"))
-            .then(|| {
-                self.session
-                    .view_nodes()
-                    .iter()
-                    .find(|n| n.id == id)
-                    .map(|node| {
-                        let rect = bead::ui::rect(&node.draw);
-                        rect.x + rect.w / 2.
-                    })
-            })
-            .flatten()
+        (self.bar
+            && matches!(
+                view,
+                "calendar" | "network" | "bluetooth" | "battery" | "tray"
+            ))
+        .then(|| {
+            self.session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id == id)
+                .map(|node| {
+                    let rect = bead::ui::rect(&node.draw);
+                    rect.x + rect.w / 2.
+                })
+        })
+        .flatten()
     }
     pub fn with_trace(mut self, trace: bool) -> Self {
         self.trace = trace;
@@ -474,6 +490,25 @@ impl Runtime {
         self.notifications = Some(owner);
         Ok(self)
     }
+    pub fn with_tray_bar(mut self, selection: crate::tray::Selection, enabled: bool) -> Self {
+        self.tray_enabled = enabled;
+        self.tray_selection = enabled.then_some(selection);
+        self
+    }
+    pub fn with_tray_menu(
+        mut self,
+        selection: crate::tray::Selection,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut menu = crate::tray::Menu::new(selection);
+        let snapshot = self
+            .desktop
+            .as_ref()
+            .ok_or("desktop unavailable")?
+            .snapshot();
+        self.session.stores = self.session.stores.reconcile(&menu.values(&snapshot))?;
+        self.tray_menu = Some(menu);
+        Ok(self)
+    }
     pub fn with_desktop(self) -> Result<Self, Box<dyn Error>> {
         self.with_shared_desktop(bead::services::Desktop::start(), true)
     }
@@ -489,11 +524,20 @@ impl Runtime {
             .session
             .stores
             .reconcile(&crate::desktop::values(&desktop.snapshot(), ""))?;
+        if bar && !self.tray_enabled {
+            self.session.stores = self.session.stores.reconcile(&BTreeMap::from([(
+                "bead.desktop.tray".into(),
+                bead::core::Value::list(vec![]),
+            )]))?;
+        }
         for name in [
             "services.audio",
             "services.audio.volume",
             "services.tray",
             "services.menu",
+            "services.menu.open",
+            "services.menu.back",
+            "services.tray.secondary",
         ] {
             self.actions.register(name, "desktop.services")?;
         }
@@ -537,6 +581,9 @@ impl Runtime {
                 }
             }
             "services.tray" => {
+                if !self.tray_enabled {
+                    return Err("tray producer unavailable".into());
+                }
                 let bead::core::Value::Text(item) = arg else {
                     return Err("tray ID required".into());
                 };
@@ -545,16 +592,79 @@ impl Runtime {
                     .iter()
                     .find(|t| t.id == item)
                     .ok_or("stale tray ID")?;
-                if tray.item_is_menu || context_menu {
-                    self.menu_item = if self.menu_item == item {
-                        String::new()
+                if let Some(delta) = delta {
+                    Action::TrayScroll {
+                        item,
+                        delta: if delta > 0. { -120 } else { 120 },
+                        horizontal: false,
+                    }
+                } else if tray.item_is_menu || context_menu {
+                    if let Some(selection) = &self.tray_selection {
+                        desktop
+                            .action(Action::TrayPrepare { item: item.clone() })
+                            .map_err(|e| -> Box<dyn Error> { e.into() })?;
+                        *selection.lock().unwrap_or_else(|e| e.into_inner()) = item.clone();
+                        self.wakeup
+                            .as_ref()
+                            .ok_or("tray event channel unavailable")?(
+                            UiEvent::CompanionSelect {
+                                view: "tray".into(),
+                                output: None,
+                                toggle: false,
+                                center: self.tray_anchor,
+                            },
+                        );
+                        self.wakeup
+                            .as_ref()
+                            .ok_or("tray event channel unavailable")?(
+                            UiEvent::CompanionModel(Default::default()),
+                        );
+                        return Ok(());
                     } else {
-                        item.clone()
-                    };
+                        self.menu_item = if self.menu_item == item {
+                            String::new()
+                        } else {
+                            item.clone()
+                        };
+                    }
                     Action::TrayPrepare { item }
                 } else {
                     Action::TrayActivate { item, x: 0, y: 0 }
                 }
+            }
+            "services.tray.secondary" => {
+                let bead::core::Value::Text(item) = arg else {
+                    return Err("tray ID required".into());
+                };
+                Action::TraySecondaryActivate { item, x: 0, y: 0 }
+            }
+            "services.menu.back" => {
+                self.tray_menu
+                    .as_mut()
+                    .ok_or("tray menu unavailable")?
+                    .back();
+                return Ok(());
+            }
+            "services.menu.open" => {
+                let bead::core::Value::Text(value) = arg else {
+                    return Err("menu ID required".into());
+                };
+                let (item, entry) = value.rsplit_once('|').ok_or("menu ID required")?;
+                desktop
+                    .action(Action::TrayPrepareEntry {
+                        item: item.into(),
+                        entry: entry.parse()?,
+                    })
+                    .map_err(|e| -> Box<dyn Error> { e.into() })?;
+                if !self
+                    .tray_menu
+                    .as_mut()
+                    .ok_or("tray menu unavailable")?
+                    .navigate(&desktop.snapshot(), entry.parse()?)
+                {
+                    return Err("stale submenu".into());
+                }
+                return Ok(());
             }
             "services.menu" => {
                 let bead::core::Value::Text(value) = arg else {
@@ -562,6 +672,9 @@ impl Runtime {
                 };
                 let (item, entry) = value.rsplit_once('|').ok_or("menu ID required")?;
                 self.menu_item.clear();
+                if self.tray_menu.is_some() {
+                    self.tray_close = true;
+                }
                 Action::TrayMenu {
                     item: item.into(),
                     entry: entry.parse()?,
@@ -868,6 +981,7 @@ impl SceneSource for Runtime {
         let mut host_action = match &event {
             UiEvent::Click { x, y }
             | UiEvent::ContextMenu { x, y }
+            | UiEvent::SecondaryClick { x, y }
             | UiEvent::Scroll { x, y, .. } => self.session.action_at(*x, *y),
             UiEvent::Command { command, .. } if command == "enter" => self.session.focused_action(),
             UiEvent::Command { command, .. } if command == "left" || command == "right" => {
@@ -876,6 +990,19 @@ impl SceneSource for Runtime {
             UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
             _ => None,
         };
+        if let Some((_, name, _)) = &mut host_action
+            && name == "services.tray"
+            && matches!(&event, UiEvent::SecondaryClick { .. })
+        {
+            *name = "services.tray.secondary".into();
+        }
+        if matches!(&event, UiEvent::SecondaryClick { .. })
+            && !host_action
+                .as_ref()
+                .is_some_and(|(_, name, _)| name == "services.tray.secondary")
+        {
+            return Ok(None);
+        }
         if let Some((_, name, arg)) = &mut host_action
             && name == "view.open"
             && *arg == bead::core::Value::Text("sound".into())
@@ -1059,13 +1186,21 @@ impl SceneSource for Runtime {
             } else {
                 None
             };
-            if delta.is_none() || name == "services.audio" {
-                self.desktop_action(
+            if delta.is_none() || name == "services.audio" || name == "services.tray" {
+                self.tray_anchor = self.popout_center(id, "tray");
+                let result = self.desktop_action(
                     name,
                     arg.clone(),
                     delta,
                     matches!(event, UiEvent::ContextMenu { .. }),
-                )?;
+                );
+                if name.starts_with("services.tray") || name.starts_with("services.menu") {
+                    if result.is_err() {
+                        eprintln!("TRAY_ACTION unavailable_or_stale");
+                    }
+                } else {
+                    result?;
+                }
             }
             if !self.bar {
                 self.pending_focus = Some(id.clone());
@@ -1094,7 +1229,14 @@ impl SceneSource for Runtime {
         }
         let scene = match event {
             UiEvent::Model(values) => {
-                if self.launcher.is_some() {
+                if let Some(menu) = &mut self.tray_menu {
+                    let snapshot = self
+                        .desktop
+                        .as_ref()
+                        .ok_or("desktop unavailable")?
+                        .snapshot();
+                    self.session.update(menu.values(&snapshot))?
+                } else if self.launcher.is_some() {
                     self.session.update(values)?
                 } else {
                     self.session.update_model(values)?
@@ -1106,7 +1248,20 @@ impl SceneSource for Runtime {
                 {
                     owner.audio_changed(&snapshot.audio);
                 }
-                let mut values = crate::desktop::values(&snapshot, &self.menu_item);
+                let mut values = if let Some(menu) = &mut self.tray_menu {
+                    menu.values(&snapshot)
+                } else {
+                    crate::desktop::values(&snapshot, &self.menu_item)
+                };
+                if std::mem::take(&mut self.tray_close) {
+                    values.insert("panel.open".into(), bead::core::Value::Bool(false));
+                }
+                if self.bar && !self.tray_enabled {
+                    values.insert("bead.desktop.tray".into(), bead::core::Value::list(vec![]));
+                }
+                if self.bar && self.menu_item.is_empty() {
+                    values.extend(crate::desktop::tooltip_values(&snapshot, &self.tray_hover));
+                }
                 if let Some(id) = self.pending_focus.take() {
                     values.insert("bead.focused".into(), bead::core::Value::Text(id));
                 }
@@ -1344,7 +1499,36 @@ impl SceneSource for Runtime {
                 action,
                 value,
             } => self.session.accessibility_action(target, &action, value)?,
-            UiEvent::Hover { x, y } => self.session.hover(x, y)?,
+            UiEvent::Hover { x, y } => {
+                let hovered = self.session.hover(x, y)?;
+                if self.bar && self.menu_item.is_empty() {
+                    self.tray_hover = self
+                        .session
+                        .action_at(x, y)
+                        .and_then(|(_, name, arg)| {
+                            if name == "services.tray" {
+                                if let bead::core::Value::Text(id) = arg {
+                                    Some(id)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default();
+                    let snapshot = self
+                        .desktop
+                        .as_ref()
+                        .ok_or("desktop unavailable")?
+                        .snapshot();
+                    self.session
+                        .update(crate::desktop::tooltip_values(&snapshot, &self.tray_hover))?
+                        .or(hovered)
+                } else {
+                    hovered
+                }
+            }
             UiEvent::Drag { x, y } => self.session.drag(x, y)?,
             UiEvent::Ime {
                 preedit,
@@ -1404,7 +1588,7 @@ impl SceneSource for Runtime {
                 }
             },
             UiEvent::WatchError(error) => return Err(error.into()),
-            UiEvent::ContextMenu { .. } => None,
+            UiEvent::ContextMenu { .. } | UiEvent::SecondaryClick { .. } => None,
             UiEvent::Click { x, y } => self.session.click(x, y)?,
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
             UiEvent::Key { text, backspace } => self.session.key(&text, backspace)?,

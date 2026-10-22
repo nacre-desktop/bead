@@ -27,6 +27,9 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
     ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=10,height=30,justify="center",align="center",gap=7,
         ui.Text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
         ui.Text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=ui.bind("bead.focused_title"),height=24,width=ui.bind("bar.title.width"),max_width=550,family="JetBrainsMono Nerd Font",font_size=16,color="primary"},
+        kit.Tooltip{id="tray-tooltip",edge="top",bar_size=-8,left=0,width="100%",height=30,padding=3,visible=ui.bind("bead.desktop.tray.tooltip.visible"),
+            ui.Text{text=ui.bind("bead.desktop.tray.tooltip"),height=24,width="100%",font_size=13,color="onSurface"},
+        },
         ui.Repeat{id="menu",model=ui.bind("bead.desktop.menu"),key="id",render=function(item)
             return kit.Button{id="entry",text=item.label,height=30,padding=4,font_size=13,on_activate=ui.action("services.menu",item.id)}
         end},
@@ -35,7 +38,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
         ui.Text{id="reconnecting",visible=ui.bind("bar.reconnecting"),text="Reconnecting",width=92,height=24,font_size=12,color="error"},
         ui.Row{id="tray",height=30,gap=4,align="center",
             ui.Repeat{id="items",model=ui.bind("bead.desktop.tray"),key="id",render=function(item)
-                return kit.Button{id="item",width=28,height=28,padding=2,fill="surface",radius=14,aria_label=item.title,on_activate=ui.action("services.tray",item.id),
+                return kit.Button{id="item",width=28,height=28,padding=2,fill=item.attention and "secondaryContainer" or "surface",radius=14,aria_label=item.title,on_activate=ui.action("services.tray",item.id),
                     ui.Image{id="icon",icon=item.icon,width=24,height=24},
                 }
             end},

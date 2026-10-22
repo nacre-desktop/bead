@@ -592,6 +592,9 @@ impl PointerHandler for App {
                 PointerEventKind::Press { button: 0x111, .. } => {
                     self.view_event(panel, UiEvent::ContextMenu { x, y })
                 }
+                PointerEventKind::Press { button: 0x112, .. } => {
+                    self.view_event(panel, UiEvent::SecondaryClick { x, y })
+                }
                 PointerEventKind::Axis { vertical, .. } => self.view_event(
                     panel,
                     UiEvent::Scroll {
