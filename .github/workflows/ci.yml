@@ -28,7 +28,7 @@ jobs:
           mkdir -p "$HOME" "$CARGO_HOME/bin"
           echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
           apt-get update -qq
-          apt-get install -y ca-certificates build-essential curl git python3 unzip libwayland-dev libfontconfig1-dev libxkbcommon-dev libpipewire-0.3-dev libclang-dev libgdk-pixbuf-2.0-dev webp-pixbuf-loader pkg-config dbus
+          apt-get install -y ca-certificates build-essential curl git python3 unzip systemd libwayland-dev libfontconfig1-dev libxkbcommon-dev libpipewire-0.3-dev libclang-dev libgdk-pixbuf-2.0-dev webp-pixbuf-loader pkg-config dbus
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, verified 2026-10-13
       - name: Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
@@ -60,7 +60,6 @@ jobs:
           cargo check -p nacre-shell --no-default-features --locked -j2
           cargo check --workspace --all-features --locked -j2
       - name: Facade, headless UI and Luau schema
-        shell: bash
         run: |
           cargo run -p bead --example minimal --locked -j2 -- --check
           cargo build -p nacre-shell --no-default-features --locked -j2
@@ -85,7 +84,6 @@ jobs:
         run: |
           dbus-run-session -- bash -c 'export DBUS_SYSTEM_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" BEAD_PRIVATE_SERVICES_TEST=1 BEAD_FIXTURE_UPDATE=1; cargo test -p bead-services --test tray_private_bus --locked -j2 -- --ignored --nocapture'
       - name: Install cargo-deny
-        shell: bash
         run: |
           asset=cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
           base=https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2
