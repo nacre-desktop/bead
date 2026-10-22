@@ -1951,6 +1951,10 @@ impl SceneSource for Runtime {
             UiEvent::WatchError(error) => return Err(error.into()),
             UiEvent::ContextMenu { .. }
             | UiEvent::SecondaryClick { .. }
+            | UiEvent::WallpaperFrame(_)
+            | UiEvent::WallpaperRefresh
+            | UiEvent::WallpaperFailed(_)
+            | UiEvent::WallpaperTick(_)
             | UiEvent::HorizontalScroll { .. } => None,
             UiEvent::Click { x, y } => self.session.click(x, y)?,
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
