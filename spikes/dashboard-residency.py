@@ -213,7 +213,7 @@ def finish_phase_window(label, began, budget, capture, acceptance, monotonic, sl
     return row, {"mode": "legacy", "phase_seconds": monotonic() - began}
 
 
-def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed, observe, enabled, baseline_timing=None, keeper_check=None):
+def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed, observe, enabled, baseline_timing=None, keeper_check=None, backend_probe=None):
     acceptance = acceptance_config(os.environ)
     def total(row):
         return row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
@@ -233,6 +233,8 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         row["panel"] = state
         row["legacy"] = json.loads(call("state", target="nacre"))
         row["external"] = observe()
+        if backend_probe is not None:
+            row["backend"] = backend_probe(state)
         assert_capture_rails(row, bar, row["external"], total,
                              batch_medians=bool(acceptance and acceptance["batch_medians"]),
                              close="-close-" in label)
@@ -249,11 +251,13 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
                 offset = len(matrix.log_text(log))
                 began_ns = time.monotonic_ns()
                 call("open", view)
-                state_wait(lambda s: s["view"] == view and s["target_open"] and s["prepared"])
+                opened_state = state_wait(lambda s: s["view"] == view and s["target_open"] and s["prepared"])
                 stamp = matrix.wait_log(log, lambda text: committed(text[offset:]) if legacy else presented(text[offset:], view.removeprefix("dashboard-")))
                 time.sleep(.3)
                 opened = matrix.idle(client.pid, .2)
                 opened.update(view=view, phase=label, index=index, open_to_presented_ms=(stamp-began_ns)/1e6)
+                if backend_probe is not None:
+                    opened["backend"] = backend_probe(opened_state)
                 warm.append(opened)
                 call("close")
                 state_wait(lambda s: not s["resident"] and not s["target_open"] and s["surfaces"] == 0)

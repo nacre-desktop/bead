@@ -22,14 +22,44 @@ before creating capture evidence.
 
 ## Owner and lead steps
 
-The owner leaves the laptop idle on AC for **about 45 minutes** for the required
+The default production-backend batch takes **about 45 minutes** for the required
 three alternating Niri pairs (A=frozen-source control, B=current main candidate).
 The lead runs this exact command from the Bead repository root after the owner
 signals:
 
 ```sh
-BEAD_OWNER_SIGNAL=1 nice -n 10 python3 spikes/laptop-reference-capture.py
+BEAD_OWNER_SIGNAL=1 nice -n 10 python3 spikes/laptop-reference-capture.py --include-cpu --window-minutes 90
 ```
+
+This runs the production-default batch (about 45 minutes) and, with
+`--include-cpu`, an additional CPU-forced policy-control batch (about 45
+minutes; 90 total). Both resolve to CPU in this capture, so the second batch
+checks the renderer selection explicitly rather than testing a distinct
+backend. The wrapper prints the combined estimate before preflight and stores
+evidence under `production/` and `cpu/`. Although nacre-shell enables
+`native-gl` by default and `auto` can select Femtovg GL, this measured command
+is `--bar --core-views --renderer auto`: `--bar` auto-fallback selects CPU for
+the main bar, and the core dashboard, launcher and popout constructors select
+`RendererKind::Cpu`. The GL companion path is not launched. Each sample records
+the exact UI PID's command line and mapped GPU libraries plus Bead renderer log
+markers. Never-opened means the panel backend is inactive; unknown backend on
+any active surface invalidates the arm and blocks an absolute verdict.
+
+To run the default production-only batch, omit `--include-cpu` and allow about
+45 minutes:
+
+```sh
+BEAD_OWNER_SIGNAL=1 nice -n 10 python3 spikes/laptop-reference-capture.py --window-minutes 45
+```
+
+The i915 DRM total includes `drm-total-*` where reported and falls
+back to `drm-resident-*`/legacy fdinfo regions; the absolute total is exactly
+PSS + per-client DRM + SwapPss. The summary also records `wallpaper_shm` as
+inactive (0 MiB) only when no `WALLPAPER_SURFACE_COMMITTED` marker appears in
+the measured UI logs; the private nested `spikes/niri.kdl` does not configure a
+wallpaper surface. If Bead commits one, the summary marks its size unknown and
+blocks the absolute verdict because B0021's niri-held SHM is separate from the
+UI PID measurement.
 
 The command prints its runtime estimate before preflight. It refuses if the
 one-minute load average is at least 1, a build/capture scope is active, AC is

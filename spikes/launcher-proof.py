@@ -39,6 +39,11 @@ def build_launcher_command(binary,core_views,source_args,sock,raw,dashboard_view
     command=[binary,'--bar','--core-views'if core_views else'--launcher-panel',*source_args,
              '--command-socket',str(sock),'--namespace','bead-launcher-proof','--trace-state',
              '--report',str(raw/'cache-report.json'),'--seconds',str(lifetime)]
+    renderer=os.environ.get('BEAD_REFERENCE_RENDERER','production')
+    if renderer not in ('production','cpu'):
+        raise RuntimeError('BEAD_REFERENCE_RENDERER must be production or cpu')
+    command += ['--renderer', 'auto' if renderer == 'production' else 'cpu']
+    if renderer == 'cpu': command += ['--panel-renderer', 'cpu']
     if dashboard_views:
         assert core_views and status_views,'dashboard proof requires full core views'
         if dashboard_fixtures:command+=['--dashboard-fixtures',dashboard_fixtures]
@@ -47,6 +52,28 @@ def build_launcher_command(binary,core_views,source_args,sock,raw,dashboard_view
         command+=['--ui-provider']
     if compositor=='hyprland':command+=['--output','bead-bench']
     return command
+
+def renderer_evidence(pid, log, requested, panel_active=False):
+    """Record the measured UI's renderer choice and live GPU mappings."""
+    maps=pathlib.Path(f'/proc/{pid}/maps').read_text()
+    argv=pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().decode(errors='replace').split('\0')
+    argv=[arg for arg in argv if arg]
+    libraries=sorted({pathlib.Path(line.split()[-1]).name for line in maps.splitlines()
+                      if '/' in line.split()[-1] and re.search(r'(libGL|libEGL|iris_dri|libgallium|LLVM|vulkan)',line,re.I)})
+    text=log.read_text(errors='replace')
+    selected=argv[argv.index('--renderer')+1] if '--renderer' in argv and argv.index('--renderer')+1<len(argv) else None
+    main='cpu' if ('--bar' in argv and '--core-views' in argv
+                   and ((requested=='production' and selected=='auto')
+                        or (requested=='cpu' and selected=='cpu'))) else 'unknown'
+    panel='inactive' if not panel_active else 'unknown'
+    if panel_active and re.search(r'RENDER_POLICY .*transition=gl-to-cpu', text): panel='cpu-fallback'
+    elif panel_active and (re.search(r'RENDER_POLICY .*companion=true',text) or re.search(r'BUFFER companion=true .*transport=GL',text)): panel='native-gl'
+    elif panel_active and requested=='cpu' and '--panel-renderer' in argv and argv[argv.index('--panel-renderer')+1:argv.index('--panel-renderer')+2]==['cpu']: panel='cpu'
+    elif panel_active and requested=='production' and 'GPU_SHARED' not in text and not re.search(r'transport=GL',text): panel='cpu (configured dashboard renderer)'
+    wallpaper_active=bool(re.search(r'WALLPAPER_SURFACE_COMMITTED',text))
+    return {'requested':requested,'main_bar':main,'opened_panel':panel,'measured_argv':argv,
+            'wallpaper_surface_committed':wallpaper_active,
+            'gpu_libraries':libraries,'evidence_source':'measured PID /proc maps plus Bead renderer log markers'}
 
 def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     acceptance=dashboard_residency.acceptance_config(os.environ)
@@ -199,6 +226,9 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 (raw/'dashboard-residency-baseline.json').write_text(json.dumps(baseline_timing,indent=2)+'\n')
             else:
                 bar=matrix.idle(client.pid,2)
+            requested_renderer=os.environ.get('BEAD_REFERENCE_RENDERER','production')
+            bar['backend']=renderer_evidence(client.pid,log,requested_renderer)
+            (raw/'render-backend-start.json').write_text(json.dumps(bar['backend'],indent=2)+'\n')
             if os.environ.get('BEAD_REFERENCE_ABSOLUTE_GATE')=='1':
                 if bar.get('drm_mib') is None:
                     raise RuntimeError('reference baseline lacks DRM fdinfo; absolute laptop verdict is unavailable')
@@ -211,7 +241,9 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             (raw/'bar.json').write_text(json.dumps(bar,indent=2)+'\n')
             (raw/'bar.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
             if os.environ.get('BEAD_DASHBOARD_RESIDENCY') == '1':
-                result=dashboard_residency.sample(client,raw,bar,matrix,call,state_wait,log,dashboard_presented,committed_and_presented,observe,dashboard_views,result.get('acceptance_baseline'),keeper_check)
+                result=dashboard_residency.sample(client,raw,bar,matrix,call,state_wait,log,dashboard_presented,committed_and_presented,observe,dashboard_views,result.get('acceptance_baseline'),keeper_check,
+                                                  lambda state: renderer_evidence(client.pid,log,requested_renderer,
+                                                                                  panel_active=bool(state.get('target_open'))))
                 keeper_check('before success cleanup')
                 stop(client)
                 assert client.returncode==0,'residency UI did not exit cleanly'

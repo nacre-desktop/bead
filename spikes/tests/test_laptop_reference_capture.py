@@ -121,10 +121,15 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
                         "wayland_socket_inside_private_runtime": True}))
                     value = 22.0 if side == "A" else 22.2
                     row = sample(value, drm={"i915@0000:00:02.0/system": value - 20.0} if drm else False)
-                    residency = {"bar": row, "closed": [row, row], "valid": True,
+                    backend = {"requested": "production", "main_bar": "cpu",
+                               "opened_panel": "cpu", "gpu_libraries": [],
+                               "evidence_source": "test measured PID evidence"}
+                    row["backend"] = backend
+                    residency = {"bar": row, "closed": [row, row], "warm": [{"backend": backend}], "valid": True,
                                  "batch_medians": True, "opened_once_only": False}
                     for file_phase, phase in capture.PHASES.items():
-                        residency[phase] = {"memory": row["memory"], "drm_mib": row["drm_mib"]}
+                        residency[phase] = {"memory": row["memory"], "drm_mib": row["drm_mib"],
+                                            "backend": backend}
                         (arm / f"{file_phase}.json").write_text(json.dumps(row))
                     (arm / "dashboard-residency.json").write_text(json.dumps(residency))
 
@@ -147,6 +152,22 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             report = capture.summarize(root, ["niri"], rehearsal=False)
             self.assertEqual(report["absolute_verdict"], "INCOMPLETE / STOP")
             self.assertIn("DRM fdinfo unavailable", report["failures"][0])
+
+    def test_unknown_backend_invalidates_arm_and_absolute_verdict(self):
+        with tempfile.TemporaryDirectory(prefix="bead-laptop-backend-unknown-") as temp:
+            root = pathlib.Path(temp)
+            self.make_batch(root)
+            path = root / "niri" / "B1" / "niri" / "dashboard-residency.json"
+            residency = json.loads(path.read_text())
+            residency["warm"][0]["backend"]["opened_panel"] = "unknown"
+            path.write_text(json.dumps(residency))
+            report = capture.summarize(root, ["niri"], rehearsal=False)
+            self.assertEqual(report["arm_validity"]["niri/B1"]["valid"], False)
+            self.assertEqual(report["absolute_verdict"], "INCOMPLETE / STOP")
+
+    def test_runtime_estimate_covers_default_and_optional_cpu_batch(self):
+        self.assertEqual(capture.estimate_runtime(["niri"], include_cpu=False), (45, 41.0))
+        self.assertEqual(capture.estimate_runtime(["niri"], include_cpu=True), (90, 82.0))
 
     def test_resident_and_legacy_fdinfo_are_deduplicated_and_normalized(self):
         fdinfo = [

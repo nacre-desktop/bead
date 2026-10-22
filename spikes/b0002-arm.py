@@ -51,6 +51,7 @@ CAPTURE_CONFIG = {
     "BEAD_DASHBOARD_ACCEPTANCE": "1",
     "BEAD_DASHBOARD_BATCH_MEDIANS": "1",
     "BEAD_DASHBOARD_WARMUP_SECONDS": "600",
+    "BEAD_REFERENCE_RENDERER": "production",
 }
 
 
@@ -365,6 +366,7 @@ def main() -> int:
                         help="use the single authorized cell replacement after an environmental failure")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--profile", choices=("legacy", "laptop-reference", "rehearsal"), default="legacy")
+    parser.add_argument("--reference-renderer", choices=("production", "cpu"), default="production")
     parser.add_argument("--opened-once-only", action="store_true",
                         help="diagnostic mode: BEAD_DASHBOARD_OPENED_ONCE_ONLY=1, only the opened-once phase")
     parser.add_argument("--max-load", type=float, default=None,
@@ -375,6 +377,7 @@ def main() -> int:
     if args.label[0] != args.side:
         parser.error("--side must match the arm label")
     CAPTURE_PROFILE = args.profile
+    CAPTURE_CONFIG["BEAD_REFERENCE_RENDERER"] = args.reference_renderer
     CONTROL_BUNDLE_ROOT = args.control_bundle_root.resolve(strict=True) if args.control_bundle_root else None
     HOST_GATES.update(max_load=args.max_load, forbid_nacre_lead=args.forbid_nacre_lead,
                       opened_once_only=args.opened_once_only)

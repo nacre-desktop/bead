@@ -35,6 +35,13 @@ FROZEN_CONTROL_SHA256 = "b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec
 FROZEN_FIXTURE_GIT_TREE = "51dbf56ff49bf55656d7f04257f532dde73ece47"
 
 
+def estimate_runtime(compositors: list[str], include_cpu: bool) -> tuple[int, float]:
+    batches = 2 if include_cpu else 1
+    fixed_seconds = len(compositors) * batches * 6 * ARM_SECONDS
+    total_seconds = fixed_seconds + len(compositors) * batches * 4 * 60
+    return math.ceil(total_seconds / 60), fixed_seconds / 60
+
+
 def sha256(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -168,6 +175,18 @@ def validate_arm(raw_root: pathlib.Path, compositor: str, label: str) -> tuple[b
         return False, "host swap-in reached 1 MiB or was not recorded"
     if not residency.get("valid") or not residency.get("batch_medians") or residency.get("opened_once_only"):
         return False, "residency batch is invalid or missing phases"
+    main_rows = [residency.get("bar", {}).get("backend")]
+    main_rows.extend(row.get("backend") for row in residency.get("closed", []))
+    main_rows.extend(residency.get(phase, {}).get("backend")
+                     for phase in ("never", "once", "several", "combined"))
+    panel_rows = [row.get("backend") for row in residency.get("warm", [])]
+    panel_rows.extend(residency.get(phase, {}).get("backend")
+                      for phase in ("once", "several", "combined"))
+    if (any(not isinstance(row, dict) or row.get("main_bar") != "cpu" for row in main_rows)
+            or any(not isinstance(row, dict) or row.get("opened_panel") not in
+                   ("cpu", "cpu (configured dashboard renderer)", "cpu-fallback", "native-gl")
+                   for row in panel_rows)):
+        return False, "actual renderer backend is unknown for one or more measured samples"
     expected = {"never", "once", "several", "combined"}
     if any(not isinstance(residency.get(phase), dict) for phase in expected):
         return False, "one or more settled phases are absent"
@@ -220,10 +239,16 @@ def rows_for(raw_root: pathlib.Path, compositor: str, side: str, phase_name: str
 
 
 def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -> dict:
+    wallpaper_active = any("WALLPAPER_SURFACE_COMMITTED" in path.read_text(errors="replace")
+                           for path in raw_root.rglob("launcher.log") if path.is_file())
     report = {"schema_version": 1, "complete": True, "rehearsal_only": rehearsal,
               "absolute_verdict": "REHEARSAL ONLY" if rehearsal else "INCOMPLETE",
-              "relative_deltas_mib": {}, "arm_validity": {},
-              "compositors": compositors, "failures": []}
+              "relative_deltas_mib": {}, "arm_validity": {}, "arm_backend": {},
+              "compositors": compositors, "failures": [],
+              "wallpaper_shm": {"active": wallpaper_active,
+                                "mib": None if wallpaper_active else 0.0,
+                                "reason": ("Bead committed a wallpaper surface; niri-held SHM was not separately measured" if wallpaper_active else
+                                           "no WALLPAPER_SURFACE_COMMITTED marker in measured UI logs; private niri.kdl has no wallpaper surface")}}
     for compositor in compositors:
         arm_failures = []
         for side in ("A", "B"):
@@ -231,6 +256,16 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
                 label = f"{side}{pair}"
                 valid, reason = validate_arm(raw_root, compositor, label)
                 report["arm_validity"][f"{compositor}/{label}"] = {"valid": valid, "reason": reason}
+                backend_path = raw_root / compositor / label / compositor / "dashboard-residency.json"
+                if backend_path.is_file():
+                    residency = json.loads(backend_path.read_text())
+                    report["arm_backend"][f"{compositor}/{label}"] = {
+                        "bar": residency.get("bar", {}).get("backend"),
+                        "opened_panels": [row.get("backend") for row in residency.get("warm", [])],
+                        "wallpaper_surface_committed": any(
+                            row.get("wallpaper_surface_committed") is True
+                            for row in [residency.get("bar", {}).get("backend", {})]
+                            + [item.get("backend", {}) for item in residency.get("warm", [])])}
                 if not valid:
                     arm_failures.append(f"{label}: {reason}")
         for file_phase, key in PHASES.items():
@@ -280,9 +315,12 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
                     "gpu_paths": sorted({key.split("/", 1)[0] for row in all_rows
                                           for key in (row.get("drm_mib") or {})}),
                     "measurement_basis": "PSS + SwapPss only; DRM unknown" if drm_unknown else "PSS + per-client DRM + SwapPss",
+                    "absolute_total_definition": "PSS + per-client DRM fdinfo + SwapPss",
                 }
                 gate_failures = []
                 if not rehearsal:
+                    if wallpaper_active:
+                        gate_failures.append("niri wallpaper surface is active but its compositor-held SHM was not separately measured")
                     if any(row["memory"]["swap_pss_mib"] != 0 for row in all_rows):
                         gate_failures.append("SwapPss was nonzero")
                     if drm_unknown:
@@ -337,8 +375,20 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
     return report
 
 
+def save_overall_summary(output: pathlib.Path, reports: dict[str, dict]) -> dict:
+    result = {"schema_version": 1,
+              "complete": bool(reports) and all(report["complete"] for report in reports.values()),
+              "absolute_verdict": "PASS" if reports and all(report["absolute_verdict"] == "PASS" for report in reports.values()) else "INCOMPLETE / STOP",
+              "renderers": reports}
+    path = output / "summary.json"
+    temp = path.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    temp.replace(path)
+    return result
+
+
 def arm_command(args, manifest: dict, compositor: str, label: str, previous: str,
-                raw_root: pathlib.Path) -> list[str]:
+                raw_root: pathlib.Path, renderer: str = "production") -> list[str]:
     side = label[0]
     control = manifest["control"]
     candidate = manifest["candidate"]
@@ -348,6 +398,7 @@ def arm_command(args, manifest: dict, compositor: str, label: str, previous: str
                "--control-binary", control["path"], "--control-sha256", control["sha256"],
                "--candidate-binary", candidate["path"], "--candidate-sha256", candidate["sha256"],
                "--control-bundle-root", manifest["control_bundle_root"],
+               "--reference-renderer", renderer,
                "--profile", profile, "--max-load", str(args.max_load), "--forbid-nacre-lead"]
     return command
 
@@ -376,7 +427,9 @@ def main() -> int:
     parser.add_argument("--compositors", nargs="+", choices=("niri", "hyprland"), default=("niri",))
     parser.add_argument("--max-load", type=float, default=1.0)
     parser.add_argument("--rehearsal", action="store_true", help="desktop-only dry rehearsal; no absolute verdict")
-    parser.add_argument("--window-minutes", type=float, default=45.0)
+    parser.add_argument("--window-minutes", type=float, default=90.0)
+    parser.add_argument("--include-cpu", action="store_true",
+                        help="run an additional full CPU-rendered batch after production-default arms")
     args = parser.parse_args()
     if not args.rehearsal and os.environ.get("BEAD_OWNER_SIGNAL") != "1":
         parser.error("laptop capture starts only after the owner signals: set BEAD_OWNER_SIGNAL=1")
@@ -386,9 +439,9 @@ def main() -> int:
         parser.error("desktop rehearsal is forbidden on the owner's laptop")
     if args.rehearsal and os.environ.get("BEAD_DESKTOP_HEAVY_LOCKED") != "1":
         parser.error("desktop rehearsal must run under flock ~/nacre-lead/desktop-heavy.lock")
-    estimate_seconds = len(args.compositors) * (6 * ARM_SECONDS + 4 * 60)
-    estimate_minutes = math.ceil(estimate_seconds / 60)
-    print(f"ESTIMATED_RUNTIME about {estimate_minutes} minutes; fixed idle windows {len(args.compositors)*6*ARM_SECONDS/60:.1f} minutes plus startup/preflight allowance; compositors={','.join(args.compositors)}", flush=True)
+    backends = ["production"] + (["cpu"] if args.include_cpu else [])
+    estimate_minutes, fixed_minutes = estimate_runtime(args.compositors, args.include_cpu)
+    print(f"ESTIMATED_RUNTIME about {estimate_minutes} minutes; fixed idle windows {fixed_minutes:.1f} minutes plus startup/preflight allowance; renderers={','.join(backends)}; compositors={','.join(args.compositors)}", flush=True)
     if estimate_minutes > args.window_minutes:
         parser.error(f"estimated {estimate_minutes} minutes exceeds the selected {args.window_minutes:g}-minute idle window")
     try:
@@ -409,60 +462,68 @@ def main() -> int:
     (args.output / "artifact-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     print("PREFLIGHT PASS " + json.dumps(preflight, sort_keys=True), flush=True)
     pairs = [f"{side}{pair}" for pair in range(1, 4) for side in "AB"]
-    for compositor in args.compositors:
-        prior = "START"
-        for label in pairs:
-            try:
-                current = host_preflight(args.max_load, require_ac=not args.rehearsal)
-                arm_root = args.output / compositor / label
-                if arm_root.exists():
-                    raise RuntimeError(f"refusing to overwrite evidence: {arm_root}")
-                command = arm_command(args, manifest, compositor, label, prior, args.output)
-                checks = args.output / compositor / "host-preflight"
-                checks.mkdir(mode=0o700, parents=True, exist_ok=True)
-                (checks / f"{label}.json").write_text(json.dumps(
-                    {"label": label, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                     **current}, indent=2, sort_keys=True) + "\n")
-                logs = args.output / "logs"
-                logs.mkdir(mode=0o700, exist_ok=True)
-                arm_log = logs / f"{compositor}-{label}.log"
-                arm_started = time.monotonic()
-                print(f"ARM_START {compositor}/{label} previous_valid={prior} load1={current['load1']:.2f} swap_used={current['swap_used_bytes']}", flush=True)
-                with arm_log.open("w") as log:
-                    process = subprocess.Popen(command, cwd=ROOT, start_new_session=True,
-                                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                               text=True, bufsize=1)
-                    try:
-                        for line in process.stdout:
-                            print(line, end="", flush=True)
-                            log.write(line)
-                    finally:
-                        process.stdout.close()
-                    code = process.wait()
-                if code != 0:
-                    raise RuntimeError(f"arm command exited {code}; inspect {arm_log} and preserved raw evidence")
-                valid, reason = validate_arm(args.output, compositor, label)
-                if not valid:
-                    raise RuntimeError(f"arm invalid: {reason}")
-                prior = label
-                print(f"ARM_VALID {compositor}/{label} elapsed_seconds={time.monotonic()-arm_started:.1f}", flush=True)
-            except KeyboardInterrupt:
-                if "process" in locals():
-                    terminate_owned(process)
-                print("ABORTED by Ctrl-C; owned capture scope/session cleanup requested; partial evidence preserved and invalid", file=sys.stderr, flush=True)
+    reports = {}
+    for backend in backends:
+        backend_root = args.output / backend
+        backend_root.mkdir(mode=0o700)
+        for compositor in args.compositors:
+            prior = "START"
+            for label in pairs:
                 try:
-                    summarize(args.output, args.compositors, args.rehearsal)
-                except Exception:
-                    pass
-                return 130
-            except Exception as error:
-                print(f"CAPTURE STOP {compositor}/{label}: {error}", file=sys.stderr, flush=True)
-                report = summarize(args.output, args.compositors, args.rehearsal)
-                print("SUMMARY " + json.dumps({"complete": report["complete"], "absolute_verdict": report["absolute_verdict"], "failures": report["failures"]}, sort_keys=True), flush=True)
-                return 1
-    report = summarize(args.output, args.compositors, args.rehearsal)
-    print("SUMMARY " + json.dumps({"complete": report["complete"], "absolute_verdict": report["absolute_verdict"], "phases": len(report["relative_deltas_mib"]), "failures": report["failures"]}, sort_keys=True), flush=True)
-    return 0 if report["complete"] and (args.rehearsal or report["absolute_verdict"] == "PASS") else 1
+                    current = host_preflight(args.max_load, require_ac=not args.rehearsal)
+                    arm_root = backend_root / compositor / label
+                    if arm_root.exists():
+                        raise RuntimeError(f"refusing to overwrite evidence: {arm_root}")
+                    command = arm_command(args, manifest, compositor, label, prior, backend_root, backend)
+                    checks = backend_root / compositor / "host-preflight"
+                    checks.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    (checks / f"{label}.json").write_text(json.dumps(
+                        {"label": label, "renderer": backend, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                         **current}, indent=2, sort_keys=True) + "\n")
+                    logs = backend_root / "logs"
+                    logs.mkdir(mode=0o700, exist_ok=True)
+                    arm_log = logs / f"{compositor}-{label}.log"
+                    arm_started = time.monotonic()
+                    print(f"ARM_START {backend}/{compositor}/{label} previous_valid={prior} load1={current['load1']:.2f} swap_used={current['swap_used_bytes']}", flush=True)
+                    with arm_log.open("w") as log:
+                        process = subprocess.Popen(command, cwd=ROOT, start_new_session=True,
+                                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                                   text=True, bufsize=1)
+                        try:
+                            for line in process.stdout:
+                                print(line, end="", flush=True)
+                                log.write(line)
+                        finally:
+                            process.stdout.close()
+                        code = process.wait()
+                    if code != 0:
+                        raise RuntimeError(f"arm command exited {code}; inspect {arm_log} and preserved raw evidence")
+                    valid, reason = validate_arm(backend_root, compositor, label)
+                    if not valid:
+                        raise RuntimeError(f"arm invalid: {reason}")
+                    prior = label
+                    print(f"ARM_VALID {backend}/{compositor}/{label} elapsed_seconds={time.monotonic()-arm_started:.1f}", flush=True)
+                except KeyboardInterrupt:
+                    if "process" in locals():
+                        terminate_owned(process)
+                    print("ABORTED by Ctrl-C; owned capture scope/session cleanup requested; partial evidence preserved and invalid", file=sys.stderr, flush=True)
+                    try:
+                        reports[backend] = summarize(backend_root, args.compositors, args.rehearsal)
+                        save_overall_summary(args.output, reports)
+                    except Exception:
+                        pass
+                    return 130
+                except Exception as error:
+                    print(f"CAPTURE STOP {backend}/{compositor}/{label}: {error}", file=sys.stderr, flush=True)
+                    report = summarize(backend_root, args.compositors, args.rehearsal)
+                    reports[backend] = report
+                    save_overall_summary(args.output, reports)
+                    print("SUMMARY " + json.dumps({"renderer": backend, "complete": report["complete"], "absolute_verdict": report["absolute_verdict"], "failures": report["failures"]}, sort_keys=True), flush=True)
+                    return 1
+        reports[backend] = summarize(backend_root, args.compositors, args.rehearsal)
+    combined = save_overall_summary(args.output, reports)
+    print("SUMMARY " + json.dumps({"complete": combined["complete"], "absolute_verdict": combined["absolute_verdict"], "renderers": backends}, sort_keys=True), flush=True)
+    return 0 if combined["complete"] and (args.rehearsal or combined["absolute_verdict"] == "PASS") else 1
 
 
 if __name__ == "__main__":
