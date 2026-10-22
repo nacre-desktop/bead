@@ -1,17 +1,18 @@
 # B0022 — Per-output bar composition and lifecycle
 
-Status: **Partial; protocol contracts and B0023 memory/proof acceptance remain blocked**. B0016 tray,
+Status: **Partial; protocol contracts and B0023 scale-memory acceptance remain blocked**. B0016 tray,
 B0018 status pill, and B0019 launcher are existing work and are not reopened as
 independent features here. The QML reference is Nacre `origin/main` at the task
 start. The Wayland runtime already creates one primary layer surface per
 announced output, updates it on output geometry/scale changes, and removes it
 on output destruction. The local [B0023 candidate](0023-per-output-ui-sessions.md)
 now gives each output its own runtime, view state and scoped backend projection.
-Its full CI passed, but matched desktop control/candidate measurements fail
-the relative memory gate (at most +0.5 MiB per phase). The laptop absolute
-cap does not apply to this host. Architecture acceptance and the published
-action contracts still block this consumer; see B0023 for measured deltas and
-private lifecycle proofs. No source from B0023 has been pushed.
+The owner accepts the +2.045 MiB per-extra-output cost under its separate
+~3 MiB target; the +0.5 MiB same-count rule does not apply to intentional
+two-output session state. Niri scale-phase retention still needs correction
+and matched single-output deltas at most +0.5 MiB. That scale acceptance and
+the published action contracts block this consumer; see B0023 for the current
+allocation investigation and private proofs. No source from B0023 is pushed.
 
 Output surface lifecycle is already implemented in
 `crates/bead-wayland/src/runtime.rs` and `protocols.rs`: output announcements
@@ -80,7 +81,7 @@ The original blocker was architectural: adding model fields could not repair
 one shared `SceneSource`, committed scene, primary UI serial and pointer target.
 B0023 implements per-output sessions, update/commit/input/teardown routing and
 late-name handling while keeping services and immutable resources shared.
-Its failed relative-memory gate now replaces the missing runtime
+Its pending niri scale-memory acceptance now replaces the missing runtime
 implementation as the architecture blocker; see its measured result before
 resuming this consumer. This does not publish any missing daemon action route.
 
