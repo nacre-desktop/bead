@@ -8,11 +8,7 @@ impl App {
             && matches!(&event, UiEvent::Remote(_) | UiEvent::Accessibility { .. })
         {
             let requested_output = if let UiEvent::Remote(request) = &event {
-                request
-                    .call
-                    .args
-                    .iter()
-                    .find_map(|arg| arg.get("output").and_then(|v| v.as_str()))
+                request.call.output.as_deref()
             } else {
                 None
             };
