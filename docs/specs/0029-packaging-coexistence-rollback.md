@@ -113,9 +113,9 @@ condition / `OnFailure` wiring); only the drop-in decides the shell.
   ancestry or group/world-writable parents, unit text is generated from validated
   values; no shell is involved in `ExecStart`.
 - **Lock screen**: unchanged. hyprlock is not part of either shell (B0023).
-- **Not proven by this unit**: real systemd `OnFailure`/start-limit behaviour and
-  the real daemon's reply shape for the provider probe (modelled; the
-  rehearsal used a modelled manager with real processes, see Evidence).
+- **Not proven by this unit**: real systemd `OnFailure`/start-limit/`PartOf` behaviour
+  (the rehearsal's manager is modelled; units pass `systemd-analyze verify`) and anything
+  on the owner's laptop.
 
 ## Temporary duplicates (expiry)
 
@@ -132,3 +132,27 @@ Install the package (or stage under a user prefix), then as the ordinary user:
 `nacre ui-shell bead --notifications none --launcher <path>`; return with
 `nacre ui-shell qml`. Live memory and perf acceptance (25 MiB laptop cap, typing
 latency) remain open gates and are independent of this unit.
+
+## Evidence (isolated; nothing installed, nothing live)
+
+- Nacre `tools/tests/test_ui_shell_switch.py`: 13 tests on a modelled manager (temp HOME):
+  round trip, idempotent repeat, nine refusals that write nothing, forced health failures
+  (crash, flapping, no provider, restart and reload failure) restoring QML, crash before each
+  of six bead phases and after each of three mutations, crash in each of five `qml` phases,
+  unmanaged drop-in never removed, journal modes, `--recover` busy path.
+- `packaging/tests/test_stage.py` (4 tests, also in Bead CI): layout, no `shell/tests`,
+  relocatable prefix, `check`/`start` behaviour with stub binaries.
+- Package: `makepkg` of `packaging/arch/PKGBUILD` in `archlinux:latest` produced
+  `bead-shell-0.1.0-1` (8.7 MB, 75 bundle files); namcap findings applied (depends trimmed,
+  no debug split). The extracted package passes `bead-shell check` on the desktop.
+- `scripts/rehearse-ui-switch.py` on the owner's desktop (private HOME, runtime dir, session
+  bus; headless labwc -> niri; real packaged Bead, real quickshell/Nacre QML, real nacre-helper
+  daemon, real `releases.py ui-shell`): 20/20 checks. Covered: baseline QML owns the bus and
+  provider; a Bead that dies at start falls back to QML; real Bead replaces all QML surfaces
+  (`bead-dev` vs `nacre-*`), is the registered provider, Settings opens through the unchanged
+  IPC and does not take the notification bus; one-step `qml`; five SIGKILLs trip the start limit
+  and the real `OnFailure` fallback command restores QML; SIGKILL of the switch mid-transaction
+  leaves a running shell and `qml` converges; `systemd-analyze verify` accepts the generated units.
+  QML-side check (private bus): normal mode owns `org.freedesktop.Notifications`; windows-only
+  mode does not, even after opening Settings > Notifications.
+- Not covered: real systemd, the laptop, the AI sidebar, memory/perf under the switch.
