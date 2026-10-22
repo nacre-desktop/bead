@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-22 — B0022 per-output bar spec
+
+[B0022](specs/0022-bar-composition-lifecycle.md) scopes one output-bound bar
+per active monitor, hotplug/scale and daemon/tray recovery, plus a Nacre QML
+action inventory routed only through published protocol methods. B0016 tray,
+B0018 status pill and B0019 launcher remain existing entry points. Implementation
+is gated on verifying each action against published method metadata; unknown
+workspace, title-scroll or power routes are recorded as contract blockers.
+
 ## 2026-10-22 — B0021 wallpaper memory fixed; review
 
 [B0021](specs/0021-static-wallpaper-surface.md) memory diagnosis is complete at
