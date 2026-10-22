@@ -45,12 +45,13 @@ impl App {
     fn trim_idle_shm(&mut self, index: usize) {
         let surface = &mut self.surfaces[index];
         if surface.shm_trim_pending
-            || surface
+            || surface.buffers.is_empty()
+            || (surface.heap_trimmed_ui_serial == surface.ui_serial && surface
                 .buffers
                 .iter()
                 .filter(|buffer| buffer.painted)
                 .count()
-                <= 1
+                <= 1)
         {
             return;
         }
@@ -81,6 +82,7 @@ impl App {
                     return TimeoutAction::Drop;
                 }
                 surface.shm_trim_pending = false;
+                surface.heap_trimmed_ui_serial = surface.ui_serial;
                 if surface
                     .buffers
                     .iter()
@@ -88,6 +90,10 @@ impl App {
                     .count()
                     <= 1
                 {
+                    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                    unsafe {
+                        libc::malloc_trim(0);
+                    }
                     return TimeoutAction::Drop;
                 }
                 // An idle burst can have touched several reusable slots. Retire
