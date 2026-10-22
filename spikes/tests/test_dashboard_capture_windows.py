@@ -49,6 +49,17 @@ class FakeClock:
 
 
 class DashboardOutputGeometryTests(unittest.TestCase):
+    def test_scale_lifecycle_accepts_integer_and_fractional_redraws(self):
+        self.assertTrue(measure.scale_lifecycle_completed(b'set_buffer_scale(2) set_buffer_scale(1)'))
+        trace = (b'wp_fractional_scale_v1#21.preferred_scale(240)\n'
+                 b'wl_shm_pool#24.create_buffer(1)\nwl_surface#19.commit()\n'
+                 b'wp_fractional_scale_v1#21.preferred_scale(120)\n'
+                 b'wl_shm_pool#24.create_buffer(2)\nwl_surface#19.commit()\n')
+        self.assertTrue(measure.scale_lifecycle_completed(trace))
+        self.assertFalse(measure.scale_lifecycle_completed(trace.replace(b'.commit()', b'')))
+        self.assertFalse(measure.scale_lifecycle_completed(trace.replace(b'.create_buffer(1)', b'')))
+        self.assertFalse(measure.scale_lifecycle_completed(trace.split(b'.preferred_scale(120)')[0]))
+
     def test_hyprland_requires_exact_virtual_output_geometry(self):
         output = {"name": "bead-bench", "width": 2880, "height": 1800,
                   "scale": 1.5, "refreshRate": 120.0}

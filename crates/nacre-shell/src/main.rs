@@ -21,6 +21,8 @@ mod status_views;
 mod tray;
 mod ui_provider;
 mod wallpaper;
+#[cfg(test)]
+mod wallpaper_decode;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
 use std::path::{Path, PathBuf};

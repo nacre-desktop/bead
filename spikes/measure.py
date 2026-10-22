@@ -64,6 +64,18 @@ def validate_dashboard_output_geometry(compositor, outputs):
     raise ValueError(f'unsupported B0002 compositor: {compositor}')
 
 
+def scale_lifecycle_completed(data):
+    if b'set_buffer_scale(2)' in data and b'set_buffer_scale(1)' in data:
+        return True
+    # Fractional-scale clients keep wl_buffer scale 1 and resize via viewports.
+    for scale, following in [(b'240', b'120'), (b'120', b'240')]:
+        _, marker, window = data.partition(b'.preferred_scale(' + scale + b')')
+        window = window.partition(b'.preferred_scale(' + following + b')')[0]
+        if not marker or b'.create_buffer(' not in window or b'.commit(' not in window:
+            return False
+    return True
+
+
 def ticks(pid):
     fields = pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
     return int(fields[11]) + int(fields[12])
@@ -903,7 +915,7 @@ def main():
                         if args.lifecycle and args.compositor=='hyprland':
                             assert data.count(b'READY output=')>=3 and data.count(b'OUTPUT_REMOVED')>=2, 'Hotplug lifecycle did not map/release every output'
                         if args.lifecycle and args.compositor=='niri':
-                            assert b'set_buffer_scale(2)' in data and b'set_buffer_scale(1)' in data, 'Scale change did not redraw'
+                            assert scale_lifecycle_completed(data), 'Scale change did not redraw'
                         if args.lifecycle: print(args.compositor+' lifecycle: PASS',flush=True)
                     client = None
             return 0
