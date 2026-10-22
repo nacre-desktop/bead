@@ -211,7 +211,11 @@ mod tests {
     fn refusals_and_unrelated_routes_are_explicit() {
         assert!(launcher(&call("mode", &["legacy"])).unwrap().is_err());
         assert!(launcher(&call("mode", &["nonsense"])).unwrap().is_err());
-        assert!(launcher(&call("menu", &["Bad Route!", ""])).unwrap().is_err());
+        assert!(
+            launcher(&call("menu", &["Bad Route!", ""]))
+                .unwrap()
+                .is_err()
+        );
         assert_eq!(routed("menu", &["", "q"]).route.as_deref(), Some("home"));
         assert_eq!(routed("menu", &["", "q"]).query, "q");
         assert!(launcher(&call("hide", &[])).is_none());

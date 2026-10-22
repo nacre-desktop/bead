@@ -525,7 +525,11 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
     let output = events.clone();
     runtime.services(Box::new(move |event| output.lock().unwrap().push(event)));
     events.lock().unwrap().clear();
-    let mut send = |target: &str, method: &str, args: &[&str], open: bool| -> Result<bead::services::ipc::Reply> {
+    let mut send = |target: &str,
+                    method: &str,
+                    args: &[&str],
+                    open: bool|
+     -> Result<bead::services::ipc::Reply> {
         let (reply, received) = std::sync::mpsc::sync_channel(1);
         runtime.stage(UiEvent::Remote(std::sync::Arc::new(Remote {
             call: crate::commands::from_strings(
@@ -542,16 +546,18 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
         })))?;
         Ok(received.recv_timeout(std::time::Duration::from_secs(1))?)
     };
-    let route = |memory: &crate::launcher::Memory| {
-        memory.lock().unwrap()["launcher.engine_route"].clone()
-    };
+    let route =
+        |memory: &crate::launcher::Memory| memory.lock().unwrap()["launcher.engine_route"].clone();
     // Super+X: menu route, never a toggle.
     for open in [false, true] {
         events.lock().unwrap().clear();
         assert!(send("nacre", "menu", &["power", ""], open)?.error.is_none());
         assert!(matches!(
             events.lock().unwrap().as_slice(),
-            [UiEvent::CompanionVisibility(true), UiEvent::CompanionModel(_)]
+            [
+                UiEvent::CompanionVisibility(true),
+                UiEvent::CompanionModel(_)
+            ]
         ));
         assert_eq!(route(&memory), Value::Text("power".into()));
     }
@@ -577,7 +583,10 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
     assert_eq!(route(&memory), Value::Text("actions.clipboard".into()));
     assert!(matches!(
         events.lock().unwrap().as_slice(),
-        [UiEvent::CompanionVisibility(true), UiEvent::CompanionModel(_)]
+        [
+            UiEvent::CompanionVisibility(true),
+            UiEvent::CompanionModel(_)
+        ]
     ));
     // Refused or unpublished routes fail explicitly and leave the launcher alone.
     events.lock().unwrap().clear();
@@ -588,7 +597,10 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
         ("brightness", "step", &["up"][..]),
     ] {
         let reply = send(target, method, args, false)?;
-        assert_eq!(reply.error.as_ref().map(|e| e.code.as_str()), Some("unavailable"));
+        assert_eq!(
+            reply.error.as_ref().map(|e| e.code.as_str()),
+            Some("unavailable")
+        );
     }
     assert!(events.lock().unwrap().is_empty());
     Ok(())
@@ -619,9 +631,9 @@ fn live_palette_overlay_recolors_panel_views_without_reload_or_file_write() -> R
             },
         )?;
         let fills = |scene: &bead::render::Scene| {
-            scene.primitives.iter().any(|p| {
-                matches!(p, bead::render::Primitive::Rounded { fill, .. } if *fill == SURFACE)
-            })
+            scene.primitives.iter().any(
+                |p| matches!(p, bead::render::Primitive::Rounded { fill, .. } if *fill == SURFACE),
+            )
         };
         assert!(!fills(h.scene()), "{entry} starts with the file palette");
         let mut runtime = crate::reload::Runtime::new(h.session);
@@ -645,7 +657,9 @@ fn live_palette_overlay_recolors_panel_views_without_reload_or_file_write() -> R
         );
         // A later reload keeps the overlay; the committed file is never rewritten.
         assert!(runtime.commit());
-        let reloaded = runtime.stage(UiEvent::Reload)?.ok_or("reload produced no scene")?;
+        let reloaded = runtime
+            .stage(UiEvent::Reload)?
+            .ok_or("reload produced no scene")?;
         assert!(fills(&reloaded), "{entry} lost the live palette on reload");
     }
     assert_eq!(std::fs::read(&palette_file)?, before);

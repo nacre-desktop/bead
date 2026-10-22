@@ -1748,10 +1748,7 @@ impl SceneSource for Runtime {
                                         wakeup(UiEvent::CompanionVisibility(true));
                                         wakeup(UiEvent::CompanionModel(values));
                                     }
-                                    bead::services::ipc::Reply::ok(
-                                        call.id,
-                                        serde_json::Value::Null,
-                                    )
+                                    bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
                                 }
                                 Some(Err(message)) => bead::services::ipc::Reply::error(
                                     call.id,
@@ -1783,10 +1780,9 @@ impl SceneSource for Runtime {
                                 .ok_or("brightness keys unavailable")?
                                 .step(direction, output.as_deref())
                             {
-                                Ok(()) => bead::services::ipc::Reply::ok(
-                                    call.id,
-                                    serde_json::Value::Null,
-                                ),
+                                Ok(()) => {
+                                    bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                                }
                                 Err(message) => bead::services::ipc::Reply::error(
                                     call.id,
                                     "unavailable",
