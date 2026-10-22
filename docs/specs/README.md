@@ -12,7 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0021 Static wallpaper](0021-static-wallpaper-surface.md) | Unblocked — N0027 `wallpaper.active` v1 published | Implement passive per-output surface; no direct Nacre state-file reads or Bead config writer. |
+| 0 | [B0021 Static wallpaper](0021-static-wallpaper-surface.md) | Blocked — settled release PSS reached 26.64 MiB, above the 24.5 MiB owner stop line | Implementation and dev-1 CI passed; one private Hyprland output smoke passed. Stop before niri/transition captures pending owner memory review. |
 | 0 | [B0020 Notifications/OSD](0020-notifications-osd-product.md) | Blocked — spec first | Nacre N0017 remains a proposal, not a published producer; timeout policy and keyboard-layout OSD contract unresolved. No runtime adoption, live ownership or push. B0019 reserved for concurrent launcher work. |
 | 4 | [B0019 Launcher parity](0019-launcher-parity.md) | In progress | Catalogue/favourites/categories, daemon ordering, input/activation and stale-result fencing; private validation, no push or live switch. |
 | 4 | [B0019 Launcher parity](0019-launcher-parity.md) | Review — implementation validated; performance/memory acceptance open | Source c8b55b5; async catalogue/favourites/group routes, ordered results, input/activation and stale fences. Full remote CI and private input/reopen passed; see spec for diagnostics and limits. No push or live switch. |

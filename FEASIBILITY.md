@@ -1,5 +1,22 @@
 # Feasibility
 
+## 2026-10-22 — B0021 static wallpaper validation
+
+The Nacre N0027 consumer, secure file decoder, paired palette update and per-output background surfaces are implemented.
+The exact Bead CI replica passed in a dev-1 Arch container on commit `d1f1257`.
+A private nested Hyprland smoke committed the wallpaper on `bead-bench` and exercised two output create/remove cycles.
+Settled release memory crossed the owner stop line, so niri and transition capture were stopped before running.
+
+| One-output Hyprland measurement | Result |
+| --- | ---: |
+| Output mode / scale | 2880×1800 / 1.5 |
+| Poster RGBA payload | 19.78 MiB |
+| Settled nacre-shell PSS + SwapPss | 26.64 MiB |
+| PSS file-backed / anonymous / shared-memory | 13.98 / 2.51 / 10.15 MiB |
+| SwapPss / DRM | 0 / no DRM fdinfo |
+
+The 26.64 MiB process total exceeds the 24.5 MiB stop line; it is not a wallpaper-only delta. No niri or transition PSS was measured. Output hotplug was exercised, but a wallpaper-specific release marker was not emitted on the compositor's surface-close path. No installation, push or live-desktop change occurred.
+
 ## 2026-10-22 — B0019 launcher parity diagnostic
 
 Async queries retain same-scope rows, fence stale routes and preserve focused input.

@@ -1,11 +1,14 @@
 # Status
 
-## 2026-10-22 — B0021 static wallpaper implementation
+## 2026-10-22 — B0021 static wallpaper; blocked at memory gate
 
 [B0021](specs/0021-static-wallpaper-surface.md) is unblocked by Nacre N0027,
 published at `294d3f40`. B0021 adopts the v1 active state and activation pair;
-implementation and private nested validation are in progress. No Nacre
-private-state reads or Bead-owned configuration writer are allowed.
+the implementation and full dev-1 CI are complete. A private Hyprland nested
+smoke verified the wallpaper commit and output hotplug; settled release PSS was
+26.64 MiB on one 2880×1800 output, above the 24.5 MiB stop line. Per the owner
+memory rule, further compositor and transition captures stopped. No Nacre
+private-state reads, Bead-owned configuration writer, install or push occurred.
 
 ## 2026-10-22 — B0020 notifications/OSD spec; producer gate blocked
 
