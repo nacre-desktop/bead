@@ -182,10 +182,11 @@ impl TreeCache {
     /// Presented frames retain their own resources until the caller drops them.
     pub fn retain_scales(&mut self, scales: &[f32]) {
         let current = |bits: u32| scales.iter().any(|scale| scale.to_bits() == bits);
-        let discarded = self.entries.keys().any(|(_, bits)| !current(*bits));
+        let stale_frame = self.frame.as_ref().is_some_and(|frame| !current(frame.scale.to_bits()));
+        let discarded = stale_frame || self.entries.keys().any(|(_, bits)| !current(*bits));
         self.entries.retain(|(_, bits), _| current(*bits));
         self.nodes.retain(|(_, bits), _| current(*bits));
-        if self.frame.as_ref().is_some_and(|frame| !current(frame.scale.to_bits())) {
+        if stale_frame {
             self.frame = None;
         }
         if discarded {

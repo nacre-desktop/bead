@@ -155,9 +155,13 @@ def sample(env, raw, compositor, stop):
         result['cache_bytes'] = diagnostics.get('cache_bytes')
         result['heap_bytes'] = diagnostics.get('heap_bytes')
         resources = {}
+        live_outputs = ({output['name'] for output in result['geometry']}
+                        if compositor == 'hyprland' else set(result['geometry']))
         for line in text_log().splitlines():
             if line.startswith('UI_RESOURCES '):
                 output = re.search(r'\boutput=(\S+)', line)
+                if output and output.group(1) not in live_outputs:
+                    continue
                 resources[output.group(1) if output else 'shared'] = {
                     key: int(value) for key, value in re.findall(r'\b(\w+)=(\d+)', line)}
         result['resources_by_output'] = resources
