@@ -74,5 +74,14 @@ desktop if a measured first frame shows no flash without it.
 
 ## Checks and evidence
 
-See the report for the full remote CI (`ci.sh`) and the parity harness run. Goldens: none changed (no view changed).
+Full CI-equivalent (ubuntu:24.04 container on dev-2, the workflow's steps incl. fmt, clippy -D warnings, 460 workspace tests, renderer
+configs, Luau schema, spikes tests, motion smoke, services, deny) passed on the pushed commit.
+
+Parity harness (desktop, nested niri 2880x1800 @1.5, states colors-app, welcome-colors, settings-colors-app-theming,
+QML | Bead, release builds before and after): the Bead apps wear the teal wallpaper accent in both builds, because the
+harness starts the apps after the shell has seen a palette (the spawn-time file already covered that). So the harness does
+**not** discriminate this change; the live-change path (palette changing while an app is open, or an app started before the
+first palette) is covered by code review and the unit tests of the mapping only, **no automated or visual proof yet**. Known gap:
+add a harness step that changes the wallpaper while an app is open. rmse after: colors-app 19.6 %, welcome-colors 10.0 %,
+settings 9.7 % (the Bead Colors app shows no daemon colour data with this helper revision; unrelated to this unit). Goldens: none changed (no view changed).
 Added/removed product lines: see the report.
