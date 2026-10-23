@@ -92,7 +92,9 @@ impl SocketWatch {
                     | AddWatchFlags::IN_MOVE_SELF,
             )
             .ok()?;
-            tokio::io::unix::AsyncFd::new(Descriptor(fd)).ok()
+            // SAFETY: `Descriptor` owns the inotify descriptor, so it stays open and
+            // unchanged for the whole life of the `AsyncFd`.
+            unsafe { tokio::io::unix::AsyncFd::register(Descriptor(fd)) }.ok()
         };
         Self(watch())
     }
