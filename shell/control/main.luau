@@ -95,7 +95,16 @@ local function home()
     local list={}
     for _,id in ipairs(order) do
         local t=reg.by_id[id]
-        if t and usable(t) then table.insert(list,{size=t.size,build=function(w,h) return build_tile(t,w,h) end}) end
+        if t then
+            local ok=usable(t)
+            -- The QML dims an unavailable tile (alpha .4) instead of dropping it; the veil does the same.
+            table.insert(list,{size=t.size,build=function(w,h)
+                local tile=build_tile(t,w,h)
+                if ok then return tile end
+                return ui.Box{id="dim-"..t.id,width=w,height=h,tile,
+                    ui.Box{id="veil",position="absolute",left=0,top=0,width=w,height=h,radius=T.radii.medium,fill=ui.alpha("surface",0.6)}}
+            end})
+        end
     end
     local items={{ui.Row(status),HEAD}}
     if #list==0 then

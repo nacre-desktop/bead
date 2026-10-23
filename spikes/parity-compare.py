@@ -38,6 +38,7 @@ HERE = Path(__file__).resolve().parent
 #   ('ui', target, method, *args)   daemon ui.dispatch, identical for both shells
 #   ('notify', summary, body)       a freedesktop notification on the private bus
 #   ('sleep', seconds)
+#   ('shell', target, method, *args) a call on Bead's own command socket (views the daemon vocabulary lacks)
 #   ('app_close', name)             close Settings (an app window in both shells)
 #   ('only', 'qml'|'bead', step)    a step for one arm (the shells' preview/trigger routes differ)
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
@@ -64,7 +65,7 @@ STATES = {
                    [('ui', 'nacre', 'close')], 0),
     'osd-microphone': ([('only', 'qml', ('ui', 'nacre', 'previewFeedback', 'microphone')), ('only', 'bead', ('level', 'source', 0.45))],
                        [('ui', 'nacre', 'close')], 0),
-    'session': ([('only', 'qml', ('ui', 'nacre', 'session')), ('only', 'bead', ('ui', 'bead.panel', 'open', 'session'))],
+    'session': ([('only', 'qml', ('ui', 'nacre', 'session')), ('only', 'bead', ('shell', 'bead.panel', 'open', 'session'))],
                 [('ui', 'nacre', 'close')], 1.0),
     'settings': ([('ui', 'nacre', 'settings'), ('sleep', 1.5)], [('app_close', 'settings')], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
@@ -291,20 +292,24 @@ class Arm:
             raise RuntimeError(str(reply['err'].get('message') or reply['err'])[:160])
         return reply
 
+    @staticmethod
+    def socket_call(path, target, method, args):
+        """Newline-delimited JSON on a Bead command socket (the shell's CLI only knows catalogue routes)."""
+        import socket
+        request = json.dumps({'version': 1, 'id': 1, 'target': target, 'method': method, 'args': args}) + '\n'
+        with socket.socket(socket.AF_UNIX) as client:
+            client.settimeout(3)
+            client.connect(str(path))
+            client.sendall(request.encode())
+            client.recv(4096)
+
     def app_close(self, name):
         if self.name == 'qml':
             self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
                       'call', name + 'App', 'close'], check=False)
         else:  # the app process listens on app-NAME.sock beside the shell's command socket
-            # Newline-delimited JSON on the app's own socket (the shell's CLI only knows catalogue routes).
-            import socket
-            request = json.dumps({'version': 1, 'id': 1, 'target': 'bead.window', 'method': 'close', 'args': []}) + '\n'
             try:
-                with socket.socket(socket.AF_UNIX) as client:
-                    client.settimeout(3)
-                    client.connect(str(self.runtime / f'app-{name}.sock'))
-                    client.sendall(request.encode())
-                    client.recv(4096)
+                self.socket_call(self.runtime / f'app-{name}.sock', 'bead.window', 'close', [])
             except OSError as error:
                 self.errors.append(f'closing {name}: {error}')
 
@@ -331,6 +336,11 @@ class Arm:
                 self.notify(step[1], step[2])
             elif kind == 'sleep':
                 time.sleep(step[1])
+            elif kind == 'shell':
+                try:
+                    self.socket_call(self.runtime / 'bead-command.sock', step[1], step[2], list(step[3:]))
+                except OSError as error:
+                    self.errors.append(f'{" ".join(step[1:])}: {error}')
             elif kind == 'app_close':
                 self.app_close(step[1])
             elif kind == 'only':

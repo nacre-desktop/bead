@@ -26,7 +26,7 @@ local tiles={
     {id="night",kind="toggle",size="half",icon="nightlight",label="bead.panel.control-night",source="night-light.state",ask="night_light.set",default=true},
     {id="appearance",kind="toggle",size="half",icon="palette",label="bead.panel.control-appearance",source="appearance.mode",ask="appearance.set_mode",need="toggle",default=true},
     {id="screenshot",kind="button",size="third",icon="screenshot",label="bead.panel.control-screenshot",source="screenshot.capture",ask="screenshot.capture",need="press"},
-    {id="record",kind="toggle",size="half",icon="videocam",label="bead.panel.control-record",source="recorder.state",ask="recorder.start",need="toggle"},
+    {id="record",kind="toggle",size="third",icon="videocam",label="bead.panel.control-record",source="recorder.state",ask="recorder.start",need="toggle"},
     {id="picker",kind="button",size="third",icon="colorize",label="bead.panel.control-picker",source="color-picker.pick",ask="color_picker.pick",need="press"},
     {id="clipboard",kind="button",size="third",icon="content_paste",label="bead.panel.control-clipboard",view="dashboard-clipboard"},
     {id="updates",kind="button",size="third",icon="system_update",label="bead.panel.control-updates",view="dashboard-system"},
