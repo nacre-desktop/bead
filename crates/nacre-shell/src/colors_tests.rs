@@ -774,16 +774,27 @@ fn settings_wallpaper_and_colors_pages_are_editable_registry_rows() {
     };
     let rows = |page: &str| -> (Vec<Json>, Value) {
         let model = settings.project(&at(page));
-        let Value::List(items) = &model["settings.items"] else { panic!() };
+        let Value::List(items) = &model["settings.items"] else {
+            panic!()
+        };
         (items.to_vec(), model["settings.readonly"].clone())
     };
     let kind = |rows: &[Json], id: &str| {
-        rows.iter().find(|r| r["id"] == id).unwrap_or_else(|| panic!("{id} missing"))["kind"].clone()
+        rows.iter()
+            .find(|r| r["id"] == id)
+            .unwrap_or_else(|| panic!("{id} missing"))["kind"]
+            .clone()
     };
     let (wallpaper, readonly) = rows("wallpaper");
     assert_eq!(readonly, Value::Bool(false));
-    assert_eq!(kind(&wallpaper, "wallpaper.rotation.rotationEnabled"), "toggle");
-    assert_eq!(kind(&wallpaper, "wallpaper.rotation.rotationMinutes"), "number");
+    assert_eq!(
+        kind(&wallpaper, "wallpaper.rotation.rotationEnabled"),
+        "toggle"
+    );
+    assert_eq!(
+        kind(&wallpaper, "wallpaper.rotation.rotationMinutes"),
+        "number"
+    );
     assert_eq!(kind(&wallpaper, "wallpaper.motion.motionMode"), "choice");
     let (colors, readonly) = rows("colors");
     assert_eq!(readonly, Value::Bool(false));
@@ -791,5 +802,10 @@ fn settings_wallpaper_and_colors_pages_are_editable_registry_rows() {
     // Mode and the schedule are applied by helpers, not by a store write: shown, not editable.
     assert_eq!(kind(&colors, "colors.palette.mode"), "help");
     let (targets, _) = rows("colors/app-theming");
-    assert!(targets.iter().filter(|r| r["id"].as_str().is_some_and(|id| id.contains(".targets."))).all(|r| r["kind"] == "help"));
+    assert!(
+        targets
+            .iter()
+            .filter(|r| r["id"].as_str().is_some_and(|id| id.contains(".targets.")))
+            .all(|r| r["kind"] == "help")
+    );
 }
