@@ -21,16 +21,18 @@ local function label(id,text,size,color,height)
     return ui.Text{id=id,text=text,width="fill",height=height or math.ceil(px(size)*1.35),shrink=0,font_size=px(size),color=color or "onSurface"}
 end
 -- Compact text button with an optional Material glyph; `action=nil` dims it.
-local function button(id,text,glyph,action,selected,width)
+local function button(id,text,glyph,action,selected)
     local armed=action~=nil
+    local label=tostring(text)
+    local chars=utf8.len(label) or 4
     local ink=selected and armed and "onPrimary" or (armed and "onSurface" or "onSurfaceVariant")
     local row={}
     if glyph then table.insert(row,ui.Text{id="glyph",text=glyph,family="Material Symbols Rounded",width=24,height=24,shrink=0,font_size=px(T.icons.large),color=ink}) end
-    if text~="" then table.insert(row,ui.Text{id="label",text=text,height=24,shrink=0,width=(utf8.len(text) or 4)*8+4,font_size=px(tx.body),color=ink}) end
+    if label~="" then table.insert(row,ui.Text{id="label",text=label,height=24,shrink=0,width=chars*8+4,font_size=px(tx.body),color=ink}) end
     row.id="row";row.height=32;row.gap=sp.xs;row.align="center";row.justify="center"
-    local width=2*sp.md+(glyph and 24+sp.xs or 0)+(text~="" and (utf8.len(text) or 4)*8+4 or 0)
-    return kit.Button{id=id,width=width,height=32,shrink=0,padding=0,padding_left=sp.md,padding_right=sp.md,radius=rd.small,
-        fill=selected and (armed and "primary" or "surfaceContainerHigh") or "surfaceContainer",aria_label=text~="" and text or glyph,on_activate=action,ui.Row(row)}
+    local span=2*sp.md+(glyph and 24+sp.xs or 0)+(label~="" and chars*8+4 or 0)
+    return kit.Button{id=id,width=span,height=32,shrink=0,padding=0,padding_left=sp.md,padding_right=sp.md,radius=rd.small,
+        fill=selected and (armed and "primary" or "surfaceContainerHigh") or "surfaceContainer",aria_label=label~="" and label or glyph,on_activate=action,ui.Row(row)}
 end
 local function header(v)
     local tabs={}

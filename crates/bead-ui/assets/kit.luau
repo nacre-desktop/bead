@@ -405,7 +405,7 @@ return function(ui, tokens)
         if line~="" then table.insert(lines,line) end
         if p.max_lines and #lines>p.max_lines then
             while #lines>p.max_lines do table.remove(lines) end
-            local last=lines[#lines]
+            local last=tostring(lines[#lines])
             local n=utf8.len(last) or #last
             lines[#lines]=(n>1 and string.sub(last,1,(utf8.offset(last,n) or 1)-1) or "").."…"
         end
