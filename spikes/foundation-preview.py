@@ -26,7 +26,142 @@ matrix = load('preview_matrix', ROOT / 'spikes/bar-matrix.py')
 clocks = load('preview_clocks', ROOT / 'spikes/process-clock.py')
 
 
+TOUR = [('bar', None, None), ('launcher', 'nacre', ['launcher', '']), ('dashboard', 'drawers', ['toggle', 'dashboard']),
+        ('settings', 'nacre', ['settings']), ('sidebar', 'nacre', ['left']), ('session', 'nacre', ['menu', 'power', ''])]
+
+
+def sample_full(env, raw, compositor, stop):
+    """The whole shell as `bead-shell start` runs it (one process, one UI provider, in-process notices)
+    plus a standalone daemon, in a private nested session. Nothing here reaches a live session."""
+    binary = Path(os.environ['BEAD_HARDENING_BINARY']).resolve()
+    helper = Path(os.environ['BEAD_PREVIEW_DAEMON']).resolve()
+    runtime = Path(env['XDG_RUNTIME_DIR']).resolve()
+    assert runtime != Path(f'/run/user/{os.getuid()}'), 'live runtime refused'
+    assert Path(env['WAYLAND_DISPLAY']).resolve().is_relative_to(runtime), 'live UI display refused'
+    assert str(Path(f'/run/user/{os.getuid()}/bus')) not in env['DBUS_SESSION_BUS_ADDRESS'], 'live bus refused'
+    assert Path(env['NIRI_SOCKET']).resolve().is_relative_to(runtime)
+    daemon = bar = None
+    directory = tempfile.TemporaryDirectory(prefix="bead-preview-ui-")
+    try:
+        root = Path(directory.name)
+        shutil.copytree(Path(os.environ.get('BEAD_PREVIEW_SHELL', str(ROOT / 'shell'))), root / 'shell')
+        for name in ['home', 'data', 'config', 'state/nacre', 'cache']:
+            (root / name).mkdir(mode=0o700, parents=True)
+        (runtime / 'nacre').mkdir(mode=0o700, exist_ok=True)
+        (root / 'state/nacre/shell/notifications/images').mkdir(mode=0o700, parents=True)
+        endpoint = runtime / 'nacre/daemon.sock'  # the key binds of the private niri use this path
+        commands = runtime / 'bead-command.sock'
+        private = dict(env, HOME=str(root / 'home'), XDG_DATA_HOME=str(root / 'data'),
+                       XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
+                       XDG_CACHE_HOME=str(root / 'cache'), NACRE_DAEMON_SOCKET=str(endpoint),
+                       NACRE_COMPOSITOR=compositor, NACRE_NIRI_HOVER_STREAM='0',
+                       DBUS_SYSTEM_BUS_ADDRESS=env['DBUS_SESSION_BUS_ADDRESS'],
+                       PIPEWIRE_REMOTE='bead-private-unavailable', PULSE_SERVER='unix:' + str(root / 'no-pulse'))
+        tools = os.environ.get('BEAD_PREVIEW_TOOLS')
+        if tools:
+            private['NACRE_HELPER_TOOLS'] = tools
+        presentation = os.environ.get('BEAD_PREVIEW_PRESENTATION')
+        if presentation:  # read-only copy of one record; the image it names is only read
+            shutil.copyfile(presentation, root / 'state/nacre/presentation.json')
+            (root / 'state/nacre/presentation.json').chmod(0o600)
+        daemon = subprocess.Popen([str(helper), 'daemon', '--notifications=daemon'], cwd=root, env=private,
+                                  stdout=(raw / 'preview-daemon.log').open('w'), stderr=subprocess.STDOUT,
+                                  start_new_session=True)
+
+        def call(method, params):
+            reply = subprocess.run([os.environ['BEAD_PREVIEW_NACRECTL'], 'call', '--timeout', '2000', method,
+                                    json.dumps(params)], env=private, capture_output=True, text=True, timeout=4)
+            if reply.returncode:
+                raise RuntimeError('private daemon call failed: ' + method)
+            return json.loads(reply.stdout)
+
+        def wait_call(method, params):
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                if daemon.poll() is not None:
+                    raise RuntimeError('private daemon exited; inspect preview log')
+                try:
+                    return call(method, params)
+                except RuntimeError:
+                    time.sleep(.1)
+            raise RuntimeError('private daemon deadline: ' + method)
+
+        def notify(summary, body, expire=8000):
+            subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications',
+                            '--object-path', '/org/freedesktop/Notifications',
+                            '--method', 'org.freedesktop.Notifications.Notify', 'Bead preview', '0', '',
+                            summary, body, '[]', '{}', str(expire)], env=private, capture_output=True, timeout=5)
+
+        wait_call('daemon.status', {})
+        # The exact production flags of packaging/bin/bead-shell, plus --notices (in-process notices/OSD).
+        flags = ['--bar', '--core-views', '--ui-provider', '--notices', '--daemon-socket', str(endpoint),
+                 '--command-socket', str(commands)]
+        if os.environ.get('BEAD_PREVIEW_DASHBOARD_FIXTURES') == '1':
+            flags += ['--dashboard-fixtures', str(root / 'shell/tests/fixtures/dashboard')]
+        if os.environ.get('BEAD_PREVIEW_CPU') == '1':
+            flags += ['--renderer', 'cpu', '--panel-renderer', 'cpu']
+        bar = subprocess.Popen([str(binary)] + flags, cwd=root, env=private,
+                               stdout=(raw / 'preview-bar.log').open('w'), stderr=subprocess.STDOUT,
+                               start_new_session=True)
+        wait_call('ui.dispatch', {'target': 'nacre', 'method': 'state', 'args': []})
+        matrix.wait_log(raw / 'preview-bar.log', lambda t: 'READY output=' in t)
+        time.sleep(1)
+        notify('Bead preview', 'Notifications are shown by the shell itself (B0030).')
+        shots = os.environ.get('BEAD_PREVIEW_SHOTS')
+        if shots:
+            out = Path(shots)
+            out.mkdir(parents=True, exist_ok=True)
+
+            def grab(name):
+                subprocess.run(['grim', str(out / (name + '.png'))], env=private, check=True, timeout=20)
+
+            def dispatch(target, args):
+                try:
+                    call('ui.dispatch', {'target': target[0], 'method': target[1], 'args': args})
+                except RuntimeError:
+                    print('PREVIEW_TOUR dispatch failed: ' + target[1], flush=True)
+            time.sleep(2)
+            grab('bar')
+            notify('Bead preview', 'Screenshot notification.')
+            time.sleep(2)
+            grab('notification')
+            time.sleep(7)
+            for name, target, args in TOUR[1:]:
+                dispatch((target, args[0]), args[1:])
+                time.sleep(3)
+                grab(name)
+                dispatch(('nacre', 'close'), []) if name != 'settings' else subprocess.run(
+                    [str(binary), 'ipc', '--socket', str(commands), '--json', 'bead.window', 'close'], cwd=root,
+                    env=private, capture_output=True, timeout=5)
+                time.sleep(1.5)
+            # The exact command lines of the private niri's key binds (a key press cannot be injected
+            # into the nested niri without a focused parent client); the key names are checked by `niri validate`.
+            import re as _re
+            binds = dict(_re.findall(r'Alt\+(\w+) repeat=false \{ spawn-sh ("(?:[^"\\]|\\.)*")',
+                                     Path(os.environ['BEAD_PREVIEW_NIRI_CONFIG']).read_text()))
+            for key, name in [('Space', 'keybind-launcher'), ('O', 'keybind-dashboard')]:
+                code = subprocess.run(['sh', '-c', json.loads(binds[key])], env=env, capture_output=True, timeout=10).returncode
+                print('PREVIEW_KEYS Alt+%s rc=%s' % (key, code), flush=True)
+                time.sleep(3)
+                grab(name)
+                dispatch(('nacre', 'close'), [])
+                time.sleep(1.5)
+            print('PREVIEW_TOUR_DONE ' + str(out), flush=True)
+        else:
+            print('PREVIEW_READY full=true', flush=True)
+            while bar.poll() is None and daemon.poll() is None:
+                time.sleep(.1)
+    finally:
+        if bar is not None:
+            stop(bar)
+        clocks.stop_owned_tree(daemon, stop)
+        directory.cleanup()
+        print('PREVIEW_STOPPED owned_UI_and_daemon_workers_stopped=true', flush=True)
+
+
 def sample(env, raw, compositor, stop):
+    if os.environ.get('BEAD_PREVIEW_FULL') == '1':
+        return sample_full(env, raw, compositor, stop)
     binary = Path(os.environ['BEAD_HARDENING_BINARY']).resolve()
     helper = Path(os.environ['BEAD_PREVIEW_DAEMON']).resolve()
     runtime = Path(env['XDG_RUNTIME_DIR']).resolve()

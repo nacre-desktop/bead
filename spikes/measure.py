@@ -675,6 +675,7 @@ def main():
                 sockets = [f for f in parent_runtime.glob('wayland-*') if stat.S_ISSOCK(f.stat().st_mode)]
                 if sockets:
                     env['WAYLAND_DISPLAY']=str(sockets[0])
+                    env['BEAD_PARENT_WAYLAND']=str(sockets[0])
                     break
                 if parent.poll() is not None:
                     raise RuntimeError('Offscreen parent exited; inspect ignored labwc.log')
@@ -684,7 +685,7 @@ def main():
                 raise RuntimeError('Offscreen parent did not start')
         log = (raw / f'{args.compositor}.log').open('w')
         if args.compositor=='niri':
-            command=['niri','--config',str(ROOT/'spikes/niri.kdl')]
+            command=['niri','--config',os.environ.get('BEAD_PREVIEW_NIRI_CONFIG') or str(ROOT/'spikes/niri.kdl')]
         else:
             env['AQ_DRM_DEVICES']='/dev/null'
             command=['Hyprland','--config',str(ROOT/'spikes/hyprland.lua')]
