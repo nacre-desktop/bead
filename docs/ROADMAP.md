@@ -356,3 +356,8 @@ Widgets made for Bead can be dragged and dropped between "widget hosts": the top
 - **Layout persistence:** the shell owns it. On Nacre it is stored through the settings store as an opaque layout that the daemon stores but never interprets.
 - **Catalogue:** built-in widgets plus a user widget folder with live reload (custom-widgets milestone). The audio-reactive ideas (spectrum source) plug in here.
 - **Boundary:** the Nacre daemon owns system data and operations and never UI composition. Bead owns surfaces, layout, components, reactivity, placement and resource lifetimes, and has no hardcoded Nacre concepts (no specific bar or music widget). Nacre's desktop is Bead plus the Nacre adapter plus Nacre's Luau widgets.
+- **Owner examples (2026-10-23):**
+  - A music widget whose form depends on its host. In the bar: dancing bars or a small circular visualiser. Dragged onto the desktop: a large riced visualiser, such as a full-width bottom bar or a big centre circle, with effects (sparkles, shine). Clicking it opens per-widget settings: shape (line or circle), length, effects and colours.
+  - The date and time could move out of the status pill into a placeable clock widget with styles.
+  - Many such widgets (clock, weather, system, calendar) would make this a signature Nacre feature.
+  - Needs: a desktop-layer widget host, per-widget settings pages, and an effects library (particles, glow) in the kit.
