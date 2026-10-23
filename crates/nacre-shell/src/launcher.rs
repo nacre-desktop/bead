@@ -6,7 +6,8 @@ use bead::core::{
     source::{self, Source},
 };
 use nacre_protocol::menu::{
-    MAX_ITEMS, MenuActivate, MenuActivated, MenuConversion, MenuQuery, MenuQueryResult,
+    MAX_ITEMS, MenuActivate, MenuActivated, MenuConversion, MenuGroupsResult, MenuQuery,
+    MenuQueryResult,
 };
 use serde_json::{Value as Json, json};
 use std::{
@@ -186,6 +187,18 @@ fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared
 pub fn rows(reply: Json) -> source::Result<Vec<Json>> {
     Ok(prepare(reply, None)?.rows)
 }
+/// `menu.groups` as the `launcher.groups` store rows. The caller owns hiding and order.
+fn parse_groups(reply: Json) -> Option<Vec<Json>> {
+    let result: MenuGroupsResult = serde_json::from_value(reply).ok()?;
+    result.validate().ok()?;
+    Some(
+        result
+            .groups
+            .into_iter()
+            .map(|g| json!({"id":g.id,"name":g.label,"icon":g.icon}))
+            .collect(),
+    )
+}
 fn prepare_for(reply: Json, request: &(String, String, String)) -> source::Result<Prepared> {
     let prepared = prepare(reply, Some(&request.0))?;
     let expected_route = if request.2.is_empty() {
@@ -254,6 +267,25 @@ pub fn activation_changes(result: MenuActivated) -> BTreeMap<String, Value> {
     changes
 }
 
+/// The nine top-level groups `menu.groups` publishes (English labels), as store rows.
+#[cfg(test)]
+pub(crate) fn fixture_groups() -> Value {
+    Value::list(
+        [
+            ("home", "Home", "home"),
+            ("apps", "All apps", "apps"),
+            ("actions", "Actions", "bolt"),
+            ("style", "Style", "palette"),
+            ("setup", "Setup", "tune"),
+            ("software", "Software", "download"),
+            ("health", "Health", "build"),
+            ("learn", "Learn", "help"),
+            ("power", "Power", "power_settings_new"),
+        ]
+        .map(|(id, name, icon)| json!({"id":id,"name":name,"icon":icon}))
+        .to_vec(),
+    )
+}
 #[cfg(test)]
 pub(crate) fn fixture_reply(query: &str, rows: Vec<Json>) -> Json {
     let mut items = serde_json::Map::new();
@@ -352,6 +384,14 @@ impl Source for Fixture {
                 return Ok(
                     json!({"favorites":favorites.iter().cloned().collect::<Vec<_>>(),"hidden":[],"recent":[],"usage":{}}),
                 );
+            }
+            if method == "menu.groups" {
+                let groups = self.snapshot().data.get("groups").cloned();
+                return groups
+                    .map(|groups| json!({"catalog_rev":1,"groups":groups}))
+                    .ok_or_else(|| {
+                        source::Error::new("unavailable", "no groups in fixture", false)
+                    });
             }
             if method != "menu.query" {
                 return Err(source::Error::new(
@@ -456,6 +496,8 @@ struct QueryActor {
     preferences_generation: Arc<std::sync::atomic::AtomicU64>,
     preferences_loaded: Arc<std::sync::atomic::AtomicBool>,
     favorite_in_flight: Arc<std::sync::atomic::AtomicBool>,
+    /// Engine rail groups (`menu.groups`) as `{id,name,icon}` store rows; empty until loaded.
+    groups: Arc<std::sync::Mutex<Vec<Json>>>,
     runtime_handle: tokio::runtime::Handle,
     cancelled: Arc<std::sync::atomic::AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
@@ -470,6 +512,8 @@ impl QueryActor {
         let preferences_generation = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let preferences_loaded = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let favorite_in_flight = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let groups = Arc::new(std::sync::Mutex::new(Vec::<Json>::new()));
+        let worker_groups = groups.clone();
         let done = completion.clone();
         let notify = wake.clone();
         let worker_favorites = favorites.clone();
@@ -488,6 +532,7 @@ impl QueryActor {
             .spawn(move || {
                 runtime.block_on(async move {
                     let mut preference_task: Option<tokio::task::JoinHandle<()>> = None;
+                    let mut groups_task: Option<tokio::task::JoinHandle<()>> = None;
                     let mut preference_stamp: Option<SourceStamp> = None;
                     let mut newest = None;
                     loop {
@@ -504,6 +549,34 @@ impl QueryActor {
                                 previous.abort();
                                 let _ = previous.await;
                             }
+                            if let Some(previous) = groups_task.take() {
+                                previous.abort();
+                                let _ = previous.await;
+                            }
+                            let groups_source = source.clone();
+                            let groups_slot = worker_groups.clone();
+                            let groups_notify = notify.clone();
+                            groups_task = Some(tokio::spawn(async move {
+                                // Older daemons do not publish the method: keep the fallback rail.
+                                let Some(rows) = groups_source
+                                    .call("menu.groups".into(), json!({}), Duration::from_secs(3))
+                                    .await
+                                    .ok()
+                                    .and_then(parse_groups)
+                                else {
+                                    return;
+                                };
+                                let changed = groups_slot.lock().is_ok_and(|mut slot| {
+                                    let changed = *slot != rows;
+                                    *slot = rows;
+                                    changed
+                                });
+                                if changed
+                                    && let Some(callback) = groups_notify.lock().ok().and_then(|slot| slot.clone())
+                                {
+                                    callback(groups_source.snapshot());
+                                }
+                            }));
                             let prefs_source = source.clone();
                             let prefs = worker_favorites.clone();
                             let prefs_error = worker_preferences_error.clone();
@@ -577,6 +650,7 @@ impl QueryActor {
             preferences_generation,
             preferences_loaded,
             favorite_in_flight,
+            groups,
             runtime_handle,
             cancelled,
             thread: Some(thread),
@@ -1315,6 +1389,15 @@ impl Menu {
         if let Some(mode) = restore_mode {
             delta.insert("launcher.mode".into(), Value::Text(mode));
         }
+        if let Some(current) = stores.get("launcher.groups")
+            && let Some(actor) = &self.query_actor
+            && let Ok(groups) = actor.groups.lock()
+        {
+            let rows = Value::list(groups.clone());
+            if *current != rows && !groups.is_empty() {
+                delta.insert("launcher.groups".into(), rows);
+            }
+        }
         if stores.get("launcher.total_count").is_some() {
             delta.insert(
                 "launcher.total_count".into(),
@@ -1589,6 +1672,54 @@ mod tests {
         assert_eq!(switched_scope["launcher.pending"], Value::Bool(true));
         assert_eq!(switched_scope["launcher.result_count"], Value::Number(0.));
         assert!(menu.view.borrow().rows.is_empty());
+    }
+    #[test]
+    fn engine_groups_reach_the_rail_store_and_an_older_daemon_keeps_the_fallback() {
+        let reply = |groups: Option<Json>| {
+            let mut data = json!({"queries":{"":fixture_reply("",vec![
+                json!({"id":"org.example.app.desktop","name":"Application","kind":"app"}),
+            ])}});
+            if let Some(groups) = groups {
+                data["groups"] = groups;
+            }
+            Fixture::new(data).unwrap()
+        };
+        let stores = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text(String::new())),
+                ("launcher.selection".into(), Value::Text(String::new())),
+                ("launcher.groups".into(), Value::list(vec![])),
+            ]))
+            .unwrap();
+        let project_for = |source: Fixture| {
+            let menu = Menu::new(Some(Arc::new(source))).unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(1);
+            let mut seen = None;
+            while seen.is_none() && std::time::Instant::now() < deadline {
+                seen = project_wait(&menu, &stores)
+                    .unwrap()
+                    .remove("launcher.groups");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            seen
+        };
+        let rows = json!([
+            {"id":"home","label":"Home","icon":"home"},
+            {"id":"style","label":"Style","icon":"palette"}
+        ]);
+        assert_eq!(
+            project_for(reply(Some(rows))),
+            Some(Value::list(vec![
+                json!({"id":"home","name":"Home","icon":"home"}),
+                json!({"id":"style","name":"Style","icon":"palette"}),
+            ]))
+        );
+        // No `menu.groups` answer: the store stays empty and the Luau fallback rail applies.
+        assert_eq!(project_for(reply(None)), None);
+        assert_eq!(
+            parse_groups(json!({"catalog_rev":1,"groups":[{"id":"","label":"x","icon":""}]})),
+            None
+        );
     }
     #[test]
     fn favorites_use_canonical_result_ids_and_published_preferences() {

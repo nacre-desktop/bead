@@ -344,6 +344,12 @@ mod tests {
         ]);
         assert_eq!(cells, [46., 46.]);
         assert!(texts.iter().any(|t| t == "home") && texts.iter().any(|t| t == "2"));
+        // N0040: a visiting group starts with its home output's name and keeps the cell width.
+        let visitor =
+            serde_json::json!({"visiting":true,"group_start":true,"origin":"DP-2","label":"3"});
+        let (cells, texts) = capsule(vec![row(1, serde_json::json!({})), row(2, visitor)]);
+        assert_eq!(cells, [32., 32.]);
+        assert!(texts.iter().any(|t| t == "▣ DP-2") && texts.iter().any(|t| t == "3"));
     }
     #[test]
     fn unavailable_audio_and_bad_tray_pixels_do_not_become_valid_ui_state() {

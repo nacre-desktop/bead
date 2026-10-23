@@ -446,6 +446,7 @@ mod tests {
                 "launcher.search.text".into(),
                 Value::Text("= 10 km to miles".into()),
             );
+            fixture.insert("launcher.groups".into(), crate::launcher::fixture_groups());
             fixture.insert(key.into(), Value::Text(value.into()));
             let mut h = bead_test::Harness::load(
                 &root(),

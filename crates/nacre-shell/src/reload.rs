@@ -59,6 +59,9 @@ pub struct Runtime {
     tray_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     tray_topic_subscription: Option<bead::core::source::Subscription>,
     daemon_tray: std::sync::Arc<std::sync::Mutex<Vec<bead::services::TrayItem>>>,
+    /// N0040: the niri `compositor` topic, read only for workspace origins (visitor groups).
+    origins_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    origins_subscription: Option<bead::core::source::Subscription>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
     subscription: Option<bead::backends::Subscription>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
@@ -264,6 +267,8 @@ impl Runtime {
             tray_topic: None,
             tray_topic_subscription: None,
             daemon_tray: Default::default(),
+            origins_topic: None,
+            origins_subscription: None,
             backend: None,
             subscription: None,
             desktop: None,
@@ -324,9 +329,15 @@ impl Runtime {
         let stores = self.prefs_stores(&prefs);
         self.session.stores = self.session.stores.reconcile(&stores)?;
         // The bar's workspace rows depend on the owner's count, icons and hints.
-        if self.workspaces.view.follow(&stores)
-            && let Some(backend) = &self.backend
-        {
+        if self.workspaces.view.follow(&stores) {
+            self.refresh_workspaces()?;
+        }
+        self.prefs = Some(source);
+        Ok(self)
+    }
+    /// Re-project `bead.workspaces` from the backend snapshot and the current row view.
+    fn refresh_workspaces(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(backend) = &self.backend {
             let rows = self
                 .workspaces
                 .rows(&backend.snapshot(), self.output.as_deref());
@@ -337,7 +348,42 @@ impl Runtime {
                     bead::core::Value::list(rows),
                 )]))?;
         }
-        self.prefs = Some(source);
+        Ok(())
+    }
+    /// N0040 visitor groups: on niri the daemon `compositor` topic carries each workspace's home
+    /// output and number. Leased only for the bar's lifetime; other backends need nothing.
+    pub fn with_workspace_origins(
+        self,
+        client: &crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        if !self
+            .backend
+            .as_ref()
+            .is_some_and(|backend| backend.snapshot().backend == "niri")
+        {
+            return Ok(self);
+        }
+        match client.lease_topic("compositor") {
+            Ok(topic) => self.with_origins_topic(std::sync::Arc::new(topic)),
+            Err(_) => {
+                eprintln!("SOURCE_ERROR code=compositor_topic_lease");
+                Ok(self)
+            }
+        }
+    }
+    fn with_origins_topic(
+        mut self,
+        topic: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let stores = BTreeMap::from([(
+            "bar.workspace.origins".into(),
+            bead::core::Value::list(crate::workspace_rows::origin_rows(&topic.snapshot().data)),
+        )]);
+        self.session.stores = self.session.stores.reconcile(&stores)?;
+        if self.workspaces.view.follow(&stores) {
+            self.refresh_workspaces()?;
+        }
+        self.origins_topic = Some(topic);
         Ok(self)
     }
     /// Host stores the preferences drive: the bar's, or the launcher rail's.
@@ -725,6 +771,11 @@ impl Runtime {
                         .ok()
                         .filter(|i| (1..=255).contains(i))?,
                 })
+            }
+            ("backend.window.focus", _) if press => {
+                // Glyphs carry the local id; the daemon knows windows by its own.
+                crate::workspace_rows::daemon_window_id(text)
+                    .map(|window| Route::WindowFocus { window })
             }
             ("backend.workspace.switch", UiEvent::Scroll { delta, .. }) => {
                 Some(Route::WorkspaceScroll {
@@ -1310,6 +1361,25 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=tray_topic_subscription"),
             }
         }
+        if let Some(topic) = &self.origins_topic {
+            let wakeup = wakeup.clone();
+            // Titles and focus churn the topic constantly; only origin changes reach the bar.
+            let last = std::sync::Mutex::new(Vec::<serde_json::Value>::new());
+            match topic.subscribe(std::sync::Arc::new(move |snapshot| {
+                let rows = crate::workspace_rows::origin_rows(&snapshot.data);
+                let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
+                if *last != rows {
+                    last.clone_from(&rows);
+                    wakeup(UiEvent::Model(BTreeMap::from([(
+                        "bar.workspace.origins".into(),
+                        bead::core::Value::list(rows),
+                    )])));
+                }
+            })) {
+                Ok(subscription) => self.origins_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=origins_subscription"),
+            }
+        }
         // A language switch rebuilds the views from the new catalog, then lets the
         // Rust-side projectors rewrite their text (live refresh, no restart).
         {
@@ -1800,6 +1870,7 @@ impl SceneSource for Runtime {
             && (name.starts_with("services.")
                 || name == "bar.title"
                 || name == "backend.workspace.switch"
+                || name == "backend.window.focus"
                 || (name == "status.pill.open"
                     && matches!(
                         event,

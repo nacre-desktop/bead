@@ -1,6 +1,7 @@
 {
   "bead.bar.active-window": "Active window",
   "bead.bar.audio-hint": "Audio: click mute, scroll volume",
+  "bead.bar.focus-window": "Focus window",
   "bead.bar.open-battery": "Open battery status",
   "bead.bar.open-bluetooth": "Open Bluetooth status",
   "bead.bar.open-calendar": "Open calendar",
@@ -188,7 +189,6 @@
   "bead.launcher.preferences-loading": "Launcher preferences are still loading",
   "bead.launcher.result-unavailable": "Result is not available",
   "bead.launcher.results": "Results",
-  "bead.launcher.search": "Search",
   "bead.launcher.search-everything": "Search everything",
   "bead.launcher.search-placeholder": "Search everything…",
   "bead.launcher.service-unavailable": "Launcher service unavailable",

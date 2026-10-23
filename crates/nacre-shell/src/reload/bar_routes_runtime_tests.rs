@@ -17,6 +17,7 @@ type Events = std::sync::mpsc::Receiver<UiEvent>;
 const ALL: &[&str] = &[
     "workspace.activate",
     "workspace.scroll",
+    "window.focus",
     "audio.adjust_volume",
     "audio.toggle_mute",
     "brightness.adjust",
@@ -36,6 +37,13 @@ fn tray() -> serde_json::Value {
             "sni:plain":{"title":"Plain app","visible":true,"item_is_menu":false,"attention":false,"icon_path":icon,"menu":menu},
         },"order":["sni:menu","sni:plain"]}
     })
+}
+
+fn compositor() -> serde_json::Value {
+    serde_json::json!({"available":true,"workspaces":{
+        "niri-workspace:3":{"originOutput":"B","originIndex":1,"visiting":true},
+        "niri-workspace:4":{"outputId":"A"},
+    }})
 }
 
 /// Fake daemon that accepts reconnects. `kick` drops the current link.
@@ -85,7 +93,10 @@ async fn daemon(
                 proto: 1,
                 min: 1,
                 boot: format!("bar-boot-{generation}"),
-                topics: std::collections::BTreeMap::from([("tray".into(), 1)]),
+                topics: std::collections::BTreeMap::from([
+                    ("tray".into(), 1),
+                    ("compositor".into(), 1),
+                ]),
                 methods: all,
                 frame_ms: None,
             };
@@ -101,7 +112,8 @@ async fn daemon(
                         }
                         Ok(Some(Message::Sub { topics })) => {
                             for topic in topics {
-                                let snap = Message::Snap { topic, seq: 0, data: tray() };
+                                let data = if topic == "compositor" { compositor() } else { tray() };
+                                let snap = Message::Snap { topic, seq: 0, data };
                                 framing::write(&mut writer, &snap).await.unwrap();
                             }
                         }
@@ -117,6 +129,9 @@ async fn daemon(
 }
 
 fn bar(client: &Client, output: &str) -> (Runtime, Events) {
+    bar_with(client, output, false)
+}
+fn bar_with(client: &Client, output: &str, origins: bool) -> (Runtime, Events) {
     let palette =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
     let colors = bead::render::Palette::read(&palette).unwrap();
@@ -143,7 +158,7 @@ fn bar(client: &Client, output: &str) -> (Runtime, Events) {
             (
                 "bead.workspaces".into(),
                 bead::core::Value::list(vec![
-                    serde_json::json!({"id":"native-a","name":"2","index":2,"active":true}),
+                    serde_json::json!({"id":"native-a","name":"2","index":2,"active":true,"hinted":true,"shown":1,"app1":"language","win1":"niri:1:window:7"}),
                 ]),
             ),
             (
@@ -160,6 +175,7 @@ fn bar(client: &Client, output: &str) -> (Runtime, Events) {
     runtime.tray_enabled = false;
     for name in [
         "backend.workspace.switch",
+        "backend.window.focus",
         "services.tray",
         "services.tray.secondary",
         "services.audio",
@@ -169,6 +185,10 @@ fn bar(client: &Client, output: &str) -> (Runtime, Events) {
     runtime.actions.grant("bar.test");
     let topic = Arc::new(client.topic("tray").unwrap()) as Arc<dyn bead::core::source::Source>;
     let mut runtime = runtime.with_bar_routes(client.clone(), topic).unwrap();
+    if origins {
+        let leased = client.lease_topic("compositor").unwrap();
+        runtime = runtime.with_origins_topic(Arc::new(leased)).unwrap();
+    }
     let (sender, events) = std::sync::mpsc::channel();
     let sender = std::sync::Mutex::new(sender);
     runtime.services(Box::new(move |event| {
@@ -255,6 +275,20 @@ async fn workspace_title_pill_and_tray_actions_are_scoped_published_calls() {
             serde_json::json!({"output":"right","direction":"next"})
         )
     );
+    // N0040: a window glyph focuses its window by the daemon's id, with no output.
+    at(
+        &mut runtime,
+        "backend.window.focus",
+        Some("niri:1:window:7"),
+        |x, y| UiEvent::Click { x, y },
+    );
+    assert_eq!(
+        call(&mut calls, "glyph click").await,
+        (
+            "window.focus".into(),
+            serde_json::json!({"window":"niri-window:7"})
+        )
+    );
     at(&mut runtime, "bar.title", None, |x, y| UiEvent::Scroll {
         x,
         y,
@@ -338,6 +372,10 @@ async fn unadvertised_methods_disable_controls_and_send_nothing() {
     .await;
     assert!(!flag(&runtime, "bar.tray.enabled"));
     assert!(node(&runtime, "backend.workspace.switch", None).is_none());
+    assert!(
+        node(&runtime, "backend.window.focus", None).is_none(),
+        "glyphs are display-only without window.focus"
+    );
     // The one advertised method still works; a title click is not a scroll route.
     at(&mut runtime, "bar.title", None, |x, y| UiEvent::Click {
         x,
@@ -393,5 +431,20 @@ async fn daemon_restart_keeps_the_bar_and_gates_controls_by_link() {
         call(&mut calls, "post-restart click").await.0,
         "workspace.activate"
     );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn compositor_topic_origins_reach_the_bar_stores() {
+    let (dir, client, _calls, _kick) = daemon(ALL).await;
+    let (mut runtime, events) = bar_with(&client, "right", true);
+    let expected = bead::core::Value::list(vec![
+        serde_json::json!({"id":"niri-workspace:3","output":"B","index":1,"visiting":true}),
+    ]);
+    until(&mut runtime, &events, |r| {
+        r.session.stores.get("bar.workspace.origins") == Some(&expected)
+    })
+    .await;
+    assert_eq!(runtime.workspaces.view.origins.len(), 1);
     std::fs::remove_dir_all(dir).ok();
 }

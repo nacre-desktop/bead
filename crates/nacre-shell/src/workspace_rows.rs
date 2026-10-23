@@ -16,15 +16,62 @@ pub struct View {
     pub count: u32,
     pub icons: Vec<String>,
     pub hints: bool,
+    /// The daemon `compositor` topic's niri origin fields (N0040); empty on Hyprland.
+    pub origins: Vec<Origin>,
 }
+/// A workspace's home output and index; `visiting` when it is shown on another output.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Origin {
+    /// Topic workspace id (`niri-workspace:<native id>`).
+    pub id: String,
+    pub output: String,
+    pub index: i64,
+    pub visiting: bool,
+}
+/// Bound on the origin rows kept from the topic (a visitor group per output at most).
+const MAX_ORIGINS: usize = 64;
 impl Default for View {
     fn default() -> Self {
         Self {
             count: 6,
             icons: Vec::new(),
             hints: true,
+            origins: Vec::new(),
         }
     }
+}
+/// The topic workspace rows that carry `originOutput`/`originIndex`, as the
+/// `bar.workspace.origins` store. A missing `visiting` is false.
+pub fn origin_rows(topic: &Json) -> Vec<Json> {
+    topic["workspaces"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(id, row)| {
+            Some(json!({
+                "id": id,
+                "output": row["originOutput"].as_str()?,
+                "index": row["originIndex"].as_i64()?,
+                "visiting": row["visiting"] == true,
+            }))
+        })
+        .take(MAX_ORIGINS)
+        .collect()
+}
+/// `niri-workspace:<n>`, the daemon's id for a local niri workspace id; other backends have none.
+fn topic_id(id: &bead::backends::Id) -> Option<String> {
+    let mut parts = id.0.split(':');
+    (parts.next()? == "niri" && parts.nth(1)? == "workspace")
+        .then(|| format!("niri-workspace:{}", parts.next().unwrap_or_default()))
+}
+/// `niri-window:<n>` or the Hyprland address: the daemon's id for a local window id.
+pub fn daemon_window_id(id: &str) -> Option<String> {
+    let mut parts = id.splitn(4, ':');
+    let (backend, _, kind, native) = (parts.next()?, parts.next()?, parts.next()?, parts.next()?);
+    (kind == "window" && !native.is_empty()).then(|| match backend {
+        "niri" => format!("niri-window:{native}"),
+        _ => native.to_owned(),
+    })
 }
 impl View {
     /// Takes the `bar.workspace.*` host stores `Prefs::bar_stores` publishes; true when
@@ -42,6 +89,20 @@ impl View {
         }
         if let Some(Value::Bool(hints)) = values.get("bar.workspace.hints") {
             next.hints = *hints;
+        }
+        if let Some(Value::List(origins)) = values.get("bar.workspace.origins") {
+            next.origins = origins
+                .iter()
+                .filter_map(|o| {
+                    Some(Origin {
+                        id: o["id"].as_str()?.to_owned(),
+                        output: o["output"].as_str()?.to_owned(),
+                        index: o["index"].as_i64()?,
+                        visiting: o["visiting"] == true,
+                    })
+                })
+                .take(MAX_ORIGINS)
+                .collect();
         }
         let changed = next != *self;
         *self = next;
@@ -218,8 +279,13 @@ impl Rows {
                 .iter()
                 .any(|win| win.workspace.as_ref() == Some(&w.id))
         };
+        let origin = |w: &Workspace| {
+            let id = topic_id(&w.id)?;
+            view.origins.iter().find(|o| o.id == id)
+        };
+        let visiting = |w: &Workspace| origin(w).map_or(w.visiting, |o| o.visiting);
         let shown: Vec<&Workspace> = if snapshot.capabilities.supports("perOutputWorkspaces") {
-            let mut own: Vec<_> = mine.iter().copied().filter(|w| !w.visiting).collect();
+            let mut own: Vec<_> = mine.iter().copied().filter(|w| !visiting(w)).collect();
             own.sort_by_key(|w| w.index);
             let named = |w: &Workspace| {
                 w.fixed_slot || (!w.name.is_empty() && !w.name.bytes().all(|b| b.is_ascii_digit()))
@@ -241,9 +307,11 @@ impl Rows {
             let mut visitors: Vec<_> = mine
                 .iter()
                 .copied()
-                .filter(|w| w.visiting && occupied(w))
+                .filter(|w| visiting(w) && occupied(w))
                 .collect();
-            visitors.sort_by_key(|w| w.index);
+            visitors.sort_by_key(|w| {
+                origin(w).map_or((String::new(), w.index), |o| (o.output.clone(), o.index))
+            });
             local.extend(visitors);
             local
         } else {
@@ -270,8 +338,17 @@ impl Rows {
         let available = 170f64.max(720f64.min(width / 2. - 130.).min(width - RIGHT - 220.));
         shown
             .iter()
-            .map(|w| {
+            .enumerate()
+            .map(|(at, w)| {
                 let windows = windows_of(w);
+                // QML `labelNumber`: a visitor keeps the number it has on its home output.
+                let number = origin(w).map_or(w.index, |o| o.index);
+                let visitor = visiting(w);
+                let home = origin(w).map(|o| o.output.as_str()).filter(|_| visitor);
+                let group_start = home.is_some()
+                    && (at == 0
+                        || shown.get(at - 1).and_then(|p| origin(p)).map(|o| &o.output)
+                            != origin(w).map(|o| &o.output));
                 let selected = active.as_ref() == Some(&w.id);
                 let hinted = selected && view.hints && !icon_mode;
                 let count = windows.len();
@@ -290,9 +367,12 @@ impl Rows {
                 }
                 let fit = if hinted { fit } else { 0 };
                 let mut row = serde_json::to_value(w).unwrap_or(Json::Null);
-                row["label"] = json!(w.index.to_string());
+                row["label"] = json!(number.to_string());
+                row["visiting"] = json!(visitor);
+                row["origin"] = json!(home.unwrap_or_default());
+                row["group_start"] = json!(group_start);
                 row["icon"] = json!(
-                    usize::try_from(w.index - 1)
+                    usize::try_from(number - 1)
                         .ok()
                         .and_then(|i| view.icons.get(i))
                         .map_or("", String::as_str)
@@ -308,12 +388,12 @@ impl Rows {
                     String::new()
                 });
                 for slot in 0..MAX_HINTS {
-                    row[format!("app{}", slot + 1)] = json!(
-                        windows
-                            .get(slot)
-                            .filter(|_| slot < fit)
-                            .map_or("", |win| self.glyph(&win.app_id, dirs))
-                    );
+                    let shown_window = windows.get(slot).filter(|_| slot < fit);
+                    row[format!("app{}", slot + 1)] =
+                        json!(shown_window.map_or("", |win| self.glyph(&win.app_id, dirs)));
+                    // The local id; the focus route maps it to the daemon's.
+                    row[format!("win{}", slot + 1)] =
+                        json!(shown_window.map_or("", |win| win.id.0.as_str()));
                 }
                 row
             })
@@ -465,6 +545,90 @@ mod tests {
             labels(&rows.rows_with(&used, Some("out"), &no_dirs)),
             ["1", "9"]
         );
+    }
+
+    #[test]
+    fn topic_origins_group_visitors_by_home_output_with_their_home_number() {
+        let niri = |native: i64, index: i64, active: bool| {
+            let mut w = workspace(index, &index.to_string(), false, active);
+            w.id = Id(format!("niri:3:workspace:{native}"));
+            w
+        };
+        let on = |native: i64, ws: usize| {
+            let mut win = window(ws, 0, "x");
+            win.workspace = Some(Id(format!("niri:3:workspace:{native}")));
+            win
+        };
+        let snap = snapshot(
+            vec![
+                niri(10, 1, true),
+                niri(11, 2, false),
+                niri(12, 3, false),
+                niri(13, 4, false),
+            ],
+            vec![on(11, 1), on(12, 2), on(13, 3)],
+            true,
+        );
+        let topic = json!({"workspaces":{
+            "niri-workspace:10":{"originOutput":"A","originIndex":1,"visiting":false},
+            "niri-workspace:11":{"originOutput":"B","originIndex":5,"visiting":true},
+            "niri-workspace:12":{"originOutput":"B","originIndex":2,"visiting":true},
+            "niri-workspace:13":{"originOutput":"C","originIndex":1,"visiting":true},
+            "niri-workspace:14":{"originOutput":"C"},
+        }});
+        let mut rows = Rows::default();
+        let stores = BTreeMap::from([(
+            "bar.workspace.origins".to_owned(),
+            Value::list(origin_rows(&topic)),
+        )]);
+        assert_eq!(origin_rows(&topic).len(), 4);
+        assert!(rows.view.follow(&stores));
+        let listed = rows.rows_with(&snap, Some("out"), &no_dirs);
+        let flat = |key: &str| -> Vec<String> {
+            listed
+                .iter()
+                .map(|r| {
+                    r[key]
+                        .as_str()
+                        .map_or_else(|| r[key].to_string(), str::to_owned)
+                })
+                .collect()
+        };
+        // Own workspaces first, then visitors by home output and home number.
+        assert_eq!(flat("label"), ["1", "2", "5", "1"]);
+        assert_eq!(flat("origin"), ["", "B", "B", "C"]);
+        assert_eq!(flat("group_start"), ["false", "true", "false", "true"]);
+        assert_eq!(flat("visiting"), ["false", "true", "true", "true"]);
+        // Without a ledger entry (absent fields) nothing is a visitor.
+        let mut bare = Rows::default();
+        assert_eq!(
+            labels(&bare.rows_with(&snap, Some("out"), &no_dirs)),
+            ["1", "2", "3", "4"]
+        );
+        bare.view.follow(&BTreeMap::from([(
+            "bar.workspace.origins".to_owned(),
+            Value::list(origin_rows(&json!({"workspaces":{"x":{"originOutput":1}}}))),
+        )]));
+        assert!(bare.view.origins.is_empty());
+    }
+
+    #[test]
+    fn local_ids_map_to_the_daemon_ids() {
+        assert_eq!(
+            daemon_window_id("niri:3:window:42").as_deref(),
+            Some("niri-window:42")
+        );
+        assert_eq!(
+            daemon_window_id("hyprland:3:window:0x55aa").as_deref(),
+            Some("0x55aa")
+        );
+        assert_eq!(daemon_window_id("niri:3:workspace:4"), None);
+        assert_eq!(daemon_window_id("w1"), None);
+        assert_eq!(
+            topic_id(&Id("niri:3:workspace:7".into())).as_deref(),
+            Some("niri-workspace:7")
+        );
+        assert_eq!(topic_id(&Id("hyprland:3:workspace:7".into())), None);
     }
 
     #[test]

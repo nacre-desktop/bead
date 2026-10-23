@@ -1,6 +1,7 @@
 {
   "bead.bar.active-window": "Bead top bar: accessible name of the title area that shows the focused window title.",
   "bead.bar.audio-hint": "Bead top bar: accessible name of the audio icon when no panel is available; click toggles mute, scrolling changes the volume.",
+  "bead.bar.focus-window": "Bead top bar: accessible name of a window glyph in the workspace capsule; clicking it focuses that window.",
   "bead.bar.open-battery": "Bead top bar: accessible name (screen reader and tooltip) of a button; opens the battery status panel.",
   "bead.bar.open-bluetooth": "Bead top bar: accessible name (screen reader and tooltip) of a button; opens the Bluetooth status panel.",
   "bead.bar.open-calendar": "Bead top bar: accessible name (screen reader and tooltip) of a button; opens the calendar popout from the clock.",
@@ -185,7 +186,6 @@
   "bead.launcher.preferences-loading": "Launcher: error when favorites are changed before the saved preferences were read.",
   "bead.launcher.result-unavailable": "Launcher: error when the chosen result vanished before it could be opened.",
   "bead.launcher.results": "Launcher: heading above a list of search results.",
-  "bead.launcher.search": "Launcher: sidebar entry for search.",
   "bead.launcher.search-everything": "Launcher: heading while searching across applications, files and actions.",
   "bead.launcher.search-placeholder": "Launcher: placeholder in the empty search box.",
   "bead.launcher.service-unavailable": "Launcher: error shown in the results area when the desktop daemon does not answer.",

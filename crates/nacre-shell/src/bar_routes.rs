@@ -28,6 +28,10 @@ pub enum Route {
     WorkspaceScroll {
         forward: bool,
     },
+    /// A window glyph on the bar (N0040: the output is optional, the window's own is used).
+    WindowFocus {
+        window: String,
+    },
     Volume {
         up: bool,
     },
@@ -52,6 +56,7 @@ impl Route {
         match self {
             Self::WorkspaceActivate { .. } => "workspace.activate",
             Self::WorkspaceScroll { .. } => "workspace.scroll",
+            Self::WindowFocus { .. } => "window.focus",
             Self::Volume { .. } => "audio.adjust_volume",
             Self::Mute => "audio.toggle_mute",
             Self::Brightness { .. } => "brightness.adjust",
@@ -61,7 +66,10 @@ impl Route {
     }
     /// Relative or toggling calls must never queue behind themselves.
     fn exclusive(&self) -> bool {
-        !matches!(self, Self::WorkspaceActivate { .. } | Self::Tray { .. })
+        !matches!(
+            self,
+            Self::WorkspaceActivate { .. } | Self::WindowFocus { .. } | Self::Tray { .. }
+        )
     }
     /// `None` when the route needs an output and none is known yet.
     fn params(&self, output: Option<&str>) -> Option<serde_json::Value> {
@@ -73,6 +81,7 @@ impl Route {
             Self::WorkspaceScroll { forward } => {
                 json!({"output": output?, "direction": if *forward { "next" } else { "prev" }})
             }
+            Self::WindowFocus { window } => json!({"window": window}),
             Self::Volume { up } => {
                 json!({"delta": if *up { VOLUME_STEP } else { -VOLUME_STEP }})
             }
@@ -113,6 +122,7 @@ fn stores(client: &Client) -> BTreeMap<String, Value> {
     BTreeMap::from([
         ("bar.workspace.enabled".into(), on("workspace.activate")),
         ("bar.tray.enabled".into(), on("tray.activate")),
+        ("bar.window.focus.enabled".into(), on("window.focus")),
     ])
 }
 
@@ -247,6 +257,12 @@ mod tests {
         assert_eq!(
             p(Route::WorkspaceScroll { forward: false }),
             json!({"output":"DP-1","direction":"prev"})
+        );
+        assert_eq!(
+            p(Route::WindowFocus {
+                window: "niri-window:7".into()
+            }),
+            json!({"window":"niri-window:7"})
         );
         assert_eq!(p(Route::Volume { up: false }), json!({"delta":-0.05}));
         assert_eq!(p(Route::Mute), json!({}));

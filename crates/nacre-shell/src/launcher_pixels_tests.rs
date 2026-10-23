@@ -24,6 +24,7 @@ fn harness(query: &str, scroll: f64) -> Result<Harness> {
         &root.join("palette.json"),
         BTreeMap::from([
             ("launcher.apps".into(), Value::list(rows)),
+            ("launcher.groups".into(), crate::launcher::fixture_groups()),
             ("launcher.result_count".into(), Value::Number(320.)),
             ("launcher.search.text".into(), Value::Text(query.into())),
             ("launcher.scroll.y".into(), Value::Number(scroll)),
@@ -243,6 +244,7 @@ fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
             Path::new("ui/main.luau"),
             &root.join("palette.json"),
             BTreeMap::from([
+                ("launcher.groups".into(), crate::launcher::fixture_groups()),
                 ("launcher.rail.order".into(), list(order)),
                 ("launcher.rail.hidden".into(), list(hidden)),
             ]),
@@ -263,16 +265,53 @@ fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
             })
             .collect())
     };
-    assert_eq!(rail(&[], &[])?, ["apps", "home", "search", "actions"]);
-    assert_eq!(rail(&[], &["search", "home"])?, ["apps", "home", "actions"]);
-    assert_eq!(rail(&[], &["apps", "actions"])?, ["home", "search"]);
+    let all = [
+        "home", "apps", "actions", "style", "setup", "software", "health", "learn", "power",
+    ];
+    assert_eq!(rail(&[], &[])?, all);
     assert_eq!(
-        rail(&["actions", "home"], &[])?,
-        ["home", "actions", "apps", "search"]
+        rail(&[], &["actions", "home", "power"])?,
+        [
+            "home", "apps", "style", "setup", "software", "health", "learn"
+        ]
+    );
+    assert_eq!(
+        rail(&["power", "style"], &[])?,
+        [
+            "home", "power", "style", "apps", "actions", "setup", "software", "health", "learn"
+        ]
     );
     assert_eq!(
         rail(&["apps", "style"], &["actions"])?,
-        ["home", "apps", "search"]
+        [
+            "home", "apps", "style", "setup", "software", "health", "learn", "power"
+        ]
     );
+    // Without `menu.groups` (older daemon) the rail keeps the groups every engine has.
+    let bare = {
+        let root = root();
+        let mut h = Harness::load(
+            &root,
+            Path::new("ui/main.luau"),
+            &root.join("palette.json"),
+            BTreeMap::new(),
+            Config {
+                width: 1920,
+                height: 1200,
+                scale: 1.,
+            },
+        )?;
+        h.render()?;
+        h.session
+            .view_nodes()
+            .iter()
+            .filter(|node| node.action.as_deref() == Some("navigate"))
+            .filter_map(|node| match &node.action_arg {
+                Some(Value::Text(id)) => Some(id.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(bare, ["home", "apps", "actions"]);
     Ok(())
 }

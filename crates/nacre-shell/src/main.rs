@@ -945,7 +945,9 @@ fn start(
                         runtime
                     };
                     let runtime = if let Some((client, tray)) = bar_routes {
-                        runtime.with_bar_routes(client, tray)?
+                        runtime
+                            .with_bar_routes(client.clone(), tray)?
+                            .with_workspace_origins(&client)?
                     } else {
                         runtime
                     };
@@ -1196,7 +1198,7 @@ mod tests {
         let scene = session.reload().unwrap();
         // Core navigation replaces the old six-entry placeholder sidebar. Check
         // its actual content and input contract rather than a primitive count.
-        for label in ["Nacre", "Applications", "Search", "Actions"] {
+        for label in ["Nacre", "Favorites", "Applications", "Actions"] {
             assert!(
                 scene
                     .primitives

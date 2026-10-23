@@ -6,6 +6,7 @@ local popouts=ui.resolve_for_check(ui.bind("bar.popouts"))
 local ws_on=ui.resolve_for_check(ui.bind("bar.workspace.enabled"))
 local tray_on=ui.resolve_for_check(ui.bind("bar.tray.enabled"))
 local dash_on=ui.resolve_for_check(ui.bind("bar.dashboard.enabled"))
+local focus_on=ui.resolve_for_check(ui.bind("bar.window.focus.enabled"))
 local function glyph(id,text,color)
     return ui.Text{id=id,text=text,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color=color or "secondary",text_align="center"}
 end
@@ -18,11 +19,17 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
                 local label=item.label or item.name or ""
                 local on=item.active
                 local activate=ws_on and ui.action("backend.workspace.switch",item.id) or nil
+                -- A visiting workspace group starts with its home output's name (QML groupSpace, 48 px).
+                local gs=item.group_start==true and 48 or 0
+                local button
+                local width
+                local overlays={}
                 if item.icon_mode then
                     -- workspaceIcons: 46 px cells, accent fill when active, symbol and number, dot when occupied.
                     local ink=on and "onPrimary" or "onSurfaceVariant"
                     local icon=item.icon or ""
-                    return kit.Button{id="workspace",width=46,height=28,radius=14,padding=0,fill=on and accent or "surfaceContainer",hover_fill=on and accent or ui.alpha(accent,0.1),shrink=0,
+                    width=46
+                    button=kit.Button{id="workspace",position="absolute",left=gs,top=0,width=46,height=28,radius=14,padding=0,fill=on and accent or "surfaceContainer",hover_fill=on and accent or ui.alpha(accent,0.1),shrink=0,
                         on_activate=activate,
                         ui.Row{id="face",position="absolute",left=0,top=2,width=46,height=24,gap=4,align="center",justify="center",
                             ui.Text{id="symbol",visible=icon~="",text=icon,width=icon~="" and 18 or 0,height=24,shrink=0,family="Material Symbols Rounded",font_size=15,text_align="center",color=ink},
@@ -30,31 +37,47 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
                         },
                         ui.Box{id="occupied",position="absolute",left=21,top=23,width=3,height=3,radius=2,visible=item.occupied==true,fill=on and "onPrimary" or accent},
                     }
-                end
-                -- workspaceWindowHints: category glyphs of the active workspace's windows beside its pearl.
-                local shown=item.shown or 0
-                local more=item.overflow or ""
-                local hinted=item.hinted==true
-                local apps={}
-                for slot=1,3 do
-                    local glyph_name=item["app"..slot]
-                    if glyph_name and glyph_name~="" then
-                        apps[#apps+1]=ui.Text{id="app"..slot,text=glyph_name,width=15,height=28,shrink=0,family="Material Symbols Rounded",font_size=14,text_align="center",color="onSurface"}
+                else
+                    -- workspaceWindowHints: category glyphs of the active workspace's windows beside its pearl.
+                    local shown=item.shown or 0
+                    local more=item.overflow or ""
+                    local hinted=item.hinted==true
+                    local apps={}
+                    for slot=1,3 do
+                        local glyph_name=item["app"..slot]
+                        if glyph_name and glyph_name~="" then
+                            apps[#apps+1]=ui.Text{id="app"..slot,text=glyph_name,width=15,height=28,shrink=0,family="Material Symbols Rounded",font_size=14,text_align="center",color="onSurface"}
+                            -- Clicking a glyph focuses its window (window.focus); a sibling, as a button cannot nest in a button.
+                            local window=item["win"..slot]
+                            if focus_on and window and window~="" then
+                                overlays[#overlays+1]=kit.Button{id="focus"..slot,position="absolute",left=gs+33+(slot-1)*18,top=0,width=15,height=28,radius=7,padding=0,fill="transparent",hover_fill=ui.alpha("onSurface",0.14),shrink=0,
+                                    aria_label=ui.tr("bead.bar.focus-window"),on_activate=ui.action("backend.window.focus",window),
+                                    ui.Box{id="hit",width=15,height=28}}
+                            end
+                        end
                     end
+                    if more~="" then
+                        apps[#apps+1]=ui.Text{id="more",text=more,width=17,height=28,shrink=0,font_size=12,color="onSurface"}
+                    end
+                    width=32+shown*18+(more~="" and 20 or 0)+(hinted and 4 or 0)
+                    local face=hinted and ui.tint("surfaceContainer",accent,0.15) or "surfaceContainer"
+                    button=kit.Button{id="workspace",position="absolute",left=gs,top=0,width=width,height=28,radius=14,padding=0,fill=face,hover_fill=hinted and face or "surfaceContainerHigh",shrink=0,
+                        border_width=hinted and 1 or 0,border_color=ui.alpha(accent,0.24),
+                        on_activate=activate,
+                        ui.Box{id="halo",position="absolute",left=3,top=1,width=26,height=26,radius=13,fill=on and ui.alpha(accent,0.3) or "surfaceContainer"},
+                        ui.Box{id="pearl",position="absolute",left=6,top=4,width=20,height=20,radius=10,border_width=on and 0 or 1,border_color=accent,fill=on and accent or "surfaceContainer"},
+                        ui.Text{id="number",position="absolute",left=6,top=5,text=label,width=20,height=20,font_size=13,family="IBM Plex Sans",text_align="center",color=on and "onPrimary" or "onSurfaceVariant"},
+                        ui.Row{id="apps",position="absolute",left=33,top=0,width=math.max(0,width-33),height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)},
+                    }
                 end
-                if more~="" then
-                    apps[#apps+1]=ui.Text{id="more",text=more,width=17,height=28,shrink=0,font_size=12,color="onSurface"}
+                local kids={}
+                if gs>0 then
+                    kids[#kids+1]=ui.Box{id="group-rule",position="absolute",left=5,top=5,width=1,height=18,fill="outlineVariant"}
+                    kids[#kids+1]=ui.Text{id="group-origin",position="absolute",left=10,top=5,width=36,height=18,text="▣ "..(item.origin or ""),font_size=11,color="onSurfaceVariant"}
                 end
-                local width=32+shown*18+(more~="" and 20 or 0)+(hinted and 4 or 0)
-                local face=hinted and ui.tint("surfaceContainer",accent,0.15) or "surfaceContainer"
-                return kit.Button{id="workspace",width=width,height=28,radius=14,padding=0,fill=face,hover_fill=hinted and face or "surfaceContainerHigh",shrink=0,
-                    border_width=hinted and 1 or 0,border_color=ui.alpha(accent,0.24),
-                    on_activate=activate,
-                    ui.Box{id="halo",position="absolute",left=3,top=1,width=26,height=26,radius=13,fill=on and ui.alpha(accent,0.3) or "surfaceContainer"},
-                    ui.Box{id="pearl",position="absolute",left=6,top=4,width=20,height=20,radius=10,border_width=on and 0 or 1,border_color=accent,fill=on and accent or "surfaceContainer"},
-                    ui.Text{id="number",position="absolute",left=6,top=5,text=label,width=20,height=20,font_size=13,family="IBM Plex Sans",text_align="center",color=on and "onPrimary" or "onSurfaceVariant"},
-                    ui.Row{id="apps",position="absolute",left=33,top=0,width=math.max(0,width-33),height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)},
-                }
+                kids[#kids+1]=button
+                for _,overlay in ipairs(overlays) do kids[#kids+1]=overlay end
+                return ui.Box{id="cell",width=gs+width,height=28,shrink=0,table.unpack(kids)}
             end},
         },
         popouts and dash_on and kit.Button{id="dashboard",width=30,height=30,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-dashboard"),on_activate=ui.action("view.open","dashboard-today"),
