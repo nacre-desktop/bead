@@ -402,7 +402,7 @@ def run_arm(args):
         arm.start_shell()
         arm.drive(args.states)
         shell_log = (arm.logs / 'shell.log').read_text(errors='replace')
-        (arm.out / 'shell.log.txt').write_text(shell_log[-20000:])
+        (arm.out / 'shell.log.txt').write_text(shell_log[:6000] + '\n...\n' + shell_log[-14000:])
         (arm.out / 'daemon.log.txt').write_text((arm.logs / 'daemon.log').read_text(errors='replace')[-8000:])
         return 0
     except Exception as error:

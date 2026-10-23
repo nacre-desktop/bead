@@ -13,7 +13,7 @@ local function glyph(id,text,color)
 end
 return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",
     ui.Row{id="left",height=34,gap=12,align="center",
-        launcher and kit.Button{id="brand",width=30,height=30,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-launcher"),on_activate=ui.action("launcher.open"),ui.Image{path="bar/assets/nacre-logo.svg",themed=true,width=30,height=30}} or ui.Image{id="brand",path="bar/assets/nacre-logo.svg",themed=true,width=30,height=30},
+        launcher and kit.Button{id="brand",width=30,height=30,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-launcher"),on_activate=ui.action("launcher.open"),ui.Image{path="bar/assets/nacre-logo.themed.svg",width=30,height=30}} or ui.Image{id="brand",path="bar/assets/nacre-logo.themed.svg",width=30,height=30},
         ui.Row{id="capsule",height=34,padding_left=5,padding_right=5,gap=2,radius=17,fill="surfaceContainer",align="center",
             ui.Repeat{id="workspaces",model=ui.bind("bead.workspaces"),key="id",render=function(item)
                 local accent=({"primary","secondary","tertiary"})[((item.index or 1)-1)%3+1]

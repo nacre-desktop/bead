@@ -15,6 +15,7 @@ pub mod script;
 mod session;
 pub mod status_pill;
 pub mod text_style;
+mod themed;
 pub mod transcript;
 mod watcher;
 use bead_core::{Stores, Value};

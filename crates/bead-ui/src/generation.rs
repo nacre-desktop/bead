@@ -489,6 +489,23 @@ impl Generation {
         palette: &Palette,
         viewport: (f32, f32),
     ) -> Result<(Scene, Vec<Node>), Diagnostic> {
+        let (mut scene, nodes) = self.materialize_view(stores, palette, viewport)?;
+        for primitive in &mut scene.primitives {
+            if let Primitive::Image { path, .. } = primitive
+                && path.to_str().is_some_and(|p| p.ends_with(".themed.svg"))
+            {
+                *path = crate::themed::themed_asset(path, palette, &mut scene.asset_data)
+                    .map_err(|e| Diagnostic::new(path, 1, 1, e))?;
+            }
+        }
+        Ok((scene, nodes))
+    }
+    fn materialize_view(
+        &self,
+        stores: &Stores,
+        palette: &Palette,
+        viewport: (f32, f32),
+    ) -> Result<(Scene, Vec<Node>), Diagnostic> {
         if let Some(entry) = &self.markup_entry {
             use frontend::FrontEnd;
             self.script.begin();
