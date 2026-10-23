@@ -26,7 +26,7 @@ with `PIPEWIRE_REMOTE=bead-private-unavailable`, so audio is equally absent.)
 The first-presentation wait also aborts immediately on any `UI_ERROR`.
 The helper examples (`private-pointer`, `tray-fixture`, `notification-client`)
 are staged under `artifacts/examples/`; copy them to `<repo>/target/release/examples/`
-if the checkout lacks them. The 2026-10-23 candidate was built from `fdd5cc1`
+if the checkout lacks them. The 2026-10-23 candidate was built from `7f7cd74`
 with Rust 1.99.0, `cargo build -p nacre-shell --release --locked`.
 
 The checkout's `shell/tests/fixtures/dashboard` tree must match the fixture-tree

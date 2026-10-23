@@ -124,7 +124,7 @@ exposed a harness defect, not a product result:
    `shell/` tree raised a Luau `UI_ERROR`, so `source_error=true` never cleared.
    Not an audio problem (both arms run with PipeWire unavailable). Fixed by a
    manifest `shell_git_tree` gate and a fail-fast on `UI_ERROR`; candidate rebuilt
-   from fdd5cc1 and a six-arm desktop rehearsal was ARM_VALID.
+   from 7f7cd74 and a six-arm desktop rehearsal was ARM_VALID.
 The swap reset works on the laptop (7.3 GiB → 22 MiB, with MemAvailable >
 swap + 8 GiB). Evidence: ~/.local/share/nacre/ai/lead/bead-laptop-reference-20261022/evidence-*.
 
