@@ -61,6 +61,10 @@ fn welcome(with_pair: bool) -> Message {
             "bluetooth.pair",
             "bluetooth.pair.respond",
             "bluetooth.pair.cancel",
+            "bluetooth.set_power",
+            "bluetooth.set_discovery",
+            "bluetooth.connect",
+            "bluetooth.disconnect",
         ]
     } else {
         &[]
@@ -392,14 +396,19 @@ async fn the_device_list_orders_rows_and_only_unpaired_devices_offer_pair()
     assert_eq!(ids, ["dev:dev_A", "dev:dev_B", "dev:dev_C"]);
     assert_eq!(rows[0]["caption"], "80%");
     assert_eq!(rows[0]["icon"], "headphones");
-    assert_eq!(rows[0]["action"], "");
+    assert_eq!(rows[0]["action"], "Disconnect");
+    assert_eq!(rows[0]["kind"], "link");
+    assert_eq!(rows[0]["battery"], "battery_full");
+    assert_eq!(rows[0]["enabled"], true);
     assert_eq!(rows[1]["caption"], "Ready to pair");
     assert_eq!(rows[1]["icon"], "keyboard");
     assert_eq!(rows[1]["action"], "Pair");
     assert_eq!(rows[1]["enabled"], true);
     assert_eq!(rows[2]["caption"], "Paired");
     assert_eq!(rows[2]["icon"], "smartphone");
-    assert_eq!(rows[2]["enabled"], false);
+    assert_eq!(rows[2]["action"], "Connect");
+    assert_eq!(rows[2]["battery"], "");
+    assert_eq!(rows[2]["enabled"], true);
     finish(runtime, client, daemon, lab).await
 }
 
@@ -773,4 +782,272 @@ async fn the_pin_stays_out_of_traces_summaries_and_saved_state()
     assert_eq!(method, "bluetooth.pair.cancel");
     assert!(!params.to_string().contains(PIN));
     finish(runtime, client, daemon, lab).await
+}
+
+// B0062: the live device list, Find devices, Connect/Disconnect.
+
+/// The fixture topic with changes: `adapter` fields and `(device, field, value)` edits.
+fn topic(
+    powered: bool,
+    discovering: bool,
+    edits: &[(&str, &str, serde_json::Value)],
+) -> serde_json::Value {
+    let mut state = devices();
+    state["adapters"]["items"]["hci0"]["powered"] = powered.into();
+    state["adapters"]["items"]["hci0"]["discovering"] = discovering.into();
+    for (device, field, value) in edits {
+        state["devices"]["items"][*device][*field] = value.clone();
+    }
+    state
+}
+fn press_row(runtime: &mut Runtime, action: &str, device: &str) {
+    let key = Value::Text(format!("dev:{device}"));
+    click_node(runtime, |n| {
+        n.action.as_deref() == Some(action) && n.action_arg.as_ref() == Some(&key)
+    });
+}
+fn press(runtime: &mut Runtime, action: &str) {
+    click_node(runtime, |n| n.action.as_deref() == Some(action));
+}
+/// A press on a row or button that is not drawn as active: the host must refuse it itself.
+fn force(runtime: &Runtime, scan: bool, device: &str) {
+    let status = runtime.status.as_ref().unwrap();
+    if scan {
+        status.bluetooth_scan(Arc::new(|| {}));
+    } else {
+        status.bluetooth_link(&format!("dev:{device}"), Arc::new(|| {}));
+    }
+}
+fn flag(runtime: &Runtime, name: &str) -> bool {
+    matches!(runtime.session.stores.get(name), Some(Value::Bool(true)))
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_list_follows_the_topic_and_says_why_it_is_empty()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (lab, client, mut runtime, mut daemon) = setup(true).await?;
+    assert_eq!(text(&runtime, "bluetooth.empty_text"), "");
+    // A device that appears later, and one that disappears.
+    let mut state = devices();
+    state["devices"]["items"]["dev_D"] = serde_json::json!({"adapter":"hci0","name":"Fixture mouse","connected":false,"paired":true,"trusted":true,"pairing":false,"battery":15,"icon":"input-mouse"});
+    state["devices"]["order"] = serde_json::json!(["dev_C", "dev_B", "dev_D", "dev_A"]);
+    daemon.snap("bluetooth", state);
+    until(&mut runtime, |r| list(r, "bluetooth.devices").len() == 4).await;
+    let rows = list(&runtime, "bluetooth.devices");
+    assert_eq!(rows[2]["label"], "Fixture mouse");
+    assert_eq!(rows[2]["caption"], "15%");
+    assert_eq!(rows[2]["battery"], "battery_1_bar");
+    // The adapter goes off: rows stay, nothing is actionable, the empty text says so.
+    daemon.snap("bluetooth", topic(false, false, &[]));
+    until(&mut runtime, |r| {
+        text(r, "bluetooth.empty_text") == "Bluetooth is off"
+    })
+    .await;
+    assert!(
+        list(&runtime, "bluetooth.devices")
+            .iter()
+            .all(|r| r["enabled"] == false)
+    );
+    assert!(!flag(&runtime, "bluetooth.scan_enabled"));
+    // On with no devices.
+    let mut empty = topic(true, false, &[]);
+    empty["devices"] = serde_json::json!({"items":{},"order":[]});
+    daemon.snap("bluetooth", empty);
+    until(&mut runtime, |r| {
+        text(r, "bluetooth.empty_text") == "No known devices"
+    })
+    .await;
+    // No adapter at all.
+    let mut none = topic(true, false, &[]);
+    none["adapters"] = serde_json::json!({"items":{},"order":[]});
+    none["devices"] = serde_json::json!({"items":{},"order":[]});
+    daemon.snap("bluetooth", none);
+    until(&mut runtime, |r| {
+        text(r, "bluetooth.empty_text") == "No Bluetooth adapter"
+    })
+    .await;
+    finish(runtime, client, daemon, lab).await
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn find_devices_scans_until_the_daemon_stops_it() -> Result<(), Box<dyn std::error::Error>> {
+    let (lab, client, mut runtime, mut daemon) = setup(true).await?;
+    assert_eq!(text(&runtime, "bluetooth.scan_label"), "Find devices");
+    assert!(flag(&runtime, "bluetooth.scan_enabled"));
+    press(&mut runtime, "bluetooth.scan");
+    let (id, method, params) = daemon.call().await;
+    assert_eq!(method, "bluetooth.set_discovery");
+    assert_eq!(
+        params,
+        serde_json::json!({"adapter":"hci0","discovering":true})
+    );
+    // Pending: already shown as scanning, and a second press sends nothing.
+    until(&mut runtime, |r| flag(r, "bluetooth.scanning")).await;
+    assert_eq!(text(&runtime, "bluetooth.scan_label"), "Scanning…");
+    assert!(!flag(&runtime, "bluetooth.scan_enabled"));
+    force(&runtime, true, "");
+    daemon.ok(id);
+    daemon.snap("bluetooth", topic(true, true, &[]));
+    until(&mut runtime, |r| flag(r, "bluetooth.scanning")).await;
+    assert!(!flag(&runtime, "bluetooth.scan_enabled"));
+    // A device found by the scan shows up with its signal-less row.
+    let mut found = topic(true, true, &[]);
+    found["devices"]["items"]["dev_N"] = serde_json::json!({"adapter":"hci0","name":"Found speaker","connected":false,"paired":false,"trusted":false,"pairing":false,"icon":"audio-card","rssi":-60});
+    found["devices"]["order"] = serde_json::json!(["dev_C", "dev_B", "dev_A", "dev_N"]);
+    daemon.snap("bluetooth", found);
+    until(&mut runtime, |r| list(r, "bluetooth.devices").len() == 4).await;
+    // The daemon's 60 s stop: the topic says so, Find devices is back, and closing sends nothing.
+    daemon.snap("bluetooth", topic(true, false, &[]));
+    until(&mut runtime, |r| flag(r, "bluetooth.scan_enabled")).await;
+    assert_eq!(text(&runtime, "bluetooth.scan_label"), "Find devices");
+    drop(runtime);
+    Source::stop(&client).await?;
+    assert!(
+        daemon
+            .drain()
+            .await
+            .iter()
+            .all(|m| !matches!(m, Message::Call { .. }))
+    );
+    drop(lab);
+    Ok(())
+}
+#[tokio::test(flavor = "current_thread")]
+async fn a_refused_scan_says_so_and_closing_stops_a_running_one()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (lab, client, mut runtime, mut daemon) = setup(true).await?;
+    press(&mut runtime, "bluetooth.scan");
+    let (id, _, _) = daemon.call().await;
+    daemon.err(
+        id,
+        ErrorCode::Unavailable,
+        "Bluetooth discovery failed",
+        true,
+    );
+    until(&mut runtime, |r| {
+        text(r, "bluetooth.list_message") == "Could not search for devices."
+    })
+    .await;
+    assert!(flag(&runtime, "bluetooth.scan_enabled"));
+    // A scan that runs when the panel closes is stopped.
+    press(&mut runtime, "bluetooth.scan");
+    let (id, _, _) = daemon.call().await;
+    daemon.ok(id);
+    daemon.snap("bluetooth", topic(true, true, &[]));
+    until(&mut runtime, |r| {
+        flag(r, "bluetooth.scanning") && text(r, "bluetooth.list_message").is_empty()
+    })
+    .await;
+    drop(runtime);
+    let (_, method, params) = daemon.call().await;
+    assert_eq!(method, "bluetooth.set_discovery");
+    assert_eq!(
+        params,
+        serde_json::json!({"adapter":"hci0","discovering":false})
+    );
+    Source::stop(&client).await?;
+    drop(daemon.out);
+    let _ = daemon.server.await;
+    drop(lab);
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn connect_and_disconnect_show_a_busy_row_and_follow_the_topic()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (lab, client, mut runtime, mut daemon) = setup(true).await?;
+    press_row(&mut runtime, "bluetooth.link", "dev_C");
+    let (id, method, params) = daemon.call().await;
+    assert_eq!(method, "bluetooth.connect");
+    assert_eq!(params, serde_json::json!({"device":"dev_C"}));
+    // The pressed row is busy; every other action waits for it.
+    until(&mut runtime, |r| {
+        list(r, "bluetooth.devices")[2]["action"] == "Connecting…"
+    })
+    .await;
+    let rows = list(&runtime, "bluetooth.devices");
+    assert!(rows.iter().all(|r| r["enabled"] == false));
+    assert!(!flag(&runtime, "bluetooth.scan_enabled"));
+    force(&runtime, false, "dev_A");
+    daemon.ok(id);
+    daemon.snap(
+        "bluetooth",
+        topic(true, false, &[("dev_C", "connected", true.into())]),
+    );
+    until(&mut runtime, |r| {
+        list(r, "bluetooth.devices")[1]["action"] == "Disconnect"
+    })
+    .await;
+    assert_eq!(list(&runtime, "bluetooth.devices")[1]["enabled"], true);
+    // Disconnect the first row; the daemon is busy.
+    press_row(&mut runtime, "bluetooth.link", "dev_A");
+    let (id, method, params) = daemon.call().await;
+    assert_eq!(method, "bluetooth.disconnect");
+    assert_eq!(params, serde_json::json!({"device":"dev_A"}));
+    until(&mut runtime, |r| {
+        list(r, "bluetooth.devices")[0]["action"] == "Disconnecting…"
+    })
+    .await;
+    daemon.err(id, ErrorCode::Busy, "Bluetooth device is busy", true);
+    until(&mut runtime, |r| {
+        text(r, "bluetooth.list_message") == "Bluetooth is busy. Try again."
+    })
+    .await;
+    assert_eq!(list(&runtime, "bluetooth.devices")[0]["enabled"], true);
+    // A disconnect that fails.
+    press_row(&mut runtime, "bluetooth.link", "dev_C");
+    let (id, method, _) = daemon.call().await;
+    assert_eq!(method, "bluetooth.disconnect");
+    daemon.err(
+        id,
+        ErrorCode::Unavailable,
+        "Bluetooth connection failed",
+        true,
+    );
+    until(&mut runtime, |r| {
+        text(r, "bluetooth.list_message") == "Could not change the connection."
+    })
+    .await;
+    finish(runtime, client, daemon, lab).await
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_scan_is_stopped_before_a_connection_and_unadvertised_methods_send_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (lab, client, mut runtime, mut daemon) = setup(true).await?;
+    daemon.snap("bluetooth", topic(true, true, &[]));
+    until(&mut runtime, |r| flag(r, "bluetooth.scanning")).await;
+    press_row(&mut runtime, "bluetooth.link", "dev_C");
+    let (stop, method, params) = daemon.call().await;
+    assert_eq!(method, "bluetooth.set_discovery");
+    assert_eq!(
+        params,
+        serde_json::json!({"adapter":"hci0","discovering":false})
+    );
+    daemon.ok(stop);
+    let (_, method, _) = daemon.call().await;
+    assert_eq!(method, "bluetooth.connect");
+    finish(runtime, client, daemon, lab).await?;
+
+    let (lab, client, mut runtime, mut daemon) = setup(false).await?;
+    force(&runtime, true, "");
+    force(&runtime, false, "dev_C");
+    project(&mut runtime);
+    assert!(
+        list(&runtime, "bluetooth.devices")
+            .iter()
+            .all(|r| r["enabled"] == false)
+    );
+    assert!(!flag(&runtime, "bluetooth.scan_enabled"));
+    drop(runtime);
+    Source::stop(&client).await?;
+    assert!(
+        daemon
+            .drain()
+            .await
+            .iter()
+            .all(|m| !matches!(m, Message::Call { .. }))
+    );
+    drop(lab);
+    Ok(())
 }

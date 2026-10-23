@@ -43,6 +43,7 @@ HERE = Path(__file__).resolve().parent
 #   ('qml_settings', page)          QML only: `quickshell ipc call settingsApp open PAGE` (Bead: ('shell', 'nacre', 'settings', PAGE))
 #   ('only', 'qml'|'bead', step)    a step for one arm (the shells' preview/trigger routes differ)
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
+#   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
 STATES = {
     'idle': ([], [], 0),
     'launcher': ([('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
@@ -57,10 +58,15 @@ STATES = {
     'popout-calendar': ([('ui', 'nacre', 'popout', 'calendar', '1700')], [('ui', 'nacre', 'close')], 1.0),
     'popout-network': ([('ui', 'nacre', 'popout', 'network', '1560')], [('ui', 'nacre', 'close')], 1.0),
     'popout-bluetooth': ([('ui', 'nacre', 'popout', 'bluetooth', '1600')], [('ui', 'nacre', 'close')], 0),
+    'popout-bluetooth-scanning': ([('bluez', 'discovering', 'on'), ('sleep', 2.5), ('ui', 'nacre', 'popout', 'bluetooth', '1600')],
+                                  [('ui', 'nacre', 'close'), ('bluez', 'reset', 'now')], 0),
+    'popout-bluetooth-off': ([('bluez', 'power', 'off'), ('sleep', 1.0), ('ui', 'nacre', 'popout', 'bluetooth', '1600')],
+                             [('ui', 'nacre', 'close'), ('bluez', 'reset', 'now')], 0),
     'popout-battery': ([('ui', 'nacre', 'popout', 'battery', '1640')], [('ui', 'nacre', 'close')], 0),
     'popout-audio': ([('ui', 'nacre', 'popout', 'audio', '1520')], [('ui', 'nacre', 'close')], 0),
     'control-center': ([('ui', 'nacre', 'controls', 'home')], [('ui', 'nacre', 'close')], 1.2),
     'control-network': ([('ui', 'nacre', 'controls', 'network')], [('ui', 'nacre', 'close')], 0),
+    'control-bluetooth': ([('ui', 'nacre', 'controls', 'bluetooth')], [('ui', 'nacre', 'close')], 0),
     'notification': ([('notify', 'Parity check', 'The same notification in both shells.'), ('sleep', 1.5)], [('ui', 'nacre', 'close')], 1.2),
     'osd-volume': ([('only', 'qml', ('ui', 'nacre', 'previewFeedback', 'volume')), ('only', 'bead', ('level', 'sink', 0.62))],
                    [('ui', 'nacre', 'close')], 0),
@@ -259,6 +265,11 @@ class Arm:
         for name in ['pactl', 'wpctl']:
             (fake / name).chmod(0o755)
         self.env['PATH'] = f'{fake}:' + self.env['PATH']
+        # A fake org.bluez on the private bus (the "system" bus of both shells): the same adapter and devices on both arms.
+        self.spawn([sys.executable, str(HERE / 'fake-bluez.py')], 'fake-bluez')
+        wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.bluez', '--object-path', '/',
+                                                       '--method', 'org.freedesktop.DBus.ObjectManager.GetManagedObjects'])),
+                   20, 'the fake org.bluez')
         command = [str(Path(a.bead_bin).resolve() / 'nacre-helper'), 'daemon']
         if self.name == 'bead':
             command.append('--notifications=daemon')
@@ -381,6 +392,9 @@ class Arm:
                     self.steps([step[2]])
             elif kind == 'level':
                 self.set_level(step[1], step[2])
+            elif kind == 'bluez':
+                self.run(['gdbus', 'call', '--session', '--dest', 'org.bead.FakeBluez', '--object-path', '/ctl',
+                          '--method', 'org.bead.FakeBluez.Set', step[1], step[2]], check=False)
 
     def grab(self, path, scale=None, region=None):
         command = ['grim'] + (['-g', region] if region else []) + (['-s', str(scale)] if scale else []) + [str(path)]

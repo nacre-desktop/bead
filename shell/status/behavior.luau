@@ -26,6 +26,8 @@ return {stores={
     end,
     ["bluetooth.toggle_power"]=function(_) end,
     ["bluetooth.pair"]=function(_) end,
+    ["bluetooth.scan"]=function(_) end,
+    ["bluetooth.link"]=function(_) end,
     ["bluetooth.pair_respond"]=function(_) end,
     ["bluetooth.pair_cancel"]=function(_) end,
     ["bluetooth.pair_retry"]=function(_) end,

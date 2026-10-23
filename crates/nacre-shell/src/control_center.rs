@@ -480,8 +480,7 @@ impl ControlCenter {
             ),
             "network.wifi" => (self.can("network.set_wifi"), false, false),
             "bluetooth.power" => (
-                self.can("bluetooth.set_enabled")
-                    || (reading.node.is_some() && self.can("bluetooth.set_power")),
+                reading.node.is_some() && self.can("bluetooth.set_power"),
                 false,
                 false,
             ),
@@ -582,9 +581,6 @@ impl ControlCenter {
             "audio.output" => Some(("audio.set_mute", json!({"target": "sink", "muted": !on}))),
             "audio.input" => Some(("audio.set_mute", json!({"target": "source", "muted": !on}))),
             "network.wifi" => Some(("network.set_wifi", json!({"enabled": !on}))),
-            "bluetooth.power" if self.can("bluetooth.set_enabled") => {
-                Some(("bluetooth.set_enabled", json!({"enabled": !on})))
-            }
             "bluetooth.power" => reading.node.map(|adapter| {
                 (
                     "bluetooth.set_power",

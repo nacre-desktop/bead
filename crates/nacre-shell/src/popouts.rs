@@ -272,6 +272,9 @@ fn status_at_root_mode(
     } else if matches!(kind, crate::status_views::Kind::Network) && client.is_some() {
         // The controlled network popout carries the hidden/saved footer.
         (310., crate::status_views::NETWORK_BASE_HEIGHT as f32)
+    } else if matches!(kind, crate::status_views::Kind::Bluetooth) && client.is_some() {
+        // The controlled Bluetooth popout is the QML popup's 352 px with its device cards.
+        (352., 100.)
     } else {
         (310., 222.)
     };

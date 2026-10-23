@@ -6,15 +6,15 @@
 //! A typed PIN or passkey lives only in the `bluetooth.secret` input store until the respond call
 //! is built; the host clears it after every action. It is never put in a message, store
 //! projection or log, and the `.secret` suffix keeps it out of traces and saved state.
-use super::{BluetoothCandidate, BluetoothControl, Status, join, line, tr};
+use super::{BluetoothCandidate, BluetoothControl, Status, devices, join, line, tr};
 use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
 use bead::core::{
     Stores, Value,
     source::{Snapshot, Source, Subscription},
 };
 use nacre_protocol::core_services::{
-    BluetoothDevice, BluetoothPairRespond, BluetoothPairingState, BluetoothState, CoreSnapshot,
-    DeviceTarget, EntityId, PairingKind, pairing_text_valid,
+    BluetoothPairRespond, BluetoothPairingState, CoreSnapshot, DeviceTarget, EntityId, PairingKind,
+    pairing_text_valid,
 };
 use std::{
     collections::BTreeMap,
@@ -27,7 +27,6 @@ use std::{
 
 /// The single store that holds a typed PIN or passkey.
 pub(crate) const SECRET_STORE: &str = "bluetooth.secret";
-const MAX_DEVICE_ROWS: usize = 5;
 const PAIR_CALL: &str = "bluetooth.pair";
 /// `begin_call` refuses deadlines above two minutes; the daemon method may wait longer.
 const MAX_CALL: Duration = Duration::from_secs(120);
@@ -110,7 +109,7 @@ impl Drop for Flow {
     }
 }
 /// Keep a sent call alive until it completes (a dropped queued ticket would cancel it).
-fn detach(mut ticket: CallTicket) {
+pub(super) fn detach(mut ticket: CallTicket) {
     std::thread::spawn(move || {
         for _ in 0..150 {
             if ticket.try_take().is_some() {
@@ -120,7 +119,7 @@ fn detach(mut ticket: CallTicket) {
         }
     });
 }
-fn advertised(client: &Client, name: &str) -> Option<u32> {
+pub(super) fn advertised(client: &Client, name: &str) -> Option<u32> {
     client
         .status()
         .methods
@@ -128,7 +127,7 @@ fn advertised(client: &Client, name: &str) -> Option<u32> {
         .filter(|method| method.v == 1)
         .map(|method| method.timeout)
 }
-fn call(
+pub(super) fn call(
     client: &Client,
     boot: &str,
     method: &str,
@@ -164,79 +163,6 @@ fn failure(code: &str, message: &str) -> (&'static str, bool) {
         ("unavailable", _) => ("bead.panel.bluetooth-pair-unavailable", false),
         _ => ("bead.panel.bluetooth-pair-failed", true),
     }
-}
-
-fn glyph(icon: Option<&str>) -> &'static str {
-    let icon = icon.unwrap_or("");
-    if ["headset", "headphone", "audio"]
-        .iter()
-        .any(|word| icon.contains(word))
-    {
-        "headphones"
-    } else if icon.contains("keyboard") {
-        "keyboard"
-    } else if icon.contains("mouse") {
-        "mouse"
-    } else if icon.contains("phone") {
-        "smartphone"
-    } else {
-        "bluetooth"
-    }
-}
-
-/// Device rows: connected first, then devices that can be paired, then the rest, by name.
-fn rows(state: &BluetoothState, can_pair: bool) -> Vec<serde_json::Value> {
-    let mut devices: Vec<(&EntityId, &BluetoothDevice)> = state
-        .devices
-        .order
-        .iter()
-        .filter_map(|id| state.devices.items.get(id).map(|device| (id, device)))
-        .collect();
-    let rank = |d: &BluetoothDevice| match (d.connected, d.paired) {
-        (true, _) => 0,
-        (false, false) => 1,
-        _ => 2,
-    };
-    devices.sort_by(|a, b| {
-        (rank(a.1), a.1.name.to_lowercase(), &a.0.0).cmp(&(
-            rank(b.1),
-            b.1.name.to_lowercase(),
-            &b.0.0,
-        ))
-    });
-    devices.truncate(MAX_DEVICE_ROWS);
-    devices
-        .into_iter()
-        .map(|(id, device)| {
-            let unpaired = !device.paired && !device.connected;
-            let caption = match device.battery {
-                Some(percent) => format!("{percent}%"),
-                None if device.connected => tr("bead.panel.bluetooth-device-connected-state", &[]),
-                None if device.paired => tr("bead.panel.bluetooth-device-paired", &[]),
-                None => tr("bead.panel.bluetooth-device-new", &[]),
-            };
-            let action = if device.pairing {
-                tr("bead.panel.bluetooth-device-pairing", &[])
-            } else if unpaired {
-                tr("bead.panel.bluetooth-pair", &[])
-            } else {
-                String::new()
-            };
-            serde_json::json!({
-                "id": format!("dev:{}", id.0),
-                "label": if device.name.is_empty() {
-                    tr("bead.panel.bluetooth-device-unnamed", &[])
-                } else {
-                    line(&device.name, 24)
-                },
-                "caption": caption,
-                "icon": glyph(device.icon.as_deref()),
-                "action": action,
-                "active": device.connected,
-                "enabled": can_pair && unpaired && !device.pairing,
-            })
-        })
-        .collect()
 }
 
 /// The prompt addressed to `device`, when the topic is fresh and valid.
@@ -466,6 +392,7 @@ fn start(
         control.notice = Some("bead.panel.bluetooth-pair-unavailable");
         return;
     }
+    devices::quiet_scan(control, candidate);
     // Watch the prompt topic first so no prompt is missed, then send the call that waits.
     let Ok(lease) = client.lease_topic("bluetooth.pairing") else {
         control.notice = Some("bead.panel.bluetooth-pair-unavailable");
@@ -513,31 +440,11 @@ pub(super) fn project(
     candidate: &BluetoothCandidate,
 ) -> BTreeMap<String, Value> {
     settle(control);
-    let can_pair = candidate.fresh
-        && control.flow.is_none()
-        && control.pending.is_none()
-        && advertised(&control.client, PAIR_CALL).is_some()
-        && candidate
-            .state
-            .as_ref()
-            .is_some_and(|state| state.adapters.items.values().any(|adapter| adapter.powered));
-    let devices = candidate
-        .state
-        .as_ref()
-        .filter(|_| candidate.fresh)
-        .map(|state| rows(state, can_pair))
-        .unwrap_or_default();
     let focus = control
         .flow
         .as_mut()
         .is_some_and(|flow| std::mem::take(&mut flow.focus));
-    let mut stores = BTreeMap::from([
-        ("bluetooth.devices".into(), Value::list(devices)),
-        (
-            "bluetooth.list_message".into(),
-            Value::Text(control.notice.map_or(String::new(), |id| tr(id, &[]))),
-        ),
-    ]);
+    let mut stores = devices::project(control, candidate);
     let flow = control.flow.as_ref().filter(|flow| !flow.leaving);
     let (kind, text, retry) = match flow.map(|flow| (flow, &flow.outcome)) {
         None => ("waiting", String::new(), false),
@@ -729,19 +636,5 @@ mod tests {
             failure("internal", "x"),
             ("bead.panel.bluetooth-pair-failed", true)
         );
-    }
-    #[test]
-    fn glyphs_follow_the_bluez_icon_names() {
-        for (icon, glyph_name) in [
-            ("audio-headset", "headphones"),
-            ("audio-card", "headphones"),
-            ("input-keyboard", "keyboard"),
-            ("input-mouse", "mouse"),
-            ("phone", "smartphone"),
-            ("computer", "bluetooth"),
-        ] {
-            assert_eq!(glyph(Some(icon)), glyph_name);
-        }
-        assert_eq!(glyph(None), "bluetooth");
     }
 }

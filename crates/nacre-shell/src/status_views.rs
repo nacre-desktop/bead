@@ -10,6 +10,7 @@ use nacre_protocol::core_services::{
 };
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
+mod devices;
 mod join;
 mod pairing;
 pub(crate) use join::SECRET_STORE;
@@ -125,6 +126,12 @@ struct BluetoothControl {
     /// Pairing started from the device list (N0055 edge in `pairing.rs`) and its last notice.
     flow: Option<pairing::Flow>,
     notice: Option<&'static str>,
+    /// Find devices (N0047): the admission call, and (boot, adapter, seen running) of a scan this
+    /// panel started, so closing it stops the scan unless it already ended.
+    scan: Option<crate::nacre_source::CallTicket>,
+    scan_owned: Option<(String, String, bool)>,
+    /// A connect or disconnect in flight.
+    link: Option<devices::DeviceOp>,
 }
 #[derive(Clone, Copy)]
 enum Mode {
@@ -211,6 +218,9 @@ impl Status {
                 checked: false,
                 flow: None,
                 notice: None,
+                scan: None,
+                scan_owned: None,
+                link: None,
             })),
         }
     }

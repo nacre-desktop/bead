@@ -206,6 +206,13 @@ fn controlled_bluetooth_template_omits_unavailable_switch_action() -> Result<()>
         ("bluetooth.view".into(), Value::Text("list".into())),
         ("bluetooth.devices".into(), Value::list(Vec::new())),
         ("bluetooth.list_message".into(), Value::Text(String::new())),
+        (
+            "bluetooth.scan_label".into(),
+            Value::Text("Find devices".into()),
+        ),
+        ("bluetooth.scan_enabled".into(), Value::Bool(false)),
+        ("bluetooth.scanning".into(), Value::Bool(false)),
+        ("bluetooth.empty_text".into(), Value::Text(String::new())),
     ]);
     let h = Harness::load(
         &root(),
@@ -1354,9 +1361,15 @@ fn bluetooth_pairing_pages_have_goldens_at_both_scales() -> Result<()> {
     // Install the built-in English catalog so the pages show real text.
     let _ = crate::i18n::tr("bead.panel.bluetooth-pair", &[]);
     let devices = Value::list(vec![
-        serde_json::json!({"id":"dev:dev_A","label":"Fixture headphones","caption":"80%","icon":"headphones","action":"","active":true,"enabled":false}),
-        serde_json::json!({"id":"dev:dev_B","label":"Fixture keyboard","caption":"Ready to pair","icon":"keyboard","action":"Pair","active":false,"enabled":true}),
-        serde_json::json!({"id":"dev:dev_C","label":"Fixture phone","caption":"Paired","icon":"smartphone","action":"","active":false,"enabled":false}),
+        serde_json::json!({"id":"dev:dev_A","label":"Fixture headphones","caption":"80%","battery":"battery_full","icon":"headphones","kind":"link","action":"Disconnect","active":true,"enabled":true}),
+        serde_json::json!({"id":"dev:dev_B","label":"Fixture keyboard","caption":"Ready to pair","battery":"","icon":"keyboard","kind":"pair","action":"Pair","active":false,"enabled":true}),
+        serde_json::json!({"id":"dev:dev_C","label":"Fixture phone","caption":"Paired","battery":"","icon":"smartphone","kind":"link","action":"Connect","active":false,"enabled":true}),
+    ]);
+    // Scanning with a connection in flight: the busy row and the other buttons dimmed.
+    let busy = Value::list(vec![
+        serde_json::json!({"id":"dev:dev_A","label":"Fixture headphones","caption":"80%","battery":"battery_full","icon":"headphones","kind":"link","action":"Disconnect","active":true,"enabled":false}),
+        serde_json::json!({"id":"dev:dev_B","label":"Fixture keyboard","caption":"Ready to pair","battery":"","icon":"keyboard","kind":"pair","action":"Pair","active":false,"enabled":false}),
+        serde_json::json!({"id":"dev:dev_C","label":"Fixture phone","caption":"15%","battery":"battery_full","icon":"smartphone","kind":"link","action":"Connecting…","active":false,"enabled":false}),
     ]);
     let pair = |kind: &str, text: &str, extra: Vec<(&'static str, Value)>| {
         let mut page = vec![
@@ -1376,8 +1389,31 @@ fn bluetooth_pairing_pages_have_goldens_at_both_scales() -> Result<()> {
         Value::Text("Expires in 52 s".into()),
     );
     type Page = (&'static str, Vec<(&'static str, Value)>);
-    let pages: [Page; 7] = [
+    let pages: [Page; 9] = [
         ("list", vec![("bluetooth.devices", devices)]),
+        (
+            "scanning",
+            vec![
+                ("bluetooth.devices", busy),
+                ("bluetooth.scan_label", Value::Text("Scanning…".into())),
+                ("bluetooth.scanning", Value::Bool(true)),
+                (
+                    "bluetooth.list_message",
+                    Value::Text("Bluetooth is busy. Try again.".into()),
+                ),
+            ],
+        ),
+        (
+            "off",
+            vec![
+                ("bluetooth.power_checked", Value::Bool(false)),
+                ("bluetooth.scan_enabled", Value::Bool(false)),
+                (
+                    "bluetooth.empty_text",
+                    Value::Text("Bluetooth is off".into()),
+                ),
+            ],
+        ),
         (
             "waiting",
             pair("waiting", "Confirm pairing on your device.", vec![]),
@@ -1430,6 +1466,7 @@ fn bluetooth_pairing_pages_have_goldens_at_both_scales() -> Result<()> {
         for scale in [1., 1.5] {
             let mut initial = BTreeMap::from([
                 ("view.edge".into(), Value::Text("top".into())),
+                ("view.width".into(), Value::Number(352.)),
                 ("panel.open".into(), Value::Bool(true)),
                 ("status.ready".into(), Value::Bool(true)),
                 ("status.active".into(), Value::Bool(true)),
@@ -1455,6 +1492,13 @@ fn bluetooth_pairing_pages_have_goldens_at_both_scales() -> Result<()> {
                 ("bluetooth.view".into(), Value::Text("list".into())),
                 ("bluetooth.devices".into(), Value::list(Vec::new())),
                 ("bluetooth.list_message".into(), Value::Text(String::new())),
+                (
+                    "bluetooth.scan_label".into(),
+                    Value::Text("Find devices".into()),
+                ),
+                ("bluetooth.scan_enabled".into(), Value::Bool(true)),
+                ("bluetooth.scanning".into(), Value::Bool(false)),
+                ("bluetooth.empty_text".into(), Value::Text(String::new())),
                 ("bluetooth.pair_title".into(), Value::Text(String::new())),
                 ("bluetooth.pair_kind".into(), Value::Text("waiting".into())),
                 ("bluetooth.pair_text".into(), Value::Text(String::new())),
@@ -1473,8 +1517,12 @@ fn bluetooth_pairing_pages_have_goldens_at_both_scales() -> Result<()> {
                 &root().join("palette.json"),
                 initial,
                 Config {
-                    width: 380,
-                    height: if name == "list" { 520 } else { 300 },
+                    width: 420,
+                    height: if matches!(name, "list" | "scanning" | "off") {
+                        520
+                    } else {
+                        300
+                    },
                     scale,
                 },
             )?;

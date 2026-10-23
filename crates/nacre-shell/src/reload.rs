@@ -634,6 +634,19 @@ impl Runtime {
                 bead::core::Value::Text(String::new()),
             ),
             (
+                "bluetooth.scan_label".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "bluetooth.scan_enabled".into(),
+                bead::core::Value::Bool(false),
+            ),
+            ("bluetooth.scanning".into(), bead::core::Value::Bool(false)),
+            (
+                "bluetooth.empty_text".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
                 "bluetooth.view".into(),
                 bead::core::Value::Text("list".into()),
             ),
@@ -666,6 +679,8 @@ impl Runtime {
         for action in [
             "bluetooth.toggle_power",
             "bluetooth.pair",
+            "bluetooth.scan",
+            "bluetooth.link",
             "bluetooth.pair_respond",
             "bluetooth.pair_cancel",
             "bluetooth.pair_retry",
@@ -2245,6 +2260,8 @@ impl SceneSource for Runtime {
             && matches!(
                 name.as_str(),
                 "bluetooth.pair"
+                    | "bluetooth.scan"
+                    | "bluetooth.link"
                     | "bluetooth.pair_respond"
                     | "bluetooth.pair_cancel"
                     | "bluetooth.pair_retry"
@@ -2267,6 +2284,10 @@ impl SceneSource for Runtime {
                     ("bluetooth.pair", bead::core::Value::Text(key)) => {
                         status.bluetooth_pair(key, callback)
                     }
+                    ("bluetooth.link", bead::core::Value::Text(key)) => {
+                        status.bluetooth_link(key, callback)
+                    }
+                    ("bluetooth.scan", _) => status.bluetooth_scan(callback),
                     ("bluetooth.pair_respond", bead::core::Value::Text(answer)) => {
                         clear =
                             status.bluetooth_pair_respond(answer == "accept", &self.session.stores);

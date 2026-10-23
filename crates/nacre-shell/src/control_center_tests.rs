@@ -377,7 +377,7 @@ const ALL: [&str; 6] = [
     "audio.set_mute",
     "audio.set_volume",
     "network.set_wifi",
-    "bluetooth.set_enabled",
+    "bluetooth.set_power",
     "notifications.set_dnd",
     SET,
 ];
@@ -405,7 +405,10 @@ async fn tiles_call_only_published_methods_with_the_current_state() {
     control.act("toggle:bluetooth.power");
     assert_eq!(
         call(&mut lab).await,
-        ("bluetooth.set_enabled".into(), json!({"enabled": false}))
+        (
+            "bluetooth.set_power".into(),
+            json!({"adapter": "hci0", "powered": false})
+        )
     );
     control.act("toggle:notifications.dnd");
     assert_eq!(
