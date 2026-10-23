@@ -105,6 +105,22 @@ with the batch result.
   B = `306474f0`, both compositors). It starts when the desktop heavy slot is
   free.
 
+### Laptop reference capture — night of 2026-10-23 (in progress)
+
+The owner chose option (a) and the lead runs the capture on the laptop while
+it is idle. Three attempts stopped safely before a valid arm. Each stop
+exposed a harness defect, not a product result:
+1. The quiet-host gate (`nacre-lead` processes) saw remote-only worker ssh
+   commands. The rerun waited for workers to finish; the gate is unchanged.
+2. A CPU-rendered UI has no DRM client, so the harness reported "DRM
+   unavailable". Fixed in 62cf817 (lead as spec agent): no /dev/dri fd means
+   known-zero DRM; a DRM fd without fdinfo stays unknown and still blocks.
+3. Open-panel samples were never classified (always "inactive"), so the
+   strict backend validator could not pass. A fix is in progress; the
+   validator stays strict.
+The swap reset works on the laptop (7.3 GiB → 22 MiB, with MemAvailable >
+swap + 8 GiB). Evidence: ~/.local/share/nacre/ai/lead/bead-laptop-reference-20261022/evidence-*.
+
 ### Lead note — render backend and the niri wallpaper buffer — 2026-10-22
 
 B0021 measurements (9be5869) showed two things that matter for the memory gate:
