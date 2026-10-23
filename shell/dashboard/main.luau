@@ -13,15 +13,17 @@ local customize=ui.resolve_for_check(ui.bind("dashboard.customize"))
 local count=math.max(1,#tabs)
 local tw=math.floor(936/count)
 local labeled=tw>=94
+local lw=count<=4 and 90 or math.min(112,tw-39)
+local rw=labeled and 26+lw or 19
 -- QML NacreDashboardNavigation: icon + title centred at y=6, accent icon / ink title when selected, an 8 px pearl (12 px halo) under the selected slot; no pill.
 for _,tab in ipairs(tabs) do
     local selected=tab.id==page
     local interactive=not selected
     local Button=interactive and kit.Button or ui.Box
     local face={
-        ui.Row{id="label",position="absolute",left=0,top=6,width=tw,height=24,gap=7,align="center",justify="center",
+        ui.Row{id="label",position="absolute",left=(tw-rw)/2,top=6,width=rw,height=24,gap=7,align="center",
             ui.Text{text=tab.icon,family="Material Symbols Rounded",width=19,height=24,font_size=18.667,color=selected and "primary" or "onSurfaceVariant"},
-            labeled and ui.Text{text=tab.title,height=24,font_size=13.333,color=selected and "onSurface" or "onSurfaceVariant"} or nil,
+            labeled and ui.Text{text=tab.title,width=lw,height=24,font_size=13.333,color=selected and "onSurface" or "onSurfaceVariant"} or nil,
         },
         selected and ui.Box{id="halo",position="absolute",left=(tw-12)/2,top=29,width=12,height=12,radius=6,fill=ui.alpha("primary",0.12)} or nil,
         selected and ui.Box{id="pearl",position="absolute",left=(tw-8)/2,top=31,width=8,height=8,radius=4,fill="primary"} or nil,
