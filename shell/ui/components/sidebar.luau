@@ -16,7 +16,7 @@ end)
 return ui.component("Sidebar", {}, function(_)
     return ui.Column {id="sidebar",width=152,gap=16,
         ui.Row{height=28,gap=9,align="center",
-            ui.Image{path="ui/assets/nacre-logo.svg",width=28,height=28,aria_label="Nacre"},
+            ui.Image{path="ui/assets/nacre-logo.themed.svg",width=28,height=28,aria_label="Nacre"},
             ui.Text{text="Nacre",font_size=20,grow=1},
         },
         ui.Column{gap=3,
