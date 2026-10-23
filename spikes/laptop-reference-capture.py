@@ -442,7 +442,12 @@ def arm_command(args, manifest: dict, compositor: str, label: str, previous: str
                "--candidate-binary", candidate["path"], "--candidate-sha256", candidate["sha256"],
                "--control-bundle-root", manifest["control_bundle_root"],
                "--reference-renderer", renderer,
-               "--profile", profile, "--max-load", str(args.max_load), "--forbid-nacre-lead"]
+               "--profile", profile, "--max-load", str(args.max_load)]
+    # The owner's laptop must be quiet. The shared desktop serializes heavy jobs with
+    # desktop-heavy.lock, and workers queued on that lock show "nacre-lead" in their command
+    # lines, so a rehearsal skips only this pgrep gate (load, build, scope and swap gates stay).
+    if not args.rehearsal:
+        command.append("--forbid-nacre-lead")
     return command
 
 

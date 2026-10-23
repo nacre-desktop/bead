@@ -170,6 +170,18 @@ exposed a harness defect, not a product result:
 The swap reset works on the laptop (7.3 GiB → 22 MiB, with MemAvailable >
 swap + 8 GiB). Evidence: ~/.local/share/nacre/ai/lead/bead-laptop-reference-20261022/evidence-*.
 
+Prep for the night of 2026-10-24 (Claude worker, current main `2da79c9`: B0037–B0060, notices in
+process, frame, pearls, app mode): the candidate and helper examples were rebuilt from that exact
+commit (Rust 1.99.0, release, `--locked`, Arch container on prod; the build script stops on any
+cargo error). The launcher now (a) records `measured_process` from the PID's cmdline and
+invalidates an arm unless it is the always-on `nacre-shell --bar --core-views` (Settings, sidebar,
+Colors and Welcome are separate `--app` processes outside the 25 MiB target), and (b) pins the
+`shell`, `crates`, `vendor` and `Cargo.lock` git trees in the manifest and refuses a dirty
+checkout. The control, its bundle and the dashboard fixtures tree (`51dbf56f`) are unchanged.
+Known limit: the harness runs without a daemon link (see the runbook). During a capture no
+process command line may contain "nacre-lead" (the quiet-host gate matches it), including
+worker ssh commands and wrapper scripts. Runbook: `docs/research/laptop-reference-capture-runbook.md`.
+
 ### Lead note — render backend and the niri wallpaper buffer — 2026-10-22
 
 B0021 measurements (9be5869) showed two things that matter for the memory gate:

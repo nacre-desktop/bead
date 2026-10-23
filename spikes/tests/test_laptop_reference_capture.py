@@ -100,6 +100,16 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "uncommitted changes"):
                 capture.check_candidate_shell_tree({"shell_git_tree": shell, "source_git_trees": current})
 
+    def test_quiet_host_pgrep_gate_is_laptop_only(self):
+        manifest = {"control": {"path": "c", "sha256": "0"}, "candidate": {"path": "b", "sha256": "1"},
+                    "control_bundle_root": "bundle"}
+        for rehearsal in (False, True):
+            args = mock.Mock(rehearsal=rehearsal, max_load=1.0)
+            command = capture.arm_command(args, manifest, "niri", "A1", "START", pathlib.Path("raw"))
+            self.assertEqual("--forbid-nacre-lead" in command, not rehearsal)
+            self.assertEqual(command[command.index("--profile") + 1], "rehearsal" if rehearsal else "laptop-reference")
+            self.assertIn("--max-load", command)
+
     def test_only_the_always_on_shell_counts_as_the_measured_process(self):
         always_on = ["/x/nacre-shell", "--bar", "--core-views", "--renderer", "auto", "--command-socket", "/s"]
         self.assertEqual(launcher_proof.measured_process_kind(always_on), "always-on-shell")
