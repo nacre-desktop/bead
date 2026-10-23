@@ -128,6 +128,11 @@ Settings, Colors, Welcome and every other QML surface move to Bead/Rust; no
 QML windows companion remains. The session menu adds confirmations and Suspend.
 Owner (same day): port EVERY QML feature; the inventory's retire candidates (video wallpaper, pearls,
 desktop frame, tile editor, weather hero, VPN, live previews) are all ported. SDDM greeter stays for now.
+Owner (same day): Bead must LOOK AND FEEL the same as the QML shell. Every visible unit compares
+side by side against the QML in identical nested sessions (screenshots + animation timing) and fixes
+or lists each difference; self-goldens are not parity. B0056 audits and fixes everything built so far
+(owner preview found: icon spacing, launcher rising from top, panel colours, dropdowns not joined to the
+frame, logo colour). Switch gate: the owner signs off a side-by-side QML/Bead gallery of every surface.
 Plan: [QML retirement inventory](../research/qml-retirement-inventory-20261023.md)
 (groups A–F). In flight: B0030, B0042, B0043 (AI sidebar), B0044, B0045
 (Settings framework); Nacre N0042 (Wi-Fi secrets), N0043 (osd topic).
