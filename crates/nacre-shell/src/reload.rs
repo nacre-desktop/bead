@@ -2134,7 +2134,7 @@ impl SceneSource for Runtime {
             | UiEvent::ControlChanged => {
                 return Err("companion visibility reached script".into());
             }
-            UiEvent::Panel(_, _) | UiEvent::Output(_, _, _) => {
+            UiEvent::Panel(_, _) | UiEvent::Window(_, _) | UiEvent::Output(_, _, _) => {
                 return Err("session envelope reached script".into());
             }
             UiEvent::PanelVisibility(open) => {

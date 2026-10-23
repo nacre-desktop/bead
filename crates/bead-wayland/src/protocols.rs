@@ -9,6 +9,12 @@ impl CompositorHandler for App {
         surface: &wl_surface::WlSurface,
         scale: i32,
     ) {
+        if self.window_surface() == Some(surface)
+            && self.window.as_ref().is_some_and(|w| !w.has_fractional())
+        {
+            self.window_scale(scale.max(1) as u32 * 120);
+            return;
+        }
         if let Some(i) = self
             .surfaces
             .iter()
@@ -126,6 +132,12 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
         _: &Connection,
         qh: &QueueHandle<Self>,
     ) {
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
+            && state.window_surface() == Some(surface)
+        {
+            state.window_scale(scale);
+            return;
+        }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
             && let Some(i) = state
                 .surfaces
@@ -707,6 +719,10 @@ impl PointerHandler for App {
         events: &[PointerEvent],
     ) {
         for event in events {
+            if self.window_surface() == Some(&event.surface) {
+                self.window_pointer(event);
+                continue;
+            }
             if self
                 .dismiss
                 .as_ref()
@@ -950,6 +966,12 @@ impl KeyboardHandler for App {
                 self.keyboard_surface.is_some()
             );
         }
+        if self.keyboard_surface.is_some()
+            && self.keyboard_surface.as_ref() == self.window_surface()
+        {
+            self.window_key(&event);
+            return;
+        }
         if self.keyboard_surface.as_ref().is_some_and(|surface| {
             self.surfaces
                 .iter()
@@ -966,23 +988,7 @@ impl KeyboardHandler for App {
                     .iter()
                     .any(|s| s.companion && s.layer.wl_surface() == surface)
             });
-            let command = match event.keysym {
-                Keysym::Escape => Some("escape"),
-                Keysym::Tab | Keysym::ISO_Left_Tab => Some("tab"),
-                Keysym::Return | Keysym::KP_Enter => Some("enter"),
-                Keysym::Left => Some("left"),
-                Keysym::Right => Some("right"),
-                Keysym::Up => Some("up"),
-                Keysym::Down => Some("down"),
-                Keysym::Home => Some("home"),
-                Keysym::End => Some("end"),
-                Keysym::Delete => Some("delete"),
-                Keysym::a if self.modifiers.ctrl => Some("select-all"),
-                Keysym::c if self.modifiers.ctrl => Some("clipboard-copy"),
-                Keysym::x if self.modifiers.ctrl => Some("clipboard-cut"),
-                Keysym::v if self.modifiers.ctrl => Some("clipboard-paste"),
-                _ => None,
-            };
+            let command = window::key_command(event.keysym, self.modifiers.ctrl);
             if let Some(command) = command {
                 if panel
                     && (command == "escape"

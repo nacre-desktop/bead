@@ -14,9 +14,11 @@ mod rendering;
 mod report;
 mod runtime;
 mod transactions;
+mod window;
 use runtime::App;
 pub use runtime::run_runtime;
 pub(crate) use runtime::{output_event_is_current, output_scope_matches};
+pub use window::{WindowFactory, WindowModel, WindowSpec};
 pub mod worker;
 use bead_render::{
     Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
@@ -157,6 +159,8 @@ pub enum UiEvent {
     /// The compositor may publish an output name after its initial announcement.
     OutputName(String),
     Panel(u64, Box<UiEvent>),
+    /// Event for the on-demand window session (epoch rejects a closed window's late wakeups).
+    Window(u64, Box<UiEvent>),
     PanelVisibility(bool),
     CompanionVisibility(bool),
     /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.
@@ -427,6 +431,8 @@ pub struct Options {
     /// Optional product-owned wallpaper consumer; the framework owns passive surfaces.
     pub wallpaper: Option<std::sync::Arc<dyn WallpaperProvider>>,
     pub control: Option<std::sync::Arc<dyn ShellControl>>,
+    /// On-demand xdg toplevel window (`bead.window open|close`).
+    pub window: Option<WindowSpec>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -468,6 +474,7 @@ impl Default for Options {
             trace_state: false,
             wallpaper: None,
             control: None,
+            window: None,
         }
     }
 }

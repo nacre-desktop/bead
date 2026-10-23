@@ -213,6 +213,17 @@ impl App {
             }
             return;
         }
+        if let UiEvent::Window(epoch, event) = event {
+            if self.window.as_ref().is_some_and(|w| w.epoch() == epoch) {
+                self.window_ui(*event);
+            }
+            return;
+        }
+        if let UiEvent::Remote(request) = &event
+            && self.window_command(request.clone())
+        {
+            return;
+        }
         if let UiEvent::Panel(epoch, event) = event {
             if epoch == self.panel_epoch && self.panel_runtime.is_some() {
                 // A service-backed view can retire itself when its item vanishes.
