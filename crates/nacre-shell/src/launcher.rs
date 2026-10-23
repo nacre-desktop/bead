@@ -456,8 +456,20 @@ impl Source for Fixture {
     }
 }
 
+/// The last settled grid (empty query, apps) result, kept only while its panel worker lives.
+/// Returning to the grid with an unchanged source stamp reuses it, so one key makes one commit.
+struct GridResult {
+    stamp: Option<SourceStamp>,
+    rows: Arc<Vec<Json>>,
+    total: usize,
+    actions: BTreeMap<String, String>,
+    catalog_rev: u64,
+    conversion: Option<MenuConversion>,
+    message: String,
+}
 #[derive(Default)]
 struct View {
+    grid: Option<GridResult>,
     request: Option<MenuRequest>,
     result_request: Option<MenuRequest>,
     pending: Option<PendingQuery>,
@@ -1095,6 +1107,7 @@ impl Menu {
                 if result.keep_open {
                     let mut view = self.view.borrow_mut();
                     view.request = None;
+                    view.grid = None;
                     view.pending_navigation.clear();
                 }
                 Ok(result)
@@ -1105,6 +1118,7 @@ impl Menu {
                 if e.code == "stale_revision" {
                     // Same as QML: drop the stale rows and query again.
                     view.request = None;
+                    view.grid = None;
                     view.result_stamp = None;
                 }
                 Err(e)
@@ -1204,6 +1218,35 @@ impl Menu {
                     view.error = error.message;
                 }
             }
+        }
+        let is_grid = request.0.trim().is_empty() && request.1 == "apps" && request.2.is_empty();
+        if !reply_applied
+            && is_grid
+            && view.request.as_ref() != Some(&request)
+            && let Some(grid) = view.grid.as_ref().filter(|grid| grid.stamp == stamp)
+        {
+            reply_applied = true;
+            let (rows, total, actions, rev, conversion, message) = (
+                grid.rows.clone(),
+                grid.total,
+                grid.actions.clone(),
+                grid.catalog_rev,
+                grid.conversion.clone(),
+                grid.message.clone(),
+            );
+            view.rows = rows;
+            view.total = total;
+            view.actions = actions;
+            view.catalog_rev = rev;
+            view.conversion = conversion;
+            view.message = message;
+            view.error.clear();
+            view.pending = None;
+            view.pending_limited = false;
+            view.request = Some(request.clone());
+            view.stamp = stamp.clone();
+            view.result_request = Some(request.clone());
+            view.result_stamp = stamp.clone();
         }
         if let Some(actor) = &self.query_actor
             && let Ok(favorites) = actor.favorites.lock()
@@ -1454,6 +1497,25 @@ impl Menu {
             _ => {
                 delta.insert("launcher.apps".into(), Value::List(view.rows.clone()));
             }
+        }
+        if is_grid
+            && view.error.is_empty()
+            && view.pending.is_none()
+            && view.result_request.as_ref() == Some(&request)
+            && !view.grid.as_ref().is_some_and(|grid| {
+                grid.stamp == view.result_stamp && Arc::ptr_eq(&grid.rows, &view.rows)
+            })
+            && view.rows.iter().all(|row| row["selected"].as_bool() == Some(false))
+        {
+            view.grid = Some(GridResult {
+                stamp: view.result_stamp.clone(),
+                rows: view.rows.clone(),
+                total: view.total,
+                actions: view.actions.clone(),
+                catalog_rev: view.catalog_rev,
+                conversion: view.conversion.clone(),
+                message: view.message.clone(),
+            });
         }
         Ok(delta)
     }
@@ -1720,6 +1782,29 @@ mod tests {
             parse_groups(json!({"catalog_rev":1,"groups":[{"id":"","label":"x","icon":""}]})),
             None
         );
+    }
+    #[test]
+    fn returning_to_the_grid_reuses_the_settled_result_in_one_projection() {
+        let source = prefix_source(false, false);
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = prefix_stores();
+        edit_prefix(&menu, &mut stores);
+        assert_eq!(
+            stores.get("launcher.result_count"),
+            Some(&Value::Number(64.))
+        );
+        let before = source.calls.lock().unwrap().len();
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text(String::new()),
+            )]))
+            .unwrap();
+        let delta = menu.project(&stores).unwrap();
+        assert_eq!(delta["launcher.pending"], Value::Bool(false));
+        assert_eq!(delta["launcher.result_count"], Value::Number(320.));
+        assert_eq!(delta["launcher.selection"], Value::Text(String::new()));
+        assert_eq!(source.calls.lock().unwrap().len(), before, "no new query");
     }
     #[test]
     fn favorites_use_canonical_result_ids_and_published_preferences() {
