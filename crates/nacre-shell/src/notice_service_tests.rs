@@ -266,67 +266,6 @@ fn hover_keys_cover_cards_buttons_and_the_osd_only() {
     assert_eq!(hover_key("bar.launcher", &t("x")), None);
 }
 
-fn item(channel: OsdChannel, unit: OsdUnit, value: Option<f64>, muted: Option<bool>) -> OsdItem {
-    OsdItem {
-        serial: 1,
-        channel,
-        unit,
-        value,
-        muted,
-        expires_ms: u64::MAX / 4,
-    }
-}
-#[test]
-fn osd_items_map_to_the_slider_scale_and_brightness_needs_a_value() {
-    let vol = shown_from(&item(
-        OsdChannel::Volume,
-        OsdUnit::Linear,
-        Some(0.125),
-        Some(false),
-    ))
-    .unwrap();
-    assert!(
-        (vol.level - 0.5).abs() < 1e-9,
-        "linear volume shows as its cube root"
-    );
-    let per = shown_from(&item(
-        OsdChannel::Volume,
-        OsdUnit::Perceptual,
-        Some(0.5),
-        None,
-    ))
-    .unwrap();
-    assert_eq!(text(&osd_values(Some(&per)), "osd.status"), "50%");
-    let muted = shown_from(&item(
-        OsdChannel::Microphone,
-        OsdUnit::Linear,
-        Some(0.5),
-        Some(true),
-    ))
-    .unwrap();
-    assert_eq!(text(&osd_values(Some(&muted)), "osd.status"), "Muted");
-    assert!(shown_from(&item(OsdChannel::Brightness, OsdUnit::Fraction, None, None)).is_none());
-    let br = shown_from(&item(
-        OsdChannel::Brightness,
-        OsdUnit::Fraction,
-        Some(0.4),
-        None,
-    ))
-    .unwrap();
-    let v = osd_values(Some(&br));
-    assert_eq!(text(&v, "osd.label"), "Display brightness");
-    assert!(matches!(v["osd.level"], Value::Number(n) if (n - 40.).abs() < 1e-9));
-    let caps = shown_from(&item(
-        OsdChannel::Capslock,
-        OsdUnit::Boolean,
-        Some(1.),
-        None,
-    ))
-    .unwrap();
-    assert_eq!(text(&osd_values(Some(&caps)), "osd.status"), "On");
-    assert!(!flag(&osd_values(None), "osd.open"));
-}
-
 fn snap(data: Json, connected: bool) -> Snapshot {
     Snapshot {
         epoch: "b1".into(),
@@ -343,31 +282,90 @@ fn shared() -> Arc<Shared> {
     s.lock().osd.armed = Some(Instant::now());
     s
 }
-fn osd(serial: u64, value: f64, expires: u64) -> Json {
-    json!({"health":{"available":true,"stale":false},"current":{"serial":serial,"channel":"volume",
-        "unit":"perceptual","value":value,"muted":false,"expires_ms":expires}})
+fn event(data: Json) -> OsdEvent {
+    let mut data = data;
+    data["ts"] = json!(1_800_000_000_000_u64);
+    serde_json::from_value(data).expect("event parses")
 }
+fn shown(s: &Shared) -> BTreeMap<String, Value> {
+    osd_values(s.lock().osd.shown.as_ref())
+}
+fn number(v: &BTreeMap<String, Value>, key: &str) -> f64 {
+    match &v[key] {
+        Value::Number(n) => *n,
+        other => panic!("{key}: {other:?}"),
+    }
+}
+
 #[test]
-fn osd_topic_never_replays_the_initial_expired_or_reconnected_state() {
+fn every_osd_kind_is_projected_as_its_event_fields() {
     let s = shared();
-    let future = wall_ms() + 60_000;
-    // Existing state on connect is a baseline, not an event.
-    on_osd(&s, &snap(osd(7, 0.3, future), true));
-    assert!(s.lock().osd.shown.is_none());
-    // The same serial again (equal value) is still nothing.
-    on_osd(&s, &snap(osd(7, 0.3, future), true));
-    assert!(s.lock().osd.shown.is_none());
-    // A new serial with the same value is a new event.
-    on_osd(&s, &snap(osd(8, 0.3, future), true));
-    assert!(s.lock().osd.shown.is_some());
-    assert!(s.lock().osd.deadline.is_some(), "hide timer starts");
+    for (data, kind, value) in [
+        (
+            json!({"kind":"volume","value":0.5,"muted":false,"label":"Speakers","device":"alsa_output.x"}),
+            "volume",
+            0.5,
+        ),
+        (
+            json!({"kind":"output","value":0.3,"muted":false,"label":"Headphones","device":"bluez_output.1"}),
+            "output",
+            0.3,
+        ),
+        (
+            json!({"kind":"microphone","value":0.0,"muted":true,"label":"Built-in microphone"}),
+            "microphone",
+            0.0,
+        ),
+        (
+            json!({"kind":"brightness","value":0.75,"device":"eDP-1"}),
+            "brightness",
+            0.75,
+        ),
+        (
+            json!({"kind":"keyboard","value":0.5,"max":2}),
+            "keyboard",
+            0.5,
+        ),
+        (json!({"kind":"night_light","value":1}), "night_light", 1.),
+        (
+            json!({"kind":"power_profile","label":"power-saver"}),
+            "power_profile",
+            0.,
+        ),
+        (json!({"kind":"capslock","value":0}), "capslock", 0.),
+    ] {
+        let label = data["label"].as_str().unwrap_or("").to_owned();
+        deliver(&s, &event(data));
+        let v = shown(&s);
+        assert!(flag(&v, "osd.open"), "{kind}");
+        assert_eq!(text(&v, "osd.kind"), kind);
+        assert!((number(&v, "osd.value") - value).abs() < 1e-9, "{kind}");
+        assert_eq!(text(&v, "osd.label"), label, "{kind}");
+        assert!(
+            s.lock().osd.deadline.is_some(),
+            "{kind}: the hide timer starts"
+        );
+        s.lock().osd.shown = None;
+    }
+    assert!(!flag(&osd_values(None), "osd.open"));
+}
+
+#[test]
+fn osd_events_clamp_the_level_and_refuse_invalid_ones() {
+    let s = shared();
+    deliver(
+        &s,
+        &event(json!({"kind":"volume","value":1.4,"muted":false})),
+    );
+    assert_eq!(number(&shown(&s), "osd.value"), 1.);
+    deliver(&s, &event(json!({"kind":"volume","muted":true})));
+    let v = shown(&s);
+    assert_eq!(number(&v, "osd.value"), 0.);
+    assert!(flag(&v, "osd.muted"));
     s.lock().osd.shown = None;
-    // An expired producer deadline is not shown.
-    on_osd(&s, &snap(osd(9, 0.5, 1), true));
-    assert!(s.lock().osd.shown.is_none());
-    // Disconnect re-baselines: the next state, even with a new serial, is silent.
-    on_osd(&s, &snap(json!({}), false));
-    on_osd(&s, &snap(osd(1, 0.9, future), true));
+    // A toggle outside 0/1 and a brightness above 1 are not valid events.
+    deliver(&s, &event(json!({"kind":"capslock","value":0.5})));
+    deliver(&s, &event(json!({"kind":"brightness","value":1.5})));
     assert!(s.lock().osd.shown.is_none());
 }
 
@@ -375,58 +373,38 @@ fn osd_topic_never_replays_the_initial_expired_or_reconnected_state() {
 fn osd_arming_and_hover_control_the_hide_clock() {
     let s = shared();
     let now = Instant::now();
+    let any = || shown_from(&event(json!({"kind":"volume","value":0.5}))).unwrap();
     let mut g = s.lock();
     g.osd.armed = Some(now + Duration::from_secs(5));
-    g.osd.show(
-        Shown {
-            channel: OsdChannel::Volume,
-            level: 0.5,
-            muted: false,
-        },
-        now,
-    );
+    g.osd.show(any(), now);
     assert!(g.osd.shown.is_none(), "inside the arming window");
     g.osd.armed = Some(now);
     g.osd.hovered = true;
-    g.osd.show(
-        Shown {
-            channel: OsdChannel::Volume,
-            level: 0.5,
-            muted: false,
-        },
-        now,
-    );
+    g.osd.show(any(), now);
     assert!(
         g.osd.shown.is_some() && g.osd.deadline.is_none(),
         "hover holds it open"
     );
 }
 
-fn audio(volume: f64, muted: bool, sink: &str) -> Json {
-    json!({"health":{"available":true,"stale":false},
-        "nodes":{"items":{sink:{"name":"Speakers","kind":"output","volume":volume,"muted":muted,"ready":true}},"order":[sink]},
-        "default_output":sink})
-}
 #[test]
-fn audio_changes_drive_the_volume_osd_only_without_a_live_osd_topic() {
+fn route_event_reads_only_osd_changed_events() {
+    use nacre_protocol::Message;
     let s = shared();
-    on_audio(&s, &snap(audio(0.125, false, "s1"), true));
-    assert!(s.lock().osd.shown.is_none(), "baseline");
-    on_audio(&s, &snap(audio(0.125, false, "s1"), true));
-    assert!(s.lock().osd.shown.is_none(), "no change");
-    on_audio(&s, &snap(audio(0.343, false, "s1"), true));
-    let level = s.lock().osd.shown.as_ref().map(|x| x.level).unwrap();
-    assert!((level - 0.7).abs() < 1e-6);
-    s.lock().osd.shown = None;
-    // A different default output is a new baseline, not a volume event.
-    on_audio(&s, &snap(audio(0.9, false, "s2"), true));
+    SINKS.lock().unwrap().push(Arc::downgrade(&s));
+    let ev = |topic: &str, name: &str, data: Json| Message::Ev {
+        topic: topic.into(),
+        name: name.into(),
+        seq: 1,
+        data,
+    };
+    let volume = json!({"kind":"volume","value":0.2,"ts":1});
+    route_event(&ev("audio", "changed", volume.clone()));
+    route_event(&ev("osd", "other", volume.clone()));
+    route_event(&ev("osd", "changed", json!({"kind":"nonsense","ts":1})));
     assert!(s.lock().osd.shown.is_none());
-    on_audio(&s, &snap(audio(0.9, true, "s2"), true));
-    assert!(s.lock().osd.shown.as_ref().is_some_and(|x| x.muted));
-    s.lock().osd.shown = None;
-    s.lock().osd.topic_live = true;
-    on_audio(&s, &snap(audio(0.1, true, "s2"), true));
-    assert!(s.lock().osd.shown.is_none(), "the published osd topic wins");
+    route_event(&ev("osd", "changed", volume));
+    assert!(s.lock().osd.shown.is_some());
 }
 
 fn replay(transcript: &str) -> Vec<Json> {
@@ -565,10 +543,11 @@ fn seed_defines_every_key_the_views_bind() {
         "notifications.message",
         "notifications.controls",
         "osd.open",
-        "osd.label",
-        "osd.level",
-        "osd.status",
+        "osd.kind",
+        "osd.value",
         "osd.muted",
+        "osd.label",
+        "osd.device",
     ] {
         assert!(seeded.contains_key(key), "{key}");
     }
@@ -609,11 +588,7 @@ fn views_are_offered_for_popups_and_osd_and_yield_to_other_panels() {
     publish(&shared);
     assert!(offers().is_empty());
     // The OSD wins over popups and is offered even while another view is shown.
-    shared.lock().osd.shown = Some(Shown {
-        channel: OsdChannel::Volume,
-        level: 0.5,
-        muted: false,
-    });
+    shared.lock().osd.shown = shown_from(&event(json!({"kind":"volume","value":0.5})));
     publish(&shared);
     assert_eq!(offers(), [(VIEW_OSD.to_owned(), true)]);
     let mut g = shared.lock();
@@ -656,6 +631,16 @@ mod daemon {
         topics: Json,
         snapshot: Json,
     ) -> (std::path::PathBuf, mpsc::Receiver<Json>, mpsc::Sender<()>) {
+        fake_events(lab, topics, snapshot, vec![])
+    }
+    /// Like [`fake`]; once the client subscribes `osd` it publishes `events` as `osd`
+    /// `changed` events (after the consumer's arming window, 30 ms apart).
+    fn fake_events(
+        lab: &Lab,
+        topics: Json,
+        snapshot: Json,
+        events: Vec<Json>,
+    ) -> (std::path::PathBuf, mpsc::Receiver<Json>, mpsc::Sender<()>) {
         let socket = lab.0.join("daemon.sock");
         let listener = UnixListener::bind(&socket).unwrap();
         std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
@@ -676,6 +661,7 @@ mod daemon {
             )
             .unwrap();
             welcome["topics"] = topics;
+            let events_writer = writer.try_clone().unwrap();
             let mut send = |v: &Json| writeln!(writer, "{v}").unwrap();
             let mut line = String::new();
             loop {
@@ -691,12 +677,32 @@ mod daemon {
                 let frame: Json = serde_json::from_str(&line).unwrap();
                 match frame["t"].as_str().unwrap() {
                     "hello" => send(&welcome),
-                    "sub"
-                        if frame["topics"]
-                            .as_array()
-                            .is_some_and(|t| t.contains(&json!("notifications"))) =>
-                    {
-                        send(&json!({"t":"snap","topic":"notifications","seq":0,"data":snapshot}));
+                    "sub" => {
+                        let has = |topic: &str| {
+                            frame["topics"]
+                                .as_array()
+                                .is_some_and(|t| t.contains(&json!(topic)))
+                        };
+                        if has("notifications") {
+                            send(
+                                &json!({"t":"snap","topic":"notifications","seq":0,"data":snapshot}),
+                            );
+                        }
+                        if has("osd") {
+                            send(
+                                &json!({"t":"snap","topic":"osd","seq":0,"data":{"health":{"available":true,"stale":false}}}),
+                            );
+                            let mut out = events_writer.try_clone().unwrap();
+                            let events = events.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(Duration::from_millis(700));
+                                for (i, data) in events.iter().enumerate() {
+                                    let ev = json!({"t":"ev","topic":"osd","name":"changed","seq":i + 1,"data":data});
+                                    let _ = writeln!(out, "{ev}");
+                                    std::thread::sleep(Duration::from_millis(30));
+                                }
+                            });
+                        }
                     }
                     "call" => {
                         send(&json!({"t":"ret","id":frame["id"],"ok":{"changed":true}}));
@@ -818,30 +824,67 @@ mod daemon {
     }
 
     #[test]
-    fn brightness_feedback_from_the_key_route_shows_the_osd_and_nothing_else_is_accepted() {
+    fn daemon_osd_events_of_all_eight_kinds_drive_the_view_models_and_feedback_is_refused() {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();
-        let (socket, _calls, close) = fake(&lab, json!({"notifications":1}), data);
-        let service = start(socket, false, false);
+        let cases = [
+            (
+                json!({"kind":"volume","value":0.5,"muted":false,"label":"Speakers","device":"d1"}),
+                "volume",
+                0.5,
+            ),
+            (
+                json!({"kind":"output","value":0.3,"muted":false,"label":"Headphones","device":"bluez_output.1"}),
+                "output",
+                0.3,
+            ),
+            (
+                json!({"kind":"microphone","value":0.0,"muted":true,"label":"Mic"}),
+                "microphone",
+                0.0,
+            ),
+            (
+                json!({"kind":"brightness","value":0.75,"device":"eDP-1"}),
+                "brightness",
+                0.75,
+            ),
+            (
+                json!({"kind":"keyboard","value":0.5,"max":2}),
+                "keyboard",
+                0.5,
+            ),
+            (json!({"kind":"night_light","value":1}), "night_light", 1.0),
+            (
+                json!({"kind":"power_profile","label":"performance"}),
+                "power_profile",
+                0.0,
+            ),
+            (json!({"kind":"capslock","value":1}), "capslock", 1.0),
+        ];
+        let events = cases
+            .iter()
+            .map(|(e, _, _)| {
+                let mut e = e.clone();
+                e["ts"] = json!(1_800_000_000_000_u64);
+                e
+            })
+            .collect();
+        let (socket, _calls, close) =
+            fake_events(&lab, json!({"notifications":1,"osd":1}), data, events);
+        let service = start(socket, true, false);
         let rx = models(&service);
-        std::thread::sleep(Duration::from_millis(600));
-        service
-            .feedback(&[json!("brightness"), json!(0.4), json!(false)])
-            .unwrap();
-        until(&rx, |m| {
-            flag(m, "osd.open")
-                && text(m, "osd.label") == "Display brightness"
-                && text(m, "osd.status") == "40%"
-        });
+        for (_, kind, value) in cases {
+            until(&rx, |m| {
+                flag(m, "osd.open")
+                    && text(m, "osd.kind") == kind
+                    && (number(m, "osd.value") - value).abs() < 1e-9
+            });
+        }
         assert!(
             service
-                .feedback(&[json!("volume"), json!(0.4), json!(false)])
-                .is_err()
-        );
-        assert!(
-            service
-                .feedback(&[json!("brightness"), json!(1.5), json!(false)])
-                .is_err()
+                .feedback(&[json!("brightness"), json!(0.4), json!(false)])
+                .is_err(),
+            "the N0036 reply path is gone"
         );
         let _ = close.send(());
     }

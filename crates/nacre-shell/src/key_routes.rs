@@ -11,7 +11,6 @@ use bead::{
 };
 use std::{
     collections::BTreeMap,
-    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -117,28 +116,13 @@ const BRIGHTNESS_STEP: i64 = 5;
 pub struct Brightness {
     client: Client,
     pending: Arc<Mutex<Option<CallTicket>>>,
-    /// Command socket of a separate private notice process (compatibility fixture).
-    osd: Option<PathBuf>,
-    /// The in-process notice service: the reply's level is shown through it.
-    local: Option<Arc<dyn crate::notifications::Notices>>,
-}
-/// N0036: `brightness.adjust` replies `{changed, output, level_percent}`; the level
-/// read back from the device is the OSD value. Failures and absent values show nothing.
-fn osd_level(reply: &serde_json::Value) -> Option<f64> {
-    let percent = reply.get("level_percent")?.as_u64().filter(|p| *p <= 100)?;
-    (reply.get("changed") == Some(&serde_json::Value::Bool(true))).then_some(percent as f64 / 100.)
 }
 impl Brightness {
-    pub fn new(client: Client, osd: Option<PathBuf>) -> Self {
+    pub fn new(client: Client) -> Self {
         Self {
             client,
             pending: Default::default(),
-            osd,
-            local: None,
         }
-    }
-    pub fn with_local(&mut self, service: Arc<dyn crate::notifications::Notices>) {
-        self.local = Some(service);
     }
     pub fn step(&self, direction: &str, output: Option<&str>) -> Result<(), &'static str> {
         let delta = match direction {
@@ -168,44 +152,6 @@ impl Brightness {
             *pending = None;
         }
         let timeout = Duration::from_millis(u64::from(method.timeout).clamp(1, 60_000));
-        let (slot, osd, local) = (self.pending.clone(), self.osd.clone(), self.local.clone());
-        let wake: crate::nacre_source::CallWake = Arc::new(move || {
-            let reply = match slot.lock() {
-                Ok(mut held) => held
-                    .as_mut()
-                    .and_then(CallTicket::try_take)
-                    .inspect(|_| *held = None),
-                Err(_) => None,
-            };
-            let level = match &reply {
-                Some(Ok(value)) => osd_level(value),
-                _ => None,
-            };
-            if let (Some(level), Some(local)) = (level, &local) {
-                let _ = local.feedback(&[
-                    serde_json::json!("brightness"),
-                    serde_json::json!(level),
-                    serde_json::json!(false),
-                ]);
-            } else if let (Some(level), Some(socket)) = (level, osd.clone()) {
-                // Blocking IPC never runs on the transport thread.
-                std::thread::spawn(move || {
-                    let call = Call {
-                        version: 1,
-                        id: 1,
-                        target: "bead.osd".into(),
-                        method: "show".into(),
-                        args: vec![
-                            serde_json::json!("brightness"),
-                            serde_json::json!(level),
-                            serde_json::json!(false),
-                        ],
-                        output: None,
-                    };
-                    let _ = bead::services::ipc::call(&socket, &call, Duration::from_secs(2));
-                });
-            }
-        });
         let ticket = self
             .client
             .begin_call(
@@ -213,7 +159,7 @@ impl Brightness {
                 serde_json::json!({"output": output, "delta": delta}),
                 timeout,
                 CallGuard { boot, version: 1 },
-                Some(wake),
+                None,
             )
             .map_err(|_| "brightness request was not sent")?;
         *pending = Some(ticket);
@@ -301,27 +247,5 @@ mod tests {
         assert_eq!(model["launcher.mode"], Value::Text("apps".into()));
         let plain = routed("launcher", &["a"]).model();
         assert_eq!(plain["launcher.engine_route"], Value::Text(String::new()));
-    }
-}
-
-#[cfg(test)]
-mod osd_tests {
-    use super::osd_level;
-    use serde_json::json;
-    #[test]
-    fn only_a_changed_reply_with_a_percent_is_an_osd_level() {
-        assert_eq!(
-            osd_level(&json!({"changed":true,"output":"A","level_percent":40})),
-            Some(0.4)
-        );
-        assert_eq!(
-            osd_level(&json!({"changed":false,"output":"A","level_percent":40})),
-            None
-        );
-        assert_eq!(osd_level(&json!({"changed":true})), None);
-        assert_eq!(
-            osd_level(&json!({"changed":true,"level_percent":101})),
-            None
-        );
     }
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! B0020: the resident notice stack, history and OSD as a consumer of the daemon's
-//! published `notifications`, `osd` and `audio` topics (N0017). The daemon owns
+//! published `notifications` topic and `osd` events (N0017, N0043). The daemon owns
 //! the bus name, expiry, history and the DND setting; this side only projects
 //! snapshots, keeps local expansion/hover/OSD-hide state, and sends the published
 //! revision-checked methods. It never starts a bus owner or replays a mutation.
@@ -19,9 +19,9 @@ use bead::{
     },
     wayland::UiEvent,
 };
-use nacre_protocol::core_services::{
-    AudioState, CoreSnapshot, Notification, NotificationsState, OsdChannel, OsdItem, OsdState,
-    OsdUnit,
+use nacre_protocol::{
+    core_services::{Notification, NotificationsState},
+    osd::{OsdEvent, OsdKind},
 };
 use serde_json::{Value as Json, json};
 use std::{
@@ -50,7 +50,7 @@ const OSD_ARM: Duration = Duration::from_millis(400);
 const MAX_CALLS: usize = 16;
 
 /// Topics the shared daemon link must subscribe for this service.
-pub const TOPICS: [&str; 3] = ["notifications", "osd", "audio"];
+pub const TOPICS: [&str; 2] = ["notifications", "osd"];
 /// Panel views the service offers (see `UiEvent::CompanionOffer`).
 pub const VIEW_NOTICES: &str = "notices";
 pub const VIEW_OSD: &str = "osd";
@@ -290,66 +290,49 @@ pub(crate) fn plan(
     })
 }
 
+/// What the OSD view shows: the last `osd` event, cleaned. The kind-to-glyph/label
+/// mapping is data in `shell/osd/kinds.luau`; the host only projects the event.
 struct Shown {
-    channel: OsdChannel,
-    /// Perceptual level (the slider scale) or brightness fraction; capslock 0/1.
-    level: f64,
+    kind: OsdKind,
+    /// Level fraction 0..=1 (volume is clamped), or 1/0 for the toggles.
+    value: f64,
     muted: bool,
+    label: String,
+    device: String,
 }
-fn shown_from(item: &OsdItem) -> Option<Shown> {
-    let muted = item.muted == Some(true);
-    let level = match (&item.channel, &item.unit, item.value) {
-        (OsdChannel::Volume | OsdChannel::Microphone, OsdUnit::Perceptual, v) => v?,
-        (OsdChannel::Volume | OsdChannel::Microphone, OsdUnit::Linear, v) => v?.cbrt(),
-        // No value means the producer cannot read brightness back (N0036): no OSD.
-        (OsdChannel::Brightness, OsdUnit::Fraction, v) => v?,
-        (OsdChannel::Capslock, OsdUnit::Boolean, v) => v?,
-        _ => return None,
-    };
-    Some(Shown {
-        channel: item.channel.clone(),
-        level,
-        muted,
+fn kind_name(kind: OsdKind) -> &'static str {
+    match kind {
+        OsdKind::Volume => "volume",
+        OsdKind::Output => "output",
+        OsdKind::Microphone => "microphone",
+        OsdKind::Brightness => "brightness",
+        OsdKind::Keyboard => "keyboard",
+        OsdKind::NightLight => "night_light",
+        OsdKind::PowerProfile => "power_profile",
+        OsdKind::Capslock => "capslock",
+    }
+}
+fn shown_from(event: &OsdEvent) -> Option<Shown> {
+    event.valid().then(|| Shown {
+        kind: event.kind,
+        value: event.value.unwrap_or(0.).clamp(0., 1.),
+        muted: event.muted == Some(true),
+        label: event.label.clone().unwrap_or_default(),
+        device: event.device.clone().unwrap_or_default(),
     })
 }
+/// Model keys of the OSD view; hidden keeps the last values for the close animation.
 fn osd_values(shown: Option<&Shown>) -> BTreeMap<String, Value> {
     let Some(s) = shown else {
         return BTreeMap::from([("osd.open".into(), Value::Bool(false))]);
     };
-    let caps = s.channel == OsdChannel::Capslock;
-    let label = match s.channel {
-        OsdChannel::Brightness => "bead.osd.brightness",
-        OsdChannel::Microphone => "bead.osd.microphone",
-        OsdChannel::Capslock => "bead.osd.capslock",
-        OsdChannel::Volume => "bead.osd.volume",
-    };
-    let status = if caps {
-        tr(
-            if s.level > 0. {
-                "bead.osd.on"
-            } else {
-                "bead.osd.off"
-            },
-            &[],
-        )
-    } else if s.muted {
-        tr("bead.osd.muted", &[])
-    } else {
-        format!("{:.0}%", s.level * 100.)
-    };
     BTreeMap::from([
         ("osd.open".into(), Value::Bool(true)),
+        ("osd.kind".into(), Value::Text(kind_name(s.kind).into())),
+        ("osd.value".into(), Value::Number(s.value)),
         ("osd.muted".into(), Value::Bool(s.muted)),
-        ("osd.label".into(), Value::Text(tr(label, &[]))),
-        (
-            "osd.level".into(),
-            Value::Number(if caps {
-                if s.level > 0. { 100. } else { 0. }
-            } else {
-                (s.level * 100.).clamp(0., 100.)
-            }),
-        ),
-        ("osd.status".into(), Value::Text(status)),
+        ("osd.label".into(), Value::Text(s.label.clone())),
+        ("osd.device".into(), Value::Text(s.device.clone())),
     ])
 }
 
@@ -359,12 +342,6 @@ struct Osd {
     shown: Option<Shown>,
     hovered: bool,
     deadline: Option<Instant>,
-    /// First snapshot of each connection only sets the baseline (never replays).
-    baselined: bool,
-    seen: Option<u64>,
-    /// The published `osd` topic is live: it, not the audio topic, drives the OSD.
-    topic_live: bool,
-    audio: Option<(String, f64, bool)>,
 }
 impl Osd {
     fn show(&mut self, shown: Shown, now: Instant) {
@@ -511,81 +488,41 @@ fn on_notifications(shared: &Shared, snap: &Snapshot) {
     shared.wake.notify_all();
     publish(shared);
 }
-fn on_osd(shared: &Shared, snap: &Snapshot) {
-    {
-        let mut g = shared.lock();
-        let state = serde_json::from_value::<OsdState>((*snap.data).clone())
-            .ok()
-            .filter(|s| CoreSnapshot::Osd(s.clone()).valid());
-        let (Some(state), true) = (state, snap.connected) else {
-            g.osd.baselined = false;
-            g.osd.topic_live = false;
-            return;
-        };
-        g.osd.topic_live = state.health.available && !state.health.stale;
-        let serial = state.current.as_ref().map(|c| c.serial);
-        if !g.osd.baselined {
-            g.osd.baselined = true;
-            g.osd.seen = serial;
-            return;
-        }
-        if serial == g.osd.seen {
-            return;
-        }
-        g.osd.seen = serial;
-        // Expired state never replays; the producer's deadline is a hint only.
-        if let Some(item) = state.current.filter(|c| wall_ms() < c.expires_ms)
-            && let Some(shown) = shown_from(&item)
-        {
-            g.osd.show(shown, Instant::now());
-        } else {
-            return;
-        }
-    }
+/// One `osd` event (N0043). The daemon coalesces bursts and never replays, so each
+/// event is a real change to show now.
+fn deliver(shared: &Shared, event: &OsdEvent) {
+    let Some(shown) = shown_from(event) else {
+        return;
+    };
+    shared.lock().osd.show(shown, Instant::now());
     shared.wake.notify_all();
     publish(shared);
 }
-fn on_audio(shared: &Shared, snap: &Snapshot) {
-    {
-        let mut g = shared.lock();
-        let state = serde_json::from_value::<AudioState>((*snap.data).clone())
-            .ok()
-            .filter(|s| CoreSnapshot::Audio(s.clone()).valid() && s.health.available);
-        let sink = state.as_ref().and_then(|s| {
-            let id = s.default_output.as_ref()?;
-            let n = s.nodes.items.get(id).filter(|n| n.ready)?;
-            let level = n
-                .readback
-                .as_ref()
-                .and_then(|r| r.perceptual_volume)
-                .unwrap_or_else(|| n.volume.cbrt());
-            let muted = n.readback.as_ref().and_then(|r| r.muted).unwrap_or(n.muted);
-            Some((id.0.clone(), level, muted))
-        });
-        let (true, Some((id, level, muted))) = (snap.connected, sink) else {
-            g.osd.audio = None;
-            return;
-        };
-        let changed = match &g.osd.audio {
-            // A new default output, or the first reading, is a baseline.
-            Some((old, l, m)) if *old == id => (l - level).abs() > 1e-6 || *m != muted,
-            _ => false,
-        };
-        g.osd.audio = Some((id, level, muted));
-        if !changed || g.osd.topic_live {
-            return;
-        }
-        g.osd.show(
-            Shown {
-                channel: OsdChannel::Volume,
-                level,
-                muted,
-            },
-            Instant::now(),
-        );
+/// Live services that receive `osd` events from the shell's one daemon link (the
+/// link's event hook is fixed before the service exists, as for the chat events).
+static SINKS: Mutex<Vec<Weak<Shared>>> = Mutex::new(Vec::new());
+pub fn route_event(message: &nacre_protocol::Message) {
+    use nacre_protocol::{Message, osd};
+    let Message::Ev {
+        topic, name, data, ..
+    } = message
+    else {
+        return;
+    };
+    if topic != osd::TOPIC || name != osd::EVENT {
+        return;
     }
-    shared.wake.notify_all();
-    publish(shared);
+    let Ok(event) = serde_json::from_value::<OsdEvent>(data.clone()) else {
+        return;
+    };
+    let sinks: Vec<_> = {
+        let mut all = SINKS.lock().unwrap_or_else(|p| p.into_inner());
+        all.retain(|w| w.strong_count() > 0);
+        all.iter().filter_map(Weak::upgrade).collect()
+    };
+    for shared in sinks {
+        deliver(&shared, &event);
+    }
 }
 
 /// Hides the OSD at its deadline and keeps the provider-only suppression in sync.
@@ -738,12 +675,16 @@ impl Service {
             wake: Condvar::new(),
         });
         shared.lock().osd.armed = Some(Instant::now() + OSD_ARM);
+        SINKS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(Arc::downgrade(&shared));
         let mut subscriptions = vec![];
         type Handler = fn(&Shared, &Snapshot);
         for (topic, handler) in [
             ("notifications", on_notifications as Handler),
-            ("osd", on_osd),
-            ("audio", on_audio),
+            // Subscribing starts the daemon's producers; the events arrive by `route_event`.
+            ("osd", |_, _| {}),
         ] {
             let weak = Arc::downgrade(&shared);
             subscriptions.push(
@@ -897,26 +838,9 @@ impl Notices for Service {
         Ok(())
     }
     fn audio_changed(&self, _: &bead::services::Audio) {}
-    /// Brightness has no published OSD topic: the key route forwards the level the
-    /// daemon read back (N0036). Volume and the rest come from the daemon topics.
-    fn feedback(&self, args: &[Json]) -> Result<Json, &'static str> {
-        let level = match args {
-            [channel, level, _] if channel == "brightness" => level.as_f64(),
-            _ => return Err("only brightness feedback is accepted"),
-        }
-        .filter(|l| l.is_finite() && (0.0..=1.0).contains(l))
-        .ok_or("brightness level must be within 0..1")?;
-        self.shared.lock().osd.show(
-            Shown {
-                channel: OsdChannel::Brightness,
-                level,
-                muted: false,
-            },
-            Instant::now(),
-        );
-        self.shared.wake.notify_all();
-        publish(&self.shared);
-        Ok(Json::Null)
+    /// The OSD is driven by the daemon's `osd` events alone (N0043); nothing else may show it.
+    fn feedback(&self, _: &[Json]) -> Result<Json, &'static str> {
+        Err("the OSD shows daemon osd events only")
     }
     fn command(&self, call: &bead::services::ipc::Call) -> Result<Json, &'static str> {
         match call.method.as_str() {

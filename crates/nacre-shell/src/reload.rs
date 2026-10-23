@@ -976,11 +976,10 @@ impl Runtime {
     pub fn with_brightness_keys(
         mut self,
         client: crate::nacre_source::Client,
-        osd: Option<std::path::PathBuf>,
     ) -> Result<Self, Box<dyn Error>> {
         self.actions.register("key.brightness", "key.control")?;
         self.actions.grant("key.control");
-        self.brightness = Some(crate::key_routes::Brightness::new(client, osd));
+        self.brightness = Some(crate::key_routes::Brightness::new(client));
         Ok(self)
     }
     pub fn with_popout_trigger(mut self) -> Result<Self, Box<dyn Error>> {
@@ -1057,9 +1056,6 @@ impl Runtime {
         self.actions
             .register("notifications.feedback", "notifications")?;
         self.actions.grant("notifications");
-        if let Some(brightness) = &mut self.brightness {
-            brightness.with_local(service.clone());
-        }
         self.notice_host = Some(service);
         Ok(self)
     }

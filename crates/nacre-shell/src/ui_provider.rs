@@ -235,8 +235,12 @@ pub fn start(
             .map(String::from)
             .collect(),
     );
-    // `ai.chat` `send_failed` events restore the sidebar composer (B0043).
-    config.event = Some(Arc::new(crate::chat::route_event));
+    // `ai.chat` `send_failed` events restore the sidebar composer (B0043); `osd`
+    // events drive the on-screen display (B0051).
+    config.event = Some(Arc::new(|message| {
+        crate::chat::route_event(message);
+        crate::notice_service::route_event(message);
+    }));
     let slot: Arc<OnceLock<crate::nacre_source::WeakClient>> = Default::default();
     let own = slot.clone();
     config.provider = Some((

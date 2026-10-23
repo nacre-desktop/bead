@@ -124,7 +124,7 @@ impl Owner {
                         models.retain(|key, _| {
                             !matches!(
                                 key.as_str(),
-                                "osd.label" | "osd.status" | "osd.level" | "osd.muted"
+                                "osd.kind" | "osd.value" | "osd.muted" | "osd.label" | "osd.device"
                             )
                         });
                     }
@@ -291,15 +291,7 @@ impl Notices for Owner {
 pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
     let rows = snapshot["rows"].as_array().cloned().unwrap_or_default();
     let osd = &snapshot["osd"];
-    let channel = osd["channel"].as_str().unwrap_or("volume");
-    let muted = osd["muted"].as_bool().unwrap_or(false);
-    let value = osd["value"].as_f64().unwrap_or(0.);
-    let label = match channel {
-        "brightness" => "bead.osd.brightness",
-        "microphone" => "bead.osd.microphone",
-        "capslock" => "bead.osd.capslock",
-        _ => "bead.osd.volume",
-    };
+    let kind = osd["channel"].as_str().unwrap_or("volume");
     BTreeMap::from([
         (
             "notifications.open".into(),
@@ -315,33 +307,17 @@ pub fn values(snapshot: &serde_json::Value) -> BTreeMap<String, Value> {
             Value::Number(snapshot["history_count"].as_u64().unwrap_or(0) as f64),
         ),
         ("osd.open".into(), Value::Bool(osd.is_object())),
-        ("osd.muted".into(), Value::Bool(muted)),
-        ("osd.label".into(), Value::Text(crate::i18n::tr(label, &[]))),
+        ("osd.kind".into(), Value::Text(kind.into())),
         (
-            "osd.level".into(),
-            Value::Number(if channel == "capslock" {
-                if value > 0. { 100. } else { 0. }
-            } else {
-                value * 100.
-            }),
+            "osd.value".into(),
+            Value::Number(osd["value"].as_f64().unwrap_or(0.).clamp(0., 1.)),
         ),
         (
-            "osd.status".into(),
-            Value::Text(if channel == "capslock" {
-                crate::i18n::tr(
-                    if value > 0. {
-                        "bead.osd.on"
-                    } else {
-                        "bead.osd.off"
-                    },
-                    &[],
-                )
-            } else if muted {
-                crate::i18n::tr("bead.osd.muted", &[])
-            } else {
-                format!("{:.0}%", value * 100.)
-            }),
+            "osd.muted".into(),
+            Value::Bool(osd["muted"].as_bool().unwrap_or(false)),
         ),
+        ("osd.label".into(), Value::Text(String::new())),
+        ("osd.device".into(), Value::Text(String::new())),
     ])
 }
 #[cfg(test)]

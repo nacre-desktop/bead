@@ -578,7 +578,6 @@ fn start(
     if ui_notification_socket.is_some() && !register_ui_provider {
         return Err("--ui-notification-socket requires --ui-provider".into());
     }
-    let osd_socket = ui_notification_socket.clone();
     let _ui_provider = if register_ui_provider {
         Some(
             ui_provider::start(
@@ -893,7 +892,6 @@ fn start(
         let fallback = scene.clone();
         let bar = options.bar;
         let brightness_client = _ui_provider.clone().filter(|_| core_views && bar);
-        let brightness_osd = osd_socket.clone();
         // B0022: with a daemon, bar actions are N0031 calls and the tray is its topic.
         let bar_routes = brightness_client
             .as_ref()
@@ -916,7 +914,6 @@ fn start(
         let make_source = move |output: Option<String>| {
             let prefs_source = prefs_source.clone();
             let brightness_client = brightness_client.clone();
-            let brightness_osd = brightness_osd.clone();
             let bar_routes = bar_routes.clone();
             let entry = entry.clone();
             let palette = palette.clone();
@@ -961,7 +958,7 @@ fn start(
                         runtime
                     };
                     let runtime = if let Some(client) = brightness_client {
-                        runtime.with_brightness_keys(client, brightness_osd)?
+                        runtime.with_brightness_keys(client)?
                     } else {
                         runtime
                     };

@@ -124,6 +124,8 @@ impl Script {
             "notifications.clear",
             "notifications.clear_popups",
             "notifications.osd",
+            // Host-handled dashboard control (any page may bind it once the daemon advertises it).
+            "dashboard.do",
             "services.audio",
             "services.audio.volume",
             "services.tray",

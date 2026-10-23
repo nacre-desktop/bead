@@ -563,6 +563,7 @@ mod tests {
             path: path.to_string_lossy().into_owned(),
             file_identity: identity,
             presentation: nacre_protocol::wallpaper::Presentation::Crop,
+            motion: None,
             palette: nacre_protocol::wallpaper::WallpaperPalette {
                 mode: nacre_protocol::wallpaper::PaletteMode::Dark,
                 colours: BTreeMap::from([

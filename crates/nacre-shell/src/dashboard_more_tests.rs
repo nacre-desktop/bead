@@ -1312,3 +1312,51 @@ fn dashboard_wakes_on_a_preference_change_and_core_tabs_follow_dashboard_tabs() 
     .with_prefs(dashboard.prefs.clone());
     assert_eq!(ids(&weather), ["system", "today", "weather"]);
 }
+
+/// B0051: with the dashboard controls live (daemon methods advertised) pages bind the
+/// host action `dashboard.do`; every page must still load (Today failed with
+/// `error converting Lua nil to function`, so `try-bead.py --dashboard-fixtures` died).
+#[test]
+fn every_dashboard_page_loads_with_live_controls() -> Result<()> {
+    let player = || Arc::new(FakeSource::new(fixture("player")).unwrap()) as Arc<dyn Source>;
+    let mut bound = 0;
+    for page in [
+        Page::Today,
+        Page::Weather,
+        Page::Media,
+        Page::System,
+        Page::Notifications,
+        Page::Devices,
+        Page::Network,
+    ]
+    .into_iter()
+    .chain(PAGES)
+    {
+        let mut model = Dashboard::new(
+            page,
+            Arc::new(FakeSource::new(fixture(page.name())).unwrap()),
+            None,
+            true,
+        )
+        .with_now(fixed_now)
+        .with_player((page == Page::Today).then(player))
+        .project();
+        for key in [
+            "dashboard.control",
+            "dashboard.can_previous",
+            "dashboard.can_toggle",
+            "dashboard.can_next",
+        ] {
+            model.insert(key.into(), Value::Bool(true));
+        }
+        let h = extra_harness(page, model, 1.)?;
+        bound += h
+            .session
+            .view_nodes()
+            .iter()
+            .filter(|n| n.action.as_deref() == Some("dashboard.do"))
+            .count();
+    }
+    assert!(bound > 0, "some page binds dashboard.do");
+    Ok(())
+}

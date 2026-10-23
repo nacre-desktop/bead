@@ -202,6 +202,171 @@ mod tests {
         }
         Ok(())
     }
+    /// B0051: one golden and the visible texts per `osd` event kind (glyph, title, value, detail).
+    #[test]
+    fn osd_kinds_show_their_glyph_title_value_and_detail() -> Result<(), Box<dyn std::error::Error>>
+    {
+        // (name, kind, value, muted, label, device, texts that must be drawn)
+        let cases: [(&str, &str, f64, bool, &str, &str, &[&str]); 11] = [
+            (
+                "volume",
+                "volume",
+                0.5,
+                false,
+                "Speakers",
+                "alsa_output.x",
+                &["volume_up", "Volume", "50%", "Speakers"],
+            ),
+            (
+                "volume-low",
+                "volume",
+                0.2,
+                false,
+                "",
+                "",
+                &["volume_down", "20%", "Default output"],
+            ),
+            (
+                "volume-muted",
+                "volume",
+                0.5,
+                true,
+                "Speakers",
+                "",
+                &["volume_off", "Muted"],
+            ),
+            (
+                "volume-clamped",
+                "volume",
+                1.4,
+                false,
+                "Speakers",
+                "",
+                &["volume_up", "100%"],
+            ),
+            (
+                "output",
+                "output",
+                0.3,
+                false,
+                "Headphones",
+                "bluez_output.1",
+                &["headphones", "Audio output", "Headphones"],
+            ),
+            (
+                "microphone",
+                "microphone",
+                0.0,
+                true,
+                "Built-in microphone",
+                "",
+                &["mic_off", "Microphone", "Muted", "Built-in microphone"],
+            ),
+            (
+                "brightness",
+                "brightness",
+                0.75,
+                false,
+                "",
+                "eDP-1",
+                &["brightness_high", "Display brightness", "75%"],
+            ),
+            (
+                "keyboard",
+                "keyboard",
+                0.5,
+                false,
+                "",
+                "",
+                &[
+                    "keyboard",
+                    "Keyboard brightness",
+                    "50%",
+                    "Keyboard backlight",
+                ],
+            ),
+            (
+                "night-light",
+                "night_light",
+                1.,
+                false,
+                "",
+                "",
+                &["bedtime", "Night light", "On"],
+            ),
+            (
+                "power-profile",
+                "power_profile",
+                0.,
+                false,
+                "power-saver",
+                "",
+                &["eco", "Power mode", "Power saver"],
+            ),
+            (
+                "capslock",
+                "capslock",
+                0.,
+                false,
+                "",
+                "",
+                &["keyboard_capslock", "Caps Lock", "Off"],
+            ),
+        ];
+        for (name, kind, value, muted, label, device, texts) in cases {
+            let mut fixture = initial_models()?;
+            fixture.insert("panel.open".into(), Value::Bool(true));
+            for (key, v) in [
+                ("osd.open", Value::Bool(true)),
+                ("osd.kind", Value::Text(kind.into())),
+                ("osd.value", Value::Number(value)),
+                ("osd.muted", Value::Bool(muted)),
+                ("osd.label", Value::Text(label.into())),
+                ("osd.device", Value::Text(device.into())),
+            ] {
+                fixture.insert(key.into(), v);
+            }
+            let mut harness = bead_test::Harness::load(
+                &root(),
+                Path::new("osd/main.luau"),
+                &root().join("palette.json"),
+                fixture,
+                bead_test::Config {
+                    width: 404,
+                    height: 144,
+                    scale: 1.,
+                },
+            )?;
+            let frame = harness.render()?;
+            let drawn: Vec<String> = harness
+                .scene()
+                .primitives
+                .iter()
+                .filter_map(|p| match p {
+                    bead::render::Primitive::Text { text, .. } => Some(text.to_string()),
+                    _ => None,
+                })
+                .collect();
+            for want in texts {
+                assert!(
+                    drawn.iter().any(|t| t == want),
+                    "{name}: {want} in {drawn:?}"
+                );
+            }
+            let golden = root()
+                .join("tests/goldens")
+                .join(format!("osd-{name}-1.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                bead_test::Tolerance::default(),
+                &std::env::temp_dir().join(format!("bead-osd-{name}-diff")),
+            )?;
+        }
+        Ok(())
+    }
     /// Manual renderer CPU comparison; excluded from CI timing assertions.
     #[test]
     #[ignore = "manual release CPU benchmark; no compositor needed"]
