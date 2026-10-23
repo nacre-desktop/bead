@@ -93,7 +93,7 @@ both on one slot abstraction when a third companion slot is needed, not before.
   tests, packaging, wallpaper smoke, services, cargo-deny: exit 0.
 - Nested smoke (desktop, private bus/labwc/niri, real `nacre-helper daemon
   --notifications=daemon` from Nacre `299463d4`, `spikes/notice-daemon-smoke.py` against the main
-  shell): **37/37** (the 35 B0030 checks adapted to the overlay view, plus: a popup shows while
+  shell): **26/26** on the tree rebased onto B0051 (before the rebase 37/37 including the old snapshot-fed OSD checks, which B0051 made obsolete and this unit removed from the smoke; `spikes/b0051-gates.py` covers the OSD) — the B0030 checks adapted to the overlay view, plus: a popup shows while
   the launcher is open with the panel slot holding the launcher and no inhibition; a popout
   suppresses popups and the overlay is released). Not covered nested: a second output (the nested
   niri has one), so the focused-output choice is proven by the unit/fake-daemon tests only.
