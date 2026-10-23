@@ -35,30 +35,30 @@ Owner items: (1) bar pill spacing, (2) launcher from the top, (3) panels not the
 
 | State | Baseline | Now |
 | --- | --- | --- |
-| idle | 3.921 | 3.86 |
-| launcher | 34.178 | 8.048 |
-| launcher-typed | 34.235 | 5.1 |
-| launcher-wallpapers | 34.646 | 8.473 |
-| menu-power | 34.403 | 5.435 |
-| dashboard-0 | 7.814 | 7.756 |
-| dashboard-1 | 7.112 | 7.11 |
-| dashboard-2 | 6.092 | 6.028 |
-| dashboard-3 | 7.643 | 7.455 |
-| dashboard-4 | 7.814 | 7.756 |
-| popout-calendar | 4.781 | 4.704 |
+| idle | 3.921 | 3.862 |
+| launcher | 34.178 | 4.495 |
+| launcher-typed | 34.235 | 5.102 |
+| launcher-wallpapers | 34.646 | 8.474 |
+| menu-power | 34.403 | 5.437 |
+| dashboard-0 | 7.814 | 7.803 |
+| dashboard-1 | 7.112 | 7.111 |
+| dashboard-2 | 6.092 | 6.03 |
+| dashboard-3 | 7.643 | 7.387 |
+| dashboard-4 | 7.814 | 7.803 |
+| popout-calendar | 4.781 | 4.706 |
 | popout-network | 17.802 | 17.824 |
 | popout-bluetooth | 17.677 | 17.754 |
-| popout-battery | 14.277 | 14.337 |
-| popout-audio | 19.123 | 19.181 |
-| control-center | 18.791 | 7.718 |
-| control-network | 12.956 | 12.927 |
-| notification | 7.459 | 7.425 |
-| osd-volume | 5.168 | 5.124 |
-| osd-microphone | 5.163 | 5.119 |
+| popout-battery | 14.277 | 14.338 |
+| popout-audio | 19.123 | 19.182 |
+| control-center | 18.791 | 7.719 |
+| control-network | 12.956 | 12.928 |
+| notification | 7.459 | 7.426 |
+| osd-volume | 5.168 | 5.126 |
+| osd-microphone | 5.163 | 5.12 |
 | session | 22.466 | 18.245 |
-| settings | 10.731 | 10.193 |
-| sidebar | 26.972 | 5.131 |
-| pearl-detached | 39.435 | 10.453 |
+| settings | 10.731 | 10.194 |
+| sidebar | 26.972 | 5.132 |
+| pearl-detached | 39.435 | 8.07 |
 
 ## Owner follow-ups (2026-10-23, second look)
 
