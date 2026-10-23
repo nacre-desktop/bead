@@ -205,13 +205,12 @@ return function(ui, tokens)
             on_activate=maybe(p.on_edit,on)})
         return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=p.enabled,table.unpack(children)}
     end
-    function kit.ListRow(p)
+    function kit.ListEditor(p)
         local on=p.enabled~=false
         local rows={}
         for i,item in ipairs(p.items) do
-            rows[i]=ui.Row{id="item-"..i,width="fill",height=32,shrink=0,gap=sp.sm,align="center",
-                ui.Text{id="text",text=item.label,grow=1,height=20,font_size=tx.body*4/3,color="onSurface"},
-                kit.IconButton{id="remove",width=32,height=32,shrink=0,text="close",aria_label=p.remove_label.." "..item.label,on_activate=maybe(ui.action(p.on_remove,(p.remove_prefix or "")..item.id),on)}}
+            rows[i]=kit.FormRow{id="item-"..i,label=item.label,description="",height=40,enabled=on,
+                kit.IconButton{id="remove",text="close",aria_label=p.remove_label.." "..item.label,on_activate=maybe(ui.action(p.on_remove,(p.remove_prefix or "")..item.id),on)}}
         end
         rows.id="items";rows.width="fill";rows.gap=sp.xs;rows.shrink=0
         local add

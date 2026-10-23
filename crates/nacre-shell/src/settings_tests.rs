@@ -274,6 +274,8 @@ fn closing_releases_every_store_source() {
 }
 
 fn harness(model: BTreeMap<String, Value>, width: u32, height: u32, scale: f32) -> Harness {
+    // The built-in English table is installed once per process; do not race another test to it.
+    crate::i18n::init();
     Harness::load(
         &root(),
         Path::new("settings/main.luau"),
@@ -317,6 +319,7 @@ fn settings_window_goldens() {
         let mut model = settings.project(&stores(page, search));
         // Goldens show the enabled look a connected daemon gives.
         model.insert("settings.writable".into(), Value::Bool(true));
+        model.insert("settings.search".into(), Value::Text(search.into()));
         let mut h = harness(model, 960, 640, scale);
         golden(name, &mut h);
     }
@@ -365,6 +368,7 @@ fn form_kit_gallery_golden() {
 #[test]
 fn typing_in_the_search_field_is_fast() {
     use bead::wayland::{SceneSource, UiEvent};
+    crate::i18n::init();
     let palette = root().join("palette.json");
     let colors = bead::render::Palette::read(&palette).unwrap();
     let cold = crate::sound::fallback(colors.get("surface").unwrap());
