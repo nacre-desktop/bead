@@ -129,6 +129,14 @@ battery draw, VA-API CPU, 4K.
   the fallback visible.
 - `spikes/wallpaper-video-shell-proof.py`: the relative gate against a control shell (below).
 
+## Validation
+
+Full Bead CI replica (Ubuntu 24.04 container on prod, `nice -n 10`, -j8): fmt, clippy `-D warnings`, service
+boundary, `cargo test --workspace` (+ trace), renderer feature checks, facade/Luau analyze, spike unit tests,
+packaging staging, the motion smoke above, services lifecycle, private SNI, `cargo deny` (workspace and each
+`bead-*` framework root) - all passed (`CI_ALL_OK`). Not run: nested smoke on the owner's desktop (hardware
+VA-API, real niri/Hyprland fullscreen and DPMS) and any live switch.
+
 ## Packaging and CI (B0029)
 
 `bead-wallpaper-video` installs beside `nacre-shell` (`stage.sh`, `bead-shell check`, stage test); the Arch package
