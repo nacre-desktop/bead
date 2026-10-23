@@ -17,7 +17,10 @@ pub fn mask(text: &str) -> String {
 }
 /// Byte offset in `mask(text)` for the byte offset `at` of `text`.
 pub fn mask_offset(text: &str, at: usize) -> usize {
-    text.grapheme_indices(true).take_while(|(i, _)| *i < at).count() * MASK.len_utf8()
+    text.grapheme_indices(true)
+        .take_while(|(i, _)| *i < at)
+        .count()
+        * MASK.len_utf8()
 }
 pub fn boundaries(text: &str) -> Vec<usize> {
     let mut values: Vec<_> = text.grapheme_indices(true).map(|(i, _)| i).collect();

@@ -120,7 +120,11 @@ impl Drop for Runtime {
 impl Runtime {
     /// A freshly opened prompt or form takes keyboard focus on its first field, so the
     /// user can type (and press Enter) at once.
-    fn focus_network_form(&mut self, scene: Option<Scene>) -> Result<Option<Scene>, Box<dyn Error>> {
+    fn focus_network_form(
+        &mut self,
+        scene: Option<Scene>,
+        mut changes: BTreeMap<String, bead::core::Value>,
+    ) -> Result<Option<Scene>, Box<dyn Error>> {
         let field = match self.session.stores.get("network.view") {
             Some(bead::core::Value::Text(view)) if view == "prompt" => "status-popout.secret.field",
             Some(bead::core::Value::Text(view)) if view == "hidden" => "status-popout.ssid",
@@ -129,11 +133,9 @@ impl Runtime {
         if self.session.stores.get("bead.focused") == Some(&bead::core::Value::Text(field.into())) {
             return Ok(scene);
         }
-        let focused = self.session.update(BTreeMap::from([(
-            "bead.focused".into(),
-            bead::core::Value::Text(field.into()),
-        )]))?;
-        Ok(focused.or(scene))
+        // `update` builds on the committed stores, so the pending changes ride along.
+        changes.insert("bead.focused".into(), bead::core::Value::Text(field.into()));
+        Ok(self.session.update(changes)?.or(scene))
     }
     fn publish_status_pill(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
         let values = BTreeMap::from([
@@ -1906,8 +1908,8 @@ impl SceneSource for Runtime {
                 }
             }
             clear.insert("network.reveal".into(), bead::core::Value::Bool(false));
-            let scene = self.session.update(clear)?;
-            let scene = self.focus_network_form(scene)?;
+            let scene = self.session.update(clear.clone())?;
+            let scene = self.focus_network_form(scene, clear)?;
             return self.finish_scene(scene, false);
         }
         if let Some((_, name, bead::core::Value::Text(key))) = &host_action
@@ -1927,7 +1929,7 @@ impl SceneSource for Runtime {
                 status.network_link_action(name, key, callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
-            let scene = self.focus_network_form(scene)?;
+            let scene = self.focus_network_form(scene, BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }
         if let (Some(dashboard), Some((_, name, bead::core::Value::Text(arg)))) =
@@ -3162,6 +3164,8 @@ mod bar_routes_runtime_tests;
 mod bluetooth_power_tests;
 #[cfg(test)]
 mod chat_runtime_tests;
+#[cfg(test)]
+mod join_runtime_tests;
 #[cfg(test)]
 mod launcher_reopen_tests;
 #[cfg(test)]

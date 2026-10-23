@@ -30,7 +30,8 @@ local function Page()
         gap=gap,radius=T.radii.medium,fill="surface",table.unpack(kids)}
 end
 local function button(id,label,action,primary,h)
-    return kit.Button{id=id,height=h or BUTTON,grow=1,padding=0,radius=T.radii.small,justify="center",align="center",
+    local height=h or BUTTON
+    return kit.Button{id=id,height=height,grow=1,padding=0,padding_top=(height-24)/2,radius=T.radii.small,justify="center",align="center",
         fill=primary and (action and "primary" or "surfaceContainerHigh") or "surfaceContainer",aria_label=label,on_activate=action,
         ui.Text{id=id.."-label",text=label,height=24,grow=1,font_size=BODY,text_align="center",
             color=primary and action and "onPrimary" or (action and "onSurface" or "onSurfaceVariant")}}
@@ -83,7 +84,7 @@ if view=="saved" then
                 ui.Column{id="saved-text",height=FIELD,grow=1,
                     ui.Text{id="saved-name",text=item.label,height=24,font_size=BODY,color="onSurface"},
                     ui.Text{id="saved-caption",text=item.caption,height=16,font_size=CAPTION*.85,color="onSurfaceVariant"}},
-                kit.ConfirmButton{id="forget",width=T.spacing.xxl*5,height=BUTTON,padding=T.spacing.sm,radius=T.radii.small,
+                kit.ConfirmButton{id="forget",width=T.spacing.xxl*7,height=BUTTON,padding=T.spacing.sm,radius=T.radii.small,
                     label=ui.tr("bead.panel.network-forget"),confirm_label=ui.tr("bead.panel.network-forget-confirm"),glyph="delete",
                     confirming=item.confirming,
                     on_activate=item.enabled and ui.action("network.forget_ask",item.id) or nil,
@@ -120,7 +121,6 @@ return kit.Panel{id="status-popout",edge=get("view.edge"),
             on_activate=item.enabled and (item.active and ui.action("network.disconnect",item.id) or ui.action("network.connect",item.id)) or nil,
             ui.Row{id="link-row",height=28,align="center",gap=T.spacing.md,
                 ui.Text{id="link-name",text=item.label,height=24,grow=1,font_size=BODY,color=item.enabled and "onSurface" or "onSurfaceVariant"},
-                item.secured and ui.Text{id="link-lock",text="lock",family="Material Symbols Rounded",font_size=CAPTION,width=CAPTION,height=24,shrink=0,color="onSurfaceVariant"} or nil,
                 ui.Text{id="link-action",text=item.action,height=24,font_size=CAPTION,color=item.active and "primary" or "onSurfaceVariant"},
             },
         }

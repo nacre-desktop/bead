@@ -82,6 +82,9 @@ After Bead's core switch on Nacre, plan support for:
   `bead_ui::markdown` (block subset), `kit.Transcript`, `kit.Composer`, and
   `TextInput multiline` (Shift+Enter, wrapped caret, vertical moves). Chat-agnostic;
   the `ai.chat` contract lives only in `nacre-shell/src/chat.rs`.
+- B0050: `TextInput masked` (bullets, no accessibility value, IME password purpose, no copy),
+  `kit.PasswordField`, `kit.ConfirmButton`, and the `*.secret` store convention (never traced or saved).
+  The Wi-Fi flow lives only in `nacre-shell/src/status_views/join.rs`.
 
 ## Housekeeping (later)
 

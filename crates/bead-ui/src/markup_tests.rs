@@ -1222,3 +1222,38 @@ return ui.Panel{id="panel",width=300,height=200,padding=0,
         .count();
     assert_eq!(carets, 1);
 }
+#[test]
+fn masked_input_draws_bullets_and_never_exposes_its_value() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=300,height=200,padding=0,
+ ui.TextInput{id="box",masked=true,text=ui.bind("query"),placeholder="Password",width=280,height=40}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let scene = s.focus_id("panel.box").unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.key("pässw0rd", false).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("query"), Some(&Value::Text("pässw0rd".into())));
+    assert!(s.focused_masked());
+    // Drawn as one bullet per character, never the characters.
+    assert!(texts(&s).iter().any(|t| t == "••••••••"), "{:?}", texts(&s));
+    assert!(texts(&s).iter().all(|t| !t.contains("ssw0rd")));
+    // Out of copy, IME context, accessibility, traces.
+    assert_eq!(s.selected_text(), None);
+    assert_eq!(s.surrounding_text(), Some((String::new(), 0, 0)));
+    let tree = format!("{:?}", s.accessibility_tree());
+    assert!(!tree.contains("ssw0rd"), "{tree}");
+    // The caret sits after the last bullet, not at the end of the real text.
+    let mut scene = s.current.clone();
+    s.decorate_inputs(&mut scene).unwrap();
+    assert!(
+        scene
+            .primitives
+            .iter()
+            .any(|p| matches!(p, Primitive::Rounded { rect, .. } if rect.w == 1.))
+    );
+}

@@ -1228,3 +1228,119 @@ fn network_popout_height_follows_rows_and_message() -> Result<()> {
     }
     Ok(())
 }
+
+/// B0050 goldens: password prompt, wrong-password re-prompt, hidden join form, saved list.
+#[test]
+fn network_join_pages_have_goldens_at_both_scales() -> Result<()> {
+    // Install the built-in English catalog so the pages show real text.
+    let _ = crate::i18n::tr("bead.panel.network-back", &[]);
+    let saved = |confirming: bool| {
+        Value::list(vec![
+            serde_json::json!({"id":"forget:c0","label":"Home","caption":"Secured","confirming":false,"enabled":true}),
+            serde_json::json!({"id":"forget:c9","label":"Old flat","caption":"Secured","confirming":confirming,"enabled":true}),
+            serde_json::json!({"id":"forget:c4","label":"Guest","caption":"Open","confirming":false,"enabled":true}),
+        ])
+    };
+    type Page = (&'static str, Vec<(&'static str, Value)>);
+    let pages: [Page; 6] = [
+        (
+            "list",
+            vec![
+                (
+                    "network.rows",
+                    Value::list(vec![
+                        serde_json::json!({"id":"dev:wifi0","label":"Home","action":"Disconnect","active":true,"secured":true,"enabled":true}),
+                        serde_json::json!({"id":"ap:ap3","label":"Lab network","action":"Connect","active":false,"secured":true,"enabled":true}),
+                    ]),
+                ),
+                ("network.height", Value::Number(342.)),
+            ],
+        ),
+        (
+            "prompt",
+            vec![
+                ("network.view", Value::Text("prompt".into())),
+                ("network.prompt_label", Value::Text("Lab network".into())),
+                ("network.secret", Value::Text("hunter2pass".into())),
+            ],
+        ),
+        (
+            "reprompt",
+            vec![
+                ("network.view", Value::Text("prompt".into())),
+                ("network.prompt_label", Value::Text("Lab network".into())),
+                (
+                    "network.form_error",
+                    Value::Text("Wrong password. Try again.".into()),
+                ),
+            ],
+        ),
+        (
+            "hidden",
+            vec![
+                ("network.view", Value::Text("hidden".into())),
+                ("network.hidden_ssid", Value::Text("Hidden Lab".into())),
+                ("network.hidden_security", Value::Text("sae".into())),
+                ("network.secret", Value::Text("hunter2pass".into())),
+                ("network.reveal", Value::Bool(false)),
+            ],
+        ),
+        (
+            "saved",
+            vec![
+                ("network.view", Value::Text("saved".into())),
+                ("network.saved", saved(false)),
+            ],
+        ),
+        (
+            "saved-confirm",
+            vec![
+                ("network.view", Value::Text("saved".into())),
+                ("network.saved", saved(true)),
+            ],
+        ),
+    ];
+    for (name, extra) in pages {
+        for scale in [1., 1.5] {
+            let mut initial = with_flow_stores(BTreeMap::from([
+                ("view.edge".into(), Value::Text("top".into())),
+                ("panel.open".into(), Value::Bool(true)),
+                ("status.ready".into(), Value::Bool(true)),
+                ("status.active".into(), Value::Bool(true)),
+                ("network.wifi_checked".into(), Value::Bool(true)),
+                ("network.wifi_enabled".into(), Value::Bool(true)),
+                ("network.wifi_busy".into(), Value::Bool(false)),
+                ("network.wifi_message".into(), Value::Text(String::new())),
+                ("network.rows".into(), Value::list(Vec::new())),
+                ("network.height".into(), Value::Number(262.)),
+                ("network.link_visible".into(), Value::Bool(false)),
+                ("network.link_message".into(), Value::Text(String::new())),
+            ]));
+            initial.extend(extra.iter().map(|(k, v)| ((*k).into(), v.clone())));
+            let mut h = Harness::load(
+                &root(),
+                Path::new("status/network.luau"),
+                &root().join("palette.json"),
+                initial,
+                Config {
+                    width: 380,
+                    height: 400,
+                    scale,
+                },
+            )?;
+            let frame = h.render()?;
+            let golden = root()
+                .join("tests/goldens")
+                .join(format!("network-{name}-{scale}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                Default::default(),
+                &std::env::temp_dir().join(format!("bead-network-{name}-{scale}-diff")),
+            )?;
+        }
+    }
+    Ok(())
+}

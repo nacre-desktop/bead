@@ -70,7 +70,11 @@ impl WifiControl {
 }
 
 /// A connect to a secured access point without a saved profile needs a password first.
-pub(super) fn secret_prompt(state: &NetworkState, key: &str, target: &LinkTarget) -> Option<Prompt> {
+pub(super) fn secret_prompt(
+    state: &NetworkState,
+    key: &str,
+    target: &LinkTarget,
+) -> Option<Prompt> {
     if target.method != "network.connect" || target.params["target"]["kind"] != "access_point" {
         return None;
     }
@@ -186,7 +190,10 @@ fn text(stores: &Stores, name: &str) -> String {
 
 impl Status {
     /// Fresh state plus the live control, or nothing when no flow action is possible.
-    fn flow<R>(&self, f: impl FnOnce(&mut WifiControl, &Client, &str, &NetworkState) -> R) -> Option<R> {
+    fn flow<R>(
+        &self,
+        f: impl FnOnce(&mut WifiControl, &Client, &str, &NetworkState) -> R,
+    ) -> Option<R> {
         let control = self.wifi_control.as_ref()?;
         let snapshot = self.source.snapshot();
         let client = control.borrow().client.clone();
@@ -203,8 +210,9 @@ impl Status {
         self.flow(|control, client, _, state| {
             control.reset_flow();
             match view {
-                "hidden" if advertised(client, "network.connect").is_some()
-                    && sole_device(state, "wifi", false).is_some() =>
+                "hidden"
+                    if advertised(client, "network.connect").is_some()
+                        && sole_device(state, "wifi", false).is_some() =>
                 {
                     control.page = Page::Hidden;
                 }
@@ -381,7 +389,8 @@ pub(super) fn project(
         .is_some_and(|op| op.reprompt.is_some() && op.ticket.is_some());
     let link_busy = control.link.is_some();
     let can_join = state.is_some_and(|state| {
-        advertised(client, "network.connect").is_some() && sole_device(state, "wifi", false).is_some()
+        advertised(client, "network.connect").is_some()
+            && sole_device(state, "wifi", false).is_some()
     });
     let can_forget = state.is_some() && advertised(client, "network.forget").is_some();
     let mut saved: Vec<_> = state
@@ -401,7 +410,11 @@ pub(super) fn project(
         .into_iter()
         .map(|(id, c)| {
             let key = format!("forget:{}", id.0);
-            let name = c.ssid.as_deref().filter(|s| !s.is_empty()).unwrap_or(&c.name);
+            let name = c
+                .ssid
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&c.name);
             serde_json::json!({
                 "id": key,
                 "label": line(name, 28),
@@ -419,17 +432,28 @@ pub(super) fn project(
         })
         .collect();
     BTreeMap::from([
-        ("network.view".into(), Value::Text(control.page.as_str().into())),
+        (
+            "network.view".into(),
+            Value::Text(control.page.as_str().into()),
+        ),
         (
             "network.prompt_label".into(),
-            Value::Text(control.prompt.as_ref().map_or(String::new(), |p| p.label.clone())),
+            Value::Text(
+                control
+                    .prompt
+                    .as_ref()
+                    .map_or(String::new(), |p| p.label.clone()),
+            ),
         ),
         (
             "network.form_error".into(),
             Value::Text(control.form_error.map_or(String::new(), |id| tr(id, &[]))),
         ),
         ("network.form_busy".into(), Value::Bool(busy)),
-        ("network.can_hidden".into(), Value::Bool(can_join && !link_busy)),
+        (
+            "network.can_hidden".into(),
+            Value::Bool(can_join && !link_busy),
+        ),
         ("network.can_forget".into(), Value::Bool(can_forget)),
         ("network.saved".into(), Value::list(rows)),
     ])

@@ -15,6 +15,7 @@ without `--check` it updates only the framework scale mirror.
 The kit exposes Button, IconButton, StatusIcon, Slider, Switch, Tile, SegmentedControl,
 List/ListRow, Card, Popover/Peek, Tooltip and TextInput. Slider uses a bounded
 step range: click/drag chooses a step, arrow keys change the focused step.
+`TextInput masked=true` draws bullets and keeps its value out of accessibility, IME context, copy and traces (stores named `*.secret` are also left out of trace dumps); `kit.PasswordField` adds a show/hide button and Enter action, `kit.ConfirmButton` asks again in place before acting.
 Tile takes distinct `on_toggle` and `on_detail` actions. SegmentedControl takes
 stable item IDs and an action receiving the selected ID. List/TextInput keep
 existing stable store bindings; component identity survives reload.

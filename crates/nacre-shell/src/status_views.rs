@@ -680,7 +680,10 @@ impl Status {
             .as_mut()
             .and_then(|op| op.ticket.as_mut().and_then(|ticket| ticket.try_take()));
         if let Some(result) = link_terminal {
-            let join = control.link.as_ref().is_some_and(|op| op.reprompt.is_some());
+            let join = control
+                .link
+                .as_ref()
+                .is_some_and(|op| op.reprompt.is_some());
             match result {
                 Ok(payload)
                     if payload.as_object().is_some_and(|object| {
@@ -713,7 +716,12 @@ impl Status {
                         control.form_error = Some(join::join_error_id(&error.code, &error.message));
                     } else if let Some(prompt) = key.and_then(|key| {
                         join::needs_secret(&error.code, &error.message)
-                            .then(|| candidate.state.as_ref().and_then(|s| join::prompt_for(s, &key)))
+                            .then(|| {
+                                candidate
+                                    .state
+                                    .as_ref()
+                                    .and_then(|s| join::prompt_for(s, &key))
+                            })
                             .flatten()
                     }) {
                         // The daemon wants a password the tap did not carry (for example the saved
@@ -739,10 +747,10 @@ impl Status {
                     .as_ref()
                     .is_none_or(|state| !join::still_pending(state, op)))
             && let Some(op) = control.link.take()
+            && authentication_error
+            && let Some(again) = op.reprompt
         {
-            if authentication_error && let Some(again) = op.reprompt {
-                control.reopen(again);
-            }
+            control.reopen(again);
         }
         let (can_connect, can_disconnect) = {
             let methods = client.status().methods;
@@ -787,7 +795,11 @@ impl Status {
             None => Vec::new(),
         };
         let row_count = rows.len();
-        let forms = join::project(&mut control, candidate.state.as_ref().filter(|_| candidate.fresh), &client);
+        let forms = join::project(
+            &mut control,
+            candidate.state.as_ref().filter(|_| candidate.fresh),
+            &client,
+        );
         let link_message = if link_busy {
             ""
         } else {
@@ -1227,6 +1239,8 @@ fn resolve_link(state: &NetworkState, key: &str) -> Option<LinkTarget> {
         params: serde_json::to_value(NetworkConnect {
             device: device.clone(),
             target,
+            secret: None,
+            security: None,
         })
         .unwrap_or_default(),
     };
@@ -1252,7 +1266,11 @@ fn resolve_link(state: &NetworkState, key: &str) -> Option<LinkTarget> {
         }
         "forget" => {
             // Saved Wi-Fi profiles only (they carry an SSID).
-            state.connections.items.get(&id).filter(|c| c.ssid.is_some())?;
+            state
+                .connections
+                .items
+                .get(&id)
+                .filter(|c| c.ssid.is_some())?;
             Some(LinkTarget {
                 method: "network.forget",
                 params: serde_json::to_value(nacre_protocol::core_services::ConnectionTarget {
