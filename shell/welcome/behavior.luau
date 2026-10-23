@@ -6,7 +6,7 @@ return {stores={
     ["welcome.step"]="welcome",["welcome.guide"]="",["welcome.scroll"]=0,
     ["welcome.width"]=1020,["welcome.height"]=760,
     ["welcome.can.settings"]=true,["welcome.can.colors"]=false,["welcome.can.ai"]=false,["welcome.can.brain"]=false,
-    ["welcome.shortcuts"]={},["welcome.shortcuts.state"]="loading",
+    ["welcome.shortcuts"]={},["welcome.demo"]={},["welcome.shortcuts.state"]="loading",
 },actions={
     -- Go to a tour page (or the help page) and start it at the top.
     go=function(s,name) s["welcome.step"]=name s["welcome.guide"]="" s["welcome.scroll"]=0 end,

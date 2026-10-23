@@ -185,6 +185,12 @@ struct State {
     zones: Vec<String>,
     zones_fetch: Option<CallTicket>,
     zones_asked: bool,
+    /// Theme targets `(id, status)` from `colors.targets` (B0064), the call that reads them and
+    /// whether a `colors.set_target` is in flight (the list is read again when it finishes).
+    targets: Vec<(String, String)>,
+    targets_fetch: Option<CallTicket>,
+    targets_asked: bool,
+    retarget: bool,
     /// The text of the picker's filter field, as of the last projection.
     pick: String,
     /// What the last finished call wants said (not an error), cleared by the next action.
@@ -412,7 +418,7 @@ impl Settings {
     /// (launcher entries, startup apps) and editors only the QML shell has.
     fn unavailable(&self, setting: &Json) -> bool {
         let id = setting["id"].as_str().unwrap_or("");
-        setting.get("adapter").is_some()
+        (setting.get("adapter").is_some() && !self.app_theme(setting))
             || setting.get("backend").is_some()
             || matches!(setting["entityType"].as_str(), Some("entry" | "startup"))
             || (setting.get("editorOwned").is_some()
@@ -427,6 +433,9 @@ impl Settings {
         let mut row = json!({"id": id, "label": label, "description": description,
             "enabled": editable && self.depends_on(setting) && self.allowed(setting.get("enabledWhen")),
             "editing": state.editing == id});
+        if self.app_theme(setting) {
+            return self.target_row(setting, row);
+        }
         if self.unavailable(setting) {
             row["kind"] = "help".into();
             row["description"] = "".into();

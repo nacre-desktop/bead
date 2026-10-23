@@ -1516,6 +1516,9 @@ impl Runtime {
             if let Some(colors) = &self.colors {
                 colors.attach_images(scene);
             }
+            if let Some(welcome) = &self.welcome {
+                welcome.attach_images(scene);
+            }
             let asset_profile = bead::core::profile::Span::new("assets");
             for draw in &mut scene.primitives {
                 if let bead::render::Primitive::Image { path, .. } = draw
@@ -2196,7 +2199,7 @@ impl SceneSource for Runtime {
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
-            let outcome = welcome.act(arg);
+            let outcome = welcome.act(arg, &self.session.stores);
             if outcome.close {
                 // The window retires itself, as a panel's view does.
                 self.wakeup
@@ -2205,7 +2208,7 @@ impl SceneSource for Runtime {
                     UiEvent::CompanionVisibility(false),
                 );
             }
-            let scene = self.session.update(BTreeMap::new())?;
+            let scene = self.session.update(outcome.changes)?;
             return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)

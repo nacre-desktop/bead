@@ -143,6 +143,7 @@ local function compare(v)
         if not row or #row>=2 then row={};table.insert(rows,row) end
         table.insert(row,ui.Column{id="cmp-"..c.id,width=w,gap=8,shrink=0,
             label("name",c.label,11),
+            ui.Text{id="contrast",text=c.contrast,visible=c.contrast~="",width="fill",height=c.contrast~="" and 14 or 0,font_size=px(9),color="onSurfaceVariant"},
             kit.PreviewCard{id="card",width=w,height=math.min(260,w*.6),colors=c.colors,image=v.has_photo and "colors-card" or "",
                 aria_label=c.label,labels={brand=ui.tr("bead.colors.card-brand"),files=ui.tr("bead.colors.card-files"),
                     lines={ui.tr("bead.colors.card-documents"),ui.tr("bead.colors.card-pictures"),ui.tr("bead.colors.card-projects")},open=ui.tr("bead.colors.card-open"),

@@ -41,21 +41,30 @@ pub struct Welcome {
     state: RefCell<State>,
     wake: RefCell<Option<CallWake>>,
     viewport: std::cell::Cell<(u32, u32)>,
+    /// The colours page demo (B0064): the Colors explorer's preview loop, never applying.
+    demo: crate::colors::Colors,
 }
 /// What an action asks of the window.
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq)]
 pub struct Outcome {
     pub close: bool,
+    /// Store changes of a demo action (`demo:<op>:<payload>`).
+    pub changes: BTreeMap<String, Value>,
 }
 
 impl Welcome {
     pub fn new(client: Option<Client>) -> Self {
         Self {
-            client,
             state: Default::default(),
             wake: Default::default(),
             viewport: std::cell::Cell::new((1020, 760)),
+            demo: crate::colors::Colors::new(client.clone()),
+            client,
         }
+    }
+    /// Gives the demo's image slots their pixels (`@icon:colors-*`).
+    pub fn attach_images(&self, scene: &mut bead::render::Scene) {
+        self.demo.attach_images(scene);
     }
     /// Shortcut rows from a fixed list (previews and tests): no daemon call is made.
     #[cfg(test)]
@@ -72,6 +81,7 @@ impl Welcome {
     }
     /// The reply wake: a finished daemon call projects again.
     pub fn subscribe(&self, wake: CallWake) {
+        self.demo.subscribe(wake.clone());
         *self.wake.borrow_mut() = Some(wake);
     }
     fn ready(&self, method: &str) -> Option<(String, std::time::Duration)> {
@@ -162,18 +172,32 @@ impl Welcome {
                 "brain",
                 self.published(BRAIN_TOPIC) && on_path(BRAIN_COMMAND),
             ),
+            (
+                "welcome.demo".into(),
+                Value::list(vec![self.demo.demo(
+                    matches!(stores.get("welcome.step"), Some(Value::Text(p)) if p == "colors"),
+                )]),
+            ),
             ("welcome.shortcuts".into(), Value::list(state.rows.clone())),
             ("welcome.shortcuts.state".into(), Value::Text(shown.into())),
         ])
     }
     /// The host action `welcome.do`, argument `op:payload`. The payload only selects from the
     /// fixed tables here; it never becomes a command, path or URL.
-    pub fn act(&self, arg: &str) -> Outcome {
+    pub fn act(&self, arg: &str, stores: &Stores) -> Outcome {
         let (op, payload) = arg.split_once(':').unwrap_or((arg, ""));
         match op {
-            "close" => Outcome { close: true },
+            "demo" => Outcome {
+                changes: self.demo.act(payload, stores),
+                ..Outcome::default()
+            },
+            "close" => Outcome {
+                close: true,
+                ..Outcome::default()
+            },
             "route" => Outcome {
                 close: self.route(payload),
+                ..Outcome::default()
             },
             "link" => {
                 if let Some((_, url)) = LINKS.iter().find(|(name, _)| *name == payload) {

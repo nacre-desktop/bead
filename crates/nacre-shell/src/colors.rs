@@ -117,6 +117,13 @@ const STYLES: [(&str, &str, &str); 7] = [
         "bead.colors.style-pearl-text",
     ),
 ];
+/// The eighth style, which the Colors window only reaches through the time-of-day tint.
+const TIDE: (&str, &str, &str) = (
+    "tide",
+    "bead.colors.style-tide",
+    "bead.colors.style-tide-text",
+);
+const DEMO_SCENES: usize = 4;
 const VISIONS: [(&str, &str); 4] = [
     ("normal", "bead.colors.vision-normal"),
     ("protan", "bead.colors.vision-protan"),
@@ -166,7 +173,7 @@ fn local_hour() -> i64 {
     }
 }
 /// A colour map `{role: hex}` as `{role: [r,g,b,255]}` for the roles in `only` (all when empty).
-fn colour_map(map: &Json, only: &[&str]) -> Json {
+pub(crate) fn colour_map(map: &Json, only: &[&str]) -> Json {
     let mut out = Map::new();
     for (role, value) in map.as_object().into_iter().flatten() {
         if (only.is_empty() || only.contains(&role.as_str()))
@@ -497,11 +504,9 @@ impl Colors {
                 }
             }
         }
-        if st.flight.is_none()
-            && st.queued
-            && st.options["image"].is_string()
-            && self.ready(PREVIEW).is_some()
-        {
+        // N0050: a newer preview cancels the running older one in the daemon (its call fails
+        // `busy`, which is dropped as stale), so the newest request goes out at once.
+        if st.queued && st.options["image"].is_string() && self.ready(PREVIEW).is_some() {
             st.queued = false;
             let generation = st.generation;
             match self.call(PREVIEW, json!({"request": st.options})) {
@@ -515,10 +520,10 @@ impl Colors {
             let what = *what;
             st.action = None;
             match reply {
-                Ok(result) if what == "apply" => {
-                    st.status = tr("bead.colors.status-applied", &[]);
-                    let _ = result;
+                Ok(result) if what == "apply" && result["applied"] == json!(false) => {
+                    st.error = tr("bead.colors.error-action", &[]);
                 }
+                Ok(_) if what == "apply" => st.status = tr("bead.colors.status-applied", &[]),
                 Ok(result) => {
                     st.status = tr(
                         "bead.colors.status-exported",
@@ -528,6 +533,7 @@ impl Colors {
                         )],
                     )
                 }
+                Err(e) if e.code == "busy" => st.error = tr("bead.colors.error-busy", &[]),
                 Err(e) => {
                     st.error = if e.message.is_empty() {
                         tr("bead.colors.error-action", &[])
@@ -562,6 +568,75 @@ impl Colors {
     }
 
     // ---- projection -------------------------------------------------------------
+
+    /// The poster (the large preview) is decoded once per path.
+    fn refresh_poster(&self, st: &State) {
+        let path = st.preview.as_ref().and_then(|p| p["thumbnail"].as_str());
+        let mut pictures = self.pictures.borrow_mut();
+        if pictures.poster.as_ref().map(|(held, _)| held.as_str()) != path {
+            pictures.rendered.clear();
+            pictures.poster = path.map(|p| (p.to_owned(), player_art::decode(&POSTERS, p)));
+        }
+    }
+
+    /// The Welcome colours page demo (B0064): the first wallpapers of the catalog as scenes, the
+    /// eight styles, dark/light and the preview's colours. It only previews (`colors.preview`);
+    /// nothing is applied to the desktop, so no snapshot or restore is needed. `on` is true while
+    /// the page is shown: the catalog and the first preview are fetched then, not before.
+    pub fn demo(&self, on: bool) -> Json {
+        if on {
+            self.pump();
+            self.refresh_poster(&self.state.borrow());
+        }
+        let st = self.state.borrow();
+        let Some(preview) = st.preview.as_ref() else {
+            return json!({"id": "demo", "available": false, "loading": on && self.explorer() && st.error.is_empty(),
+                "error": st.error});
+        };
+        let catalog = st.catalog.as_ref();
+        let mut pictures = self.pictures.borrow_mut();
+        let mut scenes = Vec::new();
+        let picks = catalog
+            .into_iter()
+            .flat_map(|c| c.entries.iter().enumerate());
+        let statics = picks.clone().filter(|(_, e)| !e.dynamic);
+        let rest = picks.filter(|(_, e)| e.dynamic);
+        for (index, entry) in statics.chain(rest).take(DEMO_SCENES) {
+            let held = pictures
+                .thumbs
+                .entry(entry.thumbnail.clone())
+                .or_insert_with(|| player_art::decode(&THUMBS, &entry.thumbnail));
+            scenes.push(json!({"id": index.to_string(), "name": entry.name,
+                "selected": st.options["image"].as_str() == Some(entry.path.as_str()),
+                "thumb": if held.is_some() { format!("colors-thumb-{index}") } else { String::new() },
+                "action": format!("demo:choose:{index}")}));
+        }
+        let personality = st.options["personality"].as_str().unwrap_or("natural");
+        let styles: Vec<Json> = STYLES
+            .iter()
+            .chain(std::iter::once(&TIDE))
+            .map(|(id, label, _)| json!({"id": *id, "label": tr(label, &[]), "selected": personality == *id}))
+            .collect();
+        let style_text = STYLES
+            .iter()
+            .find(|(id, ..)| *id == personality)
+            .map_or_else(|| tr(TIDE.2, &[]), |(.., text)| tr(text, &[]));
+        let colours = &preview["colours"];
+        let swatches: Vec<Json> = ["primary", "secondary", "tertiary", "surface"]
+            .iter()
+            .filter_map(|role| {
+                Some(json!({"role": *role, "color": colours[*role].as_str().and_then(rgba)?}))
+            })
+            .collect();
+        let has_photo = pictures
+            .poster
+            .as_ref()
+            .is_some_and(|(_, image)| image.is_some());
+        json!({"id": "demo", "available": true, "loading": false, "scenes": scenes, "styles": styles,
+            "style_text": style_text, "mode": st.options["mode"].as_str().unwrap_or("dark"),
+            "colors": colour_map(colours, &CARD_ROLES), "swatches": swatches, "has_photo": has_photo,
+            "busy": st.queued || st.flight.is_some(), "error": st.error})
+    }
 
     fn entries(&self, st: &State, query: &str) -> Vec<Json> {
         let Some(catalog) = &st.catalog else {
@@ -693,7 +768,11 @@ impl Colors {
             .filter_map(|c| {
                 let id = c["personality"].as_str()?;
                 let label = STYLES.iter().find(|(s, ..)| *s == id).map(|(_, l, _)| tr(l, &[]))?;
-                Some(json!({"id": id, "label": label, "colors": colour_map(&c["colours"], &CARD_ROLES)}))
+                let contrast = c["minimumContrast"].as_f64().map(|v| {
+                    tr("bead.colors.compare-contrast", &[("contrast", &format!("{}", (v * 100.).round() / 100.))])
+                });
+                Some(json!({"id": id, "label": label, "colors": colour_map(&c["colours"], &CARD_ROLES),
+                    "contrast": contrast.unwrap_or_default()}))
             })
             .collect();
         let rows: Vec<Json> = audit["text"]
@@ -796,15 +875,7 @@ impl Colors {
         }
         self.pump();
         let st = self.state.borrow();
-        // The poster (the large preview) is decoded once per path.
-        {
-            let path = st.preview.as_ref().and_then(|p| p["thumbnail"].as_str());
-            let mut pictures = self.pictures.borrow_mut();
-            if pictures.poster.as_ref().map(|(held, _)| held.as_str()) != path {
-                pictures.rendered.clear();
-                pictures.poster = path.map(|p| (p.to_owned(), player_art::decode(&POSTERS, p)));
-            }
-        }
+        self.refresh_poster(&st);
         let entries = self.entries(&st, &text("colors.query"));
         let empty = entries.is_empty() && self.explorer();
         let view = self.view(&st, &vision, flag("colors.fine"));
@@ -844,7 +915,7 @@ impl Colors {
             "mode" if payload == "dark" || payload == "light" => {
                 self.change(st, &[("mode", payload.into()), ("autoMode", false.into())]);
             }
-            "style" if STYLES.iter().any(|(id, ..)| *id == payload) => {
+            "style" if payload == TIDE.0 || STYLES.iter().any(|(id, ..)| *id == payload) => {
                 self.change(st, &[("personality", payload.into())]);
             }
             "bg" => {
@@ -1110,4 +1181,4 @@ pub fn window_spec(
 
 #[cfg(test)]
 #[path = "colors_tests.rs"]
-mod tests;
+pub(crate) mod tests;

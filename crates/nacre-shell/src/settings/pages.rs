@@ -789,6 +789,48 @@ impl Settings {
         rows
     }
 
+    // ---- theme targets (B0064) ---------------------------------------------------------------
+
+    /// A registry row Bead can drive with `colors.set_target`: the `app-theme` adapter, with the
+    /// method advertised. (`settings.set colors appThemes.<id>` only writes the store; it does not
+    /// re-theme the target.)
+    pub(super) fn app_theme(&self, setting: &Json) -> bool {
+        setting["adapter"] == "app-theme" && self.can("colors.set_target")
+    }
+    /// One target: On / Off buttons and the published status (`current`, `not-published`,
+    /// `tool-missing`, `paused`; unknown until `colors.targets` answers).
+    pub(super) fn target_row(&self, setting: &Json, mut row: Json) -> Json {
+        let key = setting["key"].as_str().unwrap_or("");
+        let status = self
+            .state
+            .borrow()
+            .targets
+            .iter()
+            .find(|(id, _)| id == key)
+            .map(|(_, status)| status.clone());
+        let text = match status.as_deref() {
+            Some("current") => "bead.settings.target-current",
+            Some("not-published") => "bead.settings.target-not-published",
+            Some("tool-missing") => "bead.settings.target-tool-missing",
+            Some("paused") => "bead.settings.target-paused",
+            _ => "bead.settings.target-unknown",
+        };
+        let enabled = row["enabled"] == true && status.is_some();
+        let on = self.current(setting) == json!(true);
+        let mut out = on_off(
+            row["id"].as_str().unwrap_or(""),
+            row["label"].as_str().unwrap_or(""),
+            &tr(text, &[]),
+            on,
+            &format!("app-theme|{key}"),
+            enabled,
+        );
+        out["own"] = json!(false);
+        row.as_object_mut()
+            .map(|r| r.extend(out.as_object().cloned().unwrap_or_default()));
+        row
+    }
+
     // ---- calls -----------------------------------------------------------------------------
 
     /// Collect the reply of the call in flight and of the time zone list; start a queued level
@@ -801,6 +843,9 @@ impl Settings {
                 && let Some(reply) = ticket.try_take()
             {
                 state.pending = None;
+                if std::mem::take(&mut state.retarget) {
+                    state.targets_asked = false;
+                }
                 match reply {
                     Ok(_) => {
                         state.message.clear();
@@ -818,6 +863,25 @@ impl Settings {
                     }
                 }
                 queued = state.queued.take();
+            }
+            if let Some(ticket) = &mut state.targets_fetch
+                && let Some(reply) = ticket.try_take()
+            {
+                state.targets_fetch = None;
+                if let Ok(reply) = reply {
+                    state.targets = reply["targets"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .take(64)
+                        .filter_map(|t| {
+                            Some((
+                                t["id"].as_str()?.to_owned(),
+                                t["status"].as_str()?.to_owned(),
+                            ))
+                        })
+                        .collect();
+                }
             }
             if let Some(ticket) = &mut state.zones_fetch
                 && let Some(reply) = ticket.try_take()
@@ -849,8 +913,11 @@ impl Settings {
         }
     }
 
-    /// Start the one-time reads a page needs: the time zone list.
+    /// Start the reads a page needs: the time zone list, the theme target statuses.
     pub(super) fn fetch(&self, page: &str) {
+        if page == "colors/app-theming" {
+            self.fetch_targets();
+        }
         if page != "date-time-language" {
             return;
         }
@@ -871,6 +938,28 @@ impl Settings {
             self.wake.borrow().clone(),
         ) {
             state.zones_fetch = Some(ticket);
+        }
+    }
+
+    fn fetch_targets(&self) {
+        let mut state = self.state.borrow_mut();
+        if state.targets_asked || state.targets_fetch.is_some() {
+            return;
+        }
+        let (Some((boot, timeout)), Some(client)) =
+            (self.ready_for("colors.targets"), &self.client)
+        else {
+            return;
+        };
+        state.targets_asked = true;
+        if let Ok(ticket) = client.begin_call(
+            "colors.targets".into(),
+            json!({}),
+            timeout,
+            CallGuard { boot, version: 1 },
+            self.wake.borrow().clone(),
+        ) {
+            state.targets_fetch = Some(ticket);
         }
     }
 
@@ -907,6 +996,19 @@ impl Settings {
                 if armed {
                     self.call("notifications.clear", json!({"scope": "history"}), wake, "");
                 }
+            }
+            "app-theme"
+                if (b == "on" || b == "off")
+                    && self.state.borrow().targets.iter().any(|(id, _)| id == a) =>
+            {
+                self.call(
+                    "colors.set_target",
+                    json!({"id": a, "enabled": b == "on"}),
+                    wake,
+                    "",
+                );
+                let mut state = self.state.borrow_mut();
+                state.retarget = state.pending.is_some();
             }
             "lock" => self.call("session.request", json!({"action": "lock"}), wake, ""),
             "install-login" => {

@@ -82,7 +82,13 @@ fn a_command_counts_only_as_an_executable_file_in_a_path_directory() {
 #[test]
 fn actions_select_from_fixed_tables_and_only_a_started_app_closes_the_window() {
     let welcome = Welcome::new(None);
-    assert_eq!(welcome.act("close"), Outcome { close: true });
+    assert_eq!(
+        welcome.act("close", &Default::default()),
+        Outcome {
+            close: true,
+            ..Outcome::default()
+        }
+    );
     // The shell is not configured here, and AI and Brain are not published: nothing starts.
     for arg in [
         "route:settings",
@@ -98,7 +104,11 @@ fn actions_select_from_fixed_tables_and_only_a_started_app_closes_the_window() {
         "other",
         "",
     ] {
-        assert_eq!(welcome.act(arg), Outcome::default(), "{arg}");
+        assert_eq!(
+            welcome.act(arg, &Default::default()),
+            Outcome::default(),
+            "{arg}"
+        );
     }
 }
 
@@ -298,6 +308,68 @@ fn page_model(
     model.insert("welcome.step".into(), Value::Text(page.into()));
     model.insert("welcome.guide".into(), Value::Text(guide.into()));
     model
+}
+
+/// The demo on the colours page with a finished preview, from fixtures (no daemon).
+#[test]
+fn welcome_colours_demo_matches_a_golden() {
+    use crate::colors::{
+        colour_map,
+        tests::{cache, colours, temp},
+    };
+    crate::i18n::init();
+    let tmp = temp("welcome-demo");
+    let mut icons = BTreeMap::new();
+    for (slot, w, h) in [
+        ("colors-card", 320, 200),
+        ("colors-thumb-0", 120, 84),
+        ("colors-thumb-1", 120, 84),
+        ("colors-thumb-2", 120, 84),
+    ] {
+        icons.insert(
+            slot.to_string(),
+            std::path::PathBuf::from(cache(&tmp, "icons", &format!("{slot}.png"), w, h)),
+        );
+    }
+    let palette = colours(0);
+    let card = colour_map(&palette, &[]);
+    let swatch = |role: &str| json!({"role": role, "color": card[role]});
+    let scenes: Vec<Json> = [
+        ("0", "Mountain lake", true),
+        ("1", "Dune ridge", false),
+        ("2", "City lights at night", false),
+    ]
+    .iter()
+    .map(|(id, name, selected)| {
+        json!({"id": id, "name": name, "selected": selected,
+            "thumb": format!("colors-thumb-{id}"), "action": format!("demo:choose:{id}")})
+    })
+    .collect();
+    let styles: Vec<Json> = ["natural", "pigment", "harmony", "pop", "mist", "vivid", "pearl", "tide"]
+        .iter()
+        .map(|id| json!({"id": id, "label": id[..1].to_uppercase() + &id[1..], "selected": *id == "harmony"}))
+        .collect();
+    let view = json!({"id": "demo", "available": true, "loading": false, "scenes": scenes, "styles": styles,
+        "style_text": "Related accents for a calm, unified desktop", "mode": "dark", "colors": card,
+        "swatches": [swatch("primary"), swatch("secondary"), swatch("tertiary"), swatch("surface")],
+        "has_photo": true, "busy": false, "error": ""});
+    let mut model = page_model("colors", "", true, true, (1020, 760));
+    model.insert("welcome.demo".into(), Value::list(vec![view]));
+    let mut h = Harness::load_with_icons(
+        &root(),
+        Path::new("welcome/main.luau"),
+        &root().join("palette.json"),
+        model,
+        HarnessConfig {
+            width: 1020,
+            height: 760,
+            scale: 1.,
+        },
+        icons,
+    )
+    .unwrap();
+    golden("welcome-colors-demo-1", &mut h);
+    let _ = std::fs::remove_dir_all(tmp);
 }
 
 #[test]

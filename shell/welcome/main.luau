@@ -111,19 +111,78 @@ function pages.welcome()
         para("hero-tagline",ui.tr("bead.welcome.hero-tagline"),tagSize,{align="center"}),
         muted("hero-tour",ui.tr("bead.welcome.hero-tour"),11,{align="center"})}
 end
-function pages.colors()
+-- Your colors: the live demo (wallpaper scenes, styles, dark/light, a miniature desktop and the
+-- palette it gives) over `colors.preview`; without the colours methods, the window's own palette.
+local function demo(v)
+    local labels={brand=ui.tr("bead.colors.card-brand"),files=ui.tr("bead.colors.card-files"),
+        lines={ui.tr("bead.colors.card-documents"),ui.tr("bead.colors.card-pictures"),ui.tr("bead.colors.card-projects")},
+        open=ui.tr("bead.colors.card-open"),build=ui.tr("bead.colors.card-build"),ready=ui.tr("bead.colors.card-ready"),
+        warning=ui.tr("bead.colors.card-warning"),message=ui.tr("bead.colors.card-message"),message_detail=ui.tr("bead.colors.card-message-detail")}
     local cells={}
-    for _,item in ipairs(catalog.roles) do
-        table.insert(cells,ui.Row{id="role-"..item.role,grow=1,height=34,gap=10,
-            ui.Box{id="swatch",width=34,height=34,shrink=0,radius=9,fill=item.role,border_width=1,border_color="outline"},
-            ui.Column{id="role-name",grow=1,height=34,justify="center",
-                ui.Text{id="label",text=ui.tr(item.label),height=math.ceil(px(10)*1.4),font_size=px(10),color="onSurface"}}})
+    if v.available then
+        for _,item in ipairs(v.swatches) do
+            table.insert(cells,ui.Row{id="role-"..item.role,grow=1,height=34,gap=10,
+                ui.Box{id="swatch",width=34,height=34,shrink=0,radius=9,fill=item.color,border_width=1,border_color="outline"},
+                ui.Column{id="role-name",grow=1,height=34,justify="center",
+                    ui.Text{id="label",text=ui.tr(catalog.roleLabels[item.role]),height=math.ceil(px(10)*1.4),font_size=px(10),color="onSurface"}}})
+        end
+    else
+        for _,item in ipairs(catalog.roles) do
+            table.insert(cells,ui.Row{id="role-"..item.role,grow=1,height=34,gap=10,
+                ui.Box{id="swatch",width=34,height=34,shrink=0,radius=9,fill=item.role,border_width=1,border_color="outline"},
+                ui.Column{id="role-name",grow=1,height=34,justify="center",
+                    ui.Text{id="label",text=ui.tr(item.label),height=math.ceil(px(10)*1.4),font_size=px(10),color="onSurface"}}})
+        end
     end
+    local roles=ui.Row{id="roles",width="fill",height=34,shrink=0,gap=12,table.unpack(cells)}
+    if not v.available then
+        local note=v.loading and ui.tr("bead.welcome.demo-preparing") or v.error
+        return ui.Column{id="demo",width="fill",shrink=0,gap=12,
+            muted("demo-state",note~="" and note or ui.tr("bead.welcome.colors-more"),10),roles}
+    end
+    local tw=(CW-36)/4
+    local th=math.max(70,math.min(180,tw*.56,CH*.22))
+    local scenes={}
+    for _,sc in ipairs(v.scenes) do
+        table.insert(scenes,ui.Column{id="scene-"..sc.id,width=tw,shrink=0,gap=7,
+            kit.Button{id="pick",width=tw,height=th,shrink=0,padding=4,radius=12,fill="surfaceContainer",hover_fill="surfaceContainerHigh",
+                border_width=sc.selected and 2 or 1,border_color=sc.selected and ui.alpha("onSurface",.65) or ui.alpha("outline",.4),
+                aria_label=ui.tr("bead.welcome.demo-scene",{name=sc.name}),on_activate=act("demo:choose:"..sc.id),
+                ui.Box{id="clip",width="100%",height="100%",radius=9,fill="surfaceContainerHigh",
+                    sc.thumb~="" and ui.Image{id="thumb",position="absolute",left=0,top=0,width=tw-8,height=th-8,icon=sc.thumb,aria_label=sc.name} or ui.Box{id="none",width=1,height=1},
+                    sc.selected and ui.Box{id="check",position="absolute",left=tw-8-30,top=th-8-30,width=24,height=24,radius=12,fill="surface",
+                        ui.Text{id="glyph",position="absolute",left=3,top=3,width=18,height=18,text="check",family="Material Symbols Rounded",font_size=px(10),color="onSurface"}} or ui.Box{id="nocheck",width=1,height=1}}},
+            kit.Paragraph{id="name",text=sc.name,width=tw,font_size=px(10),max_lines=2,color="onSurface"}})
+    end
+    local chips={}
+    for i,c in ipairs(v.styles) do chips[i]={id=c.id,label=c.label,selected=c.selected} end
+    local modes={}
+    for i,m in ipairs{{"dark","dark_mode","bead.welcome.demo-dark"},{"light","light_mode","bead.welcome.demo-light"}} do
+        modes[i]=kit.IconButton{id="mode-"..m[1],width=36,height=32,padding=0,radius=rd.small,text=m[2],selected=v.mode==m[1],
+            fill=v.mode==m[1] and "primary" or "surfaceContainer",color=v.mode==m[1] and "onPrimary" or "onSurface",
+            aria_label=ui.tr(m[3]),on_activate=act("demo:mode:"..m[1])}
+    end
+    modes.id="modes";modes.gap=sp.xs;modes.shrink=0
+    local status=v.error~="" and v.error or (v.busy and ui.tr("bead.welcome.demo-working") or ui.tr("bead.welcome.demo-note"))
+    return ui.Column{id="demo",width="fill",shrink=0,gap=10,
+        ui.Row{id="scenes",width="fill",shrink=0,gap=12,table.unpack(scenes)},
+        ui.Row{id="style-row",width="fill",shrink=0,gap=12,
+            ui.Row{id="style-line",grow=1,shrink=1,gap=8,
+                ui.Text{id="style-label",text=ui.tr("bead.welcome.demo-style"),width=44,height=32,shrink=0,font_size=px(11),color="onSurface"},
+                kit.ChipRow{id="styles",items=chips,per_row=CW>=900 and 8 or 4,on_change="welcome.do",change_arg=function(id) return "demo:style:"..id end}},
+            ui.Row(modes)},
+        muted("style-text",v.style_text,10),
+        kit.PreviewCard{id="preview",width=CW,height=math.max(210,math.min(CH-380,420)),colors=v.colors,image=v.has_photo and "colors-card" or "",
+            aria_label=ui.tr("bead.colors.preview-aria"),labels=labels},
+        roles,
+        muted("demo-state",status,10)}
+end
+function pages.colors()
     local can=get("welcome.can.colors")
     return column("colors",12,
         para("colors-title",ui.tr("bead.welcome.colors-title"),25),
         muted("colors-intro",ui.tr("bead.welcome.colors-intro"),12),
-        ui.Row{id="roles",width="fill",height=34,shrink=0,gap=12,table.unpack(cells)},
+        ui.Repeat{id="demo-view",model=ui.bind("welcome.demo"),key="id",render=demo},
         muted("colors-more",ui.tr("bead.welcome.colors-more"),10),
         ui.Row{id="colors-actions",width="fill",height=34,shrink=0,
             pill{id="colors-open",label=can and ui.tr("bead.welcome.colors-open") or ui.tr("bead.welcome.button-not-installed"),

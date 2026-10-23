@@ -248,7 +248,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let client = daemon
         .map(|socket| {
             let mut topics: Vec<String> = TOPICS.iter().map(|t| t.to_string()).collect();
-            if name == "colors" {
+            if name == "colors" || name == "welcome" {
                 topics.extend(colors_app::TOPICS.iter().map(|t| t.to_string()));
             }
             let mut config = nacre_source::Config::new(socket, topics);

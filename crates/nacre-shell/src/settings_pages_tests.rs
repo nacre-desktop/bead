@@ -166,6 +166,13 @@ async fn lab(topics: Vec<(&str, Json)>, methods: &[&str]) -> Lab {
                         None if m == "time.zones" => Reply::Ok {
                             ok: json!({"zones": ["Africa/Cairo", "America/New_York", "Europe/Oslo", "Europe/Paris"]}),
                         },
+                        None if m == "colors.targets" => Reply::Ok {
+                            ok: json!({"targets": [
+                                {"id": "gtk3", "label": "GTK 3", "status": "current"},
+                                {"id": "gtk4", "label": "GTK 4", "status": "tool-missing"},
+                                {"id": "kitty", "label": "Kitty", "status": "not-published"},
+                                {"id": "qt", "label": "Qt", "status": "paused"}]}),
+                        },
                         None => Reply::Ok {
                             ok: json!({"changed": true}),
                         },
@@ -521,6 +528,78 @@ async fn date_time_page_picks_a_zone_sets_ntp_and_says_when_authentication_faile
             json!({"store":"desktop","key":["clockFormat"],"value":"12-hour","rev":7})
         )
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn theme_targets_show_their_status_and_retheme_through_set_target() {
+    let mut l = lab(
+        vec![(
+            "settings.store.colors",
+            store(
+                "colors",
+                3,
+                json!({"appThemes": {"gtk3": true, "gtk4": false}}),
+            ),
+        )],
+        &["settings.set", "colors.targets", "colors.set_target"],
+    )
+    .await;
+    let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
+    let at = stores("colors/app-theming");
+    let model = until(&settings, &at, |m| {
+        items(m).iter().any(|r| {
+            r["id"] == "colors/app-theming.targets.gtk4"
+                && r["description"]
+                    .as_str()
+                    .is_some_and(|d| d.contains("not installed"))
+        })
+    })
+    .await;
+    assert_eq!(l.call().await, ("colors.targets".into(), json!({})));
+    let rows = items(&model);
+    let gtk3 = row(&rows, "colors/app-theming.targets.gtk3");
+    assert_eq!(
+        option_args(gtk3),
+        ["do:app-theme|gtk3|on", "do:app-theme|gtk3|off"]
+    );
+    assert_eq!(gtk3["options"][0]["selected"], true);
+    assert_eq!(
+        row(&rows, "colors/app-theming.targets.gtk4")["options"][0]["selected"],
+        false
+    );
+    // The four statuses the publisher writes, each with its own text.
+    let say = |id: &str| row(&rows, id)["description"].as_str().unwrap().to_string();
+    let texts = [
+        say("colors/app-theming.targets.gtk3"),
+        say("colors/app-theming.targets.gtk4"),
+    ];
+    assert_ne!(texts[0], texts[1]);
+    // Switching a target on is the re-theming call, not a store write; the list is read again.
+    settings.act("do:app-theme|gtk4|on", "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "colors.set_target".into(),
+            json!({"id": "gtk4", "enabled": true})
+        )
+    );
+    for _ in 0..100 {
+        settings.project(&at);
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(l.call().await.0, "colors.targets");
+    // An id the daemon did not list never becomes a call.
+    settings.act("do:app-theme|nope|on", "", wake());
+    settings.act("do:app-theme|gtk3|maybe", "", wake());
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(l.quiet());
+    // A refused change is said.
+    l.fail
+        .lock()
+        .unwrap()
+        .insert("colors.set_target".into(), ErrorCode::Busy);
+    settings.act("do:app-theme|gtk3|off", "", wake());
+    assert_eq!(l.call().await.0, "colors.set_target");
 }
 
 // ---- notifications history and workflows --------------------------------------------------------

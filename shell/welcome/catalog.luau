@@ -29,6 +29,8 @@ return {
         {role="primary",label="bead.welcome.role-main"},{role="secondary",label="bead.welcome.role-second"},
         {role="tertiary",label="bead.welcome.role-third"},{role="surface",label="bead.welcome.role-background"},
     },
+    roleLabels={primary="bead.welcome.role-main",secondary="bead.welcome.role-second",
+        tertiary="bead.welcome.role-third",surface="bead.welcome.role-background"},
     help={
         {title="bead.welcome.help-panel-title",detail="bead.welcome.help-panel-detail"},
         {title="bead.welcome.help-attention-title",detail="bead.welcome.help-attention-detail"},

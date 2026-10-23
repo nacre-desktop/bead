@@ -10,7 +10,7 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
 }
 /// The shell palette's colours; `shift` rotates the accent channels so styles differ.
-fn colours(shift: u8) -> Json {
+pub(crate) fn colours(shift: u8) -> Json {
     let mut map: Map<String, Json> =
         serde_json::from_slice::<Json>(&std::fs::read(root().join("palette.json")).unwrap())
             .unwrap()["colours"]
@@ -42,11 +42,12 @@ fn preview(id: &str, image: &str, poster: &str, request: &Json) -> Json {
         "audit": {"textPasses": true, "minimumTextContrast": 7.123, "warnings": ["Tertiary on surface is low."],
             "text": [{"foreground": "e8eaed", "background": "14161a", "ratio": 14.2}],
             "simulated": {"protan": colours(30), "deutan": colours(60), "tritan": colours(90)}},
-        "comparisons": [{"personality": "natural", "colours": colours(0)}, {"personality": "vivid", "colours": colours(30)},
-            {"personality": "mist", "colours": colours(60)}, {"personality": "pearl", "colours": colours(90)}],
+        "comparisons": [{"personality": "natural", "colours": colours(0), "minimumContrast": 7.123},
+            {"personality": "vivid", "colours": colours(30), "minimumContrast": 5.5},
+            {"personality": "mist", "colours": colours(60), "minimumContrast": 4.5}, {"personality": "pearl", "colours": colours(90), "minimumContrast": 6.0}],
     })
 }
-fn cache(root: &Path, dir: &str, name: &str, w: u32, h: u32) -> String {
+pub(crate) fn cache(root: &Path, dir: &str, name: &str, w: u32, h: u32) -> String {
     let dir = root.join(dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join(name);
@@ -58,7 +59,7 @@ fn cache(root: &Path, dir: &str, name: &str, w: u32, h: u32) -> String {
         .unwrap();
     path.to_str().unwrap().into()
 }
-fn temp(name: &str) -> PathBuf {
+pub(crate) fn temp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("colors-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -193,6 +194,7 @@ async fn daemon(name: &str, cache_root: &Path, with_methods: bool) -> Daemon {
     let (updates, mut updates_rx) = mpsc::unbounded_channel::<(String, Json)>();
     let gate = Arc::new(tokio::sync::Semaphore::new(0));
     let held = gate.clone();
+    let applies = std::sync::atomic::AtomicUsize::new(0);
     let thumb = cache(cache_root, "nacre/shell/colors-thumbs", "t0.png", 64, 40);
     let poster = cache(cache_root, "nacre/shell/colors-preview", "p0.png", 320, 180);
     let server = tokio::spawn(async move {
@@ -235,8 +237,26 @@ async fn daemon(name: &str, cache_root: &Path, with_methods: bool) -> Daemon {
             ),
             (ACTIVE.to_string(), active("/home/me/lake.jpg", &surface())),
         ]);
+        // N0050: one preview at a time; a newer one cancels the waiting older (it fails `busy`).
+        let mut waiting: Option<(_, Json)> = None;
         loop {
             tokio::select! {
+                permit = held.clone().acquire_owned(), if waiting.is_some() => {
+                    permit.unwrap().forget();
+                    let (id, p) = waiting.take().unwrap();
+                    let ok = if p["request"]["personality"] == "pop" {
+                        let failure = nacre_protocol::Failure::new(
+                            nacre_protocol::ErrorCode::Validation,
+                            "Choose a local wallpaper",
+                            false,
+                        );
+                        framing::write(&mut writer, &Message::Ret { id, reply: Reply::Err { err: failure } }).await.unwrap();
+                        continue;
+                    } else {
+                        preview("p1", p["request"]["image"].as_str().unwrap(), &poster, &p["request"])
+                    };
+                    framing::write(&mut writer, &Message::Ret { id, reply: Reply::Ok { ok } }).await.unwrap();
+                }
                 update = updates_rx.recv() => {
                     let Some((topic, data)) = update else { break };
                     seq += 1;
@@ -259,17 +279,16 @@ async fn daemon(name: &str, cache_root: &Path, with_methods: bool) -> Daemon {
                                     "entries": [{"path": "/home/me/lake.jpg", "name": "Mountain lake", "dynamic": false, "thumbnail": thumb},
                                                 {"path": "/home/me/loop.mp4", "name": "Rain loop", "dynamic": true, "thumbnail": ""}]}),
                                 PREVIEW => {
-                                    held.acquire().await.unwrap().forget();
-                                    if p["request"]["personality"] == "pop" {
-                                        let failure = nacre_protocol::Failure::new(
-                                            nacre_protocol::ErrorCode::Validation,
-                                            "Choose a local wallpaper",
-                                            false,
-                                        );
-                                        framing::write(&mut writer, &Message::Ret { id, reply: Reply::Err { err: failure } }).await.unwrap();
-                                        continue;
+                                    if let Some((old, _)) = waiting.replace((id, p)) {
+                                        let failure = nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Busy, "replaced by a newer preview", true);
+                                        framing::write(&mut writer, &Message::Ret { id: old, reply: Reply::Err { err: failure } }).await.unwrap();
                                     }
-                                    preview("p1", p["request"]["image"].as_str().unwrap(), &poster, &p["request"])
+                                    continue;
+                                }
+                                APPLY if applies.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 => {
+                                    let failure = nacre_protocol::Failure::new(nacre_protocol::ErrorCode::Busy, "another action is running", true);
+                                    framing::write(&mut writer, &Message::Ret { id, reply: Reply::Err { err: failure } }).await.unwrap();
+                                    continue;
                                 }
                                 APPLY => json!({"applied": true, "name": "Mountain lake"}),
                                 EXPORT => json!({"directory": "/home/me/exports/lake", "files": ["a.css"]}),
@@ -359,26 +378,32 @@ async fn the_explorer_loads_previews_one_at_a_time_and_applies_over_the_wire() {
     assert_eq!(v["samples"].as_array().unwrap().len(), 5);
     assert_eq!(v["samples"][0]["caption"], "42%");
     assert_eq!(v["other"], "Other shades: 12%");
+    assert_eq!(v["compare"][0]["contrast"], "Text contrast 7.12");
     assert_eq!(v["status"], "Preview only — Apply when you're ready");
     assert_eq!(v["can_apply"], true);
     assert_eq!(v["can_export"], true);
     assert!(v["colors"]["primary"].is_array());
-    // Three quick changes while one preview is in flight: one more request, the last values.
+    // Newest wins (N0050): every change goes out at once, the daemon cancels the older request
+    // (it fails `busy`) and only the last request's reply is used.
     colors.act("style:vivid", &at);
-    let (_, params) = d.calls.recv().await.unwrap();
+    let (_, params) = next_call(&colors, &at, &mut d).await;
     assert_eq!(params["request"]["personality"], "vivid");
     colors.act("brightness:0.050", &at);
+    let (_, params) = next_call(&colors, &at, &mut d).await;
+    assert_eq!(params["request"]["brightness"], 0.05);
     colors.act("brightness:0.080", &at);
-    colors.act("saturation:1.200", &at);
-    assert!(
-        d.calls.try_recv().is_err(),
-        "a second preview must wait for the first"
-    );
-    d.gate.add_permits(2);
     let (_, params) = next_call(&colors, &at, &mut d).await;
     assert_eq!(params["request"]["brightness"], 0.08);
+    colors.act("saturation:1.200", &at);
+    let (_, params) = next_call(&colors, &at, &mut d).await;
     assert_eq!(params["request"]["saturation"], 1.2);
-    assert_eq!(params["request"]["personality"], "vivid");
+    assert_eq!(params["request"]["brightness"], 0.08);
+    let v = until(&colors, &at, |v| v["busy"] == true).await;
+    assert_eq!(
+        v["status_error"], false,
+        "a cancelled older preview is not an error"
+    );
+    d.gate.add_permits(1);
     let v = until(&colors, &at, |v| v["busy"] == false).await;
     assert_eq!(v["can_apply"], true);
     // Apply sends exactly the preview id; the status follows the reply.
@@ -402,6 +427,18 @@ async fn the_explorer_loads_previews_one_at_a_time_and_applies_over_the_wire() {
         .unwrap();
     let v = until(&colors, &at, |v| v["applied"] == true).await;
     assert_eq!(v["can_apply"], false);
+    // A second action while one runs is refused `busy`: said, not retried.
+    colors.act("apply:", &at);
+    assert_eq!(d.calls.recv().await.unwrap().0, APPLY);
+    let v = until(&colors, &at, |v| v["status_error"] == true).await;
+    assert!(v["status"].as_str().unwrap().contains("still running"));
+    colors.act("style:natural", &at);
+    assert_eq!(d.calls.recv().await.unwrap().0, PREVIEW);
+    d.gate.add_permits(1);
+    until(&colors, &at, |v| {
+        v["busy"] == false && v["status_error"] == false
+    })
+    .await;
     // Export reports the folder.
     colors.act("export:", &at);
     assert_eq!(d.calls.recv().await.unwrap().0, EXPORT);
@@ -427,6 +464,68 @@ async fn the_explorer_loads_previews_one_at_a_time_and_applies_over_the_wire() {
     d.server.abort();
     let _ = std::fs::remove_dir_all(&d.dir);
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// The Welcome demo previews only: scenes from the catalog, eight styles, no apply.
+#[tokio::test(flavor = "current_thread")]
+async fn the_welcome_demo_previews_wallpapers_and_styles_and_never_applies() {
+    crate::i18n::init();
+    let tmp = temp("cache-demo");
+    let mut d = daemon("wire-demo", &tmp, true).await;
+    let colors = Colors::new(Some(d.client.clone()));
+    let waiting = colors.demo(false);
+    assert_eq!(
+        waiting["available"], false,
+        "nothing is fetched while the page is hidden"
+    );
+    assert!(d.calls.try_recv().is_err());
+    let (method, _) = next_call_demo(&colors, &mut d).await;
+    assert_eq!(method, PREVIEW);
+    d.gate.add_permits(1);
+    let mut v = colors.demo(true);
+    for _ in 0..600 {
+        if v["available"] == true {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        v = colors.demo(true);
+    }
+    assert_eq!(v["available"], true, "{v:#}");
+    assert_eq!(v["styles"].as_array().unwrap().len(), 8);
+    assert_eq!(v["styles"][0]["selected"], true);
+    assert_eq!(v["scenes"][0]["name"], "Mountain lake");
+    assert_eq!(v["scenes"][0]["selected"], true);
+    assert_eq!(v["scenes"][0]["thumb"], "colors-thumb-0");
+    assert_eq!(v["swatches"].as_array().unwrap().len(), 4);
+    // Tide and a second scene are previews too.
+    colors.act("style:tide", &stores("studio", ""));
+    let (_, params) = next_call_demo(&colors, &mut d).await;
+    assert_eq!(params["request"]["personality"], "tide");
+    colors.act("choose:1", &stores("studio", ""));
+    let (_, params) = next_call_demo(&colors, &mut d).await;
+    assert_eq!(params["request"]["image"], "/home/me/loop.mp4");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    while let Ok((method, _)) = d.calls.try_recv() {
+        assert_ne!(method, APPLY);
+    }
+    drop(colors);
+    d.client.stop().await.unwrap();
+    d.server.abort();
+    let _ = std::fs::remove_dir_all(&d.dir);
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+async fn next_call_demo(colors: &Colors, d: &mut Daemon) -> (String, Json) {
+    for _ in 0..600 {
+        if let Ok(call) = d.calls.try_recv() {
+            if call.0 == CATALOG {
+                continue;
+            }
+            return call;
+        }
+        colors.demo(true);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("no call reached the daemon");
 }
 
 #[tokio::test(flavor = "current_thread")]
