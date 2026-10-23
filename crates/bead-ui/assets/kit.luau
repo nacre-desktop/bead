@@ -359,8 +359,16 @@ return function(ui, tokens)
         local on=p.enabled~=false
         local rows={}
         for i,item in ipairs(p.items) do
-            rows[i]=kit.FormRow{id="item-"..i,label=item.label,description="",height=40,enabled=on,
-                kit.IconButton{id="remove",text="close",aria_label=p.remove_label.." "..item.label,on_activate=maybe(ui.action(p.on_remove,(p.remove_prefix or "")..item.id),on)}}
+            local buttons={id="buttons",gap=sp.xs,align="center"}
+            if p.reorder then
+                local last=#p.items
+                buttons[#buttons+1]=kit.IconButton{id="up",text="arrow_upward",aria_label=item.label.." "..(p.up_label or "up"),
+                    on_activate=maybe(ui.action(p.on_remove,(p.remove_prefix or "")..(item.up or "")),on and i>1)}
+                buttons[#buttons+1]=kit.IconButton{id="down",text="arrow_downward",aria_label=item.label.." "..(p.down_label or "down"),
+                    on_activate=maybe(ui.action(p.on_remove,(p.remove_prefix or "")..(item.down or "")),on and i<last)}
+            end
+            buttons[#buttons+1]=kit.IconButton{id="remove",text="close",aria_label=p.remove_label.." "..item.label,on_activate=maybe(ui.action(p.on_remove,(p.remove_prefix or "")..item.id),on)}
+            rows[i]=kit.FormRow{id="item-"..i,label=item.label,description="",height=40,enabled=on,ui.Row(buttons)}
         end
         rows.id="items";rows.width="fill";rows.gap=sp.xs;rows.shrink=0
         local add

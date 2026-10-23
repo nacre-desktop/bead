@@ -445,6 +445,8 @@
   "bead.settings.not-here": "not available in Bead yet",
   "bead.settings.read-only": "Editing this page is not available in Bead yet.",
   "bead.settings.remove": "Remove",
+  "bead.settings.move-up": "Move up",
+  "bead.settings.move-down": "Move down",
   "bead.settings.requires-apply": "This change needs to be applied.",
   "bead.settings.save": "Save",
   "bead.settings.save-failed": "Could not save the setting",

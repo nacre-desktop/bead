@@ -28,6 +28,8 @@ pub struct Registry {
     settings: Json,
     english: BTreeMap<String, String>,
     editable: Vec<String>,
+    /// Array settings shown as a reorderable list (also lifts `editorOwned`).
+    ordered: Vec<String>,
     default_page: String,
 }
 impl Registry {
@@ -53,6 +55,12 @@ impl Registry {
             settings: parse("settings.json")?,
             english: serde_json::from_slice(&read("en.json")?).map_err(|e| e.to_string())?,
             editable: overlay["editable"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect(),
+            ordered: overlay["orderedLists"]
                 .as_array()
                 .into_iter()
                 .flatten()
@@ -285,10 +293,16 @@ impl Settings {
     fn planned(setting: &Json) -> bool {
         setting["backend"] == "planned"
     }
-    fn unavailable(setting: &Json) -> bool {
-        ["adapter", "editorOwned", "entityType", "backend"]
-            .iter()
-            .any(|k| setting.get(*k).is_some())
+    /// Rows the Settings app cannot edit as a plain control: helper adapters, object lists
+    /// (launcher entries, startup apps) and editors only the QML shell has.
+    fn unavailable(&self, setting: &Json) -> bool {
+        let id = setting["id"].as_str().unwrap_or("");
+        setting.get("adapter").is_some()
+            || setting.get("backend").is_some()
+            || matches!(setting["entityType"].as_str(), Some("entry" | "startup"))
+            || (setting.get("editorOwned").is_some()
+                && setting["type"] == "array"
+                && !self.registry.ordered.iter().any(|o| o == id))
     }
 
     fn row(&self, setting: &Json, editable: bool, state: &State) -> Json {
@@ -297,7 +311,7 @@ impl Settings {
         let description = self.registry.text(setting, "descriptionId");
         let mut row = json!({"id": id, "label": label, "description": description,
             "enabled": editable && self.depends_on(setting), "editing": state.editing == id});
-        if Self::unavailable(setting) {
+        if self.unavailable(setting) {
             row["kind"] = "help".into();
             row["description"] = "".into();
             row["label"] = format!(
@@ -378,9 +392,12 @@ impl Settings {
                     .take(MAX_ITEMS)
                     .enumerate()
                     .map(|(i, v)| {
-                        json!({"id": format!("{id}|rm:{i}"), "label": v.as_str().map(String::from).unwrap_or_else(|| v.to_string())})
+                        json!({"id": format!("{id}|rm:{i}"), "up": format!("{id}|up:{i}"),
+                            "down": format!("{id}|down:{i}"),
+                            "label": v.as_str().map(String::from).unwrap_or_else(|| v.to_string())})
                     })
                     .collect();
+                row["reorder"] = self.registry.ordered.iter().any(|o| o == id).into();
                 row["items"] = items.into();
             }
             _ => {
@@ -425,14 +442,14 @@ impl Settings {
             }
             items.push(json!({"id": format!("section:{sid}"), "kind": "section",
                 "label": registry.text(section, "labelId"), "description": registry.text(section, "descriptionId")}));
-            if section.get("customType").is_some() {
+            if section.get("customType").is_some() && rows.is_empty() {
                 items.push(json!({"id": format!("custom:{sid}"), "kind": "help",
                     "label": tr("bead.settings.custom-unavailable", &[])}));
             }
             for setting in rows {
                 if let Some(store) = setting["store"]["id"].as_str()
                     && !stores.iter().any(|s| s == store)
-                    && !Self::unavailable(setting)
+                    && !self.unavailable(setting)
                 {
                     stores.push(store.to_owned());
                 }
@@ -626,8 +643,7 @@ impl Settings {
             return none;
         };
         let page = setting["page"].as_str().unwrap_or("");
-        if Self::unavailable(setting) || !self.registry.editable(page) || !self.depends_on(setting)
-        {
+        if self.unavailable(setting) || !self.registry.editable(page) || !self.depends_on(setting) {
             return none;
         }
         let store = setting["store"]["id"].as_str().unwrap_or("");
@@ -679,6 +695,20 @@ impl Settings {
                 {
                     (index < list.len()).then(|| {
                         list.remove(index);
+                        Json::Array(list.clone())
+                    })
+                } else if let Some((from, to)) = how
+                    .split_once(':')
+                    .filter(|_| self.registry.ordered.iter().any(|o| o == id))
+                    .and_then(|(dir, i)| Some((dir, i.parse::<usize>().ok()?)))
+                    .and_then(|(dir, i)| match dir {
+                        "up" => i.checked_sub(1).map(|j| (i, j)),
+                        "down" => Some((i, i + 1)),
+                        _ => None,
+                    })
+                {
+                    (from < list.len() && to < list.len()).then(|| {
+                        list.swap(from, to);
                         Json::Array(list.clone())
                     })
                 } else if how == "add" && list.len() < MAX_ITEMS {

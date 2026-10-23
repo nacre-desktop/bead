@@ -47,7 +47,7 @@ local function row(item)
             save_label=ui.tr("bead.settings.save"),cancel_label=ui.tr("bead.common.cancel")}
     elseif k=="list" then
         node=kit.ListEditor{id="list",label=item.label,enabled=on,items=item.items,editing=item.editing,field=ui.bind("settings.edit.text"),
-            on_edit=act("edit:"..id),on_save=act("set:"..id.."|add"),on_cancel=act("cancel"),on_remove="settings.do",remove_prefix="set:",
+            on_edit=act("edit:"..id),on_save=act("set:"..id.."|add"),on_cancel=act("cancel"),on_remove="settings.do",remove_prefix="set:",reorder=item.reorder,up_label=ui.tr("bead.settings.move-up"),down_label=ui.tr("bead.settings.move-down"),
             add_label=ui.tr("bead.settings.add"),remove_label=ui.tr("bead.settings.remove"),
             save_label=ui.tr("bead.settings.save"),cancel_label=ui.tr("bead.common.cancel")}
     else

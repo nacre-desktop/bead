@@ -1,12 +1,25 @@
 {
  "version": 1,
- "note": "Bead overlay (B0045): which registry pages Bead can edit. Pages not listed here show their values read-only. Delete an entry's restriction by adding the page id.",
+ "note": "Bead overlay (B0045): which registry pages Bead can edit. Pages not listed here show their values read-only. Delete an entry's restriction by adding the page id. orderedLists (B0058): array settings shown as a reorderable list, which also lifts editorOwned.",
  "editable": [
   "appearance",
   "notifications",
   "panels",
   "windows-workspaces",
-  "date-time-language"
+  "date-time-language",
+  "launcher",
+  "apps"
+ ],
+ "orderedLists": [
+  "panels/dashboard/pages.editor.pages",
+  "panels/dashboard/extras.editor.enabled",
+  "panels/dashboard/extras.editor.order",
+  "launcher.sidebar.order",
+  "apps.defaults.browser",
+  "apps.defaults.terminal",
+  "apps.defaults.files",
+  "apps.defaults.mail",
+  "apps.defaults.emoji"
  ],
  "default": "appearance"
 }

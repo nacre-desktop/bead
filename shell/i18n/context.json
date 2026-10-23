@@ -436,6 +436,8 @@
   "bead.settings.not-here": "Settings window: ends a line such as Name: not available in Bead yet for an unsupported setting.",
   "bead.settings.read-only": "Settings window: note under the page title when the page can be viewed but not edited yet.",
   "bead.settings.remove": "Settings window: accessible name prefix of the button that removes one entry of a list setting.",
+  "bead.settings.move-up": "Settings window: accessible name suffix of the button that moves one entry of a list setting up.",
+  "bead.settings.move-down": "Settings window: accessible name suffix of the button that moves one entry of a list setting down.",
   "bead.settings.requires-apply": "Settings window: explains that the chosen value only takes effect after pressing Apply.",
   "bead.settings.save": "Settings window: accessible name of the button that saves the edited text of a setting.",
   "bead.settings.save-failed": "Settings window: shown when the daemon refused or lost a setting change.",

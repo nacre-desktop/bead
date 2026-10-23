@@ -109,6 +109,7 @@ fn notifications_page_and_search_use_the_same_registry_data() {
 }
 
 const DESKTOP: &str = "settings.store.desktop";
+const APPS: &str = "settings.store.apps";
 
 /// A real client against a fake daemon: reads the store, writes with the revision
 /// fence, and follows an outside edit.
@@ -147,7 +148,7 @@ async fn store_read_write_round_trip_over_the_wire_and_live_updates() {
             proto: 1,
             min: 1,
             boot: "settings-boot".into(),
-            topics: [(DESKTOP.to_string(), 1)].into(),
+            topics: [(DESKTOP.to_string(), 1), (APPS.to_string(), 1)].into(),
             methods,
             frame_ms: None,
         };
@@ -157,11 +158,12 @@ async fn store_read_write_round_trip_over_the_wire_and_live_updates() {
             match message {
                 Message::Sub { topics } => {
                     for topic in topics {
-                        let snap = Message::Snap {
-                            topic,
-                            seq,
-                            data: doc("desktop", 3, json!({"dnd": false})),
+                        let data = if topic == APPS {
+                            doc("apps", 3, json!({"browser": ["a", "b", "c"]}))
+                        } else {
+                            doc("desktop", 3, json!({"dnd": false}))
                         };
+                        let snap = Message::Snap { topic, seq, data };
                         framing::write(&mut writer, &snap).await.unwrap();
                     }
                 }
@@ -188,7 +190,7 @@ async fn store_read_write_round_trip_over_the_wire_and_live_updates() {
             }
         }
     });
-    let client = Client::start(Config::new(socket, vec![DESKTOP.into()])).unwrap();
+    let client = Client::start(Config::new(socket, vec![DESKTOP.into(), APPS.into()])).unwrap();
     for _ in 0..500 {
         if client.snapshot().connected && client.status().boot.is_some() {
             break;
@@ -241,8 +243,32 @@ async fn store_read_write_round_trip_over_the_wire_and_live_updates() {
     );
     assert_eq!(model["settings.message"], Value::Text(String::new()));
     // Pages Bead does not edit never send a call.
-    settings.act("set:panels.lips.clickEdgeMenus|1", "", wake());
+    settings.act("set:keyboard-mouse.touchpad.naturalScroll", "", wake());
     assert!(calls.try_recv().is_err());
+    // B0058: a reorderable list sends the whole swapped array; the first entry cannot move up.
+    let apps = stores("apps", "");
+    for _ in 0..500 {
+        let model = settings.project(&apps);
+        if row(&items(&model), "apps.defaults.browser")["items"]
+            .as_array()
+            .is_some_and(|i| i.len() == 3)
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let browser = row(&items(&settings.project(&apps)), "apps.defaults.browser").clone();
+    assert_eq!(browser["reorder"], true);
+    settings.act("set:apps.defaults.browser|up:0", "", wake());
+    assert!(
+        calls.try_recv().is_err(),
+        "the first entry has nowhere to go"
+    );
+    settings.act("set:apps.defaults.browser|down:0", "", wake());
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        json!({"store":"apps","key":["browser"],"value":["b","a","c"],"rev":3})
+    );
     // The window is closed: leases and subscriptions go with it.
     drop(settings);
     client.stop().await.unwrap();
@@ -309,6 +335,54 @@ fn panels_windows_date_and_lock_pages_follow_the_registry() {
     // Lock and login stays view only (the locker is external; login theme install is privileged).
     let lock = settings.project(&stores("lock-login", ""));
     assert_eq!(lock["settings.readonly"], Value::Bool(true));
+}
+
+/// B0058 slice 2: launcher, apps and the dashboard sub-pages.
+#[test]
+fn launcher_apps_and_dashboard_pages_follow_the_registry() {
+    let (settings, _) = fixture(json!({"nativePalette": true}));
+    let launcher = items(&settings.project(&stores("launcher", "")));
+    assert_eq!(row(&launcher, "launcher.sidebar.order")["reorder"], true);
+    assert_eq!(row(&launcher, "launcher.sidebar.hidden")["reorder"], false);
+    assert!(
+        launcher
+            .iter()
+            .any(|r| r["id"] == "link:launcher/favorites")
+    );
+    let favorites = items(&settings.project(&stores("launcher/favorites", "")));
+    assert_eq!(
+        row(&favorites, "launcher/favorites.list.favorites")["kind"],
+        "list"
+    );
+    // Object lists need a launcher entry editor Bead does not have: text, never a control.
+    let entries = items(&settings.project(&stores("launcher/entries", "")));
+    assert_eq!(
+        row(&entries, "launcher/entries.list.entries")["kind"],
+        "help"
+    );
+    let apps = items(&settings.project(&stores("apps", "")));
+    let browser = row(&apps, "apps.defaults.browser");
+    assert_eq!(browser["kind"], "list");
+    assert_eq!(browser["items"][0]["label"], "google-chrome-stable");
+    assert_eq!(browser["items"][0]["down"], "apps.defaults.browser|down:0");
+    // `startup` is planned: hidden, and so is its empty section.
+    assert!(apps.iter().all(|r| r["id"] != "section:apps.startup"));
+    let pages = items(&settings.project(&stores("panels/dashboard/pages", "")));
+    assert_eq!(
+        row(&pages, "panels/dashboard/pages.editor.pages")["reorder"],
+        true
+    );
+    let weather = items(&settings.project(&stores("panels/dashboard/weather", "")));
+    assert_eq!(
+        row(&weather, "panels/dashboard/weather.editor.weatherPhotos")["kind"],
+        "toggle"
+    );
+    // The control-center tile list stays with its own editor (B0049).
+    let cc = items(&settings.project(&stores("panels/control-center", "")));
+    assert!(
+        cc.iter()
+            .all(|r| r["id"] != "panels/control-center.editor.tiles" || r["kind"] == "help")
+    );
 }
 
 #[test]
@@ -379,6 +453,26 @@ fn settings_window_goldens() {
             1.,
         ),
         ("settings-lock-login-1", "lock-login", "", 1.),
+        ("settings-launcher-1", "launcher", "", 1.),
+        (
+            "settings-launcher-favorites-1",
+            "launcher/favorites",
+            "",
+            1.,
+        ),
+        ("settings-apps-1", "apps", "", 1.),
+        (
+            "settings-dashboard-pages-1",
+            "panels/dashboard/pages",
+            "",
+            1.,
+        ),
+        (
+            "settings-dashboard-weather-1",
+            "panels/dashboard/weather",
+            "",
+            1.,
+        ),
     ] {
         let (settings, _) = fixture(desktop.clone());
         let mut model = settings.project(&stores(page, search));
