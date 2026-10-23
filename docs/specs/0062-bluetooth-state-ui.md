@@ -34,7 +34,39 @@ Status: **Review** (Claude worker, branch `task/b0062-bt-state-20261023`). Pin `
 - 18 goldens `shell/tests/goldens/bluetooth-{list,scanning,off,waiting,pin,confirm,authorize,display,error}-{1,1.5}.png` (the pair pages are now 352 px wide), eyeballed. The fixture font has no glyph for `battery_1_bar`/`battery_4_bar` (its subset text has no digits): the goldens use `battery_full`; the thresholds are a unit test.
 - CI-equivalent in the Arch container with `ttf-dejavu ttf-ibm-plex` and a git checkout for the spikes: see the report for the exact commands and results.
 
-PARITY_SECTION
+## Look-and-feel parity with QML (`spikes/parity-compare.py`, fake org.bluez)
+
+Both shells ran in identical private nested sessions (2880x1800, scale 1.5, CPU renderer for Bead), the same daemon and the same fake BlueZ (`spikes/fake-bluez.py`: adapter, headphones connected 80 %, keyboard and phone paired, mouse unpaired; discovery adds a nearby speaker). Control = origin/main at `c01e0cc` (before this unit), candidate = this branch, same Nacre daemon build and the same fake. rmse % full scale, QML against Bead (the first column is not comparable with B0056's numbers: those ran with no adapter):
+
+| State | Control | This unit |
+| --- | --- | --- |
+| popout-bluetooth | 16.236 | 15.276 |
+| popout-bluetooth-scanning | 16.152 | 15.679 |
+| popout-bluetooth-off | 16.052 | 15.503 |
+| control-bluetooth (tile detail) | 9.366 | 10.235 |
+| popout-network (unchanged control) | 17.830 | 17.824 |
+
+The whole-screen numbers move little because the bar and the panel position differ; the cropped pairs (`docs/specs/evidence/0062/*.jpg`, QML left, Bead right) show the card layout now matching. Fixed: heading/Find devices/switch row, 68 px cards with battery glyph and percentage, button labels, empty texts, 352 px width, scanning state. **Known gaps (not fixed here):**
+
+1. The Bead panel is not joined to the bar contour (QML panel rises from the bar with a concave join; Bead's sits below it at the pill's x) and the bar pill differs (clock/updates cells): B0061/B0056 shared popout geometry, deliberately not touched.
+2. Order: Bead sorts connected, then unpaired, then paired (so discovered devices are not lost behind the 5-row cap); the QML uses the daemon order (connected, then name) and scrolls. Bead shows at most 5 rows and does not scroll.
+3. Control-centre detail: the QML opens a docked page with a back arrow, the Find devices button under the title and a full-height list; Bead's tile opens the same popout as the bar icon. The rmse rose (10.2 against 9.4) because the QML page is full height and Bead's panel is now larger than before. Needs the control-centre detail host (B0057 gap).
+4. Switch and button sizes: Bead's switch is 48x28 (QML about 40x24), the Find devices pill is 128 px with an icon offset a few px; QML row button fill is the primary container tone when connected.
+5. Hover and pressed states were not captured (the harness drives states through the daemon only).
+6. Animation direction, duration and easing of the popout are B0056's (unchanged here).
+
+### Relative memory gate (CPU renderer, desktop, median of 3 runs per build, RssAnon MiB, same harness and flags)
+
+| Phase | Control | Candidate | Diff |
+| --- | --- | --- | --- |
+| idle | 14.73 | 14.58 | -0.15 |
+| popout-bluetooth open | 22.67 | 21.76 | -0.91 |
+| scanning open | 20.72 | 19.98 | -0.73 |
+| off open | 22.61 | 21.57 | -1.04 |
+| control-bluetooth open | 22.60 | 21.23 | -1.37 |
+| popout-bluetooth closed after | 21.50 | 19.95 | -1.55 |
+
+PASS (candidate - control <= +0.5 MiB in every phase, no unexplained anon growth). Swap was 0 B before and after.
 
 ## Asks to Nacre / lead
 

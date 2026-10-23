@@ -39,6 +39,8 @@ PIN and passkey exist only in the `bluetooth.secret` input store (`*.secret`: no
 
 ## Look-and-feel parity with QML (`NacreBluetoothPopup`, `NacreBluetoothPairing`)
 
+B0062 update: rows are 68 px cards (radius 12, battery glyph and percentage), the popout is 352 px wide, **Find devices** and Connect/Disconnect exist (N0047 served the topic and methods), and the empty texts are ported; the other rows of this table stand.
+
 Not compared side by side: B0056's `parity-compare.py` is not on main, and a nested comparison would need a BlueZ with devices on both sides plus the unserved `bluetooth` topic. Gaps known from reading the QML, to close in the nested comparison unit:
 
 | QML | Bead now |

@@ -146,6 +146,7 @@ class Manager(dbus.service.Object):
         super().__init__(bus, '/')
         self.bus, self.nodes = bus, {}
         self.agents, self.control = Agents(bus, '/org/bluez'), Control(bus, self)
+        self.load()
     def load(self):
         for path, ifaces in start_state().items():
             self.add(path, ifaces)
