@@ -905,6 +905,52 @@ return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=
 }
 
 #[test]
+fn grid_list_flip_builds_only_the_window_and_returns_the_same_tiles() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"local rows={};for i=1,320 do rows[i]={id=tostring(i),name="Application "..i} end
+return {stores={mode="grid",scroll=0,rows=rows},actions={select=function()end},computed={}}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui");local kit=require("bead.kit")
+local grid=ui.resolve_for_check(ui.bind("mode"))=="grid"
+return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=400,height=100,min_cell_width=grid and 100 or 400,gap_x=0,gap_y=0,row_height=40,scroll=ui.bind("scroll"),model=ui.bind("rows"),key="id",render=function(item)return ui.Button{id="tile",text=item.name,on_activate=ui.action("select",item.id)}end}}"#).unwrap();
+    let mut s = session(&f);
+    let tiles = |s: &Session| {
+        s.view_nodes()
+            .iter()
+            .filter(|n| n.id.ends_with(".tile"))
+            .map(|n| n.id.clone())
+            .collect::<Vec<_>>()
+    };
+    let set = |s: &mut Session, name: &str, value: Value| {
+        let next = s
+            .update(BTreeMap::from([(name.into(), value)]))
+            .unwrap()
+            .unwrap();
+        s.commit(next);
+    };
+    // The grid claims a 100 px viewport inside a 240 px scroll area, so every built row is
+    // on screen and countable. Top of the model: 4 columns x 4 rows (2.5 visible + 1 below).
+    let grid = tiles(&s);
+    assert_eq!(grid.len(), 4 * 4);
+    set(&mut s, "mode", Value::Text("list".into()));
+    let list = tiles(&s);
+    assert_eq!(list.len(), 4);
+    set(&mut s, "mode", Value::Text("grid".into()));
+    assert_eq!(
+        tiles(&s),
+        grid,
+        "grid -> list -> grid returns the same tiles"
+    );
+    // Mid-scroll: the window moves and never exceeds viewport + 2 rows.
+    set(&mut s, "scroll", Value::Number(1000.));
+    let mid = tiles(&s);
+    assert!(!mid.is_empty() && mid.len() <= 4 * 5);
+    assert!(mid.iter().all(|id| !grid.contains(id)));
+}
+#[test]
 fn text_patch_updates_pixels_label_and_structural_bindings_still_relayout() {
     let f = fixture();
     let mut s = session(&f);

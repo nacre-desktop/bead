@@ -75,7 +75,8 @@ return function(ui, tokens)
         local height=math.max(0,rows*pitch-p.gap_y)
         local scroll=math.clamp(value(p.scroll,0),0,math.max(0,height-p.height))
         local first=math.max(0,math.floor(scroll/pitch)-1)
-        local count=math.ceil(p.height/pitch)+2
+        -- Never more than viewport + 2 rows; at the top (no row above to overscan) one row fewer.
+        local count=math.min(math.ceil(p.height/pitch)+2,math.floor((scroll+p.height)/pitch)-first+2)
         return ui.Scroll{id=p.id,scroll=p.scroll,grow=1,
             ui.Box{id="extent",height=height,shrink=0,width="fill",
                 ui.Grid{id="window",position="absolute",top=first*pitch,width="fill",

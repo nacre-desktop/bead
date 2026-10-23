@@ -41,6 +41,19 @@ fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
     ])
 }
 
+/// Quiet time before an idle SHM pool is compacted. A surface that holds keyboard
+/// focus (an open launcher) waits longer: the retire-and-repaint costs the next
+/// key ~2.4 ms of UI CPU (B0040), and hiding the panel destroys its pool anyway.
+/// Set `SHM_COMPACT_FOCUSED_IDLE` to `SHM_COMPACT_IDLE` for the previous behaviour.
+const SHM_COMPACT_IDLE: Duration = Duration::from_millis(250);
+const SHM_COMPACT_FOCUSED_IDLE: Duration = Duration::from_secs(5);
+fn shm_compact_idle(surface: &Surface) -> Duration {
+    if surface.keyboard_visible == Some(true) {
+        SHM_COMPACT_FOCUSED_IDLE
+    } else {
+        SHM_COMPACT_IDLE
+    }
+}
 impl App {
     fn trim_idle_shm(&mut self, index: usize) {
         let surface = &mut self.surfaces[index];
@@ -59,9 +72,9 @@ impl App {
         surface.shm_trim_pending = true;
         let identity = surface.layer.wl_surface().clone();
         let qh = self.qh.clone();
-        let expires = Instant::now() + Duration::from_secs(3);
+        let expires = Instant::now() + SHM_COMPACT_FOCUSED_IDLE + Duration::from_secs(3);
         if let Err(error) = self.loop_handle.insert_source(
-            Timer::from_duration(Duration::from_millis(250)),
+            Timer::from_duration(shm_compact_idle(surface)),
             move |_, _, app| {
                 let Some(index) = app
                     .surfaces
@@ -74,10 +87,14 @@ impl App {
                 if surface.callbacks.pending
                     || surface
                         .last_callback
-                        .is_none_or(|last| last.elapsed() < Duration::from_millis(250))
+                        .is_none_or(|last| last.elapsed() < shm_compact_idle(surface))
                 {
                     if Instant::now() < expires {
-                        return TimeoutAction::ToDuration(Duration::from_millis(100));
+                        let quiet = shm_compact_idle(surface);
+                        let wait = surface
+                            .last_callback
+                            .map_or(quiet, |last| quiet.saturating_sub(last.elapsed()));
+                        return TimeoutAction::ToDuration(wait.max(Duration::from_millis(100)));
                     }
                     surface.shm_trim_pending = false;
                     return TimeoutAction::Drop;
