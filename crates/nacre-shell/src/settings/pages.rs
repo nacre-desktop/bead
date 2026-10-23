@@ -826,8 +826,9 @@ impl Settings {
             enabled,
         );
         out["own"] = json!(false);
-        row.as_object_mut()
-            .map(|r| r.extend(out.as_object().cloned().unwrap_or_default()));
+        if let (Some(r), Some(o)) = (row.as_object_mut(), out.as_object()) {
+            r.extend(o.clone());
+        }
         row
     }
 

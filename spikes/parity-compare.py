@@ -41,6 +41,7 @@ HERE = Path(__file__).resolve().parent
 #   ('shell', target, method, *args) a call on Bead's own command socket (views the daemon vocabulary lacks)
 #   ('app_close', name)             close Settings (an app window in both shells)
 #   ('qml_settings', page)          QML only: `quickshell ipc call settingsApp open PAGE` (Bead: ('shell', 'nacre', 'settings', PAGE))
+#   ('qml_app', app, method, *args) QML only: `quickshell ipc call APP METHOD ARGS` (Bead arm: a ('ui', APP, METHOD, ARGS) step)
 #   ('only', 'qml'|'bead', step)    a step for one arm (the shells' preview/trigger routes differ)
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
 #   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
@@ -75,6 +76,13 @@ STATES = {
     'session': ([('ui', 'nacre', 'session')],
                 [('ui', 'nacre', 'close')], 1.0),
     'settings': ([('ui', 'nacre', 'settings'), ('sleep', 1.5)], [('app_close', 'settings')], 0),
+    # B0064: the Colors app, the Welcome colours page and the app-theming targets (generated wallpapers, see --wallpapers)
+    'colors-app': ([('only', 'qml', ('qml_app', 'colorsApp', 'open')), ('only', 'bead', ('ui', 'colorsApp', 'open')), ('sleep', 6.0)],
+    [('app_close', 'colors')], 0),
+    'welcome-colors': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'colors')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'colors')), ('sleep', 6.0)],
+    [('app_close', 'welcome')], 0),
+    'settings-colors-app-theming': ([('only', 'qml', ('qml_settings', 'colors/app-theming')), ('only', 'bead', ('shell', 'nacre', 'settings', 'colors/app-theming')), ('sleep', 3.0)],
+    [('app_close', 'settings')], 0),
     # B0063: one state per Settings page, opened by deep link in both shells
     'settings-date-time-language': ([('only', 'qml', ('qml_settings', 'date-time-language')), ('only', 'bead', ('shell', 'nacre', 'settings', 'date-time-language')), ('sleep', 2.0)],
     [('app_close', 'settings')], 0),
@@ -252,6 +260,19 @@ class Arm:
         if record and record.is_file():  # read-only copy of the owner's record: same wallpaper and palette on both arms
             shutil.copyfile(record, self.root / 'state/nacre/presentation.json')
             (self.root / 'state/nacre/presentation.json').chmod(0o600)
+        if a.wallpapers:  # generated gradients: the library both arms list in the Colors app
+            from PIL import Image
+            folder = home / 'Pictures/Wallpapers'
+            folder.mkdir(parents=True, exist_ok=True)
+            for index in range(a.wallpapers):
+                width, height = 1600, 900
+                image = Image.new('RGB', (width, height))
+                pixels = image.load()
+                for y in range(height):
+                    for x in range(width):
+                        pixels[x, y] = ((x * 255 // width + index * 70) % 256, (y * 255 // height * (index + 1)) % 256,
+                                        ((x + y) * 255 // (width + height) + index * 40) % 256)
+                image.save(folder / f'generated-{index + 1}.png')
         # No audio server here: stand-ins make the daemon's osd service see a sink and a source whose level we set.
         fake = self.root / 'fakeaudio'
         fake.mkdir()
@@ -387,6 +408,9 @@ class Arm:
             elif kind == 'qml_settings':
                 self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
                           'call', 'settingsApp', 'open', step[1]], check=False)
+            elif kind == 'qml_app':
+                self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
+                          'call', *step[1:]], check=False)
             elif kind == 'only':
                 if step[1] == self.name:
                     self.steps([step[2]])
@@ -678,6 +702,7 @@ def main():
     parser.add_argument('--arms', default='qml,bead')
     parser.add_argument('--size', default='2880x1800')
     parser.add_argument('--scale', type=float, default=1.5)
+    parser.add_argument('--wallpapers', type=int, default=0, help='generate N gradient wallpapers into the private HOME (Colors app library)')
     parser.add_argument('--presentation', default='~/.local/state/nacre/presentation.json',
                         help='record copied read-only into both private states (wallpaper + palette); empty for none')
     parser.add_argument('--cpu', action='store_true', help='Bead on the CPU renderer')
@@ -721,7 +746,7 @@ def main():
                             'NACRE_QS_CONFIG', 'DBUS_SESSION_BUS_ADDRESS']:
                     env.pop(key, None)
                 command = ['dbus-run-session', '--', sys.executable, __file__, '--run-arm', arm, '--private', private]
-                for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'settle', 'boot_settle',
+                for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'settle', 'boot_settle',
                              'seq_scale']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
