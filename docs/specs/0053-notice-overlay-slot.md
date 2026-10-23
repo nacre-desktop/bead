@@ -48,6 +48,21 @@ owner wants the same behaviour.
   views. A companion that needs more should use the panel slot.
 - Moving a shown stack when focus changes (new popups follow focus; see above).
 
+## Look-and-feel parity (owner rule 2026-10-23)
+
+This unit changes the surface that hosts the popup stack, not the cards: size, 12 px insets
+below the bar, radii, palette roles and fonts are the B0020/B0030 views, placed by the same
+positioner as before. A paired nested QML/Bead capture was **not** produced here (no QML
+nested session was run); a source comparison against `NacreNotificationStack.qml` found these
+known gaps, to be closed by a parity pass with paired screenshots:
+
+- Enter/exit: QML reveals by animating the stack height (230 ms OutCubic, clipped) and fades
+  items in via a list `add` transition; Bead fades the whole stack (160 ms, no slide).
+- QML clips the stack to its own box under the frame contour; Bead's overlay surface is a free
+  card stack at the same inset (it does not join the bar/frame contour).
+- Shown state of the popup in Bead is captured by the smoke (`raw/1-popup.png`,
+  `3b-popup-over-launcher.png`); no QML counterparts exist yet.
+
 ## Generalization (ADR 0004)
 
 `bead_wayland::Overlays` and `Options::overlays` (second view slot, offered by name),
