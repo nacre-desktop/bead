@@ -370,6 +370,8 @@ struct Inner {
     wakeups: BTreeMap<u64, Wakeup>,
     /// Bar sessions offering the panel views; the lowest id leads.
     drivers: BTreeMap<u64, Wakeup>,
+    /// The retained count last sent to the bars (None until a bar is driven).
+    bar_count: Option<u64>,
     next: u64,
     /// Another view (launcher, dashboard, popout) is shown: popups are suppressed.
     other_panel: bool,
@@ -429,7 +431,7 @@ fn wanted(g: &Inner) -> Option<&'static str> {
 }
 /// Pushes the current models and view offers; wake-ups run outside the lock.
 fn publish(shared: &Shared) {
-    let (values, offer, output, wakeups, driver) = {
+    let (values, offer, output, wakeups, drivers, count) = {
         let mut g = shared.lock();
         let want = wanted(&g);
         let close = if want.is_none() {
@@ -438,24 +440,41 @@ fn publish(shared: &Shared) {
             None
         };
         g.offered = want.or(g.offered);
+        let values = models(&g);
+        // Every bar shows the retained count beside its bell; only a change is sent.
+        let retained = match values.get("notifications.history_count") {
+            Some(Value::Number(n)) => *n as u64,
+            _ => 0,
+        };
+        let count = (g.bar_count != Some(retained)).then_some(retained);
+        g.bar_count = Some(retained);
         (
-            models(&g),
+            values,
             want.map(|v| (v, true)).or(close.map(|v| (v, false))),
             g.focus.clone(),
             g.wakeups.values().cloned().collect::<Vec<_>>(),
-            g.drivers.values().next().cloned(),
+            g.drivers.values().cloned().collect::<Vec<_>>(),
+            count,
         )
     };
     for wakeup in wakeups {
         wakeup(UiEvent::Model(values.clone()));
     }
-    if let (Some(driver), Some((view, open))) = (driver, offer) {
+    if let Some(count) = count {
+        for driver in &drivers {
+            driver(UiEvent::Model(bar_count(count)));
+        }
+    }
+    if let (Some(driver), Some((view, open))) = (drivers.first(), offer) {
         driver(UiEvent::CompanionOffer {
             view: view.into(),
             output,
             open,
         });
     }
+}
+fn bar_count(count: u64) -> BTreeMap<String, Value> {
+    BTreeMap::from([("bar.notifications.count".into(), Value::Number(count as f64))])
 }
 
 /// Whether panel view `view` suppresses popups: every view outside the coexisting
@@ -779,9 +798,11 @@ impl Notices for Service {
             let mut g = self.shared.lock();
             g.next += 1;
             let id = g.next;
-            g.drivers.insert(id, wakeup);
+            g.drivers.insert(id, wakeup.clone());
             id
         };
+        // A new bar starts from the current count.
+        wakeup(UiEvent::Model(bar_count(self.shared.lock().bar_count.unwrap_or(0))));
         publish(&self.shared);
         Box::new(Lease(id, Arc::downgrade(&self.shared)))
     }
