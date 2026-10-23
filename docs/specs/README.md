@@ -110,6 +110,17 @@ with the batch result.
   B = `306474f0`, both compositors). It starts when the desktop heavy slot is
   free.
 
+### Owner decision 2026-10-23 — no QML after the switch
+
+The owner decided the switch target is complete QML retirement. The AI sidebar,
+Settings, Colors, Welcome and every other QML surface move to Bead/Rust; no
+QML windows companion remains. The session menu adds confirmations and Suspend.
+Plan: [QML retirement inventory](../research/qml-retirement-inventory-20261023.md)
+(groups A–F). In flight: B0030, B0042, B0043 (AI sidebar), B0044, B0045
+(Settings framework); Nacre N0042 (Wi-Fi secrets), N0043 (osd topic).
+B0029's `nacre-qml-windows.service` is now a temporary bridge (expires at the
+Group F deletion pass).
+
 ### Laptop reference capture — night of 2026-10-23 (in progress)
 
 The owner chose option (a) and the lead runs the capture on the laptop while
