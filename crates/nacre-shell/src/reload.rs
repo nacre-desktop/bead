@@ -440,6 +440,7 @@ impl Runtime {
         self.actions.register("toggle_favorite", "launcher")?;
         self.actions.grant("launcher");
         self.launcher = Some(menu);
+        self.fonts = crate::font_sources::Selector::default().with_ascii();
         Ok(self)
     }
     pub fn with_calendar(

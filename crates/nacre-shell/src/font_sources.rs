@@ -6,15 +6,23 @@ use std::{collections::BTreeSet, ffi::CString, path::PathBuf, time::Instant};
 type Selection = (BTreeSet<String>, BTreeSet<char>);
 pub struct Selector {
     entries: bead::core::cache::Lru<Selection, Vec<PathBuf>>,
+    ascii: bool,
 }
 impl Default for Selector {
     fn default() -> Self {
         Self {
             entries: bead::core::cache::Lru::new("font-selector", 512 * 1024),
+            ascii: false,
         }
     }
 }
 impl Selector {
+    /// Select for printable ASCII as well, so the first typed query reuses the opening
+    /// selection instead of running Fontconfig again on the input path.
+    pub fn with_ascii(mut self) -> Self {
+        self.ascii = true;
+        self
+    }
     pub fn clear(&mut self) {
         self.entries.clear();
     }
@@ -28,6 +36,9 @@ impl Selector {
                 chars.extend(text.chars().filter(|c| !c.is_control()));
             }
         }
+        if self.ascii {
+            chars.extend(' '..='~');
+        }
         let matched = self
             .entries
             .keys()
@@ -40,7 +51,7 @@ impl Selector {
                 .ok_or("font selection evicted")?
                 .clone());
         }
-        let paths = select(scene)?;
+        let paths = select_chars(scene, self.ascii)?;
         if families.len() <= 32 && chars.len() <= 4096 {
             let bytes = families.iter().map(|f| f.capacity() + 64).sum::<usize>()
                 + chars.len() * 40
@@ -61,6 +72,9 @@ impl Selector {
     }
 }
 pub fn select(scene: &Scene) -> Result<Vec<PathBuf>> {
+    select_chars(scene, false)
+}
+fn select_chars(scene: &Scene, ascii: bool) -> Result<Vec<PathBuf>> {
     let start = Instant::now();
     let mut families = BTreeSet::new();
     let mut needed = BTreeSet::new();
@@ -72,6 +86,9 @@ pub fn select(scene: &Scene) -> Result<Vec<PathBuf>> {
     }
     if families.is_empty() {
         return Ok(Vec::new());
+    }
+    if ascii {
+        needed.extend(' '..='~');
     }
     let fc = fontconfig::Fontconfig::new().ok_or("native fontconfig unavailable")?;
     let mut paths = BTreeSet::new();

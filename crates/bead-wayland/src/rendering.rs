@@ -844,11 +844,37 @@ impl App {
                     track_repair(&mut b.pending, *region);
                 }
             }
-            let b = s
+            let slot = s
                 .buffers
-                .iter_mut()
-                .find(|b| !b.buffer.slot().has_active_buffers())
+                .iter()
+                .position(|b| !b.buffer.slot().has_active_buffers())
                 .ok_or("three buffers still in use at callback")?;
+            // A spare buffer left unpainted by pool compaction would otherwise be
+            // repainted in full on the next edit. Adopt a painted buffer's pixels and
+            // its pending repairs instead: copying is far cheaper than rasterising.
+            if !s.buffers[slot].painted
+                && let Some(from) = s.buffers.iter().position(|b| b.painted)
+                // The source is still held by the compositor, so canvas() refuses it;
+                // reading it is sound, only writing is not.
+                && let (source, len) = {
+                    let held = s.buffers[from].buffer.slot();
+                    let data = s.pool.raw_data_mut(&held);
+                    (data.as_ptr(), data.len())
+                }
+                && let Some(target) = s.buffers[slot].buffer.canvas(&mut s.pool)
+            {
+                // SAFETY: both slots are distinct ranges of the same live pool mapping,
+                // which canvas() does not move or resize; the copy stays inside both.
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        source,
+                        target.as_mut_ptr(),
+                        len.min(target.len()),
+                    )
+                };
+                s.buffers[slot].pending = s.buffers[from].pending.clone();
+            }
+            let b = &mut s.buffers[slot];
             b.painted = true;
             let bounding = b
                 .pending
