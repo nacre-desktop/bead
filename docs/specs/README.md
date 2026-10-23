@@ -116,6 +116,8 @@ with the batch result.
 The owner decided the switch target is complete QML retirement. The AI sidebar,
 Settings, Colors, Welcome and every other QML surface move to Bead/Rust; no
 QML windows companion remains. The session menu adds confirmations and Suspend.
+Owner (same day): port EVERY QML feature; the inventory's retire candidates (video wallpaper, pearls,
+desktop frame, tile editor, weather hero, VPN, live previews) are all ported. SDDM greeter stays for now.
 Plan: [QML retirement inventory](../research/qml-retirement-inventory-20261023.md)
 (groups A–F). In flight: B0030, B0042, B0043 (AI sidebar), B0044, B0045
 (Settings framework); Nacre N0042 (Wi-Fi secrets), N0043 (osd topic).
