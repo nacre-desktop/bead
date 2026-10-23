@@ -61,13 +61,18 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
                         apps[#apps+1]=ui.Text{id="more",text=more,width=17,height=28,shrink=0,font_size=12,color="onSurface"}
                     end
                     width=32+shown*18+(more~="" and 20 or 0)+(hinted and 4 or 0)
+                    local lit=on or item.occupied==true
+                    local size=on and 22 or lit and 20 or 18
                     local face=hinted and ui.tint("surfaceContainer",accent,0.15) or "surfaceContainer"
                     button=kit.Button{id="workspace",position="absolute",left=gs,top=0,width=width,height=28,radius=14,padding=0,fill=face,hover_fill=hinted and face or "surfaceContainerHigh",shrink=0,
                         border_width=hinted and 1 or 0,border_color=ui.alpha(accent,0.24),
                         on_activate=activate,
-                        ui.Box{id="halo",position="absolute",left=3,top=1,width=26,height=26,radius=13,fill=on and ui.alpha(accent,0.3) or "surfaceContainer"},
-                        ui.Box{id="pearl",position="absolute",left=6,top=4,width=20,height=20,radius=10,border_width=on and 0 or 1,border_color=accent,fill=on and accent or "surfaceContainer"},
-                        ui.Text{id="number",position="absolute",left=6,top=5,text=label,width=20,height=20,font_size=13,family="IBM Plex Sans",text_align="center",color=on and "onPrimary" or "onSurfaceVariant"},
+                        -- QML NacreWorkspacePearl: 22 px current / 20 occupied / 18 empty; enamel (accent warmed toward cream) with a specular highlight, ring in onSurface (current) or accent (empty).
+                        ui.Box{id="pearl",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size,radius=size/2,fill=lit and accent or "surfaceContainer",
+                            border_width=on and 1 or lit and 0 or 1.5,border_color=on and ui.alpha("onSurface",0.5) or ui.alpha(accent,0.9)},
+                        lit and ui.Box{id="enamel",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size,radius=size/2,fill=ui.alpha("inverseSurface",on and 0.4 or 0.1)} or nil,
+                        lit and ui.Box{id="specular",position="absolute",left=16-size/2+size*.23,top=14-size/2+size*.14,width=size*.44,height=size*.23,radius=size*.115,fill=ui.alpha("inverseSurface",on and 0.6 or 0.3)} or nil,
+                        ui.Text{id="number",position="absolute",left=16-size/2,top=14-size/2,text=label,width=size,height=size,font_size=#label<2 and 11 or 9,family="IBM Plex Sans",text_align="center",color=lit and "onPrimary" or "onSurfaceVariant"},
                         ui.Row{id="apps",position="absolute",left=33,top=0,width=math.max(0,width-33),height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)},
                     }
                 end
