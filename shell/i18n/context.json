@@ -312,5 +312,22 @@
   "bead.panel.wifi-control-unavailable": "Status panel (network, Bluetooth, battery and sound popouts from the bar): message under the Wi-Fi switch: the radio cannot be controlled right now.",
   "bead.panel.wifi-off": "Status panel (network, Bluetooth, battery and sound popouts from the bar): secondary line of the network view: the Wi-Fi radio is off.",
   "bead.panel.wifi-on": "Status panel (network, Bluetooth, battery and sound popouts from the bar): secondary line of the network view: the Wi-Fi radio is on.",
-  "bead.panel.wifi-radio": "Accessible name of the switch that turns the Wi-Fi radio on or off."
+  "bead.panel.wifi-radio": "Accessible name of the switch that turns the Wi-Fi radio on or off.",
+  "bead.settings.add": "Settings window: label of the button that starts adding an entry to a list setting.",
+  "bead.settings.apply": "Settings window: button that confirms a pending change to a setting that needs an explicit apply.",
+  "bead.settings.changed-elsewhere": "Settings window: shown when saving failed because the stored settings changed meanwhile.",
+  "bead.settings.custom-unavailable": "Settings window: placeholder line for a settings section whose editor is not built yet.",
+  "bead.settings.default-value": "Settings window: value shown for a text setting that is empty and so uses the default.",
+  "bead.settings.discard": "Settings window: button that drops a pending change to a setting that needs apply.",
+  "bead.settings.no-results": "Settings window: shown when a search matches no setting or page.",
+  "bead.settings.not-here": "Settings window: ends a line such as Name: not available in Bead yet for an unsupported setting.",
+  "bead.settings.read-only": "Settings window: note under the page title when the page can be viewed but not edited yet.",
+  "bead.settings.remove": "Settings window: accessible name prefix of the button that removes one entry of a list setting.",
+  "bead.settings.requires-apply": "Settings window: explains that the chosen value only takes effect after pressing Apply.",
+  "bead.settings.save": "Settings window: accessible name of the button that saves the edited text of a setting.",
+  "bead.settings.save-failed": "Settings window: shown when the daemon refused or lost a setting change.",
+  "bead.settings.search-placeholder": "Settings window: placeholder and accessible name of the search field in the sidebar.",
+  "bead.settings.search-results": "Settings window: page title while a search query is shown instead of a page.",
+  "bead.settings.title": "Settings window: title of the window shown by the window manager.",
+  "bead.settings.unavailable-now": "Settings window: shown when settings cannot be changed because the daemon is unreachable."
 }

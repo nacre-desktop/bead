@@ -1,0 +1,756 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! B0045 Settings window adapter. Nacre's settings registry (data) plus the published
+//! store contract (`settings.store.<id>` topics, `settings.set {store,key,value,rev}`)
+//! become generic form rows; `shell/settings/*.luau` and the bead-ui form kit draw them.
+//! A new page or widget is registry data or Luau, never Rust: this file only knows
+//! value types (boolean, number, enum, string, array). Nothing is resident until the
+//! window opens, and the registry, store leases and subscriptions go with it.
+use crate::i18n::tr;
+use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
+use bead::core::{
+    Stores, Value,
+    source::{Source, Subscription},
+};
+use serde_json::{Value as Json, json};
+use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
+
+const NAVIGATION: &str = include_str!("../../../shell/settings/registry/navigation.json");
+const REGISTRY: &str = include_str!("../../../shell/settings/registry/settings.json");
+const ENGLISH: &str = include_str!("../../../shell/settings/registry/en.json");
+const OVERLAY: &str = include_str!("../../../shell/settings/registry/bead.json");
+pub const METHOD: &str = "settings.set";
+const MAX_TEXT: usize = 200;
+const MAX_ITEMS: usize = 64;
+const MAX_RESULTS: usize = 40;
+
+pub struct Registry {
+    navigation: Json,
+    settings: Json,
+    english: BTreeMap<String, String>,
+    editable: Vec<String>,
+    default_page: String,
+}
+impl Registry {
+    pub fn load() -> Result<Self, String> {
+        let parse = |text: &str| serde_json::from_str::<Json>(text).map_err(|e| e.to_string());
+        let overlay = parse(OVERLAY)?;
+        Ok(Self {
+            navigation: parse(NAVIGATION)?,
+            settings: parse(REGISTRY)?,
+            english: serde_json::from_str(ENGLISH).map_err(|e| e.to_string())?,
+            editable: overlay["editable"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect(),
+            default_page: overlay["default"].as_str().unwrap_or("").into(),
+        })
+    }
+    fn label(&self, id: &str) -> String {
+        self.english.get(id).cloned().unwrap_or_else(|| tr(id, &[]))
+    }
+    fn text(&self, node: &Json, key: &str) -> String {
+        node[key]
+            .as_str()
+            .map(|id| self.label(id))
+            .unwrap_or_default()
+    }
+    fn array<'a>(&'a self, node: &'a Json, key: &str) -> impl Iterator<Item = &'a Json> {
+        node[key].as_array().into_iter().flatten()
+    }
+    fn order(node: &Json) -> i64 {
+        node["order"].as_i64().unwrap_or(0)
+    }
+    /// Top-level pages by group, in registry order.
+    fn groups(&self) -> Vec<(&Json, Vec<&Json>)> {
+        let mut groups: Vec<&Json> = self.array(&self.navigation, "groups").collect();
+        groups.sort_by_key(|g| Self::order(g));
+        groups
+            .into_iter()
+            .map(|group| {
+                let mut pages: Vec<&Json> = self
+                    .array(&self.navigation, "pages")
+                    .filter(|p| p["group"] == group["id"] && p.get("parent").is_none())
+                    .collect();
+                pages.sort_by_key(|p| Self::order(p));
+                (group, pages)
+            })
+            .collect()
+    }
+    fn page(&self, id: &str) -> Option<&Json> {
+        self.array(&self.navigation, "pages")
+            .find(|p| p["id"] == id)
+    }
+    fn first_page(&self) -> String {
+        if self.page(&self.default_page).is_some() {
+            return self.default_page.clone();
+        }
+        self.groups()
+            .iter()
+            .find_map(|(_, pages)| pages.first().and_then(|p| p["id"].as_str()))
+            .unwrap_or("")
+            .into()
+    }
+    fn setting(&self, id: &str) -> Option<&Json> {
+        self.array(&self.settings, "settings")
+            .find(|s| s["id"] == id)
+    }
+    /// A page is editable only when the Bead overlay lists it (or its top-level parent).
+    fn editable(&self, page: &str) -> bool {
+        self.editable
+            .iter()
+            .any(|p| page == p || page.starts_with(&format!("{p}/")))
+    }
+}
+
+/// Dotted-path read of a store document.
+fn dig<'a>(data: &'a Json, key: &[&str]) -> Option<&'a Json> {
+    key.iter().try_fold(data, |at, k| at.get(*k))
+}
+fn key_of(setting: &Json) -> Vec<&str> {
+    setting["store"]["key"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Json::as_str)
+        .collect()
+}
+fn number_step(setting: &Json) -> (f64, f64, f64) {
+    let range = &setting["range"];
+    (
+        range["min"].as_f64().unwrap_or(0.),
+        range["max"].as_f64().unwrap_or(100.),
+        range["step"].as_f64().filter(|s| *s > 0.).unwrap_or(1.),
+    )
+}
+fn hex_color(text: &str) -> Option<[u8; 4]> {
+    let hex = text.strip_prefix('#')?;
+    if !(hex.len() == 6 || hex.len() == 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+    Some([
+        byte(0)?,
+        byte(2)?,
+        byte(4)?,
+        if hex.len() == 8 { byte(6)? } else { 255 },
+    ])
+}
+fn clean_text(text: &str) -> Option<String> {
+    let text = text.trim();
+    (text.chars().count() <= MAX_TEXT && !text.chars().any(char::is_control)).then(|| text.into())
+}
+
+#[derive(Default)]
+struct State {
+    pending: Option<CallTicket>,
+    message: String,
+    editing: String,
+    /// A value for a setting that needs an explicit apply.
+    staged: Option<(String, Json)>,
+}
+type Wake = Arc<dyn Fn() + Send + Sync>;
+type Opened = BTreeMap<String, (Arc<dyn Source>, Option<Subscription>)>;
+pub struct Settings {
+    client: Option<Client>,
+    /// Fixed store sources for previews and tests; they replace the daemon topics.
+    fixtures: BTreeMap<String, Arc<dyn Source>>,
+    registry: Registry,
+    open: RefCell<Opened>,
+    wake: RefCell<Option<Wake>>,
+    state: RefCell<State>,
+}
+
+impl Settings {
+    pub fn new(client: Option<Client>) -> Result<Self, String> {
+        Ok(Self {
+            client,
+            fixtures: Default::default(),
+            registry: Registry::load()?,
+            open: Default::default(),
+            wake: Default::default(),
+            state: Default::default(),
+        })
+    }
+    #[cfg(test)]
+    pub fn with_sources(mut self, fixtures: BTreeMap<String, Arc<dyn Source>>) -> Self {
+        self.fixtures = fixtures;
+        self
+    }
+    /// Store changes wake the window; sources opened later subscribe with the same wake.
+    pub fn subscribe(&self, wake: Wake) {
+        for (source, subscription) in self.open.borrow_mut().values_mut() {
+            *subscription = Self::follow(source, &wake);
+        }
+        *self.wake.borrow_mut() = Some(wake);
+    }
+    fn follow(source: &Arc<dyn Source>, wake: &Wake) -> Option<Subscription> {
+        let wake = wake.clone();
+        source.subscribe(Arc::new(move |_| wake())).ok()
+    }
+    fn ready(&self) -> Option<(String, Duration)> {
+        let client = self.client.as_ref()?;
+        let status = client.status();
+        let method = status.methods.get(METHOD).filter(|m| m.v == 1)?;
+        if !client.snapshot().connected {
+            return None;
+        }
+        Some((
+            status.boot?,
+            Duration::from_millis(u64::from(method.timeout).clamp(1, 10_000)),
+        ))
+    }
+    /// Keep exactly the stores the shown settings read; everything else is released.
+    fn retain(&self, wanted: &[String]) {
+        let mut open = self.open.borrow_mut();
+        open.retain(|id, _| wanted.contains(id));
+        for id in wanted {
+            if open.contains_key(id) {
+                continue;
+            }
+            let topic = format!("settings.store.{id}");
+            let source: Option<Arc<dyn Source>> = match (self.fixtures.get(id), &self.client) {
+                (Some(fixed), _) => Some(fixed.clone()),
+                (None, Some(client)) => match client.topic(&topic) {
+                    Ok(t) => Some(Arc::new(t)),
+                    Err(_) => client.lease_topic(&topic).ok().map(|t| Arc::new(t) as _),
+                },
+                (None, None) => None,
+            };
+            if let Some(source) = source {
+                let subscription = self
+                    .wake
+                    .borrow()
+                    .as_ref()
+                    .and_then(|wake| Self::follow(&source, wake));
+                open.insert(id.clone(), (source, subscription));
+            }
+        }
+    }
+    /// `(rev, data, readable)` of a store document.
+    fn document(&self, store: &str) -> (u64, Json, bool) {
+        let Some(source) = self.open.borrow().get(store).map(|(s, _)| s.clone()) else {
+            return (0, Json::Null, false);
+        };
+        let snapshot = source.snapshot();
+        let doc = &*snapshot.data;
+        let ok = snapshot.connected
+            && doc.get("store").and_then(Json::as_str) == Some(store)
+            && doc.get("error").is_none_or(Json::is_null);
+        (doc["rev"].as_u64().unwrap_or(0), doc["data"].clone(), ok)
+    }
+    fn current(&self, setting: &Json) -> Json {
+        let (_, data, _) = self.document(setting["store"]["id"].as_str().unwrap_or(""));
+        let default = setting["default"].clone();
+        let value = dig(&data, &key_of(setting))
+            .cloned()
+            .unwrap_or(default.clone());
+        let fits = match setting["type"].as_str() {
+            Some("boolean") => value.is_boolean(),
+            Some("integer" | "number") => value.is_number(),
+            Some("string") => value.is_string(),
+            Some("array") => value.is_array(),
+            Some("enum") => setting["options"]
+                .as_array()
+                .is_some_and(|o| o.iter().any(|o| o["value"] == value)),
+            _ => false,
+        };
+        if fits { value } else { default }
+    }
+    fn depends_on(&self, setting: &Json) -> bool {
+        match setting["dependsOn"]
+            .as_str()
+            .and_then(|id| self.registry.setting(id))
+        {
+            Some(parent) => self.current(parent) == json!(true),
+            None => true,
+        }
+    }
+    fn unavailable(setting: &Json) -> bool {
+        ["adapter", "editorOwned", "entityType", "backend"]
+            .iter()
+            .any(|k| setting.get(*k).is_some())
+    }
+
+    fn row(&self, setting: &Json, editable: bool, state: &State) -> Json {
+        let id = setting["id"].as_str().unwrap_or("");
+        let label = self.registry.text(setting, "labelId");
+        let description = self.registry.text(setting, "descriptionId");
+        let mut row = json!({"id": id, "label": label, "description": description,
+            "enabled": editable && self.depends_on(setting), "editing": state.editing == id});
+        if Self::unavailable(setting) {
+            row["kind"] = "help".into();
+            row["description"] = "".into();
+            row["label"] = format!(
+                "{label}: {}",
+                if setting["unavailableId"].is_string() {
+                    self.registry.text(setting, "unavailableId")
+                } else {
+                    tr("bead.settings.not-here", &[])
+                }
+            )
+            .into();
+            return row;
+        }
+        let value = self.current(setting);
+        // Staged values show as the pending choice until applied or discarded.
+        let staged = state
+            .staged
+            .as_ref()
+            .filter(|(s, _)| s == id)
+            .map(|(_, v)| v.clone());
+        let shown = staged.clone().unwrap_or(value);
+        row["staged"] = staged.is_some().into();
+        row["apply"] = (setting["apply"] == "confirm").into();
+        match setting["type"].as_str() {
+            Some("boolean") => {
+                row["kind"] = "toggle".into();
+                row["checked"] = (shown == json!(true)).into();
+            }
+            Some(kind @ ("integer" | "number")) => {
+                let (min, max, step) = number_step(setting);
+                row["kind"] = "number".into();
+                row["number"] = shown.clone();
+                row["text"] = shown
+                    .as_f64()
+                    .map(|n| format!("{n}"))
+                    .unwrap_or_default()
+                    .into();
+                row["integer"] = (kind == "integer").into();
+                row["min"] = json!(min);
+                row["max"] = json!(max);
+                row["step"] = json!(step);
+                row["unit"] = setting["unit"].as_str().unwrap_or("").into();
+                row["at_min"] = (shown.as_f64().unwrap_or(min) <= min).into();
+                row["at_max"] = (shown.as_f64().unwrap_or(max) >= max).into();
+            }
+            Some("enum") => {
+                row["kind"] = "choice".into();
+                let options: Vec<Json> = self
+                    .registry
+                    .array(setting, "options")
+                    .enumerate()
+                    .map(|(i, o)| {
+                        json!({"id": format!("{id}|{i}"), "label": self.registry.text(o, "labelId"),
+                            "selected": o["value"] == shown})
+                    })
+                    .collect();
+                row["options"] = options.into();
+            }
+            Some("string") => {
+                let text = shown.as_str().unwrap_or("").to_owned();
+                row["kind"] = "text".into();
+                row["text"] = if text.is_empty() {
+                    tr("bead.settings.default-value", &[])
+                } else {
+                    text.clone()
+                }
+                .into();
+                if let Some(color) = hex_color(&text) {
+                    row["swatch"] = json!(color);
+                }
+            }
+            Some("array") => {
+                row["kind"] = "list".into();
+                let items: Vec<Json> = shown
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .take(MAX_ITEMS)
+                    .enumerate()
+                    .map(|(i, v)| {
+                        json!({"id": format!("{id}|rm:{i}"), "label": v.as_str().map(String::from).unwrap_or_else(|| v.to_string())})
+                    })
+                    .collect();
+                row["items"] = items.into();
+            }
+            _ => {
+                row["kind"] = "help".into();
+            }
+        }
+        row
+    }
+
+    fn page_items(&self, page: &str, state: &State) -> (Vec<Json>, Vec<String>) {
+        let registry = &self.registry;
+        let editable = registry.editable(page);
+        let mut items = Vec::new();
+        let mut stores = Vec::new();
+        let mut children: Vec<&Json> = registry
+            .array(&registry.navigation, "pages")
+            .filter(|p| p["parent"] == page)
+            .collect();
+        children.sort_by_key(|p| Registry::order(p));
+        for child in children {
+            let id = child["id"].as_str().unwrap_or("");
+            items.push(json!({"id": format!("link:{id}"), "kind": "link", "page": id,
+                "label": registry.text(child, "labelId"), "description": registry.text(child, "descriptionId")}));
+        }
+        let mut sections: Vec<&Json> = registry
+            .array(&registry.settings, "sections")
+            .filter(|s| s["page"] == page)
+            .collect();
+        sections.sort_by_key(|s| Registry::order(s));
+        let in_page = |section: Option<&str>| -> Vec<&Json> {
+            registry
+                .array(&registry.settings, "settings")
+                .filter(|s| s["page"] == page && s["section"].as_str() == section)
+                .collect()
+        };
+        for section in &sections {
+            let sid = section["id"].as_str().unwrap_or("");
+            items.push(json!({"id": format!("section:{sid}"), "kind": "section",
+                "label": registry.text(section, "labelId"), "description": registry.text(section, "descriptionId")}));
+            if section.get("customType").is_some() {
+                items.push(json!({"id": format!("custom:{sid}"), "kind": "help",
+                    "label": tr("bead.settings.custom-unavailable", &[])}));
+            }
+            for setting in in_page(Some(sid)) {
+                if let Some(store) = setting["store"]["id"].as_str()
+                    && !stores.iter().any(|s| s == store)
+                    && !Self::unavailable(setting)
+                {
+                    stores.push(store.to_owned());
+                }
+                items.push(self.row(setting, editable, state));
+            }
+        }
+        (items, stores)
+    }
+
+    fn search(&self, query: &str) -> Vec<Json> {
+        let tokens: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+        let registry = &self.registry;
+        let matches = |hay: &str| {
+            let hay = hay.to_lowercase();
+            tokens.iter().all(|t| hay.contains(t))
+        };
+        let page_title = |id: &str| {
+            registry
+                .page(id)
+                .map(|p| registry.text(p, "labelId"))
+                .unwrap_or_default()
+        };
+        let mut out = Vec::new();
+        for page in registry.array(&registry.navigation, "pages") {
+            let hay = format!(
+                "{} {}",
+                registry.text(page, "labelId"),
+                registry.text(page, "descriptionId")
+            );
+            if matches(&hay) {
+                let id = page["id"].as_str().unwrap_or("");
+                out.push(json!({"id": format!("page:{id}"), "kind": "link", "page": id,
+                    "label": registry.text(page, "labelId"), "description": registry.text(page, "descriptionId")}));
+            }
+        }
+        for setting in registry.array(&registry.settings, "settings") {
+            let label = registry.text(setting, "labelId");
+            let synonyms = registry
+                .array(setting, "synonyms")
+                .filter_map(Json::as_str)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let hay = format!(
+                "{label} {} {synonyms} {}",
+                registry.text(setting, "descriptionId"),
+                setting["key"].as_str().unwrap_or("")
+            );
+            if matches(&hay) {
+                let id = setting["id"].as_str().unwrap_or("");
+                out.push(json!({"id": format!("setting:{id}"), "kind": "link",
+                    "page": setting["page"], "label": label,
+                    "description": page_title(setting["page"].as_str().unwrap_or(""))}));
+            }
+        }
+        out.truncate(MAX_RESULTS);
+        out
+    }
+
+    /// The page shown for `settings.page`, or the registry default for anything unknown.
+    pub fn page_for(&self, requested: &str) -> String {
+        if self.registry.page(requested).is_some() {
+            requested.into()
+        } else {
+            self.registry.first_page()
+        }
+    }
+
+    pub fn project(&self, stores: &Stores) -> BTreeMap<String, Value> {
+        let text = |name: &str| match stores.get(name) {
+            Some(Value::Text(t)) => t.clone(),
+            _ => String::new(),
+        };
+        let page = self.page_for(&text("settings.page"));
+        let query = text("settings.search");
+        let searching = !query.trim().is_empty();
+        let ready = self.ready().is_some();
+        // Which stores the page reads decides the leases; rows are built after they open.
+        let wanted = if searching {
+            Vec::new()
+        } else {
+            self.page_items(&page, &self.state.borrow()).1
+        };
+        self.retain(&wanted);
+        let items = if searching {
+            self.search(&query)
+        } else {
+            self.page_items(&page, &self.state.borrow()).0
+        };
+        let editable = self.registry.editable(&page);
+        let readable = wanted.iter().all(|s| self.document(s).2);
+        let writable = ready && editable && readable;
+        let mut message = String::new();
+        {
+            let mut state = self.state.borrow_mut();
+            if let Some(ticket) = &mut state.pending
+                && let Some(reply) = ticket.try_take()
+            {
+                state.pending = None;
+                state.message = match reply {
+                    Ok(_) => String::new(),
+                    Err(e) if e.code == "stale_revision" => {
+                        "bead.settings.changed-elsewhere".into()
+                    }
+                    Err(_) => "bead.settings.save-failed".into(),
+                };
+            }
+            if !state.message.is_empty() {
+                message = tr(&state.message, &[]);
+            }
+        }
+        let busy = self.state.borrow().pending.is_some();
+        let mut nav = Vec::new();
+        for (group, pages) in self.registry.groups() {
+            nav.push(json!({"id": format!("group:{}", group["id"].as_str().unwrap_or("")),
+                "kind": "group", "label": self.registry.text(group, "labelId"), "icon": "", "selected": false}));
+            for p in pages {
+                let id = p["id"].as_str().unwrap_or("");
+                let selected = !searching && (page == id || page.starts_with(&format!("{id}/")));
+                nav.push(
+                    json!({"id": id, "kind": "page", "label": self.registry.text(p, "labelId"),
+                    "icon": p["icon"].as_str().unwrap_or(""), "selected": selected}),
+                );
+            }
+        }
+        let current = self.registry.page(&page);
+        let (title, description) = if searching {
+            (tr("bead.settings.search-results", &[]), String::new())
+        } else {
+            current.map_or_else(Default::default, |p| {
+                (
+                    self.registry.text(p, "labelId"),
+                    self.registry.text(p, "descriptionId"),
+                )
+            })
+        };
+        BTreeMap::from([
+            ("settings.page".into(), Value::Text(page)),
+            ("settings.nav".into(), Value::list(nav)),
+            ("settings.items".into(), Value::list(items.clone())),
+            ("settings.title".into(), Value::Text(title)),
+            ("settings.description".into(), Value::Text(description)),
+            ("settings.message".into(), Value::Text(message)),
+            ("settings.writable".into(), Value::Bool(writable && !busy)),
+            (
+                "settings.readonly".into(),
+                Value::Bool(!searching && !editable),
+            ),
+            ("settings.searching".into(), Value::Bool(searching)),
+            ("settings.empty".into(), Value::Bool(items.is_empty())),
+        ])
+    }
+
+    fn say(&self, id: &str) {
+        self.state.borrow_mut().message = id.into();
+    }
+
+    /// One host action `settings.do`, argument `op:payload`. Returns store changes for
+    /// the window (page, text field). Ids are re-resolved against the registry; the
+    /// argument text never names a store, key or method.
+    pub fn act(&self, arg: &str, edit_text: &str, wake: CallWake) -> BTreeMap<String, Value> {
+        let (op, payload) = arg.split_once(':').unwrap_or((arg, ""));
+        let none = BTreeMap::new();
+        match op {
+            "page" => {
+                self.state.borrow_mut().editing.clear();
+                return BTreeMap::from([
+                    ("settings.page".into(), Value::Text(self.page_for(payload))),
+                    ("settings.search".into(), Value::Text(String::new())),
+                    ("settings.edit.text".into(), Value::Text(String::new())),
+                ]);
+            }
+            "cancel" => {
+                let mut state = self.state.borrow_mut();
+                state.editing.clear();
+                state.staged = None;
+                return BTreeMap::from([("settings.edit.text".into(), Value::Text(String::new()))]);
+            }
+            "discard" => {
+                self.state.borrow_mut().staged = None;
+                return none;
+            }
+            _ => {}
+        }
+        // Everything below writes: it needs the exact method, a connected daemon and
+        // a readable store on an editable page.
+        let (id, how) = payload.split_once('|').unwrap_or((payload, ""));
+        let Some(setting) = self.registry.setting(id) else {
+            return none;
+        };
+        let page = setting["page"].as_str().unwrap_or("");
+        if Self::unavailable(setting) || !self.registry.editable(page) || !self.depends_on(setting)
+        {
+            return none;
+        }
+        let store = setting["store"]["id"].as_str().unwrap_or("");
+        let (_, _, readable) = self.document(store);
+        if self.ready().is_none() || !readable {
+            self.say("bead.settings.unavailable-now");
+            return none;
+        }
+        let current = self.current(setting);
+        if op == "edit" {
+            self.state.borrow_mut().editing = id.into();
+            let prefill = match current.as_str() {
+                Some(text) => text.to_owned(),
+                None => String::new(),
+            };
+            return BTreeMap::from([("settings.edit.text".into(), Value::Text(prefill))]);
+        }
+        let value: Option<Json> = match (op, setting["type"].as_str()) {
+            ("apply", _) => self
+                .state
+                .borrow_mut()
+                .staged
+                .take()
+                .filter(|(s, _)| s == id)
+                .map(|(_, v)| v),
+            ("set", Some("boolean")) => Some(json!(current != json!(true))),
+            ("set", Some(kind @ ("integer" | "number"))) => {
+                how.parse::<f64>().ok().filter(|n| n.is_finite()).map(|n| {
+                    let (min, max, step) = number_step(setting);
+                    let snapped = (min + ((n - min) / step).round() * step).clamp(min, max);
+                    if kind == "integer" {
+                        json!(snapped.round() as i64)
+                    } else {
+                        json!(snapped)
+                    }
+                })
+            }
+            ("set", Some("enum")) => how
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| setting["options"].get(i))
+                .map(|o| o["value"].clone()),
+            ("set", Some("string")) => clean_text(edit_text).map(Json::String),
+            ("set", Some("array")) => {
+                let mut list = current.as_array().cloned().unwrap_or_default();
+                if let Some(index) = how
+                    .strip_prefix("rm:")
+                    .and_then(|i| i.parse::<usize>().ok())
+                {
+                    (index < list.len()).then(|| {
+                        list.remove(index);
+                        Json::Array(list.clone())
+                    })
+                } else if how == "add" && list.len() < MAX_ITEMS {
+                    clean_text(edit_text).filter(|t| !t.is_empty()).map(|t| {
+                        list.push(Json::String(t));
+                        Json::Array(list.clone())
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        let Some(value) = value else { return none };
+        if setting["apply"] == "confirm" && op != "apply" {
+            self.state.borrow_mut().staged = Some((id.into(), value));
+            return none;
+        }
+        self.submit(setting, value, wake);
+        let mut changes = BTreeMap::new();
+        if matches!(setting["type"].as_str(), Some("string" | "array")) {
+            self.state.borrow_mut().editing.clear();
+            changes.insert("settings.edit.text".into(), Value::Text(String::new()));
+        }
+        changes
+    }
+
+    fn submit(&self, setting: &Json, value: Json, wake: CallWake) {
+        let mut state = self.state.borrow_mut();
+        if state.pending.is_some() {
+            return;
+        }
+        state.message.clear();
+        let (rev, _, _) = self.document(setting["store"]["id"].as_str().unwrap_or(""));
+        let (Some((boot, timeout)), Some(client)) = (self.ready(), &self.client) else {
+            state.message = "bead.settings.unavailable-now".into();
+            return;
+        };
+        // The revision fence: a stale revision is refused and nothing is replayed.
+        let params = json!({"store": setting["store"]["id"], "key": setting["store"]["key"],
+            "value": value, "rev": rev});
+        match client.begin_call(
+            METHOD.into(),
+            params,
+            timeout,
+            CallGuard { boot, version: 1 },
+            Some(wake),
+        ) {
+            Ok(ticket) => state.pending = Some(ticket),
+            Err(_) => state.message = "bead.settings.save-failed".into(),
+        }
+    }
+}
+
+/// The Settings window as a framework `WindowSpec`: one factory, one deep-link mapping.
+pub fn window_spec(
+    palette: std::path::PathBuf,
+    colors: bead::render::Palette,
+    client: Option<Client>,
+    trace: bool,
+) -> Result<bead::wayland::WindowSpec, Box<dyn std::error::Error>> {
+    let mut fallback = crate::sound::fallback(colors.get("surface")?);
+    fallback.motion = None;
+    fallback.primitives.clear();
+    fallback.offset = (0., 0.);
+    fallback.width = 800.;
+    fallback.bounds = bead::render::Rect::new(0., 0., 800., 600.);
+    let cold = fallback.clone();
+    Ok(bead::wayland::WindowSpec {
+        app_id: "nacre-settings".into(),
+        title: tr("bead.settings.title", &[]),
+        size: (960, 640),
+        min_size: (560, 400),
+        fallback,
+        factory: Arc::new(move |_| {
+            let session = bead::ui::Session::new(
+                "shell".into(),
+                "settings/main.luau".into(),
+                palette.clone(),
+                colors.clone(),
+                cold.clone(),
+            );
+            crate::reload::Runtime::new(session)
+                .with_trace(trace)
+                .with_settings(client.clone())
+                .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
+                .map_err(|e| e.to_string())
+        }),
+        model: Arc::new(|args| {
+            args.first()
+                .and_then(Json::as_str)
+                .map(|page| {
+                    BTreeMap::from([
+                        ("settings.page".into(), Value::Text(page.into())),
+                        ("settings.search".into(), Value::Text(String::new())),
+                    ])
+                })
+                .unwrap_or_default()
+        }),
+    })
+}

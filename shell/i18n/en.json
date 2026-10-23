@@ -321,5 +321,22 @@
   "bead.panel.wifi-control-unavailable": "Wi-Fi control unavailable",
   "bead.panel.wifi-off": "Wi-Fi off",
   "bead.panel.wifi-on": "Wi-Fi on",
-  "bead.panel.wifi-radio": "Wi-Fi radio"
+  "bead.panel.wifi-radio": "Wi-Fi radio",
+  "bead.settings.add": "Add",
+  "bead.settings.apply": "Apply",
+  "bead.settings.changed-elsewhere": "Changed elsewhere, try again",
+  "bead.settings.custom-unavailable": "This section is not available in Bead yet.",
+  "bead.settings.default-value": "Default",
+  "bead.settings.discard": "Discard",
+  "bead.settings.no-results": "No settings match.",
+  "bead.settings.not-here": "not available in Bead yet",
+  "bead.settings.read-only": "Editing this page is not available in Bead yet.",
+  "bead.settings.remove": "Remove",
+  "bead.settings.requires-apply": "This change needs to be applied.",
+  "bead.settings.save": "Save",
+  "bead.settings.save-failed": "Could not save the setting",
+  "bead.settings.search-placeholder": "Search settings",
+  "bead.settings.search-results": "Search results",
+  "bead.settings.title": "Settings",
+  "bead.settings.unavailable-now": "Settings cannot be changed right now."
 }

@@ -45,6 +45,7 @@ pub struct Runtime {
     session_menu_subscription: Option<bead::core::source::Subscription>,
     chat: Option<std::rc::Rc<crate::chat::Chat>>,
     chat_subscription: Vec<bead::core::source::Subscription>,
+    settings: Option<std::rc::Rc<crate::settings::Settings>>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
@@ -255,6 +256,7 @@ impl Runtime {
             session_menu_subscription: None,
             chat: None,
             chat_subscription: Vec::new(),
+            settings: None,
             dashboard: None,
             dashboard_subscription: Vec::new(),
             launcher_memory: None,
@@ -623,6 +625,23 @@ impl Runtime {
             chrome.set_engaged(true);
         }
         self.chat = Some(chat);
+        Ok(self)
+    }
+    /// B0045 Settings window: registry rows over the published store contract.
+    pub fn with_settings(
+        mut self,
+        client: Option<crate::nacre_source::Client>,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.settings.is_some() {
+            return Err("one data projector per panel".into());
+        }
+        let settings = std::rc::Rc::new(crate::settings::Settings::new(client)?);
+        let projector = settings.clone();
+        self.session
+            .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+        self.actions.register("settings.do", "settings.control")?;
+        self.actions.grant("settings.control");
+        self.settings = Some(settings);
         Ok(self)
     }
     pub fn with_core_battery_status(
@@ -1462,6 +1481,12 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=session_menu_subscription"),
             }
         }
+        if let Some(settings) = &self.settings {
+            let wakeup = wakeup.clone();
+            settings.subscribe(std::sync::Arc::new(move || {
+                wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
+            }));
+        }
         if let Some(dashboard) = &self.dashboard {
             match dashboard.subscribe(wakeup.clone()) {
                 Ok(subscription) => self.dashboard_subscription = subscription,
@@ -1776,6 +1801,28 @@ impl SceneSource for Runtime {
                 );
             }
             let scene = self.session.update(outcome.stores)?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(settings), Some((_, name, bead::core::Value::Text(arg)))) =
+            (&self.settings, &host_action)
+            && name == "settings.do"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("settings completion event channel unavailable")?;
+            let wake: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            let edit = match self.session.stores.get("settings.edit.text") {
+                Some(bead::core::Value::Text(t)) => t.clone(),
+                _ => String::new(),
+            };
+            let changes = settings.act(arg, &edit, wake);
+            let scene = self.session.update(changes)?;
             return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)

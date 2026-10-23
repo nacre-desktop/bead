@@ -138,6 +138,102 @@ return function(ui, tokens)
         return ui.Box{id=p.id,width=p.width or 160,height=p.height or 8,radius=tokens.radii.full,fill="surfaceContainerHigh",
             ui.Box{id="level",width=(level*100).."%",height="100%",radius=tokens.radii.full,fill="primary"}}
     end
+    -- Form kit (B0045). Generic rows over plain data; callers pass labels, values and
+    -- ready-made actions, so no product or setting id lives here. Sizes and colours are tokens.
+    local sp,tx=tokens.spacing,tokens.text
+    local function maybe(action,enabled) if enabled then return action end return nil end
+    function kit.SectionHeader(p)
+        return ui.Column{id=p.id,width="fill",height=46,shrink=0,gap=sp.hairline,padding_top=sp.lg,
+            ui.Text{id="title",text=p.label,font_size=tx.title*4/3,height=24,color="primary"},
+            ui.Text{id="detail",text=p.description or "",visible=(p.description or "")~="",font_size=tx.caption*4/3,height=16,color="onSurfaceVariant"}}
+    end
+    function kit.HelpText(p)
+        return ui.Text{id=p.id,text=p.text,width="fill",height=20,shrink=0,font_size=tx.caption*4/3,color="onSurfaceVariant"}
+    end
+    function kit.Swatch(p)
+        return ui.Box{id=p.id,width=p.size or 24,height=p.size or 24,radius=tokens.radii.small,fill=p.color,
+            border_width=1,border_color="outlineVariant",aria_label=p.label}
+    end
+    -- Label and description on the left, the control children on the right.
+    function kit.FormRow(p)
+        local on=p.enabled~=false
+        local out=props(p,{width="fill",height=p.height or 56,shrink=0,gap=sp.md,align="center",padding_left=sp.sm,padding_right=sp.sm,
+            radius=tokens.radii.small},{label=true,description=true,enabled=true,height=true})
+        local labels=ui.Column{id="labels",grow=1,gap=sp.hairline,justify="center",
+            ui.Text{id="label",text=p.label,font_size=tx.body*4/3,height=20,color=on and "onSurface" or "onSurfaceVariant"},
+            ui.Text{id="description",text=p.description or "",visible=(p.description or "")~="",font_size=tx.caption*4/3,height=16,color="onSurfaceVariant"}}
+        local row={labels}
+        for _,child in ipairs(p) do table.insert(row,child) end
+        for k,v in pairs(out) do if type(k)~="number" then row[k]=v end end
+        return ui.Row(row)
+    end
+    function kit.ToggleRow(p)
+        return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=p.enabled,
+            kit.Switch{id="switch",checked=p.checked,aria_label=p.label,on_activate=maybe(p.on_activate,p.enabled)}}
+    end
+    function kit.ChoiceRow(p)
+        local on=p.enabled~=false
+        local buttons={}
+        for i,o in ipairs(p.options) do
+            buttons[i]=kit.Button{id="option-"..i,text=o.label,height=32,padding=sp.xs,padding_left=sp.sm,padding_right=sp.sm,shrink=0,
+                width=sp.xxl+(utf8.len(o.label) or 4)*8,selected=o.selected,
+                fill=o.selected and "primaryContainer" or "surfaceContainer",color=o.selected and "onPrimaryContainer" or "onSurface",
+                aria_label=p.label..": "..o.label,on_activate=maybe(ui.action(p.on_change,o.id),on)}
+        end
+        buttons.id="options";buttons.gap=sp.xs
+        return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=p.enabled,ui.Row(buttons)}
+    end
+    function kit.NumberRow(p)
+        local on=p.enabled~=false
+        return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=p.enabled,
+            kit.IconButton{id="decrease",text="remove",aria_label=p.label.." -",on_activate=maybe(p.on_decrease,on and not p.at_min)},
+            ui.Text{id="value",text=p.text..(p.unit or ""),width=64,height=24,text_align="center",font_size=tx.body*4/3,color="onSurface"},
+            kit.IconButton{id="increase",text="add",aria_label=p.label.." +",on_activate=maybe(p.on_increase,on and not p.at_max)}}
+    end
+    -- Value as a button; editing shows the shared text field with save and cancel.
+    function kit.TextRow(p)
+        local on=p.enabled~=false
+        if p.editing then
+            return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=p.enabled,
+                kit.TextInput{id="field",text=p.field,width=220,aria_label=p.label},
+                kit.IconButton{id="save",text="check",aria_label=p.save_label,on_activate=p.on_save},
+                kit.IconButton{id="cancel",text="close",aria_label=p.cancel_label,on_activate=p.on_cancel}}
+        end
+        local children={}
+        if p.swatch then table.insert(children,kit.Swatch{id="swatch",color=p.swatch,label=p.label}) end
+        table.insert(children,kit.Button{id="edit",text=p.text,width=220,height=32,padding=sp.xs,padding_left=sp.sm,aria_label=p.label..": "..p.text,
+            on_activate=maybe(p.on_edit,on)})
+        return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=p.enabled,table.unpack(children)}
+    end
+    function kit.ListRow(p)
+        local on=p.enabled~=false
+        local rows={}
+        for i,item in ipairs(p.items) do
+            rows[i]=ui.Row{id="item-"..i,width="fill",height=32,shrink=0,gap=sp.sm,align="center",
+                ui.Text{id="text",text=item.label,grow=1,height=20,font_size=tx.body*4/3,color="onSurface"},
+                kit.IconButton{id="remove",width=32,height=32,shrink=0,text="close",aria_label=p.remove_label.." "..item.label,on_activate=maybe(ui.action(p.on_remove,(p.remove_prefix or "")..item.id),on)}}
+        end
+        rows.id="items";rows.width="fill";rows.gap=sp.xs;rows.shrink=0
+        local add
+        if p.editing then
+            add=ui.Row{id="add",width="fill",gap=sp.sm,align="center",
+                kit.TextInput{id="field",text=p.field,grow=1,aria_label=p.label},
+                kit.IconButton{id="save",text="check",aria_label=p.save_label,on_activate=p.on_save},
+                kit.IconButton{id="cancel",text="close",aria_label=p.cancel_label,on_activate=p.on_cancel}}
+        else
+            add=kit.Button{id="add",text=p.add_label,height=32,width=120,padding=sp.xs,padding_left=sp.sm,on_activate=maybe(p.on_edit,on)}
+        end
+        return ui.Column{id=p.id,width="fill",shrink=0,gap=sp.xs,padding=sp.sm,
+            ui.Text{id="label",text=p.label,height=20,font_size=tx.body*4/3,color=on and "onSurface" or "onSurfaceVariant"},
+            ui.Column(rows),add}
+    end
+    -- A choice that needs an explicit apply: shows what is pending and offers both ways out.
+    function kit.ApplyBar(p)
+        return ui.Row{id=p.id,width="fill",height=40,shrink=0,gap=sp.sm,align="center",padding_left=sp.sm,radius=tokens.radii.small,fill="secondaryContainer",
+            ui.Text{id="pending",text=p.text,grow=1,height=20,font_size=tx.caption*4/3,color="onSecondaryContainer"},
+            kit.Button{id="apply",text=p.apply_label,width=96,on_activate=p.on_apply},
+            kit.Button{id="discard",text=p.discard_label,width=96,on_activate=p.on_discard}}
+    end
     function kit.BlurredArtwork(p) return ui.Image(props(p,{blur=12})) end
     return kit
 end

@@ -140,7 +140,7 @@ pub fn from_strings(target: String, method: String, values: &[String]) -> Result
         args: converted,
         output: None,
     };
-    if call.target != "bead" && call.target != "bead.panel" {
+    if !["bead", "bead.panel", "bead.window"].contains(&call.target.as_str()) {
         c.validate(&call)?;
     }
     Ok(call)
@@ -194,6 +194,16 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
         call.args = vec![Value::String("chat".into())];
         return Ok(call);
     }
+    // B0045: `nacre settings [page]` opens the Settings window (deep link by page id).
+    if call.target == "nacre"
+        && call.method == "settings"
+        && call.args.len() <= 1
+        && call.args.iter().all(Value::is_string)
+    {
+        call.target = "bead.window".into();
+        call.method = "open".into();
+        return Ok(call);
+    }
     if call.target == "nacre" && call.method == "tab" {
         validate(&call)?;
         let page = call.args[0]
@@ -244,7 +254,7 @@ pub fn map_launcher(call: Call) -> Result<Call, Reply> {
     Ok(call)
 }
 pub fn map(mut call: Call) -> Result<Call, Reply> {
-    if call.target == "bead" || call.target == "bead.panel" || call.target == "bead.osd" {
+    if ["bead", "bead.panel", "bead.osd", "bead.window"].contains(&call.target.as_str()) {
         return Ok(call);
     }
     validate(&call)?;

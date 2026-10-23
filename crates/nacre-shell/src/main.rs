@@ -24,6 +24,9 @@ mod popouts;
 mod prefs;
 mod reload;
 mod session_menu;
+mod settings;
+#[cfg(test)]
+mod settings_tests;
 mod shell_control;
 mod sound;
 mod state;
@@ -762,6 +765,12 @@ fn start(
             );
         }
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
+        options.window = Some(settings::window_spec(
+            palette.clone(),
+            colors.clone(),
+            _ui_provider.clone(),
+            panel_trace,
+        )?);
     }
     let notification_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     let notice_service = match &notice_daemon {
