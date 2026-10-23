@@ -3,7 +3,10 @@
  "note": "Bead overlay (B0045): which registry pages Bead can edit. Pages not listed here show their values read-only. Delete an entry's restriction by adding the page id.",
  "editable": [
   "appearance",
-  "notifications"
+  "notifications",
+  "panels",
+  "windows-workspaces",
+  "date-time-language"
  ],
  "default": "appearance"
 }

@@ -281,6 +281,10 @@ impl Settings {
             None => true,
         }
     }
+    /// QML hides a `backend: "planned"` setting (and a section left empty) outside development.
+    fn planned(setting: &Json) -> bool {
+        setting["backend"] == "planned"
+    }
     fn unavailable(setting: &Json) -> bool {
         ["adapter", "editorOwned", "entityType", "backend"]
             .iter()
@@ -410,17 +414,22 @@ impl Settings {
             registry
                 .array(&registry.settings, "settings")
                 .filter(|s| s["page"] == page && s["section"].as_str() == section)
+                .filter(|s| !Self::planned(s))
                 .collect()
         };
         for section in &sections {
             let sid = section["id"].as_str().unwrap_or("");
+            let rows = in_page(Some(sid));
+            if rows.is_empty() && section.get("customType").is_none() {
+                continue;
+            }
             items.push(json!({"id": format!("section:{sid}"), "kind": "section",
                 "label": registry.text(section, "labelId"), "description": registry.text(section, "descriptionId")}));
             if section.get("customType").is_some() {
                 items.push(json!({"id": format!("custom:{sid}"), "kind": "help",
                     "label": tr("bead.settings.custom-unavailable", &[])}));
             }
-            for setting in in_page(Some(sid)) {
+            for setting in rows {
                 if let Some(store) = setting["store"]["id"].as_str()
                     && !stores.iter().any(|s| s == store)
                     && !Self::unavailable(setting)
@@ -459,7 +468,10 @@ impl Settings {
                     "label": registry.text(page, "labelId"), "description": registry.text(page, "descriptionId")}));
             }
         }
-        for setting in registry.array(&registry.settings, "settings") {
+        for setting in registry
+            .array(&registry.settings, "settings")
+            .filter(|s| !Self::planned(s))
+        {
             let label = registry.text(setting, "labelId");
             let synonyms = registry
                 .array(setting, "synonyms")

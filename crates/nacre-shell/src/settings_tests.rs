@@ -104,8 +104,8 @@ fn notifications_page_and_search_use_the_same_registry_data() {
     let none = settings.project(&stores("appearance", "zzzzqqq"));
     assert_eq!(none["settings.empty"], Value::Bool(true));
     // Pages Bead cannot edit yet are shown read-only, never writable.
-    let panels = settings.project(&stores("panels", ""));
-    assert_eq!(panels["settings.readonly"], Value::Bool(true));
+    let network = settings.project(&stores("network", ""));
+    assert_eq!(network["settings.readonly"], Value::Bool(true));
 }
 
 const DESKTOP: &str = "settings.store.desktop";
@@ -264,6 +264,53 @@ fn values_are_typed_clamped_and_staged_before_they_reach_the_wire() {
     );
 }
 
+/// B0058 slice 1: pages whose controls only write the settings store are editable and typed
+/// from the registry; controls the daemon cannot honour yet stay read-only text.
+#[test]
+fn panels_windows_date_and_lock_pages_follow_the_registry() {
+    let (settings, _) =
+        fixture(json!({"topBarEnabled": false, "frameWidth": 12, "language": "nb"}));
+    let panels = items(&settings.project(&stores("panels", "")));
+    assert_eq!(
+        row(&panels, "panels.lips.detachablePanels")["kind"],
+        "toggle"
+    );
+    assert_eq!(row(&panels, "panels.lips.hoverDelay")["kind"], "number");
+    // `backend: planned` settings are hidden, like QML outside development.
+    assert!(panels.iter().all(|r| r["id"] != "panels.lips.lipSize"));
+    assert!(
+        panels
+            .iter()
+            .any(|r| r["id"] == "link:panels/top-bar" && r["kind"] == "link")
+    );
+    let top = items(&settings.project(&stores("panels/top-bar", "")));
+    assert_eq!(row(&top, "panels/top-bar.panel.enabled")["checked"], false);
+    assert_eq!(row(&top, "panels/top-bar.panel.enabled")["enabled"], true);
+    for planned in ["modules", "clockFormat", "tray"] {
+        assert!(
+            top.iter()
+                .all(|r| r["id"] != format!("panels/top-bar.panel.{planned}"))
+        );
+    }
+    let win = items(&settings.project(&stores("windows-workspaces", "")));
+    assert!(
+        win.iter()
+            .all(|r| r["id"] != "windows-workspaces.workspaces.workspaceCount")
+    );
+    assert!(
+        win.iter()
+            .any(|r| r["id"] == "link:windows-workspaces/workflows")
+    );
+    let dt = items(&settings.project(&stores("date-time-language", "")));
+    assert_eq!(
+        row(&dt, "date-time-language.locale.language")["kind"],
+        "choice"
+    );
+    // Lock and login stays view only (the locker is external; login theme install is privileged).
+    let lock = settings.project(&stores("lock-login", ""));
+    assert_eq!(lock["settings.readonly"], Value::Bool(true));
+}
+
 #[test]
 fn closing_releases_every_store_source() {
     let (settings, source) = fixture(json!({}));
@@ -317,6 +364,21 @@ fn settings_window_goldens() {
         ("settings-appearance-1.5", "appearance", "", 1.5),
         ("settings-notifications-1", "notifications", "", 1.),
         ("settings-search-1", "appearance", "font", 1.),
+        ("settings-panels-1", "panels", "", 1.),
+        ("settings-panels-top-bar-1", "panels/top-bar", "", 1.),
+        (
+            "settings-windows-workspaces-1",
+            "windows-workspaces",
+            "",
+            1.,
+        ),
+        (
+            "settings-date-time-language-1",
+            "date-time-language",
+            "",
+            1.,
+        ),
+        ("settings-lock-login-1", "lock-login", "", 1.),
     ] {
         let (settings, _) = fixture(desktop.clone());
         let mut model = settings.project(&stores(page, search));
