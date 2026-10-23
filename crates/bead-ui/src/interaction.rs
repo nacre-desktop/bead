@@ -476,6 +476,17 @@ impl Session {
             .into_iter()
             .rfind(|p| *p <= editor.map_or(cursor, |e| e.anchor))
             .unwrap_or(0);
+        let shown;
+        let (value, cursor, anchor) = if node.masked {
+            shown = input::mask(value);
+            (
+                &shown,
+                input::mask_offset(value, cursor),
+                input::mask_offset(value, anchor),
+            )
+        } else {
+            (value, cursor, anchor)
+        };
         let preedit = editor.map_or("", |e| e.preedit.as_str());
         let text_index=scene.primitives.iter().position(|p|matches!(p,Primitive::Text{rect,..}if rect.x>=r.x&&rect.y>=r.y&&rect.x<r.x+r.w&&rect.y<r.y+r.h));
         let Some(index) = text_index else {
@@ -583,6 +594,9 @@ impl Session {
     }
     pub fn selected_text(&self) -> Option<String> {
         let (id, _, text) = self.focused_input()?;
+        if self.focused_masked() {
+            return None;
+        }
         let editor = self.editors.get(&id)?;
         let points = input::boundaries(&text);
         let cursor = points
@@ -596,8 +610,16 @@ impl Session {
             .unwrap_or(0);
         (cursor != anchor).then(|| text[cursor.min(anchor)..cursor.max(anchor)].to_owned())
     }
+    /// The focused input is masked: its value stays out of IME, copy and accessibility.
+    pub fn focused_masked(&self) -> bool {
+        self.focused_input()
+            .is_some_and(|(id, ..)| self.current_nodes.iter().any(|n| n.id == id && n.masked))
+    }
     pub fn surrounding_text(&self) -> Option<(String, i32, i32)> {
         let (id, _, text) = self.focused_input()?;
+        if self.focused_masked() {
+            return Some((String::new(), 0, 0));
+        }
         let editor = self.editors.get(&id);
         Some((
             text.clone(),

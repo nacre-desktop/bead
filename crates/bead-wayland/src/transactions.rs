@@ -756,15 +756,24 @@ impl App {
             self.runtime.as_ref()
         };
         let current = source.and_then(|r| r.surrounding_text());
-        if current == self.ime_last {
+        let sensitive = source.is_some_and(|r| r.sensitive_input());
+        if current == self.ime_last && sensitive == self.ime_sensitive {
             return;
         }
         if let Some((text, cursor, anchor)) = &current {
             input.enable();
-            input.set_content_type(
-                zwp_text_input_v3::ContentHint::None,
-                zwp_text_input_v3::ContentPurpose::Normal,
-            );
+            if sensitive {
+                input.set_content_type(
+                    zwp_text_input_v3::ContentHint::SensitiveData
+                        | zwp_text_input_v3::ContentHint::HiddenText,
+                    zwp_text_input_v3::ContentPurpose::Password,
+                );
+            } else {
+                input.set_content_type(
+                    zwp_text_input_v3::ContentHint::None,
+                    zwp_text_input_v3::ContentPurpose::Normal,
+                );
+            }
             let mut start = (*cursor as usize).saturating_sub(2000);
             while !text.is_char_boundary(start) {
                 start += 1;
@@ -790,5 +799,6 @@ impl App {
             input.commit();
         }
         self.ime_last = current;
+        self.ime_sensitive = sensitive;
     }
 }

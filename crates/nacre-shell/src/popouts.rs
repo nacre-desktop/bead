@@ -269,6 +269,9 @@ fn status_at_root_mode(
         (190., 72.)
     } else if control_panel {
         (400., 286.)
+    } else if matches!(kind, crate::status_views::Kind::Network) && client.is_some() {
+        // The controlled network popout carries the hidden/saved footer.
+        (310., crate::status_views::NETWORK_BASE_HEIGHT as f32)
     } else {
         (310., 222.)
     };

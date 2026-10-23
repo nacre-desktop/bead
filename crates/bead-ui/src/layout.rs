@@ -129,6 +129,7 @@ pub const PROPERTIES: &[&str] = &[
     "hover_fill",
     "selected_fill",
     "multiline",
+    "masked",
 ];
 pub fn allowed_property(name: &str) -> bool {
     PROPERTIES.contains(&name)
@@ -147,6 +148,8 @@ pub struct ViewSpec {
     pub input: Option<String>,
     /// TextInput accepts newlines (Shift+Enter) and wraps at its width.
     pub multiline: bool,
+    /// TextInput value is drawn as bullets and kept out of accessibility, IME and copy.
+    pub masked: bool,
     pub scroll: Option<String>,
     pub fill: Option<Json>,
     pub color: Option<Json>,
@@ -511,6 +514,7 @@ impl ViewSpec {
                 argument: action.and_then(|a| a.1),
                 input,
                 multiline: boolean(p, "multiline", false, source)?,
+                masked: boolean(p, "masked", false, source)?,
                 scroll,
                 fill: p.get("fill").cloned(),
                 color: p.get("color").cloned(),
@@ -858,6 +862,8 @@ pub fn layout(
                 ),
                 text: if input_empty {
                     view.placeholder.clone()
+                } else if view.masked && view.input.is_some() {
+                    crate::input::mask(&view.text)
                 } else {
                     view.text.clone()
                 },
@@ -903,10 +909,13 @@ pub fn layout(
                 scroll_store: inherited_scroll.map(str::to_owned),
                 focusable: view.action.is_some() || view.input.is_some(),
                 multiline: view.multiline && view.input.is_some(),
+                masked: view.masked && view.input.is_some(),
                 drag: view.drag,
                 clip,
                 label: if !view.aria_label.is_empty() {
                     view.aria_label.clone()
+                } else if view.masked && view.input.is_some() {
+                    view.placeholder.clone()
                 } else if !view.text.is_empty() {
                     view.text.clone()
                 } else if view.input.is_some() {

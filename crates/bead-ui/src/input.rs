@@ -10,6 +10,15 @@ pub enum EditKey {
     Delete,
     SelectAll,
 }
+/// One bullet per grapheme; a masked TextInput draws this instead of its value.
+pub const MASK: char = '\u{2022}';
+pub fn mask(text: &str) -> String {
+    text.graphemes(true).map(|_| MASK).collect()
+}
+/// Byte offset in `mask(text)` for the byte offset `at` of `text`.
+pub fn mask_offset(text: &str, at: usize) -> usize {
+    text.grapheme_indices(true).take_while(|(i, _)| *i < at).count() * MASK.len_utf8()
+}
 pub fn boundaries(text: &str) -> Vec<usize> {
     let mut values: Vec<_> = text.grapheme_indices(true).map(|(i, _)| i).collect();
     values.push(text.len());

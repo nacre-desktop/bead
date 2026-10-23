@@ -118,6 +118,23 @@ impl Drop for Runtime {
     }
 }
 impl Runtime {
+    /// A freshly opened prompt or form takes keyboard focus on its first field, so the
+    /// user can type (and press Enter) at once.
+    fn focus_network_form(&mut self, scene: Option<Scene>) -> Result<Option<Scene>, Box<dyn Error>> {
+        let field = match self.session.stores.get("network.view") {
+            Some(bead::core::Value::Text(view)) if view == "prompt" => "status-popout.secret.field",
+            Some(bead::core::Value::Text(view)) if view == "hidden" => "status-popout.ssid",
+            _ => return Ok(scene),
+        };
+        if self.session.stores.get("bead.focused") == Some(&bead::core::Value::Text(field.into())) {
+            return Ok(scene);
+        }
+        let focused = self.session.update(BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text(field.into()),
+        )]))?;
+        Ok(focused.or(scene))
+    }
     fn publish_status_pill(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
         let values = BTreeMap::from([
             (
@@ -524,7 +541,32 @@ impl Runtime {
                 "network.link_message".into(),
                 bead::core::Value::Text(String::new()),
             ),
+            (
+                "network.view".into(),
+                bead::core::Value::Text("list".into()),
+            ),
+            (
+                "network.prompt_label".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "network.form_error".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            ("network.form_busy".into(), bead::core::Value::Bool(false)),
+            ("network.can_hidden".into(), bead::core::Value::Bool(false)),
+            ("network.can_forget".into(), bead::core::Value::Bool(false)),
+            ("network.saved".into(), bead::core::Value::list(Vec::new())),
         ]))?;
+        for action in [
+            "network.open",
+            "network.cancel",
+            "network.join",
+            "network.forget_ask",
+            "network.forget",
+        ] {
+            runtime.actions.register(action, "network.control")?;
+        }
         runtime
             .actions
             .register("network.toggle_wifi", "network.control")?;
@@ -1666,6 +1708,9 @@ impl SceneSource for Runtime {
     fn surrounding_text(&self) -> Option<(String, i32, i32)> {
         self.session.surrounding_text()
     }
+    fn sensitive_input(&self) -> bool {
+        self.session.focused_masked()
+    }
     fn viewport(&mut self, width: u32, height: u32) -> bool {
         if let Some(chrome) = &mut self.chrome {
             chrome.output = (width, height);
@@ -1815,6 +1860,56 @@ impl SceneSource for Runtime {
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }
+        if let Some((node, name, arg)) = &host_action
+            && matches!(
+                name.as_str(),
+                "network.open"
+                    | "network.cancel"
+                    | "network.join"
+                    | "network.forget_ask"
+                    | "network.forget"
+            )
+            && ((matches!(&event, UiEvent::Click { .. }) && !node.ends_with("field"))
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("network completion event channel unavailable")?;
+            let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            // Whatever happens, a typed password leaves the input buffer once it was used.
+            let mut clear = BTreeMap::from([(
+                crate::status_views::SECRET_STORE.to_owned(),
+                bead::core::Value::Text(String::new()),
+            )]);
+            if let Some(status) = &self.status {
+                match (name.as_str(), arg) {
+                    ("network.open", bead::core::Value::Text(view)) => status.network_open(view),
+                    ("network.cancel", _) => {
+                        status.network_cancel();
+                        clear.insert(
+                            "network.hidden_ssid".into(),
+                            bead::core::Value::Text(String::new()),
+                        );
+                    }
+                    ("network.join", _) => status.network_join(&self.session.stores, callback),
+                    ("network.forget_ask", bead::core::Value::Text(key)) => {
+                        status.network_forget(key, false, callback)
+                    }
+                    ("network.forget", bead::core::Value::Text(key)) => {
+                        status.network_forget(key, true, callback)
+                    }
+                    _ => {}
+                }
+            }
+            clear.insert("network.reveal".into(), bead::core::Value::Bool(false));
+            let scene = self.session.update(clear)?;
+            let scene = self.focus_network_form(scene)?;
+            return self.finish_scene(scene, false);
+        }
         if let Some((_, name, bead::core::Value::Text(key))) = &host_action
             && (name == "network.connect" || name == "network.disconnect")
             && (matches!(&event, UiEvent::Click { .. })
@@ -1832,6 +1927,7 @@ impl SceneSource for Runtime {
                 status.network_link_action(name, key, callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
+            let scene = self.focus_network_form(scene)?;
             return self.finish_scene(scene, false);
         }
         if let (Some(dashboard), Some((_, name, bead::core::Value::Text(arg)))) =
@@ -2690,11 +2786,50 @@ impl SceneSource for Runtime {
                         )])
                     }))?
                 }
+                "escape"
+                    if self.status.is_some()
+                        && matches!(
+                            self.session.stores.get("network.view"),
+                            Some(bead::core::Value::Text(view)) if view != "list"
+                        ) =>
+                {
+                    // Esc leaves the prompt, hidden form or saved list before it closes the panel.
+                    if let Some(status) = &self.status {
+                        status.network_cancel();
+                    }
+                    self.session.update(BTreeMap::from([
+                        (
+                            crate::status_views::SECRET_STORE.to_owned(),
+                            bead::core::Value::Text(String::new()),
+                        ),
+                        (
+                            "network.hidden_ssid".into(),
+                            bead::core::Value::Text(String::new()),
+                        ),
+                        ("network.reveal".into(), bead::core::Value::Bool(false)),
+                    ]))?
+                }
                 "escape" if self.session.stores.get("panel.open").is_some() => {
-                    self.session.update(std::collections::BTreeMap::from([(
+                    // A half-typed password never outlives its panel.
+                    let mut values = std::collections::BTreeMap::from([(
                         "panel.open".into(),
                         bead::core::Value::Bool(false),
-                    )]))?
+                    )]);
+                    if self
+                        .session
+                        .stores
+                        .get(crate::status_views::SECRET_STORE)
+                        .is_some()
+                    {
+                        if let Some(status) = &self.status {
+                            status.network_cancel();
+                        }
+                        values.insert(
+                            crate::status_views::SECRET_STORE.into(),
+                            bead::core::Value::Text(String::new()),
+                        );
+                    }
+                    self.session.update(values)?
                 }
                 "escape" if self.bar => {
                     self.status_pill.escape();

@@ -76,6 +76,9 @@ pub struct Node {
     pub focusable: bool,
     #[serde(default)]
     pub multiline: bool,
+    /// TextInput shows one bullet per character and never exposes its value.
+    #[serde(default)]
+    pub masked: bool,
     #[serde(default)]
     pub drag: bool,
     #[serde(skip)]

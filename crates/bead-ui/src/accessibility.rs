@@ -40,7 +40,9 @@ pub fn tree(views: &[Node], stores: &Stores) -> TreeUpdate {
             node.add_action(Action::Click);
         }
         if let Some(store) = &view.input {
-            if let Some(Value::Text(value)) = stores.get(store) {
+            if !view.masked
+                && let Some(Value::Text(value)) = stores.get(store)
+            {
                 node.set_value(value.clone());
             }
             node.add_action(Action::SetValue);

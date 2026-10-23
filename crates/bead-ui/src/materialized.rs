@@ -14,6 +14,7 @@ use std::{
     rc::Rc,
 };
 struct Text {
+    masked: bool,
     node: Option<usize>,
     binding: String,
     index: usize,
@@ -107,7 +108,8 @@ impl Cached {
                             &view.source,
                         )?;
                         cached.text.push(Text {
-                            node: if view.aria_label.is_empty() {
+                            masked: view.masked,
+                            node: if view.aria_label.is_empty() && !view.masked {
                                 cached.nodes.iter().position(|n| n.id == view.id)
                             } else {
                                 None
@@ -258,6 +260,8 @@ impl Cached {
                 let placeholder = value.is_empty() && text.placeholder.is_some();
                 *paint = if placeholder {
                     text.placeholder.clone().unwrap_or_default()
+                } else if text.masked {
+                    crate::input::mask(value)
                 } else {
                     value.clone()
                 };

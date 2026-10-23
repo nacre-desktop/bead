@@ -35,6 +35,19 @@ fn data() -> serde_json::Value {
     };
     serde_json::to_value(snapshot).unwrap()
 }
+/// The join/forget stores the adapter projects (B0050), at their idle values.
+fn with_flow_stores(mut stores: BTreeMap<String, Value>) -> BTreeMap<String, Value> {
+    stores.extend([
+        ("network.view".into(), Value::Text("list".into())),
+        ("network.prompt_label".into(), Value::Text(String::new())),
+        ("network.form_error".into(), Value::Text(String::new())),
+        ("network.form_busy".into(), Value::Bool(false)),
+        ("network.can_hidden".into(), Value::Bool(true)),
+        ("network.can_forget".into(), Value::Bool(true)),
+        ("network.saved".into(), Value::list(Vec::new())),
+    ]);
+    stores
+}
 fn core_network() -> serde_json::Value {
     serde_json::json!({
         "health":{"available":true,"stale":false},
@@ -126,10 +139,11 @@ fn controlled_network_template_omits_unavailable_switch_action() -> Result<()> {
             Value::Text("Wi-Fi control unavailable".into()),
         ),
         ("network.rows".into(), Value::list(Vec::new())),
-        ("network.height".into(), Value::Number(222.)),
+        ("network.height".into(), Value::Number(262.)),
         ("network.link_visible".into(), Value::Bool(false)),
         ("network.link_message".into(), Value::Text(String::new())),
     ]);
+    let initial = with_flow_stores(initial);
     let h = Harness::load(
         &root(),
         Path::new("status/network.luau"),
@@ -1147,16 +1161,16 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
 
 #[test]
 fn network_popout_height_follows_rows_and_message() -> Result<()> {
-    assert_eq!(crate::status_views::network_popout_height(0, false), 222.);
-    assert_eq!(crate::status_views::network_popout_height(2, false), 302.);
-    assert_eq!(crate::status_views::network_popout_height(5, false), 422.);
-    assert_eq!(crate::status_views::network_popout_height(9, true), 450.);
+    assert_eq!(crate::status_views::network_popout_height(0, false), 262.);
+    assert_eq!(crate::status_views::network_popout_height(2, false), 342.);
+    assert_eq!(crate::status_views::network_popout_height(5, false), 462.);
+    assert_eq!(crate::status_views::network_popout_height(9, true), 490.);
     for (count, message) in [(0usize, false), (2, false), (5, false), (2, true)] {
         let rows = (0..count)
             .map(|i| {
                 serde_json::json!({
                     "id": format!("ap:{i}"), "label": format!("Net {i}"),
-                    "action": "Connect", "active": false, "enabled": true
+                    "action": "Connect", "active": false, "secured": false, "enabled": true
                 })
             })
             .collect();
@@ -1183,6 +1197,7 @@ fn network_popout_height_follows_rows_and_message() -> Result<()> {
                 Value::Text(if message { "Network list changed" } else { "" }.into()),
             ),
         ]);
+        let initial = with_flow_stores(initial);
         let h = Harness::load(
             &root(),
             Path::new("status/network.luau"),

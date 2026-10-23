@@ -10,6 +10,10 @@ use nacre_protocol::core_services::{
 };
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
+mod join;
+pub(crate) use join::SECRET_STORE;
+use join::{Page, Prompt, Reprompt};
+
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
     Network,
@@ -73,6 +77,12 @@ struct WifiControl {
     message: Option<String>,
     last_boot: Option<String>,
     checked: bool,
+    /// Join/forget flow (N0042); the view itself lives in Luau, the flow stays at this edge.
+    page: Page,
+    prompt: Option<Prompt>,
+    form_error: Option<&'static str>,
+    forget: Option<(String, std::time::Instant)>,
+    confirm_timeout: Duration,
 }
 /// One in-flight connect/disconnect. `ticket` is the admission call; after an
 /// admitted change the row stays pending until topic readback or `deadline`.
@@ -82,12 +92,14 @@ struct LinkOp {
     method: &'static str,
     ticket: Option<crate::nacre_source::CallTicket>,
     deadline: Option<std::time::Instant>,
+    /// Set for joins that sent a secret: a wrong password re-opens this form.
+    reprompt: Option<Reprompt>,
 }
 const LINK_READBACK: Duration = Duration::from_secs(30);
 const MAX_LINK_ROWS: usize = 5;
-/// Zero-row popout height, plus each row (32 high + 8 gap) and the message line
-/// (20 high + 8 gap) only while a message shows.
-pub(crate) const NETWORK_BASE_HEIGHT: f64 = 222.;
+/// Zero-row popout height (includes the hidden/saved footer row), plus each row
+/// (32 high + 8 gap) and the message line (20 high + 8 gap) only while a message shows.
+pub(crate) const NETWORK_BASE_HEIGHT: f64 = 262.;
 pub(crate) fn network_popout_height(rows: usize, message: bool) -> f64 {
     NETWORK_BASE_HEIGHT + 40. * rows.min(MAX_LINK_ROWS) as f64 + if message { 28. } else { 0. }
 }
@@ -100,6 +112,7 @@ struct LinkRow {
     label: String,
     action: &'static str,
     active: bool,
+    secured: bool,
 }
 struct BluetoothControl {
     client: crate::nacre_source::Client,
@@ -156,6 +169,11 @@ impl Status {
                 message: None,
                 last_boot: None,
                 checked: false,
+                page: Page::List,
+                prompt: None,
+                form_error: None,
+                forget: None,
+                confirm_timeout: join::CONFIRM_TIMEOUT,
             })),
             bluetooth_control: None,
         }
@@ -318,27 +336,23 @@ impl Status {
             control.link_message = Some(tr("bead.panel.network-list-changed", &[]));
             return;
         };
-        match client.begin_call(
-            method.into(),
-            target.params,
-            Duration::from_millis(advertised.timeout.min(10_000) as u64),
-            crate::nacre_source::CallGuard {
-                boot: boot.clone(),
-                version: 1,
-            },
-            Some(wake),
-        ) {
-            Ok(ticket) => {
-                control.link = Some(LinkOp {
-                    boot,
-                    key: key.into(),
-                    method: target.method,
-                    ticket: Some(ticket),
-                    deadline: None,
-                })
-            }
-            Err(error) => control.link_message = Some(link_error_message(&error.code)),
+        // A secured network without a saved profile needs its password first.
+        if let Some(prompt) = join::secret_prompt(state, key, &target) {
+            control.prompt = Some(prompt);
+            control.page = Page::Prompt;
+            control.form_error = None;
+            return;
         }
+        join::dispatch(
+            &mut control,
+            &client,
+            boot,
+            (method, advertised.timeout),
+            target,
+            key.into(),
+            None,
+            wake,
+        );
     }
     pub fn bluetooth_action(&self, wake: crate::nacre_source::CallWake) {
         let Some(control) = &self.bluetooth_control else {
@@ -600,9 +614,13 @@ impl Status {
         {
             control.message = None;
             control.link_message = None;
+            control.reset_flow();
         }
         if let Some(boot) = candidate.topic_boot.as_ref() {
             control.last_boot = Some(boot.clone());
+        }
+        if !candidate.fresh {
+            control.reset_flow();
         }
         let current_identity = candidate.eligible_identity.as_deref();
         if control.pending.as_ref().is_some_and(|(boot, _)| {
@@ -662,6 +680,7 @@ impl Status {
             .as_mut()
             .and_then(|op| op.ticket.as_mut().and_then(|ticket| ticket.try_take()));
         if let Some(result) = link_terminal {
+            let join = control.link.as_ref().is_some_and(|op| op.reprompt.is_some());
             match result {
                 Ok(payload)
                     if payload.as_object().is_some_and(|object| {
@@ -673,6 +692,10 @@ impl Status {
                     }) =>
                 {
                     let changed = payload["changed"].as_bool() == Some(true);
+                    if join {
+                        // The form is done; the row shows progress and a wrong password re-opens it.
+                        control.reset_flow();
+                    }
                     if changed && let Some(op) = control.link.as_mut() {
                         op.ticket = None;
                         op.deadline = Some(std::time::Instant::now() + LINK_READBACK);
@@ -685,8 +708,22 @@ impl Status {
                     control.link_message = Some(tr("bead.panel.network-change-failed", &[]));
                 }
                 Err(error) => {
-                    control.link = None;
-                    control.link_message = Some(link_error_message(&error.code));
+                    let key = control.link.take().map(|op| op.key);
+                    if join {
+                        control.form_error = Some(join::join_error_id(&error.code, &error.message));
+                    } else if let Some(prompt) = key.and_then(|key| {
+                        join::needs_secret(&error.code, &error.message)
+                            .then(|| candidate.state.as_ref().and_then(|s| join::prompt_for(s, &key)))
+                            .flatten()
+                    }) {
+                        // The daemon wants a password the tap did not carry (for example the saved
+                        // profile is gone): ask for it instead of failing.
+                        control.prompt = Some(prompt);
+                        control.page = Page::Prompt;
+                        control.form_error = None;
+                    } else {
+                        control.link_message = Some(link_error_message(&error.code));
+                    }
                 }
             }
         }
@@ -697,11 +734,15 @@ impl Status {
             && (authentication_error
                 || op.deadline.is_some_and(|d| std::time::Instant::now() >= d)
                 || !candidate.fresh
-                || candidate.state.as_ref().is_none_or(|state| {
-                    resolve_link(state, &op.key).is_none_or(|t| t.method != op.method)
-                }))
+                || candidate
+                    .state
+                    .as_ref()
+                    .is_none_or(|state| !join::still_pending(state, op)))
+            && let Some(op) = control.link.take()
         {
-            control.link = None;
+            if authentication_error && let Some(again) = op.reprompt {
+                control.reopen(again);
+            }
         }
         let (can_connect, can_disconnect) = {
             let methods = client.status().methods;
@@ -738,6 +779,7 @@ impl Status {
                         "label": row.label,
                         "action": action,
                         "active": row.active,
+                        "secured": row.secured,
                         "enabled": allowed && !link_busy && !busy,
                     })
                 })
@@ -745,6 +787,7 @@ impl Status {
             None => Vec::new(),
         };
         let row_count = rows.len();
+        let forms = join::project(&mut control, candidate.state.as_ref().filter(|_| candidate.fresh), &client);
         let link_message = if link_busy {
             ""
         } else {
@@ -779,6 +822,7 @@ impl Status {
             ),
             ("network.link_message".into(), Value::Text(link_message)),
         ]);
+        base.extend(forms);
         base
     }
 
@@ -1144,7 +1188,10 @@ fn bluetooth_candidate(
 }
 
 fn link_error_message(code: &str) -> String {
-    let id = match code {
+    tr(link_error_id(code), &[])
+}
+fn link_error_id(code: &str) -> &'static str {
+    match code {
         "permission_denied" => "bead.panel.network-not-permitted",
         "stale_revision" => "bead.panel.network-list-changed-retry",
         "unavailable" => "bead.panel.network-control-unavailable",
@@ -1152,8 +1199,7 @@ fn link_error_message(code: &str) -> String {
         "invalid_request" | "validation" => "bead.panel.network-rejected",
         "timeout" => "bead.panel.network-timed-out",
         _ => "bead.panel.network-change-failed",
-    };
-    tr(id, &[])
+    }
 }
 /// The single device of `kind`, optionally required to be connected.
 fn sole_device<'a>(
@@ -1203,6 +1249,17 @@ fn resolve_link(state: &NetworkState, key: &str) -> Option<LinkTarget> {
             let connection = state.connections.items.get(&id).filter(|c| !c.active)?;
             let device = sole_device(state, &connection.kind, false)?;
             Some(connect(device, NetworkTarget::Connection(id)))
+        }
+        "forget" => {
+            // Saved Wi-Fi profiles only (they carry an SSID).
+            state.connections.items.get(&id).filter(|c| c.ssid.is_some())?;
+            Some(LinkTarget {
+                method: "network.forget",
+                params: serde_json::to_value(nacre_protocol::core_services::ConnectionTarget {
+                    connection: id,
+                })
+                .unwrap_or_default(),
+            })
         }
         "dev" => {
             state.devices.items.get(&id).filter(|d| d.connected)?;
@@ -1254,6 +1311,7 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
                 "bead.panel.network-connect"
             },
             active: ap.active,
+            secured: ap.secured,
         });
     }
     let represented: std::collections::BTreeSet<_> = state
@@ -1291,6 +1349,7 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
                 "bead.panel.network-connect"
             },
             active: connection.active,
+            secured: connection.security.as_deref().is_some_and(|s| s != "open"),
         });
     }
     rows.truncate(MAX_LINK_ROWS);

@@ -14,6 +14,7 @@ struct Mirror {
     focused_dismiss: bool,
     regions: Vec<InputRegion>,
     surrounding: Option<(String, i32, i32)>,
+    sensitive: bool,
     tree: Option<accesskit::TreeUpdate>,
     summary: String,
     resources: String,
@@ -25,6 +26,7 @@ impl Mirror {
             focused_dismiss: source.focused_dismiss(),
             regions: source.input_regions(),
             surrounding: source.surrounding_text(),
+            sensitive: source.sensitive_input(),
             tree: source.accessibility_tree(),
             summary: source.state_summary(),
             resources: source.resource_counts(),
@@ -440,6 +442,9 @@ impl SceneSource for Source {
     }
     fn surrounding_text(&self) -> Option<(String, i32, i32)> {
         self.mirror.surrounding.clone()
+    }
+    fn sensitive_input(&self) -> bool {
+        self.mirror.sensitive
     }
     fn input_regions(&self) -> Vec<InputRegion> {
         self.mirror.regions.clone()

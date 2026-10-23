@@ -351,6 +351,10 @@ pub trait SceneSource {
     fn surrounding_text(&self) -> Option<(String, i32, i32)> {
         None
     }
+    /// The focused input is secret: the input method gets the password purpose and no context.
+    fn sensitive_input(&self) -> bool {
+        false
+    }
     fn viewport(&mut self, _width: u32, _height: u32) -> bool {
         false
     }

@@ -582,10 +582,20 @@ impl Session {
                 .sum::<usize>())
         )
     }
+    /// Store dump for traces. Stores named `*.secret` (password buffers) are never included.
     pub fn state_summary(&self) -> String {
-        serde_json::to_string(self.stores.values()).unwrap_or_default()
+        let shown: BTreeMap<_, _> = self
+            .stores
+            .values()
+            .iter()
+            .filter(|(id, _)| !id.ends_with(SECRET_SUFFIX))
+            .collect();
+        serde_json::to_string(&shown).unwrap_or_default()
     }
 }
+
+/// Store ids with this suffix hold secrets: never traced, logged or persisted.
+pub const SECRET_SUFFIX: &str = ".secret";
 
 fn merged_palette(base: &Palette, overlay: Option<&Palette>) -> Palette {
     let Some(overlay) = overlay else {

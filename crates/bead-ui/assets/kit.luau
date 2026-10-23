@@ -223,6 +223,33 @@ return function(ui, tokens)
     function kit.Composer(p)
         return kit.TextInput(props(p,{multiline=true,padding=tokens.spacing.md,radius=tokens.spacing.lg,fill="surfaceContainerHigh"}))
     end
+    -- Secret input plus a show/hide button. `text` must be a mutable store named `*.secret`
+    -- (kept out of traces and saved state); `revealed` is a bool, `on_toggle` flips it and
+    -- `on_activate` runs on Enter. Masked fields stay out of accessibility, IME context and copy.
+    function kit.PasswordField(p)
+        local shown=value(p.revealed,false)
+        local out=props(p,{gap=tokens.spacing.xs,align="center",height=40},
+            {text=true,revealed=true,on_toggle=true,on_activate=true,placeholder=true,show_label=true,hide_label=true,aria_label=true})
+        out[1]=kit.TextInput{id="field",text=p.text,placeholder=p.placeholder,masked=not shown,grow=1,
+            aria_label=p.aria_label,on_activate=p.on_activate}
+        out[2]=kit.IconButton{id="reveal",text=shown and "visibility_off" or "visibility",
+            aria_label=shown and p.hide_label or p.show_label,on_activate=p.on_toggle}
+        return ui.Row(out)
+    end
+    -- Row button that asks again in place: while `confirming` it shows `confirm_label` in the error
+    -- colour with the same glyph and runs `on_confirm`; otherwise `label` runs `on_activate`.
+    function kit.ConfirmButton(p)
+        local confirming=value(p.confirming,false)
+        local label=confirming and p.confirm_label or p.label
+        local ink=confirming and "error" or (p.on_activate and "onSurface" or "onSurfaceVariant")
+        local out=props(p,{},{label=true,confirm_label=true,glyph=true,confirming=true,on_confirm=true,on_activate=true})
+        out.aria_label=label
+        out.on_activate=confirming and p.on_confirm or p.on_activate
+        out[1]=ui.Row{id=(p.id or "confirm").."-row",height=24,gap=tokens.spacing.md,align="center",
+            p.glyph and ui.Text{id="glyph",text=p.glyph,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=tokens.icons.large*4/3,color=ink} or nil,
+            ui.Text{id="label",text=label,height=24,grow=1,font_size=tokens.text.body*4/3,color=ink}}
+        return kit.Button(out)
+    end
     function kit.List(p) return ui.Scroll(props(p,{grow=1})) end
     function kit.ListRow(p) return kit.Button(props(p,{height=40,width="fill",text_align="left"})) end
     function kit.Card(p) return ui.Column(props(p,{padding=tokens.spacing.md,gap=tokens.spacing.sm,radius=tokens.radii.medium,fill="surfaceContainer"})) end
