@@ -32,7 +32,10 @@ fn bluetooth() -> Json {
 }
 fn power() -> Json {
     json!({"health": health(), "active": "balanced",
-        "profiles": {"order": ["balanced"], "items": {"balanced": {"name": "balanced", "available": true}}}})
+        "profiles": {"order": ["power-saver", "balanced", "performance"], "items": {
+            "power-saver": {"name": "power-saver", "available": true},
+            "balanced": {"name": "balanced", "available": true},
+            "performance": {"name": "performance", "available": false}}}})
 }
 fn battery() -> Json {
     json!({"health": health(), "percentage": 78.0, "charging": false})
@@ -40,8 +43,14 @@ fn battery() -> Json {
 fn notifications() -> Json {
     json!({"health": health(), "do_not_disturb": false})
 }
+fn controls() -> Json {
+    json!({"health": health(), "brightness": {"DP-1": 40, "eDP-1": 60}, "keyboard": {"level": 1, "max": 3},
+        "airplane": {"enabled": false}, "night_light": {"enabled": false, "external": false},
+        "stay_awake": {"enabled": false}, "recorder": {"recording": false}, "appearance": {"mode": "dark"}})
+}
 fn topic_data(name: &str) -> Json {
     match name {
+        "controls" => controls(),
         "audio" => audio(),
         "network" => network(),
         "bluetooth" => bluetooth(),
@@ -126,7 +135,9 @@ fn sources_read_the_published_topics_and_hide_what_is_missing() {
     let Value::List(all) = &out["cc.src"] else {
         panic!()
     };
-    assert!(all.iter().all(|s| s["id"] != "brightness.level"));
+    assert!(all.iter().all(|s| s["id"] != "vpn.state"));
+    assert_eq!(source(&out, "brightness.level")["status"], "60%");
+    assert_eq!(source(&out, "brightness.level")["set"], false);
     assert_eq!(out["cc.battery"], Value::Text("78%".into()));
     assert_eq!(out["cc.saved_known"], Value::Bool(true));
     assert_eq!(out["cc.saved"], ids(vec!["volume", "network", "dnd"]));
@@ -180,6 +191,9 @@ impl Drop for Lab {
     }
 }
 async fn lab(methods: &[&str]) -> Lab {
+    lab_with(methods, controls()).await
+}
+async fn lab_with(methods: &[&str], published: Json) -> Lab {
     use std::os::unix::fs::PermissionsExt;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -251,6 +265,8 @@ async fn lab(methods: &[&str]) -> Lab {
                         for topic in topics {
                             let data = if topic == STORE_TOPIC {
                                 store(tiles.clone(), rev)
+                            } else if topic == "controls" {
+                                published.clone()
                             } else {
                                 topic_data(&topic)
                             };
@@ -328,7 +344,7 @@ async fn control_for(lab: &Lab) -> ControlCenter {
     // Wait for the leased topics to deliver their first snapshots.
     for _ in 0..500 {
         let out = control.project(&Stores::default());
-        if out["cc.saved_known"] == Value::Bool(true) && source_count(&out) == 6 {
+        if out["cc.saved_known"] == Value::Bool(true) && source_count(&out) >= 13 {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -358,8 +374,8 @@ fn draft(list: Vec<&str>) -> Stores {
     stores(&[("cc.edited", Value::Bool(true)), ("cc.order", ids(list))])
 }
 const ALL: [&str; 6] = [
-    "audio.toggle_mute",
-    "audio.adjust_volume",
+    "audio.set_mute",
+    "audio.set_volume",
     "network.set_wifi",
     "bluetooth.set_enabled",
     "notifications.set_dnd",
@@ -373,10 +389,11 @@ async fn tiles_call_only_published_methods_with_the_current_state() {
     let out = control.project(&Stores::default());
     assert_eq!(source(&out, "network.wifi")["toggle"], true);
     assert_eq!(source(&out, "audio.output")["set"], true);
+    assert_eq!(source(&out, "audio.input")["toggle"], true);
     assert_eq!(
-        source(&out, "audio.input")["toggle"],
+        source(&out, "brightness.level")["set"],
         false,
-        "audio.set_mute is not advertised"
+        "not advertised"
     );
     assert_eq!(out["cc.writable"], Value::Bool(true));
 
@@ -398,26 +415,246 @@ async fn tiles_call_only_published_methods_with_the_current_state() {
     control.act("toggle:audio.output");
     assert_eq!(
         call(&mut lab).await,
-        ("audio.toggle_mute".into(), json!({}))
+        (
+            "audio.set_mute".into(),
+            json!({"target": "sink", "muted": true})
+        )
     );
-    // A level step moves toward the target.
+    control.act("toggle:audio.input");
+    assert_eq!(
+        call(&mut lab).await,
+        (
+            "audio.set_mute".into(),
+            json!({"target": "source", "muted": false})
+        )
+    );
+    // The slider is perceptual, the daemon's level linear: the cube of the slider.
     settle(&control, &Stores::default()).await;
     control.act("set:audio.output:60");
     let (method, params) = call(&mut lab).await;
-    assert_eq!(method, "audio.adjust_volume");
-    assert!((params["delta"].as_f64().unwrap() - 0.1).abs() < 1e-9);
+    assert_eq!(method, "audio.set_volume");
+    assert_eq!(params["target"], "sink");
+    assert!((params["value"].as_f64().unwrap() - 0.216).abs() < 1e-9);
+    settle(&control, &Stores::default()).await;
+    control.act("set:audio.input:100");
+    assert_eq!(
+        call(&mut lab).await,
+        (
+            "audio.set_volume".into(),
+            json!({"target": "source", "value": 1.0})
+        )
+    );
     // Unadvertised verbs, unknown sources and garbage send nothing.
-    control.act("toggle:audio.input");
     control.act("set:brightness.level:50");
     control.act("press:screenshot.capture");
     control.act("set:audio.output:nan");
     control.act("");
     settle(&control, &Stores::default()).await;
     assert!(lab.calls.try_recv().is_err());
-    // A far target moves by at most the published bound per call.
+    // A target equal to the shown level sends nothing; a far one is one absolute call.
+    control.act("set:audio.output:50");
+    settle(&control, &Stores::default()).await;
+    assert!(lab.calls.try_recv().is_err());
     control.act("set:audio.output:100");
     let (_, params) = call(&mut lab).await;
-    assert_eq!(params["delta"], STEP);
+    assert_eq!(params["value"], 1.0);
+}
+
+const CONTROLS: [&str; 12] = [
+    "brightness.set",
+    "keyboard_light.set",
+    "power.set_profile",
+    "airplane.set",
+    "night_light.set",
+    "stay_awake.set",
+    "recorder.start",
+    "recorder.stop",
+    "screenshot.capture",
+    "color_picker.pick",
+    "wallpaper.next",
+    "appearance.set_mode",
+];
+
+#[tokio::test(flavor = "current_thread")]
+async fn every_n0046_tile_calls_its_method_with_absolute_values() {
+    let mut lab = lab(&CONTROLS).await;
+    let control = control_for(&lab).await;
+    let out = control.project(&Stores::default());
+    let brightness = source(&out, "brightness.level");
+    assert_eq!(
+        (brightness["value"].clone(), brightness["set"].clone()),
+        (json!(60.), json!(true)),
+        "the internal panel, not the first output"
+    );
+    assert_eq!(source(&out, "keyboard.backlight")["value"], 33.);
+    assert_eq!(source(&out, "appearance.mode")["status"], "Dark");
+    assert_eq!(source(&out, "recorder.state")["status"], "Off");
+    let profile = source(&out, "power.profile");
+    assert_eq!(profile["choices"].as_array().unwrap().len(), 2);
+    assert_eq!(profile["choices"][1]["active"], true);
+
+    for (arg, method, params) in [
+        (
+            "set:brightness.level:70",
+            "brightness.set",
+            json!({"output": "eDP-1", "percent": 70}),
+        ),
+        (
+            "set:keyboard.backlight:100",
+            "keyboard_light.set",
+            json!({"level": 3}),
+        ),
+        (
+            "choose:power.profile:power-saver",
+            "power.set_profile",
+            json!({"profile": "power-saver"}),
+        ),
+        (
+            "toggle:airplane.mode",
+            "airplane.set",
+            json!({"enabled": true}),
+        ),
+        (
+            "toggle:night-light.state",
+            "night_light.set",
+            json!({"enabled": true}),
+        ),
+        (
+            "toggle:stay-awake.state",
+            "stay_awake.set",
+            json!({"enabled": true}),
+        ),
+        (
+            "toggle:appearance.mode",
+            "appearance.set_mode",
+            json!({"mode": "auto"}),
+        ),
+        ("press:wallpaper.next", "wallpaper.next", json!({})),
+    ] {
+        settle(&control, &Stores::default()).await;
+        control.act(arg);
+        assert_eq!(call(&mut lab).await, (method.into(), params), "{arg}");
+        assert!(!control.take_close(), "{arg} needs no closed panel");
+    }
+    // The same keyboard step, an unknown profile and an unknown source send nothing.
+    settle(&control, &Stores::default()).await;
+    control.act("set:keyboard.backlight:33");
+    control.act("choose:power.profile:turbo");
+    control.act("press:vpn.state");
+    settle(&control, &Stores::default()).await;
+    assert!(lab.calls.try_recv().is_err());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn interactive_tools_close_the_panel_first_and_call_after() {
+    let mut lab = lab(&CONTROLS).await;
+    let control = control_for(&lab).await;
+    for (arg, method, params) in [
+        (
+            "press:screenshot.capture",
+            "screenshot.capture",
+            json!({"mode": "region"}),
+        ),
+        ("press:color-picker.pick", "color_picker.pick", json!({})),
+        (
+            "toggle:recorder.state",
+            "recorder.start",
+            json!({"mode": "region"}),
+        ),
+    ] {
+        control.act(arg);
+        assert!(
+            control.take_close(),
+            "{arg} asks the host to close the panel"
+        );
+        assert!(!control.take_close(), "once");
+        assert!(
+            lab.calls.try_recv().is_err(),
+            "{arg} waits for the panel to go"
+        );
+        assert_eq!(call(&mut lab).await, (method.into(), params), "{arg}");
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_running_recording_is_stopped_without_closing_anything() {
+    let mut running = controls();
+    running["recorder"] = json!({"recording": true});
+    let mut lab = lab_with(&CONTROLS, running).await;
+    let control = control_for(&lab).await;
+    let out = control.project(&Stores::default());
+    assert_eq!(source(&out, "recorder.state")["on"], true);
+    assert_eq!(source(&out, "recorder.state")["status"], "Recording");
+    control.act("toggle:recorder.state");
+    assert_eq!(call(&mut lab).await, ("recorder.stop".into(), json!({})));
+    assert!(!control.take_close());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn tiles_exist_exactly_when_their_member_and_method_are_published() {
+    // Members without a method: shown read-only where the member itself is the capability.
+    let mut lab = lab(&["airplane.set", "wallpaper.next"]).await;
+    let control = control_for(&lab).await;
+    let out = control.project(&Stores::default());
+    assert_eq!(source(&out, "airplane.mode")["toggle"], true);
+    assert_eq!(source(&out, "stay-awake.state")["toggle"], false);
+    assert_eq!(source(&out, "keyboard.backlight")["set"], false);
+    assert_eq!(source(&out, "wallpaper.next")["press"], true);
+    let Value::List(all) = &out["cc.src"] else {
+        panic!()
+    };
+    assert!(
+        all.iter()
+            .all(|s| s["id"] != "screenshot.capture" && s["id"] != "color-picker.pick")
+    );
+    control.act("toggle:stay-awake.state");
+    control.act("press:screenshot.capture");
+    assert!(!control.take_close());
+    settle(&control, &Stores::default()).await;
+    assert!(lab.calls.try_recv().is_err());
+    // A backend that is absent leaves no member: no source, no tile.
+    let mut bare = controls();
+    for member in [
+        "keyboard",
+        "airplane",
+        "night_light",
+        "stay_awake",
+        "recorder",
+        "appearance",
+    ] {
+        bare.as_object_mut().unwrap().remove(member);
+    }
+    bare["brightness"] = json!({});
+    let topics = TOPICS
+        .iter()
+        .map(|name| {
+            let data = if *name == "controls" {
+                bare.clone()
+            } else {
+                topic_data(name)
+            };
+            (
+                *name,
+                Arc::new(FakeSource::new(data).unwrap()) as Arc<dyn Source>,
+            )
+        })
+        .collect();
+    let out = ControlCenter::new(None, topics, None, views()).project(&Stores::default());
+    let Value::List(all) = &out["cc.src"] else {
+        panic!()
+    };
+    let ids: Vec<&str> = all.iter().filter_map(|s| s["id"].as_str()).collect();
+    assert_eq!(
+        ids,
+        [
+            "audio.output",
+            "audio.input",
+            "network.wifi",
+            "bluetooth.power",
+            "power.profile",
+            "notifications.dnd"
+        ]
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -743,4 +980,146 @@ fn tiles_dispatch_host_actions_and_the_detail_page_opens_in_place() -> bead_test
         Some(&Value::Text("dnd".into()))
     );
     Ok(())
+}
+
+#[test]
+fn the_profile_picker_and_one_shot_tiles_dispatch_their_verbs() -> bead_test::Result<()> {
+    let mut out = base();
+    let Value::List(items) = out["cc.src"].clone() else {
+        panic!()
+    };
+    let mut items: Vec<Json> = items.to_vec();
+    for item in &mut items {
+        if item["id"] == "power.profile" {
+            item["set"] = json!(false);
+            item["choices"] = json!([
+                {"id": "power-saver", "name": "Power-saver", "active": false},
+                {"id": "balanced", "name": "Balanced", "active": true}
+            ]);
+        }
+    }
+    items.push(json!({"id": "screenshot.capture", "available": true, "press": true}));
+    out.insert("cc.src".into(), Value::list(items));
+    out.insert("cc.saved".into(), ids(vec!["battery", "screenshot"]));
+    let mut h = harness(out.clone(), "home", 1.)?;
+    let action = |h: &Harness, part: &str| {
+        let node = h
+            .session
+            .view_nodes()
+            .iter()
+            .find(|n| n.id.contains(part))
+            .unwrap_or_else(|| panic!("no node {part}: {:?}", node_ids(h)));
+        (node.action.clone(), node.action_arg.clone())
+    };
+    assert_eq!(
+        action(&h, "tile-screenshot"),
+        (
+            Some("cc.do".into()),
+            Some(Value::Text("press:screenshot.capture".into()))
+        )
+    );
+    // With a picker the tile opens it in place instead of the battery panel.
+    let (x, y) = centre(&h, "tile-battery");
+    h.script([Input::Click { x, y }, Input::Release])?;
+    assert_eq!(
+        h.session.stores.get("cc.page"),
+        Some(&Value::Text("detail".into()))
+    );
+    assert_eq!(
+        h.session.stores.get("cc.detail"),
+        Some(&Value::Text("battery".into()))
+    );
+    assert_eq!(
+        action(&h, "choice-power-saver"),
+        (
+            Some("cc.do".into()),
+            Some(Value::Text("choose:power.profile:power-saver".into()))
+        )
+    );
+    assert_eq!(
+        action(&h, "details"),
+        (
+            Some("view.open".into()),
+            Some(Value::Text("battery".into()))
+        )
+    );
+    Ok(())
+}
+
+#[test]
+fn n0046_tiles_and_the_profile_picker_match_goldens() -> bead_test::Result<()> {
+    let mut out = offline().project(&Stores::default());
+    let Value::List(items) = out["cc.src"].clone() else {
+        panic!()
+    };
+    let mut items: Vec<Json> = items.to_vec();
+    for item in &mut items {
+        let id = item["id"].as_str().unwrap_or("").to_owned();
+        item["toggle"] = json!(!matches!(
+            id.as_str(),
+            "power.profile" | "brightness.level" | "keyboard.backlight"
+        ));
+        item["set"] = json!(matches!(
+            id.as_str(),
+            "audio.output" | "audio.input" | "brightness.level" | "keyboard.backlight"
+        ));
+        if id == "power.profile" {
+            item["choices"] = json!([
+                {"id": "power-saver", "name": "Power-saver", "active": false},
+                {"id": "balanced", "name": "Balanced", "active": true}
+            ]);
+        }
+        if id == "recorder.state" {
+            item["on"] = json!(true);
+            item["status"] = json!("Recording");
+        }
+    }
+    for id in ["screenshot.capture", "color-picker.pick", "wallpaper.next"] {
+        items.push(json!({"id": id, "available": true, "press": true}));
+    }
+    out.insert("cc.src".into(), Value::list(items));
+    out.insert("cc.writable".into(), Value::Bool(true));
+    out.insert("cc.max_height".into(), Value::Number(900.));
+    out.insert(
+        "cc.saved".into(),
+        ids(vec![
+            "volume",
+            "brightness",
+            "mic-volume",
+            "keyboard",
+            "airplane",
+            "night",
+            "awake",
+            "appearance",
+            "record",
+            "battery",
+            "mic",
+            "screenshot",
+            "picker",
+            "next-wallpaper",
+        ]),
+    );
+    let mut h = harness(out.clone(), "home", 1.)?;
+    let present = node_ids(&h);
+    for tile in [
+        "brightness",
+        "keyboard",
+        "airplane",
+        "night",
+        "awake",
+        "appearance",
+        "record",
+        "screenshot",
+        "picker",
+        "next-wallpaper",
+    ] {
+        assert!(
+            present.iter().any(|i| i.contains(&format!("tile-{tile}"))),
+            "{tile}"
+        );
+    }
+    golden("n0046-overview", &mut h, 1.)?;
+    out.insert("cc.detail".into(), Value::Text("battery".into()));
+    let mut h = harness(out, "detail", 1.)?;
+    golden("n0046-profiles", &mut h, 1.)
 }

@@ -2021,6 +2021,14 @@ impl SceneSource for Runtime {
         {
             self.actions.authorize(name)?;
             control.act(arg);
+            // An interactive tool (recorder, screenshot, picker) starts after the panel is gone.
+            if control.take_close() {
+                let scene = self.session.update(BTreeMap::from([(
+                    "panel.open".into(),
+                    bead::core::Value::Bool(false),
+                )]))?;
+                return self.finish_scene(scene, false);
+            }
             // A level step keeps the focus so the drag continues over the next step.
             let scene = match self.session.focus_id(id) {
                 Ok(scene) => scene,

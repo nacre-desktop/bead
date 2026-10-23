@@ -69,7 +69,10 @@ local function build_tile(t,w,h)
             on_toggle=s.toggle and act("toggle") or nil,on_change=s.set and "cc.do" or nil,
             change_arg=function(n) return "set:"..t.source..":"..n end}
     elseif t.kind=="link" then
-        return kit.LinkTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,on_activate=opener}
+        -- A tile that can switch things opens its picker in place; the battery panel stays one row away.
+        local choosing=s.choices and #s.choices>0
+        return kit.LinkTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,
+            on_activate=choosing and ui.action("detail",t.id) or opener}
     elseif t.kind=="button" then
         return kit.ButtonTile{id=id,width=w,height=h,icon=t.icon,label=label,on_activate=s.press and act("press") or opener}
     end
@@ -176,6 +179,13 @@ local function detail()
             ui.Row{id="switch-row",width=INNER,height=HEAD+T.spacing.sm,align="center",justify="center",
                 ui.Text{id="switch-label",text=s.on and ui.tr("bead.panel.control-turn-off") or ui.tr("bead.panel.control-turn-on"),
                     width=INNER-T.spacing.lg*2,height=22,text_align="center",font_size=BODY,color=s.on and "onSurface" or "onPrimary"}}},HEAD+T.spacing.sm})
+    end
+    for _,c in ipairs(s.choices or {}) do
+        table.insert(items,{row_button("choice-"..c.id,t.icon,c.name,c.active and "radio_button_checked" or "radio_button_unchecked",
+            ui.action("cc.do","choose:"..t.source..":"..c.id)),ROW})
+    end
+    if t and s.choices and views[t.view or ""] then
+        table.insert(items,{row_button("details","battery_full",ui.tr("bead.panel.control-battery-details"),"chevron_right",ui.action("view.open",t.view)),ROW})
     end
     local note=message()
     if note then table.insert(items,note) end

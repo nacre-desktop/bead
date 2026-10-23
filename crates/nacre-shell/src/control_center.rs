@@ -16,8 +16,9 @@ use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
 /// Topics a tile source may read; the panel leases each for as long as it is open.
-pub const TOPICS: [&str; 6] = [
+pub const TOPICS: [&str; 7] = [
     "audio",
+    "controls",
     "network",
     "bluetooth",
     "power.profiles",
@@ -28,9 +29,15 @@ pub const TOPICS: [&str; 6] = [
 pub const STORE: &str = "control-center";
 pub const STORE_TOPIC: &str = "settings.store.control-center";
 const SET: &str = "settings.set";
+/// One-shot tiles: source id and the daemon method a press calls.
+const ACTIONS: [(&str, &str); 3] = [
+    ("screenshot.capture", "screenshot.capture"),
+    ("color-picker.pick", "color_picker.pick"),
+    ("wallpaper.next", "wallpaper.next"),
+];
 const MAX_TILES: usize = 64;
-/// `audio.adjust_volume` accepts at most this relative change per call.
-const STEP: f64 = 0.2;
+/// The QML shell waited this long after closing its panel before an interactive tool started.
+const CLOSE_DELAY: Duration = Duration::from_millis(320);
 
 type Notify = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
 
@@ -59,6 +66,8 @@ struct St {
     message: String,
     /// Latest slider target (percent) per source, applied once its previous call finished.
     targets: BTreeMap<String, f64>,
+    /// An interactive tool was started: the host closes the panel (N0046: "close your panels first").
+    close: bool,
     max_height: f64,
 }
 impl Default for St {
@@ -73,19 +82,45 @@ impl Default for St {
             retried: false,
             message: String::new(),
             targets: BTreeMap::new(),
+            close: false,
             max_height: 800.,
         }
     }
 }
 
-/// What a source shows. `node` and `adapter` carry the daemon's opaque ids for addressed calls.
+/// What a source shows. `node` carries the daemon's opaque id (adapter, output, mode) for addressed calls.
 #[derive(Default)]
 struct Reading {
     on: bool,
+    /// Another controller owns the state: shown, not switchable.
+    locked: bool,
     value: f64,
     status: String,
     icon: &'static str,
     node: Option<String>,
+    /// The profiles a picker offers: `(id, shown name, active)`.
+    choices: Vec<(String, String, bool)>,
+}
+/// What the daemon lets a tile do right now.
+#[derive(Default)]
+struct Verbs {
+    toggle: bool,
+    set: bool,
+    press: bool,
+}
+const PROFILES: [&str; 3] = ["power-saver", "balanced", "performance"];
+const MODES: [&str; 3] = ["light", "dark", "auto"];
+
+fn capital(name: &str) -> String {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+/// Slider percent (perceptual) to the daemon's linear level: the slider is cube-rooted.
+fn linear(percent: f64) -> f64 {
+    (percent / 100.).clamp(0., 1.).powi(3)
 }
 
 fn text(value: impl Into<String>) -> Value {
@@ -150,6 +185,7 @@ fn audio_reading(data: &Json, default: &str) -> Option<Reading> {
             _ => "volume_up",
         },
         node: Some(id.to_owned()),
+        ..Default::default()
     })
 }
 
@@ -296,12 +332,25 @@ impl ControlCenter {
                     .as_str()?
                     .to_owned();
                 let lower = name.to_lowercase();
-                let mut shown = name.chars();
+                let items = &data["profiles"]["items"];
+                let choices = data["profiles"]["order"]
+                    .as_array()
+                    .map(|order| {
+                        order
+                            .iter()
+                            .filter_map(|id| items.get(id.as_str()?))
+                            .filter(|p| p["available"] != false)
+                            .filter_map(|p| p["name"].as_str())
+                            .map(str::to_lowercase)
+                            .filter(|name| PROFILES.contains(&name.as_str()))
+                            .map(|name| (capital(&name), name))
+                            .map(|(shown, name)| (name.clone(), shown, name == lower))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 Some(Reading {
-                    status: shown
-                        .next()
-                        .map(|c| c.to_uppercase().chain(shown).collect())
-                        .unwrap_or_default(),
+                    status: capital(&name),
+                    choices,
                     icon: if lower.contains("saver") {
                         "eco"
                     } else if lower.contains("perf") {
@@ -329,26 +378,133 @@ impl ControlCenter {
                     ..Default::default()
                 })
             }
+            // N0046 `controls`: a member is present only while its backend is.
+            "brightness.level" => {
+                let data = self.controls()?;
+                let outputs = data["brightness"].as_object()?;
+                let (name, percent) = outputs
+                    .iter()
+                    .find(|(name, _)| {
+                        let name = name.to_ascii_lowercase();
+                        name.starts_with("edp") || name.starts_with("lvds")
+                    })
+                    .or_else(|| outputs.iter().next())?;
+                let value = percent.as_f64()?.clamp(0., 100.).round();
+                Some(Reading {
+                    value,
+                    status: format!("{value}%"),
+                    icon: "brightness_6",
+                    node: Some(name.clone()),
+                    ..Default::default()
+                })
+            }
+            "keyboard.backlight" => {
+                let data = self.controls()?;
+                let (level, max) = (
+                    data["keyboard"]["level"].as_f64()?,
+                    data["keyboard"]["max"].as_f64()?,
+                );
+                let value = (level / max.max(1.) * 100.).clamp(0., 100.).round();
+                Some(Reading {
+                    on: level > 0.,
+                    value,
+                    status: format!("{value}%"),
+                    icon: "keyboard",
+                    ..Default::default()
+                })
+            }
+            "airplane.mode" | "night-light.state" | "stay-awake.state" => {
+                let (member, icon) = match source {
+                    "airplane.mode" => ("airplane", "flight"),
+                    "night-light.state" => ("night_light", "nightlight"),
+                    _ => ("stay_awake", "coffee"),
+                };
+                let data = self.controls()?;
+                let on = data[member]["enabled"].as_bool()?;
+                Some(Reading {
+                    on,
+                    locked: data[member]["external"] == true,
+                    status: onoff(on),
+                    icon,
+                    ..Default::default()
+                })
+            }
+            "appearance.mode" => {
+                let data = self.controls()?;
+                let mode = data["appearance"]["mode"].as_str()?;
+                MODES.contains(&mode).then(|| Reading {
+                    on: mode == "dark",
+                    status: tr(
+                        match mode {
+                            "light" => "bead.panel.control-mode-light",
+                            "dark" => "bead.panel.control-mode-dark",
+                            _ => "bead.panel.control-mode-auto",
+                        },
+                        &[],
+                    ),
+                    icon: "palette",
+                    node: Some(mode.to_owned()),
+                    ..Default::default()
+                })
+            }
+            "recorder.state" => {
+                let recording = self.controls()?["recorder"]["recording"].as_bool()?;
+                Some(Reading {
+                    on: recording,
+                    status: if recording {
+                        tr("bead.panel.control-recording", &[])
+                    } else {
+                        onoff(false)
+                    },
+                    icon: "videocam",
+                    ..Default::default()
+                })
+            }
+            // One-shot actions have no state: they exist while the daemon advertises them.
+            "screenshot.capture" | "color-picker.pick" | "wallpaper.next" => self
+                .can(ACTIONS.iter().find(|(id, _)| *id == source)?.1)
+                .then(Reading::default),
             _ => None,
         }
     }
+    fn controls(&self) -> Option<Arc<Json>> {
+        self.data("controls").filter(|data| healthy(data))
+    }
     /// Which verbs the daemon offers for a source right now.
-    fn verbs(&self, source: &str, reading: &Reading) -> (bool, bool) {
-        match source {
-            "audio.output" => (
-                self.can("audio.toggle_mute"),
-                self.can("audio.adjust_volume") || self.can("audio.set_volume"),
+    fn verbs(&self, source: &str, reading: &Reading) -> Verbs {
+        let (toggle, set, press) = match source {
+            "audio.output" | "audio.input" => (
+                self.can("audio.set_mute"),
+                self.can("audio.set_volume"),
+                false,
             ),
-            "audio.input" => (self.can("audio.set_mute"), self.can("audio.set_volume")),
-            "network.wifi" => (self.can("network.set_wifi"), false),
+            "network.wifi" => (self.can("network.set_wifi"), false, false),
             "bluetooth.power" => (
                 self.can("bluetooth.set_enabled")
                     || (reading.node.is_some() && self.can("bluetooth.set_power")),
                 false,
+                false,
             ),
-            "notifications.dnd" => (self.can("notifications.set_dnd"), false),
-            _ => (false, false),
-        }
+            "notifications.dnd" => (self.can("notifications.set_dnd"), false, false),
+            "brightness.level" => (false, self.can("brightness.set"), false),
+            "keyboard.backlight" => (false, self.can("keyboard_light.set"), false),
+            "airplane.mode" => (self.can("airplane.set"), false, false),
+            "night-light.state" => (self.can("night_light.set") && !reading.locked, false, false),
+            "stay-awake.state" => (self.can("stay_awake.set"), false, false),
+            "appearance.mode" => (self.can("appearance.set_mode"), false, false),
+            "recorder.state" => (
+                self.can(if reading.on {
+                    "recorder.stop"
+                } else {
+                    "recorder.start"
+                }),
+                false,
+                false,
+            ),
+            "power.profile" => (false, self.can("power.set_profile"), false),
+            _ => (false, false, ACTIONS.iter().any(|(id, _)| *id == source)),
+        };
+        Verbs { toggle, set, press }
     }
     fn sources(&self) -> Vec<Json> {
         [
@@ -358,14 +514,32 @@ impl ControlCenter {
             "bluetooth.power",
             "power.profile",
             "notifications.dnd",
+            "brightness.level",
+            "keyboard.backlight",
+            "airplane.mode",
+            "night-light.state",
+            "stay-awake.state",
+            "appearance.mode",
+            "recorder.state",
+            "screenshot.capture",
+            "color-picker.pick",
+            "wallpaper.next",
         ]
         .iter()
         .filter_map(|source| {
             let reading = self.read(source)?;
-            let (toggle, set) = self.verbs(source, &reading);
+            let verbs = self.verbs(source, &reading);
+            // The profile picker is offered only while the daemon can switch profiles.
+            let choices: Vec<Json> = reading
+                .choices
+                .iter()
+                .filter(|_| verbs.set)
+                .map(|(id, name, active)| json!({"id": id, "name": name, "active": active}))
+                .collect();
             Some(json!({
                 "id": source, "available": true, "on": reading.on, "value": reading.value,
-                "status": reading.status, "icon": reading.icon, "toggle": toggle, "set": set,
+                "status": reading.status, "icon": reading.icon, "toggle": verbs.toggle,
+                "set": verbs.set && choices.is_empty(), "press": verbs.press, "choices": choices,
             }))
         })
         .collect()
@@ -403,64 +577,146 @@ impl ControlCenter {
         let Some(reading) = self.read(source) else {
             return;
         };
+        let on = reading.on;
         let call = match source {
-            "audio.output" => Some(("audio.toggle_mute", json!({}))),
-            "audio.input" => reading.node.map(|node| {
-                (
-                    "audio.set_mute",
-                    json!({"node": node, "muted": !reading.on}),
-                )
-            }),
-            "network.wifi" => Some(("network.set_wifi", json!({"enabled": !reading.on}))),
+            "audio.output" => Some(("audio.set_mute", json!({"target": "sink", "muted": !on}))),
+            "audio.input" => Some(("audio.set_mute", json!({"target": "source", "muted": !on}))),
+            "network.wifi" => Some(("network.set_wifi", json!({"enabled": !on}))),
             "bluetooth.power" if self.can("bluetooth.set_enabled") => {
-                Some(("bluetooth.set_enabled", json!({"enabled": !reading.on})))
+                Some(("bluetooth.set_enabled", json!({"enabled": !on})))
             }
             "bluetooth.power" => reading.node.map(|adapter| {
                 (
                     "bluetooth.set_power",
-                    json!({"adapter": adapter, "powered": !reading.on}),
+                    json!({"adapter": adapter, "powered": !on}),
                 )
             }),
-            "notifications.dnd" => Some(("notifications.set_dnd", json!({"enabled": !reading.on}))),
+            "notifications.dnd" => Some(("notifications.set_dnd", json!({"enabled": !on}))),
+            "airplane.mode" => Some(("airplane.set", json!({"enabled": !on}))),
+            "night-light.state" if !reading.locked => {
+                Some(("night_light.set", json!({"enabled": !on})))
+            }
+            "stay-awake.state" => Some(("stay_awake.set", json!({"enabled": !on}))),
+            "appearance.mode" => reading.node.and_then(|mode| {
+                let next = MODES[(MODES.iter().position(|m| *m == mode)? + 1) % MODES.len()];
+                Some(("appearance.set_mode", json!({"mode": next})))
+            }),
+            "recorder.state" if on => Some(("recorder.stop", json!({}))),
+            "recorder.state" => {
+                self.after_close("recorder.start", json!({"mode": "region"}));
+                None
+            }
             _ => None,
         };
         if let Some((method, params)) = call {
             self.begin(source, method, params);
         }
     }
-    /// Move a level toward `percent`. The call is skipped while the previous one is in flight;
+    /// A one-shot tile: interactive tools close the panel first, the rest call at once.
+    fn press(&self, source: &str) {
+        let Some((_, method)) = ACTIONS.iter().find(|(id, _)| *id == source) else {
+            return;
+        };
+        match *method {
+            "screenshot.capture" => self.after_close(method, json!({"mode": "region"})),
+            "color_picker.pick" => self.after_close(method, json!({})),
+            _ if self.read(source).is_some() => {
+                self.begin(source, method, json!({}));
+            }
+            _ => {}
+        }
+    }
+    /// N0046: interactive tools (recorder, screenshot, picker) reply as soon as they start and the caller
+    /// closes its own panels first. The panel is asked to close now; the call goes out after the QML delay
+    /// from a short-lived thread, because a closed panel keeps nothing resident to send it.
+    fn after_close(&self, method: &'static str, params: Json) {
+        let (Some(client), Some((boot, timeout))) = (self.client.clone(), self.ready(method))
+        else {
+            return;
+        };
+        self.st.borrow_mut().close = true;
+        std::thread::spawn(move || {
+            std::thread::sleep(CLOSE_DELAY);
+            if let Ok(_ticket) = client.begin_call(
+                method.into(),
+                params,
+                timeout,
+                CallGuard { boot, version: 1 },
+                None,
+            ) {
+                // A queued call is cancelled when its ticket drops: hold it until it is on the wire.
+                std::thread::sleep(Duration::from_secs(2));
+            }
+        });
+    }
+    /// True once after a tile started an interactive tool: the host closes the panel.
+    pub fn take_close(&self) -> bool {
+        std::mem::take(&mut self.st.borrow_mut().close)
+    }
+    fn choose(&self, source: &str, choice: &str) {
+        if source == "power.profile" && PROFILES.contains(&choice) {
+            self.begin(source, "power.set_profile", json!({"profile": choice}));
+        }
+    }
+    /// The call a slider target means: `(method, params)`, or `None` when it already holds.
+    fn set_call(
+        &self,
+        source: &str,
+        reading: &Reading,
+        percent: f64,
+    ) -> Option<(&'static str, Json)> {
+        match source {
+            "audio.output" | "audio.input" => {
+                if (percent - reading.value).abs() < 0.5 {
+                    return None;
+                }
+                let target = if source == "audio.output" {
+                    "sink"
+                } else {
+                    "source"
+                };
+                Some((
+                    "audio.set_volume",
+                    json!({"target": target, "value": linear(percent)}),
+                ))
+            }
+            "brightness.level" => {
+                let percent = percent.round();
+                (percent != reading.value).then(|| {
+                    (
+                        "brightness.set",
+                        json!({"output": reading.node, "percent": percent as u8}),
+                    )
+                })
+            }
+            "keyboard.backlight" => {
+                let max = self.controls()?["keyboard"]["max"].as_f64()?.max(1.);
+                let level = (percent / 100. * max).round();
+                (level != (reading.value / 100. * max).round())
+                    .then(|| ("keyboard_light.set", json!({"level": level as u8})))
+            }
+            _ => None,
+        }
+    }
+    /// Move a level to `percent`. The call is skipped while the previous one is in flight;
     /// the newest target waits in `targets` and is applied from the next projection.
     fn level(&self, source: &str, percent: f64) {
         let Some(reading) = self.read(source) else {
             return;
         };
-        let target = (percent / 100.).clamp(0., 1.);
-        let delta = target - reading.value / 100.;
-        if delta.abs() < 0.005 {
+        let Some((method, params)) = self.set_call(source, &reading, percent) else {
             self.st.borrow_mut().targets.remove(source);
             return;
-        }
-        let sent = match (source, &reading.node) {
-            ("audio.output", _) if self.can("audio.adjust_volume") => self.begin(
-                source,
-                "audio.adjust_volume",
-                json!({"delta": delta.clamp(-STEP, STEP)}),
-            ),
-            (_, Some(node)) if self.can("audio.set_volume") => self.begin(
-                source,
-                "audio.set_volume",
-                json!({"node": node, "volume": target}),
-            ),
-            _ => return,
         };
+        let sent = self.begin(source, method, params);
         let mut st = self.st.borrow_mut();
-        if sent && delta.abs() <= STEP {
+        if sent {
             st.targets.remove(source);
         } else {
             st.targets.insert(source.into(), percent);
         }
     }
-    /// A tile asks: `toggle:<source>`, `press:<source>` or `set:<source>:<percent>`.
+    /// A tile asks: `toggle:<source>`, `press:<source>`, `choose:<source>:<id>` or `set:<source>:<percent>`.
     pub fn act(&self, arg: &str) {
         let mut parts = arg.splitn(3, ':');
         let (verb, source, rest) = (
@@ -470,6 +726,8 @@ impl ControlCenter {
         );
         match verb {
             "toggle" => self.toggle(source),
+            "press" => self.press(source),
+            "choose" => self.choose(source, rest),
             "set" => {
                 if let Ok(percent) = rest.parse::<f64>()
                     && percent.is_finite()
