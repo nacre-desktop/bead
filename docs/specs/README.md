@@ -119,6 +119,11 @@ exposed a harness defect, not a product result:
 3. Open-panel samples were never classified (always "inactive"), so the
    strict backend validator could not pass. A fix is in progress; the
    validator stays strict.
+4. Run 4 stopped at B1: a stale candidate binary (9ce4209) against the current
+   `shell/` tree raised a Luau `UI_ERROR`, so `source_error=true` never cleared.
+   Not an audio problem (both arms run with PipeWire unavailable). Fixed by a
+   manifest `shell_git_tree` gate and a fail-fast on `UI_ERROR`; candidate rebuilt
+   from fdd5cc1 and a six-arm desktop rehearsal was ARM_VALID.
 The swap reset works on the laptop (7.3 GiB → 22 MiB, with MemAvailable >
 swap + 8 GiB). Evidence: ~/.local/share/nacre/ai/lead/bead-laptop-reference-20261022/evidence-*.
 

@@ -16,6 +16,19 @@ manifest together. Stage the bundle contents at:
 ~/.local/share/nacre/ai/lead/bead-laptop-reference-20261023/artifacts/
 ```
 
+The candidate runs the checkout's `shell/` tree, so its binary must be built from
+that exact tree. The manifest pins `candidate.shell_git_tree`
+(`git rev-parse HEAD:shell`); the launcher refuses a candidate built from a
+different tree. (Run 4 stopped because a binary from Bead `9ce4209` ran a newer
+`shell/` tree: `UI_ERROR bar/main.luau:14 ... nil value`, then a bar-log timeout.
+The repeated `SERVICE_AUDIO disconnected` lines were not the cause: both arms run
+with `PIPEWIRE_REMOTE=bead-private-unavailable`, so audio is equally absent.)
+The first-presentation wait also aborts immediately on any `UI_ERROR`.
+The helper examples (`private-pointer`, `tray-fixture`, `notification-client`)
+are staged under `artifacts/examples/`; copy them to `<repo>/target/release/examples/`
+if the checkout lacks them. The 2026-10-23 candidate was built from `fdd5cc1`
+with Rust 1.99.0, `cargo build -p nacre-shell --release --locked`.
+
 The checkout's `shell/tests/fixtures/dashboard` tree must match the fixture-tree
 SHA-256 in the manifest. The launcher verifies both UI binaries and that tree
 before creating capture evidence.
