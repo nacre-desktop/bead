@@ -53,7 +53,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
                     ui.Box{id="halo",position="absolute",left=3,top=1,width=26,height=26,radius=13,fill=on and ui.alpha(accent,0.3) or "surfaceContainer"},
                     ui.Box{id="pearl",position="absolute",left=6,top=4,width=20,height=20,radius=10,border_width=on and 0 or 1,border_color=accent,fill=on and accent or "surfaceContainer"},
                     ui.Text{id="number",position="absolute",left=6,top=5,text=label,width=20,height=20,font_size=13,family="IBM Plex Sans",text_align="center",color=on and "onPrimary" or "onSurfaceVariant"},
-                    ui.Row{id="apps",position="absolute",left=33,top=0,width=width-33,height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)},
+                    ui.Row{id="apps",position="absolute",left=33,top=0,width=math.max(0,width-33),height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)},
                 }
             end},
         },

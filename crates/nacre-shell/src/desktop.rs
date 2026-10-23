@@ -251,10 +251,7 @@ mod tests {
             fallback,
         );
         let mut state = values(&Snapshot::default(), "");
-        state.insert(
-            "bead.workspaces".into(),
-            Value::list(rows),
-        );
+        state.insert("bead.workspaces".into(), Value::list(rows));
         state.insert(
             "bead.focused_title".into(),
             Value::Text("Fixture title".into()),
@@ -266,7 +263,8 @@ mod tests {
     }
     #[test]
     fn actual_bar_bundle_loads_native_actions_assets_and_full_width_layout() {
-        let rows = vec![serde_json::json!({"id":"fixture-stable-id","name":"1","index":1,"active":true})];
+        let rows =
+            vec![serde_json::json!({"id":"fixture-stable-id","name":"1","index":1,"active":true})];
         let (mut session, scene) = bar_session(rows);
         assert_eq!(scene.width, 1920.);
         assert!(scene.primitives.iter().any(|draw|matches!(draw,bead::render::Primitive::Rounded{rect,..} if rect.x==0. && rect.y==0. && rect.w==1920. && rect.h==50.)));
@@ -316,11 +314,16 @@ mod tests {
             let mut row = serde_json::json!({"id":format!("w{i}"),"name":i.to_string(),"label":i.to_string(),
                 "index":i,"active":i==1,"icon":"","icon_mode":false,"occupied":false,"shown":0,"overflow":"",
                 "hinted":false,"app1":"","app2":"","app3":""});
-            row.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            row.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
             row
         };
         // Default: 32 px cells, no hint glyphs.
-        let (plain, texts) = capsule(vec![row(1, serde_json::json!({})), row(2, serde_json::json!({}))]);
+        let (plain, texts) = capsule(vec![
+            row(1, serde_json::json!({})),
+            row(2, serde_json::json!({})),
+        ]);
         assert_eq!(plain, [32., 32.]);
         assert!(!texts.iter().any(|t| t == "terminal"));
         // workspaceWindowHints: the active cell grows by 18 per glyph, 20 for "+N" and 4 padding.
@@ -333,7 +336,10 @@ mod tests {
         // workspaceIcons: every cell is 46 px and shows its symbol and number.
         let icons = serde_json::json!({"icon_mode":true,"occupied":true});
         let (cells, texts) = capsule(vec![
-            row(1, serde_json::json!({"icon":"home","icon_mode":true,"occupied":true})),
+            row(
+                1,
+                serde_json::json!({"icon":"home","icon_mode":true,"occupied":true}),
+            ),
             row(2, icons),
         ]);
         assert_eq!(cells, [46., 46.]);

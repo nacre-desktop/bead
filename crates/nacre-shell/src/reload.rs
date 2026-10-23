@@ -327,11 +327,15 @@ impl Runtime {
         if self.workspaces.view.follow(&stores)
             && let Some(backend) = &self.backend
         {
-            let rows = self.workspaces.rows(&backend.snapshot(), self.output.as_deref());
-            self.session.stores.commit(std::collections::BTreeMap::from([(
-                "bead.workspaces".into(),
-                bead::core::Value::list(rows),
-            )]))?;
+            let rows = self
+                .workspaces
+                .rows(&backend.snapshot(), self.output.as_deref());
+            self.session
+                .stores
+                .commit(std::collections::BTreeMap::from([(
+                    "bead.workspaces".into(),
+                    bead::core::Value::list(rows),
+                )]))?;
         }
         self.prefs = Some(source);
         Ok(self)
@@ -1091,8 +1095,11 @@ impl Runtime {
         mut self,
         backend: std::sync::Arc<crate::backends::Native>,
     ) -> Result<Self, Box<dyn Error>> {
-        let values =
-            backend_values(&backend.snapshot(), self.output.as_deref(), &self.workspaces)?;
+        let values = backend_values(
+            &backend.snapshot(),
+            self.output.as_deref(),
+            &self.workspaces,
+        )?;
         self.session.stores = self.session.stores.reconcile(&values)?;
         for name in [
             "backend.workspace.switch",
@@ -1970,12 +1977,11 @@ impl SceneSource for Runtime {
                     snapshot.workspaces.len(),
                     snapshot.windows.len()
                 );
-                self.session
-                    .update_model(backend_values(
-                        &snapshot,
-                        self.output.as_deref(),
-                        &self.workspaces,
-                    )?)?
+                self.session.update_model(backend_values(
+                    &snapshot,
+                    self.output.as_deref(),
+                    &self.workspaces,
+                )?)?
             }
             UiEvent::CompanionModel(_) => {
                 return Err("companion model reached primary script".into());

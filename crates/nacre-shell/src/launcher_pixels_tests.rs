@@ -234,7 +234,9 @@ fn ranked_prefix_keeps_actual_visible_pixels_and_actions_exact() -> Result<()> {
 #[test]
 fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
     let rail = |order: &[&str], hidden: &[&str]| -> Result<Vec<String>> {
-        let list = |ids: &[&str]| Value::list(ids.iter().map(|i| serde_json::json!(i)).collect());
+        let list = |ids: &[&str]| {
+            Value::list(ids.iter().map(|i| serde_json::json!({ "id": i })).collect())
+        };
         let root = root();
         let mut h = Harness::load(
             &root,
@@ -264,7 +266,13 @@ fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
     assert_eq!(rail(&[], &[])?, ["apps", "home", "search", "actions"]);
     assert_eq!(rail(&[], &["search", "home"])?, ["apps", "home", "actions"]);
     assert_eq!(rail(&[], &["apps", "actions"])?, ["home", "search"]);
-    assert_eq!(rail(&["actions", "home"], &[])?, ["home", "actions", "apps", "search"]);
-    assert_eq!(rail(&["apps", "style"], &["actions"])?, ["home", "apps", "search"]);
+    assert_eq!(
+        rail(&["actions", "home"], &[])?,
+        ["home", "actions", "apps", "search"]
+    );
+    assert_eq!(
+        rail(&["apps", "style"], &["actions"])?,
+        ["home", "apps", "search"]
+    );
     Ok(())
 }

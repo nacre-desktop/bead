@@ -47,6 +47,13 @@ fn snapshot() -> Snapshot {
                 urgent: false,
             })
             .collect(),
+        capabilities: {
+            let mut capabilities = bead::backends::Capabilities::empty();
+            capabilities
+                .features
+                .insert("perOutputWorkspaces".into(), true);
+            capabilities
+        },
         ..Snapshot::default()
     }
 }

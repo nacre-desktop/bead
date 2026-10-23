@@ -37,7 +37,7 @@ impl View {
         if let Some(Value::List(icons)) = values.get("bar.workspace.icons") {
             next.icons = icons
                 .iter()
-                .map(|i| i.as_str().unwrap_or_default().to_owned())
+                .map(|i| i["icon"].as_str().unwrap_or_default().to_owned())
                 .collect();
         }
         if let Some(Value::Bool(hints)) = values.get("bar.workspace.hints") {
@@ -201,7 +201,9 @@ impl Rows {
         let mine: Vec<&Workspace> = snapshot
             .workspaces
             .iter()
-            .filter(|w| output.is_none() || output_id.is_some_and(|id| w.output.as_ref() == Some(id)))
+            .filter(|w| {
+                output.is_none() || output_id.is_some_and(|id| w.output.as_ref() == Some(id))
+            })
             .collect();
         let windows_of = |w: &Workspace| -> Vec<&Window> {
             snapshot
@@ -216,24 +218,24 @@ impl Rows {
                 .iter()
                 .any(|win| win.workspace.as_ref() == Some(&w.id))
         };
-        let mut shown: Vec<&Workspace> = if snapshot.capabilities.supports("perOutputWorkspaces") {
+        let shown: Vec<&Workspace> = if snapshot.capabilities.supports("perOutputWorkspaces") {
             let mut own: Vec<_> = mine.iter().copied().filter(|w| !w.visiting).collect();
             own.sort_by_key(|w| w.index);
             let named = |w: &Workspace| {
-                w.fixed_slot
-                    || (!w.name.is_empty() && !w.name.bytes().all(|b| b.is_ascii_digit()))
+                w.fixed_slot || (!w.name.is_empty() && !w.name.bytes().all(|b| b.is_ascii_digit()))
             };
-            let mut local: Vec<_> = if own.iter().filter(|w| named(w)).count()
-                >= view.count as usize
+            let mut local: Vec<_> =
+                if own.iter().filter(|w| named(w)).count() >= view.count as usize {
+                    own.iter()
+                        .copied()
+                        .filter(|w| named(w) || occupied(w))
+                        .collect()
+                } else {
+                    own.clone()
+                };
+            if local.is_empty()
+                && let Some(first) = own.first()
             {
-                own.iter()
-                    .copied()
-                    .filter(|w| named(w) || occupied(w))
-                    .collect()
-            } else {
-                own.clone()
-            };
-            if local.is_empty() && let Some(first) = own.first() {
                 local.push(first);
             }
             let mut visitors: Vec<_> = mine
@@ -281,7 +283,8 @@ impl Rows {
                     .min((((available - base) / HINT).floor()).max(0.) as usize);
                 while hinted
                     && fit > 0
-                    && base + fit as f64 * HINT + if fit < count { OVERFLOW } else { 0. } > available
+                    && base + fit as f64 * HINT + if fit < count { OVERFLOW } else { 0. }
+                        > available
                 {
                     fit -= 1;
                 }
@@ -373,7 +376,9 @@ mod tests {
         }
     }
     fn labels(rows: &[Json]) -> Vec<String> {
-        rows.iter().map(|r| r["label"].as_str().unwrap().into()).collect()
+        rows.iter()
+            .map(|r| r["label"].as_str().unwrap().into())
+            .collect()
     }
     fn no_dirs() -> Vec<PathBuf> {
         Vec::new()
@@ -384,7 +389,10 @@ mod tests {
         let mut view = View::default();
         let stores = BTreeMap::from([
             ("bar.workspace.count".into(), Value::Number(4.)),
-            ("bar.workspace.icons".into(), Value::list(vec![json!("home"), json!("")])),
+            (
+                "bar.workspace.icons".into(),
+                Value::list(vec![json!({"icon": "home"}), json!({"icon": ""})]),
+            ),
             ("bar.workspace.hints".into(), Value::Bool(false)),
         ]);
         assert!(view.follow(&stores));
@@ -396,12 +404,26 @@ mod tests {
     fn per_output_rows_keep_all_own_until_named_slots_fill_the_count() {
         let ws = |named: bool| {
             (1..=4)
-                .map(|i| workspace(i, &if named { format!("nacre-{i}") } else { i.to_string() }, named, i == 1))
+                .map(|i| {
+                    workspace(
+                        i,
+                        &if named {
+                            format!("nacre-{i}")
+                        } else {
+                            i.to_string()
+                        },
+                        named,
+                        i == 1,
+                    )
+                })
                 .collect::<Vec<_>>()
         };
         let rows = Rows::default();
         let plain = snapshot(ws(false), vec![], true);
-        assert_eq!(labels(&rows.rows_with(&plain, Some("out"), &no_dirs)), ["1", "2", "3", "4"]);
+        assert_eq!(
+            labels(&rows.rows_with(&plain, Some("out"), &no_dirs)),
+            ["1", "2", "3", "4"]
+        );
         // Four named slots reach a count of 3: only named or occupied workspaces stay,
         // so an unnamed spare is dropped.
         let mut spare = ws(true);
@@ -409,7 +431,10 @@ mod tests {
         let mut crowded = Rows::default();
         crowded.view.count = 3;
         let named = snapshot(spare.clone(), vec![], true);
-        assert_eq!(labels(&crowded.rows_with(&named, Some("out"), &no_dirs)), ["1", "2", "3", "4"]);
+        assert_eq!(
+            labels(&crowded.rows_with(&named, Some("out"), &no_dirs)),
+            ["1", "2", "3", "4"]
+        );
         let used = snapshot(spare, vec![window(1, 5, "x")], true);
         assert_eq!(
             labels(&crowded.rows_with(&used, Some("out"), &no_dirs)),
@@ -421,24 +446,39 @@ mod tests {
     fn visitors_follow_local_rows_only_while_occupied() {
         let mut visitor = workspace(9, "9", false, false);
         visitor.visiting = true;
-        let spare = snapshot(vec![workspace(1, "1", false, true), visitor.clone()], vec![], true);
+        let spare = snapshot(
+            vec![workspace(1, "1", false, true), visitor.clone()],
+            vec![],
+            true,
+        );
         let rows = Rows::default();
-        assert_eq!(labels(&rows.rows_with(&spare, Some("out"), &no_dirs)), ["1"]);
+        assert_eq!(
+            labels(&rows.rows_with(&spare, Some("out"), &no_dirs)),
+            ["1"]
+        );
         let used = snapshot(
             vec![workspace(1, "1", false, true), visitor],
             vec![window(1, 9, "x")],
             true,
         );
-        assert_eq!(labels(&rows.rows_with(&used, Some("out"), &no_dirs)), ["1", "9"]);
+        assert_eq!(
+            labels(&rows.rows_with(&used, Some("out"), &no_dirs)),
+            ["1", "9"]
+        );
     }
 
     #[test]
     fn global_backends_list_the_count_plus_active_and_occupied() {
-        let ws: Vec<_> = [1, 2, 8, 12].map(|i| workspace(i, &i.to_string(), false, i == 8)).into();
+        let ws: Vec<_> = [1, 2, 8, 12]
+            .map(|i| workspace(i, &i.to_string(), false, i == 8))
+            .into();
         let mut rows = Rows::default();
         rows.view.count = 3;
         let one = snapshot(ws, vec![window(1, 12, "x")], false);
-        assert_eq!(labels(&rows.rows_with(&one, Some("out"), &no_dirs)), ["1", "2", "8", "12"]);
+        assert_eq!(
+            labels(&rows.rows_with(&one, Some("out"), &no_dirs)),
+            ["1", "2", "8", "12"]
+        );
     }
 
     #[test]
@@ -446,14 +486,19 @@ mod tests {
         let mut rows = Rows::default();
         rows.view.icons = vec!["home".into(), String::new(), "code".into()];
         let snap = snapshot(
-            (1..=3).map(|i| workspace(i, &i.to_string(), false, i == 1)).collect(),
+            (1..=3)
+                .map(|i| workspace(i, &i.to_string(), false, i == 1))
+                .collect(),
             vec![window(1, 1, "x")],
             true,
         );
         let out = rows.rows_with(&snap, Some("out"), &no_dirs);
         let icons: Vec<_> = out.iter().map(|r| r["icon"].as_str().unwrap()).collect();
         assert_eq!(icons, ["home", "", "code"]);
-        assert!(out.iter().all(|r| r["icon_mode"] == true && r["shown"] == 0));
+        assert!(
+            out.iter()
+                .all(|r| r["icon_mode"] == true && r["shown"] == 0)
+        );
         assert_eq!(out[0]["occupied"], true);
     }
 
@@ -461,22 +506,44 @@ mod tests {
     fn active_workspace_gets_up_to_three_hints_and_an_overflow_count() {
         let rows = Rows::default();
         let windows = (0..5).map(|i| window(i, 1, "Foo")).collect();
-        let snap = snapshot(vec![workspace(1, "1", false, true), workspace(2, "2", false, false)], windows, true);
+        let snap = snapshot(
+            vec![
+                workspace(1, "1", false, true),
+                workspace(2, "2", false, false),
+            ],
+            windows,
+            true,
+        );
         let out = rows.rows_with(&snap, Some("out"), &no_dirs);
-        assert_eq!((out[0]["shown"].as_u64(), out[0]["overflow"].as_str()), (Some(3), Some("+2")));
+        assert_eq!(
+            (out[0]["shown"].as_u64(), out[0]["overflow"].as_str()),
+            (Some(3), Some("+2"))
+        );
         assert_eq!(out[0]["app3"], "apps");
-        assert_eq!((out[1]["shown"].as_u64(), out[1]["app1"].as_str()), (Some(0), Some("")));
+        assert_eq!(
+            (out[1]["shown"].as_u64(), out[1]["app1"].as_str()),
+            (Some(0), Some(""))
+        );
         let mut off = Rows::default();
         off.view.hints = false;
         let none = off.rows_with(&snap, Some("out"), &no_dirs);
-        assert_eq!((none[0]["shown"].as_u64(), none[0]["overflow"].as_str()), (Some(0), Some("")));
+        assert_eq!(
+            (none[0]["shown"].as_u64(), none[0]["overflow"].as_str()),
+            (Some(0), Some(""))
+        );
     }
 
     #[test]
     fn narrow_bars_allocate_fewer_hints_by_the_qml_width_rule() {
         let rows = Rows::default();
         let windows = (0..3).map(|i| window(i, 1, "Foo")).collect();
-        let mut snap = snapshot((1..=6).map(|i| workspace(i, &i.to_string(), false, i == 1)).collect(), windows, true);
+        let mut snap = snapshot(
+            (1..=6)
+                .map(|i| workspace(i, &i.to_string(), false, i == 1))
+                .collect(),
+            windows,
+            true,
+        );
         // 6 cells: base 6*32+5*2+4 = 206. Width 800 leaves 250: one hint and the overflow
         // mark fit (244); width 600 leaves the 170 minimum, below the base: none.
         snap.outputs[0].width = 800;
@@ -488,8 +555,14 @@ mod tests {
     #[test]
     fn glyphs_follow_desktop_entry_categories_and_nacre_names() {
         let c = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert_eq!(glyph_for("kitty", &c(&["System", "TerminalEmulator"])), "terminal");
-        assert_eq!(glyph_for("x", &c(&["Network", "Chat", "InstantMessaging"])), "forum");
+        assert_eq!(
+            glyph_for("kitty", &c(&["System", "TerminalEmulator"])),
+            "terminal"
+        );
+        assert_eq!(
+            glyph_for("x", &c(&["Network", "Chat", "InstantMessaging"])),
+            "forum"
+        );
         assert_eq!(glyph_for("x", &c(&["Utility"])), "build");
         assert_eq!(glyph_for("x", &c(&["AudioVideo", "Player"])), "play_circle");
         assert_eq!(glyph_for("x", &[]), "apps");

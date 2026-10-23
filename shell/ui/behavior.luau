@@ -39,13 +39,14 @@ return {
       -- launcher-layout: hidden ids drop out (Home never), a configured order ranks the rest
       -- as Nacre's rail does (Home, the order, then the defaults); unranked rows keep their place at the end.
       local hidden={}
-      for _,id in ipairs(s["launcher.rail.hidden"]) do hidden[id]=true end
+      for _,entry in ipairs(s["launcher.rail.hidden"]) do hidden[entry.id]=true end
       hidden.home=nil
       local rank,count={},0
       local configured=s["launcher.rail.order"]
       if #configured>0 then
-        for _,id in ipairs({"home",table.unpack(configured)}) do
-          if not rank[id] then count+=1 rank[id]=count end
+        if not rank.home then count+=1 rank.home=count end
+        for _,entry in ipairs(configured) do
+          if not rank[entry.id] then count+=1 rank[entry.id]=count end
         end
         for _,id in ipairs({"apps","actions"}) do
           if not rank[id] then count+=1 rank[id]=count end
