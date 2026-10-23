@@ -16,9 +16,16 @@ pub type Wakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
 /// Keeps a view subscription alive; dropping it unsubscribes.
 pub type Handle = Box<dyn std::any::Any + Send>;
 /// What the shell's notice and OSD surfaces need from a notification backend: the
-/// private compatibility owner below or the daemon consumer in `notice_service`.
+/// private compatibility owner below or the in-process daemon consumer in `notice_service`.
 pub trait Notices: Send + Sync {
     fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Handle;
+    /// A bar session that drives the transient `notices`/`osd` panel views: it receives
+    /// only open/close offers, never models. Hosts without panel views ignore it.
+    fn drive(&self, _wakeup: Wakeup) -> Handle {
+        Box::new(())
+    }
+    /// The panel view now shown (None when closed), for suppression bookkeeping.
+    fn panel_changed(&self, _view: Option<&str>) {}
     /// `key` is `id[|revision]` of the card under the pointer, or `osd`.
     fn hover(&self, key: &str, on: bool);
     fn action(&self, name: &str, arg: &Value) -> Result<(), String>;

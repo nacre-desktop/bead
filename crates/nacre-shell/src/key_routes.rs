@@ -117,8 +117,10 @@ const BRIGHTNESS_STEP: i64 = 5;
 pub struct Brightness {
     client: Client,
     pending: Arc<Mutex<Option<CallTicket>>>,
-    /// Command socket of the notice/OSD process; the reply's level is shown there.
+    /// Command socket of a separate private notice process (compatibility fixture).
     osd: Option<PathBuf>,
+    /// The in-process notice service: the reply's level is shown through it.
+    local: Option<Arc<dyn crate::notifications::Notices>>,
 }
 /// N0036: `brightness.adjust` replies `{changed, output, level_percent}`; the level
 /// read back from the device is the OSD value. Failures and absent values show nothing.
@@ -132,7 +134,11 @@ impl Brightness {
             client,
             pending: Default::default(),
             osd,
+            local: None,
         }
+    }
+    pub fn with_local(&mut self, service: Arc<dyn crate::notifications::Notices>) {
+        self.local = Some(service);
     }
     pub fn step(&self, direction: &str, output: Option<&str>) -> Result<(), &'static str> {
         let delta = match direction {
@@ -162,7 +168,7 @@ impl Brightness {
             *pending = None;
         }
         let timeout = Duration::from_millis(u64::from(method.timeout).clamp(1, 60_000));
-        let (slot, osd) = (self.pending.clone(), self.osd.clone());
+        let (slot, osd, local) = (self.pending.clone(), self.osd.clone(), self.local.clone());
         let wake: crate::nacre_source::CallWake = Arc::new(move || {
             let reply = match slot.lock() {
                 Ok(mut held) => held
@@ -171,9 +177,17 @@ impl Brightness {
                     .inspect(|_| *held = None),
                 Err(_) => None,
             };
-            if let (Some(Ok(value)), Some(socket)) = (reply, osd.clone())
-                && let Some(level) = osd_level(&value)
-            {
+            let level = match &reply {
+                Some(Ok(value)) => osd_level(value),
+                _ => None,
+            };
+            if let (Some(level), Some(local)) = (level, &local) {
+                let _ = local.feedback(&[
+                    serde_json::json!("brightness"),
+                    serde_json::json!(level),
+                    serde_json::json!(false),
+                ]);
+            } else if let (Some(level), Some(socket)) = (level, osd.clone()) {
                 // Blocking IPC never runs on the transport thread.
                 std::thread::spawn(move || {
                     let call = Call {

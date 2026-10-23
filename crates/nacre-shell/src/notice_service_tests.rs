@@ -574,6 +574,57 @@ fn seed_defines_every_key_the_views_bind() {
     }
 }
 
+#[test]
+fn views_are_offered_for_popups_and_osd_and_yield_to_other_panels() {
+    let shared = Shared {
+        inner: Mutex::new(Inner::default()),
+        wake: Condvar::new(),
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    {
+        let mut g = shared.lock();
+        g.live = true;
+        g.good = Some(state(json!({})));
+        g.drivers.insert(
+            1,
+            Arc::new(move |event| {
+                let _ = tx.send(event);
+            }),
+        );
+    }
+    let offers = || {
+        rx.try_iter()
+            .filter_map(|event| match event {
+                UiEvent::CompanionOffer { view, open, .. } => Some((view, open)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    publish(&shared);
+    assert_eq!(offers(), [(VIEW_NOTICES.to_owned(), true)]);
+    // Another view is shown: the popups yield, once, and nothing is offered after.
+    shared.lock().other_panel = true;
+    publish(&shared);
+    assert_eq!(offers(), [(VIEW_NOTICES.to_owned(), false)]);
+    publish(&shared);
+    assert!(offers().is_empty());
+    // The OSD wins over popups and is offered even while another view is shown.
+    shared.lock().osd.shown = Some(Shown {
+        channel: OsdChannel::Volume,
+        level: 0.5,
+        muted: false,
+    });
+    publish(&shared);
+    assert_eq!(offers(), [(VIEW_OSD.to_owned(), true)]);
+    let mut g = shared.lock();
+    g.osd.shown = None;
+    g.other_panel = false;
+    g.live = false;
+    drop(g);
+    publish(&shared);
+    assert_eq!(offers(), [(VIEW_OSD.to_owned(), false)]);
+}
+
 mod daemon {
     use super::*;
     use std::io::{BufRead, BufReader, Write};
@@ -659,6 +710,16 @@ mod daemon {
         });
         (socket, calls, close)
     }
+    fn start(socket: std::path::PathBuf, provider: bool, action_on_click: bool) -> Arc<Service> {
+        let client = if provider {
+            crate::ui_provider::start(socket, "/tmp/bead-test-shell.sock".into(), None, &TOPICS)
+                .unwrap()
+        } else {
+            let topics = TOPICS.iter().map(|t| t.to_string()).collect();
+            Client::start(crate::nacre_source::Config::new(socket, topics)).unwrap()
+        };
+        Service::start(client, Options { action_on_click }).unwrap()
+    }
     fn models(service: &Service) -> mpsc::Receiver<BTreeMap<String, Value>> {
         let (tx, rx) = mpsc::channel();
         let handle = service.subscribe(
@@ -702,14 +763,7 @@ mod daemon {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();
         let (socket, calls, close) = fake(&lab, json!({"notifications":1}), data);
-        let service = Service::start(
-            socket,
-            Options {
-                provider: true,
-                action_on_click: true,
-            },
-        )
-        .unwrap();
+        let service = start(socket, true, true);
         let rx = models(&service);
         until(&rx, |m| {
             flag(m, "notifications.open") && flag(m, "notifications.controls")
@@ -768,14 +822,7 @@ mod daemon {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();
         let (socket, _calls, close) = fake(&lab, json!({"notifications":1}), data);
-        let service = Service::start(
-            socket,
-            Options {
-                provider: false,
-                action_on_click: false,
-            },
-        )
-        .unwrap();
+        let service = start(socket, false, false);
         let rx = models(&service);
         std::thread::sleep(Duration::from_millis(600));
         service
@@ -804,14 +851,7 @@ mod daemon {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();
         let (socket, calls, close) = fake(&lab, json!({}), data);
-        let service = Service::start(
-            socket,
-            Options {
-                provider: false,
-                action_on_click: false,
-            },
-        )
-        .unwrap();
+        let service = start(socket, false, false);
         let rx = models(&service);
         std::thread::sleep(Duration::from_millis(300));
         until(&rx, |m| {

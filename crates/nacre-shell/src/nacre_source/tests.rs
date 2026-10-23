@@ -1987,7 +1987,7 @@ async fn actual_provider_with_pending_menu(golden: &str) {
         framing::write(&mut writer, &menu[1]).await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
     });
-    let provider = Arc::new(crate::ui_provider::start(lab.socket(), ui_path, None).unwrap());
+    let provider = Arc::new(crate::ui_provider::start(lab.socket(), ui_path, None, &[]).unwrap());
     tokio::time::timeout(Duration::from_secs(5), async {
         while provider.status().boot.is_none() {
             tokio::time::sleep(Duration::from_millis(2)).await;
@@ -2051,7 +2051,7 @@ async fn actual_provider_acks_published_rows_and_refuses_unknown_operations() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     });
     let ui_path = lab.0.join("ui.sock");
-    let provider = crate::ui_provider::start(lab.socket(), ui_path, None).unwrap();
+    let provider = crate::ui_provider::start(lab.socket(), ui_path, None, &[]).unwrap();
     server.await.unwrap();
     provider.control(true).await.unwrap();
 }

@@ -174,6 +174,15 @@ pub enum UiEvent {
         toggle: bool,
         center: Option<f32>,
     },
+    /// Service-initiated ambient view (transient notices). `open` shows `view` only
+    /// while the panel slot is idle or holds another ambient view, so it never
+    /// displaces a view the user opened; `!open` closes `view` only if it is the
+    /// ambient view shown. The application defines view names.
+    CompanionOffer {
+        view: String,
+        output: Option<String>,
+        open: bool,
+    },
     CompanionModel(std::collections::BTreeMap<String, bead_core::Value>),
     ClipboardSet(String),
     ClipboardRead,

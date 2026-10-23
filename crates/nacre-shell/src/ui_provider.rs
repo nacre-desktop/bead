@@ -201,10 +201,14 @@ async fn execute(act: Act, client: Option<crate::nacre_source::Client>, shell: P
         eprintln!("UI_MENU_ACTION_FAILED {error}");
     }
 }
+/// `notifications` is the command socket of a separate private notice process (the
+/// `--notification-bus` compatibility fixture); without it `notifs` calls go to this
+/// shell. `extra` topics are subscribed besides the shell's own for services sharing this link.
 pub fn start(
     daemon: PathBuf,
     shell: PathBuf,
     notifications: Option<PathBuf>,
+    extra: &[&str],
 ) -> source::Result<crate::nacre_source::Client> {
     if !shell.is_absolute() || notifications.as_ref().is_some_and(|p| !p.is_absolute()) {
         return Err(Error::new(
@@ -222,7 +226,15 @@ pub fn start(
         crate::prefs::PROFILE,
         crate::prefs::LAUNCHER_LAYOUT,
     ];
-    let mut config = crate::nacre_source::Config::new(daemon, topics.map(String::from).to_vec());
+    let mut config = crate::nacre_source::Config::new(
+        daemon,
+        topics
+            .iter()
+            .copied()
+            .chain(extra.iter().copied())
+            .map(String::from)
+            .collect(),
+    );
     // `ai.chat` `send_failed` events restore the sidebar composer (B0043).
     config.event = Some(Arc::new(crate::chat::route_event));
     let slot: Arc<OnceLock<crate::nacre_source::WeakClient>> = Default::default();
@@ -245,12 +257,9 @@ pub fn start(
                     return Err(Error::new("unknown_method", "UI method unavailable", false));
                 }
                 let call = request(params)?;
-                let socket = if call.target == "notifs" {
-                    notifications.ok_or_else(|| {
-                        Error::new("unavailable", "Notification UI is not registered", true)
-                    })?
-                } else {
-                    shell
+                let socket = match (call.target.as_str(), notifications) {
+                    ("notifs", Some(socket)) => socket,
+                    _ => shell,
                 };
                 // Existing peer-checked IPC and bounded blocking pool; no shell command,
                 // catalog/ranking logic, or extra always-on forwarding process.

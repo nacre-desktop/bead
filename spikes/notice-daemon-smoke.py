@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""B0020 nested smoke: real daemon producer on a PRIVATE bus, nacre-shell notice consumer."""
+"""B0020/B0030 nested smoke: real daemon producer on a PRIVATE bus; the main nacre-shell (bar,
+core views, UI provider) hosts notices and the OSD in-process as panel views (`--notices`)."""
 import json, os, pathlib, re, shutil, signal, socket, subprocess, sys, time
 
 ROOT = pathlib.Path(os.environ["SMOKE_ROOT"])
 SRC, BIN = ROOT / "src", ROOT / "bin"
-RUN = pathlib.Path("/tmp/b0020-run")  # short socket paths; private, removed at exit
+SHELL = BIN / os.environ.get("SHELL_BIN", "nacre-shell")
+STACK_X, STACK_Y = 20, 30  # surface offsets: right inset 12 px and top 50 + 12 px, minus the 32 px shadow margin
+RUN = pathlib.Path("/tmp/b0030-run")  # short socket paths; private, removed at exit
 shutil.rmtree(RUN, ignore_errors=True)
 RAW = ROOT / "raw"; shutil.rmtree(RAW, ignore_errors=True); RAW.mkdir()
 for d in ("r", "pr", "state", "config", "cache", "data"):
@@ -77,7 +80,7 @@ check("private bus: daemon owns org.freedesktop.Notifications", owner() == "b tr
 class Probe:
     def __init__(self, topics):
         self.s = socket.socket(socket.AF_UNIX); self.s.connect(SOCK); self.buf = b""; self.id = 100; self.mirror = {}; self.rets = {}
-        self.send({"t": "hello", "proto": 1, "min": 1, "client": "b0020-smoke"}); self.welcome = self.recv()
+        self.send({"t": "hello", "proto": 1, "min": 1, "client": "b0030-smoke"}); self.welcome = self.recv()
         self.send({"t": "sub", "topics": topics})
     def send(self, o): self.s.sendall((json.dumps(o) + "\n").encode())
     def recv(self, timeout=5):
@@ -122,11 +125,12 @@ probe = Probe(["notifications"])
 check("daemon advertises notifications topic", probe.welcome["topics"].get("notifications") == 1)
 
 CMD = str(RUN/"cmd")
-shell = spawn([str(BIN/"nacre-shell"), "--notification-daemon", SOCK, "--notification-provider", "--renderer", "cpu",
-               "--command-socket", CMD, "--trace-state", "--namespace", "bead-b0020", "--palette", str(SRC/"shell/palette.json")],
-              "shell.log", dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), cwd=str(SRC))
+def shell_cmd(sock, cmd, trace=True):
+    return [str(SHELL), "--bar", "--core-views", "--renderer", "cpu", "--panel-renderer", "cpu", "--daemon-socket", sock, "--ui-provider",
+            "--notices", "--command-socket", cmd, "--namespace", "bead-b0030", "--palette", str(SRC/"shell/palette.json")] + (["--trace-state"] if trace else [])
+shell = spawn(shell_cmd(SOCK, CMD), "shell.log", dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), cwd=str(SRC))
 def shell_log(): return (RAW/"shell.log").read_text(errors="replace")
-wait(lambda: "NOTIFICATIONS_DAEMON" in shell_log(), 20, "shell consumer start")
+wait(lambda: "NOTIFICATIONS_DAEMON" in shell_log() and "UI_SESSION_CREATED" in shell_log(), 20, "shell consumer start")
 time.sleep(1.0)
 def layers(): return subprocess.run(["niri", "msg", "layers"], env=env, capture_output=True, text=True).stdout
 def grim(n): subprocess.run(["grim", str(RAW/n)], env=env, capture_output=True, timeout=10)
@@ -136,8 +140,10 @@ def notify(summary, body="", actions=("default", "Open", "a1", "Reply", "a2", "A
                          env=env, capture_output=True, text=True)
     return int(out.stdout.split()[-1]) if out.returncode == 0 else None
 def state(): return probe.snapshot()
+def panel_state():
+    return ipc("bead.panel", "state") or {}
 def ipc(target, method, *a):
-    r = subprocess.run([str(BIN/"nacre-shell"), "ipc", "--socket", CMD, "--json", target, method, *a], env=dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), capture_output=True, text=True, timeout=5)
+    r = subprocess.run([str(SHELL), "ipc", "--socket", CMD, "--json", target, method, *a], env=dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), capture_output=True, text=True, timeout=5)
     (RAW/"ipc.err").open("a").write(f"{target} {method} rc={r.returncode} {r.stdout[:300]} {r.stderr[:300]}\n")
     return json.loads(r.stdout)["result"] if r.returncode == 0 else None
 
@@ -148,9 +154,10 @@ st = wait(lambda: (lambda s: s if s["active"]["order"] else None)(state()), 5, "
 aid = st["active"]["order"][0]; notice = st["active"]["items"][aid]
 check("producer publishes default_action and 3 actions", notice.get("default_action") and len(notice["actions"]["order"]) == 3, str(notice.get("default_action")))
 time.sleep(1.0)
-check("popup surface exists in nested niri", "bead-b0020" in layers() or "notifications" in layers().lower(), layers().strip().replace("\n", " | ")[:200])
+ps = panel_state()
+check("popup is the 'notices' panel view with a surface (bar keeps its own)", ps.get("view") == "notices" and ps.get("surfaces", 0) >= 1 and ps.get("target_open") is True, str(ps)[:200])
 grim("1-popup.png")
-regs = ipc("bead", "regions"); (RAW/"regions-1.json").write_text(json.dumps(regs, indent=1))
+regs = ipc("bead", "panel-regions"); (RAW/"regions-1.json").write_text(json.dumps(regs, indent=1))
 rid = "notices.k" + aid.encode().hex() + "."
 (RAW/"regs-debug.json").write_text(json.dumps(regs)[:3000]); names = [r["id"] for r in regs["regions"] if rid in r["id"]] if regs else []
 check("card regions present; default action not a button row", any(n.endswith(".notice") for n in names) and not any("action-" in n for n in names), str(names)[:160])
@@ -161,8 +168,8 @@ procs.append(ptr); ptr.stdout.readline()
 def pcmd(c):
     ptr.stdin.write(c + "\n"); ptr.stdin.flush(); ptr.stdout.readline()
 def center(sub):
-    regs = ipc("bead", "regions"); r = next(r for r in regs["regions"] if rid in r["id"] and r["id"].endswith("." + sub))
-    x, y, w, h = r["rect"]; return round(W - regs["size"][0] + regs["offset"][0] + x + w / 2), round(regs["offset"][1] + y + h / 2)
+    regs = ipc("bead", "panel-regions"); r = next(r for r in regs["regions"] if rid in r["id"] and r["id"].endswith("." + sub))
+    x, y, w, h = r["rect"]; return round(W - regs["size"][0] + STACK_X + regs["offset"][0] + x + w / 2), round(STACK_Y + regs["offset"][1] + y + h / 2)
 x, y = center("notice"); pcmd(f"move {x} {y} {W} {H}")
 st = wait(lambda: (lambda s: s if s["active"]["items"][aid].get("paused") else None)(state()), 4, "hover paused")
 check("hover pauses the producer clock (set_hover via UI provider)", st["active"]["items"][aid]["paused"] is True)
@@ -170,7 +177,7 @@ pcmd(f"move 5 5 {W} {H}")
 st = wait(lambda: (lambda s: s if not s["active"]["items"][aid].get("paused") else None)(state()), 4, "hover resumed")
 check("leaving resumes the producer clock", st["active"]["items"][aid]["paused"] is False)
 pcmd(f"move {x} {y} {W} {H}"); pcmd("click"); time.sleep(.5)
-regs = ipc("bead", "regions"); (RAW/"regions-2.json").write_text(json.dumps(regs, indent=1))
+regs = ipc("bead", "panel-regions"); (RAW/"regions-2.json").write_text(json.dumps(regs, indent=1))
 names = [r["id"] for r in regs["regions"] if rid in r["id"]]
 check("click on the card expands it (action buttons appear, QML default policy)", any("action-" in n for n in names), str(sorted(n.split('.')[-1] for n in names)))
 grim("2-expanded.png")
@@ -190,6 +197,18 @@ x, y = center("notice"); pcmd(f"move {x} {y} {W} {H}"); pcmd("context"); time.sl
 st = state()
 check("right-click dismisses: no longer active, retained in history (not forgotten)", target not in st["active"]["items"] and target in st["history"]["items"] or (target not in st["active"]["items"] and st.get("history_count", 0) >= 1), f"hist={list(st['history']['order'])[:3]} count={st.get('history_count')}")
 
+# ---- 3b. another view displaces the stack: popups are suppressed (provider-only), never replayed
+notify("Before calendar", actions=("default", "Open"), timeout=60000)
+wait(lambda: state()["popup_order"], 5, "popup before calendar"); time.sleep(.8)
+check("popups are shown as the ambient 'notices' view", panel_state().get("view") == "notices")
+ipc("bead.panel", "open", "calendar")
+st = wait(lambda: (lambda s: s if s["inhibited"] else None)(state()), 5, "inhibited by the other view")
+check("opening another view suppresses popups (set_inhibited from the shell)", st["popup_order"] == [] and panel_state().get("view") == "calendar", str(panel_state())[:120])
+ipc("bead.panel", "close")
+st = wait(lambda: (lambda s: s if not s["inhibited"] else None)(state()), 5, "inhibition lifted")
+time.sleep(.5)
+check("closing it lifts suppression without replaying popups", st["popup_order"] == [] and state()["popup_order"] == [])
+
 # ---- 4. DND: popups hide, no replay when it ends
 nid3 = notify("Before DND", actions=("default", "Open"), timeout=60000)
 wait(lambda: state()["popup_order"], 5, "popup before dnd")
@@ -207,11 +226,13 @@ grim("4-dnd-off.png")
 # ---- 5. shell restart: no replay, daemon history intact; daemon kept running
 os.killpg(shell.pid, signal.SIGTERM); shell.wait(timeout=10)
 time.sleep(.5)
-shell2 = spawn([str(BIN/"nacre-shell"), "--notification-daemon", SOCK, "--notification-provider", "--renderer", "cpu", "--command-socket", CMD + "2", "--namespace", "bead-b0020", "--palette", str(SRC/"shell/palette.json")], "shell2.log", dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), cwd=str(SRC))
+shell2 = spawn(shell_cmd(SOCK, CMD + "2", trace=False), "shell2.log", dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), cwd=str(SRC))
 time.sleep(2)
 st = state(); check("shell restart: daemon state intact, no popup replay", st["popup_order"] == [] and st["history_count"] >= 1, f"count={st['history_count']}")
 n5 = notify("After restart", actions=("default", "Open"), timeout=60000); time.sleep(1.2)
-check("consumer shows new notices after restart", "bead-b0020" in layers() or "notifications" in layers().lower())
+ipc2 = lambda *a: subprocess.run([str(SHELL), "ipc", "--socket", CMD + "2", "--json", *a], env=dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), capture_output=True, text=True, timeout=5)
+ps2 = json.loads(ipc2("bead.panel", "state").stdout or "{}").get("result", {})
+check("consumer shows new notices after restart", ps2.get("view") == "notices" and ps2.get("target_open") is True, str(ps2)[:160])
 grim("5-after-restart.png")
 
 # ---- 6. daemon loss: consumer goes stale, no local owner fallback
@@ -228,17 +249,30 @@ os.killpg(shell2.pid, signal.SIGTERM); shell2.wait(timeout=10)
 import threading
 OSOCK = str(RUN/"o.sock")
 class Fake:
+    """Daemon stand-in that serves only the `osd` topic. The shell opens several links
+    (UI provider, wallpaper); every one gets the welcome, and the one that subscribes to
+    `osd` receives the published state."""
     def __init__(self, current=None):
-        self.srv = socket.socket(socket.AF_UNIX); self.srv.bind(OSOCK); os.chmod(OSOCK, 0o600); self.srv.listen(1)
+        self.srv = socket.socket(socket.AF_UNIX); self.srv.bind(OSOCK); os.chmod(OSOCK, 0o600); self.srv.listen(8)
         self.seq = 0; self.conn = None; self.current = current; self.ready = threading.Event()
-        threading.Thread(target=self.serve, daemon=True).start()
-    def serve(self):
-        self.conn, _ = self.srv.accept(); f = self.conn.makefile("rb")
-        hello = json.loads(f.readline())
-        w = json.loads(open(SRC/"crates/nacre-shell/tests/protocol-v1/notifications-loss-restart.jsonl").readline())
-        w["topics"] = {"osd": 1}; w["methods"] = {}
-        self.send(w)
-        sub = json.loads(f.readline()); self.publish(self.current); self.ready.set()
+        threading.Thread(target=self.accept, daemon=True).start()
+    def accept(self):
+        while True:
+            try: c, _ = self.srv.accept()
+            except OSError: return
+            threading.Thread(target=self.serve, args=(c,), daemon=True).start()
+    def serve(self, c):
+        f = c.makefile("rb")
+        try:
+            json.loads(f.readline())
+            w = json.loads(open(SRC/"crates/nacre-shell/tests/protocol-v1/notifications-loss-restart.jsonl").readline())
+            w["topics"] = {"osd": 1}; w["methods"] = {}
+            c.sendall((json.dumps(w) + "\n").encode())
+            for line in f:
+                frame = json.loads(line)
+                if frame.get("t") == "sub" and "osd" in frame.get("topics", []):
+                    self.conn = c; self.publish(self.current); self.ready.set()
+        except (OSError, ValueError): pass
     def send(self, o): self.conn.sendall((json.dumps(o) + "\n").encode())
     def publish(self, current):
         self.seq += 1; self.current = current
@@ -254,12 +288,15 @@ def ui_osd(text):
     last = None
     for line in text.splitlines():
         if line.startswith("UI_STATE "):
-            try: last = json.loads(line[9:])
+            try:
+                state_now = json.loads(line[9:])
+                if "osd.label" in state_now: last = state_now
             except ValueError: pass
     return last
 fake = Fake(item(1, "volume", "perceptual", 0.3))
-shell3 = spawn([str(BIN/"nacre-shell"), "--notification-daemon", OSOCK, "--renderer", "cpu", "--command-socket", CMD + "3", "--trace-state", "--namespace", "bead-b0020-osd", "--palette", str(SRC/"shell/palette.json")], "shell3.log", dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), cwd=str(SRC))
-fake.ready.wait(10); time.sleep(1.2)
+shell3 = spawn(shell_cmd(OSOCK, CMD + "3"), "shell3.log", dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), cwd=str(SRC))
+wait(lambda: "START pid" in (RAW/"shell3.log").read_text(errors="replace"), 30, "shell3 runtime start")
+wait(fake.ready.is_set, 15, "shell3 subscribed to the fake osd topic"); time.sleep(1.2)
 def pixel(x, y):
     out = subprocess.run(["grim", "-g", f"{x},{y} 1x1", "-t", "ppm", "-"], env=env, capture_output=True, timeout=10).stdout
     return tuple(out[-3:])

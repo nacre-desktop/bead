@@ -20,6 +20,8 @@ pub(super) struct App {
     pub(super) panel_close_epoch: u64,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
+    /// The shown view was offered by a service (see `UiEvent::CompanionOffer`).
+    pub(super) panel_ambient: bool,
     pub(super) panel_hovered: Option<String>,
     pub(super) panel_output: Option<wl_output::WlOutput>,
     pub(super) processing_panel: bool,
@@ -181,6 +183,7 @@ pub fn run_runtime(
         panel_close_epoch: 0,
         panel_reload_pending: false,
         panel_target: false,
+        panel_ambient: false,
         panel_hovered: None,
         panel_output: None,
         processing_panel: false,

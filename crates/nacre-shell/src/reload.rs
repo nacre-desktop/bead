@@ -76,6 +76,9 @@ pub struct Runtime {
     trace: bool,
     notifications: Option<std::sync::Arc<dyn crate::notifications::Notices>>,
     notification_subscription: Option<crate::notifications::Handle>,
+    /// Bar sessions of the main shell: drive the transient `notices`/`osd` views.
+    notice_host: Option<std::sync::Arc<dyn crate::notifications::Notices>>,
+    notice_drive: Option<crate::notifications::Handle>,
     menu_item: String,
     tray_anchor: Option<f32>,
     tray_close: bool,
@@ -286,6 +289,8 @@ impl Runtime {
             trace: false,
             notifications: None,
             notification_subscription: None,
+            notice_host: None,
+            notice_drive: None,
             menu_item: String::new(),
             tray_anchor: None,
             tray_close: false,
@@ -960,6 +965,21 @@ impl Runtime {
         self.notifications = Some(service);
         Ok(self)
     }
+    /// A bar session of the main shell: offers the daemon notice/OSD panel views and
+    /// answers `bead.osd`/`notifs` commands. It shows no notice content itself.
+    pub fn with_notice_host(
+        mut self,
+        service: std::sync::Arc<dyn crate::notifications::Notices>,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.actions
+            .register("notifications.feedback", "notifications")?;
+        self.actions.grant("notifications");
+        if let Some(brightness) = &mut self.brightness {
+            brightness.with_local(service.clone());
+        }
+        self.notice_host = Some(service);
+        Ok(self)
+    }
     pub fn notification_owner(&self) -> Option<std::sync::Arc<dyn crate::notifications::Notices>> {
         self.notifications.clone()
     }
@@ -1506,6 +1526,9 @@ impl SceneSource for Runtime {
         if let Some(owner) = &self.notifications {
             self.notification_subscription =
                 Some(owner.subscribe(wakeup.clone(), self.notification_primary));
+        }
+        if let Some(host) = &self.notice_host {
+            self.notice_drive = Some(host.drive(wakeup.clone()));
         }
         if let Some(desktop) = &self.desktop {
             let wakeup = wakeup.clone();
@@ -2178,6 +2201,7 @@ impl SceneSource for Runtime {
             }
             UiEvent::CompanionVisibility(_)
             | UiEvent::CompanionSelect { .. }
+            | UiEvent::CompanionOffer { .. }
             | UiEvent::ShellHidden(_)
             | UiEvent::ControlChanged => {
                 return Err("companion visibility reached script".into());
@@ -2223,6 +2247,7 @@ impl SceneSource for Runtime {
                             .and_then(|_| {
                                 self.notifications
                                     .as_ref()
+                                    .or(self.notice_host.as_ref())
                                     .ok_or("notification server unavailable")
                                     .and_then(|owner| owner.feedback(&call.args))
                             }) {
@@ -2232,6 +2257,7 @@ impl SceneSource for Runtime {
                         ("notifs", _) => match self
                             .notifications
                             .as_ref()
+                            .or(self.notice_host.as_ref())
                             .ok_or("notification server unavailable")
                             .and_then(|owner| owner.command(call))
                         {
@@ -2461,6 +2487,9 @@ impl SceneSource for Runtime {
                 self.publish_status_pill()?
             }
             UiEvent::PanelDismissed => {
+                if let Some(host) = &self.notice_host {
+                    host.panel_changed(None);
+                }
                 self.last_launch = None;
                 if self.status_pill_route.is_some() {
                     self.status_pill.escape();
@@ -2472,6 +2501,9 @@ impl SceneSource for Runtime {
                 }
             }
             UiEvent::PanelSelected(view) => {
+                if let Some(host) = &self.notice_host {
+                    host.panel_changed(Some(&view));
+                }
                 if self
                     .status_pill_route
                     .as_deref()

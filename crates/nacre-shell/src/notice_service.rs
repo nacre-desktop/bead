@@ -4,15 +4,18 @@
 //! the bus name, expiry, history and the DND setting; this side only projects
 //! snapshots, keeps local expansion/hover/OSD-hide state, and sends the published
 //! revision-checked methods. It never starts a bus owner or replays a mutation.
+//! B0030: it runs inside the main shell on its UI-provider daemon link. Idle it
+//! holds no surface; a bar session offers the transient `notices` and `osd` panel
+//! views, which never displace a view the user opened.
 use crate::{
     i18n::tr,
-    nacre_source::{CallGuard, CallTicket, CallWake, Client, Config},
+    nacre_source::{CallGuard, CallTicket, CallWake, Client},
     notifications::{Handle, Notices, Wakeup},
 };
 use bead::{
     core::{
         Value,
-        source::{Error, Snapshot, Source, Subscription},
+        source::{Snapshot, Source, Subscription},
     },
     wayland::UiEvent,
 };
@@ -46,10 +49,13 @@ const OSD_HIDE: Duration = Duration::from_millis(2000);
 const OSD_ARM: Duration = Duration::from_millis(400);
 const MAX_CALLS: usize = 16;
 
+/// Topics the shared daemon link must subscribe for this service.
+pub const TOPICS: [&str; 3] = ["notifications", "osd", "audio"];
+/// Panel views the service offers (see `UiEvent::CompanionOffer`).
+pub const VIEW_NOTICES: &str = "notices";
+pub const VIEW_OSD: &str = "osd";
+
 pub struct Options {
-    /// Register as the daemon's UI provider. Hover pause and panel/OSD suppression
-    /// are accepted only from that connection, and the daemon allows one provider.
-    pub provider: bool,
     /// QML `NacreNotifications.actionOnClick`: no published runtime source, so the
     /// frozen default (false) holds unless the launcher sets this flag.
     pub action_on_click: bool,
@@ -378,8 +384,13 @@ struct Inner {
     osd: Osd,
     message: String,
     calls: Vec<(String, CallTicket)>,
-    wakeups: BTreeMap<u64, (Wakeup, bool)>,
+    wakeups: BTreeMap<u64, Wakeup>,
+    /// Bar sessions offering the panel views; the lowest id leads.
+    drivers: BTreeMap<u64, Wakeup>,
     next: u64,
+    /// Another view (launcher, dashboard, popout) is shown: popups are suppressed.
+    other_panel: bool,
+    offered: Option<&'static str>,
     hover: Option<(String, u64)>,
     /// The daemon refused provider-only calls: this process is not the UI provider.
     denied: bool,
@@ -409,21 +420,53 @@ fn models(g: &Inner) -> BTreeMap<String, Value> {
     );
     out
 }
-/// Pushes the current models; wake-ups run outside the lock.
+fn popups_open(g: &Inner) -> bool {
+    g.live
+        && g.good.as_ref().is_some_and(|s| {
+            s.popup_order
+                .iter()
+                .flatten()
+                .any(|id| s.active.items.contains_key(id))
+        })
+}
+/// The transient view that should be up: the OSD, else the popup stack unless
+/// another view is shown (the daemon hides popups then, and never replays them).
+fn wanted(g: &Inner) -> Option<&'static str> {
+    if g.osd.shown.is_some() {
+        Some(VIEW_OSD)
+    } else if !g.other_panel && popups_open(g) {
+        Some(VIEW_NOTICES)
+    } else {
+        None
+    }
+}
+/// Pushes the current models and view offers; wake-ups run outside the lock.
 fn publish(shared: &Shared) {
-    let (values, osd_open, wakeups) = {
-        let g = shared.lock();
+    let (values, offer, wakeups, driver) = {
+        let mut g = shared.lock();
+        let want = wanted(&g);
+        let close = if want.is_none() {
+            g.offered.take()
+        } else {
+            None
+        };
+        g.offered = want.or(g.offered);
         (
             models(&g),
-            g.osd.shown.is_some(),
+            want.map(|v| (v, true)).or(close.map(|v| (v, false))),
             g.wakeups.values().cloned().collect::<Vec<_>>(),
+            g.drivers.values().next().cloned(),
         )
     };
-    for (wakeup, primary) in wakeups {
-        if primary {
-            wakeup(UiEvent::CompanionVisibility(osd_open));
-        }
+    for wakeup in wakeups {
         wakeup(UiEvent::Model(values.clone()));
+    }
+    if let (Some(driver), Some((view, open))) = (driver, offer) {
+        driver(UiEvent::CompanionOffer {
+            view: view.into(),
+            output: None,
+            open,
+        });
     }
 }
 
@@ -554,7 +597,7 @@ fn worker(shared: Arc<Shared>, client: Client) {
             return;
         }
         let now = Instant::now();
-        let want = g.osd.shown.is_some();
+        let want = g.osd.shown.is_some() || g.other_panel;
         if want != g.sent_inhibit && !g.denied && g.live {
             g.sent_inhibit = want;
             drop(g);
@@ -679,34 +722,17 @@ struct Lease(u64, Weak<Shared>);
 impl Drop for Lease {
     fn drop(&mut self) {
         if let Some(s) = self.1.upgrade() {
-            s.lock().wakeups.remove(&self.0);
+            let mut g = s.lock();
+            g.wakeups.remove(&self.0);
+            g.drivers.remove(&self.0);
         }
     }
 }
 
 impl Service {
-    pub fn start(socket: std::path::PathBuf, options: Options) -> Result<Arc<Self>, String> {
-        let mut config = Config::new(
-            socket,
-            vec!["notifications".into(), "osd".into(), "audio".into()],
-        );
-        config.client = "nacre-shell-notices".into();
-        if options.provider {
-            config.provider = Some((
-                "ui".into(),
-                BTreeMap::from([("ui.dispatch".into(), 1)]),
-                Arc::new(|_, _| {
-                    Box::pin(async {
-                        Err::<Json, Error>(Error::new(
-                            "unavailable",
-                            "Notification process has no UI routes",
-                            false,
-                        ))
-                    })
-                }),
-            ));
-        }
-        let client = Client::start(config).map_err(|e| e.message)?;
+    /// `client` is the shell's UI-provider daemon link, subscribed to [`TOPICS`].
+    /// Hover pause and suppression are accepted by the daemon only from that provider.
+    pub fn start(client: Client, options: Options) -> Result<Arc<Self>, String> {
         let shared = Arc::new(Shared {
             inner: Mutex::new(Inner::default()),
             wake: Condvar::new(),
@@ -739,10 +765,7 @@ impl Service {
             .stack_size(256 * 1024)
             .spawn(move || worker(state, link))
             .map_err(|e| e.to_string())?;
-        println!(
-            "NOTIFICATIONS_DAEMON consumer=true provider={}",
-            options.provider
-        );
+        println!("NOTIFICATIONS_DAEMON consumer=true in_process=true");
         Ok(Arc::new(Self {
             shared,
             client,
@@ -756,16 +779,39 @@ impl Service {
 }
 
 impl Notices for Service {
-    fn subscribe(&self, wakeup: Wakeup, primary: bool) -> Handle {
+    fn subscribe(&self, wakeup: Wakeup, _primary: bool) -> Handle {
         let id = {
             let mut g = self.shared.lock();
             g.next += 1;
             let id = g.next;
-            g.wakeups.insert(id, (wakeup, primary));
+            g.wakeups.insert(id, wakeup);
             id
         };
         publish(&self.shared);
         Box::new(Lease(id, Arc::downgrade(&self.shared)))
+    }
+    fn drive(&self, wakeup: Wakeup) -> Handle {
+        let id = {
+            let mut g = self.shared.lock();
+            g.next += 1;
+            let id = g.next;
+            g.drivers.insert(id, wakeup);
+            id
+        };
+        publish(&self.shared);
+        Box::new(Lease(id, Arc::downgrade(&self.shared)))
+    }
+    fn panel_changed(&self, view: Option<&str>) {
+        let other = view.is_some_and(|v| v != VIEW_NOTICES && v != VIEW_OSD);
+        {
+            let mut g = self.shared.lock();
+            if g.other_panel == other {
+                return;
+            }
+            g.other_panel = other;
+        }
+        self.shared.wake.notify_all();
+        publish(&self.shared);
     }
     fn hover(&self, key: &str, on: bool) {
         if key == "osd" {

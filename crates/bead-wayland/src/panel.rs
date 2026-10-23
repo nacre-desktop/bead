@@ -291,6 +291,9 @@ impl App {
         {
             return Err(format!("panel {name} is disabled"));
         }
+        if open {
+            self.panel_ambient = false;
+        }
         // IPC and keybindings use the same live trigger as pointer activation.
         // View names remain application-defined; no shell geometry lives here.
         let center = center.or_else(|| {
@@ -640,6 +643,7 @@ impl App {
             self.primary_idle(&output, true);
         }
         self.panel_target = false;
+        self.panel_ambient = false;
         self.panel_center = None;
         self.panel_epoch = self.panel_epoch.wrapping_add(1);
         drop(self.dismiss.take());
