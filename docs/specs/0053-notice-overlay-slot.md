@@ -72,4 +72,29 @@ both on one slot abstraction when a third companion slot is needed, not before.
 
 ## Evidence
 
-See STATUS.
+- Full `ci.yml` job replicated in `ubuntu:24.04` on dev-2 (rustc 1.99.0): fmt, clippy
+  `-D warnings`, boundary check, `cargo test --workspace` (35 suites, 0 failed incl. the new
+  fake-daemon test for the published focus), feature configurations, Luau schema, spike unit
+  tests, packaging, wallpaper smoke, services, cargo-deny: exit 0.
+- Nested smoke (desktop, private bus/labwc/niri, real `nacre-helper daemon
+  --notifications=daemon` from Nacre `299463d4`, `spikes/notice-daemon-smoke.py` against the main
+  shell): **37/37** (the 35 B0030 checks adapted to the overlay view, plus: a popup shows while
+  the launcher is open with the panel slot holding the launcher and no inhibition; a popout
+  suppresses popups and the overlay is released). Not covered nested: a second output (the nested
+  niri has one), so the focused-output choice is proven by the unit/fake-daemon tests only.
+- Relative memory gate (`spikes/b0030-memory.py`, `NOTICES_BOTH=1`): five alternating pairs, same
+  host, **CPU tiny-skia**, one nested output, `--bar --core-views --ui-provider --notices` in both
+  arms. Control = parent `06526ac` (popups in the panel slot), candidate = B0053. Medians of five
+  1 s samples, then over arms; swap 0 B and MemAvailable 12 GiB before and after (`free -h`
+  logged); DRM not measured.
+
+| Phase | Control Pss MiB | Candidate Pss MiB | Delta Pss | Delta anon | Delta file | Delta shmem | Gate (+0.5) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| idle | 33.19 | 33.12 | -0.07 | +0.02 | -0.09 | 0 | PASS |
+| one popup shown | 34.37 | 34.87 | +0.50 | +0.34 | -0.14 | +0.31 | cost while shown |
+| after close (10 s) | 32.55 | 32.39 | -0.16 | -0.06 | -0.10 | 0 | PASS |
+
+  A first candidate (overlay release without the primary-session idle hint a closing panel
+  sends) read +1.12 MiB after close, all file-backed (the control sheds 1 MiB of bar pages on
+  its first panel close); `release_overlay` now sends the same hint when no view of either slot
+  is up, which restores parity. The compositor-topic subscription adds no measurable idle cost.
