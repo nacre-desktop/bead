@@ -94,6 +94,15 @@ pub(super) struct App {
     pub(super) companion: Option<(Scene, Box<dyn Renderer>, RendererKind)>,
     pub(super) animations: bead_core::animation::Animations,
     pub(super) panel_animations: bead_core::animation::Animations,
+    /// Set while a pearl (or guide) is swapped in as the resident panel.
+    pub(super) pearl: Option<pearls::Info>,
+    pub(super) slots: Vec<pearls::Group>,
+    pub(super) pearl_seq: u32,
+    pub(super) epoch_seq: u64,
+    pub(super) gesture: Option<pearls::Gesture>,
+    pub(super) guide_ids: std::collections::BTreeMap<String, u32>,
+    pub(super) guide_last: std::collections::BTreeMap<String, std::sync::Arc<Guide>>,
+    pub(super) pending_pearls: Vec<bead_core::pearl::Entry>,
 }
 
 pub(super) struct OutputSession {
@@ -258,7 +267,16 @@ pub fn run_runtime(
         companion,
         animations: Default::default(),
         panel_animations: Default::default(),
+        pearl: None,
+        slots: Vec::new(),
+        pearl_seq: 0,
+        epoch_seq: 0,
+        gesture: None,
+        guide_ids: Default::default(),
+        guide_last: Default::default(),
+        pending_pearls: Vec::new(),
     };
+    app.load_pearls();
     if app.options.interactive {
         for seat in app.seat.seats() {
             app.clipboard.seat(&seat, &qh);
@@ -1471,6 +1489,7 @@ impl App {
             layer.set_keyboard_interactivity(
                 if !self.options.test_passive
                     && ((companion
+                        && self.pearl.is_none()
                         && self
                             .options
                             .panel_spec
@@ -1479,7 +1498,15 @@ impl App {
                         || (self.options.test_keyboard && !companion))
                 {
                     KeyboardInteractivity::Exclusive
-                } else if self.options.interactive && self.options.keyboard_focus && !companion {
+                } else if (self.options.interactive && self.options.keyboard_focus && !companion)
+                    || (companion
+                        && self.pearl.is_some()
+                        && self
+                            .options
+                            .panel_spec
+                            .as_ref()
+                            .is_some_and(|s| s.keyboard_focus))
+                {
                     KeyboardInteractivity::OnDemand
                 } else {
                     KeyboardInteractivity::None

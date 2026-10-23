@@ -41,6 +41,10 @@ impl App {
         Ok(())
     }
     pub(super) fn sync_decorations(&mut self, index: usize) -> Result<(), String> {
+        // A pearl is not part of the frame; the docked panel's tiles stay as they are.
+        if self.pearl.is_some() {
+            return Ok(());
+        }
         let surface = &self.surfaces[index];
         if surface.companion || !surface.configured {
             return Ok(());

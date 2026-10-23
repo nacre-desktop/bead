@@ -33,6 +33,9 @@ pub struct Runtime {
     output: Option<String>,
     pending: Option<Scene>,
     chrome: Option<crate::placement::Chrome>,
+    /// B0048: the pearl chrome while docked, the docked chrome while detached.
+    spare_chrome: Option<crate::placement::Chrome>,
+    detached: bool,
     launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
     launcher_subscription: Option<bead::core::source::Subscription>,
     calendar: Option<std::rc::Rc<crate::calendar::Calendar>>,
@@ -268,6 +271,8 @@ impl Runtime {
             output,
             pending: None,
             chrome: None,
+            spare_chrome: None,
+            detached: false,
             launcher: None,
             launcher_subscription: None,
             calendar: None,
@@ -1359,6 +1364,16 @@ impl Runtime {
         colors: &bead::render::Palette,
     ) -> Result<Self, Box<dyn Error>> {
         self.chrome = Some(crate::placement::Chrome::new(attachment, colors)?);
+        // Only panels that can float need the second look.
+        self.spare_chrome = match attachment {
+            crate::placement::Attachment::Attached(_)
+            | crate::placement::Attachment::Popout
+            | crate::placement::Attachment::ControlCenter => Some(crate::placement::Chrome::new(
+                crate::placement::Attachment::Pearl,
+                colors,
+            )?),
+            crate::placement::Attachment::Pearl => None,
+        };
         Ok(self)
     }
     pub fn with_view_edge(mut self, edge: &str) -> Result<Self, String> {
@@ -1732,6 +1747,15 @@ impl SceneSource for Runtime {
         self.session.watch(wakeup)
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        // A pearl's border lights up under the pointer; re-decorate only when that flips.
+        if self.detached
+            && let UiEvent::Hover { x, .. } = &event
+            && let Some(chrome) = &mut self.chrome
+            && chrome.engaged() != (*x >= 0.)
+        {
+            chrome.set_engaged(*x >= 0.);
+            event = UiEvent::Relayout;
+        }
         self.pending = None;
         if let UiEvent::Hover { x, y } = &event
             && let Some(owner) = &self.notifications
@@ -2675,6 +2699,17 @@ impl SceneSource for Runtime {
             }
             UiEvent::Reload => Some(self.session.reload()?),
             UiEvent::Relayout => self.session.relayout()?,
+            UiEvent::PanelDetached(detached) => {
+                if detached != self.detached && self.spare_chrome.is_some() {
+                    std::mem::swap(&mut self.chrome, &mut self.spare_chrome);
+                    self.detached = detached;
+                    if detached && let Some(chrome) = &mut self.chrome {
+                        chrome.set_engaged(false);
+                    }
+                }
+                self.session.relayout()?
+            }
+            UiEvent::PearlGuide(_) => return Err("guide event reached script".into()),
             UiEvent::Accessibility {
                 target,
                 action,

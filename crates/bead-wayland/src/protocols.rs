@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Compositor, presentation, seat, keyboard and IME protocol dispatch.
+// Handlers hand events for a detached pearl's surfaces to the same handler with that
+// pearl swapped in, so some parameters are used only by that recursive call.
+#![allow(clippy::only_used_in_recursion)]
 use super::*;
 impl CompositorHandler for App {
     fn scale_factor_changed(
         &mut self,
-        _: &Connection,
+        conn: &Connection,
         qh: &QueueHandle<Self>,
         surface: &wl_surface::WlSurface,
         scale: i32,
     ) {
+        if let Some(id) = self.slot_of_surface(surface) {
+            self.in_slot(id, |app| app.scale_factor_changed(conn, qh, surface, scale));
+            return;
+        }
         if self.window_surface() == Some(surface)
             && self.window.as_ref().is_some_and(|w| !w.has_fractional())
         {
@@ -60,11 +67,15 @@ impl CompositorHandler for App {
     }
     fn frame(
         &mut self,
-        _: &Connection,
+        conn: &Connection,
         qh: &QueueHandle<Self>,
         surface: &wl_surface::WlSurface,
-        _: u32,
+        time: u32,
     ) {
+        if let Some(id) = self.slot_of_surface(surface) {
+            self.in_slot(id, |app| app.frame(conn, qh, surface, time));
+            return;
+        }
         if let Some(i) = self
             .surfaces
             .iter()
@@ -134,12 +145,16 @@ impl CompositorHandler for App {
 impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
     fn event(
         state: &mut Self,
-        _: &WpFractionalScaleV1,
+        proxy: &WpFractionalScaleV1,
         event: wp_fractional_scale_v1::Event,
         surface: &wl_surface::WlSurface,
-        _: &Connection,
+        conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
+        if let Some(id) = state.slot_of_surface(surface) {
+            state.in_slot(id, |app| Self::event(app, proxy, event, surface, conn, qh));
+            return;
+        }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
             && state.window_surface() == Some(surface)
         {
@@ -238,12 +253,16 @@ impl App {
 impl Dispatch<WpPresentationFeedback, PresentationData> for App {
     fn event(
         state: &mut Self,
-        _: &WpPresentationFeedback,
+        proxy: &WpPresentationFeedback,
         event: wp_presentation_feedback::Event,
         data: &PresentationData,
-        _: &Connection,
-        _: &QueueHandle<Self>,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
     ) {
+        if let Some(id) = state.slot_of_surface(&data.surface) {
+            state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
+            return;
+        }
         if let Some(s) = state
             .surfaces
             .iter_mut()
@@ -313,6 +332,7 @@ impl OutputHandler for App {
     }
     fn new_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
         self.add_output(qh, output);
+        self.restore_pearls();
         self.sync_edges();
     }
     fn update_output(
@@ -322,6 +342,7 @@ impl OutputHandler for App {
         output: wl_output::WlOutput,
     ) {
         self.add_output(qh, output.clone());
+        self.restore_pearls();
         self.sync_edges();
         if self.options.primary_factory.is_some() {
             let id = self.output_id(&output);
@@ -374,6 +395,7 @@ impl OutputHandler for App {
         if self.panel_output.as_ref() == Some(&output) {
             self.release_panel();
         }
+        self.drop_slots_on(&output);
         self.surfaces.retain(|s| s.output != output);
         self.edge_output_removed(&output);
         let removed: Vec<String> = self
@@ -417,7 +439,11 @@ impl ShmHandler for App {
     }
 }
 impl LayerShellHandler for App {
-    fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface) {
+    fn closed(&mut self, conn: &Connection, qh: &QueueHandle<Self>, layer: &LayerSurface) {
+        if let Some(id) = self.slot_of_layer(layer) {
+            self.in_slot(id, |app| app.closed(conn, qh, layer));
+            return;
+        }
         if self.edge_closed(layer) {
             return;
         }
@@ -455,12 +481,16 @@ impl LayerShellHandler for App {
     }
     fn configure(
         &mut self,
-        _: &Connection,
+        conn: &Connection,
         qh: &QueueHandle<Self>,
         layer: &LayerSurface,
         config: LayerSurfaceConfigure,
-        _: u32,
+        serial: u32,
     ) {
+        if let Some(id) = self.slot_of_layer(layer) {
+            self.in_slot(id, |app| app.configure(conn, qh, layer, config, serial));
+            return;
+        }
         if self.edge_configure(layer, config.new_size) {
             return;
         }
@@ -741,207 +771,231 @@ impl PointerHandler for App {
         events: &[PointerEvent],
     ) {
         for event in events {
-            if self.window_surface() == Some(&event.surface) {
-                self.window_pointer(event);
-                continue;
-            }
-            if self
-                .dismiss
-                .as_ref()
-                .is_some_and(|d| d.layer.wl_surface() == &event.surface)
-            {
-                if matches!(event.kind, PointerEventKind::Press { button: 0x110, .. }) {
-                    if self.options.trace_state {
-                        println!("DISMISS_INPUT press=true");
-                    }
-                    self.close_panel();
-                }
-                continue;
-            }
-            if self.edge_pointer(event) {
-                continue;
-            }
-            let Some(bar) = self
-                .surfaces
-                .iter()
-                .position(|s| s.layer.wl_surface() == &event.surface)
-            else {
-                continue;
-            };
-            if !self.surfaces[bar].companion {
-                self.edge_bar_pointer(bar, event);
-            }
-            let surface = &self.surfaces[bar];
-            let panel = surface.companion;
-            let surface_size = (surface.width, surface.height);
-            let offset = surface.offset;
-            let configured = surface.configured;
-            let surface_output_name = surface.output_name.clone();
-            let hovered_output = self.output.info(&surface.output).and_then(|i| i.name);
-            self.active_input_output = Some(surface_output_name.clone());
-            if panel {
+            // B0048: a held Super+drag belongs to the gesture, wherever the panel is now.
+            if self.gesture_owns(&event.surface) {
                 match event.kind {
-                    PointerEventKind::Enter { .. } => {
-                        self.edge_panel_hover(true);
-                        self.view_event(false, UiEvent::PointerRegion(true))
-                    }
-                    PointerEventKind::Leave { .. } => {
-                        self.edge_panel_hover(false);
-                        self.view_event(false, UiEvent::PointerRegion(false))
-                    }
+                    PointerEventKind::Motion { .. } => self.gesture_motion(event.position),
+                    PointerEventKind::Release { button: 0x110, .. } => self.gesture_release(),
                     _ => {}
                 }
+                continue;
             }
-            if !panel {
-                let source = if self.options.primary_factory.is_some() {
-                    self.output_sessions
-                        .get(&surface_output_name)
-                        .and_then(|s| s.source.as_ref())
-                } else {
-                    self.runtime.as_ref()
-                };
-                let hovered = if matches!(event.kind, PointerEventKind::Leave { .. }) {
-                    None
-                } else {
-                    source.and_then(|r| {
-                        r.input_regions().into_iter().find(|r| {
-                            r.prepare_panel
-                                && event.position.0 >= f64::from(r.rect.x)
-                                && event.position.1 >= f64::from(r.rect.y)
-                                && event.position.0 < f64::from(r.rect.x + r.rect.w)
-                                && event.position.1 < f64::from(r.rect.y + r.rect.h)
-                                && r.clip.is_none_or(|c| {
-                                    event.position.0 >= f64::from(c.x)
-                                        && event.position.1 >= f64::from(c.y)
-                                        && event.position.0 < f64::from(c.x + c.w)
-                                        && event.position.1 < f64::from(c.y + c.h)
-                                })
-                        })
-                    })
-                };
-                let target = hovered
-                    .as_ref()
-                    .map(|r| r.prepare_view.clone().unwrap_or_default());
-                let entered = target.is_some() && target != self.panel_hovered;
-                self.panel_hovered = target;
-                if entered && let Some(region) = hovered {
-                    if let Some(name) = region.prepare_view.as_deref() {
-                        self.prepare_named_panel(
-                            Some(name),
-                            hovered_output.as_deref(),
-                            region.prepare_center,
-                        );
-                    } else {
-                        self.prepare_panel(hovered_output.as_deref());
-                    }
-                }
-            }
-            // Some compositors route all pointer events to an exclusive keyboard
-            // layer, even outside its bounds. Treat that path like the backdrop.
-            if panel
-                && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
-                && (event.position.0 < 0.
-                    || event.position.1 < 0.
-                    || event.position.0 >= surface_size.0 as f64
-                    || event.position.1 >= surface_size.1 as f64)
+            if matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+                && self.gesture_press(&event.surface, event.position)
             {
                 self.pointer_pressed = false;
+                continue;
+            }
+            if let Some(id) = self.slot_of_surface(&event.surface) {
+                self.in_slot(id, |app| app.pointer_event(event));
+            } else {
+                self.pointer_event(event);
+            }
+        }
+    }
+}
+impl App {
+    fn pointer_event(&mut self, event: &PointerEvent) {
+        if self.window_surface() == Some(&event.surface) {
+            self.window_pointer(event);
+            return;
+        }
+        if self
+            .dismiss
+            .as_ref()
+            .is_some_and(|d| d.layer.wl_surface() == &event.surface)
+        {
+            if matches!(event.kind, PointerEventKind::Press { button: 0x110, .. }) {
+                if self.options.trace_state {
+                    println!("DISMISS_INPUT press=true");
+                }
                 self.close_panel();
-                continue;
             }
-            let x = event.position.0 as f32 - offset.0;
-            let y = event.position.1 as f32 - offset.1;
-            if !configured {
-                continue;
-            }
-            if panel
-                && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
-                && self
-                    .panel_runtime
-                    .as_ref()
-                    .is_some_and(|r| r.dismiss_at(x, y))
-            {
-                self.close_panel();
-                self.view_event(true, UiEvent::Click { x, y });
-                continue;
-            }
-            if let PointerEventKind::Enter { serial, .. } = event.kind {
-                self.cursor_enter_serial = serial;
-            }
-            if let Some(device) = &self.cursor_device
-                && self.cursor_enter_serial != 0
-            {
-                let output_name = self.active_input_output.as_deref();
-                let source = if panel {
-                    self.panel_runtime.as_ref()
-                } else if self.options.primary_factory.is_some() {
-                    output_name
-                        .and_then(|name| self.output_sessions.get(name))
-                        .and_then(|s| s.source.as_ref())
-                } else {
-                    self.runtime.as_ref()
-                };
-                let shape = match source.map(|r| r.pointer_cursor(x, y)) {
-                    Some("text") => wp_cursor_shape_device_v1::Shape::Text,
-                    Some("pointer") => wp_cursor_shape_device_v1::Shape::Pointer,
-                    _ => wp_cursor_shape_device_v1::Shape::Default,
-                };
-                device.set_shape(self.cursor_enter_serial, shape);
-            }
+            return;
+        }
+        if self.edge_pointer(event) {
+            return;
+        }
+        let Some(bar) = self
+            .surfaces
+            .iter()
+            .position(|s| s.layer.wl_surface() == &event.surface)
+        else {
+            return;
+        };
+        if !self.surfaces[bar].companion {
+            self.edge_bar_pointer(bar, event);
+        }
+        let surface = &self.surfaces[bar];
+        let panel = surface.companion;
+        let surface_size = (surface.width, surface.height);
+        let offset = surface.offset;
+        let configured = surface.configured;
+        let surface_output_name = surface.output_name.clone();
+        let hovered_output = self.output.info(&surface.output).and_then(|i| i.name);
+        self.active_input_output = Some(surface_output_name.clone());
+        if panel {
             match event.kind {
-                PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
-                    if self.pointer_pressed {
-                        self.view_event(panel, UiEvent::Drag { x, y });
-                    } else {
-                        self.view_event(panel, UiEvent::Hover { x, y });
-                    }
+                PointerEventKind::Enter { .. } => {
+                    self.edge_panel_hover(true);
+                    self.view_event(false, UiEvent::PointerRegion(true))
                 }
                 PointerEventKind::Leave { .. } => {
-                    self.pointer_pressed = false;
-                    self.view_event(panel, UiEvent::Hover { x: -1., y: -1. });
-                }
-                PointerEventKind::Press { button: 0x110, .. } => {
-                    self.pointer_pressed = true;
-                    self.view_event(panel, UiEvent::Click { x, y });
-                }
-                PointerEventKind::Release { button: 0x110, .. } => {
-                    self.pointer_pressed = false;
-                    self.view_event(panel, UiEvent::Release);
-                }
-                PointerEventKind::Press { button: 0x111, .. } => {
-                    self.view_event(panel, UiEvent::ContextMenu { x, y })
-                }
-                PointerEventKind::Press { button: 0x112, .. } => {
-                    self.view_event(panel, UiEvent::SecondaryClick { x, y })
-                }
-                PointerEventKind::Axis {
-                    vertical,
-                    horizontal,
-                    ..
-                } => {
-                    if vertical.absolute != 0. {
-                        self.view_event(
-                            panel,
-                            UiEvent::Scroll {
-                                x,
-                                y,
-                                delta: vertical.absolute,
-                            },
-                        );
-                    }
-                    if horizontal.absolute != 0. {
-                        self.view_event(
-                            panel,
-                            UiEvent::HorizontalScroll {
-                                x,
-                                y,
-                                delta: horizontal.absolute,
-                            },
-                        );
-                    }
+                    self.edge_panel_hover(false);
+                    self.view_event(false, UiEvent::PointerRegion(false))
                 }
                 _ => {}
             }
+        }
+        if !panel {
+            let source = if self.options.primary_factory.is_some() {
+                self.output_sessions
+                    .get(&surface_output_name)
+                    .and_then(|s| s.source.as_ref())
+            } else {
+                self.runtime.as_ref()
+            };
+            let hovered = if matches!(event.kind, PointerEventKind::Leave { .. }) {
+                None
+            } else {
+                source.and_then(|r| {
+                    r.input_regions().into_iter().find(|r| {
+                        r.prepare_panel
+                            && event.position.0 >= f64::from(r.rect.x)
+                            && event.position.1 >= f64::from(r.rect.y)
+                            && event.position.0 < f64::from(r.rect.x + r.rect.w)
+                            && event.position.1 < f64::from(r.rect.y + r.rect.h)
+                            && r.clip.is_none_or(|c| {
+                                event.position.0 >= f64::from(c.x)
+                                    && event.position.1 >= f64::from(c.y)
+                                    && event.position.0 < f64::from(c.x + c.w)
+                                    && event.position.1 < f64::from(c.y + c.h)
+                            })
+                    })
+                })
+            };
+            let target = hovered
+                .as_ref()
+                .map(|r| r.prepare_view.clone().unwrap_or_default());
+            let entered = target.is_some() && target != self.panel_hovered;
+            self.panel_hovered = target;
+            if entered && let Some(region) = hovered {
+                if let Some(name) = region.prepare_view.as_deref() {
+                    self.prepare_named_panel(
+                        Some(name),
+                        hovered_output.as_deref(),
+                        region.prepare_center,
+                    );
+                } else {
+                    self.prepare_panel(hovered_output.as_deref());
+                }
+            }
+        }
+        // Some compositors route all pointer events to an exclusive keyboard
+        // layer, even outside its bounds. Treat that path like the backdrop.
+        if panel
+            && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+            && (event.position.0 < 0.
+                || event.position.1 < 0.
+                || event.position.0 >= surface_size.0 as f64
+                || event.position.1 >= surface_size.1 as f64)
+        {
+            self.pointer_pressed = false;
+            self.close_panel();
+            return;
+        }
+        let x = event.position.0 as f32 - offset.0;
+        let y = event.position.1 as f32 - offset.1;
+        if !configured {
+            return;
+        }
+        if panel
+            && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+            && self
+                .panel_runtime
+                .as_ref()
+                .is_some_and(|r| r.dismiss_at(x, y))
+        {
+            self.close_panel();
+            self.view_event(true, UiEvent::Click { x, y });
+            return;
+        }
+        if let PointerEventKind::Enter { serial, .. } = event.kind {
+            self.cursor_enter_serial = serial;
+        }
+        if let Some(device) = &self.cursor_device
+            && self.cursor_enter_serial != 0
+        {
+            let output_name = self.active_input_output.as_deref();
+            let source = if panel {
+                self.panel_runtime.as_ref()
+            } else if self.options.primary_factory.is_some() {
+                output_name
+                    .and_then(|name| self.output_sessions.get(name))
+                    .and_then(|s| s.source.as_ref())
+            } else {
+                self.runtime.as_ref()
+            };
+            let shape = match source.map(|r| r.pointer_cursor(x, y)) {
+                Some("text") => wp_cursor_shape_device_v1::Shape::Text,
+                Some("pointer") => wp_cursor_shape_device_v1::Shape::Pointer,
+                _ => wp_cursor_shape_device_v1::Shape::Default,
+            };
+            device.set_shape(self.cursor_enter_serial, shape);
+        }
+        match event.kind {
+            PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
+                if self.pointer_pressed {
+                    self.view_event(panel, UiEvent::Drag { x, y });
+                } else {
+                    self.view_event(panel, UiEvent::Hover { x, y });
+                }
+            }
+            PointerEventKind::Leave { .. } => {
+                self.pointer_pressed = false;
+                self.view_event(panel, UiEvent::Hover { x: -1., y: -1. });
+            }
+            PointerEventKind::Press { button: 0x110, .. } => {
+                self.pointer_pressed = true;
+                self.view_event(panel, UiEvent::Click { x, y });
+            }
+            PointerEventKind::Release { button: 0x110, .. } => {
+                self.pointer_pressed = false;
+                self.view_event(panel, UiEvent::Release);
+            }
+            PointerEventKind::Press { button: 0x111, .. } => {
+                self.view_event(panel, UiEvent::ContextMenu { x, y })
+            }
+            PointerEventKind::Press { button: 0x112, .. } => {
+                self.view_event(panel, UiEvent::SecondaryClick { x, y })
+            }
+            PointerEventKind::Axis {
+                vertical,
+                horizontal,
+                ..
+            } => {
+                if vertical.absolute != 0. {
+                    self.view_event(
+                        panel,
+                        UiEvent::Scroll {
+                            x,
+                            y,
+                            delta: vertical.absolute,
+                        },
+                    );
+                }
+                if horizontal.absolute != 0. {
+                    self.view_event(
+                        panel,
+                        UiEvent::HorizontalScroll {
+                            x,
+                            y,
+                            delta: horizontal.absolute,
+                        },
+                    );
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -979,12 +1033,24 @@ impl KeyboardHandler for App {
     }
     fn press_key(
         &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        _: &wl_keyboard::WlKeyboard,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
+        keyboard: &wl_keyboard::WlKeyboard,
         serial: u32,
         event: KeyEvent,
     ) {
+        if let Some(id) = self
+            .keyboard_surface
+            .clone()
+            .and_then(|surface| self.slot_of_surface(&surface))
+        {
+            self.in_slot(id, |app| app.press_key(conn, qh, keyboard, serial, event));
+            return;
+        }
+        if self.pearl.is_some() && self.modifiers.ctrl && event.keysym == Keysym::w {
+            self.close_panel();
+            return;
+        }
         self.last_input_serial = serial;
         if bead_core::profile::enabled() {
             println!(
@@ -1025,7 +1091,7 @@ impl KeyboardHandler for App {
             let command = window::key_command(event.keysym, self.modifiers.ctrl);
             if let Some(command) = command {
                 if panel
-                    && (command == "escape"
+                    && ((command == "escape" && self.pearl.is_none())
                         || (command == "enter"
                             && self
                                 .panel_runtime
@@ -1145,12 +1211,16 @@ wayland_client::delegate_noop!(App:WpCursorShapeDeviceV1);
 impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for App {
     fn event(
         state: &mut Self,
-        _: &wayland_client::protocol::wl_callback::WlCallback,
+        proxy: &wayland_client::protocol::wl_callback::WlCallback,
         event: wayland_client::protocol::wl_callback::Event,
         data: &FrameData,
         conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
+        if let Some(id) = state.slot_of_surface(&data.surface) {
+            state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
+            return;
+        }
         if let wayland_client::protocol::wl_callback::Event::Done { callback_data } = event
             && let Some(surface) = state
                 .surfaces

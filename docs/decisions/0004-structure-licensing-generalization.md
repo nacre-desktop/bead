@@ -86,6 +86,11 @@ After Bead's core switch on Nacre, plan support for:
   `kit.PasswordField`, `kit.ConfirmButton`, and the `*.secret` store convention (never traced or saved).
   The Wi-Fi flow lives only in `nacre-shell/src/status_views/join.rs`.
 
+- B0048: `bead_core::pearl` (magnet/landing/place geometry, drag state machine, layout store) and
+  `bead_wayland::pearls` (detach/dock any panel session into a floating surface, guide slots). Edge, insets,
+  tunings and the allowed views come from the application; the film/landing/border art is Nacre-specific in
+  `nacre-shell/src/pearls.rs` and is not yet a replaceable kit component.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

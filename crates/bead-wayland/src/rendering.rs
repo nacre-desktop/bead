@@ -4,7 +4,7 @@ use super::*;
 
 /// Shadows reserve buffer space, but must not intercept adjacent controls.
 /// Retained layout bounds survive a shell replacing its background primitive.
-fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
+pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
     let body = scene
         .layers
         .iter()
@@ -505,6 +505,9 @@ impl App {
                 if s.keyboard_visible != Some(focus_visible) {
                     let interactivity = if !focus_visible {
                         KeyboardInteractivity::None
+                    } else if s.companion && self.pearl.is_some() {
+                        // A pearl takes focus when clicked, like any window.
+                        KeyboardInteractivity::OnDemand
                     } else if self.options.test_keyboard || s.companion {
                         KeyboardInteractivity::Exclusive
                     } else {

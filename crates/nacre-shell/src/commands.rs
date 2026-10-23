@@ -287,6 +287,9 @@ pub fn map(mut call: Call) -> Result<Call, Reply> {
         call.args.clear();
         return Ok(call);
     }
+    if call.target == "pearls" {
+        return map_pearls(call);
+    }
     let method = match (call.target.as_str(), call.method.as_str()) {
         ("nacre", "popout" | "controls")
             if call
@@ -308,6 +311,60 @@ pub fn map(mut call: Call) -> Result<Call, Reply> {
         call.method = method.into();
         call.args = vec![Value::String("sound".into())];
     }
+    Ok(call)
+}
+/// B0048: Nacre's `pearls` routes onto the panel layer. A QML pearl kind names the
+/// view that fills it; pearls are numbered, and `dock`/`close` take that number.
+fn map_pearls(mut call: Call) -> Result<Call, Reply> {
+    let id = call.id;
+    let (method, args) = match call.method.as_str() {
+        "detach" => ("detach", vec![]),
+        "state" => ("pearls", vec![]),
+        "open" => {
+            let kind = call.args[0].as_str().unwrap_or_default();
+            let view = match kind {
+                "launcher" => "launcher".to_owned(),
+                "ai" => "chat".to_owned(),
+                "dashboard" => format!(
+                    "dashboard-{}",
+                    crate::dashboard::Page::from_tab(0).map_or("today", |p| p.name())
+                ),
+                "media" => "dashboard-media".to_owned(),
+                _ => {
+                    return Err(Reply::error(
+                        id,
+                        "unavailable",
+                        "no panel for this pearl kind",
+                    ));
+                }
+            };
+            ("pearl-open", vec![Value::String(view)])
+        }
+        method @ ("dock" | "close") => {
+            let number = call.args[0].as_str().and_then(|s| s.parse::<u64>().ok());
+            let number = number.ok_or_else(|| {
+                Reply::error(id, "invalid-route", "a pearl is named by its number")
+            })?;
+            (
+                if method == "dock" {
+                    "dock"
+                } else {
+                    "pearl-close"
+                },
+                vec![Value::from(number)],
+            )
+        }
+        _ => {
+            return Err(Reply::error(
+                id,
+                "unavailable",
+                "the native gesture trace does not exist",
+            ));
+        }
+    };
+    call.target = "bead.panel".into();
+    call.method = method.into();
+    call.args = args;
     Ok(call)
 }
 #[cfg(test)]

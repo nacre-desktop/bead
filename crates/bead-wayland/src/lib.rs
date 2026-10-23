@@ -10,7 +10,9 @@ pub mod intent;
 mod panel;
 mod panels;
 pub use edges::{EdgeArt, EdgeChrome, LipState};
+mod pearls;
 pub use panels::Panels;
+pub use pearls::{Film, Guide, PearlOptions};
 mod policy;
 mod protocols;
 mod rendering;
@@ -151,6 +153,18 @@ pub trait ShellControl: Send + Sync {
     fn decoration_variant(&self) -> u64 {
         0
     }
+    /// Pearls (detached panels) at all.
+    fn pearls_enabled(&self) -> bool {
+        true
+    }
+    /// Whether this view may be detached into a pearl.
+    fn pearl_allowed(&self, _view: &str) -> bool {
+        true
+    }
+    /// Whether the pull-out gesture (Super + drag) is on.
+    fn pearl_drag(&self) -> bool {
+        true
+    }
     /// Bar thickness along its edge, also its exclusive zone; `None` keeps the default.
     fn bar_thickness(&self) -> Option<u32> {
         None
@@ -177,6 +191,10 @@ pub enum UiEvent {
     /// Event for the on-demand window session (epoch rejects a closed window's late wakeups).
     Window(u64, Box<UiEvent>),
     PanelVisibility(bool),
+    /// The panel was detached into a pearl (true) or docked back (false).
+    PanelDetached(bool),
+    /// Drag guidance for a guide view.
+    PearlGuide(std::sync::Arc<Guide>),
     CompanionVisibility(bool),
     /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.
     ShellHidden(Option<bool>),
@@ -465,6 +483,8 @@ pub struct Options {
     pub control: Option<std::sync::Arc<dyn ShellControl>>,
     /// On-demand xdg toplevel window (`bead.window open|close`).
     pub window: Option<WindowSpec>,
+    /// Detachable panels; none: panels cannot detach.
+    pub pearls: Option<PearlOptions>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -508,6 +528,7 @@ impl Default for Options {
             wallpaper: None,
             control: None,
             window: None,
+            pearls: None,
         }
     }
 }

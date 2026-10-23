@@ -22,14 +22,14 @@ pub(crate) fn meter() -> Meter {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts/IBMPlexSans.ttf"),
     ])
 }
-fn state(busy: bool, status: &str, question: Option<Json>) -> Json {
+pub(crate) fn state(busy: bool, status: &str, question: Option<Json>) -> Json {
     let mut s = json!({"defaultProvider":"claude","inWorkspace":false,"provider":"claude","account":"Default","title":"Fix the build","threadId":"t1","model":"","features":[],"composerKey":"k","busy":busy,"status":status,"error":""});
     if let Some(q) = question {
         s["question"] = q;
     }
     s
 }
-fn topic(messages: &[(&str, &str, &str)], st: Json) -> Json {
+pub(crate) fn topic(messages: &[(&str, &str, &str)], st: Json) -> Json {
     let msgs: serde_json::Map<String, Json> = messages
         .iter()
         .enumerate()
@@ -55,7 +55,7 @@ fn stores(pairs: &[(&str, Value)]) -> Stores {
         )
         .unwrap()
 }
-fn offline(data: Json) -> (Arc<FakeSource>, Chat) {
+pub(crate) fn offline(data: Json) -> (Arc<FakeSource>, Chat) {
     let source = Arc::new(FakeSource::new(data).unwrap());
     (source.clone(), Chat::new(None, source, meter()))
 }
@@ -652,7 +652,7 @@ async fn saved_chats_are_listed_only_when_published_and_resume_by_key() {
 
 // ---- goldens and the streaming frame budget ----------------------------------
 
-fn harness(out: BTreeMap<String, Value>, scale: f32) -> bead_test::Result<Harness> {
+pub(crate) fn harness(out: BTreeMap<String, Value>, scale: f32) -> bead_test::Result<Harness> {
     Harness::load(
         &root(),
         Path::new("chat/main.luau"),

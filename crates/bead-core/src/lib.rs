@@ -3,6 +3,7 @@
 pub mod animation;
 pub mod cache;
 pub mod capabilities;
+pub mod pearl;
 pub mod profile;
 pub mod recovery;
 pub mod source;

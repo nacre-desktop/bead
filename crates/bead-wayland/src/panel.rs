@@ -210,6 +210,35 @@ impl App {
                 self.close_panel();
                 Ok(serde_json::Value::Null)
             }
+            // B0048: detach the open docked panel; list, open, dock or close pearls.
+            "detach" => self
+                .resident_body_rect()
+                .ok_or_else(|| "no open docked panel".to_string())
+                .and_then(|rect| self.detach_resident(rect))
+                .map(|id| serde_json::json!(id)),
+            "pearls" => Ok(self.pearl_listing()),
+            "pearl-open" => {
+                let view = call.args.first().and_then(serde_json::Value::as_str);
+                let output = call.output.as_deref();
+                view.ok_or_else(|| "pearl view needs a string".to_string())
+                    .and_then(|view| self.open_pearl(view, output, None))
+                    .map(|id| serde_json::json!(id))
+            }
+            "dock" | "pearl-close" => {
+                let id = call
+                    .args
+                    .first()
+                    .and_then(serde_json::Value::as_u64)
+                    .map(|id| id as u32)
+                    .or_else(|| self.last_pearl());
+                match (id, call.method.as_str()) {
+                    (Some(id), "dock") => self
+                        .dock_pearl(id, call.output.as_deref())
+                        .map(|()| serde_json::Value::Null),
+                    (Some(id), _) => self.close_pearl(id).map(|()| serde_json::Value::Null),
+                    (None, _) => Err("no pearl".into()),
+                }
+            }
             _ => Err("unknown panel method".into()),
         };
         let reply = match result {
@@ -354,6 +383,12 @@ impl App {
         output: &wl_output::WlOutput,
         scene: &Scene,
     ) {
+        if let Some(info) = self.pearl.filter(|i| i.kind == pearls::Kind::Pearl) {
+            let (x, y) = self.pearl_margins(output, scene, info.rect);
+            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
+            layer.set_margin(y, 0, 0, x);
+            return;
+        }
         if let Some(position) = self
             .options
             .panel_spec
@@ -380,7 +415,7 @@ impl App {
         layer.set_anchor(anchor);
         layer.set_margin(top, right, bottom, left);
     }
-    fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
+    pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         let spec = self
             .options
             .panel_spec
@@ -407,13 +442,13 @@ impl App {
         }
         if self.panel_runtime.is_some() {
             if self.panel_output.as_ref() != Some(&output)
-                || (spec.keyboard_focus != self.dismiss.is_some())
+                || ((spec.keyboard_focus && self.pearl.is_none()) != self.dismiss.is_some())
                 || (open && !self.surfaces.iter().any(|surface| surface.companion))
             {
                 drop(self.dismiss.take());
                 self.surfaces.retain(|s| !s.companion);
                 self.panel_output = Some(output.clone());
-                if spec.keyboard_focus {
+                if spec.keyboard_focus && self.pearl.is_none() {
                     self.create_dismiss(&output)?;
                 }
                 let qh = self.qh.clone();
@@ -438,11 +473,11 @@ impl App {
                 bead_core::animation::Curve::EaseOut,
             );
         }
-        self.panel_epoch = self.panel_epoch.wrapping_add(1);
+        self.panel_epoch = self.next_epoch();
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_output = Some(output.clone());
-        if open && spec.keyboard_focus {
+        if open && spec.keyboard_focus && self.pearl.is_none() {
             self.create_dismiss(&output)?;
         }
         self.companion_policy = Default::default();
@@ -608,6 +643,11 @@ impl App {
         if self.panel_runtime.is_none() {
             return;
         }
+        // A pearl has no edge to slide back to: it simply goes.
+        if self.pearl.is_some() {
+            self.release_panel();
+            return;
+        }
         self.notify_panel_owner(UiEvent::PanelDismissed);
         self.panel_target = false;
         self.edges_panel_changed(true);
@@ -641,13 +681,15 @@ impl App {
         }
     }
     pub(super) fn release_panel(&mut self) {
-        if let Some(output) = self.panel_output.clone() {
+        if self.pearl.is_none()
+            && let Some(output) = self.panel_output.clone()
+        {
             self.primary_idle(&output, true);
         }
         self.panel_target = false;
         self.panel_ambient = false;
         self.panel_center = None;
-        self.panel_epoch = self.panel_epoch.wrapping_add(1);
+        self.panel_epoch = self.next_epoch();
         drop(self.dismiss.take());
         drop(self.panel_runtime.take());
         drop(self.companion.take());

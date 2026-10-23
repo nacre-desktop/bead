@@ -64,6 +64,11 @@ pub struct Prefs {
     /// `launcher-layout` `order` / `hidden` category ids (strings only, bounded).
     pub rail_order: Vec<String>,
     pub rail_hidden: Vec<String>,
+    /// B0048: `detachablePanels` / `dragPanels` (`!== false`) and `pearlPanels`, the
+    /// view names that may detach (a trailing `*` matches a prefix).
+    pub detachable_panels: bool,
+    pub drag_panels: bool,
+    pub pearl_views: Vec<String>,
 }
 const MAX_LIST: usize = 32;
 fn strings(value: Option<&Json>, keep_empty: bool) -> Vec<String> {
@@ -182,6 +187,11 @@ impl Prefs {
             window_hints: on("workspaceWindowHints"),
             rail_order: strings(layout.get("order"), false),
             rail_hidden: strings(layout.get("hidden"), false),
+            detachable_panels: on("detachablePanels"),
+            drag_panels: on("dragPanels"),
+            pearl_views: Some(strings(desktop.get("pearlPanels"), false))
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| crate::pearls::Policy::default().views),
         }
     }
     /// The frame the settings describe (`NacreFrame.qml`).

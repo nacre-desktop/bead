@@ -13,6 +13,8 @@ pub enum Attachment {
     /// Compact Nacre control panel: joins the top frame at the usable top-right.
     ControlCenter,
     Popout,
+    /// B0048: detached from every edge, a free-floating body with its own border.
+    Pearl,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -119,6 +121,11 @@ pub fn body(scene: &Scene) -> Rect {
                 Some(*rect)
             }
             bead::render::Primitive::Image { rect, path, .. }
+                if path.to_string_lossy().starts_with("@pearl-body-") =>
+            {
+                Some(*rect)
+            }
+            bead::render::Primitive::Image { rect, path, .. }
                 if path.to_string_lossy().starts_with("@joined-frame-") =>
             {
                 let top = if path.to_string_lossy().starts_with("@joined-frame-32-") {
@@ -162,10 +169,14 @@ pub struct Chrome {
     fill: [u8; 4],
     primary: [u8; 4],
     secondary: [u8; 4],
+    ink: Option<crate::pearls::Ink>,
 }
 impl Chrome {
     pub fn set_engaged(&mut self, engaged: bool) {
         self.engaged = engaged;
+    }
+    pub fn engaged(&self) -> bool {
+        self.engaged
     }
     pub fn new(
         attachment: Attachment,
@@ -184,6 +195,9 @@ impl Chrome {
             fill: colors.get("surface")?,
             primary: colors.get("primary")?,
             secondary: colors.get("secondary")?,
+            ink: matches!(attachment, Attachment::Pearl)
+                .then(|| crate::pearls::Ink::new(colors))
+                .transpose()?,
         })
     }
     fn svg(
@@ -312,6 +326,46 @@ impl Chrome {
             })
             .collect()
     }
+    /// A pearl keeps its shadow and gets its body redrawn with the pearl border.
+    fn decorate_pearl(&self, scene: &mut Scene) -> Result<(), Box<dyn std::error::Error>> {
+        use bead::render::Primitive;
+        use std::hash::{Hash, Hasher};
+        let ink = self.ink.ok_or("pearl chrome without ink")?;
+        let body = body(scene);
+        let svg = crate::pearls::body_svg(body.w, body.h, &ink, self.engaged);
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        svg.hash(&mut hash);
+        let path = std::path::PathBuf::from(format!("@pearl-body-{:x}.svg", hash.finish()));
+        scene
+            .asset_data
+            .retain(|path, _| !path.to_string_lossy().starts_with("@pearl-body-"));
+        scene
+            .asset_data
+            .insert(path.clone(), Arc::from(svg.into_bytes()));
+        let mut replaced = false;
+        for primitive in &mut scene.primitives {
+            let root = match primitive {
+                Primitive::Rounded { rect, .. } => {
+                    rect.w == body.w && rect.h == body.h && rect.x == body.x && rect.y == body.y
+                }
+                Primitive::Image { path, .. } => path.to_string_lossy().starts_with("@pearl-body-"),
+                _ => false,
+            };
+            if !replaced && root {
+                *primitive = Primitive::Image {
+                    blur: 0.,
+                    rect: body,
+                    path: path.clone(),
+                };
+                replaced = true;
+            }
+        }
+        if !replaced {
+            return Err("Panel root background missing".into());
+        }
+        scene.prepared.clear();
+        Ok(())
+    }
     pub fn decorate(&self, scene: &mut Scene) -> Result<(), Box<dyn std::error::Error>> {
         self.decorate_with(Frame::current(), scene)
     }
@@ -323,6 +377,9 @@ impl Chrome {
     ) -> Result<(), Box<dyn std::error::Error>> {
         use bead::render::Primitive;
         use std::hash::{Hash, Hasher};
+        if matches!(self.attachment, Attachment::Pearl) {
+            return self.decorate_pearl(scene);
+        }
         let body = body(scene);
         let output = (self.output.0 as f32, self.output.1 as f32);
         let top_inset = if matches!(
@@ -442,6 +499,7 @@ impl Frame {
                 let (x, _) = attached(Edge::Right, viewport, size, 0.);
                 (x, 0.)
             }
+            Attachment::Pearl => (0., 0.),
             Attachment::Popout => (
                 popout(
                     self.left,

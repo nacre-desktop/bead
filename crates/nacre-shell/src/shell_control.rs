@@ -31,6 +31,9 @@ pub struct Gate {
     controls: AtomicBool,
     sheen: AtomicBool,
     ai: AtomicBool,
+    pearls: AtomicBool,
+    pearl_drag: AtomicBool,
+    pearl_views: Mutex<crate::pearls::Policy>,
     variant: AtomicU64,
     frame: Mutex<FrameState>,
     watchers: Mutex<Vec<Box<dyn Fn() + Send + Sync>>>,
@@ -43,6 +46,9 @@ impl Gate {
             controls: AtomicBool::new(true),
             sheen: AtomicBool::new(true),
             ai: AtomicBool::new(true),
+            pearls: AtomicBool::new(true),
+            pearl_drag: AtomicBool::new(true),
+            pearl_views: Mutex::new(Default::default()),
             variant: AtomicU64::new(0),
             frame: Mutex::new(FrameState {
                 ai: true,
@@ -72,6 +78,13 @@ impl Gate {
             changed |= cell.swap(value, SeqCst) != value;
         }
         changed |= self.ai.swap(p.ai_sidebar_enabled, SeqCst) != p.ai_sidebar_enabled;
+        self.pearls.store(p.detachable_panels, SeqCst);
+        self.pearl_drag.store(p.drag_panels, SeqCst);
+        *self.pearl_views.lock().unwrap_or_else(|p| p.into_inner()) = crate::pearls::Policy {
+            enabled: p.detachable_panels,
+            drag: p.drag_panels,
+            views: p.pearl_views.clone(),
+        };
         let settings = p.frame_settings();
         let frame_changed = {
             let mut frame = self.frame_lock();
@@ -186,6 +199,18 @@ impl ShellControl for Gate {
             hover_delay_ms: frame.delay,
             click_to_open: frame.click,
         }
+    }
+    fn pearls_enabled(&self) -> bool {
+        self.pearls.load(SeqCst)
+    }
+    fn pearl_drag(&self) -> bool {
+        self.pearl_drag.load(SeqCst)
+    }
+    fn pearl_allowed(&self, view: &str) -> bool {
+        self.pearl_views
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .allows(view)
     }
     fn edge_hover_allowed(&self, open_panel: Option<&str>) -> bool {
         open_panel.is_none_or(|open| {

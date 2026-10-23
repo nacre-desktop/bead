@@ -22,6 +22,7 @@ mod nacre_source;
 mod notice_service;
 mod notice_views;
 mod notifications;
+mod pearls;
 mod placement;
 mod player_art;
 mod popouts;
@@ -830,6 +831,13 @@ fn start(
             frame_config::load(Path::new("shell")),
             views.keys().cloned(),
         );
+        // B0048: detachable panels, remembered beside the other durable panel state.
+        views.insert(pearls::GUIDE_VIEW.into(), pearls::guide_spec(&colors)?);
+        options.pearls = Some(pearls::options(
+            state::File::path()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("pearls.json"))),
+        ));
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
         options.window = Some(settings::window_spec(
             std::path::PathBuf::from("shell"),

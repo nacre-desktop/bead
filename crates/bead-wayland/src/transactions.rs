@@ -241,6 +241,11 @@ impl App {
             return;
         }
         if let UiEvent::Panel(epoch, event) = event {
+            if epoch != self.panel_epoch || self.panel_runtime.is_none() {
+                // A detached pearl's worker keeps its own epoch.
+                self.with_epoch(epoch, |app| app.ui(UiEvent::Panel(epoch, event)));
+                return;
+            }
             if epoch == self.panel_epoch && self.panel_runtime.is_some() {
                 // A service-backed view can retire itself when its item vanishes.
                 // The epoch prevents an old worker from closing its replacement.
@@ -254,10 +259,10 @@ impl App {
                         if let Err(error) = self.loop_handle.insert_source(
                             Timer::from_duration(Duration::from_millis(50)),
                             move |_, _, app| {
-                                if app.panel_epoch == epoch && app.panel_runtime.is_some() {
+                                app.with_epoch(epoch, |app| {
                                     app.panel_reload_pending = false;
                                     app.panel_ui(UiEvent::Reload);
-                                }
+                                });
                                 TimeoutAction::Drop
                             },
                         ) {
