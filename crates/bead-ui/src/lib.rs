@@ -7,6 +7,7 @@ pub mod i18n;
 pub mod input;
 mod interaction;
 pub mod layout;
+pub mod markdown;
 mod materialized;
 pub mod recovery;
 pub mod schema;
@@ -14,6 +15,7 @@ pub mod script;
 mod session;
 pub mod status_pill;
 pub mod text_style;
+pub mod transcript;
 mod watcher;
 use bead_core::{Stores, Value};
 use bead_render::{Palette, Primitive, Rect, Scene};
@@ -72,6 +74,8 @@ pub struct Node {
     pub scroll_store: Option<String>,
     #[serde(default)]
     pub focusable: bool,
+    #[serde(default)]
+    pub multiline: bool,
     #[serde(default)]
     pub drag: bool,
     #[serde(skip)]

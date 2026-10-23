@@ -128,6 +128,7 @@ pub const PROPERTIES: &[&str] = &[
     "bottom",
     "hover_fill",
     "selected_fill",
+    "multiline",
 ];
 pub fn allowed_property(name: &str) -> bool {
     PROPERTIES.contains(&name)
@@ -144,6 +145,8 @@ pub struct ViewSpec {
     pub action: Option<String>,
     pub argument: Option<Value>,
     pub input: Option<String>,
+    /// TextInput accepts newlines (Shift+Enter) and wraps at its width.
+    pub multiline: bool,
     pub scroll: Option<String>,
     pub fill: Option<Json>,
     pub color: Option<Json>,
@@ -507,6 +510,7 @@ impl ViewSpec {
                 action: action.as_ref().map(|a| a.0.clone()),
                 argument: action.and_then(|a| a.1),
                 input,
+                multiline: boolean(p, "multiline", false, source)?,
                 scroll,
                 fill: p.get("fill").cloned(),
                 color: p.get("color").cloned(),
@@ -898,6 +902,7 @@ pub fn layout(
                 action_arg: view.argument.clone(),
                 scroll_store: inherited_scroll.map(str::to_owned),
                 focusable: view.action.is_some() || view.input.is_some(),
+                multiline: view.multiline && view.input.is_some(),
                 drag: view.drag,
                 clip,
                 label: if !view.aria_label.is_empty() {

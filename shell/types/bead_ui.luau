@@ -56,6 +56,7 @@ export type Props = {
     bottom:any?,
     hover_fill:any?,
     selected_fill:any?,
+    multiline:any?,
 }
 export type SDK = {
     Panel:(Props)->Node,

@@ -1178,3 +1178,47 @@ return ui.Panel{id="panel",width=400,height=240,padding=12,ui.Column{gap=8,
     s.commit(scene);
     assert_eq!(texts(&s)[0], "Hello Ada");
 }
+#[test]
+fn multiline_input_breaks_lines_moves_vertically_and_draws_a_wrapped_caret() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=300,height=200,padding=0,
+ ui.TextInput{id="box",multiline=true,text=ui.bind("query"),width=280,height=120}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let scene = s.focus_id("panel.box").unwrap().unwrap();
+    s.commit(scene);
+    // A single-line input ignores the line-break request; this one honours it.
+    assert!(s.focused_multiline());
+    let scene = s.key("ab", false).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.input_newline().unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.key("cd", false).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("query"), Some(&Value::Text("ab\ncd".into())));
+    // Up moves to the first line: typing there lands before the break.
+    let scene = s.input_vertical(true, false).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.key("X", false).unwrap().unwrap();
+    s.commit(scene);
+    let Some(Value::Text(text)) = s.stores.get("query") else {
+        panic!()
+    };
+    assert!(
+        text.starts_with("ab") && text.contains('X') && text.ends_with("\ncd"),
+        "{text:?}"
+    );
+    // The caret is drawn below the first line for text on the second.
+    let mut scene = s.current.clone();
+    s.decorate_inputs(&mut scene).unwrap();
+    let carets = scene
+        .primitives
+        .iter()
+        .filter(|p| matches!(p, Primitive::Rounded { rect, .. } if rect.w == 1.))
+        .count();
+    assert_eq!(carets, 1);
+}

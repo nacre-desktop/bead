@@ -86,6 +86,30 @@ return function(ui, tokens)
             },
         }
     end
+    -- Scrolling message list over the cells `bead_ui::transcript` lays out: bubble fills,
+    -- text boxes (plain, Markdown blocks, code) and per-message buttons. `cells` is the
+    -- windowed model, `extent` the full height, `on_action` the action fired by buttons.
+    function kit.Transcript(p)
+        local out=props(p,{},{cells=true,extent=true,on_action=true})
+        out[1]=ui.Box{id="extent",width=p.width,height=math.max(value(p.extent,1),1),shrink=0,
+            ui.Repeat{id="cells",model=p.cells,key="id",render=function(item)
+                if item.k=="fill" then
+                    return ui.Box{id="fill",position="absolute",left=item.x,top=item.y,width=item.w,height=item.h,radius=item.r,fill=item.b}
+                elseif item.k=="text" then
+                    return ui.Text{id="text",position="absolute",left=item.x,top=item.y,width=item.w,height=item.h,text=item.t,
+                        font_size=item.s,family=item.f,color=item.c}
+                end
+                local pad=math.floor((item.h-item.s*1.4)/2)
+                return kit.Button{id="button",position="absolute",left=item.x,top=item.y,width=item.w,height=item.h,padding=0,padding_top=pad,
+                    radius=tokens.radii.small,fill="surfaceContainerHigh",aria_label=item.t,on_activate=ui.action(p.on_action,item.a),
+                    ui.Text{id="label",text=item.t,width=item.w,height=item.h-pad,font_size=item.s,text_align="center",color="onSurface"}}
+            end}}
+        return ui.Scroll(out)
+    end
+    -- Multi-line message box: Enter activates, Shift+Enter breaks the line.
+    function kit.Composer(p)
+        return kit.TextInput(props(p,{multiline=true,padding=tokens.spacing.md,radius=tokens.spacing.lg,fill="surfaceContainerHigh"}))
+    end
     function kit.List(p) return ui.Scroll(props(p,{grow=1})) end
     function kit.ListRow(p) return kit.Button(props(p,{height=40,width="fill",text_align="left"})) end
     function kit.Card(p) return ui.Column(props(p,{padding=tokens.spacing.md,gap=tokens.spacing.sm,radius=tokens.radii.medium,fill="surfaceContainer"})) end

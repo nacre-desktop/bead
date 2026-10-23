@@ -76,6 +76,13 @@ After Bead's core switch on Nacre, plan support for:
 - Later: plugins with explicit permissions, IME and screen-reader support,
   and published packages.
 
+## Generalization list (framework pieces added by feature work)
+
+- B0043: `bead_ui::transcript` (message list layout, windowing, bounded caches),
+  `bead_ui::markdown` (block subset), `kit.Transcript`, `kit.Composer`, and
+  `TextInput multiline` (Shift+Enter, wrapped caret, vertical moves). Chat-agnostic;
+  the `ai.chat` contract lives only in `nacre-shell/src/chat.rs`.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

@@ -322,6 +322,75 @@ impl Session {
         self.update(BTreeMap::from([(store, Value::Text(text))]))?
             .map_or_else(|| self.relayout(), |scene| Ok(Some(scene)))
     }
+    /// The focused input accepts line breaks (`multiline`).
+    pub fn focused_multiline(&self) -> bool {
+        self.focused_input()
+            .is_some_and(|(id, ..)| self.current_nodes.iter().any(|n| n.id == id && n.multiline))
+    }
+    /// Shift+Enter in a multi-line input.
+    pub fn input_newline(&mut self) -> Result<Option<Scene>, Diagnostic> {
+        if !self.focused_multiline() {
+            return Ok(None);
+        }
+        let Some((id, store, text)) = self.focused_input() else {
+            return Ok(None);
+        };
+        let editor = self
+            .editors
+            .entry(id)
+            .or_insert_with(|| input::Editor::new(text.len()));
+        editor.clamp(&text);
+        let (value, cursor) = input::replace(&text, editor.cursor, editor.anchor, "\n");
+        editor.cursor = cursor;
+        editor.anchor = cursor;
+        editor.preedit.clear();
+        self.update(BTreeMap::from([(store, Value::Text(value))]))
+    }
+    /// Up/Down in a multi-line input move by drawn line, keeping the x position.
+    pub fn input_vertical(&mut self, up: bool, shift: bool) -> Result<Option<Scene>, Diagnostic> {
+        if !self.focused_multiline() {
+            return Ok(None);
+        }
+        let Some((id, _, text)) = self.focused_input() else {
+            return Ok(None);
+        };
+        let Some(node) = self.current_nodes.iter().find(|n| n.id == id) else {
+            return Ok(None);
+        };
+        let r = rect(&node.draw);
+        let found = self.current.primitives.iter().find_map(|p| match p {
+            Primitive::Text {
+                rect, family, size, ..
+            } if rect.x >= r.x && rect.y >= r.y && rect.x < r.x + r.w && rect.y < r.y + r.h => {
+                Some((rect.w, family.clone(), *size))
+            }
+            _ => None,
+        });
+        let Some((width, family, size)) = found else {
+            return Ok(None);
+        };
+        let editor = self
+            .editors
+            .entry(id)
+            .or_insert_with(|| input::Editor::new(text.len()));
+        editor.clamp(&text);
+        let to = bead_render::text_vertical(
+            &self.current,
+            &text,
+            editor.cursor,
+            up,
+            &family,
+            size,
+            width,
+        )
+        .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        editor.cursor = to;
+        if !shift {
+            editor.anchor = to;
+        }
+        self.update(BTreeMap::new())?
+            .map_or_else(|| self.relayout(), |scene| Ok(Some(scene)))
+    }
     pub fn ime(
         &mut self,
         preedit: String,
@@ -407,56 +476,78 @@ impl Session {
         let family = family.clone();
         let size = *size;
         let _ = text;
-        let measure = |pos| {
-            bead_render::text_boundary_x(scene, value, pos, &family, size, area.w)
-                .map_err(|e| node.diagnostic(e))
+        let highlight_fill = {
+            let mut c = self.palette.get("primary").unwrap_or([120, 120, 120, 255]);
+            c[3] = 70;
+            c
         };
-        let x = measure(cursor)?;
-        if cursor != anchor {
-            let end = measure(anchor)?;
-            let highlight = Primitive::Rounded {
-                rect: Rect::new(
-                    area.x + x.min(end),
-                    area.y,
+        let (x, y, highlights) = if node.multiline {
+            let (x, y) = bead_render::text_caret(scene, value, cursor, &family, size, area.w)
+                .map_err(|e| node.diagnostic(e))?;
+            let rects = if cursor != anchor {
+                bead_render::text_selection(scene, value, cursor, anchor, &family, size, area.w)
+                    .map_err(|e| node.diagnostic(e))?
+            } else {
+                Vec::new()
+            };
+            (x, y, rects)
+        } else {
+            let measure = |pos| {
+                bead_render::text_boundary_x(scene, value, pos, &family, size, area.w)
+                    .map_err(|e| node.diagnostic(e))
+            };
+            let x = measure(cursor)?;
+            let rects = if cursor != anchor {
+                let end = measure(anchor)?;
+                vec![Rect::new(
+                    x.min(end),
+                    0.,
                     (x - end).abs().max(1.),
                     size * 1.4,
-                ),
-                radius: 1.,
-                fill: {
-                    let mut c = self.palette.get("primary").unwrap_or([120, 120, 120, 255]);
-                    c[3] = 70;
-                    c
-                },
-                border: None,
+                )]
+            } else {
+                Vec::new()
             };
+            (x, 0., rects)
+        };
+        let inserted = highlights.len();
+        for (offset, rect) in highlights.into_iter().enumerate() {
+            let at = index + offset;
             // Insert behind the text; move clip indices along with the command.
-            scene.primitives.insert(index, highlight);
+            scene.primitives.insert(
+                at,
+                Primitive::Rounded {
+                    rect: Rect::new(area.x + rect.x, area.y + rect.y, rect.w, rect.h),
+                    radius: 1.,
+                    fill: highlight_fill,
+                    border: None,
+                },
+            );
             for layer in &mut scene.layers {
-                if layer.own.contains(&index) {
+                if layer.own.contains(&at) {
                     layer.own.end += 1;
-                } else if layer.own.start >= index {
+                } else if layer.own.start >= at {
                     layer.own.start += 1;
                     layer.own.end += 1;
                 }
-                if layer.subtree_end > index {
+                if layer.subtree_end > at {
                     layer.subtree_end += 1;
                 }
             }
-
             scene.clips = scene
                 .clips
                 .iter()
-                .map(|(i, r)| (if *i >= index { i + 1 } else { *i }, *r))
+                .map(|(i, r)| (if *i >= at { i + 1 } else { *i }, *r))
                 .collect();
         }
-        let text_index = if cursor != anchor { index + 1 } else { index };
+        let text_index = index + inserted;
         if !preedit.is_empty()
             && let Primitive::Text { text, .. } = &mut scene.primitives[text_index]
         {
             *text = format!("{}{}{}", &value[..cursor], preedit, &value[cursor..]);
         }
         scene.primitives.push(Primitive::Rounded {
-            rect: Rect::new(area.x + x, area.y, 1., size * 1.4),
+            rect: Rect::new(area.x + x, area.y + y, 1., size * 1.4),
             radius: 0.,
             fill: self
                 .palette

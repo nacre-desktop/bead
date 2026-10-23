@@ -1060,6 +1060,127 @@ pub fn text_boundary_x(
     let fonts: &mut FontSystem = &mut guard;
     boundary_x(fonts, text, boundary, family, size, width)
 }
+/// Wrapped layout of `text` exactly as the CPU renderer draws it at scale 1: the same
+/// shaper and font selection, `width` as the wrap width, line pitch `size * 1.4`.
+/// Hosts size text boxes from this; the caret helpers below serve multi-line inputs.
+fn wrapped<R>(
+    scene: &Scene,
+    text: &str,
+    family: &str,
+    size: f32,
+    width: f32,
+    use_buffer: impl FnOnce(&mut FontSystem, &mut Buffer) -> R,
+) -> Result<R> {
+    let shared = scene_fonts(scene)?;
+    let mut guard = shared.lock().map_err(|_| "font system poisoned")?;
+    let fonts: &mut FontSystem = &mut guard;
+    let mut buffer = Buffer::new(fonts, Metrics::new(size, size * 1.4));
+    buffer.set_size(Some(width.max(1.)), None);
+    buffer.set_text(
+        text,
+        &Attrs::new().family(Family::Name(family)),
+        Shaping::Advanced,
+        None,
+    );
+    buffer.shape_until_scroll(fonts, false);
+    Ok(use_buffer(fonts, &mut buffer))
+}
+/// Number of drawn lines (at least one), counting wraps and explicit newlines.
+pub fn text_lines(scene: &Scene, text: &str, family: &str, size: f32, width: f32) -> Result<usize> {
+    wrapped(scene, text, family, size, width, |_, buffer| {
+        buffer.layout_runs().count().max(1)
+    })
+}
+fn cursor_at(text: &str, boundary: usize) -> cosmic_text::Cursor {
+    let before = &text[..boundary.min(text.len())];
+    let start = before.rfind('\n').map_or(0, |i| i + 1);
+    cosmic_text::Cursor::new(before.matches('\n').count(), before.len() - start)
+}
+fn boundary_at(text: &str, cursor: cosmic_text::Cursor) -> usize {
+    let mut offset = 0;
+    for (index, line) in text.split('\n').enumerate() {
+        if index == cursor.line {
+            let mut end = cursor.index.min(line.len());
+            while !line.is_char_boundary(end) {
+                end -= 1;
+            }
+            return offset + end;
+        }
+        offset += line.len() + 1;
+    }
+    text.len()
+}
+/// Top-left of the caret for a UTF-8 boundary, relative to the text box.
+pub fn text_caret(
+    scene: &Scene,
+    text: &str,
+    boundary: usize,
+    family: &str,
+    size: f32,
+    width: f32,
+) -> Result<(f32, f32)> {
+    wrapped(scene, text, family, size, width, |_, buffer| {
+        buffer
+            .cursor_position(&cursor_at(text, boundary))
+            .unwrap_or_else(|| {
+                // Past the shaped text (an empty trailing line): start of the last line.
+                let lines = buffer.layout_runs().count().max(1);
+                (0., (lines - 1) as f32 * size * 1.4)
+            })
+    })
+}
+/// The boundary one drawn line above or below, keeping the caret's x position.
+pub fn text_vertical(
+    scene: &Scene,
+    text: &str,
+    boundary: usize,
+    up: bool,
+    family: &str,
+    size: f32,
+    width: f32,
+) -> Result<usize> {
+    wrapped(scene, text, family, size, width, |_, buffer| {
+        let pitch = size * 1.4;
+        let (x, y) = buffer
+            .cursor_position(&cursor_at(text, boundary))
+            .unwrap_or((0., 0.));
+        let lines = buffer.layout_runs().count().max(1);
+        if up && y < pitch / 2. {
+            return 0;
+        }
+        if !up && y + pitch * 1.5 > lines as f32 * pitch {
+            return text.len();
+        }
+        let target = if up { y - pitch / 2. } else { y + pitch * 1.5 };
+        buffer
+            .hit(x, target)
+            .map_or(boundary, |cursor| boundary_at(text, cursor))
+    })
+}
+/// One rectangle per drawn line covered by `[from, to)`, relative to the text box.
+pub fn text_selection(
+    scene: &Scene,
+    text: &str,
+    from: usize,
+    to: usize,
+    family: &str,
+    size: f32,
+    width: f32,
+) -> Result<Vec<Rect>> {
+    let (from, to) = (from.min(to), from.max(to));
+    wrapped(scene, text, family, size, width, |_, buffer| {
+        let (start, end) = (cursor_at(text, from), cursor_at(text, to));
+        buffer
+            .layout_runs()
+            .flat_map(|run| {
+                let (top, height) = (run.line_top, run.line_height);
+                run.highlight(start, end)
+                    .map(move |(x, w)| Rect::new(x, top, w.max(1.), height))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    })
+}
 fn boundary_x(
     fonts: &mut FontSystem,
     text: &str,
@@ -1094,6 +1215,40 @@ fn boundary_x(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wrapped_text_lines_caret_and_vertical_moves() {
+        let scene = font_pool_scene();
+        let family = "IBM Plex Sans";
+        assert_eq!(text_lines(&scene, "", family, 16., 200.).unwrap(), 1);
+        assert_eq!(
+            text_lines(&scene, "a\nb\n\nc", family, 16., 200.).unwrap(),
+            4
+        );
+        let long = "word ".repeat(40);
+        let lines = text_lines(&scene, &long, family, 16., 120.).unwrap();
+        assert!(lines > 8, "{lines}");
+        // The caret of a boundary after a break sits lower and nearer the left edge.
+        let (x0, y0) = text_caret(&scene, "ab\ncd", 1, family, 16., 200.).unwrap();
+        let (x1, y1) = text_caret(&scene, "ab\ncd", 4, family, 16., 200.).unwrap();
+        assert!(x0 > 0. && x1 > 0. && y1 > y0);
+        // Down from the first line lands on the second, up returns to the first.
+        let down = text_vertical(&scene, "ab\ncd", 1, false, family, 16., 200.).unwrap();
+        assert!((3..=5).contains(&down));
+        let up = text_vertical(&scene, "ab\ncd", down, true, family, 16., 200.).unwrap();
+        assert!(up <= 2);
+        assert_eq!(
+            text_vertical(&scene, "ab\ncd", 1, true, family, 16., 200.).unwrap(),
+            0
+        );
+        assert_eq!(
+            text_vertical(&scene, "ab\ncd", 4, false, family, 16., 200.).unwrap(),
+            5
+        );
+        // A selection across two lines yields one rectangle per line.
+        let rects = text_selection(&scene, "ab\ncd", 1, 4, family, 16., 200.).unwrap();
+        assert_eq!(rects.len(), 2);
+        assert!(rects[1].y > rects[0].y);
+    }
     fn font_pool_scene() -> Scene {
         let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../bead-test/fonts/IBMPlexSans.ttf");
