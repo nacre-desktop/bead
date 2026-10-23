@@ -15,6 +15,7 @@ pub fn fallback(fill: [u8; 4]) -> Scene {
             curve: None,
             edge: Edge::Right,
             slide_distance: None,
+            fade: true,
         }),
         resource_revision: 0,
         asset_data: Default::default(),

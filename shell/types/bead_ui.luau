@@ -44,6 +44,7 @@ export type Props = {
     transition:any?,
     duration:any?,
     slide_distance:any?,
+    fade:any?,
     edge:any?,
     direction:any?,
     drag:any?,

@@ -228,6 +228,10 @@ pub fn spec(
     if let Some(motion) = &mut fallback.motion {
         motion.id = "dashboard".into();
         motion.edge = bead::core::Edge::Top;
+        // QML: the panel grows out of the bar over 360 ms, in-out cubic, opaque throughout.
+        motion.duration = 0.36;
+        motion.curve = Some(bead::core::animation::Curve::EaseInOut);
+        motion.fade = false;
     }
     let cold = fallback.clone();
     Ok(bead::wayland::PanelSpec {

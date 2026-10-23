@@ -372,6 +372,7 @@ fn start(
             curve: None,
             edge: panel_edge,
             slide_distance: None,
+            fade: true,
         });
         options.companion = Some((companion, panel_renderer.unwrap_or(default_panel_renderer)));
     }

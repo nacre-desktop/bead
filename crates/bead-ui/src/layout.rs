@@ -116,6 +116,7 @@ pub const PROPERTIES: &[&str] = &[
     "transition",
     "duration",
     "slide_distance",
+    "fade",
     "edge",
     "direction",
     "drag",
@@ -553,6 +554,7 @@ impl ViewSpec {
                             None
                         },
                         id: id.clone(),
+                        fade: boolean(p, "fade", true, source)?,
                         open: boolean(p, "open", true, source)?,
                         duration: f64::from(number(p, "duration", 0.2, source)?),
                         spring: text(p, "transition", "ease", source)? == "spring",

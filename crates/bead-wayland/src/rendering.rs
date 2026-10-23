@@ -388,7 +388,7 @@ impl App {
                     }),
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
-                scene.opacity = progress;
+                scene.opacity = motion.opacity(progress);
                 let (dx, dy) = motion.edge.closed_offset(
                     motion.slide_distance.unwrap_or(scene.bounds.w),
                     motion.slide_distance.unwrap_or(scene.bounds.h),
@@ -1344,6 +1344,7 @@ mod input_tests {
             curve: None,
             edge: bead_core::Edge::Top,
             slide_distance: None,
+            fade: true,
         });
         scene.offset = (32., -18.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 50]));

@@ -469,7 +469,7 @@ impl App {
                 .animations
                 .value(&motion.id, now)
                 .ok_or("motion value missing")?;
-            scene.opacity = progress;
+            scene.opacity = motion.opacity(progress);
             let (dx, dy) = motion.edge.closed_offset(
                 motion.slide_distance.unwrap_or(scene.bounds.w),
                 motion.slide_distance.unwrap_or(scene.bounds.h),

@@ -692,6 +692,7 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
             curve: None,
             edge: bead_core::Edge::Right,
             slide_distance: None,
+            fade: true,
         });
         let mut cache = bead_render::tree::TreeCache::default();
         if prepared {
