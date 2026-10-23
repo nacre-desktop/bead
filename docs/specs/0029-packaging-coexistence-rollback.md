@@ -115,7 +115,9 @@ condition / `OnFailure` wiring); only the drop-in decides the shell.
 - **Lock screen**: unchanged. hyprlock is not part of either shell (B0023).
 - **Not proven by this unit**: real systemd `OnFailure`/start-limit/`PartOf` behaviour
   (the rehearsal's manager is modelled; units pass `systemd-analyze verify`) and anything
-  on the owner's laptop.
+  on the owner's laptop. Validated afterwards under a real systemd user manager by B0033
+  (`0033-switch-systemd-validation.md`); that run found and fixed three defects (health probe,
+  `OnFailure=` firing on every crash, windows companion restart loop).
 
 ## Temporary duplicates (expiry)
 
