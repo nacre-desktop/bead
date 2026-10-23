@@ -361,3 +361,11 @@ Widgets made for Bead can be dragged and dropped between "widget hosts": the top
   - The date and time could move out of the status pill into a placeable clock widget with styles.
   - Many such widgets (clock, weather, system, calendar) would make this a signature Nacre feature.
   - Needs: a desktop-layer widget host, per-widget settings pages, and an effects library (particles, glow) in the kit.
+- **Design sketch (lead, 2026-10-23):**
+  - **Widget:** a Luau package. It declares its data (topics and actions, as a read-only view), its variants per host shape, a settings schema that auto-generates its settings page, and an animation/redraw budget.
+  - **Host shapes:** strip-horizontal (top and bottom bars), strip-vertical (side bars, i.e. the frame edges, with hover-peek expansion through lips), card (dashboard and pearls), and canvas (a new desktop layer above the wallpaper and below windows).
+  - **Layout:** data that survives restarts. Edit mode offers a catalogue and drag between hosts with a live variant preview, reusing pearl drag.
+  - **Example:** music is bars or a mini circle in the bar, a vertical spectrum in a side bar, a player card on the dashboard, and a big visualiser with effects on the desktop.
+  - **Budget:** animate only when the data is active and the host is visible; pause on fullscreen, lock and battery. Shared sources such as one spectrum serve all widgets.
+  - **User widgets:** ~/.config/bead/widgets/ with live reload.
+  - **Order:** API + bar/side hosts (port the clock and pearls) → edit mode → desktop canvas + music/effects → more widgets + docs.
