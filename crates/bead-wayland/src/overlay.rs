@@ -296,15 +296,8 @@ impl App {
         );
     }
     pub(super) fn release_overlay(&mut self) {
-        let Some(overlay) = self.overlay.take() else {
+        if self.overlay.take().is_none() {
             return;
-        };
-        let output = overlay.output.clone();
-        drop(overlay);
-        // With no view of either slot up, the primary session may shed its warm caches,
-        // as it does when the panel slot closes.
-        if !self.panel_target && self.panel_runtime.is_none() {
-            self.primary_idle(&output, true);
         }
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         // SAFETY: allocator trim only; the source, renderer and buffers are gone.
@@ -368,9 +361,6 @@ impl App {
             Ok(Some(scene)) => {
                 if !o.source.commit() {
                     return;
-                }
-                if self.options.trace_state {
-                    println!("UI_STATE {}", o.source.state_summary());
                 }
                 scene
             }
@@ -616,10 +606,6 @@ impl App {
             PointerEventKind::Release { button: 0x110, .. } => {
                 o.pressed = false;
                 Some(UiEvent::Release)
-            }
-            PointerEventKind::Press { button: 0x111, .. } => Some(UiEvent::ContextMenu { x, y }),
-            PointerEventKind::Press { button: 0x112, .. } => {
-                Some(UiEvent::SecondaryClick { x, y })
             }
             PointerEventKind::Axis {
                 vertical,

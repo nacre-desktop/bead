@@ -28,7 +28,7 @@ impl App {
         let _ = sender.send(event);
     }
 
-    pub(super) fn primary_idle(&mut self, output: &wl_output::WlOutput, idle: bool) {
+    fn primary_idle(&mut self, output: &wl_output::WlOutput, idle: bool) {
         let id = self.output_id(output);
         let source =
             if self.options.primary_factory.is_none() || self.active_output.as_ref() == Some(&id) {
