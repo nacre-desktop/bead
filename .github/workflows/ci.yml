@@ -28,7 +28,7 @@ jobs:
           mkdir -p "$HOME" "$CARGO_HOME/bin"
           echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
           apt-get update -qq
-          apt-get install -y ca-certificates build-essential curl git python3 unzip systemd libwayland-dev libfontconfig1-dev libxkbcommon-dev libpipewire-0.3-dev libclang-dev libgdk-pixbuf-2.0-dev webp-pixbuf-loader pkg-config dbus
+          apt-get install -y ca-certificates build-essential curl git python3 unzip systemd libwayland-dev libfontconfig1-dev libxkbcommon-dev libpipewire-0.3-dev libclang-dev libgdk-pixbuf-2.0-dev webp-pixbuf-loader pkg-config dbus libmpv2 ffmpeg sway grim python3-pil
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, verified 2026-10-13
       - name: Trust the checked-out workspace for Git
         run: |
@@ -84,6 +84,10 @@ jobs:
           nice -n 10 python3 -m py_compile spikes/capture_safety.py spikes/measure.py spikes/bar-matrix.py spikes/dashboard-residency.py spikes/launcher-proof.py spikes/b0002-arm.py spikes/laptop-reference-capture.py spikes/laptop-reference-artifacts.py spikes/menu-engine-proof.py spikes/menu_engine_trace.py spikes/b0003-arm.py spikes/tests/test_dashboard_capture_windows.py spikes/tests/test_menu_engine_trace.py spikes/tests/test_b0002_arm.py spikes/tests/test_laptop_reference_capture.py spikes/tests/test_b0003_arm.py
       - name: Packaging staging and launcher
         run: python3 -m unittest discover -s packaging/tests
+      - name: Motion wallpaper renderer smoke
+        run: |
+          cargo build -p nacre-shell --bin bead-wallpaper-video --locked -j2
+          python3 spikes/wallpaper-video-smoke.py --engine target/debug/bead-wallpaper-video
       - name: Private service owner lifecycle
         run: python3 spikes/services-check.py
       - name: Private SNI and DBusMenu lifecycle

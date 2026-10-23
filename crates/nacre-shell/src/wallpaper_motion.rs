@@ -140,6 +140,16 @@ impl Controller {
             eprintln!("WALLPAPER_VIDEO_DISABLED code=renderer_missing");
             return None;
         }
+        Self::start_with(deps, move || {
+            let mut command = std::process::Command::new(&renderer);
+            command.arg("--hwdec=vaapi");
+            command
+        })
+    }
+    fn start_with(
+        deps: Deps,
+        renderer: impl Fn() -> std::process::Command + Send + 'static,
+    ) -> Option<Self> {
         let (sender, receiver) = mpsc::channel();
         let poke = {
             let sender = sender.clone();
@@ -165,14 +175,8 @@ impl Controller {
             let poke = poke.clone();
             subscriptions.push(Box::new(desktop.subscribe(move |_| poke())));
         }
-        let supervisor = supervisor::Supervisor::start(
-            supervisor::Config::new(move || {
-                let mut command = std::process::Command::new(&renderer);
-                command.arg("--hwdec=auto");
-                command
-            }),
-            log_event,
-        );
+        let supervisor =
+            supervisor::Supervisor::start(supervisor::Config::new(renderer), log_event);
         let thread = std::thread::Builder::new()
             .name("wallpaper-motion".into())
             .spawn(move || run(deps, supervisor, receiver))
@@ -384,6 +388,146 @@ mod tests {
         }
         let none = inputs(&Windows::default(), &Services::default(), Prefs::default());
         assert_eq!(none.keys().collect::<Vec<_>>(), [ANY]);
+    }
+
+    /// The whole Nacre edge over a real daemon connection: a published motion member starts
+    /// the renderer with the source and a play state; clearing it stops the source.
+    #[tokio::test(flavor = "current_thread")]
+    async fn published_motion_drives_the_renderer_and_clearing_it_stops_it() {
+        use nacre_protocol::{Message, framing};
+        use std::os::unix::fs::PermissionsExt;
+        use tokio::net::UnixListener;
+        let dir = std::env::temp_dir().join(format!("bead-motion-wire-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let clip = dir.join("clip.mp4");
+        std::fs::write(&clip, b"clip").unwrap();
+        std::fs::set_permissions(&clip, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let identity = nacre_protocol::wallpaper::WallpaperFileIdentity::from_metadata(
+            &std::fs::metadata(&clip).unwrap(),
+        );
+        let with_motion = json!({"available": true, "stale": false, "revision": 1, "outputs": {},
+            "current": {"revision": 1, "motion": {"kind": "video", "path": clip, "file_identity": identity}}});
+        // Patches are merge patches: null removes the member.
+        let without = json!({"current": {"motion": null}});
+        let socket = dir.join("daemon.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let (clear_tx, clear_rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut write) = stream.into_split();
+            let mut reader = framing::Reader::new(tokio::io::BufReader::new(read));
+            assert!(matches!(
+                reader.next().await.unwrap().unwrap(),
+                Message::Hello { .. }
+            ));
+            let mut methods = nacre_protocol::core_methods();
+            methods.insert(
+                "wallpaper.activate".into(),
+                nacre_protocol::Method {
+                    v: 1,
+                    class: nacre_protocol::Capability::Desktop,
+                    timeout: 1000,
+                    params: json!({"type": "object"}),
+                    result: json!({}),
+                },
+            );
+            framing::write(
+                &mut write,
+                &Message::Welcome {
+                    proto: 1,
+                    min: 1,
+                    boot: "00000000-0000-4000-8000-000000000046".into(),
+                    topics: BTreeMap::from([("wallpaper.active".into(), 1)]),
+                    methods,
+                    frame_ms: Some(16),
+                },
+            )
+            .await
+            .unwrap();
+            assert!(matches!(
+                reader.next().await.unwrap().unwrap(),
+                Message::Sub { .. }
+            ));
+            framing::write(
+                &mut write,
+                &Message::Snap {
+                    topic: "wallpaper.active".into(),
+                    seq: 0,
+                    data: with_motion,
+                },
+            )
+            .await
+            .unwrap();
+            let _ = clear_rx.await;
+            framing::write(
+                &mut write,
+                &Message::Patch {
+                    topic: "wallpaper.active".into(),
+                    base: 0,
+                    seq: 1,
+                    data: without,
+                },
+            )
+            .await
+            .unwrap();
+            while reader.next().await.is_ok_and(|m| m.is_some()) {}
+        });
+        let socket_for_client = socket.clone();
+        let wallpaper = tokio::task::spawn_blocking(move || {
+            crate::wallpaper::Consumer::start(socket_for_client).unwrap()
+        })
+        .await
+        .unwrap();
+        let log = dir.join("renderer.log");
+        let log_for_command = log.clone();
+        let controller = Controller::start_with(
+            Deps {
+                wallpaper,
+                picker: None,
+                backend: None,
+                desktop: None,
+            },
+            move || {
+                let mut p = std::process::Command::new("sh");
+                p.arg("-c")
+                    .arg("cat >> \"$1\"")
+                    .arg("sh")
+                    .arg(&log_for_command);
+                p
+            },
+        )
+        .unwrap();
+        let seen = |needle: &'static str| {
+            let log = log.clone();
+            async move {
+                for _ in 0..200 {
+                    if std::fs::read_to_string(&log).is_ok_and(|text| text.contains(needle)) {
+                        return true;
+                    }
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                false
+            }
+        };
+        assert!(
+            seen("\"kind\":\"video\"").await,
+            "source reached the renderer"
+        );
+        assert!(
+            seen("\"decoder\":\"play\",\"render\":[\"*\"]").await,
+            "plays on every output"
+        );
+        clear_tx.send(()).unwrap();
+        assert!(
+            seen("\"cmd\":\"quit\"").await,
+            "clearing the motion member stops the renderer"
+        );
+        drop(controller);
+        server.abort();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

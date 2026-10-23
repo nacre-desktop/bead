@@ -10,7 +10,7 @@ arch=('x86_64')
 url='https://github.com/nacre-desktop/bead'
 license=('GPL-3.0-only')
 options=('!lto' '!debug')
-depends=('glibc' 'gcc-libs' 'glib2' 'fontconfig' 'libxkbcommon' 'gdk-pixbuf2' 'libpipewire')
+depends=('glibc' 'gcc-libs' 'glib2' 'fontconfig' 'libxkbcommon' 'gdk-pixbuf2' 'libpipewire' 'mpv')
 makedepends=('rust' 'cargo' 'clang' 'pkgconf')
 optdepends=('nacre: daemon, QML Settings/Colors/Welcome windows and the ui-shell switch')
 

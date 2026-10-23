@@ -14,7 +14,8 @@ Gap-list unit 10 (`docs/research/core-switch-gap-20261022.md`). Nacre side: bran
    scriptlet starts, enables or edits a unit. A user-prefix install is the same
    staging script: `packaging/stage.sh DESTDIR PREFIX`.
 2. **Install layout** (all under the prefix, relocatable): `lib/bead/nacre-shell`
-   and its companion `nacre-wallpaper-decode` (must sit side by side),
+   and its companions `nacre-wallpaper-decode` and `bead-wallpaper-video` (B0046, the
+   motion-wallpaper renderer; dlopens libmpv, package dependency `mpv`) which must sit side by side,
    `share/bead/shell/**` (the Luau bundle, minus `shell/tests`), `bin/bead-shell`
    (launcher: `start` runs the daily profile from the bundle directory against
    `$XDG_RUNTIME_DIR/nacre/daemon.sock`; `check` verifies the install with no

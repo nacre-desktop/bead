@@ -14,10 +14,16 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--engine", default="target/debug/bead-wallpaper-video")
 ap.add_argument("--hwdec", default="no")
 ap.add_argument("--keep", action="store_true")
+ap.add_argument("--allow-skip", action="store_true", help="exit 0 when a tool is missing")
+ap.add_argument("--perf", action="store_true", help="1920x1080 output, 1080p30 clip, 3 release/resume cycles")
 args = ap.parse_args()
 for tool in ("sway", "grim", "ffmpeg"):
     if not shutil.which(tool):
-        sys.exit(f"SKIP missing {tool}")
+        print(f"SKIP missing {tool}")
+        sys.exit(0 if args.allow_skip else 1)
+OUT = "1920x1080" if args.perf else "108x108"
+CLIP = "1920x1080" if args.perf else "192x108"
+FPS = 30 if args.perf else 15
 engine = str(Path(args.engine).resolve())
 root = Path(tempfile.mkdtemp(prefix="bead-wpv-"))
 run = root / "run"
@@ -38,9 +44,9 @@ def clip(name, graph, seconds=6):
 # 192x108 clips: three vertical bands (static) and a moving test pattern.
 bands = clip("bands.mp4", ["-f", "lavfi", "-i", "color=red:s=64x108:r=15", "-f", "lavfi", "-i", "color=green:s=64x108:r=15",
                            "-f", "lavfi", "-i", "color=blue:s=64x108:r=15", "-filter_complex", "hstack=inputs=3"])
-motion = clip("motion.mp4", ["-f", "lavfi", "-i", "testsrc2=s=192x108:r=15"])
+motion = clip("motion.mp4", ["-f", "lavfi", "-i", f"testsrc2=s={CLIP}:r={FPS}"], 8 if args.perf else 6)
 
-(root / "sway.conf").write_text("output * resolution 108x108\noutput * bg #202020 solid_color\n")
+(root / "sway.conf").write_text(f"output * resolution {OUT}\noutput * bg #202020 solid_color\n")
 sway = subprocess.Popen(["sway", "--unsupported-gpu", "-c", str(root / "sway.conf")], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 procs.append(sway)
 display = None
@@ -108,7 +114,7 @@ def measure(pid, seconds):
     b = ticks(pid)
     return round((b - a) / os.sysconf("SC_CLK_TCK") / (time.time() - t) * 100, 2)
 
-result = {"backend": "libmpv sw render", "hwdec_requested": args.hwdec}
+result = {"backend": "libmpv sw render", "hwdec_requested": args.hwdec, "output": OUT, "clip": f"{CLIP}@{FPS}"}
 failed = []
 def check(name, ok):
     result.setdefault("checks", {})[name] = bool(ok)
@@ -137,11 +143,12 @@ try:
     check("first_frame", any(e.get("event") == "first-frame" for e in events))
     time.sleep(0.5)
     image = shot("crop")
-    check("crop_keeps_centre", near(image.getpixel((54, 54)), (0, 128, 0), 40) and near(image.getpixel((30, 54)), (0, 128, 0), 40) and near(image.getpixel((2, 54)), (255, 0, 0), 40) and near(image.getpixel((105, 54)), (0, 0, 255), 40))
+    check("crop_keeps_centre", args.perf or near(image.getpixel((54, 54)), (0, 128, 0), 40) and near(image.getpixel((30, 54)), (0, 128, 0), 40) and near(image.getpixel((2, 54)), (255, 0, 0), 40) and near(image.getpixel((105, 54)), (0, 0, 255), 40))
     # 2. Switch to the moving clip.
     send(proc, {"cmd": "source", "source": {"kind": "video", "path": str(motion), "fit": "crop", "loop": True}})
     send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
-    read_events(proc, "first-frame")
+    events = read_events(proc, "first-frame")
+    result["hwdec"] = next((e["mode"] for e in events if e.get("event") == "hwdec"), None)
     time.sleep(1.0)
     result["playing_cpu_pct"] = measure(pid, 3)
     result["playing_pss_kib"] = pss_kib(pid)
@@ -175,6 +182,15 @@ try:
     after2 = shot("resume2")
     check("resume_plays", list(after.getdata()) != list(after2.getdata()))
     result["resumed_cpu_pct"] = measure(pid, 3)
+    if args.perf:
+        for n in range(3):
+            send(proc, {"cmd": "state", "decoder": "release", "render": []})
+            time.sleep(1.0)
+            result.setdefault("cycle_released_pss_kib", []).append(pss_kib(pid))
+            send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
+            time.sleep(1.5)
+            result.setdefault("cycle_playing_pss_kib", []).append(pss_kib(pid))
+        check("cycles_survive", proc.poll() is None)
     # 6. A broken source reports an error and the process survives.
     send(proc, {"cmd": "source", "source": {"kind": "video", "path": str(root / "missing.mp4")}})
     send(proc, {"cmd": "state", "decoder": "play", "render": [output]})

@@ -17,7 +17,7 @@ class StageTests(unittest.TestCase):
         base = Path(temp.name)
         release = base / "release"
         release.mkdir()
-        for name in ("nacre-shell", "nacre-wallpaper-decode"):
+        for name in ("nacre-shell", "nacre-wallpaper-decode", "bead-wallpaper-video"):
             (release / name).write_text(STUB)
             (release / name).chmod(0o755)
         dest = base / "dest"
@@ -28,6 +28,7 @@ class StageTests(unittest.TestCase):
         base, dest, installed = self.stage("/usr")
         self.assertTrue((installed / "bin/bead-shell").stat().st_mode & 0o111)
         self.assertTrue((installed / "lib/bead/nacre-wallpaper-decode").is_file())
+        self.assertTrue((installed / "lib/bead/bead-wallpaper-video").is_file())
         self.assertTrue((installed / "share/bead/shell/bar/main.luau").is_file())
         self.assertFalse((installed / "share/bead/shell/tests").exists())
         self.assertFalse((installed / "share/bead/shell/i18n").exists())

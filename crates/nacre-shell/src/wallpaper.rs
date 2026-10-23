@@ -30,7 +30,12 @@ impl Consumer {
     pub(crate) fn start(socket: std::path::PathBuf) -> Result<Arc<Self>, String> {
         let client = crate::nacre_source::Client::start(crate::nacre_source::Config::new(
             socket,
-            vec!["wallpaper.active".into()],
+            // The picker settings drive motion pause rules; a daemon without the topic is
+            // simply not subscribed to it.
+            vec![
+                "wallpaper.active".into(),
+                crate::prefs::WALLPAPER_PICKER.into(),
+            ],
         ))
         .map_err(|_| "wallpaper daemon connection failed")?;
         let topic = client
@@ -74,6 +79,11 @@ impl Consumer {
     pub(crate) fn motion(&self) -> Option<bead_wallpaper::protocol::Source> {
         let snapshot = Source::snapshot(&self.topic);
         snapshot.connected.then(|| parse_motion(&snapshot.data))?
+    }
+    /// `settings.store.wallpaper-picker` on this connection (motion mode, pause, cover rule).
+    pub(crate) fn picker(&self) -> Option<Arc<dyn Source>> {
+        let topic = self.client.topic(crate::prefs::WALLPAPER_PICKER).ok()?;
+        Some(Arc::new(topic))
     }
     pub(crate) fn watch_motion(
         &self,

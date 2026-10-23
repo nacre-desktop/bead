@@ -34,6 +34,8 @@ suggested future fix. Do not fix them as part of unrelated work.
 | Wallpaper transition duration is matched to Nacre QML's 210 ms fade and `options.animate`. | `crates/bead-wayland/src/runtime.rs` | Pass motion policy and duration through neutral wallpaper surface options. |
 | Native bar surface and exclusive zone assume a 50-pixel Nacre header. | `crates/bead-wayland/src/runtime.rs` | Accept the bar thickness from the shell rather than fixing it in the Wayland host. |
 | Kit defaults use Nacre/Orient palette role names and icon-font family. | `crates/bead-ui/assets/kit.luau` | Inject a shell theme for palette roles, typography and component defaults. |
+| Motion wallpaper reads the Nacre `wallpaper.active` `motion` member and `wallpaper-picker` keys (`motionMode`, `paused`, `pauseCovered`). | `crates/nacre-shell/src/wallpaper_motion.rs`, `wallpaper.rs` | Already confined to the Nacre edge; the renderer, protocol, policy and supervisor (`bead-wallpaper`) carry no Nacre ids. Move the edge with `nacre-shell` at the housekeeping step. |
+| Motion wallpaper renderer uses libmpv (GPL) and sits in the GPL crate. | `crates/nacre-shell/src/bin/bead-wallpaper-video/` | Publish it as its own GPL engine package; frameworks talk to it only through the `bead-wallpaper` protocol. |
 
 ## Housekeeping (later)
 

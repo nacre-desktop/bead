@@ -834,6 +834,27 @@ fn start(
             Err(_) => eprintln!("WALLPAPER_DISABLED code=contract_unavailable"),
         }
     }
+    // Service owners outlive individual output sessions and their workers.
+    let shared_backend = if backend_enabled {
+        Some(backends::Native::from_env()?)
+    } else {
+        None
+    };
+    let shared_desktop = options.bar.then(bead::services::Desktop::start);
+    if let Some(desktop) = &shared_desktop {
+        let _ = desktop_owner.set(desktop.clone());
+    }
+    // B0046: motion wallpaper control; the decoder runs in `bead-wallpaper-video`.
+    if let Some(wallpaper) = wallpaper_consumer.take() {
+        _motion_wallpaper = wallpaper_motion::Controller::start(wallpaper_motion::Deps {
+            picker: wallpaper.picker(),
+            wallpaper,
+            backend: shared_backend
+                .clone()
+                .map(|b| b as std::sync::Arc<dyn bead::backends::Backend>),
+            desktop: shared_desktop.clone(),
+        });
+    }
     if let Some(entry) = ui {
         let ui_entry_is_launcher = entry == Path::new("ui/main.luau");
         let fallback = scene.clone();
@@ -855,31 +876,6 @@ fn start(
             .transpose()
             .map_err(|e| e.to_string())?;
         let trace = options.trace_state;
-        // Service owners outlive individual output sessions and their workers.
-        let shared_backend = if backend_enabled {
-            Some(backends::Native::from_env()?)
-        } else {
-            None
-        };
-        let shared_desktop = bar.then(bead::services::Desktop::start);
-        if let Some(desktop) = &shared_desktop {
-            let _ = desktop_owner.set(desktop.clone());
-        }
-        // B0046: motion wallpaper control; the decoder runs in `bead-wallpaper-video`.
-        if let Some(wallpaper) = wallpaper_consumer.take() {
-            _motion_wallpaper = wallpaper_motion::Controller::start(wallpaper_motion::Deps {
-                wallpaper,
-                picker: _ui_provider.as_ref().and_then(|client| {
-                    client.topic(prefs::WALLPAPER_PICKER).ok().map(|t| {
-                        std::sync::Arc::new(t) as std::sync::Arc<dyn bead::core::source::Source>
-                    })
-                }),
-                backend: shared_backend
-                    .clone()
-                    .map(|b| b as std::sync::Arc<dyn bead::backends::Backend>),
-                desktop: shared_desktop.clone(),
-            });
-        }
         let prefs_source = _prefs
             .as_ref()
             .map(|(_, source)| source.clone())

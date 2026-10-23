@@ -132,7 +132,9 @@ unsafe extern "C" fn wake(data: *mut c_void) {
     unsafe { &*(data as *const calloop::ping::Ping) }.ping();
 }
 impl Player {
-    pub fn new(hwdec: bool, wake_up: Arc<calloop::ping::Ping>) -> Result<Self, String> {
+    /// `hwdec` is an mpv `hwdec` value; copy-back modes (`vaapi-copy`, `auto-copy`) render into
+    /// shared memory, `no` decodes in software. A hardware mode that fails falls back to software.
+    pub fn new(hwdec: &str, wake_up: Arc<calloop::ping::Ping>) -> Result<Self, String> {
         let api = load()?;
         // SAFETY: documented libmpv call sequence; every pointer comes from libmpv.
         unsafe {
@@ -172,7 +174,7 @@ impl Player {
                 ("scale", "bilinear"),
                 ("cscale", "bilinear"),
                 ("dither-depth", "no"),
-                ("hwdec", if hwdec { "auto-copy" } else { "no" }),
+                ("hwdec", hwdec),
             ] {
                 // Unknown options in older libmpv versions are ignored on purpose.
                 player.option(name, value);

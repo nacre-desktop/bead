@@ -99,7 +99,7 @@ struct Engine {
     handle: LoopHandle<'static, Engine>,
     signal: LoopSignal,
     wake: Arc<calloop::ping::Ping>,
-    hwdec: bool,
+    hwdec: &'static str,
     outs: Vec<Out>,
     source: Option<Source>,
     decoder: Decoder,
@@ -628,7 +628,7 @@ impl ProvidesRegistryState for Engine {
 }
 smithay_client_toolkit::delegate_dispatch2!(Engine);
 
-fn run(hwdec: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn run(hwdec: &'static str) -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::connect_to_env()?;
     let (globals, queue) = registry_queue_init(&conn)?;
     let qh = queue.handle();
@@ -694,11 +694,20 @@ fn run(hwdec: bool) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    let mut hwdec = true;
+    // Large frame buffers should be mapped and returned immediately, and a couple of arenas
+    // keep `malloc_trim` effective, so releasing the decoder really gives its memory back.
+    // SAFETY: mallopt before any other thread exists.
+    unsafe {
+        libc::mallopt(-3, 256 * 1024); // M_MMAP_THRESHOLD (also disables the dynamic raise)
+        libc::mallopt(-8, 2); // M_ARENA_MAX
+    }
+    let mut hwdec = "vaapi-copy";
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
-            "--hwdec=no" => hwdec = false,
-            "--hwdec=auto" => hwdec = true,
+            "--hwdec=no" => hwdec = "no",
+            // VA-API copy-back is the default; `auto` lets mpv pick any copy-back API.
+            "--hwdec=vaapi" => hwdec = "vaapi-copy",
+            "--hwdec=auto" => hwdec = "auto-copy",
             "--check" => {
                 // Whether this host can play at all (libmpv present); for diagnostics.
                 match mpv::available() {
@@ -710,7 +719,7 @@ fn main() {
                 }
             }
             _ => {
-                eprintln!("usage: bead-wallpaper-video [--hwdec=auto|no] [--check]");
+                eprintln!("usage: bead-wallpaper-video [--hwdec=vaapi|auto|no] [--check]");
                 std::process::exit(2);
             }
         }

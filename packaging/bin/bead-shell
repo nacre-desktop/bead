@@ -9,7 +9,7 @@ lib=$prefix/lib/bead
 share=$prefix/share/bead
 case ${1:-} in
 check)
-	for file in "$lib/nacre-shell" "$lib/nacre-wallpaper-decode"; do
+	for file in "$lib/nacre-shell" "$lib/nacre-wallpaper-decode" "$lib/bead-wallpaper-video"; do
 		[ -x "$file" ] || { echo "bead-shell: missing executable $file" >&2; exit 1; }
 	done
 	for entry in ui bar popouts sound status; do
