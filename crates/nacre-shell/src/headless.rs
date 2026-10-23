@@ -207,6 +207,7 @@ mod tests {
     fn osd_kinds_show_their_glyph_title_value_and_detail() -> Result<(), Box<dyn std::error::Error>>
     {
         // (name, kind, value, muted, label, device, texts that must be drawn)
+        #[allow(clippy::type_complexity)]
         let cases: [(&str, &str, f64, bool, &str, &str, &[&str]); 11] = [
             (
                 "volume",
