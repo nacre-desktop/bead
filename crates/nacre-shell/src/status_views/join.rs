@@ -181,7 +181,7 @@ pub(super) fn dispatch(
     }
 }
 
-fn text(stores: &Stores, name: &str) -> String {
+pub(super) fn text(stores: &Stores, name: &str) -> String {
     match stores.get(name) {
         Some(Value::Text(text)) => text.clone(),
         _ => String::new(),

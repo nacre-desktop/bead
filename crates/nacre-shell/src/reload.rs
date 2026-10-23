@@ -621,10 +621,53 @@ impl Runtime {
                 "bluetooth.power_message".into(),
                 bead::core::Value::Text(String::new()),
             ),
+            (
+                "bluetooth.devices".into(),
+                bead::core::Value::list(Vec::new()),
+            ),
+            (
+                "bluetooth.list_message".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "bluetooth.view".into(),
+                bead::core::Value::Text("list".into()),
+            ),
+            (
+                "bluetooth.pair_title".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "bluetooth.pair_kind".into(),
+                bead::core::Value::Text("waiting".into()),
+            ),
+            (
+                "bluetooth.pair_text".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "bluetooth.pair_countdown".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "bluetooth.pair_error".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            ("bluetooth.pair_busy".into(), bead::core::Value::Bool(false)),
+            (
+                "bluetooth.pair_retry".into(),
+                bead::core::Value::Bool(false),
+            ),
         ]))?;
-        runtime
-            .actions
-            .register("bluetooth.toggle_power", "bluetooth.control")?;
+        for action in [
+            "bluetooth.toggle_power",
+            "bluetooth.pair",
+            "bluetooth.pair_respond",
+            "bluetooth.pair_cancel",
+            "bluetooth.pair_retry",
+        ] {
+            runtime.actions.register(action, "bluetooth.control")?;
+        }
         runtime.actions.grant("bluetooth.control");
         Ok(runtime)
     }
@@ -2073,6 +2116,55 @@ impl SceneSource for Runtime {
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }
+        if let Some((node, name, arg)) = &host_action
+            && matches!(
+                name.as_str(),
+                "bluetooth.pair"
+                    | "bluetooth.pair_respond"
+                    | "bluetooth.pair_cancel"
+                    | "bluetooth.pair_retry"
+            )
+            && ((matches!(&event, UiEvent::Click { .. }) && !node.ends_with("field"))
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("Bluetooth completion event channel unavailable")?;
+            let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            // A typed PIN or passkey leaves the input buffer once it was used or the flow ended.
+            let mut clear = true;
+            if let Some(status) = &self.status {
+                match (name.as_str(), arg) {
+                    ("bluetooth.pair", bead::core::Value::Text(key)) => {
+                        status.bluetooth_pair(key, callback)
+                    }
+                    ("bluetooth.pair_respond", bead::core::Value::Text(answer)) => {
+                        clear =
+                            status.bluetooth_pair_respond(answer == "accept", &self.session.stores);
+                    }
+                    ("bluetooth.pair_cancel", _) => status.bluetooth_pair_cancel(),
+                    ("bluetooth.pair_retry", _) => status.bluetooth_pair_retry(callback),
+                    _ => {}
+                }
+            }
+            let changes = if clear {
+                BTreeMap::from([
+                    (
+                        crate::status_views::BLUETOOTH_SECRET_STORE.to_owned(),
+                        bead::core::Value::Text(String::new()),
+                    ),
+                    ("bluetooth.reveal".into(), bead::core::Value::Bool(false)),
+                ])
+            } else {
+                BTreeMap::new()
+            };
+            let scene = self.session.update(changes)?;
+            return self.finish_scene(scene, false);
+        }
         if let Some((_, name, _)) = &host_action
             && name == "launcher.open"
             && self.launcher_trigger
@@ -2845,12 +2937,44 @@ impl SceneSource for Runtime {
                         ("network.reveal".into(), bead::core::Value::Bool(false)),
                     ]))?
                 }
+                "escape"
+                    if self
+                        .status
+                        .as_ref()
+                        .is_some_and(|status| status.bluetooth_pairing_open()) =>
+                {
+                    // Esc cancels the pairing page before it closes the panel.
+                    if let Some(status) = &self.status {
+                        status.bluetooth_pair_cancel();
+                    }
+                    self.session.update(BTreeMap::from([
+                        (
+                            crate::status_views::BLUETOOTH_SECRET_STORE.to_owned(),
+                            bead::core::Value::Text(String::new()),
+                        ),
+                        ("bluetooth.reveal".into(), bead::core::Value::Bool(false)),
+                    ]))?
+                }
                 "escape" if self.session.stores.get("panel.open").is_some() => {
                     // A half-typed password never outlives its panel.
                     let mut values = std::collections::BTreeMap::from([(
                         "panel.open".into(),
                         bead::core::Value::Bool(false),
                     )]);
+                    if self
+                        .session
+                        .stores
+                        .get(crate::status_views::BLUETOOTH_SECRET_STORE)
+                        .is_some()
+                    {
+                        if let Some(status) = &self.status {
+                            status.bluetooth_pair_leave();
+                        }
+                        values.insert(
+                            crate::status_views::BLUETOOTH_SECRET_STORE.into(),
+                            bead::core::Value::Text(String::new()),
+                        );
+                    }
                     if self
                         .session
                         .stores
@@ -3206,6 +3330,8 @@ mod launcher_reopen_tests;
 mod link_runtime_tests;
 #[cfg(test)]
 mod output_runtime_tests;
+#[cfg(test)]
+mod pairing_runtime_tests;
 #[cfg(test)]
 mod session_menu_runtime_tests;
 #[cfg(test)]

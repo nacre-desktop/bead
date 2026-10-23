@@ -203,6 +203,9 @@ fn controlled_bluetooth_template_omits_unavailable_switch_action() -> Result<()>
             "bluetooth.power_message".into(),
             Value::Text("Bluetooth power control unavailable".into()),
         ),
+        ("bluetooth.view".into(), Value::Text("list".into())),
+        ("bluetooth.devices".into(), Value::list(Vec::new())),
+        ("bluetooth.list_message".into(), Value::Text(String::new())),
     ]);
     let h = Harness::load(
         &root(),
@@ -1339,6 +1342,153 @@ fn network_join_pages_have_goldens_at_both_scales() -> Result<()> {
                 &golden,
                 Default::default(),
                 &std::env::temp_dir().join(format!("bead-network-{name}-{scale}-diff")),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// B0055 goldens: device list and every pairing page of the Bluetooth popout.
+#[test]
+fn bluetooth_pairing_pages_have_goldens_at_both_scales() -> Result<()> {
+    // Install the built-in English catalog so the pages show real text.
+    let _ = crate::i18n::tr("bead.panel.bluetooth-pair", &[]);
+    let devices = Value::list(vec![
+        serde_json::json!({"id":"dev:dev_A","label":"Fixture headphones","caption":"80%","icon":"headphones","action":"","active":true,"enabled":false}),
+        serde_json::json!({"id":"dev:dev_B","label":"Fixture keyboard","caption":"Ready to pair","icon":"keyboard","action":"Pair","active":false,"enabled":true}),
+        serde_json::json!({"id":"dev:dev_C","label":"Fixture phone","caption":"Paired","icon":"smartphone","action":"","active":false,"enabled":false}),
+    ]);
+    let pair = |kind: &str, text: &str, extra: Vec<(&'static str, Value)>| {
+        let mut page = vec![
+            ("bluetooth.view", Value::Text("pair".into())),
+            (
+                "bluetooth.pair_title",
+                Value::Text("Pair with Fixture keyboard".into()),
+            ),
+            ("bluetooth.pair_kind", Value::Text(kind.into())),
+            ("bluetooth.pair_text", Value::Text(text.into())),
+        ];
+        page.extend(extra);
+        page
+    };
+    let countdown = (
+        "bluetooth.pair_countdown",
+        Value::Text("Expires in 52 s".into()),
+    );
+    type Page = (&'static str, Vec<(&'static str, Value)>);
+    let pages: [Page; 7] = [
+        ("list", vec![("bluetooth.devices", devices)]),
+        (
+            "waiting",
+            pair("waiting", "Confirm pairing on your device.", vec![]),
+        ),
+        (
+            "pin",
+            pair(
+                "pin",
+                "Enter the pairing code from your device.",
+                vec![
+                    countdown.clone(),
+                    ("bluetooth.secret", Value::Text("1234".into())),
+                ],
+            ),
+        ),
+        (
+            "confirm",
+            pair(
+                "confirm",
+                "Does 123456 match the code on your device?",
+                vec![countdown.clone()],
+            ),
+        ),
+        (
+            "display",
+            pair(
+                "display",
+                "Type 654321 on your device, then press Enter.",
+                vec![countdown.clone()],
+            ),
+        ),
+        (
+            "authorize",
+            pair(
+                "authorize",
+                "Allow this device to connect?",
+                vec![countdown],
+            ),
+        ),
+        (
+            "error",
+            pair(
+                "error",
+                "Wrong code. Try again.",
+                vec![("bluetooth.pair_retry", Value::Bool(true))],
+            ),
+        ),
+    ];
+    for (name, extra) in pages {
+        for scale in [1., 1.5] {
+            let mut initial = BTreeMap::from([
+                ("view.edge".into(), Value::Text("top".into())),
+                ("panel.open".into(), Value::Bool(true)),
+                ("status.ready".into(), Value::Bool(true)),
+                ("status.active".into(), Value::Bool(true)),
+                ("status.heading".into(), Value::Text("Bluetooth".into())),
+                ("status.icon".into(), Value::Text("bluetooth".into())),
+                (
+                    "status.primary".into(),
+                    Value::Text("Fixture headphones".into()),
+                ),
+                (
+                    "status.secondary".into(),
+                    Value::Text("Bluetooth on".into()),
+                ),
+                (
+                    "status.detail".into(),
+                    Value::Text("1 device connected".into()),
+                ),
+                ("bluetooth.power_visible".into(), Value::Bool(true)),
+                ("bluetooth.power_checked".into(), Value::Bool(true)),
+                ("bluetooth.power_enabled".into(), Value::Bool(true)),
+                ("bluetooth.power_busy".into(), Value::Bool(false)),
+                ("bluetooth.power_message".into(), Value::Text(String::new())),
+                ("bluetooth.view".into(), Value::Text("list".into())),
+                ("bluetooth.devices".into(), Value::list(Vec::new())),
+                ("bluetooth.list_message".into(), Value::Text(String::new())),
+                ("bluetooth.pair_title".into(), Value::Text(String::new())),
+                ("bluetooth.pair_kind".into(), Value::Text("waiting".into())),
+                ("bluetooth.pair_text".into(), Value::Text(String::new())),
+                (
+                    "bluetooth.pair_countdown".into(),
+                    Value::Text(String::new()),
+                ),
+                ("bluetooth.pair_error".into(), Value::Text(String::new())),
+                ("bluetooth.pair_busy".into(), Value::Bool(false)),
+                ("bluetooth.pair_retry".into(), Value::Bool(false)),
+            ]);
+            initial.extend(extra.iter().map(|(k, v)| ((*k).into(), v.clone())));
+            let mut h = Harness::load(
+                &root(),
+                Path::new("status/bluetooth.luau"),
+                &root().join("palette.json"),
+                initial,
+                Config {
+                    width: 380,
+                    height: if name == "list" { 520 } else { 300 },
+                    scale,
+                },
+            )?;
+            let frame = h.render()?;
+            let golden = root()
+                .join("tests/goldens")
+                .join(format!("bluetooth-{name}-{scale}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                Default::default(),
+                &std::env::temp_dir().join(format!("bead-bluetooth-{name}-{scale}-diff")),
             )?;
         }
     }

@@ -11,8 +11,10 @@ use nacre_protocol::core_services::{
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
 mod join;
+mod pairing;
 pub(crate) use join::SECRET_STORE;
 use join::{Page, Prompt, Reprompt};
+pub(crate) use pairing::SECRET_STORE as BLUETOOTH_SECRET_STORE;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -120,6 +122,9 @@ struct BluetoothControl {
     message: Option<String>,
     last_boot: Option<String>,
     checked: bool,
+    /// Pairing started from the device list (N0055 edge in `pairing.rs`) and its last notice.
+    flow: Option<pairing::Flow>,
+    notice: Option<&'static str>,
 }
 #[derive(Clone, Copy)]
 enum Mode {
@@ -204,6 +209,8 @@ impl Status {
                 message: None,
                 last_boot: None,
                 checked: false,
+                flow: None,
+                notice: None,
             })),
         }
     }
@@ -987,6 +994,7 @@ impl Status {
             ("bluetooth.power_busy".into(), Value::Bool(busy)),
             ("bluetooth.power_message".into(), Value::Text(message)),
         ]);
+        base.extend(pairing::project(&mut control, &candidate));
         base
     }
 
@@ -1111,6 +1119,7 @@ struct WifiCandidate {
     timeout_ms: u32,
 }
 struct BluetoothCandidate {
+    state: Option<BluetoothState>,
     topic_boot: Option<String>,
     eligible_identity: Option<(String, String)>,
     adapter_id: Option<String>,
@@ -1184,6 +1193,7 @@ fn bluetooth_candidate(
     let (adapter_id, adapter) =
         sole.map_or((None, None), |(id, adapter)| (Some(id), Some(adapter)));
     BluetoothCandidate {
+        state,
         topic_boot: Some(topic_boot.clone()),
         eligible_identity: if identity_matches && eligible {
             adapter_id.clone().map(|id| (topic_boot, id))

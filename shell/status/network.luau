@@ -30,11 +30,7 @@ local function Page()
         gap=gap,radius=T.radii.medium,fill="surface",table.unpack(kids)}
 end
 local function button(id,label,action,primary,h)
-    local height=h or BUTTON
-    return kit.Button{id=id,height=height,grow=1,padding=0,padding_top=(height-24)/2,radius=T.radii.small,justify="center",align="center",
-        fill=primary and (action and "primary" or "surfaceContainerHigh") or "surfaceContainer",aria_label=label,on_activate=action,
-        ui.Text{id=id.."-label",text=label,height=24,grow=1,font_size=BODY,text_align="center",
-            color=primary and action and "onPrimary" or (action and "onSurface" or "onSurfaceVariant")}}
+    return kit.ActionButton{id=id,label=label,on_activate=action,primary=primary,height=h}
 end
 -- Back arrow plus title: leaves the prompt or form without sending anything.
 local function header(title)

@@ -85,6 +85,8 @@ After Bead's core switch on Nacre, plan support for:
 - B0050: `TextInput masked` (bullets, no accessibility value, IME password purpose, no copy),
   `kit.PasswordField`, `kit.ConfirmButton`, and the `*.secret` store convention (never traced or saved).
   The Wi-Fi flow lives only in `nacre-shell/src/status_views/join.rs`.
+- B0055: `kit.ActionButton` (text button for forms and prompts, shared by the Wi-Fi and Bluetooth pages).
+  The Bluetooth flow lives only in `nacre-shell/src/status_views/pairing.rs`.
 
 - B0048: `bead_core::pearl` (magnet/landing/place geometry, drag state machine, layout store) and
   `bead_wayland::pearls` (detach/dock any panel session into a floating surface, guide slots). Edge, insets,

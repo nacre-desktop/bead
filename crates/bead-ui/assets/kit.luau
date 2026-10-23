@@ -236,6 +236,16 @@ return function(ui, tokens)
             aria_label=shown and p.hide_label or p.show_label,on_activate=p.on_toggle}
         return ui.Row(out)
     end
+    -- Text button for forms and prompts: centred label, `primary` fills with the primary role while
+    -- armed; a nil `on_activate` dims it. `height` defaults to 36 and the button grows to share a row.
+    function kit.ActionButton(p)
+        local height=p.height or 36
+        local armed=p.on_activate~=nil
+        return kit.Button{id=p.id,height=height,grow=1,padding=0,padding_top=(height-24)/2,radius=tokens.radii.small,justify="center",align="center",
+            fill=p.primary and (armed and "primary" or "surfaceContainerHigh") or "surfaceContainer",aria_label=p.label,on_activate=p.on_activate,
+            ui.Text{id=p.id.."-label",text=p.label,height=24,grow=1,font_size=tokens.text.body*4/3,text_align="center",
+                color=p.primary and armed and "onPrimary" or (armed and "onSurface" or "onSurfaceVariant")}}
+    end
     -- Row button that asks again in place: while `confirming` it shows `confirm_label` in the error
     -- colour with the same glyph and runs `on_confirm`; otherwise `label` runs `on_activate`.
     function kit.ConfirmButton(p)
