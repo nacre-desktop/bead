@@ -421,7 +421,11 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
 def save_overall_summary(output: pathlib.Path, reports: dict[str, dict]) -> dict:
     result = {"schema_version": 1,
               "complete": bool(reports) and all(report["complete"] for report in reports.values()),
-              "absolute_verdict": "PASS" if reports and all(report["absolute_verdict"] == "PASS" for report in reports.values()) else "INCOMPLETE / STOP",
+              "absolute_verdict": (
+                  "PASS" if reports and all(report["absolute_verdict"] == "PASS" for report in reports.values())
+                  else "REHEARSAL ONLY — no laptop verdict" if reports and all(
+                      report.get("rehearsal_only") and report["complete"] for report in reports.values())
+                  else "INCOMPLETE / STOP"),
               "renderers": reports}
     path = output / "summary.json"
     temp = path.with_suffix(".json.tmp")

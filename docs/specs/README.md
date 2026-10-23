@@ -181,6 +181,11 @@ checkout. The control, its bundle and the dashboard fixtures tree (`51dbf56f`) a
 Known limit: the harness runs without a daemon link (see the runbook). During a capture no
 process command line may contain "nacre-lead" (the quiet-host gate matches it), including
 worker ssh commands and wrapper scripts. Runbook: `docs/research/laptop-reference-capture-runbook.md`.
+Desktop rehearsal (niri nested, 12/12 arms ARM_VALID, production and `--include-cpu`, no verdict):
+candidate − control medians in MiB, production never +1.47, once +1.58, several +3.23, combined +6.19;
+CPU batch +1.40, +5.92, +1.34, +3.17. File-backed PSS is about +2.1 to +2.9 (larger binary) and anonymous
+swings between −1 and +3.8 in the open-panel phases from run to run. Expect the laptop to need the
+pair medians, not single arms.
 
 ### Lead note — render backend and the niri wallpaper buffer — 2026-10-22
 

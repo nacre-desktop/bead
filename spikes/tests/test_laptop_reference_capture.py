@@ -100,6 +100,18 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "uncommitted changes"):
                 capture.check_candidate_shell_tree({"shell_git_tree": shell, "source_git_trees": current})
 
+    def test_overall_summary_labels_a_complete_rehearsal_not_stop(self):
+        with tempfile.TemporaryDirectory(prefix="bead-laptop-overall-") as temp:
+            out = pathlib.Path(temp)
+            done = {"complete": True, "rehearsal_only": True, "absolute_verdict": "REHEARSAL ONLY — no laptop verdict"}
+            self.assertEqual(capture.save_overall_summary(out, {"production": done, "cpu": done})["absolute_verdict"],
+                             "REHEARSAL ONLY — no laptop verdict")
+            broken = {**done, "complete": False, "absolute_verdict": "INCOMPLETE / STOP"}
+            self.assertEqual(capture.save_overall_summary(out, {"production": done, "cpu": broken})["absolute_verdict"],
+                             "INCOMPLETE / STOP")
+            real = {"complete": True, "rehearsal_only": False, "absolute_verdict": "PASS"}
+            self.assertEqual(capture.save_overall_summary(out, {"production": real})["absolute_verdict"], "PASS")
+
     def test_quiet_host_pgrep_gate_is_laptop_only(self):
         manifest = {"control": {"path": "c", "sha256": "0"}, "candidate": {"path": "b", "sha256": "1"},
                     "control_bundle_root": "bundle"}
