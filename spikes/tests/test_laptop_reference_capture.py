@@ -65,7 +65,8 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
                             "exact_original_binary_identity": True},
                 "candidate": {"path": "candidate", "sha256": capture.sha256(candidate),
                               "shell_git_tree": subprocess.check_output(
-                                  ["git", "-C", str(ROOT), "rev-parse", "HEAD:shell"], text=True).strip()},
+                                  ["git", "-C", str(ROOT), "rev-parse", "HEAD:shell"], text=True).strip(),
+                              "source_git_trees": capture.source_git_trees()},
                 "control_bundle_root": "control-bundle",
                 "control_bundle_sha256": capture.canonical_tree_hash(bundle),
                 "dashboard_fixtures_sha256": capture.canonical_tree_hash(fixture_root),
@@ -83,6 +84,39 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             capture.check_candidate_shell_tree({"source_revision": "old", "shell_git_tree": "0" * 40})
         with self.assertRaisesRegex(RuntimeError, "rebuild the candidate"):
             capture.check_candidate_shell_tree({"source_revision": "old"})
+
+    def test_candidate_built_from_different_rust_sources_or_a_dirty_checkout_is_refused(self):
+        current = capture.source_git_trees()
+        shell = current["shell"]
+        with self.assertRaisesRegex(RuntimeError, "rebuild the candidate"):
+            capture.check_candidate_shell_tree({"shell_git_tree": shell})
+        with self.assertRaisesRegex(RuntimeError, "rebuild the candidate"):
+            capture.check_candidate_shell_tree({"shell_git_tree": shell,
+                                                "source_git_trees": {**current, "crates": "0" * 40}})
+        real = subprocess.check_output
+        def dirty(command, *args, **kwargs):
+            return " M shell/ui/main.luau\n" if "status" in command else real(command, *args, **kwargs)
+        with mock.patch.object(capture.subprocess, "check_output", side_effect=dirty):
+            with self.assertRaisesRegex(RuntimeError, "uncommitted changes"):
+                capture.check_candidate_shell_tree({"shell_git_tree": shell, "source_git_trees": current})
+
+    def test_only_the_always_on_shell_counts_as_the_measured_process(self):
+        always_on = ["/x/nacre-shell", "--bar", "--core-views", "--renderer", "auto", "--command-socket", "/s"]
+        self.assertEqual(launcher_proof.measured_process_kind(always_on), "always-on-shell")
+        # The production service flags (daemon link, UI provider, notices/OSD overlay) stay the same process.
+        self.assertEqual(launcher_proof.measured_process_kind(
+            always_on + ["--ui-provider", "--daemon-socket", "/d", "--notices"]), "always-on-shell")
+        for other in (["/x/nacre-shell", "--app", "settings", "--command-socket", "/s"],
+                      ["/x/nacre-shell", "--app", "colors"],
+                      ["/x/nacre-shell", "--bar", "--core-views", "--app", "welcome"],
+                      ["/x/nacre-shell", "--ui", "settings/main.luau"],
+                      ["/x/nacre-shell", "--bar", "--audio-panel"],
+                      ["/x/nacre-shell", "helper", "--bar", "--core-views"],
+                      ["/x/alacritty", "--bar", "--core-views"], []):
+            self.assertEqual(launcher_proof.measured_process_kind(other), "not-always-on-shell", other)
+        row = launcher_proof.classify_renderer(
+            ["nacre-shell", "--app", "settings"], "", "", "production", False)
+        self.assertEqual((row["main_bar"], row["measured_process"]), ("unknown", "not-always-on-shell"))
 
     def test_ui_error_aborts_the_bar_wait_instead_of_timing_out(self):
         with self.assertRaisesRegex(RuntimeError, "UI_ERROR"):
@@ -136,6 +170,7 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
                     value = 22.0 if side == "A" else 22.2
                     row = sample(value, drm={"i915@0000:00:02.0/system": value - 20.0} if drm else False)
                     backend = {"requested": "production", "main_bar": "cpu",
+                               "measured_process": "always-on-shell",
                                "opened_panel": "cpu", "gpu_libraries": [],
                                "evidence_source": "test measured PID evidence"}
                     row["backend"] = backend
@@ -178,6 +213,22 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             report = capture.summarize(root, ["niri"], rehearsal=False)
             self.assertEqual(report["arm_validity"]["niri/B1"]["valid"], False)
             self.assertEqual(report["absolute_verdict"], "INCOMPLETE / STOP")
+
+    def test_arm_measuring_an_app_process_is_invalid(self):
+        with tempfile.TemporaryDirectory(prefix="bead-laptop-app-process-") as temp:
+            root = pathlib.Path(temp)
+            self.make_batch(root)
+            path = root / "niri" / "B2" / "niri" / "dashboard-residency.json"
+            residency = json.loads(path.read_text())
+            residency["bar"]["backend"]["measured_process"] = "not-always-on-shell"
+            path.write_text(json.dumps(residency))
+            report = capture.summarize(root, ["niri"], rehearsal=False)
+            self.assertEqual(report["arm_validity"]["niri/B2"],
+                             {"valid": False, "reason": "measured process is not the always-on shell"})
+            self.assertEqual(report["absolute_verdict"], "INCOMPLETE / STOP")
+            path.write_text(json.dumps({**residency, "bar": {**residency["bar"], "backend": {
+                **residency["bar"]["backend"], "measured_process": "always-on-shell"}}}))
+            self.assertTrue(capture.validate_arm(root, "niri", "B2")[0])
 
     def test_a1_closed_phase_rows_inactive_panel_is_valid_with_warm_cpu_rows(self):
         # Reproduces laptop run 3 A1: settled phase rows record opened_panel "inactive".

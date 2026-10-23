@@ -59,11 +59,22 @@ def canonical_tree_hash(root: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+SOURCE_TREE_PATHS = ("shell", "crates", "vendor", "Cargo.lock")
+
+
+def source_git_trees(revision: str = "HEAD", root: pathlib.Path = ROOT) -> dict[str, str]:
+    """Git object ids of everything the candidate binary and its UI bundle are built from."""
+    return {path: subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", f"{revision}:{path}"], text=True).strip()
+        for path in SOURCE_TREE_PATHS}
+
+
 def check_candidate_shell_tree(candidate: dict) -> None:
     """The candidate runs the checkout's shell/ tree, so the binary must come from that exact tree.
 
     A binary built from an older Bead revision than the checkout fails inside the
-    UI (Luau API mismatch, `UI_ERROR`) long before a valid arm exists.
+    UI (Luau API mismatch, `UI_ERROR`) long before a valid arm exists. The Rust sources
+    (crates/, vendor/, Cargo.lock) must match too, and the checkout must be clean there.
     """
     expected = candidate.get("shell_git_tree")
     actual = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD:shell"], text=True).strip()
@@ -71,6 +82,16 @@ def check_candidate_shell_tree(candidate: dict) -> None:
         raise RuntimeError(
             f"candidate was built from shell/ tree {expected} (revision {candidate.get('source_revision')}) "
             f"but this checkout has shell/ tree {actual}; rebuild the candidate from this checkout")
+    built = candidate.get("source_git_trees")
+    current = source_git_trees()
+    if not isinstance(built, dict) or built != current:
+        raise RuntimeError(
+            f"candidate source trees {built} (revision {candidate.get('source_revision')}) differ from "
+            f"this checkout's {current}; rebuild the candidate from this checkout")
+    dirty = subprocess.check_output(
+        ["git", "-C", str(ROOT), "status", "--porcelain", "--", *SOURCE_TREE_PATHS], text=True).strip()
+    if dirty:
+        raise RuntimeError(f"checkout has uncommitted changes in the built sources:\n{dirty}")
 
 
 def load_manifest(path: pathlib.Path) -> dict:
@@ -204,6 +225,11 @@ def validate_arm(raw_root: pathlib.Path, compositor: str, label: str) -> tuple[b
                    ("cpu", "cpu (configured dashboard renderer)", "cpu-fallback", "native-gl")
                    for row in panel_rows)):
         return False, "actual renderer backend is unknown for one or more measured samples"
+    # The measured PID must be the always-on shell (bar + frame + lazy panels/overlays), never an
+    # `--app` process (Settings, sidebar, Colors, Welcome), whose memory is outside the 25 MiB target.
+    if any(not isinstance(row, dict) or row.get("measured_process") != "always-on-shell"
+           for row in main_rows + panel_rows):
+        return False, "measured process is not the always-on shell"
     expected = {"never", "once", "several", "combined"}
     if any(not isinstance(residency.get(phase), dict) for phase in expected):
         return False, "one or more settled phases are absent"
@@ -437,7 +463,7 @@ def terminate_owned(process: subprocess.Popen) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    default_home = pathlib.Path.home() / ".local/share/nacre/ai/lead/bead-laptop-reference-20261023"
+    default_home = pathlib.Path.home() / ".local/share/nacre/ai/lead/bead-laptop-reference-20261024"
     parser.add_argument("--manifest", type=pathlib.Path, default=default_home / "artifacts/manifest.json")
     parser.add_argument("--output", type=pathlib.Path,
                         default=default_home / ("evidence-" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")))

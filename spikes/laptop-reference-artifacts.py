@@ -12,6 +12,7 @@ import tarfile
 
 
 FROZEN_FIXTURE_GIT_TREE = "51dbf56ff49bf55656d7f04257f532dde73ece47"
+SOURCE_TREE_PATHS = ("shell", "crates", "vendor", "Cargo.lock")
 
 
 def digest(path: pathlib.Path) -> str:
@@ -38,6 +39,13 @@ def git_tree(root: pathlib.Path, revision: str) -> str:
         text=True).strip()
 
 
+def source_git_trees(root: pathlib.Path, revision: str) -> dict[str, str]:
+    repository = subprocess.check_output(["git", "-C", str(root), "rev-parse", "--show-toplevel"], text=True).strip()
+    return {path: subprocess.check_output(
+        ["git", "-C", repository, "rev-parse", f"{revision}:{path}"], text=True).strip()
+        for path in SOURCE_TREE_PATHS}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--control", type=pathlib.Path, required=True)
@@ -45,6 +53,9 @@ def main() -> int:
     parser.add_argument("--fixtures", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--candidate-revision", required=True)
+    parser.add_argument("--examples", type=pathlib.Path,
+                        help="directory with the helper examples built with the candidate (copied to examples/)")
+    parser.add_argument("--toolchain", default="pinned Bead CI Rust 1.99.0; release profile")
     parser.add_argument("--control-revision", default="1cff9d17d61fb05451546bb0ea13c826c93cb4c9")
     parser.add_argument("--control-kind", choices=("original-frozen", "frozen-source-rebuild"), default="original-frozen")
     args = parser.parse_args()
@@ -56,6 +67,7 @@ def main() -> int:
     try:
         frozen_tree = git_tree(args.fixtures, args.control_revision)
         candidate_tree = git_tree(args.fixtures, args.candidate_revision)
+        candidate_sources = source_git_trees(args.fixtures, args.candidate_revision)
     except subprocess.CalledProcessError as error:
         parser.error(f"could not prove dashboard fixture source revisions: {error}")
     if frozen_tree != FROZEN_FIXTURE_GIT_TREE:
@@ -88,6 +100,12 @@ def main() -> int:
     frozen_fixture_hash = tree_digest(bundle_root / "shell/tests/fixtures/dashboard")
     if frozen_fixture_hash != tree_digest(args.fixtures.resolve()):
         parser.error("frozen control bundle and current main dashboard fixtures differ")
+    artifacts["candidate"]["shell_git_tree"] = candidate_sources["shell"]
+    artifacts["candidate"]["source_git_trees"] = candidate_sources
+    if args.examples:
+        if not args.examples.is_dir():
+            parser.error(f"examples directory is missing: {args.examples}")
+        shutil.copytree(args.examples, output / "examples")
     original_sha = "b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b"
     original_identity = artifacts["control"]["sha256"] == original_sha
     if args.control_kind == "original-frozen" and not original_identity:
@@ -102,7 +120,7 @@ def main() -> int:
                 "control_bundle_sha256": tree_digest(bundle_root),
                 "dashboard_fixtures_sha256": tree_digest(args.fixtures.resolve()),
                 "dashboard_fixtures_git_tree": candidate_tree,
-                "toolchain": "pinned Bead CI Rust 1.99.0; release profile",
+                "toolchain": args.toolchain,
                 "notes": ([] if original_identity else
                           ["The original frozen executable was not used.",
                            "Control is a hash-pinned rebuild from frozen source 1cff9d17."])}

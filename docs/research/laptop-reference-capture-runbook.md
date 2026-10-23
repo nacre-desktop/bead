@@ -4,34 +4,68 @@ The capture is a supervised, private nested-session run. The owner starts it onl
 after choosing an idle AC-powered window and signaling the lead. Niri is required.
 Hyprland is optional and adds about 45 minutes, so run it in a separate window.
 
+## What is measured (always-on shell only)
+
+The measured PID is exactly one process: the **always-on shell**,
+`nacre-shell --bar --core-views ...` (the same argv for the frozen control and the
+candidate). On current main that one process contains the bar, the desktop frame
+(edge art, lips, reserved edges), the lazily opened launcher, dashboard, popouts and
+status panels, the notices/OSD overlay slot (no surface and no state while idle) and
+the single UI-provider link. These belong to the 25 MiB always-on target.
+
+Everything started with `nacre-shell --app NAME` is a **separate, short-lived
+process** and is outside the target: Settings, the AI sidebar, Colors and Welcome
+(B0052/B0059/B0060). The harness never launches them. It records
+`measured_process` for every sample (from the PID's own `/proc/<pid>/cmdline`) and
+marks an arm invalid unless it is `always-on-shell`, so `--app`, `--ui`,
+`--audio-panel`, `--notification-bus`, `helper` and `ipc` invocations, or a binary
+not named `nacre-shell`, can never be measured by accident.
+
+Known fidelity limit: the harness runs the shell without a daemon link
+(`--menu-fixture`, no `--ui-provider`/`--daemon-socket`/`--notices`), as the control
+and previous captures did. The production start line adds the daemon client, the
+settings/i18n subscriptions and, once enabled, notice topics; those add anonymous
+memory the reference capture does not include. Treat the verdict as the shell's
+UI memory, not the full service.
+
 ## Prepare and stage the artifacts
 
 The artifact bundle contains the current `main` Bead release binary, the
 original frozen control (`b01dfcca…`), its matching `shell/` source tree from
-`1cff9d17`, and a manifest. The control was recovered from the desktop's private
-B0002 archive and rehashed against its recorded identity. Keep the bundle and
-manifest together. Stage the bundle contents at:
+`1cff9d17`, the helper examples and a manifest. The control was recovered from
+the desktop's private B0002 archive and rehashed against its recorded identity.
+Keep the bundle and manifest together. Stage the bundle contents at:
 
 ```text
-~/.local/share/nacre/ai/lead/bead-laptop-reference-20261023/artifacts/
+~/.local/share/nacre/ai/lead/bead-laptop-reference-20261024/artifacts/
 ```
 
 The candidate runs the checkout's `shell/` tree, so its binary must be built from
 that exact tree. The manifest pins `candidate.shell_git_tree`
-(`git rev-parse HEAD:shell`); the launcher refuses a candidate built from a
-different tree. (Run 4 stopped because a binary from Bead `9ce4209` ran a newer
-`shell/` tree: `UI_ERROR bar/main.luau:14 ... nil value`, then a bar-log timeout.
-The repeated `SERVICE_AUDIO disconnected` lines were not the cause: both arms run
-with `PIPEWIRE_REMOTE=bead-private-unavailable`, so audio is equally absent.)
+(`git rev-parse HEAD:shell`) and `candidate.source_git_trees` (`shell`, `crates`,
+`vendor`, `Cargo.lock`); the launcher refuses a candidate built from different
+trees and a checkout with uncommitted changes in those paths. (Run 4 stopped
+because a binary from Bead `9ce4209` ran a newer `shell/` tree: `UI_ERROR
+bar/main.luau:14 ... nil value`, then a bar-log timeout. The repeated
+`SERVICE_AUDIO disconnected` lines were not the cause: both arms run with
+`PIPEWIRE_REMOTE=bead-private-unavailable`, so audio is equally absent.)
 The first-presentation wait also aborts immediately on any `UI_ERROR`.
 The helper examples (`private-pointer`, `tray-fixture`, `notification-client`)
 are staged under `artifacts/examples/`; copy them to `<repo>/target/release/examples/`
-if the checkout lacks them. The 2026-10-23 candidate was built from `7f7cd74`
-with Rust 1.99.0, `cargo build -p nacre-shell --release --locked`.
+if the checkout lacks them. Build the candidate and the examples from the exact
+checkout commit with Rust 1.99.0, `cargo build -p nacre-shell --release --locked`
+(then `-p bead-wayland --example private-pointer` and
+`-p bead-services --example tray-fixture --example notification-client`), in an
+Arch container; the build script must stop on any cargo error. Write the manifest
+with `spikes/laptop-reference-artifacts.py --examples <dir> --toolchain <text>`,
+which fills the tree ids from `--candidate-revision`.
 
 The checkout's `shell/tests/fixtures/dashboard` tree must match the fixture-tree
-SHA-256 in the manifest. The launcher verifies both UI binaries and that tree
-before creating capture evidence.
+SHA-256 in the manifest and the frozen git tree `51dbf56f…`; the manifest script
+and the launcher both refuse anything else. If main's dashboard fixtures ever
+change, the control bundle (frozen `1cff9d17`) must not be edited: the capture
+would then compare different fixtures, so stop and ask the lead. The launcher
+verifies both UI binaries and that tree before creating capture evidence.
 
 ## Owner and lead steps
 

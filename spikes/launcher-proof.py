@@ -60,6 +60,19 @@ def renderer_evidence(pid, log, requested, panel_active=False):
     argv=[arg for arg in argv if arg]
     return classify_renderer(argv,maps,log.read_text(errors='replace'),requested,panel_active)
 
+SEPARATE_PROCESS_FLAGS = ('--app', '--ui', '--audio-panel', '--notification-bus', '--backend-probe')
+
+def measured_process_kind(argv):
+    """The memory gate measures the always-on shell only: `nacre-shell --bar --core-views ...`
+    (bar, frame, lazy panels, notices/OSD overlay). Settings, sidebar, Colors and Welcome run as
+    separate `--app` processes and are not part of the 25 MiB target; any other argv is refused."""
+    exe = pathlib.Path(argv[0]).name if argv else ''
+    if exe != 'nacre-shell' or '--bar' not in argv[1:] or '--core-views' not in argv[1:]:
+        return 'not-always-on-shell'
+    if argv[1:2] in (['helper'], ['ipc']) or any(flag in argv[1:] for flag in SEPARATE_PROCESS_FLAGS):
+        return 'not-always-on-shell'
+    return 'always-on-shell'
+
 def classify_renderer(argv, maps, text, requested, panel_active=False):
     """Pure classifier. RENDER_POLICY/BUFFER markers exist only in newer builds; the
     frozen control build emits none, so its CPU panel is affirmed from argv
@@ -78,6 +91,7 @@ def classify_renderer(argv, maps, text, requested, panel_active=False):
     elif panel_active and requested=='production' and not libraries and 'GPU_SHARED' not in text and not re.search(r'transport=GL',text): panel='cpu (configured dashboard renderer)'
     wallpaper_active=bool(re.search(r'WALLPAPER_SURFACE_COMMITTED',text))
     return {'requested':requested,'main_bar':main,'opened_panel':panel,'measured_argv':argv,
+            'measured_process':measured_process_kind(argv),
             'wallpaper_surface_committed':wallpaper_active,
             'gpu_libraries':libraries,'evidence_source':'measured PID /proc maps plus Bead renderer log markers'}
 
@@ -241,6 +255,8 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             requested_renderer=os.environ.get('BEAD_REFERENCE_RENDERER','production')
             bar['backend']=renderer_evidence(client.pid,log,requested_renderer)
             (raw/'render-backend-start.json').write_text(json.dumps(bar['backend'],indent=2)+'\n')
+            if bar['backend']['measured_process']!='always-on-shell':
+                raise RuntimeError('measured PID is not the always-on shell: '+' '.join(bar['backend']['measured_argv']))
             if os.environ.get('BEAD_REFERENCE_ABSOLUTE_GATE')=='1':
                 if bar.get('drm_mib') is None:
                     raise RuntimeError('reference baseline lacks DRM fdinfo; absolute laptop verdict is unavailable')
