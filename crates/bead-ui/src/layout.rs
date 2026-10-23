@@ -281,6 +281,8 @@ impl ViewSpec {
             if !(1. ..=256.).contains(&font_size) {
                 return Err(source.error("font_size must be1..256"));
             }
+            let family = crate::text_style::family(&text(p, "family", "IBM Plex Sans", source)?);
+            let font_size = crate::text_style::size(font_size, &family);
             let visible = boolean(p, "visible", true, source)?;
             let mut style = Style {
                 position: Position::Relative,
@@ -519,7 +521,7 @@ impl ViewSpec {
                     source,
                 )?,
                 font_size,
-                family: text(p, "family", "IBM Plex Sans", source)?,
+                family,
                 icon: p
                     .get("icon")
                     .map(|_| text(p, "icon", "", source))

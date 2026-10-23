@@ -3,7 +3,8 @@
 //! `settings.store.desktop` and `settings.store.dashboard` topics, applies Nacre's
 //! defaults and republishes one small effective-preferences Source, so every
 //! consumer reads the same decoded values and wakes on a change without a restart.
-//! Nacre keys live only here (ADR 0004); the framework gets the generic motion switch.
+//! Nacre keys live only here (ADR 0004); the framework gets the generic motion switch,
+//! text style and shell control (`ShellControl`).
 use bead::core::source::{Callback, Publisher, Result, Snapshot, Source, Subscription};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
@@ -14,6 +15,10 @@ pub const DASHBOARD: &str = "settings.store.dashboard";
 /// Nacre's `NacreDashboardRegistry.core` order, the default of `dashboard.tabs`.
 const CORE: [&str; 4] = ["today", "media", "weather", "system"];
 /// Tab lists written before the core set was fixed; QML treats them as unset.
+/// `NacreTokens.qml` defaults: families and the body size `textSize` is relative to.
+pub const INTERFACE_FONT: &str = "IBM Plex Sans";
+pub const MONO_FONT: &str = "JetBrainsMono Nerd Font";
+const BODY_SIZE: i32 = 12;
 const LEGACY: [&str; 5] = ["today", "weather", "media", "system", "focus"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,6 +29,17 @@ pub struct Prefs {
     pub fahrenheit: bool,
     /// `dashboard.tabs` filtered to the core pages, in the owner's order.
     pub core_tabs: Vec<String>,
+    /// `dashboardEnabled`, `controlCenterEnabled`, `topBarEnabled`, `frameSheen`:
+    /// QML treats anything but `false` as on.
+    pub dashboard_enabled: bool,
+    pub control_center_enabled: bool,
+    pub top_bar_enabled: bool,
+    pub frame_sheen: bool,
+    /// `interfaceFont` / `monoFont`: empty means Nacre's default family.
+    pub interface_font: String,
+    pub mono_font: String,
+    /// `textSize` minus Nacre's body size (12): added to every text token.
+    pub text_offset: i32,
 }
 impl Default for Prefs {
     fn default() -> Self {
@@ -60,11 +76,56 @@ impl Prefs {
         if core.is_empty() {
             core.push("today".into());
         }
+        let on = |key: &str| flag(key) != Some(false);
+        let family = |key: &str| {
+            desktop
+                .get(key)
+                .and_then(Json::as_str)
+                .map(str::trim)
+                .filter(|f| !f.is_empty() && f.len() <= 100 && !f.chars().any(char::is_control))
+                .unwrap_or_default()
+                .to_owned()
+        };
+        // JS `value || body`: zero and non-numbers fall back to the body size.
+        let size = desktop
+            .get("textSize")
+            .and_then(Json::as_f64)
+            .filter(|v| v.is_finite() && *v != 0.)
+            .map_or(BODY_SIZE, |v| v.round().clamp(1., 100.) as i32);
         Self {
+            dashboard_enabled: on("dashboardEnabled"),
+            control_center_enabled: on("controlCenterEnabled"),
+            top_bar_enabled: on("topBarEnabled"),
+            frame_sheen: on("frameSheen"),
+            interface_font: family("interfaceFont"),
+            mono_font: family("monoFont"),
+            text_offset: size - BODY_SIZE,
             reduce_motion: flag("reduceMotion") == Some(true) || flag("animations") == Some(false),
             fahrenheit: flag("weatherFahrenheit") == Some(true),
             core_tabs: core,
         }
+    }
+    /// Generic text style: Luau markup names `IBM Plex Sans` and
+    /// `JetBrainsMono Nerd Font` literally, so those names map to the owner's choice.
+    pub fn text_style(&self) -> bead::ui::text_style::TextStyle {
+        let alias =
+            |from: &str, to: &str| (!to.is_empty() && to != from).then(|| (from.into(), to.into()));
+        bead::ui::text_style::TextStyle {
+            aliases: [
+                alias(INTERFACE_FONT, &self.interface_font),
+                alias(MONO_FONT, &self.mono_font),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+            size_offset: self.text_offset as f32,
+        }
+    }
+    /// Host stores the bar markup reads to drop the button of a disabled panel (the
+    /// control center has no single bar button; its opens are refused by the gate).
+    pub fn bar_stores(&self) -> std::collections::BTreeMap<String, bead::core::Value> {
+        use bead::core::Value::Bool;
+        [("bar.dashboard.enabled".into(), Bool(self.dashboard_enabled))].into()
     }
     pub fn from_source(source: &dyn Source) -> Self {
         serde_json::from_value((*source.snapshot().data).clone()).unwrap_or_default()
@@ -175,6 +236,43 @@ mod tests {
         assert_eq!(
             tabs(json!({"tabs": ["today", "weather", "media", "system", "focus"]})),
             CORE
+        );
+    }
+    #[test]
+    fn panel_flags_sheen_fonts_and_text_size_follow_qml_defaults() {
+        let d = Prefs::default();
+        assert!(d.dashboard_enabled && d.control_center_enabled && d.top_bar_enabled);
+        assert!(d.frame_sheen && d.interface_font.is_empty() && d.text_offset == 0);
+        assert_eq!(d.text_style(), Default::default());
+        // `!== false` semantics: only a real false disables.
+        let odd = Prefs::decode(
+            &json!({"dashboardEnabled": 0, "topBarEnabled": null, "frameSheen": "no",
+                    "interfaceFont": 7, "monoFont": "  ", "textSize": "14"}),
+            &Json::Null,
+        );
+        assert_eq!(odd, d);
+        let set = Prefs::decode(
+            &json!({"dashboardEnabled": false, "controlCenterEnabled": false,
+                    "topBarEnabled": false, "frameSheen": false,
+                    "interfaceFont": " DejaVu Sans ", "monoFont": "DejaVu Sans Mono", "textSize": 14}),
+            &Json::Null,
+        );
+        assert!(!set.dashboard_enabled && !set.control_center_enabled && !set.top_bar_enabled);
+        assert!(!set.frame_sheen);
+        let style = set.text_style();
+        assert_eq!(style.size_offset, 2.);
+        assert_eq!(style.aliases[INTERFACE_FONT], "DejaVu Sans");
+        assert_eq!(style.aliases[MONO_FONT], "DejaVu Sans Mono");
+        // `textSize: 0` is falsy in QML and means the body size; a family equal to the
+        // default needs no alias.
+        let zero = Prefs::decode(
+            &json!({"textSize": 0, "interfaceFont": INTERFACE_FONT}),
+            &Json::Null,
+        );
+        assert_eq!(zero.text_style(), Default::default());
+        assert_eq!(
+            set.bar_stores()["bar.dashboard.enabled"],
+            bead::core::Value::Bool(false)
         );
     }
     struct Fake(Publisher);
@@ -314,7 +412,9 @@ mod tests {
                 seq: 1,
                 data: store_doc(
                     "desktop",
-                    json!({"weatherFahrenheit": true, "reduceMotion": true}),
+                    json!({"weatherFahrenheit": true, "reduceMotion": true,
+                           "interfaceFont": "DejaVu Sans", "textSize": 14,
+                           "dashboardEnabled": false}),
                 ),
             };
             framing::write(&mut writer, &snap).await.unwrap();
@@ -325,10 +425,15 @@ mod tests {
         let topic = |name| Arc::new(client.topic(name).unwrap()) as Arc<dyn Source>;
         let motion = Arc::new(Mutex::new(false));
         let record = motion.clone();
+        let gate = crate::shell_control::Gate::new();
+        let applied = gate.clone();
         let (_service, effective) = Service::start(
             topic(DESKTOP),
             topic(DASHBOARD),
-            Arc::new(move |p: &Prefs| *record.lock().unwrap() = p.reduce_motion),
+            Arc::new(move |p: &Prefs| {
+                *record.lock().unwrap() = p.reduce_motion;
+                applied.apply(p);
+            }),
         )
         .unwrap();
         for _ in 0..500 {
@@ -350,7 +455,12 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         assert!(*motion.lock().unwrap(), "reduced motion applied live");
-        assert!(Prefs::from_source(&*effective).reduce_motion);
+        let live = Prefs::from_source(&*effective);
+        assert!(live.reduce_motion);
+        assert_eq!(live.text_style().size_offset, 2.);
+        assert_eq!(live.text_style().aliases[INTERFACE_FONT], "DejaVu Sans");
+        use bead::wayland::ShellControl;
+        assert!(!gate.panel_allowed("dashboard-today") && gate.panel_allowed("sound"));
         client.stop().await.unwrap();
         server.abort();
         std::fs::remove_dir_all(dir).ok();

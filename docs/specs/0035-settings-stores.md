@@ -47,12 +47,12 @@ daemon consumer exists, so there is nothing to honour.
 | `dnd` | `services/NacreNotifs.qml`, `NacreDashboardState.qml`, `DesktopActions.qml`, `NacreMenuContext.qml` | **H** the daemon notification service reads it and publishes `notifications.do_not_disturb`, which B0020/B0024 show and toggle |
 | `weatherLocation` | `services/NacreWeather.qml` | **H** daemon `weather.rs` reads it |
 | `nativeClipboard` | `modules/NacreShellIpc.qml` (`nacre clipboard`) | **H** both values reach the launcher clipboard route (B0026); Bead has no separate native clipboard view |
-| `topBarEnabled`, `frameTopEnabled` | `drawers/NacreScreen.qml`, `NacrePanelInput.qml`, `topbar/NacreStatusHint.qml` | **G** needs a persistent "bar disabled" state in `bead-wayland` (separate from the Super+Z hide toggle) |
-| `dashboardEnabled`, `controlCenterEnabled`, `aiSidebarEnabled` | `drawers/NacrePanelInput.qml`, `NacreFrameLips.qml`, `services/NacrePanelState.qml` | **G** gate the three open routes (`view.open`, `nacre tab`, `drawers toggle`) and hide the bar button; touches the bar store plumbing. `aiSidebarEnabled` is **A** (no AI sidebar, B0026 blocker C) |
-| `workspaceWindowHints` | `topbar/NacreWorkspaceRow.qml` | **G** Bead's workspace capsule shows no window icons yet |
-| `interfaceFont`, `monoFont`, `textSize` | `widgets/NacreTokens.qml` | **G** Luau markup names its families literally (`IBM Plex Sans`, `JetBrainsMono Nerd Font`); a font-alias hook in `bead-ui` layout plus cache invalidation is a framework unit |
+| `topBarEnabled`, `frameTopEnabled` | `drawers/NacreScreen.qml`, `NacrePanelInput.qml`, `topbar/NacreStatusHint.qml` | **I** B0036: `bead_wayland::ShellControl` bar-off state, live |
+| `dashboardEnabled`, `controlCenterEnabled`, `aiSidebarEnabled` | `drawers/NacrePanelInput.qml`, `NacreFrameLips.qml`, `services/NacrePanelState.qml` | **I** B0036 for `dashboardEnabled` and `controlCenterEnabled` (panel gate plus dashboard button). `aiSidebarEnabled` is **A** (no AI sidebar, B0026 blocker C) |
+| `workspaceWindowHints` | `topbar/NacreWorkspaceRow.qml` | **G** B0036: still open, Bead's capsule shows no window icons yet |
+| `interfaceFont`, `monoFont`, `textSize` | `widgets/NacreTokens.qml` | **I** B0036: `bead_ui::text_style` alias table and size offset, live reload |
 | `interfaceGradients` | `NacreTokens.qml`, `topbar/NacreWorkspacePearl.qml`, `dashboard/NacreDashboardHero.qml` | **A** Bead has no pearl or hero gradients; only the frame rim stroke (see `frameSheen`) |
-| `frameSheen` | `drawers/NacreFrameRim.qml`, `NacrePanelHost.qml` | **G** maps to the rim gradient stroke in `placement.rs`; needs scene-cache invalidation on change |
+| `frameSheen` | `drawers/NacreFrameRim.qml`, `NacrePanelHost.qml` | **I** B0036: no rim stroke when off; decoration variant rebuilds the tiles |
 | `frameWidth`, `frameRounding`, `frameLeftEnabled`, `frameRightEnabled`, `frameBottomEnabled`, `leftEdge`..`bottomEdge` (legacy aliases) | `services/NacreHoverIntent.qml`, `drawers/*` | **A** Bead has no desktop frame; panels attach to fixed edges |
 | `clickEdgeMenus`, `lipHoverDelay`, `dragPanels`, `detachablePanels` | `drawers/NacreFrameLips.qml`, `NacrePanelInput.qml`, `services/NacrePearls.qml`, `NacrePanelDragRouting.qml` | **A** no edge lips, pearls or panel dragging in Bead |
 | `livePreviews`, `nativeOverview`, `nativePalette` | `modules/extras/Overview.qml` (`livePreviews` only) | **A** no overview or palette view (B0026 note 3); `nativeOverview` and `nativePalette` have no shell reader |
@@ -71,7 +71,7 @@ daemon consumer exists, so there is nothing to honour.
 | `dashboard-extras.weatherPhotos` | `dashboard/NacreWeatherPage.qml`, `NacreWeatherSky.qml` | **A** Bead's Weather page has no photo hero |
 | `control-center.tiles` | `services/NacreControlPreferences.qml`, `modules/controlcenter/*` | **A** Bead's right-edge panels are the fixed audio, network, Bluetooth and battery views (B0018), not the tile grid |
 | `launcher` (`favorites`, `hidden`, usage), `launcher-sources` | `LauncherPreferences.qml`, `NacreMenuContext.qml` | **H** the daemon menu engine reads both files and filters and ranks before `menu.query` answers (`daemon/menu.rs`) |
-| `launcher-layout` (`order`, `hidden`) | `NacreMenuContext.qml` (`Model.rail`) | **G** QML orders and hides the category rail client-side; Bead's launcher lists engine rows with no rail yet |
+| `launcher-layout` (`order`, `hidden`) | `NacreMenuContext.qml` (`Model.rail`) | **G** B0036: still open, Bead's launcher has no category rail |
 | `launcher-menu`, `launcher-workflows`, `apps` | `NacreMenuContext.qml`, `NacreLauncherWorkflows.qml` | **H** custom entries, workflows and default apps are daemon/helper-owned and arrive as menu rows |
 | `colors`, `wallpaper-picker` (`palette*`, `layout`, `kind`) | `NacreColorsApp.qml`, `NacreColours.qml`, `NacreWallpapers.qml` | **H** the daemon generates the palette and publishes `wallpaper.active`; Bead applies it (B0021, B0026) |
 | `wallpaper-picker.motionMode`, `paused`, `pauseCovered` | `services/WallpaperPlayback.qml` | **A** Bead's wallpaper is static (B0021 non-goal: video) |
@@ -79,7 +79,7 @@ daemon consumer exists, so there is nothing to honour.
 | `power` (`enabled`, `ac`, `battery`) | `services/NacrePowerPolicy.qml` (runs `powerprofilesctl set`) | **B** a shell-side duty with no daemon owner |
 | `power.alerts`, `battery-alerts` | `services/NacreBatteryAlerts.qml` (low-battery notices) | **B** same |
 | `power.idle.*`, `lid`, `button`, `saver.enabled` | helper (`desktop-settings`) | **H** compositor/logind side; not a shell duty |
-| `profile.workspaceCount`, `workspaceNames`, `workspaceIcons` | `config/NacreBar.qml` into `topbar/NacreWorkspaceRow.qml` | **G** Bead lists the workspaces the compositor publishes; custom icons and the minimum count are not applied |
+| `profile.workspaceCount`, `workspaceNames`, `workspaceIcons` | `config/NacreBar.qml` into `topbar/NacreWorkspaceRow.qml` | **G** B0036: still open, see its table (icons need a capsule icon mode, count needs backend `fixedSlot`/`visiting`; names are Overview-only) |
 | `profile.components` (AI, Brain) | `services/NacreProfile.qml` | **A** Bead has no AI or Brain surfaces |
 | `cli`, `scheme`, `theme-targets`, `software-input`, `welcome` | Settings app and helper tools | **A** not read by always-on UI |
 
@@ -112,7 +112,7 @@ registry-only 1 row (9 keys).
   goldens keep their order (changing them means regenerating about 30 PNGs).
 - `settings.desktop` is empty until a UI calls `settings.desktop state` (see Design).
 
-## Deferred Bead work (G rows), in order of value
+## Deferred Bead work (G rows), in order of value (B0036 closed items 1, 3 and `frameSheen`; the rest stays open, see [B0036](0036-settings-gaps.md))
 
 1. Panel enable flags (`dashboardEnabled`, `topBarEnabled`, `controlCenterEnabled`) through
    the bar store plumbing in `bar_routes.rs` plus a refusal in `commands::map_views`.

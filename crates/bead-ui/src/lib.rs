@@ -13,6 +13,7 @@ pub mod schema;
 pub mod script;
 mod session;
 pub mod status_pill;
+pub mod text_style;
 mod watcher;
 use bead_core::{Stores, Value};
 use bead_render::{Palette, Primitive, Rect, Scene};

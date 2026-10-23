@@ -11,6 +11,8 @@ pub(super) struct App {
     pub(super) event_sender: Option<calloop::channel::Sender<UiEvent>>,
     pub(super) dismiss: Option<panel::Dismiss>,
     pub(super) hidden: bool,
+    pub(super) bar_off: bool,
+    pub(super) decoration_variant: u64,
     pub(super) panel_runtime: Option<Box<dyn SceneSource>>,
     pub(super) panel_epoch: u64,
     pub(super) panel_name: Option<String>,
@@ -167,6 +169,8 @@ pub fn run_runtime(
         event_sender: None,
         dismiss: None,
         hidden: false,
+        bar_off: false,
+        decoration_variant: 0,
         panel_runtime: None,
         panel_epoch: 0,
         panel_name,
@@ -315,6 +319,19 @@ pub fn run_runtime(
             let _ = changed.send(UiEvent::WallpaperRefresh);
         }))?;
         app.wallpaper_sender = Some(sender);
+    }
+    if let Some(control) = app.options.control.clone() {
+        let (sender, receiver) = calloop::channel::channel::<UiEvent>();
+        loop_.handle().insert_source(receiver, |event, _, app| {
+            if let calloop::channel::Event::Msg(event) = event {
+                app.ui(event);
+            }
+        })?;
+        control.watch(Box::new(move || {
+            let _ = sender.send(UiEvent::ControlChanged);
+        }));
+        app.bar_off = !control.bar_enabled();
+        app.decoration_variant = control.decoration_variant();
     }
     let _commands = if let Some(path) = &app.options.command_socket {
         let (sender, receiver) = calloop::channel::channel::<UiEvent>();
@@ -1335,8 +1352,10 @@ impl App {
         if !primary && !(selected && self.companion.is_some()) {
             return;
         }
+        // With the bar off its surfaces are never created but still counted, so the
+        // next surface on this output is recognised as the panel's.
         let count = self.surfaces.iter().filter(|s| s.output == output).count()
-            + if primary {
+            + if primary && !self.bar_off {
                 0
             } else {
                 self.options.surface_count

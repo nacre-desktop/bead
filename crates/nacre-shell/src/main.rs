@@ -23,6 +23,7 @@ mod popouts;
 mod prefs;
 mod reload;
 mod session_menu;
+mod shell_control;
 mod sound;
 mod state;
 mod status_views;
@@ -590,6 +591,7 @@ fn start(
     });
     // B0035: the owner's Nacre settings, read-only and live. Without the topics (no
     // daemon, older daemon) every default is Nacre's, so nothing changes.
+    let gate = shell_control::Gate::new();
     let _prefs = _ui_provider.as_ref().and_then(|client| {
         let topic = |name| {
             client
@@ -597,15 +599,20 @@ fn start(
                 .ok()
                 .map(|t| std::sync::Arc::new(t) as std::sync::Arc<dyn bead::core::source::Source>)
         };
-        prefs::Service::start(
-            topic(prefs::DESKTOP)?,
-            topic(prefs::DASHBOARD)?,
-            std::sync::Arc::new(|p: &prefs::Prefs| {
-                bead::core::animation::set_reduced_motion(p.reduce_motion)
-            }),
-        )
+        prefs::Service::start(topic(prefs::DESKTOP)?, topic(prefs::DASHBOARD)?, {
+            let gate = gate.clone();
+            std::sync::Arc::new(move |p: &prefs::Prefs| {
+                bead::core::animation::set_reduced_motion(p.reduce_motion);
+                bead::ui::text_style::set(p.text_style());
+                placement::set_sheen(p.frame_sheen);
+                gate.apply(p);
+            })
+        })
         .ok()
     });
+    if _prefs.is_some() && options.bar {
+        options.control = Some(gate);
+    }
     let core_sound = if core_views {
         Some(popouts::core_sound(
             _ui_provider.clone(),
@@ -833,7 +840,12 @@ fn start(
         if let Some(desktop) = &shared_desktop {
             let _ = desktop_owner.set(desktop.clone());
         }
+        let prefs_source = _prefs
+            .as_ref()
+            .map(|(_, source)| source.clone())
+            .filter(|_| bar);
         let make_source = move |output: Option<String>| {
+            let prefs_source = prefs_source.clone();
             let brightness_client = brightness_client.clone();
             let brightness_osd = brightness_osd.clone();
             let bar_routes = bar_routes.clone();
@@ -919,6 +931,11 @@ fn start(
                     if let Some(desktop) = runtime.desktop_owner() {
                         let _ = desktop_owner.set(desktop);
                     }
+                    let runtime = if let Some(source) = prefs_source {
+                        runtime.with_prefs(source)?
+                    } else {
+                        runtime
+                    };
                     let runtime = if let Some((client, tray)) = bar_routes {
                         runtime.with_bar_routes(client, tray)?
                     } else {

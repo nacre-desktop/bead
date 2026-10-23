@@ -103,6 +103,15 @@ pub fn body(scene: &Scene) -> Rect {
         ))
 }
 
+static SHEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// `frameSheen` (B0036): the 1 px gradient rim along the frame. Off draws no rim.
+pub fn set_sheen(on: bool) {
+    SHEEN.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+fn sheen() -> bool {
+    SHEEN.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Worker-owned and transient. No module, raster or generated asset survives the
 /// existing panel worker's close/idle retirement. Renderer caches remain capped.
 pub struct Chrome {
@@ -157,8 +166,17 @@ impl Chrome {
                 (self.primary[i] as f32 * 0.78 + [255., 249., 241.][i] * 0.22).round() as u8
             }
         });
+        let rim = if sheen() {
+            format!(
+                r#"<path d="{}" fill="none" stroke="url(#rim)" stroke-width="1" opacity="{}" stroke-linecap="butt"/>"#,
+                contour.rim,
+                if engaged { 0.25 } else { 0.16 }
+            )
+        } else {
+            String::new()
+        };
         Ok(format!(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="{} {} {} {}"><defs><linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{}" y2="{}"><stop stop-color="{}"/><stop offset=".38" stop-color="{}"/><stop offset="1" stop-color="{}"/></linearGradient></defs><path d="{}" fill="{}" fill-rule="evenodd"/><path d="{}" fill="none" stroke="url(#rim)" stroke-width="1" opacity="{}" stroke-linecap="butt"/></svg>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="{} {} {} {}"><defs><linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{}" y2="{}"><stop stop-color="{}"/><stop offset=".38" stop-color="{}"/><stop offset="1" stop-color="{}"/></linearGradient></defs><path d="{}" fill="{}" fill-rule="evenodd"/>{}</svg>"#,
             crop.w,
             crop.h,
             crop.x,
@@ -172,8 +190,7 @@ impl Chrome {
             rgb(self.secondary),
             contour.body,
             rgb(self.fill),
-            contour.rim,
-            if engaged { 0.25 } else { 0.16 }
+            rim
         ))
     }
     pub fn decorations(self) -> bead::wayland::DecorationFactory {

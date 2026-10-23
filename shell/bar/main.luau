@@ -5,6 +5,7 @@ local launcher=ui.resolve_for_check(ui.bind("bar.launcher"))
 local popouts=ui.resolve_for_check(ui.bind("bar.popouts"))
 local ws_on=ui.resolve_for_check(ui.bind("bar.workspace.enabled"))
 local tray_on=ui.resolve_for_check(ui.bind("bar.tray.enabled"))
+local dash_on=ui.resolve_for_check(ui.bind("bar.dashboard.enabled"))
 local function glyph(id,text,color)
     return ui.Text{id=id,text=text,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color=color or "secondary",text_align="center"}
 end
@@ -22,7 +23,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
                 }
             end},
         },
-        popouts and kit.Button{id="dashboard",width=30,height=30,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-dashboard"),on_activate=ui.action("view.open","dashboard-today"),
+        popouts and dash_on and kit.Button{id="dashboard",width=30,height=30,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-dashboard"),on_activate=ui.action("view.open","dashboard-today"),
             glyph("glyph","dashboard","primary"),
         } or nil,
     },

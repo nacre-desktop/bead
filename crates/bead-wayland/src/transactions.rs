@@ -130,6 +130,10 @@ impl App {
             }
             other => other,
         };
+        if matches!(event, UiEvent::ControlChanged) {
+            self.apply_control();
+            return;
+        }
         if let UiEvent::ShellHidden(state) = event {
             self.set_hidden(state.unwrap_or(!self.hidden));
             return;

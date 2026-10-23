@@ -67,6 +67,14 @@ pub fn install(revision: u64, entries: Entries) {
         listener();
     }
 }
+/// Run the listeners without a catalog change: a host input that every view reads
+/// while laid out (see `text_style`) changed.
+pub(crate) fn refresh() {
+    let listeners: Vec<Listener> = with(|s| s.listeners.values().cloned().collect());
+    for listener in listeners {
+        listener();
+    }
+}
 /// Drop the fetched catalog (daemon gone for good); built-in English remains.
 pub fn clear() {
     install(0, Entries::new());

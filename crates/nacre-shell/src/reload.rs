@@ -48,6 +48,8 @@ pub struct Runtime {
     launcher_memory: Option<crate::launcher::Memory>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
+    prefs: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    prefs_subscription: Option<bead::core::source::Subscription>,
     launcher_trigger: bool,
     last_launch: Option<crate::key_routes::Launch>,
     brightness: Option<crate::key_routes::Brightness>,
@@ -250,6 +252,8 @@ impl Runtime {
             launcher_memory: None,
             connection_status: None,
             connection_subscription: None,
+            prefs: None,
+            prefs_subscription: None,
             launcher_trigger: false,
             last_launch: None,
             brightness: None,
@@ -307,6 +311,18 @@ impl Runtime {
                 bead::core::Value::Bool(source.snapshot().data["reconnecting"] == true),
             )]))?;
         self.connection_status = Some(source);
+        Ok(self)
+    }
+    /// B0036: the bar's panel buttons follow the owner's panel enable flags.
+    pub fn with_prefs(
+        mut self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&crate::prefs::Prefs::from_source(&*source).bar_stores())?;
+        self.prefs = Some(source);
         Ok(self)
     }
     pub fn panel_session(session: bead::ui::Session, open: bool) -> Self {
@@ -1225,6 +1241,17 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=connection_subscription"),
             }
         }
+        if let Some(source) = &self.prefs {
+            let wakeup = wakeup.clone();
+            match source.subscribe(std::sync::Arc::new(move |snapshot| {
+                let prefs: crate::prefs::Prefs =
+                    serde_json::from_value((*snapshot.data).clone()).unwrap_or_default();
+                wakeup(UiEvent::Model(prefs.bar_stores()));
+            })) {
+                Ok(subscription) => self.prefs_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=prefs_subscription"),
+            }
+        }
         if let Some(routes) = &self.routes {
             let wakeup = wakeup.clone();
             match routes.watch(move |stores| wakeup(UiEvent::Model(stores))) {
@@ -1912,7 +1939,8 @@ impl SceneSource for Runtime {
             }
             UiEvent::CompanionVisibility(_)
             | UiEvent::CompanionSelect { .. }
-            | UiEvent::ShellHidden(_) => {
+            | UiEvent::ShellHidden(_)
+            | UiEvent::ControlChanged => {
                 return Err("companion visibility reached script".into());
             }
             UiEvent::Panel(_, _) | UiEvent::Output(_, _, _) => {

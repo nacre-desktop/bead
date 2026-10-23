@@ -12,10 +12,22 @@ impl App {
             return;
         }
         self.hidden = hidden;
+        self.rebuild_surfaces();
+    }
+    /// A persistent "no bar" state, separate from the hide toggle: bar surfaces are
+    /// not created while off, panel surfaces still are.
+    pub(super) fn set_bar_off(&mut self, off: bool) {
+        if self.bar_off != off {
+            self.bar_off = off;
+            self.rebuild_surfaces();
+        }
+    }
+    /// Destroy every layer surface and recreate those the current state allows.
+    fn rebuild_surfaces(&mut self) {
         // The dismiss catcher would otherwise keep swallowing clicks.
         drop(self.dismiss.take());
         self.surfaces.clear();
-        if hidden {
+        if self.hidden {
             return;
         }
         let keyboard_dismiss = self.panel_target
@@ -34,6 +46,31 @@ impl App {
         let outputs: Vec<_> = self.output.outputs().collect();
         for output in outputs {
             self.add_output(&qh, output);
+        }
+    }
+}
+impl App {
+    /// A [`ShellControl`] answer changed: bar presence, a now-forbidden open panel,
+    /// or the decoration variant.
+    pub(super) fn apply_control(&mut self) {
+        let Some(control) = self.options.control.clone() else {
+            return;
+        };
+        self.set_bar_off(!control.bar_enabled());
+        if self.panel_target
+            && self
+                .panel_name
+                .as_deref()
+                .is_some_and(|name| !control.panel_allowed(name))
+        {
+            self.close_panel();
+        }
+        let variant = control.decoration_variant();
+        if variant != self.decoration_variant {
+            self.decoration_variant = variant;
+            if let Err(error) = self.sync_all_decorations() {
+                eprintln!("DECORATION_ERROR {error}");
+            }
         }
     }
 }

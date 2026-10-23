@@ -285,6 +285,12 @@ impl App {
         center: Option<f32>,
     ) -> Result<(), String> {
         panels::validate_center(center)?;
+        if open
+            && let Some((name, control)) = name.zip(self.options.control.as_ref())
+            && !control.panel_allowed(name)
+        {
+            return Err(format!("panel {name} is disabled"));
+        }
         // IPC and keybindings use the same live trigger as pointer activation.
         // View names remain application-defined; no shell geometry lives here.
         let center = center.or_else(|| {

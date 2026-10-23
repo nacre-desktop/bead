@@ -132,8 +132,25 @@ pub trait WallpaperProvider: Send + Sync {
     fn discarded(&self, output: &str, revision: u64);
     fn output_removed(&self, output: &str);
 }
+/// Product-owned switches the shell loop honours live: whether the bar exists, which
+/// named panels may open, and a decoration variant that rebuilds the static tiles.
+pub trait ShellControl: Send + Sync {
+    /// Register the callback to run (from any thread) after any answer changed.
+    fn watch(&self, changed: Box<dyn Fn() + Send + Sync>);
+    fn bar_enabled(&self) -> bool {
+        true
+    }
+    fn panel_allowed(&self, _view: &str) -> bool {
+        true
+    }
+    fn decoration_variant(&self) -> u64 {
+        0
+    }
+}
 #[derive(Clone, Debug)]
 pub enum UiEvent {
+    /// A [`ShellControl`] answer changed.
+    ControlChanged,
     /// Event delivered to one output-owned UI session. The epoch rejects callbacks
     /// queued by a session after that output has been removed.
     Output(u64, String, Box<UiEvent>),
@@ -409,6 +426,7 @@ pub struct Options {
     pub trace_state: bool,
     /// Optional product-owned wallpaper consumer; the framework owns passive surfaces.
     pub wallpaper: Option<std::sync::Arc<dyn WallpaperProvider>>,
+    pub control: Option<std::sync::Arc<dyn ShellControl>>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -449,6 +467,7 @@ impl Default for Options {
             test_passive: false,
             trace_state: false,
             wallpaper: None,
+            control: None,
         }
     }
 }

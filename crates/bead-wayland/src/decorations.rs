@@ -25,6 +25,7 @@ struct Key {
     scale120: u32,
     engaged: bool,
     panel: Option<PanelKey>,
+    variant: u64,
 }
 pub(super) struct Tiles {
     key: Key,
@@ -85,6 +86,7 @@ impl App {
             scale120: surface.scale120,
             engaged,
             panel: shape,
+            variant: self.decoration_variant,
         };
         if surface.decorations.as_ref().is_some_and(|d| d.key == key) {
             return Ok(());
