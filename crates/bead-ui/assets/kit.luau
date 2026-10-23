@@ -392,5 +392,162 @@ return function(ui, tokens)
             kit.Button{id="discard",text=p.discard_label,width=96,on_activate=p.on_discard}}
     end
     function kit.BlurredArtwork(p) return ui.Image(props(p,{blur=12})) end
+    -- Wrapped text. The kit has no text measurement, so lines break by an average advance of 0.56 em
+    -- per character (a conservative width for proportional fonts); `max_lines` ends with an ellipsis.
+    function kit.Paragraph(p)
+        local size=p.font_size or tokens.text.body*4/3
+        local per=math.max(1,math.floor(p.width/(size*.56)))
+        local lines,line={},""
+        for word in string.gmatch(p.text or "","%S+") do
+            local joined=line=="" and word or line.." "..word
+            if line=="" or (utf8.len(joined) or #joined)<=per then line=joined else table.insert(lines,line);line=word end
+        end
+        if line~="" then table.insert(lines,line) end
+        if p.max_lines and #lines>p.max_lines then
+            while #lines>p.max_lines do table.remove(lines) end
+            local last=lines[#lines]
+            local n=utf8.len(last) or #last
+            lines[#lines]=(n>1 and string.sub(last,1,(utf8.offset(last,n) or 1)-1) or "").."…"
+        end
+        local lh=math.ceil(size*1.35)
+        local kids={}
+        for i,l in ipairs(lines) do
+            kids[i]=ui.Text{id="line-"..i,text=l,width=p.width,height=lh,font_size=size,text_align=p.text_align,color=p.color or "onSurface"}
+        end
+        return ui.Column(props(kids,{id=p.id,width=p.width,height=math.max(lh,#lines*lh),shrink=0,gap=0,position=p.position,left=p.left,top=p.top}))
+    end
+    -- Colour pieces (B0060). Colours are RGBA arrays from the caller (any fill accepts them); labels,
+    -- actions and sizes are plain arguments, so nothing here knows a palette role set or a product.
+    local mono="JetBrainsMono Nerd Font"
+    -- A swatch over a small caption, one button; `selected` draws the ring.
+    function kit.ColorSample(p)
+        return kit.Button{id=p.id,grow=1,shrink=1,height=p.height or 60,padding=0,radius=tokens.radii.small,fill="transparent",
+            hover_fill=ui.alpha("onSurface",.08),aria_label=p.aria_label or p.caption,on_activate=p.on_activate,
+            ui.Column{id="sample",width="fill",height="100%",gap=sp.xs,
+                ui.Box{id="swatch",width="fill",height=34,radius=tokens.radii.small,fill=p.color,
+                    border_width=p.selected and 2 or 0,border_color="onSurface"},
+                ui.Text{id="caption",text=p.caption or "",width="fill",height=18,font_size=9*4/3,text_align="center",color="onSurfaceVariant"}}}
+    end
+    -- `items`: `{id,color,caption,aria_label,action}`; one row of equal samples.
+    function kit.ColorSampleRow(p)
+        local kids={}
+        for i,item in ipairs(p.items) do
+            kids[i]=kit.ColorSample{id=item.id,color=item.color,caption=item.caption,aria_label=item.aria_label,
+                selected=item.selected,on_activate=item.action,height=p.height}
+        end
+        return ui.Row(props(kids,{id=p.id,width="fill",height=p.height or 60,shrink=0,gap=7}))
+    end
+    -- A named colour slot: swatch, label and value; the main area is one button (`on_arm`), the
+    -- lock button pins or releases the slot (`on_lock`). `armed` rings the slot, waiting for a sample.
+    function kit.ColorTarget(p)
+        return ui.Row{id=p.id,width="fill",height=54,shrink=0,gap=0,align="center",radius=12,fill="surfaceContainer",
+            border_width=p.armed and 2 or 1,border_color=p.armed and "primary" or "outline",
+            kit.Button{id="main",grow=1,height=52,padding=0,padding_left=12,radius=12,fill="transparent",hover_fill=ui.alpha("onSurface",.06),
+                aria_label=p.aria_label or p.label,on_activate=p.on_arm,
+                ui.Row{id="main-row",grow=1,height=52,gap=10,align="center",
+                    ui.Box{id="swatch",width=30,height=30,radius=tokens.radii.small,fill=p.color,shrink=0},
+                    ui.Text{id="label",text=p.label,width=64,height=20,shrink=0,font_size=tokens.text.caption*4/3,color="onSurface"},
+                    ui.Text{id="value",text=p.value or "",grow=1,height=20,family=mono,font_size=9*4/3,color="onSurfaceVariant"}}},
+            kit.IconButton{id="lock",text=p.locked and "lock" or "lock_open",aria_label=p.lock_label,width=34,height=34,padding=0,
+                fill="transparent",on_activate=p.on_lock}}
+    end
+    -- Tabs as text with an underline on the chosen one. `items`: `{id,label,selected}`.
+    function kit.TabStrip(p)
+        local kids={}
+        for i,item in ipairs(p.items) do
+            kids[i]=kit.Button{id=item.id,height=42,padding=0,padding_left=sp.sm,padding_right=sp.sm,radius=tokens.radii.full,
+                fill="transparent",hover_fill=ui.alpha("onSurface",.06),aria_label=item.label,on_activate=ui.action(p.on_change,p.change_arg and p.change_arg(item.id) or item.id),
+                ui.Column{id=item.id.."-col",height=42,justify="end",align="center",
+                    ui.Text{id="label",text=item.label,height=38,width=item.label and (#item.label*8+4) or 40,font_size=tokens.text.caption*4/3,text_align="center",
+                        color=item.selected and "onSurface" or "onSurfaceVariant"},
+                    ui.Box{id="line",width="100%",height=2,radius=1,fill=item.selected and "primary" or "transparent"}}}
+        end
+        return ui.Row(props(kids,{id=p.id,height=42,gap=sp.xl,align="center"}))
+    end
+    -- Compact toggle chips, `per_row` to a line (the kit has no wrapping row). `items`: `{id,label,selected}`.
+    function kit.ChipRow(p)
+        local lines,line={},nil
+        for i,item in ipairs(p.items) do
+            if not line or #line>=(p.per_row or 4) then line={};table.insert(lines,line) end
+            table.insert(line,kit.Button{id=item.id,height=32,padding=sp.xs,padding_left=sp.md,padding_right=sp.md,shrink=0,
+                width=(item.width or 2*sp.md+8+(utf8.len(item.label) or 4)*9),text=item.label,selected=item.selected,
+                fill=item.selected and "primaryContainer" or "surfaceContainer",color=item.selected and "onPrimaryContainer" or "onSurface",
+                aria_label=item.label,on_activate=maybe(ui.action(p.on_change,p.change_arg and p.change_arg(item.id) or item.id),item.enabled~=false)})
+        end
+        local rows={}
+        for i,l in ipairs(lines) do rows[i]=ui.Row(props(l,{id="line-"..i,gap=6})) end
+        return ui.Column(props(rows,{id=p.id,gap=6,shrink=0}))
+    end
+    -- An image with an invisible `cols` x `rows` hit grid; a hit sends the cell centre as fractions of
+    -- the box: `on_pick` is an action name and `pick_arg(x,y)` builds its argument. The image slot
+    -- (`icon`) is filled by the host; the host maps fractions to the painted part of the image.
+    function kit.ImagePick(p)
+        local cols,rows=p.cols or 16,p.rows or 10
+        local lines={}
+        for r=0,rows-1 do
+            local cells={}
+            for c=0,cols-1 do
+                cells[c+1]=ui.Button{drag=false,id="cell-"..c,grow=1,height="100%",padding=0,radius=0,fill=ui.alpha("surface",0),
+                    aria_label=p.aria_label,on_activate=ui.action(p.on_pick,p.pick_arg((c+.5)/cols,(r+.5)/rows)),
+                    ui.Box{id="hit",width="100%",height="100%",fill=ui.alpha("surface",0)}}
+            end
+            lines[r+1]=ui.Row(props(cells,{id="row-"..r,width="100%",grow=1,gap=0}))
+        end
+        return ui.Box{id=p.id,width=p.width,height=p.height,radius=p.radius or 0,
+            ui.Image{id="image",position="absolute",left=0,top=0,width=p.width,height=p.height,icon=p.icon,aria_label=p.aria_label},
+            ui.Column(props(lines,{id="hits",position="absolute",left=0,top=0,width=p.width,height=p.height,gap=0}))}
+    end
+    -- A miniature desktop drawn from a colour map (role -> RGBA): bar with logo mark and workspace
+    -- chips, a window, a terminal and a notification. `p.labels` carries the sample texts and
+    -- `p.image` the wallpaper slot (cropped by the host). Geometry follows the card size.
+    function kit.PreviewCard(p)
+        local w,h=p.width,p.height
+        local colors=p.colors or {}
+        local fallback=colors.onSurface or {232,232,232,255}
+        local function c(role) return colors[role] or fallback end
+        local L=p.labels or {}
+        local condensed=p.compact or h<260
+        local win_h=p.compact and math.min(100,h-50) or condensed and 80 or math.min(160,h-160)
+        local win_y=condensed and 40 or 50
+        local small=9*4/3
+        local kids={}
+        local function add(node) table.insert(kids,node) end
+        if p.image and p.image~="" then
+            add(ui.Image{id="wallpaper",position="absolute",left=5,top=condensed and 30 or 35,width=w-10,height=h-(condensed and 35 or 40),icon=p.image,aria_label=L.wallpaper})
+        end
+        for i,role in ipairs{"primary","secondary","tertiary"} do
+            add(ui.Box{id="mark-"..i,position="absolute",left=10+(i-1)*5,top=10+(i-1)*3,width=10,height=10,radius=3,fill=c(role)})
+        end
+        for i,role in ipairs{"primary","secondary","tertiary"} do
+            local filled=i==1 or p.workspace_colors
+            local on={"onPrimary","onSecondary","onTertiary"}
+            add(ui.Box{id="ws-"..i,position="absolute",left=40+(i-1)*29,top=8,width=24,height=20,radius=5,fill=filled and c(role) or "transparent",
+                ui.Text{id="n",position="absolute",left=0,top=2,width=24,height=16,text=tostring(i),font_size=8*4/3,text_align="center",color=filled and c(on[i]) or c("onSurface")}})
+        end
+        add(ui.Text{id="brand",position="absolute",left=w-73,top=10,width=60,height=16,text=L.brand or "",font_size=small,color=c("onSurface")})
+        local win={ui.Box{id="head",position="absolute",left=0,top=0,width=w-28,height=27,radius=9,fill=c("surfaceContainerHigh")},
+            ui.Text{id="title",position="absolute",left=12,top=6,width=120,height=16,text=L.files or "",font_size=small,color=c("onSurface")}}
+        for i,line in ipairs(L.lines or {}) do
+            if i<=(condensed and 2 or 3) then
+                table.insert(win,ui.Text{id="line-"..i,position="absolute",left=12,top=40+(i-1)*15.6,width=120,height=16,text=line,font_size=small,color=c("onSurface")})
+            end
+        end
+        table.insert(win,ui.Box{id="open",position="absolute",left=w-28-105,top=44,width=90,height=29,radius=6,fill=c("primary"),
+            ui.Text{id="label",position="absolute",left=0,top=6,width=90,height=16,text=L.open or "",font_size=small,text_align="center",color=c("onPrimary")}})
+        table.insert(win,ui.Box{id="rule",position="absolute",left=w-28-105,top=condensed and 76 or 84,width=90,height=3,fill=c("secondary")})
+        add(ui.Box(props(win,{id="window",position="absolute",left=14,top=win_y,width=w-28,height=win_h,radius=9,fill=c("surfaceContainer")})))
+        if not p.compact then
+            local th=condensed and 68 or 82
+            add(ui.Box{id="terminal",position="absolute",left=14,top=h-th-10,width=(w-34)*.52,height=th,radius=7,fill=c("surfaceContainerLowest"),
+                ui.Text{id="t1",position="absolute",left=9,top=condensed and 7 or 9,width=120,height=14,text=L.build or "",family=mono,font_size=8*4/3,color=c("onSurface")},
+                ui.Text{id="t2",position="absolute",left=9,top=condensed and 27 or 31,width=120,height=14,text=L.ready or "",font_size=8*4/3,color=c("green")},
+                ui.Text{id="t3",position="absolute",left=9,top=condensed and 45 or 53,width=120,height=14,text=L.warning or "",font_size=8*4/3,color=c("yellow")}})
+            local nw=w*.43-14
+            add(ui.Box{id="notice",position="absolute",left=w*.57,top=h-67-10,width=nw,height=67,radius=8,fill=c("primaryContainer"),
+                ui.Text{id="n1",position="absolute",left=9,top=9,width=nw-18,height=14,text=L.message or "",font_size=8*4/3,color=c("onPrimaryContainer")},
+                ui.Text{id="n2",position="absolute",left=9,top=24,width=nw-18,height=14,text=L.message_detail or "",font_size=8*4/3,color=c("onPrimaryContainer")}})
+        end
+        return ui.Box(props(kids,{id=p.id,width=w,height=h,shrink=0,radius=14,fill=c("frame"),border_width=1,border_color=c("outline"),aria_label=p.aria_label}))
+    end
     return kit
 end
