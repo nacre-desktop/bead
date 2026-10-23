@@ -12,10 +12,10 @@ const MAX_SIDE: u32 = 4096;
 const MAX_PIXELS: u64 = 4_000_000;
 /// Where a cache lives and how large its PNGs may be; output is `w`x`h` (fill).
 pub(crate) struct Cache {
-    dir: &'static str,
-    max_file: u64,
-    w: u32,
-    h: u32,
+    pub(crate) dir: &'static str,
+    pub(crate) max_file: u64,
+    pub(crate) w: u32,
+    pub(crate) h: u32,
 }
 /// Twice the 220 px card, so scale 2 stays sharp.
 pub(crate) const ART: Cache = Cache {
@@ -32,9 +32,9 @@ pub(crate) const SHOT: Cache = Cache {
     h: 96,
 };
 
-/// A display-size PNG thumbnail of the daemon's cached image, or `None` for anything
-/// that is not a plain regular PNG file in that cache within the limits.
-pub(crate) fn thumbnail(cache: &Cache, path: &str) -> Option<Arc<[u8]>> {
+/// The decoded image of a plain regular PNG file directly inside the cache directory, or
+/// `None` for anything else (relative or foreign path, symlink, oversized file or image).
+pub(crate) fn decode(cache: &Cache, path: &str) -> Option<image::DynamicImage> {
     let path = Path::new(path);
     if !path.is_absolute() || !path.parent()?.ends_with(cache.dir) {
         return None;
@@ -55,20 +55,31 @@ pub(crate) fn thumbnail(cache: &Cache, path: &str) -> Option<Arc<[u8]>> {
     let mut limits = Limits::default();
     limits.max_alloc = Some(32 * 1024 * 1024);
     reader.limits(limits);
-    let thumb = reader
-        .decode()
-        .ok()?
-        .resize_to_fill(cache.w, cache.h, FilterType::Triangle)
-        .to_rgba8();
+    reader.decode().ok()
+}
+pub(crate) fn encode(image: &image::RgbaImage) -> Option<Arc<[u8]>> {
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new_with_quality(
         &mut out,
         image::codecs::png::CompressionType::Fast,
         image::codecs::png::FilterType::Sub,
     )
-    .write_image(&thumb, cache.w, cache.h, image::ExtendedColorType::Rgba8)
+    .write_image(
+        image,
+        image.width(),
+        image.height(),
+        image::ExtendedColorType::Rgba8,
+    )
     .ok()?;
     Some(Arc::from(out))
+}
+/// A display-size PNG thumbnail of the daemon's cached image, or `None` for anything
+/// that is not a plain regular PNG file in that cache within the limits.
+pub(crate) fn thumbnail(cache: &Cache, path: &str) -> Option<Arc<[u8]>> {
+    let thumb = decode(cache, path)?
+        .resize_to_fill(cache.w, cache.h, FilterType::Triangle)
+        .to_rgba8();
+    encode(&thumb)
 }
 
 #[cfg(test)]

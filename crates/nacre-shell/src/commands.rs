@@ -199,6 +199,20 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     {
         return Err(crate::app::route(call.id, "settings", "open", &call.args));
     }
+    // B0060: `colorsApp open [image]` (what `nacre-colors` calls) opens the Colors app; an empty
+    // image means "no image". Opening never applies a palette.
+    if call.target == "colorsApp"
+        && call.method == "open"
+        && call.args.len() <= 1
+        && call.args.iter().all(Value::is_string)
+    {
+        let args: Vec<Value> = call
+            .args
+            .into_iter()
+            .filter(|image| image.as_str().is_some_and(|s| !s.is_empty()))
+            .collect();
+        return Err(crate::app::route(call.id, "colors", "open", &args));
+    }
     // The QML right sidebar (control center): `drawers toggle right` toggles it and
     // `nacre controls home|edit` opens it.
     let right = (call.target == "drawers"

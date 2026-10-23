@@ -49,6 +49,7 @@ pub struct Runtime {
     chat: Option<std::rc::Rc<crate::chat::Chat>>,
     chat_subscription: Vec<bead::core::source::Subscription>,
     settings: Option<std::rc::Rc<crate::settings::Settings>>,
+    colors: Option<std::rc::Rc<crate::colors::Colors>>,
     control: Option<std::rc::Rc<crate::control_center::ControlCenter>>,
     control_subscription: Vec<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
@@ -286,6 +287,7 @@ impl Runtime {
             chat: None,
             chat_subscription: Vec::new(),
             settings: None,
+            colors: None,
             control: None,
             control_subscription: Vec::new(),
             dashboard: None,
@@ -745,6 +747,23 @@ impl Runtime {
         self.actions.register("settings.do", "settings.control")?;
         self.actions.grant("settings.control");
         self.settings = Some(settings);
+        Ok(self)
+    }
+    /// B0060 Colors window: the explorer over the colours methods and the two topics it follows.
+    pub fn with_colors(
+        mut self,
+        client: Option<crate::nacre_source::Client>,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.colors.is_some() {
+            return Err("one data projector per panel".into());
+        }
+        let colors = std::rc::Rc::new(crate::colors::Colors::new(client));
+        let projector = colors.clone();
+        self.session
+            .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+        self.actions.register("colors.do", "colors.control")?;
+        self.actions.grant("colors.control");
+        self.colors = Some(colors);
         Ok(self)
     }
     /// Control center (B0049): tile data sources, the stored tile order and its published write.
@@ -1460,6 +1479,9 @@ impl Runtime {
             if let Some(dashboard) = &self.dashboard {
                 dashboard.attach_art(scene);
             }
+            if let Some(colors) = &self.colors {
+                colors.attach_images(scene);
+            }
             let asset_profile = bead::core::profile::Span::new("assets");
             for draw in &mut scene.primitives {
                 if let bead::render::Primitive::Image { path, .. } = draw
@@ -1646,6 +1668,12 @@ impl SceneSource for Runtime {
                 wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
             }));
         }
+        if let Some(colors) = &self.colors {
+            let wakeup = wakeup.clone();
+            colors.subscribe(std::sync::Arc::new(move || {
+                wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
+            }));
+        }
         if let Some(dashboard) = &self.dashboard {
             match dashboard.subscribe(wakeup.clone()) {
                 Ok(subscription) => self.dashboard_subscription = subscription,
@@ -1776,6 +1804,9 @@ impl SceneSource for Runtime {
         }
         if let Some(chat) = &self.chat {
             chat.set_viewport(width, height);
+        }
+        if let Some(colors) = &self.colors {
+            colors.set_viewport(width);
         }
         self.session.set_viewport(width, height)
     }
@@ -2074,6 +2105,22 @@ impl SceneSource for Runtime {
             };
             let changes = settings.act(arg, &edit, wake);
             let scene = self.session.update(changes)?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(colors), Some((id, name, bead::core::Value::Text(arg)))) =
+            (&self.colors, &host_action)
+            && name == "colors.do"
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let changes = colors.act(arg, &self.session.stores);
+            // A slider step keeps the focus so the drag continues over the next step.
+            let level = arg.starts_with("brightness:") || arg.starts_with("saturation:");
+            let scene = match level.then(|| self.session.focus_id(id)) {
+                Some(Ok(scene)) => scene,
+                _ => self.session.update(changes)?,
+            };
             return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)
@@ -2797,6 +2844,8 @@ impl SceneSource for Runtime {
                 }
             }
             UiEvent::Reload => Some(self.session.reload()?),
+            // The Colors view sizes its pieces from the window width: project again.
+            UiEvent::Relayout if self.colors.is_some() => self.session.update(BTreeMap::new())?,
             UiEvent::Relayout => self.session.relayout()?,
             UiEvent::PanelDetached(detached) => {
                 if detached != self.detached && self.spare_chrome.is_some() {

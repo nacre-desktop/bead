@@ -4,6 +4,7 @@ mod backends;
 mod bar_routes;
 mod calendar;
 mod chat;
+mod colors;
 mod commands;
 mod contour;
 mod control_center;

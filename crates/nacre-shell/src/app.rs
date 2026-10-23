@@ -6,7 +6,7 @@
 //! Two halves share this file: [`Host`] runs in the always-on shell (find the running app and
 //! forward the request, or start it) and [`run`] is the app process. The shell holds no app
 //! state beyond one path; everything an app allocates dies with its process.
-use crate::{chat, nacre_source, placement, popouts, prefs, settings};
+use crate::{chat, colors as colors_app, nacre_source, placement, popouts, prefs, settings};
 use bead::{
     render::Palette,
     services::ipc::{self, Call, Reply},
@@ -24,7 +24,7 @@ use std::{
 
 /// Apps the shell can start. A third-party app adds a branch to [`run`] and a route in
 /// `commands::map_views`; the launch, single-instance and exit rules are shared.
-pub const APPS: [&str; 2] = ["settings", "chat"];
+pub const APPS: [&str; 3] = ["settings", "chat", "colors"];
 
 /// Topics every app follows: Nacre's text catalog and the settings that shape the look.
 const TOPICS: [&str; 5] = [
@@ -73,7 +73,7 @@ impl Host {
         }
         // Windows take the open call (a second open deep-links the running one); panels the
         // given panel method (`toggle` closes the running sidebar).
-        let (target, method) = if name == "settings" {
+        let (target, method) = if name == "settings" || name == "colors" {
             ("bead.window", "open")
         } else {
             ("bead.panel", method)
@@ -165,8 +165,11 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     // A plain client of the daemon: it follows topics and calls methods, registers nothing.
     let client = daemon
         .map(|socket| {
-            let mut config =
-                nacre_source::Config::new(socket, TOPICS.iter().map(|t| t.to_string()).collect());
+            let mut topics: Vec<String> = TOPICS.iter().map(|t| t.to_string()).collect();
+            if name == "colors" {
+                topics.extend(colors_app::TOPICS.iter().map(|t| t.to_string()));
+            }
+            let mut config = nacre_source::Config::new(socket, topics);
             config.client = format!("nacre-app-{name}");
             if name == "chat" {
                 config.event = Some(Arc::new(chat::route_event));
@@ -217,6 +220,15 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     match name {
         "settings" => {
             options.window = Some(settings::window_spec(
+                root,
+                palette,
+                colors,
+                client.clone(),
+                false,
+            )?);
+        }
+        "colors" => {
+            options.window = Some(colors_app::window_spec(
                 root,
                 palette,
                 colors,
