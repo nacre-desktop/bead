@@ -124,15 +124,59 @@ impl Host {
             .process_group(0)
             .spawn()
             .map_err(|e| format!("{name}: {e}"))?;
-        // Reap it when it exits; the closing app leaves no zombie in the shell.
+        // Reap it when it exits; the closing app leaves no zombie in the shell. A panel app also
+        // describes its body to the frame (B0056) from its own `bead.panel state` reply, and the
+        // description goes with the process.
+        let socket = (name == "chat").then(|| self.socket(name));
+        let app = name.to_owned();
         std::thread::Builder::new()
             .name("bead-app-reap".into())
-            .stack_size(64 * 1024)
+            .stack_size(256 * 1024)
             .spawn(move || {
+                if let Some(socket) = socket {
+                    describe_panel(&app, &socket, &mut child);
+                }
                 let _ = child.wait();
+                placement::set_external(&app, None);
             })
             .map(|_| ())
             .map_err(|e| e.to_string())
+    }
+}
+
+/// Wait (a few seconds at most) for a panel app to open, then tell the frame where its body is.
+/// `bead.panel state` reports the panel surface (body plus the 32 px shadow margin on each side).
+fn describe_panel(app: &str, socket: &Path, child: &mut std::process::Child) {
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "bead.panel".into(),
+        method: "state".into(),
+        args: vec![],
+        output: None,
+    };
+    for _ in 0..60 {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+        let Ok(reply) = ipc::call(socket, &call, Duration::from_millis(300)) else {
+            continue;
+        };
+        let state = reply.result.as_ref().and_then(Value::as_str).and_then(|t| serde_json::from_str::<Value>(t).ok())
+            .or(reply.result);
+        let Some(state) = state else { continue };
+        let size = state["size"].as_array().and_then(|s| Some((s.first()?.as_f64()?, s.get(1)?.as_f64()?)));
+        if let (Some(true), Some((w, h))) = (state["target_open"].as_bool(), size) {
+            placement::set_external(
+                app,
+                Some(placement::External {
+                    attachment: placement::Attachment::Attached(bead::core::Edge::Left),
+                    size: ((w - 64.).max(0.) as f32, (h - 64.).max(0.) as f32),
+                }),
+            );
+            return;
+        }
     }
 }
 

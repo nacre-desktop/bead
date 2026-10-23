@@ -7,7 +7,7 @@ use bead::{
 };
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Attachment {
     Attached(Edge),
     /// Compact Nacre control panel: joins the top frame at the usable top-right.
@@ -73,6 +73,47 @@ pub fn set_live_palette(palette: &std::collections::BTreeMap<String, [u8; 4]>) -
     let next = Some([*fill, *primary, *secondary]);
     let mut live = LIVE_COLORS.lock().unwrap_or_else(|p| p.into_inner());
     std::mem::replace(&mut *live, next) != next
+}
+/// B0056: a panel another process draws (the AI sidebar app) still takes its place in the frame.
+/// The host describes it (edge attachment and body size); the frame tiles then leave it out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct External {
+    pub attachment: Attachment,
+    pub size: (f32, f32),
+}
+static EXTERNAL: std::sync::Mutex<Vec<(String, External)>> = std::sync::Mutex::new(Vec::new());
+static EXTERNAL_REV: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+type Notify = Box<dyn Fn() + Send + Sync>;
+static EXTERNAL_NOTIFY: std::sync::Mutex<Option<Notify>> = std::sync::Mutex::new(None);
+/// Describe (Some) or drop (None) an external panel; the frame tiles rebuild.
+pub fn set_external(name: &str, panel: Option<External>) {
+    {
+        let mut all = EXTERNAL.lock().unwrap_or_else(|p| p.into_inner());
+        let before = all.iter().position(|(n, _)| n == name);
+        match (before, panel) {
+            (Some(i), Some(p)) if all[i].1 == p => return,
+            (Some(i), Some(p)) => all[i].1 = p,
+            (Some(i), None) => {
+                all.remove(i);
+            }
+            (None, Some(p)) => all.push((name.to_owned(), p)),
+            (None, None) => return,
+        }
+    }
+    EXTERNAL_REV.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    if let Some(notify) = &*EXTERNAL_NOTIFY.lock().unwrap_or_else(|p| p.into_inner()) {
+        notify();
+    }
+}
+pub fn external_rev() -> u64 {
+    EXTERNAL_REV.load(std::sync::atomic::Ordering::SeqCst)
+}
+/// The shell registers how its decoration variant is bumped and its watchers run.
+pub fn on_external_change(notify: Notify) {
+    *EXTERNAL_NOTIFY.lock().unwrap_or_else(|p| p.into_inner()) = Some(notify);
+}
+fn externals() -> Vec<External> {
+    EXTERNAL.lock().unwrap_or_else(|p| p.into_inner()).iter().map(|(_, e)| *e).collect()
 }
 static LIVE: std::sync::Mutex<Frame> = std::sync::Mutex::new(Frame::DEFAULT);
 /// The Nacre bar's own height inside the header (the rest is the top frame edge).
@@ -278,6 +319,9 @@ impl Chrome {
         let (w, h) = (w as f32, h as f32);
         let radius = frame.radius((w, h));
         let mut material = frame.material((w, h));
+        for external in externals() {
+            material.push(frame.panel(external.attachment, (w, h), external.size, None));
+        }
         if let Some(panel) = panel {
             material.push(body(panel.scene).translated(
                 panel.origin.0 as f32 - panel.scene.bounds.x,

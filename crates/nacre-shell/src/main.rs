@@ -615,6 +615,10 @@ fn start(
     // daemon, older daemon) every default is Nacre's, so nothing changes.
     let gate = shell_control::Gate::new();
     let frame_gate = gate.clone();
+    {
+        let gate = gate.clone();
+        placement::on_external_change(Box::new(move || gate.notify()));
+    }
     let _prefs = _ui_provider.as_ref().and_then(|client| {
         let topic = |name| {
             client

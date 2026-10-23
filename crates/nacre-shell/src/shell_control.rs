@@ -39,6 +39,12 @@ pub struct Gate {
     watchers: Mutex<Vec<Box<dyn Fn() + Send + Sync>>>,
 }
 impl Gate {
+    /// Run the watchers (something the tiles depend on changed outside the settings).
+    pub fn notify(&self) {
+        for watcher in self.watchers.lock().unwrap_or_else(|p| p.into_inner()).iter() {
+            watcher();
+        }
+    }
     pub fn new() -> std::sync::Arc<Self> {
         std::sync::Arc::new(Self {
             bar: AtomicBool::new(true),
@@ -145,7 +151,7 @@ impl ShellControl for Gate {
         }
     }
     fn decoration_variant(&self) -> u64 {
-        self.variant.load(SeqCst)
+        self.variant.load(SeqCst) + crate::placement::external_rev()
     }
     fn palette_changed(&self, palette: &std::collections::BTreeMap<String, [u8; 4]>) {
         if crate::placement::set_live_palette(palette) {
