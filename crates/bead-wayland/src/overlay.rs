@@ -99,7 +99,11 @@ impl App {
     /// choose it only when the slot is idle); a different view replaces the shown one.
     pub(super) fn overlay_offer(&mut self, view: &str, output: Option<&str>, open: bool) {
         if !open {
-            if self.overlay.as_ref().is_some_and(|o| o.name == view && o.open) {
+            if self
+                .overlay
+                .as_ref()
+                .is_some_and(|o| o.name == view && o.open)
+            {
                 self.overlay_close();
             }
             return;
@@ -276,7 +280,9 @@ impl App {
         self.overlay_ui(UiEvent::PanelVisibility(false));
         // Let the fade finish, then release everything. A re-offer cancels it.
         let _ = self.loop_handle.insert_source(
-            Timer::from_duration(Duration::from_millis(u64::from((fade * 1000.) as u32) + 250)),
+            Timer::from_duration(Duration::from_millis(
+                u64::from((fade * 1000.) as u32) + 250,
+            )),
             move |_, _, app| {
                 if app
                     .overlay
@@ -405,7 +411,9 @@ impl App {
         if !o.configured || self.hidden {
             return;
         }
-        if o.last_draw.is_some_and(|t| t.elapsed() < Duration::from_millis(8)) {
+        if o.last_draw
+            .is_some_and(|t| t.elapsed() < Duration::from_millis(8))
+        {
             self.overlay_retry(8);
             return;
         }

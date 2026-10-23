@@ -607,7 +607,14 @@ fn launcher_dashboard_and_chat_coexist_with_popups_other_views_suppress() {
         assert!(!suppresses(&coexist, view), "{view}");
     }
     // Popouts, status peeks, the session menu and the control drawer suppress.
-    for view in ["calendar", "sound", "peek-network", "session", "control", "dashboardx"] {
+    for view in [
+        "calendar",
+        "sound",
+        "peek-network",
+        "session",
+        "control",
+        "dashboardx",
+    ] {
         assert!(suppresses(&coexist, view), "{view}");
     }
 }
@@ -759,14 +766,13 @@ mod daemon {
                                 }
                             });
                         }
-                    }
-                    "sub"
                         if frame["topics"]
                             .as_array()
-                            .is_some_and(|t| t.contains(&json!("compositor"))) =>
-                    {
-                        send(&json!({"t":"snap","topic":"compositor","seq":0,
-                            "data":{"focus":{"outputId":"DP-9"}}}));
+                            .is_some_and(|t| t.contains(&json!("compositor")))
+                        {
+                            send(&json!({"t":"snap","topic":"compositor","seq":0,
+                                "data":{"focus":{"outputId":"DP-9"}}}));
+                        }
                     }
                     "call" => {
                         send(&json!({"t":"ret","id":frame["id"],"ok":{"changed":true}}));
@@ -794,7 +800,8 @@ mod daemon {
                 action_on_click,
                 ..Default::default()
             },
-        ).unwrap()
+        )
+        .unwrap()
     }
     fn models(service: &Service) -> mpsc::Receiver<BTreeMap<String, Value>> {
         let (tx, rx) = mpsc::channel();
@@ -838,8 +845,7 @@ mod daemon {
     fn new_popups_are_offered_on_the_daemon_published_focused_output() {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();
-        let (socket, _calls, _close) =
-            fake(&lab, json!({"notifications":1,"compositor":1}), data);
+        let (socket, _calls, _close) = fake(&lab, json!({"notifications":1,"compositor":1}), data);
         let service = start(socket, true, false);
         let (tx, rx) = mpsc::channel();
         std::mem::forget(service.drive(Arc::new(move |event| {

@@ -46,7 +46,9 @@ and the single daemon connection / provider registration; idle they hold no surf
   compatibility owner, see Duplicates). New flags: `--notices` (needs `--bar
   --core-views --ui-provider`) and `--notification-action-on-click`.
 
-## Behaviour change to accept
+## Behaviour change to accept (superseded by [B0053](0053-notice-overlay-slot.md))
+
+B0053 restores both behaviours below with an overlay slot and focus-following output.
 
 The panel slot is single, so a popup stack yields to **any** other shown view,
 including the launcher and dashboard. QML suppresses popups only for popouts, the

@@ -439,9 +439,7 @@ impl App {
                         }),
                     )
                 }
-                "overlay" => {
-                    bead_services::ipc::Reply::ok(request.call.id, self.overlay_state())
-                }
+                "overlay" => bead_services::ipc::Reply::ok(request.call.id, self.overlay_state()),
                 "overlay-regions" if std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() => {
                     bead_services::ipc::Reply::ok(request.call.id, self.overlay_regions())
                 }

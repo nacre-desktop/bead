@@ -96,6 +96,10 @@ After Bead's core switch on Nacre, plan support for:
   deep-link routing (`nacre-shell/src/app.rs`, `Host::route`) is the template for third-party apps: add a name
   to `APPS`, a branch in `app::run` and a route. The framework crate has no app names.
 
+- B0053: `bead_wayland::Overlays` / `Options::overlays` (a second view slot offered by name via
+  `CompanionOffer`, beside the panel and window slots) and `notice_service::Options::coexist`
+  (view families that do not suppress popups). Nacre's view names stay in `nacre-shell/src/main.rs`.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a
