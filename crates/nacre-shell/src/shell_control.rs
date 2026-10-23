@@ -53,11 +53,7 @@ impl Gate {
         })
     }
     /// The lips the frame declares and the panel views that exist (call once at start).
-    pub fn configure_frame(
-        &self,
-        config: FrameConfig,
-        views: impl IntoIterator<Item = String>,
-    ) {
+    pub fn configure_frame(&self, config: FrameConfig, views: impl IntoIterator<Item = String>) {
         let mut frame = self.frame.lock().unwrap_or_else(|p| p.into_inner());
         frame.config = config;
         frame.views = views.into_iter().collect();
@@ -192,7 +188,14 @@ impl ShellControl for Gate {
         }
     }
     fn edge_hover_allowed(&self, open_panel: Option<&str>) -> bool {
-        open_panel.is_none_or(|open| !self.frame_lock().config.blocked_by.iter().any(|b| b == open))
+        open_panel.is_none_or(|open| {
+            !self
+                .frame_lock()
+                .config
+                .blocked_by
+                .iter()
+                .any(|b| b == open)
+        })
     }
 }
 

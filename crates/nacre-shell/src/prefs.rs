@@ -127,7 +127,9 @@ impl Prefs {
                 .get(key)
                 .and_then(Json::as_f64)
                 .filter(|v| v.is_finite())
-                .map_or(fallback, |v| v.round().clamp(low as f64, high as f64) as i32)
+                .map_or(fallback, |v| {
+                    v.round().clamp(low as f64, high as f64) as i32
+                })
         };
         let family = |key: &str| {
             desktop
@@ -220,7 +222,11 @@ impl Prefs {
             // The header: the bar's own height plus the top frame edge (`NacreFrame`).
             (
                 "bar.height".into(),
-                Number(crate::placement::Frame::from_settings(&self.frame_settings()).top.into()),
+                Number(
+                    crate::placement::Frame::from_settings(&self.frame_settings())
+                        .top
+                        .into(),
+                ),
             ),
             (
                 "bar.workspace.count".into(),
@@ -449,7 +455,11 @@ mod tests {
             &Json::Null,
         );
         assert_eq!(
-            (extreme.lip_hover_delay, extreme.frame_width, extreme.frame_rounding),
+            (
+                extreme.lip_hover_delay,
+                extreme.frame_width,
+                extreme.frame_rounding
+            ),
             (800, 30, 0)
         );
         assert_eq!(

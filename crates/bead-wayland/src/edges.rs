@@ -373,9 +373,9 @@ impl App {
             (1, 1)
         };
         let s = &mut self.edge_surfaces[index];
-        let created = s
-            .pool
-            .create_buffer(w as i32, h as i32, (w * 4) as i32, wl_shm::Format::Argb8888);
+        let created =
+            s.pool
+                .create_buffer(w as i32, h as i32, (w * 4) as i32, wl_shm::Format::Argb8888);
         let (buffer, bytes) = match created {
             Ok(created) => created,
             Err(error) => {
@@ -405,9 +405,7 @@ impl App {
         if buffer.attach_to(s.layer.wl_surface()).is_err() {
             return;
         }
-        s.layer
-            .wl_surface()
-            .damage_buffer(0, 0, w as i32, h as i32);
+        s.layer.wl_surface().damage_buffer(0, 0, w as i32, h as i32);
         s.layer.commit();
         s.buffer = Some(buffer);
         s.drawn = Some((stamp, size, scale120));
@@ -425,7 +423,7 @@ impl App {
         };
         let open = self
             .panel_target
-            .then(|| self.panel_name.as_deref())
+            .then_some(self.panel_name.as_deref())
             .flatten();
         control.edge_hover_allowed(open) && control.panel_allowed(&lip.opens)
     }
@@ -563,8 +561,7 @@ impl App {
         }
         if self.lip_active(wl_output, lip) {
             self.close_panel();
-        } else if let Err(error) =
-            self.request_panel_at(Some(&lip.opens), Some(output), true, None)
+        } else if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(output), true, None)
         {
             eprintln!("EDGE_OPEN_ERROR {error}");
         }
@@ -741,7 +738,10 @@ mod tests {
     fn reserved_strips_reserve_their_side_only() {
         let left = strip_geometry(Edge::Left, 10);
         assert_eq!(left.anchor, Anchor::LEFT | Anchor::TOP | Anchor::BOTTOM);
-        assert_eq!((left.size, left.exclusive, left.input), ((10, 0), 10, false));
+        assert_eq!(
+            (left.size, left.exclusive, left.input),
+            ((10, 0), 10, false)
+        );
         let bottom = strip_geometry(Edge::Bottom, 12);
         assert_eq!(bottom.anchor, Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
         assert_eq!((bottom.size, bottom.exclusive), ((0, 12), 12));

@@ -313,11 +313,18 @@ impl Chrome {
             .collect()
     }
     pub fn decorate(&self, scene: &mut Scene) -> Result<(), Box<dyn std::error::Error>> {
+        self.decorate_with(Frame::current(), scene)
+    }
+    /// As [`Chrome::decorate`] for an explicit frame.
+    pub fn decorate_with(
+        &self,
+        frame: Frame,
+        scene: &mut Scene,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use bead::render::Primitive;
         use std::hash::{Hash, Hasher};
         let body = body(scene);
         let output = (self.output.0 as f32, self.output.1 as f32);
-        let frame = Frame::current();
         let top_inset = if matches!(
             self.attachment,
             Attachment::Popout | Attachment::ControlCenter | Attachment::Attached(Edge::Top)
@@ -605,7 +612,13 @@ mod tests {
         };
         let frame = Frame::from_settings(&wide);
         assert_eq!(
-            (frame.left, frame.right, frame.bottom, frame.top, frame.rounding),
+            (
+                frame.left,
+                frame.right,
+                frame.bottom,
+                frame.top,
+                frame.rounding
+            ),
             (0., 14., 0., 54., 30.)
         );
         // No bar: the header is only the top edge; no top edge either: nothing.

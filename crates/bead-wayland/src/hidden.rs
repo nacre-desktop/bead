@@ -27,8 +27,10 @@ impl App {
         // The dismiss catcher would otherwise keep swallowing clicks.
         drop(self.dismiss.take());
         self.surfaces.clear();
+        // Edge surfaces are recreated after the bars: later surfaces stack above earlier
+        // ones in a layer, and a lip must sit above the bar's frame tiles.
+        self.edge_surfaces.clear();
         if self.hidden {
-            self.sync_edges();
             return;
         }
         let keyboard_dismiss = self.panel_target

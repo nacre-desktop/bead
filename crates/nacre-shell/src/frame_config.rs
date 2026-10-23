@@ -27,10 +27,7 @@ fn name(value: &serde_json::Value, key: &str) -> Option<String> {
         .get(key)?
         .as_str()
         .filter(|s| {
-            !s.is_empty()
-                && s.len() <= 64
-                && !s.contains('/')
-                && !s.chars().any(char::is_control)
+            !s.is_empty() && s.len() <= 64 && !s.contains('/') && !s.chars().any(char::is_control)
         })
         .map(str::to_owned)
 }

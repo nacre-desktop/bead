@@ -5,11 +5,11 @@ mod calendar;
 mod chat;
 mod commands;
 mod contour;
-mod frame_art;
-mod frame_config;
 mod dashboard;
 mod desktop;
 mod font_sources;
+mod frame_art;
+mod frame_config;
 mod headless;
 mod i18n;
 mod i18n_source;
@@ -634,7 +634,10 @@ fn start(
         )
         .ok()
     });
-    if _prefs.is_some() && options.bar {
+    // The frame (reserved edges, lips, live geometry) is part of the desktop's look, so the
+    // gate is always installed for the core views; without the daemon it answers with
+    // Nacre's defaults.
+    if options.bar && (core_views || _prefs.is_some()) {
         options.control = Some(gate);
     }
     let notice_service: Option<std::sync::Arc<dyn notifications::Notices>> = if notices {

@@ -23,7 +23,11 @@ pub fn edge_tab(
         Edge::Right => false,
         _ => return None,
     };
-    let amount = if state.active { 1. } else { state.progress.clamp(0., 1.) };
+    let amount = if state.active {
+        1.
+    } else {
+        state.progress.clamp(0., 1.)
+    };
     let mut body = String::new();
     // The cue: a 1 px line on the outer edge, 36 px tall, filling top-down as the dwell
     // advances; gone once full or while the panel is open.
@@ -40,7 +44,11 @@ pub fn edge_tab(
         // Left: points right while closed, left while open. Right: the opposite.
         let right = if left { !state.active } else { state.active };
         let (x, y) = ((width - arrow_w) / 2., (height - 18.) / 2.);
-        let (a, b) = if right { (1., arrow_w - 1.) } else { (arrow_w - 1., 1.) };
+        let (a, b) = if right {
+            (1., arrow_w - 1.)
+        } else {
+            (arrow_w - 1., 1.)
+        };
         body.push_str(&format!(
             r#"<path d="M{} {} L{} {} L{} {}" fill="none" stroke="{}" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" opacity="{}"/>"#,
             x + a,
@@ -122,7 +130,10 @@ mod tests {
         };
         assert!(!at(0., false).contains("<rect"), "no cue before the dwell");
         let half = at(0.5, false);
-        assert!(half.contains(r#"x="0" y="54" width="1" height="18""#), "{half}");
+        assert!(
+            half.contains(r#"x="0" y="54" width="1" height="18""#),
+            "{half}"
+        );
         assert!(at(0.5, false).contains(r#"opacity="0.875""#));
         assert!(!at(1., false).contains("<rect"), "full: the cue fades out");
         assert!(!at(0.5, true).contains("<rect"), "open: no cue");
@@ -144,6 +155,10 @@ mod tests {
         // width < 4 after the 2 px margin: QML hides the arrow.
         let thin = edge_tab(&lip(Edge::Left), (5., 144.), idle(), A, S).unwrap();
         assert!(!thin.contains("<path"));
-        assert!(edge_tab(&lip(Edge::Left), (6., 144.), idle(), A, S).unwrap().contains("<path"));
+        assert!(
+            edge_tab(&lip(Edge::Left), (6., 144.), idle(), A, S)
+                .unwrap()
+                .contains("<path")
+        );
     }
 }

@@ -237,3 +237,253 @@ fn all_popout_and_launcher_placement_masks_match_qml() -> Result<()> {
     }
     Ok(())
 }
+
+// B0047: the configurable frame. One small output so every variant is a cheap golden; the
+// default variant's geometry is already pinned against Qt by the cases above.
+const OUTPUT: (u32, u32) = (800, 500);
+const SCALE: f32 = 1.5;
+fn frame_with(change: impl FnOnce(&mut crate::placement::FrameSettings)) -> Frame {
+    let mut settings = crate::placement::FrameSettings {
+        width: 10.,
+        rounding: 25.,
+        left: true,
+        right: true,
+        bottom: true,
+        top: true,
+        bar: true,
+    };
+    change(&mut settings);
+    Frame::from_settings(&settings)
+}
+/// The frame as the shell composes it: the bar's fill in the header, the static tiles,
+/// an optional joined panel and the lips' artwork.
+fn compose(
+    palette: &Palette,
+    frame: Frame,
+    open_panel: bool,
+    lips: &[(bead::wayland::intent::Lip, bead::wayland::LipState)],
+) -> Result<Pixels> {
+    let (w, h) = (OUTPUT.0 as f32, OUTPUT.1 as f32);
+    let width = (w * SCALE) as u32;
+    let height = (h * SCALE) as u32;
+    let mut pixels = Pixels {
+        width,
+        height,
+        pixels: [0x34, 0x37, 0x3f, 255].repeat(width as usize * height as usize),
+    };
+    let fill = palette.get("surface")?;
+    for pixel in pixels.pixels[..(width as f32 * frame.top * SCALE) as usize * 4]
+        .as_chunks_mut::<4>()
+        .0
+    {
+        *pixel = fill;
+    }
+    let mut chrome = Chrome::new(Attachment::Popout, palette)?;
+    chrome.output = OUTPUT;
+    chrome.center = Some(w / 2.);
+    let mut scene = crate::sound::fallback(fill);
+    scene.primitives = vec![bead::render::Primitive::Rounded {
+        rect: Rect::new(0., 0., 310., 222.),
+        radius: 16.,
+        fill,
+        border: None,
+    }];
+    let mut panel = None;
+    if open_panel {
+        chrome.set_engaged(true);
+        chrome.decorate_with(frame, &mut scene)?;
+        let body = body(&scene);
+        let at = frame.panel(Attachment::Popout, (w, h), (body.w, body.h), chrome.center);
+        let origin = (
+            (at.x - body.x + scene.bounds.x).round() as i32,
+            (at.y - body.y + scene.bounds.y).round() as i32,
+        );
+        panel = Some(origin);
+    }
+    let tiles = chrome
+        .tiles(
+            frame,
+            OUTPUT,
+            open_panel,
+            panel.map(|origin| bead::wayland::DecorationPanel {
+                scene: &scene,
+                origin,
+            }),
+        )
+        .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+    for decoration in tiles {
+        tile(&mut pixels, decoration.rect, &decoration.svg, SCALE)?;
+    }
+    if let Some((x, y)) = panel {
+        for primitive in &scene.primitives {
+            if let bead::render::Primitive::Image { rect, path, .. } = primitive {
+                tile(
+                    &mut pixels,
+                    rect.translated(x as f32 + scene.offset.0, y as f32 + scene.offset.1),
+                    scene.asset_data.get(path).ok_or("Missing contour")?,
+                    SCALE,
+                )?;
+            }
+        }
+    }
+    let (accent, secondary) = (palette.get("primary")?, palette.get("secondary")?);
+    for (lip, state) in lips {
+        let rect = lip.rect((w, h));
+        if let Some(svg) =
+            crate::frame_art::edge_tab(lip, (rect.w, rect.h), *state, accent, secondary)
+        {
+            tile(&mut pixels, rect, svg.as_bytes(), SCALE)?;
+        }
+    }
+    Ok(pixels)
+}
+fn lip_at(edge: Edge, thickness: f32) -> bead::wayland::intent::Lip {
+    bead::wayland::intent::Lip {
+        id: "l".into(),
+        edge,
+        length: 144.,
+        thickness,
+        opens: "p".into(),
+    }
+}
+#[test]
+fn configurable_frame_variants_match_their_goldens() -> Result<()> {
+    use bead::wayland::LipState;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let palette = Palette::read(&root.join("palette.json"))?;
+    let update = std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1");
+    let golden = root.join("tests/goldens/frame");
+    let artifacts = std::env::temp_dir().join("bead-frame-pixel-diffs");
+    let idle = LipState {
+        progress: 0.,
+        active: false,
+    };
+    let left = lip_at(Edge::Left, 10.);
+    let right = lip_at(Edge::Right, 10.);
+    let cases: Vec<(&str, Frame, bool, Vec<(_, LipState)>)> = vec![
+        ("default", frame_with(|_| {}), false, vec![]),
+        // The frame off: no bar, no top edge, no sides.
+        (
+            "frame-off",
+            frame_with(|s| {
+                s.bar = false;
+                s.top = false;
+                s.left = false;
+                s.right = false;
+                s.bottom = false;
+            }),
+            false,
+            vec![],
+        ),
+        (
+            "bar-only",
+            frame_with(|s| {
+                s.left = false;
+                s.right = false;
+                s.bottom = false;
+            }),
+            false,
+            vec![],
+        ),
+        ("rounding-0", frame_with(|s| s.rounding = 0.), false, vec![]),
+        (
+            "rounding-40",
+            frame_with(|s| s.rounding = 40.),
+            false,
+            vec![],
+        ),
+        ("no-left", frame_with(|s| s.left = false), false, vec![]),
+        ("no-right", frame_with(|s| s.right = false), false, vec![]),
+        ("no-bottom", frame_with(|s| s.bottom = false), false, vec![]),
+        (
+            "top-edge-without-bar",
+            frame_with(|s| s.bar = false),
+            false,
+            vec![],
+        ),
+        ("wide-14", frame_with(|s| s.width = 14.), false, vec![]),
+        // Joined contours with an open panel.
+        ("panel-default", frame_with(|_| {}), true, vec![]),
+        (
+            "panel-wide-round",
+            frame_with(|s| {
+                s.width = 14.;
+                s.rounding = 40.;
+            }),
+            true,
+            vec![],
+        ),
+        (
+            "panel-no-sides",
+            frame_with(|s| {
+                s.left = false;
+                s.right = false;
+            }),
+            true,
+            vec![],
+        ),
+        // Lip cues: idle chevrons, a half-filled dwell, and the open (flipped) state.
+        (
+            "lips-idle",
+            frame_with(|_| {}),
+            false,
+            vec![(left.clone(), idle), (right.clone(), idle)],
+        ),
+        (
+            "lips-dwell",
+            frame_with(|_| {}),
+            false,
+            vec![
+                (
+                    left.clone(),
+                    LipState {
+                        progress: 0.5,
+                        active: false,
+                    },
+                ),
+                (
+                    right.clone(),
+                    LipState {
+                        progress: 0.8,
+                        active: false,
+                    },
+                ),
+            ],
+        ),
+        (
+            "lips-open",
+            frame_with(|_| {}),
+            true,
+            vec![
+                (
+                    left.clone(),
+                    LipState {
+                        progress: 0.,
+                        active: true,
+                    },
+                ),
+                (
+                    right.clone(),
+                    LipState {
+                        progress: 0.,
+                        active: true,
+                    },
+                ),
+            ],
+        ),
+    ];
+    for (name, frame, panel, lips) in cases {
+        let pixels = compose(&palette, frame, panel, &lips)?;
+        let filename = format!("frame-{name}.png");
+        if update {
+            std::fs::create_dir_all(&golden)?;
+            pixels.save(&golden.join(&filename))?;
+        }
+        pixels.compare(
+            &golden.join(&filename),
+            Tolerance::default(),
+            &artifacts.join(name),
+        )?;
+    }
+    Ok(())
+}
