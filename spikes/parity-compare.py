@@ -77,7 +77,7 @@ STATES = {
                 [('ui', 'nacre', 'close')], 1.0),
     'settings': ([('ui', 'nacre', 'settings'), ('sleep', 1.5)], [('app_close', 'settings')], 0),
     # B0064: the Colors app, the Welcome colours page and the app-theming targets (generated wallpapers, see --wallpapers)
-    'colors-app': ([('only', 'qml', ('qml_app', 'colorsApp', 'open')), ('only', 'bead', ('ui', 'colorsApp', 'open')), ('sleep', 6.0)],
+    'colors-app': ([('only', 'qml', ('qml_app', 'colorsApp', 'open', '')), ('only', 'bead', ('shell', 'colorsApp', 'open')), ('sleep', 6.0)],
     [('app_close', 'colors')], 0),
     'welcome-colors': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'colors')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'colors')), ('sleep', 6.0)],
     [('app_close', 'welcome')], 0),

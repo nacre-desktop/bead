@@ -169,7 +169,7 @@ local function demo(v)
         ui.Row{id="style-row",width="fill",shrink=0,gap=12,
             ui.Row{id="style-line",grow=1,shrink=1,gap=8,
                 ui.Text{id="style-label",text=ui.tr("bead.welcome.demo-style"),width=44,height=32,shrink=0,font_size=px(11),color="onSurface"},
-                kit.ChipRow{id="styles",items=chips,per_row=CW>=900 and 8 or 4,on_change="welcome.do",change_arg=function(id) return "demo:style:"..id end}},
+                kit.ChipRow{id="styles",items=chips,per_row=CW>=900 and 8 or 4,radius=rd.full,on_change="welcome.do",change_arg=function(id) return "demo:style:"..id end}},
             ui.Row(modes)},
         muted("style-text",v.style_text,10),
         kit.PreviewCard{id="preview",width=CW,height=math.max(210,math.min(CH-380,420)),colors=v.colors,image=v.has_photo and "colors-card" or "",

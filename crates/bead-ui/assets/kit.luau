@@ -505,7 +505,7 @@ return function(ui, tokens)
     local mono="JetBrainsMono Nerd Font"
     -- A swatch over a small caption, one button; `selected` draws the ring.
     function kit.ColorSample(p)
-        return kit.Button{id=p.id,grow=1,shrink=1,height=p.height or 60,padding=0,radius=tokens.radii.small,fill="transparent",
+        return kit.Button{id=p.id,width=p.width,grow=p.width and 0 or 1,shrink=p.width and 0 or 1,height=p.height or 60,padding=0,radius=tokens.radii.small,fill="transparent",
             hover_fill=ui.alpha("onSurface",.08),aria_label=p.aria_label or p.caption,on_activate=p.on_activate,
             ui.Column{id="sample",width="fill",height="100%",gap=sp.xs,
                 ui.Box{id="swatch",width="fill",height=34,radius=tokens.radii.small,fill=p.color,
@@ -517,7 +517,7 @@ return function(ui, tokens)
         local kids={}
         for i,item in ipairs(p.items) do
             kids[i]=kit.ColorSample{id=item.id,color=item.color,caption=item.caption,aria_label=item.aria_label,
-                selected=item.selected,on_activate=item.action,height=p.height}
+                selected=item.selected,on_activate=item.action,height=p.height,width=p.sample_width}
         end
         return ui.Row(props(kids,{id=p.id,width="fill",height=p.height or 60,shrink=0,gap=7}))
     end
@@ -553,7 +553,7 @@ return function(ui, tokens)
         local lines,line={},nil
         for i,item in ipairs(p.items) do
             if not line or #line>=(p.per_row or 4) then line={};table.insert(lines,line) end
-            table.insert(line,kit.Button{id=item.id,height=32,padding=sp.xs,padding_left=sp.md,padding_right=sp.md,shrink=0,
+            table.insert(line,kit.Button{id=item.id,height=32,padding=sp.xs,radius=p.radius,padding_left=sp.md,padding_right=sp.md,shrink=0,
                 width=(item.width or 2*sp.md+8+(utf8.len(item.label) or 4)*9),text=item.label,selected=item.selected,
                 fill=item.selected and "primaryContainer" or "surfaceContainer",color=item.selected and "onPrimaryContainer" or "onSurface",
                 aria_label=item.label,on_activate=maybe(ui.action(p.on_change,p.change_arg and p.change_arg(item.id) or item.id),item.enabled~=false)})

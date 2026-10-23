@@ -41,7 +41,7 @@ local function header(v)
     end
     local modes={}
     for i,m in ipairs{{"dark","dark_mode","bead.colors.dark-preview"},{"light","light_mode","bead.colors.light-preview"}} do
-        modes[i]=kit.IconButton{id="mode-"..m[1],width=36,height=32,padding=0,radius=rd.small,text=m[2],
+        modes[i]=kit.IconButton{id="mode-"..m[1],width=36,height=32,padding=0,radius=rd.full,text=m[2],
             selected=v.mode==m[1],fill=v.mode==m[1] and "primary" or "surfaceContainer",color=v.mode==m[1] and "onPrimary" or "onSurface",
             aria_label=ui.tr(m[3]),on_activate=act("mode:"..m[1])}
     end
@@ -92,11 +92,11 @@ local function studio(v)
     local left={id="left",width=COL1,gap=12,shrink=0,
         photo,
         label("families",ui.tr("bead.colors.families"),11),
-        kit.ColorSampleRow{id="samples",items=samples}}
+        kit.ColorSampleRow{id="samples",items=samples,sample_width=84}}
     if v.other~="" then table.insert(left,ui.Text{id="other",text=v.other,width="fill",height=16,font_size=px(9),color="onSurfaceVariant"}) end
     table.insert(left,kit.Paragraph{id="grouped",text=ui.tr("bead.colors.grouped-note"),width=COL1,font_size=px(9),color="onSurfaceVariant"})
     table.insert(left,label("style-title",ui.tr("bead.colors.color-style"),12))
-    table.insert(left,kit.ChipRow{id="styles",items=chips,per_row=4,on_change="colors.do",change_arg=function(id) return "style:"..id end})
+    table.insert(left,kit.ChipRow{id="styles",items=chips,per_row=CANVAS>=620 and 7 or 4,radius=rd.full,on_change="colors.do",change_arg=function(id) return "style:"..id end})
     table.insert(left,kit.Paragraph{id="style-text",text=v.style_text,width=COL1,font_size=px(10),color="onSurfaceVariant"})
     local targets={}
     for i,t in ipairs(v.targets) do
