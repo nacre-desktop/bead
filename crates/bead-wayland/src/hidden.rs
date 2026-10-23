@@ -12,6 +12,9 @@ impl App {
             return;
         }
         self.hidden = hidden;
+        if hidden {
+            self.release_overlay();
+        }
         self.rebuild_surfaces();
     }
     /// A persistent "no bar" state, separate from the hide toggle: bar surfaces are

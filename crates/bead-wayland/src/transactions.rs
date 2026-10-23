@@ -174,6 +174,10 @@ impl App {
             return;
         }
         if let UiEvent::CompanionOffer { view, output, open } = event {
+            if self.is_overlay_view(&view) {
+                self.overlay_offer(&view, output.as_deref(), open);
+                return;
+            }
             let shown = self.panel_target && self.panel_name.as_deref() == Some(view.as_str());
             if open {
                 if self.hidden || (self.panel_target && !self.panel_ambient && !shown) {
@@ -226,6 +230,17 @@ impl App {
                     return;
                 }
                 self.close_panel();
+            }
+            return;
+        }
+        if let UiEvent::Overlay(epoch, event) = event {
+            if self.overlay.as_ref().is_some_and(|o| o.epoch() == epoch) {
+                // A view retires itself when its content vanishes.
+                if matches!(&*event, UiEvent::CompanionVisibility(false)) {
+                    self.overlay_close();
+                } else {
+                    self.overlay_ui(*event);
+                }
             }
             return;
         }
@@ -423,6 +438,12 @@ impl App {
                             "size":self.companion.as_ref().map(|c|[c.0.bounds.w,c.0.bounds.h])
                         }),
                     )
+                }
+                "overlay" => {
+                    bead_services::ipc::Reply::ok(request.call.id, self.overlay_state())
+                }
+                "overlay-regions" if std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() => {
+                    bead_services::ipc::Reply::ok(request.call.id, self.overlay_regions())
                 }
                 "state" => bead_services::ipc::Reply::ok(
                     request.call.id,

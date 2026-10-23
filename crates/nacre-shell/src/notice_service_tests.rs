@@ -600,6 +600,62 @@ fn views_are_offered_for_popups_and_osd_and_yield_to_other_panels() {
     assert_eq!(offers(), [(VIEW_OSD.to_owned(), false)]);
 }
 
+#[test]
+fn launcher_dashboard_and_chat_coexist_with_popups_other_views_suppress() {
+    let coexist: Vec<String> = ["launcher", "dashboard", "chat"].map(String::from).into();
+    for view in ["launcher", "dashboard", "dashboard-home", "chat"] {
+        assert!(!suppresses(&coexist, view), "{view}");
+    }
+    // Popouts, status peeks, the session menu and the control drawer suppress.
+    for view in ["calendar", "sound", "peek-network", "session", "control", "dashboardx"] {
+        assert!(suppresses(&coexist, view), "{view}");
+    }
+}
+
+#[test]
+fn offers_name_the_compositor_focused_output_and_fall_back_to_the_leading_one() {
+    let shared = Shared {
+        inner: Mutex::new(Inner::default()),
+        wake: Condvar::new(),
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    {
+        let mut g = shared.lock();
+        g.live = true;
+        g.good = Some(state(json!({})));
+        g.drivers.insert(
+            1,
+            Arc::new(move |event| {
+                let _ = tx.send(event);
+            }),
+        );
+    }
+    let offered = || {
+        rx.try_iter()
+            .filter_map(|event| match event {
+                UiEvent::CompanionOffer { output, open, .. } => Some((output, open)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    publish(&shared);
+    assert_eq!(offered(), [(None, true)], "unknown focus: leading output");
+    let focus = |data: Json, connected| on_compositor(&shared, &snap(data, connected));
+    focus(json!({"focus": {"outputId": "DP-2"}}), true);
+    publish(&shared);
+    assert_eq!(offered(), [(Some("DP-2".to_owned()), true)]);
+    focus(json!({"focus": {"outputId": "eDP-1"}}), true);
+    publish(&shared);
+    assert_eq!(offered(), [(Some("eDP-1".to_owned()), true)]);
+    // A malformed payload or a lost link clears it again.
+    focus(json!({"focus": {"outputId": null}}), true);
+    publish(&shared);
+    assert_eq!(offered(), [(None, true)]);
+    focus(json!({"focus": {"outputId": "DP-2"}}), false);
+    publish(&shared);
+    assert_eq!(offered(), [(None, true)]);
+}
+
 mod daemon {
     use super::*;
     use std::io::{BufRead, BufReader, Write};
@@ -704,6 +760,14 @@ mod daemon {
                             });
                         }
                     }
+                    "sub"
+                        if frame["topics"]
+                            .as_array()
+                            .is_some_and(|t| t.contains(&json!("compositor"))) =>
+                    {
+                        send(&json!({"t":"snap","topic":"compositor","seq":0,
+                            "data":{"focus":{"outputId":"DP-9"}}}));
+                    }
                     "call" => {
                         send(&json!({"t":"ret","id":frame["id"],"ok":{"changed":true}}));
                         seen.send(frame).unwrap();
@@ -724,7 +788,13 @@ mod daemon {
             let topics = TOPICS.iter().map(|t| t.to_string()).collect();
             Client::start(crate::nacre_source::Config::new(socket, topics)).unwrap()
         };
-        Service::start(client, Options { action_on_click }).unwrap()
+        Service::start(
+            client,
+            Options {
+                action_on_click,
+                ..Default::default()
+            },
+        ).unwrap()
     }
     fn models(service: &Service) -> mpsc::Receiver<BTreeMap<String, Value>> {
         let (tx, rx) = mpsc::channel();
@@ -762,6 +832,38 @@ mod daemon {
                 return frame["p"].clone();
             }
         }
+    }
+
+    #[test]
+    fn new_popups_are_offered_on_the_daemon_published_focused_output() {
+        let lab = lab();
+        let data = serde_json::to_value(state(json!({}))).unwrap();
+        let (socket, _calls, _close) =
+            fake(&lab, json!({"notifications":1,"compositor":1}), data);
+        let service = start(socket, true, false);
+        let (tx, rx) = mpsc::channel();
+        std::mem::forget(service.drive(Arc::new(move |event| {
+            if let UiEvent::CompanionOffer { output, open, .. } = event {
+                let _ = tx.send((output, open));
+            }
+        })));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut seen = vec![];
+        while Instant::now() < deadline {
+            if let Ok(offer) = rx.recv_timeout(Duration::from_millis(50)) {
+                seen.push(offer);
+                if offer_has_focus(&seen) {
+                    return;
+                }
+            }
+            // Offers repeat with every publish: nudge one once the focus may be known.
+            publish(&service.shared);
+        }
+        panic!("no offer named the focused output: {seen:?}");
+    }
+    fn offer_has_focus(seen: &[(Option<String>, bool)]) -> bool {
+        seen.iter()
+            .any(|(output, open)| *open && output.as_deref() == Some("DP-9"))
     }
 
     #[test]

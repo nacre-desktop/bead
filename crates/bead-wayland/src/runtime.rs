@@ -74,6 +74,8 @@ pub(super) struct App {
     pub(super) window_epoch: u64,
     /// App mode: the open request still waiting for the first usable output (panel apps).
     pub(super) app_pending: Option<Vec<serde_json::Value>>,
+    pub(super) overlay: Option<overlay::Overlay>,
+    pub(super) overlay_epoch: u64,
     pub(super) shm: Shm,
     pub(super) fractional: Option<WpFractionalScaleManagerV1>,
     pub(super) viewporter: Option<WpViewporter>,
@@ -249,6 +251,8 @@ pub fn run_runtime(
         window: None,
         window_epoch: 0,
         app_pending: None,
+        overlay: None,
+        overlay_epoch: 0,
         shm: Shm::bind(&globals, &qh)?,
         fractional: globals.bind(&qh, 1..=1, ()).ok(),
         viewporter: globals.bind(&qh, 1..=1, ()).ok(),

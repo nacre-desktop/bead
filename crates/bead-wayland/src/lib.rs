@@ -19,10 +19,12 @@ mod rendering;
 mod report;
 mod runtime;
 mod transactions;
+mod overlay;
 mod window;
 use runtime::App;
 pub use runtime::run_runtime;
 pub(crate) use runtime::{output_event_is_current, output_scope_matches};
+pub use overlay::Overlays;
 pub use window::{WindowFactory, WindowModel, WindowSpec};
 pub mod worker;
 use bead_render::{
@@ -190,6 +192,8 @@ pub enum UiEvent {
     Panel(u64, Box<UiEvent>),
     /// Event for the on-demand window session (epoch rejects a closed window's late wakeups).
     Window(u64, Box<UiEvent>),
+    /// Event for the overlay slot (epoch rejects a released overlay's late wakeups).
+    Overlay(u64, Box<UiEvent>),
     PanelVisibility(bool),
     /// The panel was detached into a pearl (true) or docked back (false).
     PanelDetached(bool),
@@ -207,10 +211,12 @@ pub enum UiEvent {
         toggle: bool,
         center: Option<f32>,
     },
-    /// Service-initiated ambient view (transient notices). `open` shows `view` only
-    /// while the panel slot is idle or holds another ambient view, so it never
-    /// displaces a view the user opened; `!open` closes `view` only if it is the
-    /// ambient view shown. The application defines view names.
+    /// Service-initiated ambient view (transient notices). A view of the overlay
+    /// catalog ([`Options::overlays`]) shows in the overlay slot beside whatever the
+    /// panel shows. Any other `open` shows `view` only while the panel slot is idle or
+    /// holds another ambient view, so it never displaces a view the user opened;
+    /// `!open` closes `view` only if it is the ambient view shown. The application
+    /// defines view names.
     CompanionOffer {
         view: String,
         output: Option<String>,
@@ -447,6 +453,8 @@ pub struct Options {
     pub panel_spec: Option<PanelSpec>,
     /// Optional named views sharing the existing one-resident-panel lifecycle.
     pub panels: Option<Panels>,
+    /// B0053: views offered into the overlay slot (see [`UiEvent::CompanionOffer`]).
+    pub overlays: Option<Overlays>,
     pub command_map: Option<CommandMap>,
     pub report: Option<std::path::PathBuf>,
     pub command_socket: Option<std::path::PathBuf>,
@@ -500,6 +508,7 @@ impl Default for Options {
             namespace: "bead-dev".into(),
             panel_spec: None,
             panels: None,
+            overlays: None,
             command_map: None,
             command_socket: None,
             report: None,

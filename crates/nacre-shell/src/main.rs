@@ -653,6 +653,9 @@ fn start(
             link,
             notice_service::Options {
                 action_on_click: notice_action_on_click,
+                // QML suppresses popups for popouts, the session menu and the control
+                // drawer only; these views keep showing them.
+                coexist: ["launcher", "dashboard", "chat"].map(String::from).into(),
             },
         )?;
         Some(service)
@@ -797,14 +800,19 @@ fn start(
                 colors: colors.clone(),
                 trace: panel_trace,
             };
-            views.insert(
-                notice_service::VIEW_NOTICES.into(),
-                notice_views::notices(owner.clone(), style.clone()),
-            );
-            views.insert(
-                notice_service::VIEW_OSD.into(),
-                notice_views::osd(owner, style, true),
-            );
+            // B0053: own overlay slot, so they show beside any panel view.
+            options.overlays = Some(bead::wayland::Overlays::new(
+                std::collections::BTreeMap::from([
+                    (
+                        notice_service::VIEW_NOTICES.into(),
+                        notice_views::notices(owner.clone(), style.clone()),
+                    ),
+                    (
+                        notice_service::VIEW_OSD.into(),
+                        notice_views::osd(owner, style, true),
+                    ),
+                ]),
+            )?);
         }
         if let Some(client) = &_ui_provider {
             let names = views.keys().cloned().collect();

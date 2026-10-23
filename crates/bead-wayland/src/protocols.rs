@@ -22,6 +22,12 @@ impl CompositorHandler for App {
             self.window_scale(scale.max(1) as u32 * 120);
             return;
         }
+        if self.overlay_surface() == Some(surface)
+            && self.overlay.as_ref().is_some_and(|o| !o.has_fractional())
+        {
+            self.overlay_scale(scale.max(1) as u32 * 120);
+            return;
+        }
         if self
             .edge_surfaces
             .iter()
@@ -159,6 +165,12 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
             && state.window_surface() == Some(surface)
         {
             state.window_scale(scale);
+            return;
+        }
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
+            && state.overlay_surface() == Some(surface)
+        {
+            state.overlay_scale(scale);
             return;
         }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
@@ -398,6 +410,9 @@ impl OutputHandler for App {
             self.release_panel();
         }
         self.drop_slots_on(&output);
+        if self.overlay_on(&output) {
+            self.release_overlay();
+        }
         self.surfaces.retain(|s| s.output != output);
         self.edge_output_removed(&output);
         let removed: Vec<String> = self
@@ -449,6 +464,10 @@ impl LayerShellHandler for App {
         if self.edge_closed(layer) {
             return;
         }
+        if self.overlay_layer_is(layer) {
+            self.release_overlay();
+            return;
+        }
         let removed: Vec<String> = self
             .wallpaper_surfaces
             .iter()
@@ -494,6 +513,10 @@ impl LayerShellHandler for App {
             return;
         }
         if self.edge_configure(layer, config.new_size) {
+            return;
+        }
+        if self.overlay_layer_is(layer) {
+            self.overlay_configure(config.new_size);
             return;
         }
         if let Some(surface) = self
@@ -800,6 +823,10 @@ impl App {
     fn pointer_event(&mut self, event: &PointerEvent) {
         if self.window_surface() == Some(&event.surface) {
             self.window_pointer(event);
+            return;
+        }
+        if self.overlay_surface() == Some(&event.surface) {
+            self.overlay_pointer(event);
             return;
         }
         if self

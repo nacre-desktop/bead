@@ -49,13 +49,19 @@ const OSD_HIDE: Duration = Duration::from_millis(2000);
 const OSD_ARM: Duration = Duration::from_millis(400);
 const MAX_CALLS: usize = 16;
 
-/// Topics the shared daemon link must subscribe for this service.
-pub const TOPICS: [&str; 2] = ["notifications", "osd"];
-/// Panel views the service offers (see `UiEvent::CompanionOffer`).
+/// Topics the shared daemon link must subscribe for this service. `compositor` only
+/// names the focused output for new popups; without it they use the leading output.
+pub const TOPICS: [&str; 3] = ["notifications", "osd", "compositor"];
+/// Overlay views the service offers (see `UiEvent::CompanionOffer`).
 pub const VIEW_NOTICES: &str = "notices";
 pub const VIEW_OSD: &str = "osd";
 
+#[derive(Default)]
 pub struct Options {
+    /// View families that may stay shown beside popups (launcher, dashboard...): a
+    /// view named `p` or `p-...` for a prefix `p`. Every other panel view suppresses
+    /// popups, as QML does for popouts, the session menu and the control drawer.
+    pub coexist: Vec<String>,
     /// QML `NacreNotifications.actionOnClick`: no published runtime source, so the
     /// frozen default (false) holds unless the launcher sets this flag.
     pub action_on_click: bool,
@@ -367,6 +373,10 @@ struct Inner {
     next: u64,
     /// Another view (launcher, dashboard, popout) is shown: popups are suppressed.
     other_panel: bool,
+    /// Compositor-focused output name (published `compositor` topic), if known.
+    focus: Option<String>,
+    /// See [`Options::coexist`].
+    coexist: Vec<String>,
     offered: Option<&'static str>,
     hover: Option<(String, u64)>,
     /// The daemon refused provider-only calls: this process is not the UI provider.
@@ -419,7 +429,7 @@ fn wanted(g: &Inner) -> Option<&'static str> {
 }
 /// Pushes the current models and view offers; wake-ups run outside the lock.
 fn publish(shared: &Shared) {
-    let (values, offer, wakeups, driver) = {
+    let (values, offer, output, wakeups, driver) = {
         let mut g = shared.lock();
         let want = wanted(&g);
         let close = if want.is_none() {
@@ -431,6 +441,7 @@ fn publish(shared: &Shared) {
         (
             models(&g),
             want.map(|v| (v, true)).or(close.map(|v| (v, false))),
+            g.focus.clone(),
             g.wakeups.values().cloned().collect::<Vec<_>>(),
             g.drivers.values().next().cloned(),
         )
@@ -441,12 +452,32 @@ fn publish(shared: &Shared) {
     if let (Some(driver), Some((view, open))) = (driver, offer) {
         driver(UiEvent::CompanionOffer {
             view: view.into(),
-            output: None,
+            output,
             open,
         });
     }
 }
 
+/// Whether panel view `view` suppresses popups: every view outside the coexisting
+/// families (`p` or `p-...`).
+fn suppresses(coexist: &[String], view: &str) -> bool {
+    !coexist.iter().any(|p| {
+        view == p
+            || view
+                .strip_prefix(p.as_str())
+                .is_some_and(|rest| rest.starts_with('-'))
+    })
+}
+/// New popups follow the compositor focus; a missing or absent topic clears it.
+fn on_compositor(shared: &Shared, snap: &Snapshot) {
+    let focus = snap
+        .connected
+        .then(|| snap.data["focus"]["outputId"].as_str())
+        .flatten()
+        .filter(|name| !name.is_empty() && name.len() <= 128)
+        .map(str::to_owned);
+    shared.lock().focus = focus;
+}
 fn on_notifications(shared: &Shared, snap: &Snapshot) {
     {
         let mut g = shared.lock();
@@ -679,6 +710,7 @@ impl Service {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .push(Arc::downgrade(&shared));
+        shared.lock().coexist = options.coexist;
         let mut subscriptions = vec![];
         type Handler = fn(&Shared, &Snapshot);
         for (topic, handler) in [
@@ -699,6 +731,17 @@ impl Service {
                     })
                     .map_err(|e| e.message)?,
             );
+        }
+        // Best effort: popups fall back to the leading output when focus is unknown.
+        let weak = Arc::downgrade(&shared);
+        if let Ok(subscription) = client.topic("compositor").and_then(|t| {
+            t.subscribe(Arc::new(move |snap| {
+                if let Some(shared) = weak.upgrade() {
+                    on_compositor(&shared, &snap);
+                }
+            }))
+        }) {
+            subscriptions.push(subscription);
         }
         let (state, link) = (shared.clone(), client.clone());
         std::thread::Builder::new()
@@ -743,9 +786,9 @@ impl Notices for Service {
         Box::new(Lease(id, Arc::downgrade(&self.shared)))
     }
     fn panel_changed(&self, view: Option<&str>) {
-        let other = view.is_some_and(|v| v != VIEW_NOTICES && v != VIEW_OSD);
         {
             let mut g = self.shared.lock();
+            let other = view.is_some_and(|v| suppresses(&g.coexist, v));
             if g.other_panel == other {
                 return;
             }

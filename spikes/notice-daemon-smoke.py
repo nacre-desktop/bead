@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """B0020/B0030 nested smoke: real daemon producer on a PRIVATE bus; the main nacre-shell (bar,
-core views, UI provider) hosts notices and the OSD in-process as panel views (`--notices`)."""
+core views, UI provider) hosts notices and the OSD in-process as overlay views (`--notices`)."""
 import json, os, pathlib, re, shutil, signal, socket, subprocess, sys, time
 
 ROOT = pathlib.Path(os.environ["SMOKE_ROOT"])
@@ -142,6 +142,8 @@ def notify(summary, body="", actions=("default", "Open", "a1", "Reply", "a2", "A
 def state(): return probe.snapshot()
 def panel_state():
     return ipc("bead.panel", "state") or {}
+def overlay_state():
+    return ipc("bead", "overlay") or {}
 def ipc(target, method, *a):
     r = subprocess.run([str(SHELL), "ipc", "--socket", CMD, "--json", target, method, *a], env=dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), capture_output=True, text=True, timeout=5)
     (RAW/"ipc.err").open("a").write(f"{target} {method} rc={r.returncode} {r.stdout[:300]} {r.stderr[:300]}\n")
@@ -155,9 +157,10 @@ aid = st["active"]["order"][0]; notice = st["active"]["items"][aid]
 check("producer publishes default_action and 3 actions", notice.get("default_action") and len(notice["actions"]["order"]) == 3, str(notice.get("default_action")))
 time.sleep(1.0)
 ps = panel_state()
-check("popup is the 'notices' panel view with a surface (bar keeps its own)", ps.get("view") == "notices" and ps.get("surfaces", 0) >= 1 and ps.get("target_open") is True, str(ps)[:200])
+ov = overlay_state()
+check("popup is the 'notices' overlay view with a surface (panel slot stays idle)", ov.get("view") == "notices" and ov.get("open") is True and ov.get("configured") is True and ps.get("target_open") is False, str((ov, ps))[:200])
 grim("1-popup.png")
-regs = ipc("bead", "panel-regions"); (RAW/"regions-1.json").write_text(json.dumps(regs, indent=1))
+regs = ipc("bead", "overlay-regions"); (RAW/"regions-1.json").write_text(json.dumps(regs, indent=1))
 rid = "notices.k" + aid.encode().hex() + "."
 (RAW/"regs-debug.json").write_text(json.dumps(regs)[:3000]); names = [r["id"] for r in regs["regions"] if rid in r["id"]] if regs else []
 check("card regions present; default action not a button row", any(n.endswith(".notice") for n in names) and not any("action-" in n for n in names), str(names)[:160])
@@ -168,7 +171,7 @@ procs.append(ptr); ptr.stdout.readline()
 def pcmd(c):
     ptr.stdin.write(c + "\n"); ptr.stdin.flush(); ptr.stdout.readline()
 def center(sub):
-    regs = ipc("bead", "panel-regions"); r = next(r for r in regs["regions"] if rid in r["id"] and r["id"].endswith("." + sub))
+    regs = ipc("bead", "overlay-regions"); r = next(r for r in regs["regions"] if rid in r["id"] and r["id"].endswith("." + sub))
     x, y, w, h = r["rect"]; return round(W - regs["size"][0] + STACK_X + regs["offset"][0] + x + w / 2), round(STACK_Y + regs["offset"][1] + y + h / 2)
 x, y = center("notice"); pcmd(f"move {x} {y} {W} {H}")
 st = wait(lambda: (lambda s: s if s["active"]["items"][aid].get("paused") else None)(state()), 4, "hover paused")
@@ -177,7 +180,7 @@ pcmd(f"move 5 5 {W} {H}")
 st = wait(lambda: (lambda s: s if not s["active"]["items"][aid].get("paused") else None)(state()), 4, "hover resumed")
 check("leaving resumes the producer clock", st["active"]["items"][aid]["paused"] is False)
 pcmd(f"move {x} {y} {W} {H}"); pcmd("click"); time.sleep(.5)
-regs = ipc("bead", "panel-regions"); (RAW/"regions-2.json").write_text(json.dumps(regs, indent=1))
+regs = ipc("bead", "overlay-regions"); (RAW/"regions-2.json").write_text(json.dumps(regs, indent=1))
 names = [r["id"] for r in regs["regions"] if rid in r["id"]]
 check("click on the card expands it (action buttons appear, QML default policy)", any("action-" in n for n in names), str(sorted(n.split('.')[-1] for n in names)))
 grim("2-expanded.png")
@@ -200,14 +203,24 @@ check("right-click dismisses: no longer active, retained in history (not forgott
 # ---- 3b. another view displaces the stack: popups are suppressed (provider-only), never replayed
 notify("Before calendar", actions=("default", "Open"), timeout=60000)
 wait(lambda: state()["popup_order"], 5, "popup before calendar"); time.sleep(.8)
-check("popups are shown as the ambient 'notices' view", panel_state().get("view") == "notices")
+check("popups are shown as the 'notices' overlay view", overlay_state().get("view") == "notices")
 ipc("bead.panel", "open", "calendar")
 st = wait(lambda: (lambda s: s if s["inhibited"] else None)(state()), 5, "inhibited by the other view")
-check("opening another view suppresses popups (set_inhibited from the shell)", st["popup_order"] == [] and panel_state().get("view") == "calendar", str(panel_state())[:120])
+check("opening a popout suppresses popups (set_inhibited from the shell)", st["popup_order"] == [] and panel_state().get("view") == "calendar", str(panel_state())[:120])
+wait(lambda: not overlay_state().get("resident"), 5, "overlay released")
+check("the suppressed stack releases its overlay", overlay_state().get("resident") is False)
 ipc("bead.panel", "close")
 st = wait(lambda: (lambda s: s if not s["inhibited"] else None)(state()), 5, "inhibition lifted")
 time.sleep(.5)
 check("closing it lifts suppression without replaying popups", st["popup_order"] == [] and state()["popup_order"] == [])
+# B0053: the launcher does not suppress popups; both are visible at once.
+ipc("bead.panel", "open", "launcher"); time.sleep(.8)
+notify("Over the launcher", actions=("default", "Open"), timeout=60000)
+wait(lambda: state()["popup_order"], 5, "popup over launcher"); time.sleep(.8)
+ov, ps = overlay_state(), panel_state()
+check("a popup shows while the launcher is open (own overlay slot)", ov.get("view") == "notices" and ov.get("open") is True and ps.get("view") == "launcher" and ps.get("target_open") is True and state()["inhibited"] is False, str((ov, ps))[:200])
+grim("3b-popup-over-launcher.png")
+ipc("bead.panel", "close"); time.sleep(.5)
 
 # ---- 4. DND: popups hide, no replay when it ends
 nid3 = notify("Before DND", actions=("default", "Open"), timeout=60000)
@@ -232,7 +245,8 @@ st = state(); check("shell restart: daemon state intact, no popup replay", st["p
 n5 = notify("After restart", actions=("default", "Open"), timeout=60000); time.sleep(1.2)
 ipc2 = lambda *a: subprocess.run([str(SHELL), "ipc", "--socket", CMD + "2", "--json", *a], env=dict(env, BEAD_PRIVATE_INPUT_PROOF="1"), capture_output=True, text=True, timeout=5)
 ps2 = json.loads(ipc2("bead.panel", "state").stdout or "{}").get("result", {})
-check("consumer shows new notices after restart", ps2.get("view") == "notices" and ps2.get("target_open") is True, str(ps2)[:160])
+ov2 = json.loads(ipc2("bead", "overlay").stdout or "{}").get("result", {})
+check("consumer shows new notices after restart", ov2.get("view") == "notices" and ov2.get("open") is True, str(ov2)[:160])
 grim("5-after-restart.png")
 
 # ---- 6. daemon loss: consumer goes stale, no local owner fallback
