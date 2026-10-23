@@ -4,6 +4,13 @@ local kit = require("bead.kit")
 local Sidebar = require("./components/sidebar")
 local AppGrid = require("./components/app-grid")
 local Results = require("./components/results")
+-- QML NacreAppBrowser prefixHints: five 24 px chips at the search field's right end while the query is empty.
+local hints={"> "..ui.tr("bead.launcher.hint-actions"),"= "..ui.tr("bead.launcher.hint-calculate"),"# "..ui.tr("bead.launcher.hint-brain"),": "..ui.tr("bead.launcher.hint-files"),"? "..ui.tr("bead.launcher.hint-ai")}
+local chips={}
+for index,label in ipairs(hints) do
+    chips[index]=ui.Box{id="hint",width=math.floor(#label*6.1+14),height=24,radius=6,fill=ui.alpha("onSurface",0.045),
+        ui.Text{position="absolute",left=0,top=3,width=math.floor(#label*6.1+14),height=18,text=label,font_size=11.333,text_align="center",color="onSurfaceVariant"}}
+end
 local has_detail = ui.resolve_for_check(ui.bind("launcher.has_detail"))
 local detail_only = has_detail and ui.resolve_for_check(ui.bind("launcher.result_count")) == 0
 local detail = ui.Box{visible=false,height=0}
@@ -33,7 +40,7 @@ return kit.Panel {edge="bottom",id="launcher",width=1100,height=590,max_width="9
             ui.Text{text=ui.bind("launcher.subtitle"),color="onSurfaceVariant",font_size=13.333,height=20},
             ui.Text{id="source-error",text=ui.bind("launcher.error"),visible=ui.bind("launcher.failed"),color="error",font_size=13.333,height=20},
             detail,
-            ui.Text{id="no-results",text=ui.tr("bead.launcher.no-results"),visible=ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
+            ui.Text{id="no-results",text=ui.bind("launcher.empty_text"),visible=ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
             detail_only and ui.Box{grow=1} or ui.resolve_for_check(ui.bind("launcher.grid"))
                 and ui.Box{id="grid-host",grow=1,AppGrid{}}
                 or ui.Box{id="results-host",grow=1,Results{}},
@@ -42,4 +49,5 @@ return kit.Panel {edge="bottom",id="launcher",width=1100,height=590,max_width="9
     },
     kit.TextInput{id="search",text=ui.bind("launcher.search.text"),placeholder=ui.tr("bead.launcher.search-placeholder"),
         height=49,padding=15,radius=10,font_size=16,width="fill"},
+    ui.Row{id="hints",position="absolute",right=34,top=535,height=24,gap=6,visible=ui.bind("launcher.hints"),table.unpack(chips)},
 }

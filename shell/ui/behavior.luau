@@ -24,18 +24,21 @@ return {
   },
   computed = {
     ["launcher.results"]=function(s) return not s["launcher.grid"] end,
-    ["launcher.subtitle"]=function(s) return s["launcher.grid"] and tr("bead.launcher.apps") or tr("bead.launcher.results") end,
+    ["launcher.home"]=function(s) return (s["launcher.engine_route"]:match("^[^.]+"))=="home" and s["launcher.search.text"]:match("^%s*$")~=nil end,
+    ["launcher.hints"]=function(s) return s["launcher.search.text"]=="" end,
+    ["launcher.empty_text"]=function(s) return (s["launcher.engine_route"]:match("^[^.]+"))=="home" and s["launcher.search.text"]:match("^%s*$")~=nil and tr("bead.launcher.home-empty") or tr("bead.launcher.no-results") end,
+    ["launcher.subtitle"]=function(s) if s["launcher.home"] then return tr("bead.launcher.favorites") end return s["launcher.grid"] and tr("bead.launcher.apps") or tr("bead.launcher.results") end,
     ["launcher.grid"]=function(s) return s["launcher.mode"]=="apps" and s["launcher.search.text"]:match("^%s*$")~=nil end,
     ["launcher.has_detail"]=function(s) return s["launcher.conversion.value"]~="" or s["launcher.conversion.description"]~="" or s["launcher.conversion.error"]~="" or s["launcher.message"]~="" end,
     ["launcher.empty"]=function(s) return s["launcher.result_count"]==0 and s["launcher.error"]=="" and not s["launcher.pending"] and not s["launcher.has_detail"] end,
     ["launcher.failed"]=function(s) return s["launcher.error"]~="" end,
     ["launcher.route_title"] = function(s)
       local group=s["launcher.engine_route"]:match("^[^.]+")
-      if group=="home" then return tr("bead.launcher.favorites") end
       if group then
         for _,entry in ipairs(s["launcher.groups"]) do
           if entry.id==group then return entry.name end
         end
+        if group=="home" then return tr("bead.launcher.home") end
       end
       return ({apps=tr("bead.launcher.apps"),search=tr("bead.launcher.search-everything"),actions=tr("bead.launcher.actions")})[s["launcher.route"]] or tr("bead.launcher.apps")
     end,
