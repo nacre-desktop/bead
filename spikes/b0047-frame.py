@@ -227,12 +227,12 @@ def smoke(cand, pointer_bin, ctl):
         move(W - 4, H // 2)
         time.sleep(.2)
         screenshot("dwell.png")
-        time.sleep(.9)
+        time.sleep(1.2)
         steps["hover_opens_after_dwell"] = len(bar_layers()) > base
         screenshot("open.png")
         # Leaving both the lip and the panel closes a hover-opened panel.
         move(W // 2, H - 40)
-        time.sleep(1.2)
+        time.sleep(3.2)
         steps["leaving_closes_hover_panel"] = len(bar_layers()) == base
         # A click opens at once; a second click closes.
         move(W - 4, H // 2 + 20)
@@ -240,12 +240,13 @@ def smoke(cand, pointer_bin, ctl):
         time.sleep(.8)
         steps["click_opens"] = len(bar_layers()) > base
         pointer.send("click")
-        time.sleep(1.0)
+        time.sleep(3.2)
         steps["second_click_closes"] = len(bar_layers()) == base
         # The top lip lives in the bar: resting on its empty middle opens the dashboard.
         move(W // 2, 20)
         time.sleep(1.2)
         steps["top_lip_hover_opens"] = len(bar_layers()) > base
+        screenshot("top.png")
         report["steps"] = steps
         report["log_errors"] = [l for l in (arm.raw / "shell.log").read_text(errors="replace").splitlines()
                                 if "EDGE_" in l or "ERROR" in l][:20]

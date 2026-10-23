@@ -620,6 +620,16 @@ impl App {
             self.edge.dwell_epoch = self.edge.dwell_epoch.wrapping_add(1);
         }
         self.redraw_lips();
+        if !closed {
+            // The panel's output is recorded a moment later in the open path.
+            let _ = self.loop_handle.insert_source(
+                Timer::from_duration(Duration::from_millis(30)),
+                |_, _, app| {
+                    app.redraw_lips();
+                    TimeoutAction::Drop
+                },
+            );
+        }
     }
     /// Pointer events on a lip strip surface. Returns false for any other surface.
     pub(super) fn edge_pointer(&mut self, event: &PointerEvent) -> bool {
