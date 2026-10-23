@@ -850,12 +850,13 @@ fn control_center_pages_match_goldens() -> bead_test::Result<()> {
             let mut h = harness(out, page, scale)?;
             let ids = node_ids(&h);
             match page {
-                // Only tiles whose source is published appear; brightness is saved but absent.
+                // Tiles whose source is published are live; the others are dimmed.
                 "home" => {
                     assert!(ids.iter().any(|i| i.contains("tile-volume")), "{ids:?}");
                     assert!(ids.iter().any(|i| i.contains("tile-clipboard")));
-                    assert!(!ids.iter().any(|i| i.contains("tile-brightness")));
-                    assert!(!ids.iter().any(|i| i.contains("tile-night")));
+                    // The QML dims an unavailable tile; so does the panel (a veil over the tile).
+                    assert!(ids.iter().any(|i| i.contains("dim-brightness")), "{ids:?}");
+                    assert!(ids.iter().any(|i| i.contains("dim-night")), "{ids:?}");
                 }
                 "edit" => assert!(ids.iter().any(|i| i.contains(".slot-1"))),
                 "catalog" => assert!(ids.iter().any(|i| i.contains("add-notifications"))),

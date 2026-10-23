@@ -203,9 +203,12 @@ impl Harness {
                         .ok_or_else(|| format!("missing deterministic icon fixture: {icon}"))?
                         .clone();
                 }
-                scene
-                    .asset_data
-                    .insert(path.clone(), std::sync::Arc::from(std::fs::read(&*path)?));
+                // A themed (palette-filled) image already carries its bytes under a synthetic path.
+                if !scene.asset_data.contains_key(&*path) {
+                    scene
+                        .asset_data
+                        .insert(path.clone(), std::sync::Arc::from(std::fs::read(&*path)?));
+                }
             }
         }
         scene.prepared.clear();
