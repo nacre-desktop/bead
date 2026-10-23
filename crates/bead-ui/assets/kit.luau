@@ -44,7 +44,7 @@ return function(ui, tokens)
             local n=math.min(hi,lo+i*step)
             children[i+1]=ui.Button{drag=true,id="value-"..i,grow=1,shrink=0,height=28,padding=0,radius=2,
                 fill=ui.alpha("surface",0),aria_label=(p.label or "Value").." "..n,
-                on_activate=ui.action(p.on_change,n),
+                on_activate=ui.action(p.on_change,p.change_arg and p.change_arg(n) or n),
                 ui.Box{id="hit",width="100%",height="100%",fill=ui.alpha("surface",0)}}
         end
         return ui.Box{id=p.id,width=width,height=28,
@@ -57,6 +57,119 @@ return function(ui, tokens)
         return ui.Row{id=p.id,gap=tokens.spacing.sm,fill="surfaceContainer",radius=tokens.radii.medium,
             kit.Button{id="toggle",text=p.text,grow=1,on_activate=p.on_toggle},
             kit.IconButton{id="detail",text="chevron_right",aria_label="Details",on_activate=p.on_detail}}
+    end
+    -- Control tiles: one rounded frame, four kinds. `on` fills a toggle, `available=false` dims and
+    -- disarms it. Callers pass plain values and ready-made actions; sizes come from the scale.
+    local glyph_size=tokens.icons.large*4/3
+    local function ink(p)
+        if p.available==false then return "onSurfaceVariant" end
+        return p.on and "onPrimaryContainer" or "onSurface"
+    end
+    local function glyph(id,name,color)
+        return ui.Text{id=id,text=name,family="Material Symbols Rounded",font_size=glyph_size,width=glyph_size+2,height=24,shrink=0,color=color}
+    end
+    local function tile(p,kind)
+        local color,armed=ink(p),p.available~=false
+        local pad=tokens.spacing.lg
+        local side=kind=="link" and glyph_size+pad or p.on_detail and 40 or 0
+        local main_w=p.width-(p.on_detail and 40 or 0)
+        local body
+        if p.stacked then
+            body=ui.Column{id="body",width=main_w,height=p.height,gap=tokens.spacing.xs,align="center",justify="center",
+                glyph("icon",p.icon,color),
+                ui.Text{id="label",text=p.label,width=main_w-2*tokens.spacing.xs,height=18,font_size=tokens.text.caption*4/3,text_align="center",color=color}}
+        else
+            local text_w=main_w-pad-glyph_size-2-tokens.spacing.md-(kind=="link" and side or tokens.spacing.sm)
+            local labels={ui.Text{id="label",text=p.label,width=text_w,height=20,font_size=tokens.text.caption*4/3,color=color}}
+            if p.detail and p.detail~="" then
+                labels[2]=ui.Text{id="detail",text=p.detail,width=text_w,height=18,font_size=tokens.text.caption*4/3,
+                    color=armed and p.on and "onPrimaryContainer" or "onSurfaceVariant"}
+            end
+            body=ui.Row{id="body",width=main_w,height=p.height,padding_left=pad,gap=tokens.spacing.md,align="center",
+                glyph("icon",p.icon,color),ui.Column(props(labels,{id="labels",width=text_w,gap=tokens.spacing.hairline})),
+                kind=="link" and glyph("chevron","chevron_right",color) or nil}
+        end
+        local kids={kit.Button{id="main",width=main_w,height=p.height,padding=0,radius=tokens.radii.large,fill="transparent",
+            hover_fill=ui.alpha("onSurface",.08),aria_label=p.aria_label or p.label,on_activate=armed and p.on_activate or nil,body}}
+        if p.on_detail then
+            kids[2]=kit.Button{id="detail-open",width=40,height=p.height,padding=0,radius=tokens.radii.large,fill="transparent",
+                hover_fill=ui.alpha("onSurface",.08),aria_label=p.detail_label or p.label,on_activate=p.on_detail,
+                ui.Row{id="chevron-row",width=40,height=p.height,align="center",justify="center",glyph("chevron","chevron_right",color)}}
+        end
+        return ui.Row(props(kids,{id=p.id,width=p.width,height=p.height,radius=tokens.radii.large,align="center",
+            fill=armed and (p.on and "primaryContainer" or "surfaceContainer") or ui.alpha("surfaceContainer",.4)}))
+    end
+    function kit.ToggleTile(p) return tile(p,"toggle") end
+    function kit.LinkTile(p) return tile(props(p,{on=false}),"link") end
+    function kit.ButtonTile(p) return tile(props(p,{on=false,stacked=true}),"button") end
+    -- Level control: icon button (mute), label, value text and a stepped slider; read-only
+    -- (a meter) when no `on_change` action is given.
+    function kit.SliderTile(p)
+        local color,armed=ink({available=p.available}),p.available~=false
+        local pad=tokens.spacing.lg
+        local inner=p.width-pad*2-40-tokens.spacing.sm
+        local control
+        if armed and p.on_change then
+            control=kit.Slider{id="level",width=inner,value=p.value,min=0,max=100,step=p.step or 5,label=p.label,
+                on_change=p.on_change,change_arg=p.change_arg}
+        else
+            control=kit.LevelMeter{id="level",width=inner,value=(p.value or 0)/100}
+        end
+        return ui.Row{id=p.id,width=p.width,height=p.height,padding_left=pad,padding_right=pad,gap=tokens.spacing.sm,align="center",
+            radius=tokens.radii.large,fill=armed and "surfaceContainer" or ui.alpha("surfaceContainer",.4),
+            kit.Button{id="toggle",width=40,height=40,padding=0,radius=tokens.radii.full,fill="transparent",hover_fill=ui.alpha("onSurface",.08),
+                aria_label=p.toggle_label or p.label,on_activate=armed and p.on_toggle or nil,
+                ui.Row{id="icon-row",width=40,height=40,align="center",justify="center",glyph("icon",p.icon,color)}},
+            ui.Column{id="level-column",width=inner,gap=2,
+                ui.Row{id="level-head",width=inner,height=20,align="center",
+                    ui.Text{id="label",text=p.label,width=inner-56,height=20,font_size=tokens.text.caption*4/3,color=color},
+                    ui.Text{id="value",text=p.detail or "",width=56,height=20,shrink=0,text_align="right",font_size=tokens.text.caption*4/3,color="onSurfaceVariant"}},
+                control}}
+    end
+    -- Packs tiles into rows by size: `sizes[size]={per_row,height}`; a tile is
+    -- `{size,build=function(width,height) return node end}`. A change of size starts a new row. Returns the
+    -- column and its height.
+    function kit.TileGrid(p)
+        local rows,current={},nil
+        for _,t in ipairs(p.tiles) do
+            local spec=p.sizes[t.size]
+            if not current or current.size~=t.size or #current.items>=spec.per_row then
+                current={size=t.size,items={}}
+                table.insert(rows,current)
+            end
+            table.insert(current.items,t)
+        end
+        local out,total={},0
+        for i,row in ipairs(rows) do
+            local spec=p.sizes[row.size]
+            local cell=(p.width-p.gap*(spec.per_row-1))/spec.per_row
+            local kids={}
+            for j,t in ipairs(row.items) do kids[j]=t.build(cell,spec.height) end
+            out[i]=ui.Row(props(kids,{id="row-"..i,width=p.width,height=spec.height,gap=p.gap}))
+            total=total+spec.height+(i>1 and p.gap or 0)
+        end
+        return ui.Column(props(out,{id=p.id,width=p.width,height=total,gap=p.gap})),total
+    end
+    -- Rows the reader can reorder by dragging: one drag button per item under a single parent, so a
+    -- press-and-move over another row fires that row's `on_touch` action (`bead.pressed` tells a new
+    -- gesture from a continuing one). `items` are `{id,build=function(width,height) return node end}`;
+    -- `remove` optionally builds a button per row, laid over its right end.
+    function kit.ReorderList(p)
+        local slots,overlay={},{}
+        local pitch=p.item_height+p.gap
+        for i,item in ipairs(p.items) do
+            slots[i]=kit.Button{drag=true,id="slot-"..i,width=p.width,height=p.item_height,padding=0,radius=tokens.radii.medium,
+                fill="surfaceContainer",hover_fill="surfaceContainerHigh",aria_label=item.label,on_activate=ui.action(p.on_touch,item.id),
+                item.build(p.width,p.item_height)}
+            if p.remove then
+                overlay[i]=ui.Box{id="over-"..i,position="absolute",left=p.width-p.item_height,top=(i-1)*pitch,width=p.item_height,height=p.item_height,
+                    p.remove(item,p.item_height)}
+            end
+        end
+        local height=math.max(0,#p.items*pitch-p.gap)
+        local children={ui.Column(props(slots,{id="slots",width=p.width,height=height,gap=p.gap}))}
+        for _,node in ipairs(overlay) do table.insert(children,node) end
+        return ui.Box(props(children,{id=p.id,width=p.width,height=height}))
     end
     function kit.SegmentedControl(p)
         local children={};local selected=value(p.value,"")

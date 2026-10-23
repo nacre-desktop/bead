@@ -19,7 +19,21 @@ impl Session {
                 }
         })
     }
+    /// Pointer press: the hit control's action sees `bead.pressed` false (a new gesture);
+    /// every drag step that follows sees it true until [`Session::release`].
     pub fn click(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        self.click_at(x, y, true)
+    }
+    pub fn release(&mut self) -> Result<Option<Scene>, Diagnostic> {
+        if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) {
+            return Ok(None);
+        }
+        self.update(BTreeMap::from([(
+            "bead.pressed".into(),
+            Value::Bool(false),
+        )]))
+    }
+    fn click_at(&mut self, x: f32, y: f32, press: bool) -> Result<Option<Scene>, Diagnostic> {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
@@ -48,6 +62,11 @@ impl Session {
                 hit.and_then(|node| node.action_arg.clone())
                     .unwrap_or(Value::Bool(true)),
             )?;
+        }
+        if press && self.stores.get("bead.pressed").is_some() {
+            stores
+                .commit(BTreeMap::from([("bead.pressed".into(), Value::Bool(true))]))
+                .map_err(|e| generation.script.error(e))?;
         }
         self.stage_state(stores)
     }
@@ -95,7 +114,7 @@ impl Session {
             .hit(x, y, false)
             .is_some_and(|n| n.drag && n.id.rsplit_once('.').map(|(parent, _)| parent) == group)
         {
-            self.click(x, y)
+            self.click_at(x, y, false)
         } else {
             Ok(None)
         }
@@ -130,7 +149,7 @@ impl Session {
             (index + 1).min(peers.len() - 1)
         };
         let r = rect(&peers[next].draw);
-        self.click(r.x + r.w / 2., r.y + r.h / 2.)
+        self.click_at(r.x + r.w / 2., r.y + r.h / 2., false)
     }
     pub fn focused_range(&self) -> bool {
         matches!(self.stores.get("bead.focused"),Some(Value::Text(id)) if self.current_nodes.iter().any(|n|n.drag && &n.id==id))

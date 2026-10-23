@@ -42,6 +42,13 @@ pub enum Input {
         x: f32,
         y: f32,
     },
+    /// Pointer motion with the primary button held (after a `Click`).
+    Drag {
+        x: f32,
+        y: f32,
+    },
+    /// The primary button was released.
+    Release,
     Text(String),
     Backspace,
     Tab {
@@ -230,6 +237,8 @@ impl Harness {
             let scene = match input {
                 Input::Pointer { x, y } => self.session.hover(x, y)?,
                 Input::Click { x, y } => self.session.click(x, y)?,
+                Input::Drag { x, y } => self.session.drag(x, y)?,
+                Input::Release => self.session.release()?,
                 Input::Text(text) => self.session.key(&text, false)?,
                 Input::Backspace => self.session.key("", true)?,
                 Input::Tab { backwards } => self.session.focus_next(backwards)?,

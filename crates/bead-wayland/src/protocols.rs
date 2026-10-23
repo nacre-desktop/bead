@@ -904,7 +904,10 @@ impl PointerHandler for App {
                     self.pointer_pressed = true;
                     self.view_event(panel, UiEvent::Click { x, y });
                 }
-                PointerEventKind::Release { button: 0x110, .. } => self.pointer_pressed = false,
+                PointerEventKind::Release { button: 0x110, .. } => {
+                    self.pointer_pressed = false;
+                    self.view_event(panel, UiEvent::Release);
+                }
                 PointerEventKind::Press { button: 0x111, .. } => {
                     self.view_event(panel, UiEvent::ContextMenu { x, y })
                 }

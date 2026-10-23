@@ -482,3 +482,80 @@ pub fn chat(
         }),
     })
 }
+
+/// Control center (B0049), the QML right sidebar: 424 wide on the right edge under the pill.
+/// The topic leases behind its data sources exist only while the panel is open.
+pub fn control_center(
+    client: crate::nacre_source::Client,
+    palette: PathBuf,
+    colors: Palette,
+    views: Vec<String>,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    let fill = colors.get("surface")?;
+    let (width, height) = (424., 300.);
+    let mut fallback = crate::sound::fallback(fill);
+    fallback.width = width;
+    fallback.bounds = Rect::new(-32., -32., width + 64., height + 64.);
+    fallback.primitives = vec![Primitive::Rounded {
+        rect: Rect::new(0., 0., width, height),
+        radius: 16.,
+        fill,
+        border: None,
+    }];
+    if let Some(motion) = &mut fallback.motion {
+        motion.id = "control".into();
+        motion.edge = bead::core::Edge::Right;
+        motion.duration = 0.28;
+    }
+    let cold = fallback.clone();
+    Ok(PanelSpec {
+        position: Some(
+            crate::placement::Frame::default()
+                .positioner(crate::placement::Attachment::ControlCenter),
+        ),
+        engages_decorations: true,
+        passive: false,
+        keyboard_focus: true,
+        initial_open: false,
+        fallback,
+        renderer: RendererKind::Cpu,
+        factory: Arc::new(move |open| {
+            let topics = crate::control_center::TOPICS
+                .iter()
+                .filter_map(|name| {
+                    client.lease_topic(name).ok().map(|topic| {
+                        (
+                            *name,
+                            Arc::new(topic) as Arc<dyn bead::core::source::Source>,
+                        )
+                    })
+                })
+                .collect();
+            let store = client
+                .lease_topic(crate::control_center::STORE_TOPIC)
+                .ok()
+                .map(|topic| Arc::new(topic) as Arc<dyn bead::core::source::Source>);
+            let control = crate::control_center::ControlCenter::new(
+                Some(client.clone()),
+                topics,
+                store,
+                views.clone(),
+            );
+            let session = bead::ui::Session::new(
+                PathBuf::from("shell"),
+                "control/main.luau".into(),
+                palette.clone(),
+                colors.clone(),
+                cold.clone(),
+            );
+            crate::reload::Runtime::panel_session(session, open)
+                .with_trace(trace)
+                .with_view_edge("right")?
+                .with_frame(crate::placement::Attachment::ControlCenter, &colors)
+                .and_then(|runtime| runtime.with_control_center(control))
+                .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
+                .map_err(|e| e.to_string())
+        }),
+    })
+}

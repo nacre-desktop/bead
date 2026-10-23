@@ -5,6 +5,7 @@ mod calendar;
 mod chat;
 mod commands;
 mod contour;
+mod control_center;
 mod dashboard;
 mod desktop;
 mod font_sources;
@@ -809,6 +810,19 @@ fn start(
             views.insert(
                 notice_service::VIEW_OSD.into(),
                 notice_views::osd(owner, style, true),
+            );
+        }
+        if let Some(client) = &_ui_provider {
+            let names = views.keys().cloned().collect();
+            views.insert(
+                "control".into(),
+                popouts::control_center(
+                    client.clone(),
+                    palette.clone(),
+                    colors.clone(),
+                    names,
+                    panel_trace,
+                )?,
             );
         }
         // B0047: the lips come from shell/frame/behavior.luau; a lip needs its view.

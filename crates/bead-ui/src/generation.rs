@@ -416,6 +416,8 @@ impl Generation {
         for (id, value) in [
             ("bead.focused", Value::Text(String::new())),
             ("bead.hovered", Value::Text(String::new())),
+            // True from a pointer press until its release, as seen by the press's own action.
+            ("bead.pressed", Value::Bool(false)),
         ] {
             if defaults.insert(id.into(), value).is_some() {
                 return Err(Diagnostic::new(

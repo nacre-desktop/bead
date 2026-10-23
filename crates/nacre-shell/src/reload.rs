@@ -46,6 +46,8 @@ pub struct Runtime {
     chat: Option<std::rc::Rc<crate::chat::Chat>>,
     chat_subscription: Vec<bead::core::source::Subscription>,
     settings: Option<std::rc::Rc<crate::settings::Settings>>,
+    control: Option<std::rc::Rc<crate::control_center::ControlCenter>>,
+    control_subscription: Vec<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
@@ -260,6 +262,8 @@ impl Runtime {
             chat: None,
             chat_subscription: Vec::new(),
             settings: None,
+            control: None,
+            control_subscription: Vec::new(),
             dashboard: None,
             dashboard_subscription: Vec::new(),
             launcher_memory: None,
@@ -608,6 +612,7 @@ impl Runtime {
             || self.dashboard.is_some()
             || self.session_menu.is_some()
             || self.chat.is_some()
+            || self.control.is_some()
         {
             return Err("one data projector per panel".into());
         }
@@ -648,6 +653,35 @@ impl Runtime {
         self.actions.register("settings.do", "settings.control")?;
         self.actions.grant("settings.control");
         self.settings = Some(settings);
+        Ok(self)
+    }
+    /// Control center (B0049): tile data sources, the stored tile order and its published write.
+    pub fn with_control_center(
+        mut self,
+        control: crate::control_center::ControlCenter,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.launcher.is_some()
+            || self.calendar.is_some()
+            || self.status.is_some()
+            || self.dashboard.is_some()
+            || self.session_menu.is_some()
+            || self.chat.is_some()
+            || self.control.is_some()
+        {
+            return Err("one data projector per panel".into());
+        }
+        let control = std::rc::Rc::new(control);
+        let projector = control.clone();
+        self.session
+            .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+        self.actions.register("view.open", "ui.popouts")?;
+        self.actions.grant("ui.popouts");
+        self.actions.register("cc.do", "cc.control")?;
+        self.actions.grant("cc.control");
+        if let Some(chrome) = &mut self.chrome {
+            chrome.set_engaged(true);
+        }
+        self.control = Some(control);
         Ok(self)
     }
     pub fn with_core_battery_status(
@@ -1493,6 +1527,12 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=chat_subscription"),
             }
         }
+        if let Some(control) = &self.control {
+            match control.subscribe(wakeup.clone()) {
+                Ok(subscriptions) => self.control_subscription = subscriptions,
+                Err(_) => eprintln!("SOURCE_ERROR code=control_subscription"),
+            }
+        }
         if let Some(menu) = &self.session_menu {
             let wakeup = wakeup.clone();
             match menu.subscribe(std::sync::Arc::new(move || {
@@ -1629,6 +1669,9 @@ impl SceneSource for Runtime {
     fn viewport(&mut self, width: u32, height: u32) -> bool {
         if let Some(chrome) = &mut self.chrome {
             chrome.output = (width, height);
+        }
+        if let Some(control) = &self.control {
+            control.set_viewport(width, height);
         }
         if let Some(chat) = &self.chat {
             chat.set_viewport(width, height);
@@ -1807,6 +1850,21 @@ impl SceneSource for Runtime {
             });
             dashboard.act(arg, wake);
             let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(control), Some((id, name, bead::core::Value::Text(arg)))) =
+            (&self.control, &host_action)
+            && name == "cc.do"
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            control.act(arg);
+            // A level step keeps the focus so the drag continues over the next step.
+            let scene = match self.session.focus_id(id) {
+                Ok(scene) => scene,
+                Err(_) => self.session.update(BTreeMap::new())?,
+            };
             return self.finish_scene(scene, false);
         }
         if let (Some(chat), Some((_, name, bead::core::Value::Text(arg)))) =
@@ -2583,6 +2641,7 @@ impl SceneSource for Runtime {
                 }
             }
             UiEvent::Drag { x, y } => self.session.drag(x, y)?,
+            UiEvent::Release => self.session.release()?,
             UiEvent::Ime {
                 preedit,
                 commit,

@@ -204,6 +204,29 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
         call.method = "open".into();
         return Ok(call);
     }
+    // The QML right sidebar (control center): `drawers toggle right` toggles it and
+    // `nacre controls home|edit` opens it.
+    let right = (call.target == "drawers"
+        && call.method == "toggle"
+        && call.args.first().and_then(Value::as_str) == Some("right"))
+        || (call.target == "nacre"
+            && call.method == "controls"
+            && matches!(
+                call.args.first().and_then(Value::as_str),
+                Some("home" | "edit")
+            ));
+    if right {
+        validate(&call)?;
+        call.method = if call.target == "drawers" {
+            "toggle"
+        } else {
+            "open"
+        }
+        .into();
+        call.target = "bead.panel".into();
+        call.args = vec![Value::String("control".into())];
+        return Ok(call);
+    }
     if call.target == "nacre" && call.method == "tab" {
         validate(&call)?;
         let page = call.args[0]

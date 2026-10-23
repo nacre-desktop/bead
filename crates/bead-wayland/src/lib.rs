@@ -208,6 +208,8 @@ pub enum UiEvent {
         x: f32,
         y: f32,
     },
+    /// The primary pointer button was released.
+    Release,
     Reload,
     /// Deliberately block the script executor for a bounded diagnostic interval.
     DebugScriptStall(u64),
