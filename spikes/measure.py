@@ -133,13 +133,31 @@ def parse_drm_fdinfo(contents):
     return regions or None
 
 
+def drm_device_fds(pid):
+    """Count open DRM device fds (/dev/dri/*) of a process."""
+    count=0
+    for path in pathlib.Path(f'/proc/{pid}/fd').glob('*'):
+        try:target=os.readlink(path)
+        except OSError:continue
+        if target.startswith('/dev/dri/'):count+=1
+    return count
+
+
 def drm_memory(pid):
+    """Per-client DRM memory in MiB by region.
+
+    Returns {} when the process holds no DRM device fd at all (a CPU-rendered
+    client has no GPU allocations: known zero), and None when it holds DRM fds
+    but the driver exposes no usable fdinfo accounting (unknown).
+    """
     # drm-memory-* is a deprecated amdgpu alias for drm-resident-*.
     contents=[]
     for path in pathlib.Path(f'/proc/{pid}/fdinfo').glob('*'):
         try:contents.append(path.read_text())
         except OSError:continue
-    return parse_drm_fdinfo(contents)
+    regions=parse_drm_fdinfo(contents)
+    if regions is None and drm_device_fds(pid)==0:return {}
+    return regions
 
 def sample_retained(env,raw,target,mode,layout,run,seconds,virtual120):
     label=f'{mode}-{layout}-{run}'

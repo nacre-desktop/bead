@@ -169,6 +169,14 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
         self.assertEqual(capture.estimate_runtime(["niri"], include_cpu=False), (45, 41.0))
         self.assertEqual(capture.estimate_runtime(["niri"], include_cpu=True), (90, 82.0))
 
+    def test_process_without_drm_device_is_known_zero_not_unknown(self):
+        import os
+        with mock.patch.object(measure, "drm_device_fds", return_value=0):
+            self.assertEqual(measure.drm_memory(os.getpid()), {})
+        with mock.patch.object(measure, "drm_device_fds", return_value=1), \
+                mock.patch.object(measure, "parse_drm_fdinfo", return_value=None):
+            self.assertIsNone(measure.drm_memory(os.getpid()))
+
     def test_resident_and_legacy_fdinfo_are_deduplicated_and_normalized(self):
         fdinfo = [
             "drm-driver: i915\ndrm-pdev: 0000:00:02.0\ndrm-client-id: 7\n"
