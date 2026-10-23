@@ -60,16 +60,27 @@ Owner items: (1) bar pill spacing, (2) launcher from the top, (3) panels not the
 | sidebar | 26.972 | 5.131 |
 | pearl-detached | 39.435 | 10.453 |
 
+## Owner follow-ups (2026-10-23, second look)
+
+| Owner item | Result | Named state in the gallery |
+| --- | --- | --- |
+| Top panel slides over the bar; the QML bar grows into the panel | Open. In the QML the dashboard's tab strip lives in the bar band and the panel grows from that contour; Bead draws the tabs inside the panel body and the panel surface slides over the bar layer. Needs the bar's centre band to host the tab strip while the dashboard is open and a reveal clipped to the area below the bar. Listed as gap 1. | `dashboard-0` (open and close strips) |
+| Top-left opener is a button, the QML has a hover lip | The bar button is removed (the QML header has none); the title band and the B0047 lips open the dashboard. Hover itself cannot be driven yet (gap 8). | `idle` |
+| One workspace pearl only | Same in the QML in this session: both read the same `workspaceCount` setting and the nested niri has one workspace; the sidebar state shows both shells with two. No difference found. | `idle`, `sidebar` |
+| Top-right icon spacing | Measured from the captures (full-resolution pixel runs): cell pitch is 46-47 px in both (30 + 1 logical, 1.5 scale), the right edge is identical; the remaining width difference is the QML notification bell cell (gap 5). | `idle` (bar crop) |
+| Launcher opens on All apps | Fixed: no query and no route opens on Home (`key_routes::Launch::model`), a typed query searches everything. The Home page still lacks the QML Quick controls column (gap 2). | `launcher`, `launcher-typed` |
+| Session menu opens inside the launcher | Fixed: `nacre session` (and the preview's Alt+X) toggles the top-right session view; `nacre menu power` still opens the launcher's Power route, as in the QML. The QML opens the control sidebar on its Power page; Bead's view is the compact top-right popout. | `session`, `menu-power` |
+
 ## Known gaps, ranked (what the gallery still shows)
 
-1. Launcher Home route: QML opens Home (Favorites plus a Quick controls column: do not disturb, night light, stay awake, update count); Bead opens All apps. Bead also lacks the footer hint chips (`> Actions`, `= Calculate`, ...).
-2. Control centre: QML is a full-height right dock (424 px wide: battery line, edit, settings, power, tiles, appearance segmented control, notification list); Bead's panel is content-high and narrower, has no settings button or notification list.
-3. Status popouts (Wi-Fi, Bluetooth, Battery, Audio): geometry and content differ (QML Wi-Fi has Scan and a toggle; widths; Bead docks to the right edge); colour and the bar join now match.
-4. Session menu: QML opens the control sidebar's Power page; Bead opens a small popout (`nacre session` is not routed in Bead).
-5. Bar: workspace pearl is a 3D pearl in the QML (halo, gradient) and flat here; no notification bell with count; QML shows the active window title text ("Desktop" with no window), Bead shows the glyph only; audio glyph follows data (QML default `volume_up`).
+1. Dashboard/top panel: tab strip in the bar band and grow-from-the-bar reveal (above); content density differs.
+2. Launcher Home: QML Quick controls column (do not disturb, night light, stay awake, update count) and footer hint chips (`> Actions`, `= Calculate`, ...).
+3. Control centre: QML is a full-height right dock (424 px: battery line, edit, settings, power, tiles, appearance as a segmented control, notification list); Bead's panel is content-high with no settings button or notification list.
+4. Status popouts (Wi-Fi, Bluetooth, Battery, Audio): geometry and content differ (QML Wi-Fi has Scan and a toggle; widths; Bead docks to the right edge); colour and the bar join match now.
+5. Bar: workspace pearl is a 3D pearl in the QML (halo, gradient), flat here; no notification bell with count (the bar has no notifications data path; the notice view has `notifications.history_count`); active-window title text ("Desktop" with no window) is drawn by the QML, Bead shows the glyph only; audio glyph follows data.
 6. OSD (volume, microphone) and notification popup positions/sizes were not re-measured; brightness and keyboard OSD cannot be triggered in the private session (no backlight).
-7. Animations: transitions are 0.4-0.5 s in both (frame sequences in the gallery); direction now matches for the launcher; easing and exact durations are not yet compared numerically.
-8. Frame lips hover, pressed/hover states and dashboard tab 4+ (not configured in Bead) are not driven yet: the harness has no pointer injection (the parent is a headless labwc without a virtual pointer tool).
+7. Animations: transitions are 0.4-0.5 s in both (frame strips); launcher direction now matches; easing and exact durations are not yet compared numerically (the strips sample about every 90 ms).
+8. Frame lips hover, pressed/hover states and dashboard tab 4+ (not configured in Bead) are not driven yet: the headless labwc parent has no virtual-pointer tool.
 
 ## Temporary duplicates
 

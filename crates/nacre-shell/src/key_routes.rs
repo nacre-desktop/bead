@@ -33,7 +33,15 @@ impl Launch {
             (
                 "launcher.engine_route".into(),
                 // The QML opens the launcher on Home (`openMode("apps")` sets route "home"); a typed query searches everything.
-                text(self.route.as_deref().unwrap_or(if self.query.trim().is_empty() { "home" } else { "" })),
+                text(
+                    self.route
+                        .as_deref()
+                        .unwrap_or(if self.query.trim().is_empty() {
+                            "home"
+                        } else {
+                            ""
+                        }),
+                ),
             ),
             ("launcher.selection".into(), text("")),
             ("launcher.scroll.y".into(), Value::Number(0.)),
