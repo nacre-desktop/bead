@@ -13,6 +13,7 @@ pub fn spec(
     source: crate::launcher::SourceChoice,
     trace: bool,
     memory: crate::launcher::Memory,
+    prefs: Option<std::sync::Arc<dyn bead::core::source::Source>>,
 ) -> PanelSpec {
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = 1100.;
@@ -54,6 +55,10 @@ pub fn spec(
                 .with_frame(crate::placement::Attachment::Attached(Edge::Top), &colors)
                 .and_then(|r| r.with_launcher(source))
                 .and_then(|r| r.with_launcher_memory(memory.clone()))
+                .and_then(|r| match &prefs {
+                    Some(source) => r.with_prefs(source.clone()),
+                    None => Ok(r),
+                })
                 .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),

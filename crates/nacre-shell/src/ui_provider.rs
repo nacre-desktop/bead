@@ -219,6 +219,8 @@ pub fn start(
         "i18n",
         crate::prefs::DESKTOP,
         crate::prefs::DASHBOARD,
+        crate::prefs::PROFILE,
+        crate::prefs::LAUNCHER_LAYOUT,
     ];
     let mut config = crate::nacre_source::Config::new(daemon, topics.map(String::from).to_vec());
     let slot: Arc<OnceLock<crate::nacre_source::WeakClient>> = Default::default();

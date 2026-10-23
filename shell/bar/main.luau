@@ -15,11 +15,45 @@ return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface
         ui.Row{id="capsule",height=34,padding_left=5,padding_right=5,gap=2,radius=17,fill="surfaceContainer",align="center",
             ui.Repeat{id="workspaces",model=ui.bind("bead.workspaces"),key="id",render=function(item)
                 local accent=({"primary","secondary","tertiary"})[((item.index or 1)-1)%3+1]
-                return kit.Button{id="workspace",width=32,height=28,radius=14,padding=0,fill="surfaceContainer",shrink=0,
-                    on_activate=ws_on and ui.action("backend.workspace.switch",item.id) or nil,
-                    ui.Box{id="halo",position="absolute",left=3,top=1,width=26,height=26,radius=13,fill=item.active and ui.alpha(accent,0.3) or "surfaceContainer"},
-                    ui.Box{id="pearl",position="absolute",left=6,top=4,width=20,height=20,radius=10,border_width=item.active and 0 or 1,border_color=accent,fill=item.active and accent or "surfaceContainer"},
-                    ui.Text{id="number",position="absolute",left=6,top=5,text=item.name,width=20,height=20,font_size=13,family="IBM Plex Sans",text_align="center",color=item.active and "onPrimary" or "onSurfaceVariant"},
+                local label=item.label or item.name or ""
+                local on=item.active
+                local activate=ws_on and ui.action("backend.workspace.switch",item.id) or nil
+                if item.icon_mode then
+                    -- workspaceIcons: 46 px cells, accent fill when active, symbol and number, dot when occupied.
+                    local ink=on and "onPrimary" or "onSurfaceVariant"
+                    local icon=item.icon or ""
+                    return kit.Button{id="workspace",width=46,height=28,radius=14,padding=0,fill=on and accent or "surfaceContainer",hover_fill=on and accent or ui.alpha(accent,0.1),shrink=0,
+                        on_activate=activate,
+                        ui.Row{id="face",position="absolute",left=0,top=2,width=46,height=24,gap=4,align="center",justify="center",
+                            ui.Text{id="symbol",visible=icon~="",text=icon,width=icon~="" and 18 or 0,height=24,shrink=0,family="Material Symbols Rounded",font_size=15,text_align="center",color=ink},
+                            ui.Text{id="number",text=label,width=8*#label,height=24,shrink=0,font_size=13,family="IBM Plex Sans",text_align="center",color=ink},
+                        },
+                        ui.Box{id="occupied",position="absolute",left=21,top=23,width=3,height=3,radius=2,visible=item.occupied==true,fill=on and "onPrimary" or accent},
+                    }
+                end
+                -- workspaceWindowHints: category glyphs of the active workspace's windows beside its pearl.
+                local shown=item.shown or 0
+                local more=item.overflow or ""
+                local hinted=item.hinted==true
+                local apps={}
+                for slot=1,3 do
+                    local glyph_name=item["app"..slot]
+                    if glyph_name and glyph_name~="" then
+                        apps[#apps+1]=ui.Text{id="app"..slot,text=glyph_name,width=15,height=28,shrink=0,family="Material Symbols Rounded",font_size=14,text_align="center",color="onSurface"}
+                    end
+                end
+                if more~="" then
+                    apps[#apps+1]=ui.Text{id="more",text=more,width=17,height=28,shrink=0,font_size=12,color="onSurface"}
+                end
+                local width=32+shown*18+(more~="" and 20 or 0)+(hinted and 4 or 0)
+                local face=hinted and ui.tint("surfaceContainer",accent,0.15) or "surfaceContainer"
+                return kit.Button{id="workspace",width=width,height=28,radius=14,padding=0,fill=face,hover_fill=hinted and face or "surfaceContainerHigh",shrink=0,
+                    border_width=hinted and 1 or 0,border_color=ui.alpha(accent,0.24),
+                    on_activate=activate,
+                    ui.Box{id="halo",position="absolute",left=3,top=1,width=26,height=26,radius=13,fill=on and ui.alpha(accent,0.3) or "surfaceContainer"},
+                    ui.Box{id="pearl",position="absolute",left=6,top=4,width=20,height=20,radius=10,border_width=on and 0 or 1,border_color=accent,fill=on and accent or "surfaceContainer"},
+                    ui.Text{id="number",position="absolute",left=6,top=5,text=label,width=20,height=20,font_size=13,family="IBM Plex Sans",text_align="center",color=on and "onPrimary" or "onSurfaceVariant"},
+                    ui.Row{id="apps",position="absolute",left=33,top=0,width=width-33,height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)},
                 }
             end},
         },

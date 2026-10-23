@@ -49,6 +49,7 @@ pub struct Runtime {
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
     prefs: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    workspaces: crate::workspace_rows::Rows,
     prefs_subscription: Option<bead::core::source::Subscription>,
     launcher_trigger: bool,
     last_launch: Option<crate::key_routes::Launch>,
@@ -253,6 +254,7 @@ impl Runtime {
             connection_status: None,
             connection_subscription: None,
             prefs: None,
+            workspaces: Default::default(),
             prefs_subscription: None,
             launcher_trigger: false,
             last_launch: None,
@@ -318,12 +320,32 @@ impl Runtime {
         mut self,
         source: std::sync::Arc<dyn bead::core::source::Source>,
     ) -> Result<Self, Box<dyn Error>> {
-        self.session.stores = self
-            .session
-            .stores
-            .reconcile(&crate::prefs::Prefs::from_source(&*source).bar_stores())?;
+        let prefs = crate::prefs::Prefs::from_source(&*source);
+        let stores = self.prefs_stores(&prefs);
+        self.session.stores = self.session.stores.reconcile(&stores)?;
+        // The bar's workspace rows depend on the owner's count, icons and hints.
+        if self.workspaces.view.follow(&stores)
+            && let Some(backend) = &self.backend
+        {
+            let rows = self.workspaces.rows(&backend.snapshot(), self.output.as_deref());
+            self.session.stores.commit(std::collections::BTreeMap::from([(
+                "bead.workspaces".into(),
+                bead::core::Value::list(rows),
+            )]))?;
+        }
         self.prefs = Some(source);
         Ok(self)
+    }
+    /// Host stores the preferences drive: the bar's, or the launcher rail's.
+    fn prefs_stores(
+        &self,
+        prefs: &crate::prefs::Prefs,
+    ) -> std::collections::BTreeMap<String, bead::core::Value> {
+        if self.launcher.is_some() {
+            prefs.launcher_stores()
+        } else {
+            prefs.bar_stores()
+        }
     }
     pub fn panel_session(session: bead::ui::Session, open: bool) -> Self {
         let mut runtime = Self::new(session);
@@ -1069,7 +1091,8 @@ impl Runtime {
         mut self,
         backend: std::sync::Arc<crate::backends::Native>,
     ) -> Result<Self, Box<dyn Error>> {
-        let values = backend_values(&backend.snapshot(), self.output.as_deref())?;
+        let values =
+            backend_values(&backend.snapshot(), self.output.as_deref(), &self.workspaces)?;
         self.session.stores = self.session.stores.reconcile(&values)?;
         for name in [
             "backend.workspace.switch",
@@ -1243,10 +1266,15 @@ impl SceneSource for Runtime {
         }
         if let Some(source) = &self.prefs {
             let wakeup = wakeup.clone();
+            let launcher = self.launcher.is_some();
             match source.subscribe(std::sync::Arc::new(move |snapshot| {
                 let prefs: crate::prefs::Prefs =
                     serde_json::from_value((*snapshot.data).clone()).unwrap_or_default();
-                wakeup(UiEvent::Model(prefs.bar_stores()));
+                wakeup(UiEvent::Model(if launcher {
+                    prefs.launcher_stores()
+                } else {
+                    prefs.bar_stores()
+                }));
             })) {
                 Ok(subscription) => self.prefs_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=prefs_subscription"),
@@ -1849,7 +1877,18 @@ impl SceneSource for Runtime {
                         values.into_iter().collect(),
                     )))?
             }
-            UiEvent::Model(values) => {
+            UiEvent::Model(mut values) => {
+                if self.workspaces.view.follow(&values)
+                    && let Some(backend) = &self.backend
+                {
+                    values.insert(
+                        "bead.workspaces".into(),
+                        bead::core::Value::list(
+                            self.workspaces
+                                .rows(&backend.snapshot(), self.output.as_deref()),
+                        ),
+                    );
+                }
                 if let Some(menu) = &mut self.tray_menu {
                     let snapshot = self
                         .desktop
@@ -1911,7 +1950,7 @@ impl SceneSource for Runtime {
                 self.output = Some(name.clone());
                 scope_recovery(&mut self.session, Some(&name));
                 let values = if let Some(backend) = &self.backend {
-                    backend_values(&backend.snapshot(), Some(&name))?
+                    backend_values(&backend.snapshot(), Some(&name), &self.workspaces)?
                 } else {
                     BTreeMap::from([("bead.output.name".into(), bead::core::Value::Text(name))])
                 };
@@ -1932,7 +1971,11 @@ impl SceneSource for Runtime {
                     snapshot.windows.len()
                 );
                 self.session
-                    .update_model(backend_values(&snapshot, self.output.as_deref())?)?
+                    .update_model(backend_values(
+                        &snapshot,
+                        self.output.as_deref(),
+                        &self.workspaces,
+                    )?)?
             }
             UiEvent::CompanionModel(_) => {
                 return Err("companion model reached primary script".into());
@@ -2478,6 +2521,7 @@ impl SceneSource for Runtime {
 fn backend_values(
     snapshot: &bead::backends::Snapshot,
     output: Option<&str>,
+    workspaces: &crate::workspace_rows::Rows,
 ) -> Result<std::collections::BTreeMap<String, bead::core::Value>, Box<dyn Error>> {
     use bead::core::Value;
     let output_id = output.and_then(|name| {
@@ -2487,9 +2531,6 @@ fn backend_values(
             .find(|o| o.name == name)
             .map(|o| &o.id)
     });
-    let workspace_matches = |w: &&bead::backends::Workspace| {
-        output.is_none() || output_id.is_some_and(|id| w.output.as_ref() == Some(id))
-    };
     let window_matches = |w: &&bead::backends::Window| {
         output.is_none()
             || output_id.is_some_and(|id| {
@@ -2532,14 +2573,7 @@ fn backend_values(
         ),
         (
             "bead.workspaces".into(),
-            Value::list(
-                snapshot
-                    .workspaces
-                    .iter()
-                    .filter(workspace_matches)
-                    .map(serde_json::to_value)
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
+            Value::list(workspaces.rows(snapshot, output)),
         ),
         (
             "bead.windows".into(),

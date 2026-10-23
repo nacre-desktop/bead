@@ -32,6 +32,7 @@ mod ui_provider;
 mod wallpaper;
 #[cfg(test)]
 mod wallpaper_decode;
+mod workspace_rows;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
 use std::path::{Path, PathBuf};
@@ -599,15 +600,21 @@ fn start(
                 .ok()
                 .map(|t| std::sync::Arc::new(t) as std::sync::Arc<dyn bead::core::source::Source>)
         };
-        prefs::Service::start(topic(prefs::DESKTOP)?, topic(prefs::DASHBOARD)?, {
-            let gate = gate.clone();
-            std::sync::Arc::new(move |p: &prefs::Prefs| {
-                bead::core::animation::set_reduced_motion(p.reduce_motion);
-                bead::ui::text_style::set(p.text_style());
-                placement::set_sheen(p.frame_sheen);
-                gate.apply(p);
-            })
-        })
+        prefs::Service::start_with(
+            topic(prefs::DESKTOP)?,
+            topic(prefs::DASHBOARD)?,
+            topic(prefs::PROFILE),
+            topic(prefs::LAUNCHER_LAYOUT),
+            {
+                let gate = gate.clone();
+                std::sync::Arc::new(move |p: &prefs::Prefs| {
+                    bead::core::animation::set_reduced_motion(p.reduce_motion);
+                    bead::ui::text_style::set(p.text_style());
+                    placement::set_sheen(p.frame_sheen);
+                    gate.apply(p);
+                })
+            },
+        )
         .ok()
     });
     if _prefs.is_some() && options.bar {
@@ -648,6 +655,7 @@ fn start(
             },
             panel_trace,
             launcher_memory.clone().ok_or("launcher state missing")?,
+            _prefs.as_ref().map(|(_, source)| source.clone()),
         ));
     }
     if core_views {

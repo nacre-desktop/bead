@@ -148,6 +148,8 @@ pub fn normalize(
             active: active_ws,
             focused: active_ws && monitor.is_some_and(|m| m["focused"] == true),
             urgent: false,
+            fixed_slot: false,
+            visiting: false,
         });
     }
     for w in windows

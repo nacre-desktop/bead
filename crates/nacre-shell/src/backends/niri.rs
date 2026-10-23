@@ -184,6 +184,8 @@ impl Reducer {
                 active: w.is_active,
                 focused: w.is_focused,
                 urgent: w.is_urgent,
+                fixed_slot: w.name.is_some(),
+                visiting: false,
             });
         }
         snapshot

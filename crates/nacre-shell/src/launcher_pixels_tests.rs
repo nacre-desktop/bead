@@ -228,3 +228,43 @@ fn ranked_prefix_keeps_actual_visible_pixels_and_actions_exact() -> Result<()> {
     }
     Ok(())
 }
+
+/// B0037: `launcher-layout` order and hidden ids drive the category rail live; Home is
+/// never hidden and rows outside the order keep their place at the end.
+#[test]
+fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
+    let rail = |order: &[&str], hidden: &[&str]| -> Result<Vec<String>> {
+        let list = |ids: &[&str]| Value::list(ids.iter().map(|i| serde_json::json!(i)).collect());
+        let root = root();
+        let mut h = Harness::load(
+            &root,
+            Path::new("ui/main.luau"),
+            &root.join("palette.json"),
+            BTreeMap::from([
+                ("launcher.rail.order".into(), list(order)),
+                ("launcher.rail.hidden".into(), list(hidden)),
+            ]),
+            Config {
+                width: 1920,
+                height: 1200,
+                scale: 1.,
+            },
+        )?;
+        h.render()?;
+        Ok(h.session
+            .view_nodes()
+            .iter()
+            .filter(|node| node.action.as_deref() == Some("navigate"))
+            .filter_map(|node| match &node.action_arg {
+                Some(Value::Text(id)) => Some(id.clone()),
+                _ => None,
+            })
+            .collect())
+    };
+    assert_eq!(rail(&[], &[])?, ["apps", "home", "search", "actions"]);
+    assert_eq!(rail(&[], &["search", "home"])?, ["apps", "home", "actions"]);
+    assert_eq!(rail(&[], &["apps", "actions"])?, ["home", "search"]);
+    assert_eq!(rail(&["actions", "home"], &[])?, ["home", "actions", "apps", "search"]);
+    assert_eq!(rail(&["apps", "style"], &["actions"])?, ["home", "apps", "search"]);
+    Ok(())
+}

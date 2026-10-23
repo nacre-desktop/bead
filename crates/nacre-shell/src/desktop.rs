@@ -224,8 +224,8 @@ pub fn icons(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn actual_bar_bundle_loads_native_actions_assets_and_full_width_layout() {
+    /// The real bar bundle at 1920 px with these workspace rows, reloaded but not yet committed.
+    fn bar_session(rows: Vec<serde_json::Value>) -> (bead::ui::Session, bead::render::Scene) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
         let palette_path = root.join("palette.json");
         let fallback = bead::render::Scene {
@@ -253,9 +253,7 @@ mod tests {
         let mut state = values(&Snapshot::default(), "");
         state.insert(
             "bead.workspaces".into(),
-            Value::list(vec![
-                serde_json::json!({"id":"fixture-stable-id","name":"1","index":1,"active":true}),
-            ]),
+            Value::list(rows),
         );
         state.insert(
             "bead.focused_title".into(),
@@ -264,6 +262,12 @@ mod tests {
         session.stores = session.stores.reconcile(&state).unwrap();
         session.set_viewport(1920, 1200);
         let scene = session.reload().unwrap();
+        (session, scene)
+    }
+    #[test]
+    fn actual_bar_bundle_loads_native_actions_assets_and_full_width_layout() {
+        let rows = vec![serde_json::json!({"id":"fixture-stable-id","name":"1","index":1,"active":true})];
+        let (mut session, scene) = bar_session(rows);
         assert_eq!(scene.width, 1920.);
         assert!(scene.primitives.iter().any(|draw|matches!(draw,bead::render::Primitive::Rounded{rect,..} if rect.x==0. && rect.y==0. && rect.w==1920. && rect.h==50.)));
         session.commit(scene);
@@ -282,6 +286,58 @@ mod tests {
                 .iter()
                 .any(|node| node.action.as_deref() == Some("services.audio"))
         );
+    }
+    /// Widths of the workspace cells and every text drawn, for a set of workspace rows.
+    fn capsule(rows: Vec<serde_json::Value>) -> (Vec<f32>, Vec<String>) {
+        let (mut session, scene) = bar_session(rows);
+        let texts = scene
+            .primitives
+            .iter()
+            .filter_map(|draw| match draw {
+                bead::render::Primitive::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect();
+        session.commit(scene);
+        let widths = session
+            .view_nodes()
+            .iter()
+            .filter(|n| n.action.as_deref() == Some("backend.workspace.switch"))
+            .filter_map(|n| match &n.draw {
+                bead::render::Primitive::Rounded { rect, .. } => Some(rect.w),
+                _ => None,
+            })
+            .collect();
+        (widths, texts)
+    }
+    #[test]
+    fn workspace_capsule_draws_icon_mode_cells_and_window_hints_from_row_fields() {
+        let row = |i: u32, extra: serde_json::Value| {
+            let mut row = serde_json::json!({"id":format!("w{i}"),"name":i.to_string(),"label":i.to_string(),
+                "index":i,"active":i==1,"icon":"","icon_mode":false,"occupied":false,"shown":0,"overflow":"",
+                "hinted":false,"app1":"","app2":"","app3":""});
+            row.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            row
+        };
+        // Default: 32 px cells, no hint glyphs.
+        let (plain, texts) = capsule(vec![row(1, serde_json::json!({})), row(2, serde_json::json!({}))]);
+        assert_eq!(plain, [32., 32.]);
+        assert!(!texts.iter().any(|t| t == "terminal"));
+        // workspaceWindowHints: the active cell grows by 18 per glyph, 20 for "+N" and 4 padding.
+        let hinted = serde_json::json!({"hinted":true,"shown":2,"overflow":"+1","app1":"terminal","app2":"language"});
+        let (wide, texts) = capsule(vec![row(1, hinted), row(2, serde_json::json!({}))]);
+        assert_eq!(wide, [32. + 36. + 20. + 4., 32.]);
+        for glyph in ["terminal", "language", "+1"] {
+            assert!(texts.iter().any(|t| t == glyph), "{glyph} drawn");
+        }
+        // workspaceIcons: every cell is 46 px and shows its symbol and number.
+        let icons = serde_json::json!({"icon_mode":true,"occupied":true});
+        let (cells, texts) = capsule(vec![
+            row(1, serde_json::json!({"icon":"home","icon_mode":true,"occupied":true})),
+            row(2, icons),
+        ]);
+        assert_eq!(cells, [46., 46.]);
+        assert!(texts.iter().any(|t| t == "home") && texts.iter().any(|t| t == "2"));
     }
     #[test]
     fn unavailable_audio_and_bad_tray_pixels_do_not_become_valid_ui_state() {

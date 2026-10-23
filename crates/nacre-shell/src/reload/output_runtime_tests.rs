@@ -30,6 +30,8 @@ fn snapshot() -> Snapshot {
                 active: true,
                 focused: i == 0,
                 urgent: false,
+                fixed_slot: false,
+                visiting: false,
             })
             .collect(),
         windows: (0..2)
@@ -52,8 +54,8 @@ fn snapshot() -> Snapshot {
 #[test]
 fn backend_projection_is_output_scoped_and_unknown_outputs_fail_closed() {
     let snapshot = snapshot();
-    let left = backend_values(&snapshot, Some("left")).unwrap();
-    let right = backend_values(&snapshot, Some("right")).unwrap();
+    let left = backend_values(&snapshot, Some("left"), &Default::default()).unwrap();
+    let right = backend_values(&snapshot, Some("right"), &Default::default()).unwrap();
     assert_eq!(left["bead.focused_title"], Value::Text("Title 0".into()));
     assert_eq!(right["bead.focused_title"], Value::Text(String::new()));
     for (values, expected) in [(&left, "workspace-0"), (&right, "workspace-1")] {
@@ -67,10 +69,10 @@ fn backend_projection_is_output_scoped_and_unknown_outputs_fail_closed() {
         };
         assert_eq!(windows.len(), 1, "resolve window output through workspace");
     }
-    let missing = backend_values(&snapshot, Some("removed")).unwrap();
+    let missing = backend_values(&snapshot, Some("removed"), &Default::default()).unwrap();
     assert_eq!(missing["bead.workspaces"], Value::list(vec![]));
     assert_eq!(missing["bead.windows"], Value::list(vec![]));
-    let global = backend_values(&snapshot, None).unwrap();
+    let global = backend_values(&snapshot, None, &Default::default()).unwrap();
     let Value::List(rows) = &global["bead.workspaces"] else {
         panic!()
     };
@@ -81,12 +83,12 @@ fn backend_projection_is_output_scoped_and_unknown_outputs_fail_closed() {
 fn moving_a_window_between_outputs_cannot_leave_the_old_title() {
     let mut snapshot = snapshot();
     snapshot.windows[0].output = Some(Id("output-1".into()));
-    let left = backend_values(&snapshot, Some("left")).unwrap();
-    let right = backend_values(&snapshot, Some("right")).unwrap();
+    let left = backend_values(&snapshot, Some("left"), &Default::default()).unwrap();
+    let right = backend_values(&snapshot, Some("right"), &Default::default()).unwrap();
     assert_eq!(left["bead.focused_title"], Value::Text(String::new()));
     assert_eq!(right["bead.focused_title"], Value::Text("Title 0".into()));
     snapshot.outputs.retain(|o| o.name != "right");
-    let removed = backend_values(&snapshot, Some("right")).unwrap();
+    let removed = backend_values(&snapshot, Some("right"), &Default::default()).unwrap();
     assert_eq!(removed["bead.focused_title"], Value::Text(String::new()));
 }
 

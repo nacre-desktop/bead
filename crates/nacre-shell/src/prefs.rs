@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 
 pub const DESKTOP: &str = "settings.store.desktop";
 pub const DASHBOARD: &str = "settings.store.dashboard";
+pub const PROFILE: &str = "settings.store.profile";
+pub const LAUNCHER_LAYOUT: &str = "settings.store.launcher-layout";
 /// Nacre's `NacreDashboardRegistry.core` order, the default of `dashboard.tabs`.
 const CORE: [&str; 4] = ["today", "media", "weather", "system"];
 /// Tab lists written before the core set was fixed; QML treats them as unset.
@@ -40,6 +42,29 @@ pub struct Prefs {
     pub mono_font: String,
     /// `textSize` minus Nacre's body size (12): added to every text token.
     pub text_offset: i32,
+    /// `profile.workspaceCount` (`|| 6`), `profile.workspaceIcons` (one Material symbol
+    /// per workspace number, "" for none) and `workspaceWindowHints` (`!== false`).
+    pub workspace_count: u32,
+    pub workspace_icons: Vec<String>,
+    pub window_hints: bool,
+    /// `launcher-layout` `order` / `hidden` category ids (strings only, bounded).
+    pub rail_order: Vec<String>,
+    pub rail_hidden: Vec<String>,
+}
+const MAX_LIST: usize = 32;
+fn strings(value: Option<&Json>, keep_empty: bool) -> Vec<String> {
+    value
+        .and_then(Json::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .take(MAX_LIST)
+                .map(|v| v.as_str().filter(|s| s.len() <= 120 && !s.chars().any(char::is_control)))
+                .filter(|s| keep_empty || s.is_some_and(|s| !s.is_empty()))
+                .map(|s| s.unwrap_or_default().to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 impl Default for Prefs {
     fn default() -> Self {
@@ -57,6 +82,9 @@ fn store<'a>(snapshot: &'a Snapshot, id: &str) -> &'a Json {
 }
 impl Prefs {
     pub fn decode(desktop: &Json, dashboard: &Json) -> Self {
+        Self::decode_all(desktop, dashboard, &Json::Null, &Json::Null)
+    }
+    pub fn decode_all(desktop: &Json, dashboard: &Json, profile: &Json, layout: &Json) -> Self {
         let flag = |key: &str| desktop.get(key).and_then(Json::as_bool);
         let saved: Vec<&str> = dashboard
             .get("tabs")
@@ -103,6 +131,16 @@ impl Prefs {
             reduce_motion: flag("reduceMotion") == Some(true) || flag("animations") == Some(false),
             fahrenheit: flag("weatherFahrenheit") == Some(true),
             core_tabs: core,
+            // JS `value || 6`: zero and non-numbers fall back to six.
+            workspace_count: profile
+                .get("workspaceCount")
+                .and_then(Json::as_f64)
+                .filter(|v| v.is_finite() && *v != 0.)
+                .map_or(6, |v| v.round().clamp(1., MAX_LIST as f64) as u32),
+            workspace_icons: strings(profile.get("workspaceIcons"), true),
+            window_hints: on("workspaceWindowHints"),
+            rail_order: strings(layout.get("order"), false),
+            rail_hidden: strings(layout.get("hidden"), false),
         }
     }
     /// Generic text style: Luau markup names `IBM Plex Sans` and
@@ -124,8 +162,26 @@ impl Prefs {
     /// Host stores the bar markup reads to drop the button of a disabled panel (the
     /// control center has no single bar button; its opens are refused by the gate).
     pub fn bar_stores(&self) -> std::collections::BTreeMap<String, bead::core::Value> {
-        use bead::core::Value::Bool;
-        [("bar.dashboard.enabled".into(), Bool(self.dashboard_enabled))].into()
+        use bead::core::Value::{Bool, Number};
+        let icons = self.workspace_icons.iter().map(|i| Json::from(i.as_str()));
+        [
+            ("bar.dashboard.enabled".into(), Bool(self.dashboard_enabled)),
+            ("bar.workspace.count".into(), Number(self.workspace_count.into())),
+            ("bar.workspace.icons".into(), bead::core::Value::list(icons.collect())),
+            ("bar.workspace.hints".into(), Bool(self.window_hints)),
+        ]
+        .into()
+    }
+    /// Host stores the launcher rail reads (category order and hidden ids).
+    pub fn launcher_stores(&self) -> std::collections::BTreeMap<String, bead::core::Value> {
+        let list = |ids: &[String]| {
+            bead::core::Value::list(ids.iter().map(|i| Json::from(i.as_str())).collect())
+        };
+        [
+            ("launcher.rail.order".into(), list(&self.rail_order)),
+            ("launcher.rail.hidden".into(), list(&self.rail_hidden)),
+        ]
+        .into()
     }
     pub fn from_source(source: &dyn Source) -> Self {
         serde_json::from_value((*source.snapshot().data).clone()).unwrap_or_default()
@@ -169,16 +225,33 @@ impl Service {
         dashboard: Arc<dyn Source>,
         apply: Apply,
     ) -> Result<(Self, Arc<dyn Source>)> {
+        Self::start_with(desktop, dashboard, None, None, apply)
+    }
+    /// As [`Service::start`], also following `profile` and `launcher-layout` when the
+    /// daemon publishes them (absent topics keep Nacre's defaults).
+    pub fn start_with(
+        desktop: Arc<dyn Source>,
+        dashboard: Arc<dyn Source>,
+        profile: Option<Arc<dyn Source>>,
+        layout: Option<Arc<dyn Source>>,
+        apply: Apply,
+    ) -> Result<(Self, Arc<dyn Source>)> {
         let first = Prefs::default();
         let publisher = Publisher::new("prefs".into(), serde_json::to_value(&first).unwrap())?;
         let effective: Arc<dyn Source> = Arc::new(Shared(publisher.clone()));
         let current = Arc::new(Mutex::new(None::<Prefs>));
         let update: Callback = {
             let (desktop, dashboard) = (desktop.clone(), dashboard.clone());
+            let (profile, layout) = (profile.clone(), layout.clone());
             Arc::new(move |_| {
-                let next = Prefs::decode(
+                let extra = |source: &Option<Arc<dyn Source>>, id: &str| {
+                    source.as_ref().map_or(Json::Null, |s| store(&s.snapshot(), id).clone())
+                };
+                let next = Prefs::decode_all(
                     store(&desktop.snapshot(), "desktop"),
                     store(&dashboard.snapshot(), "dashboard"),
+                    &extra(&profile, "profile"),
+                    &extra(&layout, "launcher-layout"),
                 );
                 let mut held = current.lock().unwrap_or_else(|p| p.into_inner());
                 if held.as_ref() == Some(&next) {
@@ -189,10 +262,13 @@ impl Service {
                 *held = Some(next);
             })
         };
-        let subscriptions = vec![
+        let mut subscriptions = vec![
             desktop.subscribe(update.clone())?,
-            dashboard.subscribe(update)?,
+            dashboard.subscribe(update.clone())?,
         ];
+        for source in [&profile, &layout].into_iter().flatten() {
+            subscriptions.push(source.subscribe(update.clone())?);
+        }
         Ok((
             Self {
                 _subscriptions: subscriptions,
@@ -275,6 +351,43 @@ mod tests {
             bead::core::Value::Bool(false)
         );
     }
+    #[test]
+    fn workspace_and_rail_prefs_follow_qml_defaults_and_wrong_types() {
+        let d = Prefs::default();
+        assert_eq!((d.workspace_count, d.window_hints), (6, true));
+        assert!(d.workspace_icons.is_empty() && d.rail_order.is_empty() && d.rail_hidden.is_empty());
+        // `count || 6`, `!== false`, and anything but a list of strings means unset.
+        let odd = Prefs::decode_all(
+            &json!({"workspaceWindowHints": 0}),
+            &Json::Null,
+            &json!({"workspaceCount": 0, "workspaceIcons": "home"}),
+            &json!({"order": "home", "hidden": [1, null, ""]}),
+        );
+        assert_eq!(odd, d);
+        let set = Prefs::decode_all(
+            &json!({"workspaceWindowHints": false}),
+            &Json::Null,
+            &json!({"workspaceCount": 4.4, "workspaceIcons": ["home", 5, "code"]}),
+            &json!({"order": ["apps", "", "home"], "hidden": ["style"]}),
+        );
+        assert_eq!((set.workspace_count, set.window_hints), (4, false));
+        assert_eq!(set.workspace_icons, ["home", "", "code"]);
+        assert_eq!((&set.rail_order[..], &set.rail_hidden[..]), (&["apps".to_string(), "home".into()][..], &["style".to_string()][..]));
+        let bar = set.bar_stores();
+        assert_eq!(bar["bar.workspace.count"], bead::core::Value::Number(4.));
+        assert_eq!(bar["bar.workspace.hints"], bead::core::Value::Bool(false));
+        assert_eq!(
+            bar["bar.workspace.icons"],
+            bead::core::Value::list(vec![json!("home"), json!(""), json!("code")])
+        );
+        assert_eq!(
+            set.launcher_stores()["launcher.rail.hidden"],
+            bead::core::Value::list(vec![json!("style")])
+        );
+        // A hundred icons are bounded.
+        let many = Prefs::decode_all(&Json::Null, &Json::Null, &json!({"workspaceIcons": vec!["a"; 100]}), &Json::Null);
+        assert_eq!(many.workspace_icons.len(), MAX_LIST);
+    }
     struct Fake(Publisher);
     impl Fake {
         fn new(id: &str) -> Arc<Self> {
@@ -351,6 +464,29 @@ mod tests {
         desktop.set("dashboard", json!({"weatherFahrenheit": false}));
         assert!(!Prefs::from_source(&*effective).fahrenheit);
         drop(service);
+    }
+
+    #[test]
+    fn profile_and_launcher_layout_follow_live_and_absent_topics_keep_defaults() {
+        let (desktop, dashboard) = (Fake::new("desktop"), Fake::new("dashboard"));
+        let (profile, layout) = (Fake::new("profile"), Fake::new("launcher-layout"));
+        let (_service, effective) = Service::start_with(
+            desktop,
+            dashboard,
+            Some(profile.clone()),
+            Some(layout.clone()),
+            Arc::new(|_: &Prefs| {}),
+        )
+        .unwrap();
+        assert_eq!(Prefs::from_source(&*effective), Prefs::default());
+        profile.set("profile", json!({"workspaceCount": 3, "workspaceIcons": ["home"]}));
+        layout.set("launcher-layout", json!({"order": ["actions"], "hidden": ["search"]}));
+        let now = Prefs::from_source(&*effective);
+        assert_eq!((now.workspace_count, now.workspace_icons.len()), (3, 1));
+        assert_eq!((now.rail_order, now.rail_hidden), (vec!["actions".to_string()], vec!["search".to_string()]));
+        // The wrong store id never leaks values into the decoded preferences.
+        profile.set("desktop", json!({"workspaceCount": 9}));
+        assert_eq!(Prefs::from_source(&*effective).workspace_count, 6);
     }
 
     /// The real transport: a fake daemon publishes both stores, then edits one, and the

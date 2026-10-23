@@ -3,6 +3,7 @@ return {
   stores = {
     ["panel.open"] = true, ["launcher.apps"] = {},
     ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.pending"]=false, ["launcher.result_count"]=0, ["launcher.total_count"]=0,
+    ["launcher.rail.order"]={}, ["launcher.rail.hidden"]={},
     ["launcher.selection"] = "", ["launcher.route"] = "apps", ["launcher.engine_route"]="",
     ["launcher.search.text"] = "", ["launcher.scroll.y"] = 0,
     ["launcher.conversion.value"]="", ["launcher.conversion.description"]="",
@@ -35,8 +36,32 @@ return {
       local rows={}
       local active=s["launcher.route"]
       if s["launcher.engine_route"]=="home" then active="home" end
-      for _,item in {{id="apps",name=tr("bead.launcher.apps"),icon="apps"},{id="home",name=tr("bead.launcher.favorites"),icon="favorite"},{id="search",name=tr("bead.launcher.search"),icon="search"},{id="actions",name=tr("bead.launcher.actions"),icon="terminal"}} do
-        table.insert(rows,{id=item.id,name=item.name,icon=item.icon,selected=active==item.id})
+      -- launcher-layout: hidden ids drop out (Home never), a configured order ranks the rest
+      -- as Nacre's rail does (Home, the order, then the defaults); unranked rows keep their place at the end.
+      local hidden={}
+      for _,id in ipairs(s["launcher.rail.hidden"]) do hidden[id]=true end
+      hidden.home=nil
+      local rank,count={},0
+      local configured=s["launcher.rail.order"]
+      if #configured>0 then
+        for _,id in ipairs({"home",table.unpack(configured)}) do
+          if not rank[id] then count+=1 rank[id]=count end
+        end
+        for _,id in ipairs({"apps","actions"}) do
+          if not rank[id] then count+=1 rank[id]=count end
+        end
+      end
+      local ranked={}
+      for index,item in {{id="apps",name=tr("bead.launcher.apps"),icon="apps"},{id="home",name=tr("bead.launcher.favorites"),icon="favorite"},{id="search",name=tr("bead.launcher.search"),icon="search"},{id="actions",name=tr("bead.launcher.actions"),icon="terminal"}} do
+        if not hidden[item.id] then
+          table.insert(ranked,{item=item,rank=rank[item.id] or 99,at=index})
+        end
+      end
+      if count>0 then
+        table.sort(ranked,function(a,b) if a.rank~=b.rank then return a.rank<b.rank end return a.at<b.at end)
+      end
+      for _,entry in ipairs(ranked) do
+        table.insert(rows,{id=entry.item.id,name=entry.item.name,icon=entry.item.icon,selected=active==entry.item.id})
       end
       return rows
     end,

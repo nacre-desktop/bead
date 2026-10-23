@@ -25,6 +25,12 @@ pub struct Workspace {
     pub active: bool,
     pub focused: bool,
     pub urgent: bool,
+    /// A workspace the compositor keeps by name (niri named workspace), not a spare.
+    #[serde(default)]
+    pub fixed_slot: bool,
+    /// Shown on an output other than its home output. Adapters that cannot tell report false.
+    #[serde(default)]
+    pub visiting: bool,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Window {
