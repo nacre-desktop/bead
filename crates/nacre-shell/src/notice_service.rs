@@ -474,7 +474,10 @@ fn publish(shared: &Shared) {
     }
 }
 fn bar_count(count: u64) -> BTreeMap<String, Value> {
-    BTreeMap::from([("bar.notifications.count".into(), Value::Number(count as f64))])
+    BTreeMap::from([(
+        "bar.notifications.count".into(),
+        Value::Number(count as f64),
+    )])
 }
 
 /// Whether panel view `view` suppresses popups: every view outside the coexisting
@@ -802,7 +805,9 @@ impl Notices for Service {
             id
         };
         // A new bar starts from the current count.
-        wakeup(UiEvent::Model(bar_count(self.shared.lock().bar_count.unwrap_or(0))));
+        wakeup(UiEvent::Model(bar_count(
+            self.shared.lock().bar_count.unwrap_or(0),
+        )));
         publish(&self.shared);
         Box::new(Lease(id, Arc::downgrade(&self.shared)))
     }

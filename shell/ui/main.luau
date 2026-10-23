@@ -8,7 +8,7 @@ local Results = require("./components/results")
 local hints={"> "..ui.tr("bead.launcher.hint-actions"),"= "..ui.tr("bead.launcher.hint-calculate"),"# "..ui.tr("bead.launcher.hint-brain"),": "..ui.tr("bead.launcher.hint-files"),"? "..ui.tr("bead.launcher.hint-ai")}
 local chips={}
 for index,label in ipairs(hints) do
-    chips[index]=ui.Box{id="hint",width=math.floor(#label*6.1+14),height=24,radius=6,fill=ui.alpha("onSurface",0.045),
+    chips[index]=ui.Box{id="hint"..index,width=math.floor(#label*6.1+14),height=24,radius=6,fill=ui.alpha("onSurface",0.045),
         ui.Text{position="absolute",left=0,top=3,width=math.floor(#label*6.1+14),height=18,text=label,font_size=11.333,text_align="center",color="onSurfaceVariant"}}
 end
 local has_detail = ui.resolve_for_check(ui.bind("launcher.has_detail"))

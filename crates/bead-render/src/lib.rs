@@ -158,7 +158,11 @@ pub struct Motion {
 impl Motion {
     /// Scene opacity at a progress: the progress itself when fading, else opaque once any of it is shown.
     pub fn opacity(&self, progress: f32) -> f32 {
-        if self.fade || progress <= 0.001 { progress } else { 1. }
+        if self.fade || progress <= 0.001 {
+            progress
+        } else {
+            1.
+        }
     }
 }
 /// Retained logical ownership; own primitives precede the ordered child layers.
