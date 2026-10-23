@@ -756,3 +756,40 @@ fn colors_window_without_a_daemon_golden() {
     golden("colors-unavailable-1", &mut h);
     let _ = std::fs::remove_dir_all(tmp);
 }
+
+/// The Settings pages for wallpaper and colours are registry rows like any other; their custom
+/// sections (picker, preview, app theming targets) stay placeholders and the Colors app is the
+/// way to explore and apply a palette.
+#[test]
+fn settings_wallpaper_and_colors_pages_are_editable_registry_rows() {
+    crate::i18n::init();
+    let settings = crate::settings::Settings::new(None, &root()).unwrap();
+    let at = |page: &str| {
+        Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("settings.page".into(), Value::Text(page.into())),
+                ("settings.search".into(), Value::Text(String::new())),
+            ]))
+            .unwrap()
+    };
+    let rows = |page: &str| -> (Vec<Json>, Value) {
+        let model = settings.project(&at(page));
+        let Value::List(items) = &model["settings.items"] else { panic!() };
+        (items.to_vec(), model["settings.readonly"].clone())
+    };
+    let kind = |rows: &[Json], id: &str| {
+        rows.iter().find(|r| r["id"] == id).unwrap_or_else(|| panic!("{id} missing"))["kind"].clone()
+    };
+    let (wallpaper, readonly) = rows("wallpaper");
+    assert_eq!(readonly, Value::Bool(false));
+    assert_eq!(kind(&wallpaper, "wallpaper.rotation.rotationEnabled"), "toggle");
+    assert_eq!(kind(&wallpaper, "wallpaper.rotation.rotationMinutes"), "number");
+    assert_eq!(kind(&wallpaper, "wallpaper.motion.motionMode"), "choice");
+    let (colors, readonly) = rows("colors");
+    assert_eq!(readonly, Value::Bool(false));
+    assert_eq!(kind(&colors, "colors.palette.style"), "choice");
+    // Mode and the schedule are applied by helpers, not by a store write: shown, not editable.
+    assert_eq!(kind(&colors, "colors.palette.mode"), "help");
+    let (targets, _) = rows("colors/app-theming");
+    assert!(targets.iter().filter(|r| r["id"].as_str().is_some_and(|id| id.contains(".targets."))).all(|r| r["kind"] == "help"));
+}

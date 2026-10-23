@@ -8,7 +8,9 @@
   "windows-workspaces",
   "date-time-language",
   "launcher",
-  "apps"
+  "apps",
+  "wallpaper",
+  "colors"
  ],
  "orderedLists": [
   "panels/dashboard/pages.editor.pages",

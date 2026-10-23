@@ -103,6 +103,12 @@ After Bead's core switch on Nacre, plan support for:
   `CompanionOffer`, beside the panel and window slots) and `notice_service::Options::coexist`
   (view families that do not suppress popups). Nacre's view names stay in `nacre-shell/src/main.rs`.
 
+- B0060: `kit.ColorSample`/`ColorSampleRow`, `kit.ColorTarget`, `kit.PreviewCard` (a miniature desktop from a role-to-RGBA
+  map), `kit.ImagePick` (image slot with a hit grid), `kit.TabStrip`, `kit.ChipRow`, `kit.Paragraph` (wrapped text without a
+  text-measurement primitive: an Image-fit/measure primitive in `bead-render` would replace the approximations). Slot-sized
+  image attach (`@icon:colors-*` rectangles decide the PNG) is Nacre-side in `nacre-shell/src/colors.rs`; the colours
+  methods live only there.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a
