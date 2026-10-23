@@ -16,6 +16,8 @@ The kit exposes Button, IconButton, StatusIcon, Slider, Switch, Tile, SegmentedC
 List/ListRow, Card, Popover/Peek, Tooltip and TextInput. Slider uses a bounded
 step range: click/drag chooses a step, arrow keys change the focused step.
 `TextInput masked=true` draws bullets and keeps its value out of accessibility, IME context, copy and traces (stores named `*.secret` are also left out of trace dumps); `kit.PasswordField` adds a show/hide button and Enter action, `kit.ConfirmButton` asks again in place before acting; `kit.ActionButton` is the centred text button of forms and prompts (primary fill while armed, dimmed without an action).
+Settings pieces (B0063): `kit.InfoRow` (label, value, description), `kit.ChipsRow` (label over wrapping chips), `kit.DeviceRow` (icon, title, detail, buttons, optional slider), `kit.PickerList` (filter field and entries), `kit.SecretRow` (masked field with join/cancel).
+
 Colour pieces (B0060): `kit.ColorSample`/`ColorSampleRow` (swatch over a caption), `kit.ColorTarget` (named slot with lock and arm), `kit.PreviewCard` (a miniature desktop from a role-to-RGBA map; labels are arguments), `kit.ImagePick` (image slot with an invisible hit grid), `kit.TabStrip`, `kit.ChipRow` (toggle chips, `per_row` to a line) and `kit.Paragraph` (text wrapped by average advance, `max_lines` with an ellipsis).
 Tile takes distinct `on_toggle` and `on_detail` actions. SegmentedControl takes
 stable item IDs and an action receiving the selected ID. List/TextInput keep

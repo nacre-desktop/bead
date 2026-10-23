@@ -20,7 +20,7 @@ local function nav(item)
             ui.Text{id="label",text=item.label,font_size=tx.body*4/3,grow=1,height=24}}}
 end
 local function row(item)
-    local on=item.enabled and writable
+    local on=item.enabled and (writable or item.own)
     local id=item.id
     local k=item.kind
     local node
@@ -32,6 +32,22 @@ local function row(item)
             ui.Column{grow=1,justify="center",gap=sp.hairline,
                 ui.Text{id="label",text=item.label,height=20,font_size=tx.body*4/3,color="onSurface"},
                 ui.Text{id="detail",text=item.description,height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}}}
+    elseif k=="info" then
+        return kit.InfoRow{id="info",label=item.label,description=item.description,value=item.value}
+    elseif k=="actions" then
+        if #item.options>3 then
+            return kit.ChipsRow{id="chips",label=item.label,description=item.description,enabled=on,items=item.options,on_change=on and "settings.do" or nil}
+        end
+        node=kit.ChoiceRow{id="actions",label=item.label,description=item.description,enabled=on,options=item.options,on_change="settings.do"}
+    elseif k=="device" then
+        return kit.DeviceRow{id="device",title=item.title,detail=item.detail,icon=item.icon,enabled=on,buttons=item.buttons,slider=item.slider,on_action="settings.do"}
+    elseif k=="picker" then
+        return kit.PickerList{id="picker",label=item.label,placeholder=item.placeholder,enabled=on,items=item.items,empty=item.empty,more=item.more,
+            field=ui.bind("settings.pick.text"),on_pick="settings.do"}
+    elseif k=="secret" then
+        return kit.SecretRow{id="secret",label=item.label,enabled=on,field=ui.bind("settings.secret"),revealed=ui.bind("settings.reveal"),
+            on_toggle=act("do:reveal"),on_join=act(item.join),on_cancel=act(item.cancel),join_label=item.join_label,cancel_label=item.cancel_label,
+            show_label=ui.tr("bead.panel.network-password-show"),hide_label=ui.tr("bead.panel.network-password-hide")}
     elseif k=="toggle" then
         node=kit.ToggleRow{id="toggle",label=item.label,description=item.description,checked=item.checked,enabled=on,on_activate=act("set:"..id)}
     elseif k=="choice" then
@@ -72,6 +88,7 @@ return ui.Row{id="settings",width="100%",height="100%",fill="surface",
         ui.Text{id="description",text=ui.bind("settings.description"),visible=not searching,height=20,font_size=tx.body*4/3,color="onSurfaceVariant"},
         ui.Text{id="readonly",text=ui.tr("bead.settings.read-only"),visible=ui.bind("settings.readonly"),height=20,font_size=tx.caption*4/3,color="onSurfaceVariant"},
         ui.Text{id="message",text=ui.bind("settings.message"),height=20,font_size=tx.caption*4/3,color="error"},
+        ui.Text{id="notice",text=ui.bind("settings.notice"),visible=ui.bind("settings.noticed"),height=20,font_size=tx.caption*4/3,color="primary"},
         ui.Text{id="empty",text=ui.tr("bead.settings.no-results"),visible=ui.bind("settings.empty"),height=20,font_size=tx.body*4/3,color="onSurfaceVariant"},
         ui.Scroll{id="items-scroll",scroll=ui.bind("settings.scroll"),grow=1,
             ui.Column{id="items",width="fill",gap=sp.xs,

@@ -5,6 +5,7 @@
 //! A new page or widget is registry data or Luau, never Rust: this file only knows
 //! value types (boolean, number, enum, string, array). Nothing is resident until the
 //! window opens, and the registry, store leases and subscriptions go with it.
+mod pages;
 use crate::i18n::tr;
 use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
 use bead::core::{
@@ -22,6 +23,9 @@ pub const METHOD: &str = "settings.set";
 const MAX_TEXT: usize = 200;
 const MAX_ITEMS: usize = 64;
 const MAX_RESULTS: usize = 40;
+/// Followed while the window is open: the registry's capability flags, and the two topics that
+/// answer the `bluetooth` and `battery` conditions the flags topic does not carry.
+const ALWAYS: &[&str] = &["capabilities", "bluetooth", "battery"];
 
 pub struct Registry {
     navigation: Json,
@@ -167,21 +171,46 @@ fn clean_text(text: &str) -> Option<String> {
 #[derive(Default)]
 struct State {
     pending: Option<CallTicket>,
+    /// The pending call is a `settings.set` write (decides the failure wording).
+    pending_write: bool,
     message: String,
     editing: String,
     /// A value for a setting that needs an explicit apply.
     staged: Option<(String, Json)>,
+    /// Page-local choices of the custom sections (`pages.rs`): armed destructive action, picked
+    /// time zone, chosen workflow roles, the time zone list and the call that fetches it.
+    confirm: String,
+    picked: String,
+    roles: Vec<String>,
+    zones: Vec<String>,
+    zones_fetch: Option<CallTicket>,
+    zones_asked: bool,
+    /// The text of the picker's filter field, as of the last projection.
+    pick: String,
+    /// What the last finished call wants said (not an error), cleared by the next action.
+    notice: String,
+    /// The notice id the call in flight leaves when it succeeds.
+    on_ok: String,
+    /// The newest level change that waited for the call in flight.
+    queued: Option<(String, Json)>,
+    /// The access point whose password is being asked, the typed password (never traced or kept
+    /// past the join) and whether it is shown.
+    joining: String,
+    secret: String,
+    reveal: bool,
 }
 type Wake = Arc<dyn Fn() + Send + Sync>;
 type Opened = BTreeMap<String, (Arc<dyn Source>, Option<Subscription>)>;
 pub struct Settings {
     client: Option<Client>,
-    /// Fixed store sources for previews and tests; they replace the daemon topics.
+    /// Fixed topic sources (by topic name) for previews and tests; they replace the daemon topics.
     fixtures: BTreeMap<String, Arc<dyn Source>>,
     registry: Registry,
     open: RefCell<Opened>,
     wake: RefCell<Option<Wake>>,
     state: RefCell<State>,
+    /// The `capabilities` flags of the last projection (`None`: the daemon does not publish them).
+    caps: RefCell<Option<Json>>,
 }
 
 impl Settings {
@@ -193,12 +222,30 @@ impl Settings {
             open: Default::default(),
             wake: Default::default(),
             state: Default::default(),
+            caps: Default::default(),
         })
+    }
+    /// The time zone list the daemon would have returned (previews and tests).
+    #[cfg(test)]
+    pub fn with_zones(self, zones: &[&str]) -> Self {
+        {
+            let mut state = self.state.borrow_mut();
+            state.zones = zones.iter().map(|z| z.to_string()).collect();
+            state.zones_asked = true;
+        }
+        self
     }
     #[cfg(test)]
     pub fn with_sources(mut self, fixtures: BTreeMap<String, Arc<dyn Source>>) -> Self {
         self.fixtures = fixtures;
         self
+    }
+    /// The password field's text for the next action; it lives in the `settings.secret` store.
+    pub fn secret(&self, text: &str) {
+        let mut state = self.state.borrow_mut();
+        if state.secret != text {
+            state.secret = text.into();
+        }
     }
     /// Store changes wake the window; sources opened later subscribe with the same wake.
     pub fn subscribe(&self, wake: Wake) {
@@ -212,31 +259,38 @@ impl Settings {
         source.subscribe(Arc::new(move |_| wake())).ok()
     }
     fn ready(&self) -> Option<(String, Duration)> {
+        self.ready_for(METHOD)
+    }
+    /// The daemon's advertised method at v1 on a live link, with the boot it was seen on and
+    /// its deadline (a polkit prompt may take up to the protocol's 120 s).
+    fn ready_for(&self, method: &str) -> Option<(String, Duration)> {
         let client = self.client.as_ref()?;
         let status = client.status();
-        let method = status.methods.get(METHOD).filter(|m| m.v == 1)?;
+        let advertised = status.methods.get(method).filter(|m| m.v == 1)?;
         if !client.snapshot().connected {
             return None;
         }
         Some((
             status.boot?,
-            Duration::from_millis(u64::from(method.timeout).clamp(1, 10_000)),
+            Duration::from_millis(u64::from(advertised.timeout).clamp(1, 120_000)),
         ))
     }
-    /// Keep exactly the stores the shown settings read; everything else is released.
+    fn can(&self, method: &str) -> bool {
+        self.ready_for(method).is_some()
+    }
+    /// Keep exactly the topics the shown rows read; everything else is released.
     fn retain(&self, wanted: &[String]) {
         let mut open = self.open.borrow_mut();
-        open.retain(|id, _| wanted.contains(id));
-        for id in wanted {
-            if open.contains_key(id) {
+        open.retain(|topic, _| wanted.contains(topic));
+        for topic in wanted {
+            if open.contains_key(topic) {
                 continue;
             }
-            let topic = format!("settings.store.{id}");
-            let source: Option<Arc<dyn Source>> = match (self.fixtures.get(id), &self.client) {
+            let source: Option<Arc<dyn Source>> = match (self.fixtures.get(topic), &self.client) {
                 (Some(fixed), _) => Some(fixed.clone()),
-                (None, Some(client)) => match client.topic(&topic) {
+                (None, Some(client)) => match client.topic(topic) {
                     Ok(t) => Some(Arc::new(t)),
-                    Err(_) => client.lease_topic(&topic).ok().map(|t| Arc::new(t) as _),
+                    Err(_) => client.lease_topic(topic).ok().map(|t| Arc::new(t) as _),
                 },
                 (None, None) => None,
             };
@@ -246,13 +300,24 @@ impl Settings {
                     .borrow()
                     .as_ref()
                     .and_then(|wake| Self::follow(&source, wake));
-                open.insert(id.clone(), (source, subscription));
+                open.insert(topic.clone(), (source, subscription));
             }
         }
     }
+    /// The data of a followed topic while it is live and an object.
+    fn topic(&self, name: &str) -> Option<Json> {
+        let source = self.open.borrow().get(name).map(|(s, _)| s.clone())?;
+        let snapshot = source.snapshot();
+        (snapshot.connected && snapshot.data.is_object()).then(|| (*snapshot.data).clone())
+    }
     /// `(rev, data, readable)` of a store document.
     fn document(&self, store: &str) -> (u64, Json, bool) {
-        let Some(source) = self.open.borrow().get(store).map(|(s, _)| s.clone()) else {
+        let Some(source) = self
+            .open
+            .borrow()
+            .get(&format!("settings.store.{store}"))
+            .map(|(s, _)| s.clone())
+        else {
             return (0, Json::Null, false);
         };
         let snapshot = source.snapshot();
@@ -289,6 +354,56 @@ impl Settings {
             None => true,
         }
     }
+    /// Re-read the `capabilities` flags from the followed topic.
+    fn refresh_caps(&self) {
+        let flags = self
+            .topic("capabilities")
+            .map(|t| t["flags"].clone())
+            .filter(Json::is_object);
+        *self.caps.borrow_mut() = flags;
+    }
+    /// A flag of the `capabilities` topic. A flag the topic does not name is false (as QML), except
+    /// `bluetooth` and `battery`, which the registry names but the topic does not carry (a Nacre
+    /// ask): they come from the topics themselves.
+    fn flag(&self, flags: &Json, name: &str) -> bool {
+        if let Some(value) = flags.get(name).and_then(Json::as_bool) {
+            return value;
+        }
+        let healthy = |t: &Json| t["health"]["available"] == true;
+        match name {
+            "bluetooth" => self.topic("bluetooth").is_some_and(|t| {
+                healthy(&t)
+                    && t["adapters"]["items"]
+                        .as_object()
+                        .is_some_and(|a| !a.is_empty())
+            }),
+            "battery" => self.topic("battery").is_some_and(|t| healthy(&t)),
+            _ => false,
+        }
+    }
+    fn holds(&self, flags: &Json, condition: &Json) -> bool {
+        if let Some(name) = condition["capability"].as_str() {
+            return self.flag(flags, name);
+        }
+        if let Some(all) = condition["all"].as_array() {
+            return all.iter().all(|c| self.holds(flags, c));
+        }
+        if let Some(any) = condition["any"].as_array() {
+            return any.iter().any(|c| self.holds(flags, c));
+        }
+        if let Some(not) = condition.get("not") {
+            return !self.holds(flags, not);
+        }
+        true
+    }
+    /// A registry `visibleWhen`/`enabledWhen` condition. No condition, or no published flags,
+    /// allows everything.
+    fn allowed(&self, condition: Option<&Json>) -> bool {
+        match (condition, &*self.caps.borrow()) {
+            (Some(condition), Some(flags)) => self.holds(flags, condition),
+            _ => true,
+        }
+    }
     /// QML hides a `backend: "planned"` setting (and a section left empty) outside development.
     fn planned(setting: &Json) -> bool {
         setting["backend"] == "planned"
@@ -310,7 +425,8 @@ impl Settings {
         let label = self.registry.text(setting, "labelId");
         let description = self.registry.text(setting, "descriptionId");
         let mut row = json!({"id": id, "label": label, "description": description,
-            "enabled": editable && self.depends_on(setting), "editing": state.editing == id});
+            "enabled": editable && self.depends_on(setting) && self.allowed(setting.get("enabledWhen")),
+            "editing": state.editing == id});
         if self.unavailable(setting) {
             row["kind"] = "help".into();
             row["description"] = "".into();
@@ -411,10 +527,10 @@ impl Settings {
         let registry = &self.registry;
         let editable = registry.editable(page);
         let mut items = Vec::new();
-        let mut stores = Vec::new();
+        let mut topics: Vec<String> = Vec::new();
         let mut children: Vec<&Json> = registry
             .array(&registry.navigation, "pages")
-            .filter(|p| p["parent"] == page)
+            .filter(|p| p["parent"] == page && self.allowed(p.get("visibleWhen")))
             .collect();
         children.sort_by_key(|p| Registry::order(p));
         for child in children {
@@ -424,39 +540,69 @@ impl Settings {
         }
         let mut sections: Vec<&Json> = registry
             .array(&registry.settings, "sections")
-            .filter(|s| s["page"] == page)
+            .filter(|s| s["page"] == page && self.allowed(s.get("visibleWhen")))
             .collect();
         sections.sort_by_key(|s| Registry::order(s));
-        let in_page = |section: Option<&str>| -> Vec<&Json> {
-            registry
-                .array(&registry.settings, "settings")
-                .filter(|s| s["page"] == page && s["section"].as_str() == section)
-                .filter(|s| !Self::planned(s))
-                .collect()
-        };
         for section in &sections {
             let sid = section["id"].as_str().unwrap_or("");
-            let rows = in_page(Some(sid));
-            if rows.is_empty() && section.get("customType").is_none() {
+            let mut body = Vec::new();
+            for setting in registry
+                .array(&registry.settings, "settings")
+                .filter(|s| s["page"] == page && s["section"].as_str() == Some(sid))
+                .filter(|s| !Self::planned(s) && self.allowed(s.get("visibleWhen")))
+            {
+                if let Some(store) = setting["store"]["id"].as_str()
+                    && !self.unavailable(setting)
+                {
+                    let topic = format!("settings.store.{store}");
+                    if !topics.contains(&topic) {
+                        topics.push(topic);
+                    }
+                }
+                body.push(self.row(setting, editable, state));
+            }
+            if section.get("customType").is_some() {
+                match self.custom_rows(section, editable, state) {
+                    Some((rows, read)) => {
+                        body.extend(rows);
+                        for topic in read {
+                            if !topics.contains(&topic) {
+                                topics.push(topic);
+                            }
+                        }
+                    }
+                    None if body.is_empty() => body.push(json!({"id": format!("custom:{sid}"),
+                        "kind": "help", "label": tr("bead.settings.custom-unavailable", &[])})),
+                    None => {}
+                }
+            }
+            for (rows, read) in self.extra_rows(page, sid, editable, state) {
+                body.push(rows);
+                for topic in read {
+                    if !topics.contains(&topic) {
+                        topics.push(topic);
+                    }
+                }
+            }
+            let mut actions: Vec<&Json> = registry
+                .array(&registry.settings, "actions")
+                .filter(|a| a["page"] == page && a["section"].as_str() == Some(sid))
+                .filter(|a| !Self::planned(a) && self.allowed(a.get("visibleWhen")))
+                .collect();
+            actions.sort_by_key(|a| Registry::order(a));
+            for action in actions {
+                if let Some(row) = self.action_row(action, editable, state) {
+                    body.push(row);
+                }
+            }
+            if body.is_empty() {
                 continue;
             }
             items.push(json!({"id": format!("section:{sid}"), "kind": "section",
                 "label": registry.text(section, "labelId"), "description": registry.text(section, "descriptionId")}));
-            if section.get("customType").is_some() && rows.is_empty() {
-                items.push(json!({"id": format!("custom:{sid}"), "kind": "help",
-                    "label": tr("bead.settings.custom-unavailable", &[])}));
-            }
-            for setting in rows {
-                if let Some(store) = setting["store"]["id"].as_str()
-                    && !stores.iter().any(|s| s == store)
-                    && !self.unavailable(setting)
-                {
-                    stores.push(store.to_owned());
-                }
-                items.push(self.row(setting, editable, state));
-            }
+            items.extend(body);
         }
-        (items, stores)
+        (items, topics)
     }
 
     fn search(&self, query: &str) -> Vec<Json> {
@@ -473,7 +619,10 @@ impl Settings {
                 .unwrap_or_default()
         };
         let mut out = Vec::new();
-        for page in registry.array(&registry.navigation, "pages") {
+        for page in registry
+            .array(&registry.navigation, "pages")
+            .filter(|p| self.allowed(p.get("visibleWhen")))
+        {
             let hay = format!(
                 "{} {}",
                 registry.text(page, "labelId"),
@@ -485,10 +634,16 @@ impl Settings {
                     "label": registry.text(page, "labelId"), "description": registry.text(page, "descriptionId")}));
             }
         }
-        for setting in registry
-            .array(&registry.settings, "settings")
-            .filter(|s| !Self::planned(s))
-        {
+        let shown = |page: &str| {
+            registry
+                .page(page)
+                .is_none_or(|p| self.allowed(p.get("visibleWhen")))
+        };
+        for setting in registry.array(&registry.settings, "settings").filter(|s| {
+            !Self::planned(s)
+                && self.allowed(s.get("visibleWhen"))
+                && shown(s["page"].as_str().unwrap_or(""))
+        }) {
             let label = registry.text(setting, "labelId");
             let synonyms = registry
                 .array(setting, "synonyms")
@@ -505,6 +660,20 @@ impl Settings {
                 out.push(json!({"id": format!("setting:{id}"), "kind": "link",
                     "page": setting["page"], "label": label,
                     "description": page_title(setting["page"].as_str().unwrap_or(""))}));
+            }
+        }
+        for action in registry.array(&registry.settings, "actions").filter(|a| {
+            !Self::planned(a)
+                && self.allowed(a.get("visibleWhen"))
+                && shown(a["page"].as_str().unwrap_or(""))
+        }) {
+            let label = registry.text(action, "labelId");
+            let hay = format!("{label} {}", registry.text(action, "descriptionId"));
+            if matches(&hay) {
+                let id = action["id"].as_str().unwrap_or("");
+                out.push(json!({"id": format!("action:{id}"), "kind": "link",
+                    "page": action["page"], "label": label,
+                    "description": page_title(action["page"].as_str().unwrap_or(""))}));
             }
         }
         out.truncate(MAX_RESULTS);
@@ -529,36 +698,38 @@ impl Settings {
         let query = text("settings.search");
         let searching = !query.trim().is_empty();
         let ready = self.ready().is_some();
-        // Which stores the page reads decides the leases; rows are built after they open.
-        let wanted = if searching {
+        self.state.borrow_mut().pick = text("settings.pick.text");
+        // Which topics the page reads decides the leases; rows are built after they open. The
+        // capability flags and the two topics that stand in for missing flags stay followed.
+        self.refresh_caps();
+        let mut wanted = if searching {
             Vec::new()
         } else {
             self.page_items(&page, &self.state.borrow()).1
         };
+        for base in ALWAYS {
+            if !wanted.iter().any(|t| t == base) {
+                wanted.push((*base).into());
+            }
+        }
         self.retain(&wanted);
+        self.refresh_caps();
+        let notice = self.settle();
+        self.fetch(&page);
         let items = if searching {
             self.search(&query)
         } else {
             self.page_items(&page, &self.state.borrow()).0
         };
         let editable = self.registry.editable(&page);
-        let readable = wanted.iter().all(|s| self.document(s).2);
+        let readable = wanted
+            .iter()
+            .filter_map(|t| t.strip_prefix("settings.store."))
+            .all(|store| self.document(store).2);
         let writable = ready && editable && readable;
         let mut message = String::new();
         {
-            let mut state = self.state.borrow_mut();
-            if let Some(ticket) = &mut state.pending
-                && let Some(reply) = ticket.try_take()
-            {
-                state.pending = None;
-                state.message = match reply {
-                    Ok(_) => String::new(),
-                    Err(e) if e.code == "stale_revision" => {
-                        "bead.settings.changed-elsewhere".into()
-                    }
-                    Err(_) => "bead.settings.save-failed".into(),
-                };
-            }
+            let state = self.state.borrow();
             if !state.message.is_empty() {
                 message = tr(&state.message, &[]);
             }
@@ -566,6 +737,13 @@ impl Settings {
         let busy = self.state.borrow().pending.is_some();
         let mut nav = Vec::new();
         for (group, pages) in self.registry.groups() {
+            let pages: Vec<&Json> = pages
+                .into_iter()
+                .filter(|p| self.allowed(p.get("visibleWhen")))
+                .collect();
+            if pages.is_empty() {
+                continue;
+            }
             nav.push(json!({"id": format!("group:{}", group["id"].as_str().unwrap_or("")),
                 "kind": "group", "label": self.registry.text(group, "labelId"), "icon": "", "selected": false}));
             for p in pages {
@@ -595,6 +773,8 @@ impl Settings {
             ("settings.title".into(), Value::Text(title)),
             ("settings.description".into(), Value::Text(description)),
             ("settings.message".into(), Value::Text(message)),
+            ("settings.noticed".into(), Value::Bool(!notice.is_empty())),
+            ("settings.notice".into(), Value::Text(notice)),
             ("settings.writable".into(), Value::Bool(writable && !busy)),
             (
                 "settings.readonly".into(),
@@ -616,12 +796,23 @@ impl Settings {
         let (op, payload) = arg.split_once(':').unwrap_or((arg, ""));
         let none = BTreeMap::new();
         match op {
+            "do" => return self.do_op(payload, wake),
             "page" => {
-                self.state.borrow_mut().editing.clear();
+                {
+                    let mut state = self.state.borrow_mut();
+                    state.editing.clear();
+                    state.confirm.clear();
+                    state.picked.clear();
+                    state.joining.clear();
+                    state.secret.clear();
+                    state.message.clear();
+                    state.notice.clear();
+                }
                 return BTreeMap::from([
                     ("settings.page".into(), Value::Text(self.page_for(payload))),
                     ("settings.search".into(), Value::Text(String::new())),
                     ("settings.edit.text".into(), Value::Text(String::new())),
+                    ("settings.pick.text".into(), Value::Text(String::new())),
                 ]);
             }
             "cancel" => {
@@ -737,27 +928,38 @@ impl Settings {
     }
 
     fn submit(&self, setting: &Json, value: Json, wake: CallWake) {
+        let (rev, _, _) = self.document(setting["store"]["id"].as_str().unwrap_or(""));
+        // The revision fence: a stale revision is refused and nothing is replayed.
+        let params = json!({"store": setting["store"]["id"], "key": setting["store"]["key"],
+            "value": value, "rev": rev});
+        self.call(METHOD, params, wake, "");
+    }
+
+    /// One daemon call at a time: the published method, its advertised deadline, the boot it was
+    /// seen on. The reply is read by `settle` on a later projection.
+    fn call(&self, method: &str, params: Json, wake: CallWake, ok: &str) {
         let mut state = self.state.borrow_mut();
         if state.pending.is_some() {
             return;
         }
         state.message.clear();
-        let (rev, _, _) = self.document(setting["store"]["id"].as_str().unwrap_or(""));
-        let (Some((boot, timeout)), Some(client)) = (self.ready(), &self.client) else {
+        state.notice.clear();
+        let (Some((boot, timeout)), Some(client)) = (self.ready_for(method), &self.client) else {
             state.message = "bead.settings.unavailable-now".into();
             return;
         };
-        // The revision fence: a stale revision is refused and nothing is replayed.
-        let params = json!({"store": setting["store"]["id"], "key": setting["store"]["key"],
-            "value": value, "rev": rev});
         match client.begin_call(
-            METHOD.into(),
+            method.into(),
             params,
             timeout,
             CallGuard { boot, version: 1 },
             Some(wake),
         ) {
-            Ok(ticket) => state.pending = Some(ticket),
+            Ok(ticket) => {
+                state.pending = Some(ticket);
+                state.pending_write = method == METHOD;
+                state.on_ok = ok.into();
+            }
             Err(_) => state.message = "bead.settings.save-failed".into(),
         }
     }

@@ -328,7 +328,7 @@ return function(ui, tokens)
             buttons[i]=kit.Button{id="option-"..i,text=o.label,height=32,padding=sp.xs,padding_left=sp.sm,padding_right=sp.sm,shrink=0,
                 width=sp.xxl+(utf8.len(o.label) or 4)*8,selected=o.selected,
                 fill=o.selected and "primaryContainer" or "surfaceContainer",color=o.selected and "onPrimaryContainer" or "onSurface",
-                aria_label=p.label..": "..o.label,on_activate=maybe(ui.action(p.on_change,o.id),on)}
+                aria_label=p.label..": "..o.label,on_activate=maybe(ui.action(p.on_change,o.id),on and o.enabled~=false)}
         end
         buttons.id="options";buttons.gap=sp.xs
         return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=p.enabled,ui.Row(buttons)}
@@ -383,6 +383,90 @@ return function(ui, tokens)
         return ui.Column{id=p.id,width="fill",shrink=0,gap=sp.xs,padding=sp.sm,
             ui.Text{id="label",text=p.label,height=20,font_size=tx.body*4/3,color=on and "onSurface" or "onSurfaceVariant"},
             ui.Column(rows),add}
+    end
+    -- Label and value on one line (a read-only fact, a history entry): `description` goes under the label.
+    function kit.InfoRow(p)
+        return kit.FormRow{id=p.id,label=p.label,description=p.description,enabled=true,
+            ui.Text{id="value",text=p.value or "",visible=(p.value or "")~="",width=math.min(360,8+9*(utf8.len(p.value or "") or 0)),shrink=0,
+                height=24,font_size=tx.body*4/3,text_align="right",color="onSurfaceVariant"}}
+    end
+    -- Options too many for one line: label and description above, the options as wrapping chips below.
+    -- `items`: `{id,label,selected,enabled}`; a click sends `on_change` with the item id.
+    function kit.ChipsRow(p)
+        local per_row=p.per_row or 4
+        local lines=math.max(1,math.ceil(#p.items/per_row))
+        return ui.Column{id=p.id,width="fill",shrink=0,gap=sp.xs,padding=sp.sm,height=sp.sm*2+36+lines*38,
+            ui.Text{id="label",text=p.label,height=20,font_size=tx.body*4/3,color=p.enabled~=false and "onSurface" or "onSurfaceVariant"},
+            ui.Text{id="description",text=p.description or "",visible=(p.description or "")~="",height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"},
+            kit.ChipRow{id="chips",items=p.items,per_row=per_row,on_change=p.on_change}}
+    end
+    -- A device or entity line: icon, title and detail on the left, buttons on the right, and an optional
+    -- slider line below (`slider`: `{value,min,max,step,label,prefix,text,enabled}`; the new value goes to
+    -- `on_action` as `prefix..value`). `buttons`: `{id,label,icon,selected,enabled}`; `id` is the argument.
+    function kit.DeviceRow(p)
+        local on=p.enabled~=false
+        local buttons={id="buttons",gap=sp.xs,align="center"}
+        for i,b in ipairs(p.buttons or {}) do
+            local armed=on and b.enabled~=false
+            local action=maybe(ui.action(p.on_action,b.id),armed)
+            if b.icon then
+                buttons[#buttons+1]=kit.IconButton{id="button-"..i,text=b.icon,selected=b.selected,aria_label=b.label,on_activate=action,
+                    fill=b.selected and "primaryContainer" or "surfaceContainer",color=b.selected and "onPrimaryContainer" or "onSurface"}
+            else
+                buttons[#buttons+1]=kit.Button{id="button-"..i,text=b.label,height=32,padding=sp.xs,padding_left=sp.sm,padding_right=sp.sm,shrink=0,
+                    width=sp.xxl+(utf8.len(b.label) or 4)*8,selected=b.selected,
+                    fill=b.selected and "primaryContainer" or "surfaceContainer",color=b.selected and "onPrimaryContainer" or "onSurface",
+                    aria_label=p.title..": "..b.label,on_activate=action}
+            end
+        end
+        local head={id=p.slider and "head" or p.id,width="fill",height=56,shrink=0,gap=sp.md,align="center",padding_left=sp.sm,padding_right=sp.sm,
+            radius=tokens.radii.small}
+        if p.icon then
+            head[#head+1]=ui.Text{id="icon",text=p.icon,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=tokens.icons.large*4/3,color="onSurfaceVariant"}
+        end
+        head[#head+1]=ui.Column{id="labels",grow=1,gap=sp.hairline,justify="center",
+            ui.Text{id="label",text=p.title,font_size=tx.body*4/3,height=20,color=on and "onSurface" or "onSurfaceVariant"},
+            ui.Text{id="description",text=p.detail or "",visible=(p.detail or "")~="",font_size=tx.caption*4/3,height=16,color="onSurfaceVariant"}}
+        head[#head+1]=ui.Row(buttons)
+        head=ui.Row(head)
+        if not p.slider then return head end
+        local s=p.slider
+        return ui.Column{id=p.id,width="fill",shrink=0,gap=0,head,
+            ui.Row{id="level",width="fill",height=36,shrink=0,gap=sp.md,align="center",padding_left=sp.sm,padding_right=sp.sm,
+                s.enabled and kit.Slider{id="slider",value=s.value,min=s.min,max=s.max,step=s.step,width=320,label=s.label,
+                    on_change=p.on_action,change_arg=function(n) return s.prefix..n end} or kit.LevelMeter{id="slider",value=s.value/(s.max-s.min),width=320},
+                ui.Text{id="percent",text=s.text,width=48,height=24,font_size=tx.caption*4/3,text_align="right",color="onSurface"}}}
+    end
+    -- A searchable pick list: a filter field (`field` store), the matching entries and a count of the rest.
+    -- `items`: `{id,label,selected}`; a click sends `on_pick` with the item id.
+    function kit.PickerList(p)
+        local on=p.enabled~=false
+        local rows={id="entries",width="fill",gap=sp.hairline,shrink=0}
+        for i,item in ipairs(p.items) do
+            rows[#rows+1]=kit.Button{id="entry-"..i,text=item.label,height=36,width="fill",text_align="left",padding_left=sp.md,
+                selected=item.selected,fill=item.selected and "primaryContainer" or "surfaceContainer",
+                color=item.selected and "onPrimaryContainer" or "onSurface",aria_label=item.label,
+                on_activate=maybe(ui.action(p.on_pick,item.id),on)}
+        end
+        if #p.items==0 then
+            rows[#rows+1]=ui.Text{id="empty",text=p.empty,height=20,font_size=tx.caption*4/3,color="onSurfaceVariant"}
+        end
+        if (p.more or "")~="" then
+            rows[#rows+1]=ui.Text{id="more",text=p.more,height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}
+        end
+        return ui.Column{id=p.id,width="fill",shrink=0,gap=sp.xs,padding=sp.sm,
+            ui.Text{id="label",text=p.label,height=20,font_size=tx.body*4/3,color=on and "onSurface" or "onSurfaceVariant"},
+            kit.TextInput{id="filter",text=p.field,placeholder=p.placeholder,width="fill",aria_label=p.placeholder},
+            ui.Column(rows)}
+    end
+    -- Ask for a secret in a form: label, the masked field (`field` is a `*.secret` store) and two buttons.
+    function kit.SecretRow(p)
+        local on=p.enabled~=false
+        return kit.FormRow{id=p.id,label=p.label,description="",enabled=on,height=56,
+            kit.PasswordField{id="password",text=p.field,revealed=p.revealed,on_toggle=p.on_toggle,on_activate=maybe(p.on_join,on),width=240,
+                placeholder=p.label,show_label=p.show_label,hide_label=p.hide_label,aria_label=p.label},
+            kit.Button{id="join",text=p.join_label,width=88,height=32,padding=sp.xs,fill="primaryContainer",color="onPrimaryContainer",on_activate=maybe(p.on_join,on)},
+            kit.Button{id="cancel",text=p.cancel_label,width=88,height=32,padding=sp.xs,on_activate=p.on_cancel}}
     end
     -- A choice that needs an explicit apply: shows what is pending and offers both ways out.
     function kit.ApplyBar(p)

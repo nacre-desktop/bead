@@ -2124,10 +2124,10 @@ impl SceneSource for Runtime {
             let scene = self.session.update(outcome.stores)?;
             return self.finish_scene(scene, false);
         }
-        if let (Some(settings), Some((_, name, bead::core::Value::Text(arg)))) =
+        if let (Some(settings), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.settings, &host_action)
             && name == "settings.do"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -2142,8 +2142,20 @@ impl SceneSource for Runtime {
                 Some(bead::core::Value::Text(t)) => t.clone(),
                 _ => String::new(),
             };
+            if let Some(bead::core::Value::Text(secret)) =
+                self.session.stores.get("settings.secret")
+            {
+                settings.secret(secret);
+            }
             let changes = settings.act(arg, &edit, wake);
-            let scene = self.session.update(changes)?;
+            // A slider step keeps the focus so the drag continues over the next step.
+            let scene = match arg
+                .starts_with("do:vol|")
+                .then(|| self.session.focus_id(id))
+            {
+                Some(Ok(scene)) => scene,
+                _ => self.session.update(changes)?,
+            };
             return self.finish_scene(scene, false);
         }
         if let (Some(colors), Some((id, name, bead::core::Value::Text(arg)))) =

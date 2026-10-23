@@ -12,7 +12,7 @@ Nacre reference: registry copy at `4d816ca2`; QML source `nacre/shell/modules/se
    calendar-focus).** New general kit control: `kit.ListEditor{reorder=true}` (up/down per entry); which array settings are
    reorderable is data (`orderedLists` in `bead.json`, which also lifts `editorOwned`). `entityType` app, command, text-list and
    navigation lists are plain string lists.
-3. Open: Notifications history (needs a published notifications list/clear route), Workflows (`device-content`), launcher
+3. Moved to B0063 (done there): Notifications history (needs a published notifications list/clear route), Workflows (`device-content`), launcher
    custom entries (object list), startup apps (planned, hidden), app picker control, Date & time section, panels diagram.
 
 ## Parity rule found in QML (adapter change)

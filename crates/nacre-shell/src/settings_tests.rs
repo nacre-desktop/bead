@@ -22,9 +22,21 @@ fn doc(store: &str, rev: u64, data: Json) -> Json {
     json!({"store": store, "rev": rev, "exists": true, "data": data, "dirty": false})
 }
 fn fixture(desktop: Json) -> (Settings, Arc<FakeSource>) {
+    fixture_with(desktop, &[])
+}
+/// The desktop store plus other fixed topics (by topic name).
+fn fixture_with(desktop: Json, topics: &[(&str, Json)]) -> (Settings, Arc<FakeSource>) {
     let source = Arc::new(FakeSource::new(doc("desktop", 1, desktop)).unwrap());
-    let sources: BTreeMap<String, Arc<dyn Source>> =
-        BTreeMap::from([("desktop".into(), source.clone() as Arc<dyn Source>)]);
+    let mut sources: BTreeMap<String, Arc<dyn Source>> = BTreeMap::from([(
+        "settings.store.desktop".to_string(),
+        source.clone() as Arc<dyn Source>,
+    )]);
+    for (name, data) in topics {
+        sources.insert(
+            (*name).into(),
+            Arc::new(FakeSource::new(data.clone()).unwrap()),
+        );
+    }
     (
         Settings::new(None, &root()).unwrap().with_sources(sources),
         source,
@@ -104,8 +116,8 @@ fn notifications_page_and_search_use_the_same_registry_data() {
     let none = settings.project(&stores("appearance", "zzzzqqq"));
     assert_eq!(none["settings.empty"], Value::Bool(true));
     // Pages Bead cannot edit yet are shown read-only, never writable.
-    let network = settings.project(&stores("network", ""));
-    assert_eq!(network["settings.readonly"], Value::Bool(true));
+    let displays = settings.project(&stores("displays", ""));
+    assert_eq!(displays["settings.readonly"], Value::Bool(true));
 }
 
 const DESKTOP: &str = "settings.store.desktop";
@@ -242,8 +254,8 @@ async fn store_read_write_round_trip_over_the_wire_and_live_updates() {
         "store change woke the window"
     );
     assert_eq!(model["settings.message"], Value::Text(String::new()));
-    // Pages Bead does not edit never send a call.
-    settings.act("set:keyboard-mouse.touchpad.naturalScroll", "", wake());
+    // Rows the daemon has no contract for (a helper adapter) never send a call.
+    settings.act("set:keyboard-mouse.keyboard.keyboardLayouts", "x", wake());
     assert!(calls.try_recv().is_err());
     // B0058: a reorderable list sends the whole swapped array; the first entry cannot move up.
     let apps = stores("apps", "");
@@ -332,9 +344,10 @@ fn panels_windows_date_and_lock_pages_follow_the_registry() {
         row(&dt, "date-time-language.locale.language")["kind"],
         "choice"
     );
-    // Lock and login stays view only (the locker is external; login theme install is privileged).
-    let lock = settings.project(&stores("lock-login", ""));
-    assert_eq!(lock["settings.readonly"], Value::Bool(true));
+    // Lock and login (B0063): the four lock options are plain desktop store rows.
+    let lock = items(&settings.project(&stores("lock-login", "")));
+    assert_eq!(row(&lock, "lock-login.widgets.lockMedia")["kind"], "toggle");
+    assert_eq!(row(&lock, "lock-login.widgets.lockMedia")["enabled"], true);
 }
 
 /// B0058 slice 2: launcher, apps and the dashboard sub-pages.
@@ -397,7 +410,12 @@ fn closing_releases_every_store_source() {
     assert!(weak.upgrade().is_none());
 }
 
-fn harness(model: BTreeMap<String, Value>, width: u32, height: u32, scale: f32) -> Harness {
+pub(crate) fn harness(
+    model: BTreeMap<String, Value>,
+    width: u32,
+    height: u32,
+    scale: f32,
+) -> Harness {
     // The built-in English table is installed once per process; do not race another test to it.
     crate::i18n::init();
     Harness::load(
@@ -413,7 +431,7 @@ fn harness(model: BTreeMap<String, Value>, width: u32, height: u32, scale: f32) 
     )
     .unwrap()
 }
-fn golden(name: &str, h: &mut Harness) {
+pub(crate) fn golden(name: &str, h: &mut Harness) {
     // The window fills its surface: no panel shadow inset.
     let frame = h.pose((0., 0.), 1.).unwrap();
     let path = root().join(format!("tests/goldens/{name}.png"));

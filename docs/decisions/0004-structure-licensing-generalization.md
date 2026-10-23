@@ -88,6 +88,11 @@ After Bead's core switch on Nacre, plan support for:
 - B0055: `kit.ActionButton` (text button for forms and prompts, shared by the Wi-Fi and Bluetooth pages).
   The Bluetooth flow lives only in `nacre-shell/src/status_views/pairing.rs`.
 
+- B0063: `kit.InfoRow`, `kit.ChipsRow`, `kit.DeviceRow` (icon, title, detail, buttons, optional slider line), `kit.PickerList`
+  (filter field plus entries, the zone picker) and `kit.SecretRow`; per-option `enabled` in `kit.ChoiceRow`. The registry engine
+  evaluates `visibleWhen`/`enabledWhen` against a flag map; which flags exist and the topics and methods behind each custom
+  section stay in `nacre-shell/src/settings/pages.rs`.
+
 - B0048: `bead_core::pearl` (magnet/landing/place geometry, drag state machine, layout store) and
   `bead_wayland::pearls` (detach/dock any panel session into a floating surface, guide slots). Edge, insets,
   tunings and the allowed views come from the application; the film/landing/border art is Nacre-specific in

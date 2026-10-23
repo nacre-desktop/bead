@@ -33,6 +33,8 @@ mod reload;
 mod session_menu;
 mod settings;
 #[cfg(test)]
+mod settings_pages_tests;
+#[cfg(test)]
 mod settings_tests;
 mod shell_control;
 mod sound;

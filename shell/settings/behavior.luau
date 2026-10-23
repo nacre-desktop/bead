@@ -5,7 +5,8 @@ return {stores={
     ["settings.page"]="",["settings.search"]="",["settings.edit.text"]="",
     ["settings.scroll"]=0,["settings.nav.scroll"]=0,
     ["settings.nav"]={},["settings.items"]={},
-    ["settings.title"]="",["settings.description"]="",["settings.message"]="",
+    ["settings.title"]="",["settings.description"]="",["settings.message"]="",["settings.notice"]="",["settings.noticed"]=false,
+    ["settings.pick.text"]="",["settings.secret"]="",["settings.reveal"]=false,
     ["settings.writable"]=false,["settings.readonly"]=false,["settings.searching"]=false,["settings.empty"]=false,
 },actions={
     -- The Settings adapter authorizes and handles this host action (page, edit, set, apply).
