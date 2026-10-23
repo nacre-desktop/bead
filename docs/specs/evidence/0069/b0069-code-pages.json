@@ -1,0 +1,1061 @@
+{
+ "note": "B0069 raw summaries (desktop nested niri in headless labwc, CPU renderer, no daemon). cp = shell with the 3 s code-page release (HEAD 8408786), nocp = identical tree without the timer. In variant files 'cp' is the code-size variant mixfatn (opt-level s except hot render crates, fat LTO, no timer) and 'nocp' the baseline without the timer.",
+ "latency_5_pairs_2_cycles_each": {
+  "renderer": "cpu (tiny-skia), no daemon, nested niri in headless labwc",
+  "idle_s": 12.0,
+  "launcher_open": {
+   "cp": {
+    "ms": 12.89,
+    "minflt": 5209.5,
+    "majflt": 0.0,
+    "cpu_ms": 85.0,
+    "n": 10,
+    "ms_all": [
+     12.6,
+     12.6,
+     12.6,
+     12.6,
+     12.8,
+     13.0,
+     13.0,
+     13.1,
+     13.1,
+     13.1
+    ]
+   },
+   "nocp": {
+    "ms": 12.77,
+    "minflt": 5133.0,
+    "majflt": 0.0,
+    "cpu_ms": 90.0,
+    "n": 10,
+    "ms_all": [
+     12.6,
+     12.7,
+     12.7,
+     12.7,
+     12.8,
+     12.8,
+     12.9,
+     13.0,
+     13.5,
+     13.6
+    ]
+   }
+  },
+  "key_a": {
+   "cp": {
+    "ms": 9.81,
+    "ui_cpu_ms": 9.34,
+    "minflt": 939.5,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 10,
+    "ms_all": [
+     9.7,
+     9.7,
+     9.7,
+     9.8,
+     9.8,
+     9.8,
+     9.9,
+     9.9,
+     10.0,
+     10.0
+    ]
+   },
+   "nocp": {
+    "ms": 9.79,
+    "ui_cpu_ms": 9.34,
+    "minflt": 916.0,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 10,
+    "ms_all": [
+     9.7,
+     9.7,
+     9.8,
+     9.8,
+     9.8,
+     9.8,
+     9.8,
+     9.9,
+     10.0,
+     10.0
+    ]
+   }
+  },
+  "key_back": {
+   "cp": {
+    "ms": 11.52,
+    "ui_cpu_ms": 8.36,
+    "minflt": 285.0,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 10,
+    "ms_all": [
+     11.4,
+     11.4,
+     11.4,
+     11.5,
+     11.5,
+     11.5,
+     11.6,
+     11.6,
+     11.6,
+     11.7
+    ]
+   },
+   "nocp": {
+    "ms": 11.51,
+    "ui_cpu_ms": 8.35,
+    "minflt": 290.0,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 10,
+    "ms_all": [
+     11.3,
+     11.4,
+     11.5,
+     11.5,
+     11.5,
+     11.5,
+     11.7,
+     11.7,
+     11.8,
+     11.8
+    ]
+   }
+  },
+  "dashboard_open": {
+   "cp": {
+    "ms": 12.54,
+    "minflt": 5323.5,
+    "majflt": 0.0,
+    "cpu_ms": 70.0,
+    "n": 10,
+    "ms_all": [
+     12.2,
+     12.3,
+     12.5,
+     12.5,
+     12.5,
+     12.6,
+     12.7,
+     12.7,
+     12.7,
+     12.7
+    ]
+   },
+   "nocp": {
+    "ms": 12.46,
+    "minflt": 5279.0,
+    "majflt": 0.0,
+    "cpu_ms": 70.0,
+    "n": 10,
+    "ms_all": [
+     12.2,
+     12.3,
+     12.4,
+     12.4,
+     12.5,
+     12.5,
+     12.6,
+     12.6,
+     12.6,
+     12.6
+    ]
+   }
+  }
+ },
+ "idle_cpu_2_pairs_300s": {
+  "cp": {
+   "cpu_ms_per_300s": [
+    410.0,
+    410.0
+   ],
+   "minflt_per_300s": [
+    26632,
+    26480
+   ],
+   "majflt": [
+    0,
+    0
+   ],
+   "ctxt_per_300s": [
+    342,
+    340
+   ],
+   "pss_end_mib": [
+    13.42,
+    13.27
+   ],
+   "madvise_calls_per_release_and_kib": [
+    63,
+    35660
+   ]
+  },
+  "nocp": {
+   "cpu_ms_per_300s": [
+    270.0,
+    260.0
+   ],
+   "minflt_per_300s": [
+    14646,
+    14813
+   ],
+   "majflt": [
+    0,
+    0
+   ],
+   "ctxt_per_300s": [
+    335,
+    333
+   ],
+   "pss_end_mib": [
+    27.14,
+    27.49
+   ],
+   "madvise_calls_per_release_and_kib": [
+    63,
+    35652
+   ]
+  }
+ },
+ "accounting_3_pairs_pss_mib": {
+  "idle": {
+   "cp": {
+    "anon": 5.6,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 3.73,
+    "file_clean_other": 1.62,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 11.27,
+    "rollup_pss_anon": 5.6,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.02
+   },
+   "nocp": {
+    "anon": 5.45,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 19.4,
+    "file_clean_other": 1.6,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 26.69,
+    "rollup_pss_anon": 5.45,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.03
+   }
+  },
+  "after_open_close": {
+   "cp": {
+    "anon": 6.94,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 1.71,
+    "file_clean_other": 0.56,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 9.55,
+    "rollup_pss_anon": 6.94,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.01
+   },
+   "nocp": {
+    "anon": 6.44,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 20.38,
+    "file_clean_other": 0.56,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 27.72,
+    "rollup_pss_anon": 6.44,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.03
+   }
+  }
+ },
+ "variant_accounting_2_pairs_pss_mib": {
+  "idle": {
+   "cp": {
+    "anon": 5.45,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 17.22,
+    "file_clean_other": 1.6,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 24.51,
+    "rollup_pss_anon": 5.45,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.03
+   },
+   "nocp": {
+    "anon": 5.54,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 19.5,
+    "file_clean_other": 1.56,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 26.84,
+    "rollup_pss_anon": 5.54,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.03
+   }
+  },
+  "after_open_close": {
+   "cp": {
+    "anon": 6.38,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 17.52,
+    "file_clean_other": 0.56,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 24.69,
+    "rollup_pss_anon": 6.38,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.03
+   },
+   "nocp": {
+    "anon": 6.43,
+    "file_dirty": 0.0,
+    "file_clean_text_rodata": 20.5,
+    "file_clean_other": 0.56,
+    "shmem": 0.21,
+    "drm_kib_to_mib": 0.0,
+    "pss_total": 27.71,
+    "rollup_pss_anon": 6.43,
+    "rollup_pss_shmem": 0.21,
+    "anon_heap_and_unmapped_other": 0.03
+   }
+  }
+ },
+ "variant_latency_3_pairs": {
+  "renderer": "cpu (tiny-skia), no daemon, nested niri in headless labwc",
+  "idle_s": 12.0,
+  "launcher_open": {
+   "cp": {
+    "ms": 12.82,
+    "minflt": 5172.0,
+    "majflt": 0.0,
+    "cpu_ms": 90.0,
+    "n": 6,
+    "ms_all": [
+     12.7,
+     12.8,
+     12.8,
+     12.8,
+     13.5,
+     13.7
+    ]
+   },
+   "nocp": {
+    "ms": 12.75,
+    "minflt": 5115.0,
+    "majflt": 0.0,
+    "cpu_ms": 90.0,
+    "n": 6,
+    "ms_all": [
+     12.5,
+     12.6,
+     12.7,
+     12.8,
+     12.9,
+     13.0
+    ]
+   }
+  },
+  "key_a": {
+   "cp": {
+    "ms": 9.68,
+    "ui_cpu_ms": 9.2,
+    "minflt": 916.0,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 6,
+    "ms_all": [
+     9.6,
+     9.6,
+     9.7,
+     9.7,
+     9.7,
+     9.8
+    ]
+   },
+   "nocp": {
+    "ms": 9.82,
+    "ui_cpu_ms": 9.38,
+    "minflt": 951.5,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 6,
+    "ms_all": [
+     9.8,
+     9.8,
+     9.8,
+     9.8,
+     9.9,
+     10.0
+    ]
+   }
+  },
+  "key_back": {
+   "cp": {
+    "ms": 11.49,
+    "ui_cpu_ms": 8.3,
+    "minflt": 283.0,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 6,
+    "ms_all": [
+     11.4,
+     11.4,
+     11.5,
+     11.5,
+     11.6,
+     11.8
+    ]
+   },
+   "nocp": {
+    "ms": 11.58,
+    "ui_cpu_ms": 8.4,
+    "minflt": 332.5,
+    "majflt": 0.0,
+    "cpu_ms": 10.0,
+    "n": 6,
+    "ms_all": [
+     11.5,
+     11.5,
+     11.5,
+     11.6,
+     11.8,
+     11.8
+    ]
+   }
+  },
+  "dashboard_open": {
+   "cp": {
+    "ms": 12.69,
+    "minflt": 5310.5,
+    "majflt": 0.0,
+    "cpu_ms": 70.0,
+    "n": 6,
+    "ms_all": [
+     12.3,
+     12.5,
+     12.7,
+     12.7,
+     12.8,
+     13.1
+    ]
+   },
+   "nocp": {
+    "ms": 12.52,
+    "minflt": 5173.0,
+    "majflt": 0.0,
+    "cpu_ms": 70.0,
+    "n": 6,
+    "ms_all": [
+     12.3,
+     12.3,
+     12.4,
+     12.6,
+     12.7,
+     12.7
+    ]
+   }
+  }
+ },
+ "cgroup_pressure_3_pairs": [
+  {
+   "label": "cp",
+   "limit": "471859200",
+   "idle": {
+    "current": 170.45703125,
+    "host_mem_available": 12078.3,
+    "host_mapped": 337.8,
+    "host_cached": 7399.9,
+    "anon": 116.71,
+    "file": 44.43,
+    "file_mapped": 19.52,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.0,
+    "inactive_file": 25.84,
+    "pss": 10.9091796875,
+    "binary_cached_mib": 25.09375
+   },
+   "after_file_pressure": {
+    "current": 395.890625,
+    "host_mem_available": 12096.6,
+    "host_mapped": 337.8,
+    "host_cached": 7626.0,
+    "anon": 116.24,
+    "file": 270.55,
+    "file_mapped": 19.52,
+    "shmem": 18.61,
+    "file_dirty": 0.01,
+    "active_file": 0.01,
+    "inactive_file": 251.95,
+    "pss": 10.4365234375,
+    "binary_cached_mib": 25.03125
+   },
+   "reopen_launcher": {
+    "ms": 12.752952,
+    "ipc_rc": 0,
+    "minflt": 5030,
+    "majflt": 0,
+    "cpu_ms": 80.0,
+    "ctxt": 31
+   },
+   "reopen_key": {
+    "received": false,
+    "minflt": 299,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 16
+   },
+   "hog_mib": 204,
+   "during_anon_pressure": {
+    "current": 378.8984375,
+    "host_mem_available": 11893.6,
+    "host_mapped": 336.2,
+    "host_cached": 7400.3,
+    "anon": 324.11,
+    "file": 44.85,
+    "file_mapped": 18.71,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.01,
+    "inactive_file": 26.25,
+    "pss": 9.5576171875,
+    "binary_cached_mib": 25.09375
+   },
+   "pressured_launcher": {
+    "ms": 12.412903,
+    "ipc_rc": 0,
+    "minflt": 3925,
+    "majflt": 0,
+    "cpu_ms": 70.0,
+    "ctxt": 29
+   },
+   "pressured_key": {
+    "received": false,
+    "minflt": 95,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 10
+   },
+   "after_reopen": {
+    "current": 391.9921875,
+    "host_mem_available": 11883.0,
+    "host_mapped": 355.4,
+    "host_cached": 7405.9,
+    "anon": 330.92,
+    "file": 50.48,
+    "file_mapped": 36.31,
+    "shmem": 24.23,
+    "file_dirty": 0.02,
+    "active_file": 0.01,
+    "inactive_file": 26.27,
+    "pss": 33.349609375,
+    "binary_cached_mib": 25.09375
+   }
+  },
+  {
+   "label": "nocp",
+   "limit": "471859200",
+   "idle": {
+    "current": 176.42578125,
+    "host_mem_available": 12090.6,
+    "host_mapped": 352.8,
+    "host_cached": 7400.4,
+    "anon": 121.05,
+    "file": 45.68,
+    "file_mapped": 34.72,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.01,
+    "inactive_file": 27.08,
+    "pss": 27.1611328125,
+    "binary_cached_mib": 25.1015625
+   },
+   "after_file_pressure": {
+    "current": 395.9296875,
+    "host_mem_available": 12096.7,
+    "host_mapped": 352.8,
+    "host_cached": 7620.2,
+    "anon": 121.05,
+    "file": 265.48,
+    "file_mapped": 34.72,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.26,
+    "inactive_file": 246.63,
+    "pss": 27.1650390625,
+    "binary_cached_mib": 25.1015625
+   },
+   "reopen_launcher": {
+    "ms": 12.556363,
+    "ipc_rc": 0,
+    "minflt": 4938,
+    "majflt": 0,
+    "cpu_ms": 80.0,
+    "ctxt": 33
+   },
+   "reopen_key": {
+    "received": true,
+    "minflt": 640,
+    "majflt": 0,
+    "cpu_ms": 10.0,
+    "ctxt": 15,
+    "ms": 5.512117,
+    "ui_cpu_ms": 3.874219
+   },
+   "hog_mib": 199,
+   "during_anon_pressure": {
+    "current": 379.05078125,
+    "host_mem_available": 11899.1,
+    "host_mapped": 352.8,
+    "host_cached": 7400.7,
+    "anon": 323.53,
+    "file": 46.05,
+    "file_mapped": 34.72,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.26,
+    "inactive_file": 27.2,
+    "pss": 27.5673828125,
+    "binary_cached_mib": 25.1015625
+   },
+   "pressured_launcher": {
+    "ms": 12.306642,
+    "ipc_rc": 0,
+    "minflt": 3750,
+    "majflt": 0,
+    "cpu_ms": 70.0,
+    "ctxt": 30
+   },
+   "pressured_key": {
+    "received": true,
+    "minflt": 90,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 10,
+    "ms": 4.588468,
+    "ui_cpu_ms": 2.130411
+   },
+   "after_reopen": {
+    "current": 392.47265625,
+    "host_mem_available": 11878.2,
+    "host_mapped": 359.3,
+    "host_cached": 7406.4,
+    "anon": 330.64,
+    "file": 51.68,
+    "file_mapped": 40.34,
+    "shmem": 24.23,
+    "file_dirty": 0.02,
+    "active_file": 0.26,
+    "inactive_file": 27.21,
+    "pss": 38.5478515625,
+    "binary_cached_mib": 25.1015625
+   }
+  },
+  {
+   "label": "nocp",
+   "limit": "471859200",
+   "idle": {
+    "current": 175.2109375,
+    "host_mem_available": 12091.4,
+    "host_mapped": 353.3,
+    "host_cached": 7400.9,
+    "anon": 118.7,
+    "file": 46.87,
+    "file_mapped": 35.21,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.01,
+    "inactive_file": 28.27,
+    "pss": 27.6123046875,
+    "binary_cached_mib": 25.1015625
+   },
+   "after_file_pressure": {
+    "current": 395.7265625,
+    "host_mem_available": 12095.8,
+    "host_mapped": 353.3,
+    "host_cached": 7621.8,
+    "anon": 118.71,
+    "file": 267.81,
+    "file_mapped": 35.21,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.27,
+    "inactive_file": 248.96,
+    "pss": 27.625,
+    "binary_cached_mib": 25.1015625
+   },
+   "reopen_launcher": {
+    "ms": 12.402803,
+    "ipc_rc": 0,
+    "minflt": 4922,
+    "majflt": 0,
+    "cpu_ms": 70.0,
+    "ctxt": 27
+   },
+   "reopen_key": {
+    "received": true,
+    "minflt": 618,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 10,
+    "ms": 5.448566,
+    "ui_cpu_ms": 3.803419
+   },
+   "hog_mib": 201,
+   "during_anon_pressure": {
+    "current": 381.01953125,
+    "host_mem_available": 11877.7,
+    "host_mapped": 353.3,
+    "host_cached": 7401.2,
+    "anon": 323.86,
+    "file": 47.24,
+    "file_mapped": 35.21,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.27,
+    "inactive_file": 28.39,
+    "pss": 27.95703125,
+    "binary_cached_mib": 25.1015625
+   },
+   "pressured_launcher": {
+    "ms": 12.425382,
+    "ipc_rc": 0,
+    "minflt": 3742,
+    "majflt": 0,
+    "cpu_ms": 60.0,
+    "ctxt": 31
+   },
+   "pressured_key": {
+    "received": true,
+    "minflt": 85,
+    "majflt": 0,
+    "cpu_ms": 10.0,
+    "ctxt": 9,
+    "ms": 4.790288,
+    "ui_cpu_ms": 2.2404
+   },
+   "after_reopen": {
+    "current": 392.6171875,
+    "host_mem_available": 11868.2,
+    "host_mapped": 359.8,
+    "host_cached": 7406.9,
+    "anon": 329.11,
+    "file": 52.87,
+    "file_mapped": 40.83,
+    "shmem": 24.23,
+    "file_dirty": 0.02,
+    "active_file": 0.27,
+    "inactive_file": 28.4,
+    "pss": 38.85546875,
+    "binary_cached_mib": 25.1015625
+   }
+  },
+  {
+   "label": "cp",
+   "limit": "471859200",
+   "idle": {
+    "current": 174.48828125,
+    "host_mem_available": 12091.0,
+    "host_mapped": 337.9,
+    "host_cached": 7401.0,
+    "anon": 117.27,
+    "file": 47.77,
+    "file_mapped": 19.52,
+    "shmem": 18.61,
+    "file_dirty": 0.13,
+    "active_file": 0.02,
+    "inactive_file": 29.16,
+    "pss": 10.546875,
+    "binary_cached_mib": 25.09375
+   },
+   "after_file_pressure": {
+    "current": 395.64453125,
+    "host_mem_available": 12097.5,
+    "host_mapped": 337.9,
+    "host_cached": 7622.1,
+    "anon": 117.27,
+    "file": 268.86,
+    "file_mapped": 18.77,
+    "shmem": 18.61,
+    "file_dirty": 0.13,
+    "active_file": 0.14,
+    "inactive_file": 250.13,
+    "pss": 10.55078125,
+    "binary_cached_mib": 25.03125
+   },
+   "reopen_launcher": {
+    "ms": 12.771423,
+    "ipc_rc": 0,
+    "minflt": 5016,
+    "majflt": 0,
+    "cpu_ms": 70.0,
+    "ctxt": 33
+   },
+   "reopen_key": {
+    "received": true,
+    "minflt": 580,
+    "majflt": 0,
+    "cpu_ms": 20.0,
+    "ctxt": 17,
+    "ms": 5.610947,
+    "ui_cpu_ms": 3.826938
+   },
+   "hog_mib": 203,
+   "during_anon_pressure": {
+    "current": 382.34765625,
+    "host_mem_available": 11888.7,
+    "host_mapped": 336.4,
+    "host_cached": 7401.4,
+    "anon": 324.14,
+    "file": 48.14,
+    "file_mapped": 19.52,
+    "shmem": 18.61,
+    "file_dirty": 0.01,
+    "active_file": 0.14,
+    "inactive_file": 29.41,
+    "pss": 9.0302734375,
+    "binary_cached_mib": 25.09375
+   },
+   "pressured_launcher": {
+    "ms": 12.554132,
+    "ipc_rc": 0,
+    "minflt": 3921,
+    "majflt": 0,
+    "cpu_ms": 70.0,
+    "ctxt": 27
+   },
+   "pressured_key": {
+    "received": true,
+    "minflt": 85,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 10,
+    "ms": 4.687127,
+    "ui_cpu_ms": 2.13532
+   },
+   "after_reopen": {
+    "current": 395.26953125,
+    "host_mem_available": 11878.4,
+    "host_mapped": 355.3,
+    "host_cached": 7407.0,
+    "anon": 331.4,
+    "file": 53.77,
+    "file_mapped": 36.11,
+    "shmem": 24.23,
+    "file_dirty": 0.02,
+    "active_file": 0.14,
+    "inactive_file": 29.42,
+    "pss": 32.5908203125,
+    "binary_cached_mib": 25.09375
+   }
+  },
+  {
+   "label": "cp",
+   "limit": "471859200",
+   "idle": {
+    "current": 178.28125,
+    "host_mem_available": 12085.0,
+    "host_mapped": 337.7,
+    "host_cached": 7401.6,
+    "anon": 119.9,
+    "file": 48.89,
+    "file_mapped": 19.46,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.14,
+    "inactive_file": 30.16,
+    "pss": 11.19921875,
+    "binary_cached_mib": 25.09375
+   },
+   "after_file_pressure": {
+    "current": 395.234375,
+    "host_mem_available": 12087.9,
+    "host_mapped": 339.8,
+    "host_cached": 7618.5,
+    "anon": 119.92,
+    "file": 265.74,
+    "file_mapped": 21.79,
+    "shmem": 18.61,
+    "file_dirty": 0.01,
+    "active_file": 0.15,
+    "inactive_file": 247.0,
+    "pss": 13.54296875,
+    "binary_cached_mib": 25.03125
+   },
+   "reopen_launcher": {
+    "ms": 12.930402,
+    "ipc_rc": 0,
+    "minflt": 5018,
+    "majflt": 0,
+    "cpu_ms": 80.0,
+    "ctxt": 34
+   },
+   "reopen_key": {
+    "received": true,
+    "minflt": 609,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 12,
+    "ms": 5.525396,
+    "ui_cpu_ms": 3.746018
+   },
+   "hog_mib": 192,
+   "during_anon_pressure": {
+    "current": 382.1875,
+    "host_mem_available": 11885.6,
+    "host_mapped": 336.2,
+    "host_cached": 7402.0,
+    "anon": 323.78,
+    "file": 49.26,
+    "file_mapped": 18.71,
+    "shmem": 18.61,
+    "file_dirty": 0.14,
+    "active_file": 0.15,
+    "inactive_file": 30.53,
+    "pss": 9.9111328125,
+    "binary_cached_mib": 25.09375
+   },
+   "pressured_launcher": {
+    "ms": 12.578182,
+    "ipc_rc": 0,
+    "minflt": 3934,
+    "majflt": 0,
+    "cpu_ms": 70.0,
+    "ctxt": 30
+   },
+   "pressured_key": {
+    "received": true,
+    "minflt": 85,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 11,
+    "ms": 4.713567,
+    "ui_cpu_ms": 2.21387
+   },
+   "after_reopen": {
+    "current": 397.41796875,
+    "host_mem_available": 11867.3,
+    "host_mapped": 355.6,
+    "host_cached": 7405.7,
+    "anon": 333.77,
+    "file": 52.93,
+    "file_mapped": 36.53,
+    "shmem": 24.23,
+    "file_dirty": 0.0,
+    "active_file": 13.2,
+    "inactive_file": 15.53,
+    "pss": 33.9306640625,
+    "binary_cached_mib": 25.09375
+   }
+  },
+  {
+   "label": "nocp",
+   "limit": "471859200",
+   "idle": {
+    "current": 186.56640625,
+    "host_mem_available": 12070.9,
+    "host_mapped": 352.9,
+    "host_cached": 7400.1,
+    "anon": 128.53,
+    "file": 48.38,
+    "file_mapped": 35.0,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.0,
+    "inactive_file": 29.78,
+    "pss": 27.2744140625,
+    "binary_cached_mib": 25.1015625
+   },
+   "after_file_pressure": {
+    "current": 395.8046875,
+    "host_mem_available": 12079.1,
+    "host_mapped": 352.9,
+    "host_cached": 7609.6,
+    "anon": 128.53,
+    "file": 257.88,
+    "file_mapped": 35.0,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.26,
+    "inactive_file": 239.03,
+    "pss": 27.28125,
+    "binary_cached_mib": 25.1015625
+   },
+   "reopen_launcher": {
+    "ms": 12.131173,
+    "ipc_rc": 0,
+    "minflt": 4932,
+    "majflt": 0,
+    "cpu_ms": 80.0,
+    "ctxt": 39
+   },
+   "reopen_key": {
+    "received": true,
+    "minflt": 612,
+    "majflt": 0,
+    "cpu_ms": 0.0,
+    "ctxt": 12,
+    "ms": 5.524437,
+    "ui_cpu_ms": 3.766707
+   },
+   "hog_mib": 183,
+   "during_anon_pressure": {
+    "current": 388.6640625,
+    "host_mem_available": 11876.5,
+    "host_mapped": 352.8,
+    "host_cached": 7398.7,
+    "anon": 331.57,
+    "file": 46.93,
+    "file_mapped": 35.0,
+    "shmem": 18.61,
+    "file_dirty": 0.0,
+    "active_file": 0.26,
+    "inactive_file": 28.09,
+    "pss": 27.6796875,
+    "binary_cached_mib": 25.1015625
+   },
+   "pressured_launcher": {
+    "ms": 12.459893,
+    "ipc_rc": 0,
+    "minflt": 3767,
+    "majflt": 0,
+    "cpu_ms": 70.0,
+    "ctxt": 31
+   },
+   "pressured_key": {
+    "received": true,
+    "minflt": 91,
+    "majflt": 0,
+    "cpu_ms": 10.0,
+    "ctxt": 9,
+    "ms": 4.732587,
+    "ui_cpu_ms": 2.153511
+   },
+   "after_reopen": {
+    "current": 397.46484375,
+    "host_mem_available": 11871.6,
+    "host_mapped": 359.4,
+    "host_cached": 7401.0,
+    "anon": 336.96,
+    "file": 49.29,
+    "file_mapped": 40.61,
+    "shmem": 24.23,
+    "file_dirty": 0.02,
+    "active_file": 17.29,
+    "inactive_file": 7.79,
+    "pss": 38.75390625,
+    "binary_cached_mib": 22.9375
+   }
+  }
+ ]
+}
