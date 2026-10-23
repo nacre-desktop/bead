@@ -484,7 +484,7 @@ impl Settings {
                     .enumerate()
                     .map(|(i, o)| {
                         json!({"id": format!("{id}|{i}"), "label": self.registry.text(o, "labelId"),
-                            "selected": o["value"] == shown})
+                            "selected": o["value"] == shown, "enabled": self.allowed(o.get("enabledWhen"))})
                     })
                     .collect();
                 row["options"] = options.into();

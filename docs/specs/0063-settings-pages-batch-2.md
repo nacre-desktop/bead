@@ -50,7 +50,27 @@ send nothing, unadvertised methods send nothing. 17 goldens `settings-*` (CPU re
 
 ## Look-and-feel parity (item 5)
 
-See "Parity" below (filled in with the nested comparison or the stated gap).
+`spikes/parity-compare.py` has one state per Settings page (`settings-<page>`, deep link in both shells). Run on the desktop
+(nested niri, QML at Nacre `57b3b1fe`, Bead release build of this branch, same helper): sound, network, date-time-language,
+notifications; gallery `~/nacre-lead/b0063/g1/index.html` on the desktop (rmse 7.4-9.1 %). Gaps found, the same on every page,
+**not fixed in this unit** (they are shell-wide layout, not per-page):
+
+1. QML window has a title header (logo, "Nacre Settings", current page name); Bead has none.
+2. QML groups each section in a raised rounded card with a medium-weight title; Bead draws flat section headings. Needs the adapter
+   to project sections as nested rows and a kit `Card`-style section (follow-up unit).
+3. QML sidebar is larger (taller items, search box with border, scrollbar); Bead's is denser.
+4. QML rows show a muted "unavailable / enable X first" caption when a row is off; Bead only dims.
+5. In the nested session the daemon has no audio/network data, so device lists were empty in both (QML "No audio devices
+   available."; Bead "Settings cannot be changed right now"): device content was compared only through goldens, not live.
+Remaining pages (lock-login, privacy, keyboard-mouse, power, system, nacre-ai, addons, bluetooth, workflows) were not run: the
+harness states exist, the desktop lock queue was long.
+
+## CI
+
+Arch container on dev-2 (the full `ci.yml` job): fmt, clippy -D warnings, boundary, workspace tests (445 in nacre-shell), memory
+policy, features, minimal, Luau analyze, packaging, services, tray bus and all cargo-deny runs passed. Environment-only failures
+in the Arch container: `wallpaper-video-smoke` (`fallback_visible_after_kill`, untouched code, fails identically on rerun) and
+the two spikes tests needed `git safe.directory` (passed after). Hosted CI on main decides.
 
 ## Temporary duplicates
 
