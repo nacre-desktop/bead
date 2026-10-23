@@ -76,67 +76,71 @@ impl App {
         if let Err(error) = self.loop_handle.insert_source(
             Timer::from_duration(shm_compact_idle(surface)),
             move |_, _, app| {
-                let Some(index) = app
-                    .surfaces
-                    .iter()
-                    .position(|s| s.layer.wl_surface() == &identity)
-                else {
-                    return TimeoutAction::Drop;
-                };
-                let surface = &mut app.surfaces[index];
-                if surface.callbacks.pending
-                    || surface
-                        .last_callback
-                        .is_none_or(|last| last.elapsed() < shm_compact_idle(surface))
-                {
-                    if Instant::now() < expires {
-                        let quiet = shm_compact_idle(surface);
-                        let wait = surface
+                // The surface may belong to a pearl that is not swapped in right now.
+                app.on_surface(&identity, |app| {
+                    let Some(index) = app
+                        .surfaces
+                        .iter()
+                        .position(|s| s.layer.wl_surface() == &identity)
+                    else {
+                        return TimeoutAction::Drop;
+                    };
+                    let surface = &mut app.surfaces[index];
+                    if surface.callbacks.pending
+                        || surface
                             .last_callback
-                            .map_or(quiet, |last| quiet.saturating_sub(last.elapsed()));
-                        return TimeoutAction::ToDuration(wait.max(Duration::from_millis(100)));
+                            .is_none_or(|last| last.elapsed() < shm_compact_idle(surface))
+                    {
+                        if Instant::now() < expires {
+                            let quiet = shm_compact_idle(surface);
+                            let wait = surface
+                                .last_callback
+                                .map_or(quiet, |last| quiet.saturating_sub(last.elapsed()));
+                            return TimeoutAction::ToDuration(wait.max(Duration::from_millis(100)));
+                        }
+                        surface.shm_trim_pending = false;
+                        return TimeoutAction::Drop;
                     }
                     surface.shm_trim_pending = false;
-                    return TimeoutAction::Drop;
-                }
-                surface.shm_trim_pending = false;
-                surface.heap_trimmed_ui_serial = surface.ui_serial;
-                if surface
-                    .buffers
-                    .iter()
-                    .filter(|buffer| buffer.painted)
-                    .count()
-                    <= 1
-                {
+                    surface.heap_trimmed_ui_serial = surface.ui_serial;
+                    if surface
+                        .buffers
+                        .iter()
+                        .filter(|buffer| buffer.painted)
+                        .count()
+                        <= 1
+                    {
+                        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                        unsafe {
+                            libc::malloc_trim(0);
+                        }
+                        return TimeoutAction::Drop;
+                    }
+                    // An idle burst can have touched several reusable slots. Retire
+                    // that pool and repaint one current frame, instead of retaining
+                    // spare frame pages indefinitely. Active old buffers remain
+                    // compositor-owned until release, as during a geometry change.
+                    let pool = match SlotPool::new(4096, &app.shm) {
+                        Ok(pool) => pool,
+                        Err(error) => {
+                            app.fail(error);
+                            return TimeoutAction::Drop;
+                        }
+                    };
+                    surface.buffers.clear();
+                    surface.pool = pool;
+                    surface.previous = None;
+                    surface.visual_damage = Default::default();
+                    surface.redraw = true;
+                    println!("SHM_POOL_COMPACT output={}", surface.output_name);
+                    app.draw(index, &qh);
                     #[cfg(all(target_os = "linux", target_env = "gnu"))]
                     unsafe {
                         libc::malloc_trim(0);
                     }
-                    return TimeoutAction::Drop;
-                }
-                // An idle burst can have touched several reusable slots. Retire
-                // that pool and repaint one current frame, instead of retaining
-                // spare frame pages indefinitely. Active old buffers remain
-                // compositor-owned until release, as during a geometry change.
-                let pool = match SlotPool::new(4096, &app.shm) {
-                    Ok(pool) => pool,
-                    Err(error) => {
-                        app.fail(error);
-                        return TimeoutAction::Drop;
-                    }
-                };
-                surface.buffers.clear();
-                surface.pool = pool;
-                surface.previous = None;
-                surface.visual_damage = Default::default();
-                surface.redraw = true;
-                println!("SHM_POOL_COMPACT output={}", surface.output_name);
-                app.draw(index, &qh);
-                #[cfg(all(target_os = "linux", target_env = "gnu"))]
-                unsafe {
-                    libc::malloc_trim(0);
-                }
-                TimeoutAction::Drop
+                    TimeoutAction::Drop
+                })
+                .unwrap_or(TimeoutAction::Drop)
             },
         ) {
             self.surfaces[index].shm_trim_pending = false;
@@ -1032,13 +1036,14 @@ impl App {
             if let Err(error) = self.loop_handle.insert_source(
                 Timer::from_duration(Duration::from_millis(500)),
                 move |_, _, app| {
+                    // A pearl's renderer is only in `app.companion` while its slot is swapped in.
                     let remaining = if companion {
-                        if app.panel_epoch != epoch {
-                            return TimeoutAction::Drop;
-                        }
-                        app.companion
-                            .as_mut()
-                            .and_then(|(_, r, _)| r.trim_transient_idle())
+                        app.with_epoch(epoch, |app| {
+                            app.companion
+                                .as_mut()
+                                .and_then(|(_, r, _)| r.trim_transient_idle())
+                        })
+                        .flatten()
                     } else {
                         app.renderer.trim_transient_idle()
                     };

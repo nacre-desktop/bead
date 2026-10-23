@@ -221,16 +221,16 @@ impl App {
             .and_then(|g| g.id())
     }
     /// Run `f` against the panel a worker epoch belongs to.
-    pub(super) fn with_epoch(&mut self, epoch: u64, f: impl FnOnce(&mut App)) {
+    pub(super) fn with_epoch<R>(&mut self, epoch: u64, f: impl FnOnce(&mut App) -> R) -> Option<R> {
         if self.panel_epoch == epoch && self.panel_runtime.is_some() {
-            f(self);
-        } else if let Some(id) = self
-            .slots
-            .iter()
-            .find(|g| g.epoch == epoch)
-            .and_then(|g| g.id())
-        {
-            self.in_slot(id, f);
+            Some(f(self))
+        } else {
+            let id = self
+                .slots
+                .iter()
+                .find(|g| g.epoch == epoch)
+                .and_then(|g| g.id())?;
+            self.in_slot(id, f)
         }
     }
     pub(super) fn pearls_on(&self) -> bool {
@@ -487,8 +487,21 @@ impl App {
         Ok(())
     }
     pub(super) fn close_pearl(&mut self, id: u32) -> Result<(), String> {
+        let output = self
+            .slots
+            .iter()
+            .find(|g| g.id() == Some(id))
+            .and_then(|g| g.output.clone());
         self.in_slot(id, |app| app.release_panel())
             .ok_or("no such pearl")?;
+        // Opening a panel wakes the primary view; `release_panel` leaves that to the
+        // last panel out, which for a pearl can only be known here.
+        if self.panel_runtime.is_none()
+            && !self.slots.iter().any(|g| g.is_pearl())
+            && let Some(output) = output
+        {
+            self.primary_idle(&output, true);
+        }
         Ok(())
     }
     pub(super) fn pearl_listing(&self) -> serde_json::Value {
@@ -612,8 +625,7 @@ impl App {
         self.swap_group(&mut g);
         let started = self.start_panel(Some(&monitor.name), true);
         if started.is_ok() {
-            self.panel_ui(UiEvent::PanelDetached(true));
-            self.place_pearl_surfaces();
+            self.become_pearl();
         }
         self.swap_group(&mut g);
         started?;
@@ -625,7 +637,7 @@ impl App {
     // ---- pointer gestures ----------------------------------------------------
 
     /// Run `f` with the group that owns `surface` in place (the resident one, or a slot).
-    fn on_surface<R>(
+    pub(super) fn on_surface<R>(
         &mut self,
         surface: &wl_surface::WlSurface,
         f: impl FnOnce(&mut App) -> R,

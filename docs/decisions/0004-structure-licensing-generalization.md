@@ -89,7 +89,8 @@ After Bead's core switch on Nacre, plan support for:
 - B0048: `bead_core::pearl` (magnet/landing/place geometry, drag state machine, layout store) and
   `bead_wayland::pearls` (detach/dock any panel session into a floating surface, guide slots). Edge, insets,
   tunings and the allowed views come from the application; the film/landing/border art is Nacre-specific in
-  `nacre-shell/src/pearls.rs` and is not yet a replaceable kit component.
+  `nacre-shell/src/pearls.rs` and is not yet a replaceable kit component (B0054 cut the border into small pieces
+  for memory; it is still Rust-generated SVG).
 
 - B0052: `bead_wayland::Options::app` (on-demand app process: no primary surface, opens one window or the default
   panel at start with its arguments, ends when it closes). Product-agnostic; the launch, single-instance and

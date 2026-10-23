@@ -86,21 +86,49 @@ fn blend(base: [u8; 4], over: [u8; 4], strength: f32) -> [u8; 4] {
     })
 }
 
-/// The pearl body: the surface, and a two-pixel border that is the outline at rest
-/// and the accent gradient when the pearl is focused or hovered.
-pub fn body_svg(w: f32, h: f32, ink: &Ink, engaged: bool) -> String {
+/// Thickness of the pearl border.
+const BORDER: f32 = 2.;
+
+/// The pearl border: a two-pixel ring that is the outline at rest and the accent
+/// gradient when the pearl is focused or hovered. It is cut into four corners and
+/// four edges (each overlapping its neighbour by a pixel) so that no raster is as
+/// large as the body; the fill is the panel's own root background. Rects are
+/// relative to the body. A body too small to cut gets the whole ring.
+pub fn border_svgs(w: f32, h: f32, ink: &Ink, engaged: bool) -> Vec<(Rect, String)> {
     let strength = if engaged { 1. } else { 0. };
     let a = blend(ink.outline, ink.accent, strength);
     let b = blend(ink.outline, ink.secondary, strength);
-    format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}"><defs><linearGradient id="b" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{w}" y2="{h}">{}{}</linearGradient></defs><rect width="{w}" height="{h}" rx="{RADIUS}" fill="{}"/><rect x="1" y="1" width="{}" height="{}" rx="{}" fill="none" stroke="url(#b)" stroke-width="2"/></svg>"#,
-        stop(0., a, 1.),
-        stop(1., b, 1.),
-        rgb(ink.body),
-        (w - 2.).max(1.),
-        (h - 2.).max(1.),
-        RADIUS - 1.
-    )
+    let (inner_w, inner_h) = ((w - 2.).max(1.), (h - 2.).max(1.));
+    let ring = |crop: Rect| {
+        format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="{} {} {} {}"><defs><linearGradient id="b" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{w}" y2="{h}">{}{}</linearGradient></defs><rect x="1" y="1" width="{inner_w}" height="{inner_h}" rx="{}" fill="none" stroke="url(#b)" stroke-width="{BORDER}"/></svg>"#,
+            crop.w,
+            crop.h,
+            crop.x,
+            crop.y,
+            crop.w,
+            crop.h,
+            stop(0., a, 1.),
+            stop(1., b, 1.),
+            RADIUS - 1.
+        )
+    };
+    let r = RADIUS;
+    let pieces = if w < 2. * r + 2. || h < 2. * r + 2. {
+        vec![Rect::new(0., 0., w, h)]
+    } else {
+        vec![
+            Rect::new(0., 0., r, r),
+            Rect::new(w - r, 0., r, r),
+            Rect::new(0., h - r, r, r),
+            Rect::new(w - r, h - r, r, r),
+            Rect::new(r - 1., 0., w - 2. * r + 2., BORDER),
+            Rect::new(r - 1., h - BORDER, w - 2. * r + 2., BORDER),
+            Rect::new(0., r - 1., BORDER, h - 2. * r + 2.),
+            Rect::new(w - BORDER, r - 1., BORDER, h - 2. * r + 2.),
+        ]
+    };
+    pieces.into_iter().map(|rect| (rect, ring(rect))).collect()
 }
 
 /// A point in (along, across) order: x then y for a horizontal edge's film.
@@ -427,12 +455,23 @@ mod tests {
     #[test]
     fn the_border_is_the_outline_at_rest_and_the_accent_when_engaged() {
         let ink = ink();
-        let rest = body_svg(400., 300., &ink, false);
-        let hot = body_svg(400., 300., &ink, true);
-        assert!(rest.contains(&rgb(ink.outline)) && !rest.contains(&rgb(ink.accent)));
-        assert!(hot.contains(&rgb(ink.accent)) && hot.contains(&rgb(ink.secondary)));
-        assert!(rest.contains(r#"rx="18""#) && rest.contains(r#"width="398""#));
-        assert!(rest.len() < 1200);
+        let rest = border_svgs(400., 300., &ink, false);
+        let hot = border_svgs(400., 300., &ink, true);
+        let text =
+            |pieces: &[(Rect, String)]| pieces.iter().map(|(_, s)| s.as_str()).collect::<String>();
+        assert!(text(&rest).contains(&rgb(ink.outline)) && !text(&rest).contains(&rgb(ink.accent)));
+        assert!(text(&hot).contains(&rgb(ink.accent)) && text(&hot).contains(&rgb(ink.secondary)));
+        assert!(text(&rest).contains(r#"rx="17""#) && text(&rest).contains(r#"width="398""#));
+        // Four corners and four edges: together a few hundred pixels, not a body-sized raster.
+        assert_eq!(rest.len(), 8);
+        let area: f32 = rest.iter().map(|(r, _)| r.w * r.h).sum();
+        assert!(
+            area < 4. * 18. * 18. + 2. * 2. * (364. + 264. + 8.),
+            "{area}"
+        );
+        assert!(rest.iter().all(|(_, svg)| svg.len() < 1200));
+        // A body too small to cut gets the whole ring.
+        assert_eq!(border_svgs(30., 30., &ink, false).len(), 1);
     }
 
     #[test]

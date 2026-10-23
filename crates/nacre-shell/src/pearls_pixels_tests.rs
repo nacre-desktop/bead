@@ -136,14 +136,16 @@ fn docked_and_detached_goldens() -> Result<()> {
         let mut chrome = Chrome::new(Attachment::Pearl, &colors)?;
         chrome.decorate(&mut rest).unwrap();
         golden("detached", &panel_shot(&rest, scale), scale)?;
-        // Decorating again must not pile up assets or move the body.
+        // Decorating again must not pile up pieces or move the body.
+        let primitives = rest.primitives.len();
         chrome.decorate(&mut rest).unwrap();
+        assert_eq!(rest.primitives.len(), primitives);
         assert_eq!(
             rest.asset_data
                 .keys()
-                .filter(|p| p.to_string_lossy().starts_with("@pearl-body-"))
+                .filter(|p| p.to_string_lossy().starts_with("@pearl-edge-"))
                 .count(),
-            1
+            8
         );
         let mut hot = base.clone();
         chrome.set_engaged(true);

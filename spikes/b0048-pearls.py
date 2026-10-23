@@ -4,6 +4,11 @@
 
   b0048-pearls.py smoke  CAND_BIN POINTER_BIN     detach, drag with guides, dock, close, restore
   b0048-pearls.py memory PAIRS CTL_BIN CAND_BIN   relative memory gate, alternating arms
+  b0048-pearls.py probe BIN [LABEL]               one arm per phase: PSS, glibc heap, cache budgets, smaps (B0054)
+  b0048-pearls.py drag BIN [ROUNDS]               guide/pearl frame timing while dragging (B0054)
+
+B54_WLR_RENDERER=gles2 (and B54_RENDER_DEVICE=/dev/dri/renderD129) makes the outer compositor a GL one, so the
+nested niri presents like a real output; the default is the pixman one the first B0048 numbers came from.
 
 SMOKE_ROOT holds the binaries plus src/ (the shell's working directory, with shell/ and spikes/).
 Private HOME, runtime dirs and buses only; never the live session. The launcher view runs from
@@ -97,7 +102,9 @@ class Arm:
             s.wait(lambda: (RUN / "bus").exists(), 5, "bus")
             s.env = dict(base, DBUS_SESSION_BUS_ADDRESS=bus, XDG_RUNTIME_DIR=str(RUN / "r"))
             penv = dict(base, DBUS_SESSION_BUS_ADDRESS=bus, XDG_RUNTIME_DIR=str(RUN / "pr"), WLR_BACKENDS="headless",
-                        WLR_HEADLESS_OUTPUTS="1", WLR_RENDERER="pixman")
+                        WLR_HEADLESS_OUTPUTS="1", WLR_RENDERER=os.environ.get("B54_WLR_RENDERER", "pixman"))
+            if os.environ.get("B54_RENDER_DEVICE"):
+                penv["WLR_RENDER_DRM_DEVICE"] = os.environ["B54_RENDER_DEVICE"]
             (RUN / "labwc/autostart").write_text("")
             s.spawn(["labwc", "--config-dir", str(RUN / "labwc")], "labwc.log", penv)
             parent = s.wait(lambda: next((p for p in (RUN / "pr").glob("wayland-*") if not str(p).endswith(".lock")), None), 20, "labwc")
@@ -301,6 +308,115 @@ def smoke(cand, pointer_bin):
         arm.finish()
 
 
+def percentile(values, q):
+    values = sorted(values)
+    return values[min(len(values) - 1, len(values) * q // 100)] if values else None
+
+
+def frame_costs(log, since):
+    """Shell-side processing time (ms) of each panel frame after byte offset `since`."""
+    return [float(l.split("processing_ms=")[1]) for l in log[since:].decode(errors="replace").splitlines()
+            if l.startswith("PANEL_FRAME processing_ms=")]
+
+
+def drag(binary, pointer_bin, rounds):
+    """Pull a pearl across the output, down to the docking edge and back, `rounds` times; report the presented
+    cadence of the panel surfaces (pearl and guides) and what each frame cost the shell."""
+    OUT.mkdir(exist_ok=True)
+    arm = Arm("candidate", binary)
+    arm.start("drag")
+    pointer = None
+    try:
+        out = json.loads(arm.niri("outputs"))
+        mode = next(iter(out.values())) if isinstance(out, dict) else out[0]
+        cur = mode["modes"][mode["current_mode"]]
+        W, H = cur["width"], cur["height"]
+        pointer = Pointer(arm, str(ROOT / pointer_bin))
+        arm.ipc("bead.panel", "open", "launcher")
+        time.sleep(1.5)
+        arm.ipc("bead.panel", "detach")
+        time.sleep(1.0)
+        x, y, w, h = pearls(arm)[0]["rect"]
+        log = arm.raw / "shell.log"
+        gx, gy = int(x + w / 2), int(y + 40)
+        # Down to the edge the launcher docks to (so the film grows), then back to the middle.
+        waypoints = [(gx, gy), (gx - 120, H // 2), (gx - 120, H - 80), (gx - 120, H // 2)]
+        pointer.send(f"move {gx} {gy} {W} {H}")
+        time.sleep(.3)
+        report = {"output": [W, H], "compositor": os.environ.get("B54_WLR_RENDERER", "pixman"), "rounds": []}
+        for r in range(rounds):
+            mark = log.stat().st_size
+            pointer.send("press")
+            n = 0
+            for (ax, ay), (bx, by) in zip(waypoints, waypoints[1:]):
+                for i in range(1, 61):
+                    pointer.send(f"move {ax + (bx - ax) * i // 60} {ay + (by - ay) * i // 60} {W} {H}")
+                    time.sleep(.008)
+                    n += 1
+            pointer.send("release")
+            time.sleep(.8)
+            data = log.read_bytes()
+            presented = presented_intervals(data, mark)
+            cost = frame_costs(data, mark)
+            report["rounds"].append({"steps": n, "presented_ms": presented, "frames": len(cost),
+                                     "frame_cost_ms": {"p50": percentile(cost, 50), "p99": percentile(cost, 99), "max": max(cost, default=None)}})
+            state = pearls(arm)
+            if not state:
+                break
+            x, y, w, h = state[0]["rect"]
+            gx, gy = int(x + w / 2), int(y + 40)
+            pointer.send(f"move {gx} {gy} {W} {H}")
+            waypoints = [(gx, gy), (gx - 120, H // 2), (gx - 120, H - 80), (gx - 120, H // 2)]
+            time.sleep(.3)
+        allp = [r["presented_ms"] for r in report["rounds"] if r["presented_ms"]]
+        report["presented_p50_median"] = statistics.median(p["p50"] for p in allp) if allp else None
+        report["presented_p99_median"] = statistics.median(p["p99"] for p in allp) if allp else None
+        (arm.raw / "result.json").write_text(json.dumps(report, indent=1))
+        print(json.dumps(report, indent=1))
+    finally:
+        if pointer:
+            pointer.stop()
+        arm.finish()
+
+
+def probe(binary, label="candidate"):
+    """One arm, a snapshot per phase: PSS split, glibc heap, cache budgets (state trace), smaps per phase."""
+    OUT.mkdir(exist_ok=True)
+    arm = Arm(label, binary)
+    arm.start("probe")
+    out = []
+
+    def snap(name):
+        time.sleep(3)
+        st = arm.ipc("bead.panel", "state")["result"]
+        (arm.raw / f"smaps-{name}.txt").write_text(open(f"/proc/{arm.shell.pid}/smaps").read())
+        caches = {}
+        for c in st["cache_bytes"]["caches"]:
+            caches[c["name"]] = caches.get(c["name"], 0) + c["used_bytes"]
+        out.append({"phase": name, "rollup": rollup(arm.shell.pid), "heap": st.get("heap_bytes"), "caches": caches})
+        print(name, {k: round(v, 2) for k, v in out[-1]["rollup"].items()}, "heap", out[-1]["heap"], "caches",
+              {k: v for k, v in caches.items() if v > 100_000}, flush=True)
+
+    try:
+        time.sleep(8)
+        snap("idle")
+        arm.ipc("bead.panel", "open", "launcher")
+        time.sleep(2)
+        snap("docked_open")
+        if label == "candidate":
+            arm.ipc("bead.panel", "detach")
+            time.sleep(1)
+            snap("pearl_open")
+            arm.ipc("bead.panel", "pearl-close")
+        else:
+            arm.ipc("bead.panel", "close")
+        time.sleep(8)
+        snap("closed")
+    finally:
+        (arm.raw / "probe.json").write_text(json.dumps(out, indent=1))
+        arm.finish()
+
+
 def memory_arm(label, binary, tag):
     arm = Arm(label, binary)
     arm.start(tag)
@@ -352,3 +468,7 @@ if __name__ == "__main__":
         smoke(sys.argv[2], sys.argv[3])
     elif sys.argv[1] == "memory":
         memory(int(sys.argv[2]), sys.argv[3], sys.argv[4])
+    elif sys.argv[1] == "probe":
+        probe(sys.argv[2], *sys.argv[3:4])
+    elif sys.argv[1] == "drag":
+        drag(sys.argv[2], "pointer", int(sys.argv[3]) if len(sys.argv) > 3 else 3)

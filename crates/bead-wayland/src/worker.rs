@@ -239,6 +239,10 @@ impl SceneSource for Source {
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) => {
                             let reload = matches!(event, UiEvent::Reload);
+                            // Detaching or docking gives the panel another look: once it
+                            // is accepted, the rasters only the old look used can go.
+                            let look_change = matches!(event, UiEvent::PanelDetached(_));
+                            let baked_after = cache.serial();
                             let wallpaper_palette =
                                 if let UiEvent::WallpaperPalette(values) = &event {
                                     Some(values.clone())
@@ -312,6 +316,9 @@ impl SceneSource for Source {
                                             Ok(()) => {
                                                 if fault.is_none() {
                                                     source.commit();
+                                                }
+                                                if look_change {
+                                                    cache.drop_unused_since(baked_after);
                                                 }
                                                 wakeup(UiEvent::Worker(Arc::new(Packet {
                                                     phase: Phase::Accepted,

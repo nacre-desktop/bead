@@ -260,6 +260,15 @@ impl TreeCache {
             self.raster.fonts = fonts;
         }
     }
+    /// Bake counter: entries touched by a later bake have a greater serial.
+    pub fn serial(&self) -> u64 {
+        self.serial
+    }
+    /// Release the entries no bake since `serial` has used (a look that was replaced).
+    pub fn drop_unused_since(&mut self, serial: u64) {
+        self.entries.retain(|_, entry| entry.touched > serial);
+        self.nodes.retain(|_, (_, touched)| *touched > serial);
+    }
     /// Keep finished active rasters, release scratch and offscreen cache entries.
     pub fn trim_idle(&mut self) {
         self.raster = CpuRenderer::default();

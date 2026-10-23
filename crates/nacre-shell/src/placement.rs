@@ -121,11 +121,6 @@ pub fn body(scene: &Scene) -> Rect {
                 Some(*rect)
             }
             bead::render::Primitive::Image { rect, path, .. }
-                if path.to_string_lossy().starts_with("@pearl-body-") =>
-            {
-                Some(*rect)
-            }
-            bead::render::Primitive::Image { rect, path, .. }
                 if path.to_string_lossy().starts_with("@joined-frame-") =>
             {
                 let top = if path.to_string_lossy().starts_with("@joined-frame-32-") {
@@ -326,42 +321,43 @@ impl Chrome {
             })
             .collect()
     }
-    /// A pearl keeps its shadow and gets its body redrawn with the pearl border.
+    /// A pearl keeps its shadow; the panel's root background takes the pearl's colour and
+    /// corners, and the border is drawn above everything as small pieces (see
+    /// `pearls::border_svgs`). Decorating a decorated scene again replaces the pieces.
     fn decorate_pearl(&self, scene: &mut Scene) -> Result<(), Box<dyn std::error::Error>> {
         use bead::render::Primitive;
         use std::hash::{Hash, Hasher};
         let ink = self.ink.ok_or("pearl chrome without ink")?;
-        let body = body(scene);
-        let svg = crate::pearls::body_svg(body.w, body.h, &ink, self.engaged);
-        let mut hash = std::collections::hash_map::DefaultHasher::new();
-        svg.hash(&mut hash);
-        let path = std::path::PathBuf::from(format!("@pearl-body-{:x}.svg", hash.finish()));
-        scene
-            .asset_data
-            .retain(|path, _| !path.to_string_lossy().starts_with("@pearl-body-"));
-        scene
-            .asset_data
-            .insert(path.clone(), Arc::from(svg.into_bytes()));
-        let mut replaced = false;
-        for primitive in &mut scene.primitives {
-            let root = match primitive {
-                Primitive::Rounded { rect, .. } => {
-                    rect.w == body.w && rect.h == body.h && rect.x == body.x && rect.y == body.y
-                }
-                Primitive::Image { path, .. } => path.to_string_lossy().starts_with("@pearl-body-"),
-                _ => false,
-            };
-            if !replaced && root {
-                *primitive = Primitive::Image {
-                    blur: 0.,
-                    rect: body,
-                    path: path.clone(),
-                };
-                replaced = true;
-            }
+        let is_piece = |path: &std::path::Path| path.to_string_lossy().starts_with("@pearl-edge-");
+        while matches!(scene.primitives.last(), Some(Primitive::Image { path, .. }) if is_piece(path))
+        {
+            scene.primitives.pop();
         }
-        if !replaced {
-            return Err("Panel root background missing".into());
+        scene.asset_data.retain(|path, _| !is_piece(path));
+        let body = body(scene);
+        let root = scene
+            .primitives
+            .iter_mut()
+            .find(|p| matches!(p, Primitive::Rounded { rect, .. } if *rect == body))
+            .ok_or("Panel root background missing")?;
+        *root = Primitive::Rounded {
+            rect: body,
+            radius: crate::pearls::RADIUS,
+            fill: ink.body,
+            border: None,
+        };
+        for (piece, svg) in crate::pearls::border_svgs(body.w, body.h, &ink, self.engaged) {
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            svg.hash(&mut hash);
+            let path = std::path::PathBuf::from(format!("@pearl-edge-{:x}.svg", hash.finish()));
+            scene
+                .asset_data
+                .insert(path.clone(), Arc::from(svg.into_bytes()));
+            scene.primitives.push(Primitive::Image {
+                blur: 0.,
+                rect: Rect::new(body.x + piece.x, body.y + piece.y, piece.w, piece.h),
+                path,
+            });
         }
         scene.prepared.clear();
         Ok(())
