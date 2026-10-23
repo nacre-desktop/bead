@@ -211,7 +211,13 @@
         }
       ],
       "method": "settings",
-      "parameters": [],
+      "parameters": [
+        {
+          "name": "page",
+          "type": "string",
+          "optional": true
+        }
+      ],
       "returns": "void",
       "source": "nacre/shell/modules/NacreShellIpc.qml:166"
     },

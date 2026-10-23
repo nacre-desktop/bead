@@ -1068,7 +1068,17 @@ impl Runtime {
             _ => None,
         }
     }
-    /// `brightness step` keys; disabled until the daemon advertises `brightness.adjust` v1.
+    /// The focused output, else the first one (the QML `NacreBrightness.focused`).
+    fn focused_output(&self) -> Option<String> {
+        let snapshot = self.backend.as_ref()?.snapshot();
+        snapshot
+            .outputs
+            .iter()
+            .find(|output| output.focused)
+            .or(snapshot.outputs.first())
+            .map(|output| output.name.clone())
+    }
+    /// `brightness step|set` and `keyboardLight step` keys; disabled until the daemon advertises `brightness.adjust` v1.
     pub fn with_brightness_keys(
         mut self,
         client: crate::nacre_source::Client,
@@ -2620,6 +2630,7 @@ impl SceneSource for Runtime {
             | UiEvent::CompanionSelect { .. }
             | UiEvent::CompanionOffer { .. }
             | UiEvent::ShellHidden(_)
+            | UiEvent::LivePalette(_)
             | UiEvent::ControlChanged => {
                 return Err("companion visibility reached script".into());
             }
@@ -2770,21 +2781,51 @@ impl SceneSource for Runtime {
                         }
                         ("brightness", "step") if self.brightness.is_some() => {
                             self.actions.authorize("key.brightness")?;
-                            let output = self.backend.as_ref().and_then(|backend| {
-                                let snapshot = backend.snapshot();
-                                snapshot
-                                    .outputs
-                                    .iter()
-                                    .find(|output| output.focused)
-                                    .or(snapshot.outputs.first())
-                                    .map(|output| output.name.clone())
-                            });
+                            let output = self.focused_output();
                             let direction = call.args[0].as_str().unwrap_or_default();
                             match self
                                 .brightness
                                 .as_ref()
                                 .ok_or("brightness keys unavailable")?
                                 .step(direction, output.as_deref())
+                            {
+                                Ok(()) => {
+                                    bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                                }
+                                Err(message) => bead::services::ipc::Reply::error(
+                                    call.id,
+                                    "unavailable",
+                                    message,
+                                ),
+                            }
+                        }
+                        ("brightness", "set") if self.brightness.is_some() => {
+                            self.actions.authorize("key.brightness")?;
+                            let output = self.focused_output();
+                            match self
+                                .brightness
+                                .as_ref()
+                                .ok_or("brightness keys unavailable")?
+                                .set(call.args[0].as_f64().unwrap_or(f64::NAN), output.as_deref())
+                            {
+                                Ok(()) => bead::services::ipc::Reply::ok(
+                                    call.id,
+                                    serde_json::Value::String("ok".into()),
+                                ),
+                                Err(message) => bead::services::ipc::Reply::error(
+                                    call.id,
+                                    "unavailable",
+                                    message,
+                                ),
+                            }
+                        }
+                        ("keyboardLight", "step") if self.brightness.is_some() => {
+                            self.actions.authorize("key.brightness")?;
+                            match self
+                                .brightness
+                                .as_ref()
+                                .ok_or("keyboard light keys unavailable")?
+                                .keyboard_step(call.args[0].as_str().unwrap_or_default())
                             {
                                 Ok(()) => {
                                     bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)

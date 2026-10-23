@@ -130,6 +130,14 @@ impl App {
             }
             other => other,
         };
+        if let UiEvent::LivePalette(palette) = event {
+            if self.wallpaper_palette.as_ref() != Some(&palette) {
+                // An open panel follows through `set_wallpaper_palette`; a window gets it here.
+                self.set_wallpaper_palette(palette.clone());
+                self.window_ui(UiEvent::WallpaperPalette(palette));
+            }
+            return;
+        }
         if matches!(event, UiEvent::ControlChanged) {
             self.apply_control();
             return;

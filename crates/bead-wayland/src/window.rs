@@ -248,6 +248,9 @@ impl App {
             drawn: 0,
         });
         self.window_ui(UiEvent::Reload);
+        if let Some(palette) = self.wallpaper_palette.clone() {
+            self.window_ui(UiEvent::WallpaperPalette(palette));
+        }
         let patch = (spec.model)(args);
         if !patch.is_empty() {
             self.window_ui(UiEvent::Model(patch));

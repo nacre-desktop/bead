@@ -2,7 +2,7 @@
 //! Audited compatibility signatures; features without native handlers fail explicitly.
 use bead::services::ipc::{Call, Reply};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 #[derive(Deserialize)]
 pub struct Catalog {
     pub routes: Vec<Route>,
@@ -24,6 +24,9 @@ pub struct Parameter {
     pub name: String,
     #[serde(rename = "type")]
     pub kind: String,
+    /// B0068: a trailing optional argument (`nacre settings [PAGE]`); the audited QML signature has none.
+    #[serde(default)]
+    pub optional: bool,
 }
 pub fn catalog() -> Result<Catalog, String> {
     serde_json::from_str(include_str!("../../../shell/command-catalog.json"))
@@ -47,7 +50,8 @@ impl Catalog {
         let route = self
             .route(&call.target, &call.method)
             .ok_or("unknown target/method")?;
-        if call.args.len() != route.parameters.len() {
+        let required = route.parameters.iter().filter(|p| !p.optional).count();
+        if call.args.len() < required || call.args.len() > route.parameters.len() {
             return Err("wrong argument count".into());
         }
         for (p, v) in route.parameters.iter().zip(&call.args) {
@@ -180,6 +184,47 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
+/// B0068 `menuPrompt`: the selector prompt for `nacre-menu pick|input` has no Bead view yet. Opening
+/// answers the waiting tool at once with a cancelled response (instead of leaving it to time out), so
+/// scripts fail fast and visibly; `cancel` has nothing to cancel.
+const PROMPT_UNSUPPORTED: &str = "Selector prompts are not supported by this shell yet";
+fn helper_binary() -> std::path::PathBuf {
+    std::env::var_os("NACRE_HELPER")
+        .map(Into::into)
+        .unwrap_or_else(|| {
+            let home = std::env::var_os("HOME").unwrap_or_default();
+            std::path::Path::new(&home).join(".local/share/nacre/shell/tools/nacre-helper")
+        })
+}
+fn refuse_prompt(helper: &std::path::Path, ident: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut child = bead::services::process::command(helper)
+        .args(["menu-cli", "respond", ident])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let response = json!({"value": "", "cancelled": true, "error": PROMPT_UNSUPPORTED});
+    child
+        .stdin
+        .take()
+        .ok_or("no stdin")?
+        .write_all(format!("{response}\n").as_bytes())
+        .map_err(|e| e.to_string())?;
+    child.wait().map(drop).map_err(|e| e.to_string())
+}
+#[cfg(test)]
+pub fn refuse_prompt_for_test(helper: &std::path::Path, ident: &str) -> Result<(), String> {
+    refuse_prompt(helper, ident)
+}
+fn is_prompt_id(ident: &str) -> bool {
+    ident.len() == 32
+        && ident
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     // The AI sidebar (QML left drawer): `nacre left` and `drawers toggle left` both
     // toggle it, as in the QML shell. It is an on-demand app process (B0052).
@@ -190,6 +235,84 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     if left {
         validate(&call)?;
         return Err(crate::app::route(call.id, "chat", "toggle", &[]));
+    }
+    // B0068: `welcomeApp refresh` re-reads the first-run preference after `nacre-welcome
+    // --enable/--disable`. Bead's Welcome reads nothing of it (the once-only claim stays with Nacre), so
+    // there is nothing to refresh and the app is not started for it.
+    if call.target == "welcomeApp" && call.method == "refresh" {
+        validate(&call)?;
+        return Err(Reply::ok(call.id, Value::Null));
+    }
+    if call.target == "menuPrompt" && matches!(call.method.as_str(), "open" | "cancel") {
+        validate(&call)?;
+        let ident = call.args[0].as_str().unwrap_or_default().to_owned();
+        if !is_prompt_id(&ident) {
+            return Err(Reply::error(
+                call.id,
+                "invalid-route",
+                "invalid selector id",
+            ));
+        }
+        if call.method == "open" {
+            std::thread::spawn(move || {
+                if let Err(error) = refuse_prompt(&helper_binary(), &ident) {
+                    eprintln!("MENU_PROMPT_REFUSE_FAILED {error}");
+                }
+            });
+        }
+        return Err(Reply::ok(call.id, Value::Null));
+    }
+    // `drawers toggle launcher|session` are the launcher and session keys; the other QML drawer
+    // names (osd preview, pinned flags, preview-only) are QML preview state with no Bead view.
+    if call.target == "drawers" && call.method == "toggle" {
+        match call.args.first().and_then(Value::as_str) {
+            Some("launcher") => {
+                validate(&call)?;
+                call.target = "nacre".into();
+                call.method = "launcher".into();
+                call.args = vec![Value::String(String::new())];
+                return Ok(call);
+            }
+            Some("session") => {
+                validate(&call)?;
+                call.target = "bead.panel".into();
+                call.args = vec![Value::String("session".into())];
+                return Ok(call);
+            }
+            Some("osd" | "leftPinned" | "dashboardPinned" | "previewOnly") => {
+                validate(&call)?;
+                return Err(Reply::error(
+                    call.id,
+                    "unavailable",
+                    "this QML drawer is preview state with no Bead view",
+                ));
+            }
+            _ => {}
+        }
+    }
+    // B0068: `nacre controls` sections the control centre does not own: `session` is the session view,
+    // `notifications` the dashboard's notification page; `updates` has no Bead view.
+    if call.target == "nacre" && call.method == "controls" {
+        let view = match call.args.first().and_then(Value::as_str) {
+            Some("session") => Some("session".to_owned()),
+            Some("notifications") => Some("dashboard-notifications".to_owned()),
+            Some("updates") => {
+                validate(&call)?;
+                return Err(Reply::error(
+                    call.id,
+                    "unavailable",
+                    "there is no updates view in this shell",
+                ));
+            }
+            _ => None,
+        };
+        if let Some(view) = view {
+            validate(&call)?;
+            call.target = "bead.panel".into();
+            call.method = "open".into();
+            call.args = vec![Value::String(view)];
+            return Ok(call);
+        }
     }
     // The QML session menu (`nacre session`) is the top-right power view, not a launcher route.
     if call.target == "nacre" && call.method == "session" {
@@ -356,6 +479,8 @@ fn map_pearls(mut call: Call) -> Result<Call, Reply> {
                     crate::dashboard::Page::from_tab(0).map_or("today", |p| p.name())
                 ),
                 "media" => "dashboard-media".to_owned(),
+                // B0068: the control centre exists since B0049; the pearl policy still decides.
+                "controls" => "control".to_owned(),
                 _ => {
                     return Err(Reply::error(
                         id,

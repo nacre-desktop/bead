@@ -125,6 +125,15 @@ impl std::fmt::Debug for WallpaperFrame {
             .finish()
     }
 }
+/// Where an app process learns the live presentation palette (role to RGBA).
+pub trait PaletteFeed: Send + Sync {
+    fn current(&self) -> Option<std::collections::BTreeMap<String, [u8; 4]>>;
+    /// Call `changed` (from any thread) with each new palette.
+    fn watch(
+        &self,
+        changed: Box<dyn Fn(std::collections::BTreeMap<String, [u8; 4]>) + Send + Sync>,
+    );
+}
 pub trait WallpaperProvider: Send + Sync {
     fn watch(&self, changed: Box<dyn Fn() + Send + Sync>) -> Result<(), String>;
     fn prepare(&self, output: String, width: u32, height: u32) -> Result<WallpaperFrame, String>;
@@ -186,6 +195,8 @@ pub trait ShellControl: Send + Sync {
 pub enum UiEvent {
     /// A [`ShellControl`] answer changed.
     ControlChanged,
+    /// A new live palette from the options' palette feed.
+    LivePalette(std::collections::BTreeMap<String, [u8; 4]>),
     /// Event delivered to one output-owned UI session. The epoch rejects callbacks
     /// queued by a session after that output has been removed.
     Output(u64, String, Box<UiEvent>),
@@ -491,6 +502,9 @@ pub struct Options {
     /// Optional product-owned wallpaper consumer; the framework owns passive surfaces.
     pub wallpaper: Option<std::sync::Arc<dyn WallpaperProvider>>,
     pub control: Option<std::sync::Arc<dyn ShellControl>>,
+    /// Live presentation palette for a process without a wallpaper consumer (an app process):
+    /// its window or panel wears the palette at start and follows every change.
+    pub palette_feed: Option<std::sync::Arc<dyn PaletteFeed>>,
     /// On-demand xdg toplevel window (`bead.window open|close`).
     pub window: Option<WindowSpec>,
     /// Detachable panels; none: panels cannot detach.
@@ -542,6 +556,7 @@ impl Default for Options {
             trace_state: false,
             wallpaper: None,
             control: None,
+            palette_feed: None,
             window: None,
             pearls: None,
             app: None,

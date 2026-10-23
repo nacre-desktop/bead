@@ -115,13 +115,15 @@ pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
     })
 }
 const BRIGHTNESS: &str = "brightness.adjust";
+const BRIGHTNESS_SET: &str = "brightness.set";
+const KEYBOARD_LIGHT: &str = "keyboard_light.adjust";
 /// QML `NacreBrightness.step` moves the focused display by five percentage points.
 const BRIGHTNESS_STEP: i64 = 5;
 
-/// `nacrectl ui brightness step up|down` as one daemon `brightness.adjust` call
-/// (N0031) on the focused output. Enabled only while the connected daemon
-/// advertises exactly that method at version 1. One call at a time: the daemon
-/// rejects concurrent brightness admission, so a held key never queues.
+/// `nacrectl ui brightness step|set` and `keyboardLight step` as one daemon call each
+/// (N0031 `brightness.adjust`/`brightness.set`, N0036 `keyboard_light.adjust`). Enabled only
+/// while the connected daemon advertises that method at version 1. One call at a time: the
+/// daemon rejects concurrent brightness admission, so a held key never queues.
 pub struct Brightness {
     client: Client,
     pending: Arc<Mutex<Option<CallTicket>>>,
@@ -140,10 +142,35 @@ impl Brightness {
             _ => return Err("invalid brightness direction"),
         };
         let output = output.ok_or("no output is available")?;
+        self.send(
+            BRIGHTNESS,
+            serde_json::json!({"output": output, "delta": delta}),
+        )
+    }
+    /// `brightness set X`: X is the QML fraction 0..1 (what `desktop-actions brightness` sends).
+    pub fn set(&self, fraction: f64, output: Option<&str>) -> Result<(), &'static str> {
+        if !fraction.is_finite() {
+            return Err("invalid brightness value");
+        }
+        let output = output.ok_or("no output is available")?;
+        let percent = (fraction.clamp(0., 1.) * 100.).round() as u8;
+        self.send(
+            BRIGHTNESS_SET,
+            serde_json::json!({"output": output, "percent": percent}),
+        )
+    }
+    /// `keyboardLight step up|down`: one raw unit; the daemon wraps up and stops at zero.
+    pub fn keyboard_step(&self, direction: &str) -> Result<(), &'static str> {
+        if !matches!(direction, "up" | "down") {
+            return Err("invalid keyboard light direction");
+        }
+        self.send(KEYBOARD_LIGHT, serde_json::json!({"step": direction}))
+    }
+    fn send(&self, method: &str, params: serde_json::Value) -> Result<(), &'static str> {
         let status = self.client.status();
-        let method = status
+        let advertised = status
             .methods
-            .get(BRIGHTNESS)
+            .get(method)
             .filter(|m| m.v == 1)
             .ok_or("brightness control is unavailable")?;
         if !self.client.snapshot().connected {
@@ -160,12 +187,12 @@ impl Brightness {
             }
             *pending = None;
         }
-        let timeout = Duration::from_millis(u64::from(method.timeout).clamp(1, 60_000));
+        let timeout = Duration::from_millis(u64::from(advertised.timeout).clamp(1, 60_000));
         let ticket = self
             .client
             .begin_call(
-                BRIGHTNESS.into(),
-                serde_json::json!({"output": output, "delta": delta}),
+                method.into(),
+                params,
                 timeout,
                 CallGuard { boot, version: 1 },
                 None,

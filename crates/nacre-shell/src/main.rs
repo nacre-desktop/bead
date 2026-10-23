@@ -30,6 +30,8 @@ mod player_art;
 mod popouts;
 mod prefs;
 mod reload;
+#[cfg(test)]
+mod route_coverage_tests;
 mod session_menu;
 mod settings;
 #[cfg(test)]

@@ -361,6 +361,18 @@ pub fn run_runtime(
         }))?;
         app.wallpaper_sender = Some(sender);
     }
+    if let Some(feed) = app.options.palette_feed.clone() {
+        let (sender, receiver) = calloop::channel::channel::<UiEvent>();
+        loop_.handle().insert_source(receiver, |event, _, app| {
+            if let calloop::channel::Event::Msg(event) = event {
+                app.ui(event);
+            }
+        })?;
+        app.wallpaper_palette = feed.current();
+        feed.watch(Box::new(move |palette| {
+            let _ = sender.send(UiEvent::LivePalette(palette));
+        }));
+    }
     if let Some(control) = app.options.control.clone() {
         let (sender, receiver) = calloop::channel::channel::<UiEvent>();
         loop_.handle().insert_source(receiver, |event, _, app| {

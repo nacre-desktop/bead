@@ -250,6 +250,9 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
             let mut topics: Vec<String> = TOPICS.iter().map(|t| t.to_string()).collect();
             if name == "colors" || name == "welcome" {
                 topics.extend(colors_app::TOPICS.iter().map(|t| t.to_string()));
+            } else {
+                // Every app wears the live palette (B0068): the wallpaper topic carries it.
+                topics.push(colors_app::ACTIVE.to_string());
             }
             let mut config = nacre_source::Config::new(socket, topics);
             config.client = format!("nacre-app-{name}");
@@ -298,6 +301,12 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
         ..Options::default()
     };
     let fill = colors.get("surface")?;
+    // B0068: the live palette at start and on every change (the file above only covers a start
+    // after the shell saw the first palette).
+    options.palette_feed = client
+        .as_ref()
+        .and_then(|client| client.topic(colors_app::ACTIVE).ok())
+        .map(|t| crate::wallpaper::Feed::new(t) as Arc<dyn bead::wayland::PaletteFeed>);
     let root = PathBuf::from("shell");
     match name {
         "welcome" => {

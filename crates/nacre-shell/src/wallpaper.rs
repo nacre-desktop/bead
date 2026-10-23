@@ -355,7 +355,7 @@ fn decode_in_worker(pair: &ActiveWallpaper, width: u32, height: u32) -> Result<V
     result.map_err(String::from)
 }
 
-fn palette(pair: &ActiveWallpaper) -> bead::render::Palette {
+pub(crate) fn palette(pair: &ActiveWallpaper) -> bead::render::Palette {
     let colours = pair
         .palette
         .colours
@@ -377,6 +377,56 @@ fn palette(pair: &ActiveWallpaper) -> bead::render::Palette {
         })
         .collect();
     bead::render::Palette(std::sync::Arc::new(colours))
+}
+
+/// B0068: the live palette of the `wallpaper.active` topic for an app process (no wallpaper
+/// surface of its own). A stale or unavailable state keeps the last palette the app wore.
+pub(crate) struct Feed {
+    topic: crate::nacre_source::Topic,
+    subscription: Mutex<Option<Subscription>>,
+}
+impl Feed {
+    pub(crate) fn new(topic: crate::nacre_source::Topic) -> Arc<Self> {
+        Arc::new(Self {
+            topic,
+            subscription: Mutex::new(None),
+        })
+    }
+}
+fn live(snapshot: &bead::core::source::Snapshot) -> Option<BTreeMap<String, [u8; 4]>> {
+    if !snapshot.connected {
+        return None;
+    }
+    let state: WallpaperActive = serde_json::from_value((*snapshot.data).clone()).ok()?;
+    if !state.available || state.stale {
+        return None;
+    }
+    let pair = state
+        .current
+        .or_else(|| state.outputs.into_values().next())?;
+    Some(
+        palette(&pair)
+            .0
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect(),
+    )
+}
+impl bead::wayland::PaletteFeed for Feed {
+    fn current(&self) -> Option<BTreeMap<String, [u8; 4]>> {
+        live(&Source::snapshot(&self.topic))
+    }
+    fn watch(&self, changed: Box<dyn Fn(BTreeMap<String, [u8; 4]>) + Send + Sync>) {
+        let subscription = Source::subscribe(
+            &self.topic,
+            Arc::new(move |snapshot| {
+                if let Some(palette) = live(&snapshot) {
+                    changed(palette);
+                }
+            }),
+        );
+        *self.subscription.lock().unwrap_or_else(|p| p.into_inner()) = subscription.ok();
+    }
 }
 
 /// Select an applicable topic revision; unavailable input never erases a good

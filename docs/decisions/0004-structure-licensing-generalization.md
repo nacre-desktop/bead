@@ -120,6 +120,9 @@ After Bead's core switch on Nacre, plan support for:
   size, availability and the daemon's `learn.shortcuts` rows. Text blocks are sized by a Luau estimate (`textH`) until a
   text-measurement primitive exists.
 
+- B0068: `bead_wayland::PaletteFeed` (`Options::palette_feed`): a live presentation palette for a process without a
+  wallpaper consumer (an app process); the Nacre adapter (`wallpaper::Feed`) reads the daemon's `wallpaper.active` topic.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a
