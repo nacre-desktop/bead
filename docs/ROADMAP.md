@@ -347,3 +347,12 @@ remain read-only; external helpers remain Python; no duplicated palette engine.
 Integrate into public main; no PRs/crates/AUR/releases. Every crate publish=false.
 
 Current run command/status and the exact next action are in [STATUS.md](STATUS.md).
+
+## Planned milestone: widget hosts and movable widgets (owner idea, 2026-10-23)
+
+Widgets made for Bead can be dragged and dropped between "widget hosts": the top bar, side bars, bottom bar, dashboard and pearls. Placement survives restarts. Pearls (B0048) are the first case of this. The owner sees it as a possible defining feature of Nacre.
+- **Widget:** a Luau component that declares its data needs (topics and actions) and offers size and shape variants: bar-compact, sidebar card, dashboard tile and pearl. Example: a music widget shown as an animated bar visualiser or a full player card.
+- **Host:** a general Bead primitive with slots, drop targets and a variant choice. Dragging and dropping reuses the pearl detach and dock interaction.
+- **Layout persistence:** the shell owns it. On Nacre it is stored through the settings store as an opaque layout that the daemon stores but never interprets.
+- **Catalogue:** built-in widgets plus a user widget folder with live reload (custom-widgets milestone). The audio-reactive ideas (spectrum source) plug in here.
+- **Boundary:** the Nacre daemon owns system data and operations and never UI composition. Bead owns surfaces, layout, components, reactivity, placement and resource lifetimes, and has no hardcoded Nacre concepts (no specific bar or music widget). Nacre's desktop is Bead plus the Nacre adapter plus Nacre's Luau widgets.
