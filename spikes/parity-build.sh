@@ -1,5 +1,6 @@
 #!/bin/sh
 # Build Bead (this tree) and the Nacre daemon for the parity harness, on a remote host in an Arch container.
+# The Nacre daemon is kept between runs; REBUILD_NACRE=1 rebuilds it after Nacre moved.
 # usage: spikes/parity-build.sh HOST TASK NACRE_CHECKOUT ORIENT_CHECKOUT   (run from the Bead worktree root)
 # Output: ~/nacre-lead/TASK/out/{nacre-shell,nacre-helper,...} on HOST. Fails on any cargo error.
 set -eu
@@ -25,5 +26,5 @@ echo BUILD_OK
 EOS
 ssh -F "$HOME/.ssh/config" "$HOST" "mkdir -p ~/$R/in && rm -rf ~/$R/in/* ~/$R/out"
 scp -q -F "$HOME/.ssh/config" "$T/bead.tgz" "$T/nacre.tgz" "$T/orient.tgz" "$T/build.sh" "$HOST:$R/in/"
-ssh -F "$HOME/.ssh/config" "$HOST" "cd ~/$R && docker run --rm --name $TASK-build --cpus=8 --memory=12g -e OWNER_UID=\$(id -u) -v \$PWD:/w archlinux:latest sh /w/in/build.sh" | tail -5
+ssh -F "$HOME/.ssh/config" "$HOST" "cd ~/$R && docker run --rm --name $TASK-build --cpus=8 --memory=12g -e OWNER_UID=\$(id -u) -e REBUILD_NACRE=${REBUILD_NACRE:-} -v \$PWD:/w archlinux:latest sh /w/in/build.sh" | tail -5
 rm -rf "$T"
