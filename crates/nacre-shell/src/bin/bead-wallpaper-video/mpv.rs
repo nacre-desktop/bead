@@ -76,13 +76,12 @@ fn load() -> Result<Api, String> {
             return Err("libmpv is not installed".into());
         }
         macro_rules! sym {
-            ($name:literal) => {{
-                let p = libc::dlsym(lib, concat!($name, "\0").as_ptr().cast());
-                if p.is_null() {
-                    return Err(concat!("libmpv lacks ", $name).into());
+            ($name:literal) => {
+                match symbol(lib, concat!($name, "\0")) {
+                    Some(function) => function,
+                    None => return Err(concat!("libmpv lacks ", $name).into()),
                 }
-                std::mem::transmute(p)
-            }};
+            };
         }
         Ok(Api {
             lib,
@@ -103,6 +102,18 @@ fn load() -> Result<Api, String> {
             render: sym!("mpv_render_context_render"),
             render_free: sym!("mpv_render_context_free"),
         })
+    }
+}
+/// One exported function of `lib`, as the fn-pointer type the caller names.
+///
+/// # Safety
+/// `T` must be the `extern "C"` fn-pointer type of the named libmpv function.
+unsafe fn symbol<T: Copy>(lib: *mut c_void, name: &'static str) -> Option<T> {
+    debug_assert!(name.ends_with('\0') && size_of::<T>() == size_of::<*mut c_void>());
+    // SAFETY: NUL-terminated name; the pointer is reinterpreted as the requested fn pointer.
+    unsafe {
+        let pointer = libc::dlsym(lib, name.as_ptr().cast());
+        (!pointer.is_null()).then(|| std::mem::transmute_copy::<*mut c_void, T>(&pointer))
     }
 }
 pub fn available() -> Result<(), String> {
