@@ -275,6 +275,95 @@ impl TreeCache {
         self.entries.retain(|_, entry| entry.touched == self.serial);
         self.nodes.retain(|_, (_, touched)| *touched == self.serial);
     }
+    /// B0067: a worker-prepared frame of a panel that is still growing out of its edge. The prepared items keep their
+    /// open-state clips and shapes, so the presenter derives the frame for this progress: the body fill and its
+    /// shadow take the reshaped primitives of `Scene::reveal` (the shadow gets a raster of its new size), everything
+    /// else is clipped to the reveal window. None when the scene is not revealing or does not match the frame.
+    fn revealed_frame(
+        &mut self,
+        scene: &Scene,
+        frame: &Arc<Frame>,
+        scale: f32,
+    ) -> Result<Option<Frame>> {
+        let Some(motion) = scene
+            .motion
+            .as_ref()
+            .filter(|m| m.reveal && m.progress < 1.)
+        else {
+            return Ok(None);
+        };
+        let Some(window) = scene.reveal_window() else {
+            return Ok(None);
+        };
+        if frame.items.len() != scene.primitives.len() {
+            return Ok(None);
+        }
+        let mut items = frame.items.clone();
+        for (index, item) in items.iter_mut().enumerate() {
+            if motion.parts.iter().any(|(i, _)| *i == index) {
+                let shaped = scene.primitives[index].clone();
+                if matches!(shaped, Primitive::Shadow { .. }) {
+                    let content = Scene {
+                        opacity: 1.,
+                        motion: None,
+                        resource_revision: scene.resource_revision,
+                        asset_data: Default::default(),
+                        clips: Default::default(),
+                        layers: Vec::new(),
+                        prepared: Default::default(),
+                        font_files: Vec::new(),
+                        width: scene.width,
+                        slide: None,
+                        primitives: vec![local(&shaped)],
+                        offset: (0., 0.),
+                        bounds: scene.bounds,
+                    };
+                    self.raster.prepare(&content, scale)?;
+                    let texture = crate::key(&content.primitives[0], scale);
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    texture.hash(&mut hasher);
+                    let key = hasher.finish();
+                    let pixels = self
+                        .raster
+                        .textures
+                        .remove(&texture)
+                        .ok_or("missing prepared shadow raster")?;
+                    let bytes = pixels.data().len() + 192;
+                    let charge = self
+                        .raster_budget
+                        .get_or_insert_with(|| {
+                            bead_core::cache::Budget::new(
+                                "retained-cpu-rasters",
+                                64 * bead_core::cache::MIB,
+                            )
+                        })
+                        .reserve(bytes)?;
+                    item.raster = Some(Arc::new(Raster {
+                        changed: Damage::full(pixels.width(), pixels.height()),
+                        pixels: Arc::new(pixels),
+                        origin: (0, 0),
+                        key,
+                        base_key: None,
+                        _charge: charge,
+                    }));
+                }
+                item.primitive = shaped;
+            } else {
+                item.clip = Some(item.clip.map_or(window, |own| own.intersect(window)));
+            }
+        }
+        let mut key = std::collections::hash_map::DefaultHasher::new();
+        frame.key.hash(&mut key);
+        motion.progress.to_bits().hash(&mut key);
+        Ok(Some(Frame {
+            items,
+            scale: frame.scale,
+            key: key.finish(),
+            layer_count: frame.layer_count,
+            layers: frame.layers.clone(),
+            _accounting: None,
+        }))
+    }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if let Some(frame) = scene.prepared.get(&scale.to_bits()) {
             // Worker-prepared frames own their rasters and nodes. A locally
@@ -285,7 +374,10 @@ impl TreeCache {
                 self.raster = CpuRenderer::default();
                 self.font_files.clear();
             }
-            self.frame = Some(frame.clone());
+            self.frame = Some(match self.revealed_frame(scene, frame, scale)? {
+                Some(revealed) => Arc::new(revealed),
+                None => frame.clone(),
+            });
             return Ok(());
         }
         if !scale.is_finite() || scale <= 0. {

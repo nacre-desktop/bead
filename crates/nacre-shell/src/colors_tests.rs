@@ -880,7 +880,8 @@ fn settings_wallpaper_and_colors_pages_are_editable_registry_rows() {
         let flat = items
             .iter()
             .flat_map(|row| {
-                std::iter::once(row.clone()).chain(row["rows"].as_array().cloned().unwrap_or_default())
+                std::iter::once(row.clone())
+                    .chain(row["rows"].as_array().cloned().unwrap_or_default())
             })
             .collect();
         (flat, model["settings.readonly"].clone())

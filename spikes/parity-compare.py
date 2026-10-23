@@ -55,6 +55,8 @@ STATES = {
     'launcher-wallpapers': ([('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 0),
     'menu-power': ([('ui', 'nacre', 'menu', 'power', '')], [('ui', 'nacre', 'close')], 0),
     'dashboard-0': ([('ui', 'drawers', 'toggle', 'dashboard'), ('ui', 'nacre', 'tab', '0')], [('ui', 'nacre', 'close')], 1.4),
+    # B0067: the same open, measured after one open/close (the view is built and warm), to tell a cold first frame from the motion
+    'dashboard-warm': ([('ui', 'drawers', 'toggle', 'dashboard'), ('ui', 'nacre', 'tab', '0')], [('ui', 'nacre', 'close')], 1.4),
     'dashboard-1': ([('ui', 'drawers', 'toggle', 'dashboard'), ('ui', 'nacre', 'tab', '1')], [('ui', 'nacre', 'close')], 0),
     'dashboard-2': ([('ui', 'drawers', 'toggle', 'dashboard'), ('ui', 'nacre', 'tab', '2')], [('ui', 'nacre', 'close')], 0),
     'dashboard-3': ([('ui', 'drawers', 'toggle', 'dashboard'), ('ui', 'nacre', 'tab', '3')], [('ui', 'nacre', 'close')], 0),
@@ -127,7 +129,7 @@ STATES = {
 # Where each transition happens, in logical pixels ("x,y wxh"): a grim region is much faster than the whole output, which
 # is what gives a usable frame rate for the animation timing.
 REGIONS = {
-    'launcher': '340,520 1240x680', 'dashboard-0': '300,0 1320x760', 'popout-calendar': '1250,0 670x520',
+    'launcher': '340,520 1240x680', 'dashboard-0': '300,0 1320x760', 'dashboard-warm': '300,0 1320x760', 'popout-calendar': '1250,0 670x520',
     'popout-network': '1250,0 670x520', 'control-center': '1360,0 560x760', 'notification': '1300,0 620x420',
     'session': '560,260 800x680', 'sidebar': '0,0 760x1200',
 }
@@ -528,6 +530,11 @@ class Arm:
             try:
                 self.steps([('ui', 'nacre', 'close')])
                 time.sleep(0.8)
+                if name.endswith('-warm'):
+                    self.steps(opens)
+                    time.sleep(2.5)
+                    self.steps(closes)
+                    time.sleep(1.5)
                 if seconds and opens:
                     info['open_ms'] = self.sequence(name + '-open', lambda: self.steps(opens), seconds)
                 else:
@@ -551,6 +558,11 @@ class Arm:
     def shutdown(self):
         for process in reversed(self.procs):
             stop(process)
+        # Keep the shell log with the captures (frame/motion traces, errors).
+        try:
+            shutil.copy(self.logs / 'shell.log', self.out / 'shell.log')
+        except OSError:
+            pass
 
 
 def run_arm(args):

@@ -190,14 +190,18 @@ async fn keyboard_enter_confirms_and_labels_are_accessible() {
     for _ in 0..8 {
         command(&mut runtime, "tab");
         if runtime.session.stores.get("bead.focused")
-            == Some(&bead::core::Value::Text("session-popout.act-logout.main".into()))
+            == Some(&bead::core::Value::Text(
+                "session-popout.act-logout.main".into(),
+            ))
         {
             break;
         }
     }
     assert_eq!(
         runtime.session.stores.get("bead.focused"),
-        Some(&bead::core::Value::Text("session-popout.act-logout.main".into()))
+        Some(&bead::core::Value::Text(
+            "session-popout.act-logout.main".into()
+        ))
     );
     command(&mut runtime, "enter");
     assert_eq!(label(&runtime, "confirm"), "Confirm log out");

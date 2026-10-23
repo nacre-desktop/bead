@@ -373,6 +373,17 @@ impl App {
                 } else {
                     motion.open
                 };
+                // B0067: a panel opens from closed. A fresh animation set would take the first target as where the
+                // panel already is and show it fully open at once (the cold open never animated).
+                if open && self.animations.value(&motion.id, now).is_none() {
+                    self.animations.target(
+                        &motion.id,
+                        0.,
+                        now,
+                        0.001,
+                        motion.curve.unwrap_or(bead_core::animation::Curve::EaseOut),
+                    );
+                }
                 self.animations.target(
                     &motion.id,
                     if open { 1. } else { 0. },

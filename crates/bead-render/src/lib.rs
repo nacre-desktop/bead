@@ -222,7 +222,8 @@ impl Scene {
             (a, b) => a.or(b),
         }
     }
-    /// The open-state body of a revealing panel: the first fill of the scene.
+    /// The open-state body of a revealing panel: the scene bounds less the 32 px shadow margin the presenter
+    /// offsets by; else the first shadow (30 px outside its body) or the largest fill.
     fn reveal_body(&self) -> Option<Rect> {
         let from_parts = self.motion.as_ref().and_then(|m| {
             m.parts.iter().find_map(|(_, p)| match p {
@@ -230,12 +231,37 @@ impl Scene {
                 _ => None,
             })
         });
-        from_parts.or_else(|| {
-            self.primitives.iter().find_map(|p| match p {
-                Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => Some(*rect),
-                _ => None,
+        from_parts
+            .or_else(|| {
+                // Panel scenes carry the presenter's 32 px shadow margin around the body (see `offset`).
+                (self.bounds.w > 64. && self.bounds.h > 64.).then(|| {
+                    Rect::new(
+                        self.bounds.x + 32.,
+                        self.bounds.y + 32.,
+                        self.bounds.w - 64.,
+                        self.bounds.h - 64.,
+                    )
+                })
             })
-        })
+            .or_else(|| {
+                self.primitives.iter().find_map(|p| match p {
+                    Primitive::Shadow { rect, .. } if rect.w > 60. && rect.h > 60. => Some(
+                        Rect::new(rect.x + 30., rect.y + 30., rect.w - 60., rect.h - 60.),
+                    ),
+                    _ => None,
+                })
+            })
+            .or_else(|| {
+                self.primitives
+                    .iter()
+                    .filter_map(|p| match p {
+                        Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => {
+                            Some(*rect)
+                        }
+                        _ => None,
+                    })
+                    .max_by(|a, b| (a.w * a.h).total_cmp(&(b.w * b.h)))
+            })
     }
     /// B0067: set the eased progress of a revealing panel and reshape its body: the fill and its shadow cover only
     /// the revealed part of the body (rounded on the growing edge, shadow following), while the content stays put
@@ -247,14 +273,25 @@ impl Scene {
         if self.motion.as_ref().is_some_and(|m| m.parts.is_empty())
             && let Some(body) = self.reveal_body()
         {
+            let near = |a: Rect, b: Rect| {
+                (a.x - b.x).abs() < 0.01
+                    && (a.y - b.y).abs() < 0.01
+                    && (a.w - b.w).abs() < 0.01
+                    && (a.h - b.h).abs() < 0.01
+            };
             let grown = Rect::new(body.x - 30., body.y - 30., body.w + 60., body.h + 60.);
+            let mut shadowed = false;
             let parts: Vec<(usize, Primitive)> = self
                 .primitives
                 .iter()
                 .enumerate()
                 .filter(|(_, p)| match p {
-                    Primitive::Rounded { rect, .. } => *rect == body,
-                    Primitive::Shadow { rect, .. } => *rect == grown,
+                    Primitive::Rounded { rect, .. } => near(*rect, body),
+                    // Only the panel's own (first) shadow follows the body.
+                    Primitive::Shadow { rect, .. } if !shadowed && near(*rect, grown) => {
+                        shadowed = true;
+                        true
+                    }
                     _ => false,
                 })
                 .map(|(i, p)| (i, p.clone()))
@@ -311,7 +348,10 @@ impl Scene {
     /// While a revealing panel is partly open: the visible window over its body (generous on
     /// the other sides so the shadow margin stays).
     pub fn reveal_window(&self) -> Option<Rect> {
-        let m = self.motion.as_ref().filter(|m| m.reveal && m.progress < 1.)?;
+        let m = self
+            .motion
+            .as_ref()
+            .filter(|m| m.reveal && m.progress < 1.)?;
         let body = self.reveal_body()?;
         let p = m.progress.clamp(0., 1.);
         const M: f32 = 4096.;
@@ -325,7 +365,12 @@ impl Scene {
             Rect::new(body.x - M, body.y - M, M + body.w * p, body.h + 2. * M)
         } else {
             let left = body.x + body.w * (1. - p);
-            Rect::new(left, body.y - M, body.x + body.w + M - left, body.h + 2. * M)
+            Rect::new(
+                left,
+                body.y - M,
+                body.x + body.w + M - left,
+                body.h + 2. * M,
+            )
         })
     }
     pub fn bounds(&self) -> Rect {
