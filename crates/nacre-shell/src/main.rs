@@ -375,6 +375,8 @@ fn start(
             edge: panel_edge,
             slide_distance: None,
             fade: true,
+            reveal: false,
+            progress: 1.,
         });
         options.companion = Some((companion, panel_renderer.unwrap_or(default_panel_renderer)));
     }

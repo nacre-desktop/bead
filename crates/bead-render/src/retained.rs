@@ -123,6 +123,11 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
             value.to_bits().hash(&mut h);
         }
     }
+    if let Some(r) = scene.reveal_window() {
+        for value in [r.x, r.y, r.w, r.h] {
+            value.to_bits().hash(&mut h);
+        }
+    }
     for f in [
         scene.bounds.x,
         scene.bounds.y,

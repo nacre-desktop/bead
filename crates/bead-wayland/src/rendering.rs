@@ -363,6 +363,7 @@ impl App {
             }
             s.redraw = false;
             let mut opaque_motion = self.options.animate;
+            let mut reveal_progress = None;
             if let Some(motion) = &scene.motion {
                 let now = self.started.elapsed().as_secs_f64();
                 let open = if self.options.animate {
@@ -389,14 +390,23 @@ impl App {
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
                 scene.opacity = motion.opacity(progress);
-                let (dx, dy) = motion.edge.closed_offset(
-                    motion.slide_distance.unwrap_or(scene.bounds.w),
-                    motion.slide_distance.unwrap_or(scene.bounds.h),
-                    progress,
-                );
-                opaque_motion = active && (dx != 0. || dy != 0.);
+                // A revealing panel stays put and is clipped instead (Scene::reveal_window).
+                let (dx, dy) = if motion.reveal {
+                    reveal_progress = Some(progress);
+                    (0., 0.)
+                } else {
+                    motion.edge.closed_offset(
+                        motion.slide_distance.unwrap_or(scene.bounds.w),
+                        motion.slide_distance.unwrap_or(scene.bounds.h),
+                        progress,
+                    )
+                };
+                opaque_motion = active && (dx != 0. || dy != 0. || reveal_progress.is_some());
                 scene.offset.0 = 32. + dx;
                 scene.offset.1 = 32. + dy;
+            }
+            if let (Some(progress), Some(motion)) = (reveal_progress, &mut scene.motion) {
+                motion.progress = progress;
             }
 
             let scale = s.scale120 as f32 / 120.;
@@ -1345,6 +1355,8 @@ mod input_tests {
             edge: bead_core::Edge::Top,
             slide_distance: None,
             fade: true,
+            reveal: false,
+            progress: 1.,
         });
         scene.offset = (32., -18.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 50]));

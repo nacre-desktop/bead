@@ -334,7 +334,7 @@ impl TreeCache {
             id.hash(&mut frame_hash);
             key.hash(&mut frame_hash);
             hash_primitive(primitive, false, &mut frame_hash);
-            let clip = scene.clips.get(&index).copied();
+            let clip = scene.clip_at(index);
             if let Some(clip) = clip {
                 for value in [clip.x, clip.y, clip.w, clip.h] {
                     value.to_bits().hash(&mut frame_hash);

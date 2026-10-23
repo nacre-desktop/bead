@@ -42,6 +42,16 @@ impl Rect {
             (self.y + self.h).max(other.y + other.h) - y,
         )
     }
+    pub fn intersect(self, o: Self) -> Self {
+        let x = self.x.max(o.x);
+        let y = self.y.max(o.y);
+        Self::new(
+            x,
+            y,
+            ((self.x + self.w).min(o.x + o.w) - x).max(0.),
+            ((self.y + self.h).min(o.y + o.h) - y).max(0.),
+        )
+    }
     pub fn translated(self, x: f32, y: f32) -> Self {
         Self::new(self.x + x, self.y + y, self.w, self.h)
     }
@@ -154,6 +164,11 @@ pub struct Motion {
     pub slide_distance: Option<f32>,
     /// The scene fades in with the slide (default); false keeps it opaque while it moves (the panel grows out of its edge).
     pub fade: bool,
+    /// The panel stays at its final position while its body grows out of `edge`: the scene is
+    /// clipped to the revealed part (`progress` of the body extent) instead of sliding.
+    pub reveal: bool,
+    /// Eased open progress, written by the presenter every frame (1 = fully open).
+    pub progress: f32,
 }
 impl Motion {
     /// Scene opacity at a progress: the progress itself when fading, else opaque once any of it is shown.
@@ -191,6 +206,37 @@ pub struct Scene {
     pub bounds: Rect,
 }
 impl Scene {
+    /// The clip for a primitive: its own (scroll viewport) intersected with the reveal window.
+    pub fn clip_at(&self, index: usize) -> Option<Rect> {
+        let own = self.clips.get(&index).copied();
+        match (own, self.reveal_window()) {
+            (Some(a), Some(b)) => Some(a.intersect(b)),
+            (a, b) => a.or(b),
+        }
+    }
+    /// While a revealing panel is partly open: the visible window over its body (generous on
+    /// the other sides so the shadow margin stays).
+    pub fn reveal_window(&self) -> Option<Rect> {
+        let m = self.motion.as_ref().filter(|m| m.reveal && m.progress < 1.)?;
+        let body = self.primitives.iter().find_map(|p| match p {
+            Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => Some(*rect),
+            _ => None,
+        })?;
+        let p = m.progress.clamp(0., 1.);
+        const M: f32 = 4096.;
+        let (ix, iy) = m.edge.inward();
+        Some(if iy > 0. {
+            Rect::new(body.x - M, body.y - M, body.w + 2. * M, M + body.h * p)
+        } else if iy < 0. {
+            let top = body.y + body.h * (1. - p);
+            Rect::new(body.x - M, top, body.w + 2. * M, body.y + body.h + M - top)
+        } else if ix > 0. {
+            Rect::new(body.x - M, body.y - M, M + body.w * p, body.h + 2. * M)
+        } else {
+            let left = body.x + body.w * (1. - p);
+            Rect::new(left, body.y - M, body.x + body.w + M - left, body.h + 2. * M)
+        })
+    }
     pub fn bounds(&self) -> Rect {
         self.bounds.translated(self.offset.0, self.offset.1)
     }
@@ -735,7 +781,7 @@ impl Renderer for CpuRenderer {
             d.h as f32 / scale,
         );
         for (index, p) in scene.primitives.iter().enumerate() {
-            let clipped = scene.clips.get(&index).map(|clip| {
+            let clipped = scene.clip_at(index).map(|clip| {
                 clip.translated(scene.offset.0, scene.offset.1)
                     .pixels(scale, width, height)
             });

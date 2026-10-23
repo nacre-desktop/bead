@@ -33,7 +33,7 @@ for _,tab in ipairs(tabs) do
         aria_label=tab.title,on_activate=interactive and ui.action("view.open","dashboard-"..tab.id) or nil,
         table.unpack(face)})
 end
-return kit.Panel{id="dashboard",edge="top",open=ui.bind("panel.open"),duration=.36,transition="ease-in-out",fade=false,
+return kit.Panel{id="dashboard",edge="top",open=ui.bind("panel.open"),duration=.36,transition="ease-in-out",fade=false,reveal=true,
     width=984,height=650,padding=0,radius=18,fill="surface",
     ui.Row{id="navigation",position="absolute",left=24,top=12,width=936,height=44,table.unpack(nav)},
     ui.Box{id="stage",position="absolute",left=22,top=68,width=940,height=562,content()},

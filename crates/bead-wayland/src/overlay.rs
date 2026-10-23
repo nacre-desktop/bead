@@ -470,15 +470,24 @@ impl App {
                 .value(&motion.id, now)
                 .ok_or("motion value missing")?;
             scene.opacity = motion.opacity(progress);
-            let (dx, dy) = motion.edge.closed_offset(
-                motion.slide_distance.unwrap_or(scene.bounds.w),
-                motion.slide_distance.unwrap_or(scene.bounds.h),
-                progress,
-            );
+            let reveal = motion.reveal;
+            let (dx, dy) = if reveal {
+                (0., 0.)
+            } else {
+                motion.edge.closed_offset(
+                    motion.slide_distance.unwrap_or(scene.bounds.w),
+                    motion.slide_distance.unwrap_or(scene.bounds.h),
+                    progress,
+                )
+            };
             animating = active;
             scene.offset = (32. + dx, 32. + dy);
+
             if matches!(motion.edge, bead_core::Edge::Top | bead_core::Edge::Bottom) {
                 scene.offset.0 = ((o.size.0 as f32 - scene.width) / 2.).max(0.);
+            }
+            if reveal && let Some(m) = &mut scene.motion {
+                m.progress = progress;
             }
         }
         o.offset = scene.offset;

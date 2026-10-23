@@ -232,6 +232,7 @@ pub fn spec(
         motion.duration = 0.36;
         motion.curve = Some(bead::core::animation::Curve::EaseInOut);
         motion.fade = false;
+        motion.reveal = true;
     }
     let cold = fallback.clone();
     Ok(bead::wayland::PanelSpec {
