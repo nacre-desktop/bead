@@ -55,6 +55,32 @@ fn press(runtime: &mut Runtime, id: &str) {
         .unwrap();
     runtime.commit();
 }
+fn command(runtime: &mut Runtime, name: &str) {
+    runtime
+        .stage(UiEvent::Command {
+            command: name.into(),
+            shift: false,
+        })
+        .unwrap();
+    runtime.commit();
+}
+fn node_exists(runtime: &Runtime, id: &str) -> bool {
+    runtime
+        .session
+        .view_nodes()
+        .iter()
+        .any(|n| n.id == format!("session-popout.{id}"))
+}
+fn label(runtime: &Runtime, id: &str) -> String {
+    runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|n| n.id == format!("session-popout.{id}"))
+        .unwrap()
+        .label
+        .clone()
+}
 fn refresh(runtime: &mut Runtime) {
     runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
     runtime.commit();
@@ -122,8 +148,9 @@ async fn panel_lock_and_restart_confirmation_end_to_end() {
     press(&mut runtime, "act-reboot");
     refresh(&mut runtime);
     assert!(calls.try_recv().is_err(), "restart waits for confirmation");
-    press(&mut runtime, "cancel");
+    command(&mut runtime, "escape");
     refresh(&mut runtime);
+    assert!(node_exists(&runtime, "act-reboot") && !node_exists(&runtime, "confirm"));
     press(&mut runtime, "act-reboot");
     refresh(&mut runtime);
     press(&mut runtime, "confirm");
@@ -141,6 +168,56 @@ async fn panel_lock_and_restart_confirmation_end_to_end() {
     assert_eq!(
         runtime.session.stores.get("panel.open"),
         Some(&bead::core::Value::Bool(false))
+    );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn keyboard_enter_confirms_and_labels_are_accessible() {
+    let replies = vec![ok(serde_json::json!({"changed":true}))];
+    let (dir, menu, mut calls) = lab(true, replies).await;
+    let mut runtime = panel(&menu.client());
+    refresh(&mut runtime);
+    assert_eq!(label(&runtime, "act-suspend"), "Suspend");
+    assert_eq!(label(&runtime, "act-logout"), "Log out");
+    // Tab to Log out, Enter asks, a second Enter confirms.
+    for _ in 0..8 {
+        command(&mut runtime, "tab");
+        if runtime.session.stores.get("bead.focused")
+            == Some(&bead::core::Value::Text("session-popout.act-logout".into()))
+        {
+            break;
+        }
+    }
+    assert_eq!(
+        runtime.session.stores.get("bead.focused"),
+        Some(&bead::core::Value::Text("session-popout.act-logout".into()))
+    );
+    command(&mut runtime, "enter");
+    assert_eq!(label(&runtime, "confirm"), "Confirm log out");
+    assert!(!node_exists(&runtime, "act-logout"));
+    assert!(calls.try_recv().is_err(), "asking sends nothing");
+    command(&mut runtime, "enter");
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        serde_json::json!({"action":"logout","confirmed":true})
+    );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn clicking_suspend_acts_at_once_and_replaces_a_pending_prompt() {
+    let replies = vec![ok(serde_json::json!({"changed":true}))];
+    let (dir, menu, mut calls) = lab(true, replies).await;
+    let mut runtime = panel(&menu.client());
+    refresh(&mut runtime);
+    press(&mut runtime, "act-shutdown");
+    assert_eq!(label(&runtime, "confirm"), "Confirm power off");
+    assert!(calls.try_recv().is_err());
+    press(&mut runtime, "act-suspend");
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        serde_json::json!({"action":"suspend","confirmed":true})
     );
     std::fs::remove_dir_all(dir).ok();
 }

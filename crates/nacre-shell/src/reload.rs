@@ -1734,7 +1734,14 @@ impl SceneSource for Runtime {
                 ("session.cancel", _) => menu.cancel(),
                 _ => {}
             }
-            let scene = self.session.update(BTreeMap::new())?;
+            // Keyboard path: the item that now asks holds focus, so Enter confirms.
+            let focus = menu.confirming().map_or(BTreeMap::new(), |_| {
+                BTreeMap::from([(
+                    "bead.focused".into(),
+                    bead::core::Value::Text("session-popout.confirm".into()),
+                )])
+            });
+            let scene = self.session.update(focus)?;
             return self.finish_scene(scene, false);
         }
         if let Some((_, name, _)) = &host_action
@@ -2466,12 +2473,20 @@ impl SceneSource for Runtime {
                     if self
                         .session_menu
                         .as_ref()
-                        .is_some_and(|menu| menu.confirming()) =>
+                        .is_some_and(|menu| menu.confirming().is_some()) =>
                 {
-                    if let Some(menu) = &self.session_menu {
+                    let key = self.session_menu.as_ref().and_then(|menu| {
+                        let key = menu.confirming();
                         menu.cancel();
-                    }
-                    self.session.update(BTreeMap::new())?
+                        key
+                    });
+                    // Hand focus back to the item that was asking.
+                    self.session.update(key.map_or(BTreeMap::new(), |key| {
+                        BTreeMap::from([(
+                            "bead.focused".into(),
+                            bead::core::Value::Text(format!("session-popout.act-{key}")),
+                        )])
+                    }))?
                 }
                 "escape" if self.session.stores.get("panel.open").is_some() => {
                     self.session.update(std::collections::BTreeMap::from([(

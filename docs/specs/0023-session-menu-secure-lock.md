@@ -1,5 +1,7 @@
 # B0023 — Session menu and fail-closed lock hand-off
 
+Superseded in part by [B0042](0042-session-menu-confirmations.md): suspend no longer asks, the others ask inline with a 4 s timeout.
+
 Status: **Review — contract published (Nacre N0031 `session.request`, pinned `652d6c4f`); schema aligned by B0022.**
 Gap-list unit 8 (`docs/research/core-switch-gap-20261022.md`).
 

@@ -914,3 +914,51 @@ fn calendar_old_bundle_without_follow_flag_keeps_its_navigation_behavior() -> Re
     );
     Ok(())
 }
+
+/// B0042: session menu idle, inline confirmation, and disabled (route not advertised).
+#[test]
+fn session_menu_goldens_idle_confirming_and_disabled() -> Result<()> {
+    let states = [
+        ("idle", true, "", ""),
+        ("confirm", true, "logout", "Confirm log out"),
+        ("disabled", false, "", ""),
+    ];
+    for scale in [1., 1.5] {
+        for (name, enabled, action, question) in states {
+            let mut h = Harness::load(
+                &root(),
+                Path::new("session/main.luau"),
+                &root().join("palette.json"),
+                BTreeMap::from([
+                    ("panel.open".into(), Value::Bool(true)),
+                    ("session.enabled".into(), Value::Bool(enabled)),
+                    ("session.confirm".into(), Value::Text(question.into())),
+                    ("session.confirm_action".into(), Value::Text(action.into())),
+                ]),
+                Config {
+                    width: 260,
+                    height: 360,
+                    scale,
+                },
+            )?;
+            let acting = h
+                .session
+                .view_nodes()
+                .iter()
+                .filter(|n| n.action.is_some())
+                .count();
+            assert_eq!(acting, if enabled { 5 } else { 0 }, "{name}");
+            let frame = h.render()?;
+            let golden = root()
+                .join("tests/goldens")
+                .join(format!("session-{name}-{scale}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            let artifacts =
+                std::env::temp_dir().join(format!("bead-session-golden-{name}-{scale}"));
+            frame.compare(&golden, bead_test::Tolerance::default(), &artifacts)?;
+        }
+    }
+    Ok(())
+}

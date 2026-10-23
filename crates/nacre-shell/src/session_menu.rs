@@ -6,13 +6,21 @@
 //! connected daemon advertises that exact method. Success is accepted only on
 //! the published reply `{changed:true}`; every other outcome is an error and
 //! nothing is shown as locked or done. Every action except lock is sent with
-//! `confirmed:true`, and only after the local confirmation step.
+//! `confirmed:true`; log out, restart and power off only after the inline
+//! confirmation (Enter/click again within `CONFIRM_TIMEOUT`; Esc, timeout or
+//! another entry reverts). Lock and suspend act on the first activation.
 use crate::i18n::tr;
 use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
 use bead::core::{Value, source::Source};
-use std::{cell::RefCell, collections::BTreeMap, time::Duration};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 pub const METHOD: &str = "session.request";
+/// How long an inline confirmation waits before the item reverts.
+const CONFIRM_TIMEOUT: Duration = Duration::from_secs(4);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -42,16 +50,19 @@ impl Action {
             Self::Shutdown => "shutdown",
         }
     }
-    /// Message ids (translated when projected). N0031 requires confirmation for everything except lock; the daemon
-    /// refuses an unconfirmed request, so the menu always asks first.
+    /// Inline confirmation label (translated when projected) for the destructive actions only. Suspend is
+    /// reversible and asks nothing, but N0031 still requires `confirmed:true` from the caller, so
+    /// `needs_flag` is true for everything except lock.
     fn confirm(self) -> Option<&'static str> {
         match self {
             Self::Logout => Some("bead.panel.session-confirm-logout"),
-            Self::Suspend => Some("bead.panel.session-confirm-suspend"),
             Self::Reboot => Some("bead.panel.session-confirm-reboot"),
             Self::Shutdown => Some("bead.panel.session-confirm-shutdown"),
-            Self::Lock => None,
+            Self::Lock | Self::Suspend => None,
         }
+    }
+    fn needs_flag(self) -> bool {
+        self != Self::Lock
     }
     fn failure(self) -> &'static str {
         match self {
@@ -75,7 +86,7 @@ fn verdict(
 
 enum Phase {
     Idle,
-    Confirm(Action),
+    Confirm(Action, Instant),
     Pending(Action, CallTicket),
 }
 struct State {
@@ -85,12 +96,14 @@ struct State {
 }
 pub struct SessionMenu {
     client: Client,
+    confirm_timeout: Duration,
     state: RefCell<State>,
 }
 impl SessionMenu {
     pub fn new(client: Client) -> Self {
         Self {
             client,
+            confirm_timeout: CONFIRM_TIMEOUT,
             state: RefCell::new(State {
                 phase: Phase::Idle,
                 message: String::new(),
@@ -118,11 +131,20 @@ impl SessionMenu {
             .subscribe(std::sync::Arc::new(move |_| notify()))
     }
     #[cfg(test)]
+    pub(crate) fn with_confirm_timeout(mut self, timeout: Duration) -> Self {
+        self.confirm_timeout = timeout;
+        self
+    }
+    #[cfg(test)]
     pub(crate) fn client(&self) -> Client {
         self.client.clone()
     }
-    pub fn confirming(&self) -> bool {
-        matches!(self.state.borrow().phase, Phase::Confirm(_))
+    /// The action whose inline confirmation is showing, if any.
+    pub fn confirming(&self) -> Option<&'static str> {
+        match self.state.borrow().phase {
+            Phase::Confirm(action, _) => Some(action.key()),
+            _ => None,
+        }
     }
     pub fn select(&self, key: &str, wake: CallWake) {
         let Some(action) = Action::parse(key) else {
@@ -139,21 +161,31 @@ impl SessionMenu {
         }
         if action.confirm().is_some() {
             let mut state = self.state.borrow_mut();
-            state.phase = Phase::Confirm(action);
+            state.phase = Phase::Confirm(action, Instant::now() + self.confirm_timeout);
             state.message.clear();
+            // Wake the panel at the deadline so `project` can revert the item.
+            let timeout = self.confirm_timeout;
+            std::thread::spawn(move || {
+                std::thread::sleep(timeout + Duration::from_millis(20));
+                wake();
+            });
         } else {
             self.request(action, wake);
         }
     }
     pub fn confirm(&self, wake: CallWake) {
-        let Phase::Confirm(action) = self.state.borrow().phase else {
+        let Phase::Confirm(action, deadline) = self.state.borrow().phase else {
             return;
         };
+        if Instant::now() >= deadline {
+            self.state.borrow_mut().phase = Phase::Idle;
+            return;
+        }
         self.request(action, wake);
     }
     pub fn cancel(&self) {
         let mut state = self.state.borrow_mut();
-        if matches!(state.phase, Phase::Confirm(_)) {
+        if matches!(state.phase, Phase::Confirm(..)) {
             state.phase = Phase::Idle;
         }
     }
@@ -167,7 +199,7 @@ impl SessionMenu {
         };
         match self.client.begin_call(
             METHOD.into(),
-            if action.confirm().is_some() {
+            if action.needs_flag() {
                 serde_json::json!({"action": action.key(), "confirmed": true})
             } else {
                 serde_json::json!({"action": action.key()})
@@ -199,11 +231,13 @@ impl SessionMenu {
             }
             state.phase = Phase::Idle;
         }
-        if !ready && matches!(state.phase, Phase::Confirm(_)) {
+        if let Phase::Confirm(_, deadline) = state.phase
+            && (!ready || Instant::now() >= deadline)
+        {
             state.phase = Phase::Idle;
         }
         let (confirm, action) = match &state.phase {
-            Phase::Confirm(action) => (
+            Phase::Confirm(action, _) => (
                 action.confirm().map_or(String::new(), |id| tr(id, &[])),
                 action.key(),
             ),
@@ -358,12 +392,12 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn only_destructive_actions_ask_first() {
+    fn only_logout_restart_and_power_off_ask_first() {
         let asks: Vec<_> = ["lock", "logout", "suspend", "reboot", "shutdown"]
             .into_iter()
             .map(|key| Action::parse(key).unwrap().confirm().is_some())
             .collect();
-        assert_eq!(asks, [false, true, true, true, true]);
+        assert_eq!(asks, [false, true, false, true, true]);
         assert!(Action::parse("hibernate").is_none());
     }
 
@@ -434,16 +468,17 @@ pub(crate) mod tests {
         let (dir, menu, mut calls) = lab(true, vec![ok(serde_json::json!({"changed":true}))]).await;
         menu.select("reboot", wake());
         let stores = menu.project();
-        assert_eq!(text(&stores, "session.confirm"), "Restart the computer?");
-        assert!(menu.confirming() && calls.try_recv().is_err());
+        assert_eq!(text(&stores, "session.confirm"), "Confirm restart");
+        assert!(menu.confirming().is_some() && calls.try_recv().is_err());
         menu.cancel();
-        assert!(!menu.confirming());
+        assert!(menu.confirming().is_none());
         menu.confirm(wake());
         assert!(
             calls.try_recv().is_err(),
             "confirm without a prompt is inert"
         );
         menu.select("reboot", wake());
+        assert_eq!(menu.confirming(), Some("reboot"));
         menu.confirm(wake());
         menu.select("shutdown", wake());
         menu.confirm(wake());
@@ -454,6 +489,64 @@ pub(crate) mod tests {
         assert!(calls.try_recv().is_err(), "only one request in flight");
         let stores = settle(&menu).await;
         assert_eq!(stores["panel.open"], Value::Bool(false));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn nothing_is_sent_before_confirmation_and_only_confirm_sends() {
+        let replies = vec![ok(serde_json::json!({"changed":true})); 2];
+        let (dir, menu, mut calls) = lab(true, replies).await;
+        for key in ["logout", "reboot", "shutdown"] {
+            menu.select(key, wake());
+            assert_eq!(menu.confirming(), Some(key));
+            assert!(text(&menu.project(), "session.confirm").starts_with("Confirm "));
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            assert!(calls.try_recv().is_err(), "{key} sent before confirmation");
+            menu.cancel();
+        }
+        assert!(calls.try_recv().is_err());
+        menu.select("logout", wake());
+        menu.select("shutdown", wake()); // switching item replaces the prompt
+        assert_eq!(menu.confirming(), Some("shutdown"));
+        menu.confirm(wake());
+        assert_eq!(
+            calls.recv().await.unwrap(),
+            serde_json::json!({"action":"shutdown","confirmed":true})
+        );
+        settle(&menu).await;
+        // Suspend needs no prompt but still carries the flag N0031 requires.
+        menu.select("suspend", wake());
+        assert!(menu.confirming().is_none());
+        assert_eq!(
+            calls.recv().await.unwrap(),
+            serde_json::json!({"action":"suspend","confirmed":true})
+        );
+        settle(&menu).await;
+        assert!(calls.try_recv().is_err());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_unanswered_confirmation_times_out_and_then_sends_nothing() {
+        let (dir, menu, mut calls) = lab(true, vec![]).await;
+        let menu = menu.with_confirm_timeout(Duration::from_millis(80));
+        let woke = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = woke.clone();
+        menu.select(
+            "logout",
+            Arc::new(move || flag.store(true, std::sync::atomic::Ordering::SeqCst)),
+        );
+        assert_eq!(text(&menu.project(), "session.confirm"), "Confirm log out");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            woke.load(std::sync::atomic::Ordering::SeqCst),
+            "deadline wake"
+        );
+        let stores = menu.project();
+        assert_eq!(text(&stores, "session.confirm"), "");
+        assert_eq!(text(&stores, "session.confirm_action"), "");
+        menu.confirm(wake());
+        assert!(calls.try_recv().is_err(), "late confirm is inert");
         std::fs::remove_dir_all(dir).ok();
     }
 }
