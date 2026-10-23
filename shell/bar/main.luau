@@ -148,7 +148,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
             },
             (popouts and kit.Button or ui.Row){id="clock",height=30,direction=popouts and "row" or nil,gap=4,padding_left=3,padding_right=3,align="center",fill=popouts and "transparent" or nil,aria_label=popouts and ui.tr("bead.bar.open-calendar") or nil,on_activate=popouts and ui.action("view.open","calendar") or nil,
                 glyph("calendar","calendar_month","tertiary"),
-                ui.Text{id="time",text=ui.bind("bead.desktop.clock"),width=48,shrink=0,font_size=16,height=24,family="IBM Plex Sans",color="tertiary"},
+                ui.Text{id="time",text=ui.bind("bar.clock.text"),width=ui.bind("bar.clock.width"),shrink=0,font_size=16,height=24,family="IBM Plex Sans",color="tertiary"},
             },
             (popouts and kit.Button or ui.Row){id="power",height=30,width=30,justify="center",direction=popouts and "row" or nil,align="center",padding=popouts and 0 or nil,fill=popouts and "transparent" or nil,aria_label=popouts and ui.tr("bead.bar.open-session") or nil,on_activate=popouts and ui.action("view.open","session") or nil,
                 glyph("glyph","power_settings_new","error"),

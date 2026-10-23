@@ -31,6 +31,8 @@ pub struct Prefs {
     pub reduce_motion: bool,
     /// `desktop.weatherFahrenheit`.
     pub fahrenheit: bool,
+    /// `desktop.clockFormat == "12-hour"`: the bar and dashboard clocks show AM/PM.
+    pub clock_12h: bool,
     /// `dashboard.tabs` filtered to the core pages, in the owner's order.
     pub core_tabs: Vec<String>,
     /// `dashboardEnabled`, `controlCenterEnabled`, `topBarEnabled`, `frameSheen`:
@@ -176,6 +178,7 @@ impl Prefs {
             text_offset: size - BODY_SIZE,
             reduce_motion: flag("reduceMotion") == Some(true) || flag("animations") == Some(false),
             fahrenheit: flag("weatherFahrenheit") == Some(true),
+            clock_12h: desktop.get("clockFormat").and_then(Json::as_str) == Some("12-hour"),
             core_tabs: core,
             // JS `value || 6`: zero and non-numbers fall back to six.
             workspace_count: profile
@@ -247,6 +250,7 @@ impl Prefs {
                 bead::core::Value::list(icons.collect()),
             ),
             ("bar.workspace.hints".into(), Bool(self.window_hints)),
+            ("bar.clock.twelve".into(), Bool(self.clock_12h)),
         ]
         .into()
     }

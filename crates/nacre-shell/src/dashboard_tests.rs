@@ -1252,3 +1252,12 @@ fn dashboard_extras_have_deterministic_pixels_and_only_navigation_actions() -> R
     }
     Ok(())
 }
+
+#[test]
+fn clock_text_follows_the_clock_format() {
+    assert_eq!(clock_text("17:57", false), "17:57");
+    assert_eq!(clock_text("17:57", true), "5:57 PM");
+    assert_eq!(clock_text("00:05", true), "12:05 AM");
+    assert_eq!(clock_text("12:00", true), "12:00 PM");
+    assert_eq!(clock_text("—", true), "—");
+}

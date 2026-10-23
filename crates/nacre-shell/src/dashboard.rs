@@ -541,7 +541,8 @@ impl Dashboard {
                 .and_then(Json::as_str)
                 .filter(|clock| !clock.is_empty())
                 .unwrap_or("—");
-            text(&mut values, "clock", clock, 16);
+            let twelve = self.prefs().is_some_and(|p| p.clock_12h);
+            text(&mut values, "clock", &clock_text(clock, twelve), 16);
             if !snapshot.connected {
                 values.insert("dashboard.stale".into(), Value::Bool(true));
             }
@@ -1100,3 +1101,13 @@ mod tests;
 #[cfg(test)]
 #[path = "dashboard_more_tests.rs"]
 mod more_tests;
+
+/// `desktop.clockFormat`: the daemon clock is "HH:MM"; 12-hour reads "h:MM AM/PM".
+fn clock_text(clock: &str, twelve: bool) -> String {
+    match clock.split_once(':').map(|(h, m)| (h.parse::<u32>(), m)) {
+        Some((Ok(h), m)) if twelve && h < 24 && m.len() == 2 => {
+            format!("{}:{m} {}", (h + 11) % 12 + 1, if h < 12 { "AM" } else { "PM" })
+        }
+        _ => clock.to_owned(),
+    }
+}
