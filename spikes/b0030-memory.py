@@ -113,7 +113,7 @@ class Arm:
         self.wait(lambda: owner() == "b true", 15, "private notification name")
         cmd = [str(BIN/self.binary), "--bar", "--core-views", "--renderer", "cpu", "--panel-renderer", "cpu", "--daemon-socket", sock,
                "--ui-provider", "--command-socket", str(RUN/"cmd"), "--namespace", "bead-b0030-mem", "--palette", str(SRC/"shell/palette.json")]
-        if self.label == "candidate":
+        if self.label == "candidate" or os.environ.get("NOTICES_BOTH") == "1":
             cmd.append("--notices")
         shell = self.spawn(cmd, "shell.log", env, cwd=str(SRC))
         self.wait(lambda: "UI_SESSION_CREATED" in (self.raw/"shell.log").read_text(errors="replace"), 30, "bar session")
