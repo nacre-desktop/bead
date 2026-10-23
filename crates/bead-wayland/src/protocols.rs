@@ -15,7 +15,11 @@ impl CompositorHandler for App {
             self.window_scale(scale.max(1) as u32 * 120);
             return;
         }
-        if self.edge_surfaces.iter().any(|s| s.layer.wl_surface() == surface) {
+        if self
+            .edge_surfaces
+            .iter()
+            .any(|s| s.layer.wl_surface() == surface)
+        {
             // Integer scale only matters without wp_fractional_scale.
             return;
         }
