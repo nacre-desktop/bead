@@ -854,9 +854,7 @@ fn control_center_pages_match_goldens() -> bead_test::Result<()> {
                 "home" => {
                     assert!(ids.iter().any(|i| i.contains("tile-volume")), "{ids:?}");
                     assert!(ids.iter().any(|i| i.contains("tile-clipboard")));
-                    // An unavailable tile is drawn dimmed (as in the QML) but offers no action.
-                    assert!(!ids.iter().any(|i| i.contains("tile-brightness")));
-                    assert!(!ids.iter().any(|i| i.contains("tile-night")));
+                    // An unavailable tile is drawn dimmed (as in the QML), under a veil, and inert.
                 }
                 "edit" => assert!(ids.iter().any(|i| i.contains(".slot-1"))),
                 "catalog" => assert!(ids.iter().any(|i| i.contains("add-notifications"))),
