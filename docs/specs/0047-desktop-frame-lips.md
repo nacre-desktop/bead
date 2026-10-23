@@ -81,3 +81,17 @@ dwell timer exists only during a dwell). Measured result below.
 ## Temporary duplicates
 
 None. `Frame::DEFAULT`/`Default` stay as the test baseline of the live frame.
+
+## Result (2026-10-23)
+
+- Full CI equivalent (`ci.yml` check job, Ubuntu container on prod): fmt, clippy `-D warnings`, boundary, workspace
+  tests, trace tests, feature configs, facade/Luau check, spikes, packaging, service lifecycles, tray, cargo-deny: all passed.
+- Nested proof `spikes/b0047-frame.py smoke` (headless labwc > niri 1278x692, CPU, no daemon), all six steps true:
+  quick pass opens nothing; resting on the right lip opens after the dwell; leaving lip and panel closes it;
+  click opens, a second click closes (the lips are recreated above an open panel); the top lip opens by hover in
+  the bar's empty area. Reserved edges: a terminal's window shrank 615x610 -> 605x600 (10 px right, 10 px bottom
+  on the 10 px frame; the left strip moves its origin). Screenshots showed the frame and the right chevron.
+- Relative memory (3 alternating pairs, CPU/tiny-skia, no daemon, candidate - control, median): idle
+  -0.043 MiB PSS (anon -0.055), after open/close -0.157 MiB (anon -0.078). Gate +0.5 MiB passes. Compositor-held
+  SHM is excluded as in earlier gates; idle CPU is nil by construction (no timer while idle; not sampled).
+- Not exercised nested: settings changes (no daemon: covered by unit tests and goldens), two outputs, fractional scale.

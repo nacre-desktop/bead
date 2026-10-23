@@ -552,6 +552,13 @@ impl App {
     }
     fn lip_click(&mut self, output: &str, lip: &Lip, wl_output: &wl_output::WlOutput) {
         let k = key(output, &lip.id);
+        if self.options.trace_state {
+            println!(
+                "EDGE_CLICK lip={k} active={} allowed={}",
+                self.lip_active(wl_output, lip),
+                self.lip_allowed(lip)
+            );
+        }
         self.edge.dwelling = None;
         self.edge.dwell.cancel();
         self.edge.dwell_epoch = self.edge.dwell_epoch.wrapping_add(1);
@@ -625,6 +632,13 @@ impl App {
             let _ = self.loop_handle.insert_source(
                 Timer::from_duration(Duration::from_millis(30)),
                 |_, _, app| {
+                    // Surfaces created later stack above earlier ones in a layer: the
+                    // panel now covers the lips, so recreate them on top (QML: lips z 3).
+                    if app.panel_target {
+                        app.edge_surfaces
+                            .retain(|s| !matches!(s.kind, Kind::Lip(_)));
+                        app.sync_edges();
+                    }
                     app.redraw_lips();
                     TimeoutAction::Drop
                 },

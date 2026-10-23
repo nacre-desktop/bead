@@ -107,7 +107,7 @@ class Arm:
         s.env["NIRI_SOCKET"] = str(s.wait(lambda: next(iter((RUN / "r").glob("niri.*.sock")), None), 10, "niri ipc"))
         s.cmdsock = str(RUN / "cmd")
         cmd = [str(ROOT / s.binary), "--bar", "--core-views", "--renderer", "cpu", "--panel-renderer", "cpu",
-               "--command-socket", s.cmdsock, "--namespace", NS, "--palette", str(s.src / "shell/palette.json")]
+               "--trace-state", "--command-socket", s.cmdsock, "--namespace", NS, "--palette", str(s.src / "shell/palette.json")]
         s.shell = s.spawn(cmd, "shell.log", s.env, cwd=str(s.src))
         s.wait(lambda: "UI_SESSION_CREATED" in (s.raw / "shell.log").read_text(errors="replace"), 30, "bar session")
 
@@ -239,11 +239,14 @@ def smoke(cand, pointer_bin, ctl):
         pointer.send("click")
         time.sleep(.8)
         steps["click_opens"] = len(bar_layers()) > base
+        # A real pointer jitters; the lip may have been restacked above the panel.
+        move(W - 5, H // 2 + 22)
+        time.sleep(.4)
         pointer.send("click")
         time.sleep(3.2)
         steps["second_click_closes"] = len(bar_layers()) == base
         # The top lip lives in the bar: resting on its empty middle opens the dashboard.
-        move(W // 2, 20)
+        move(W // 2 + 60, 47)
         time.sleep(1.2)
         steps["top_lip_hover_opens"] = len(bar_layers()) > base
         screenshot("top.png")
