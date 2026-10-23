@@ -39,6 +39,18 @@ pub struct Prefs {
     pub control_center_enabled: bool,
     pub top_bar_enabled: bool,
     pub frame_sheen: bool,
+    /// B0047 frame: `frameWidth` (`?? 10`), `frameRounding` (`?? 25`), the four side
+    /// toggles (`!== false`), `aiSidebarEnabled`, `lipHoverDelay` (integer 0..800, else
+    /// 350) and `clickEdgeMenus` (`=== true`).
+    pub frame_width: i32,
+    pub frame_rounding: i32,
+    pub frame_left: bool,
+    pub frame_right: bool,
+    pub frame_bottom: bool,
+    pub frame_top: bool,
+    pub ai_sidebar_enabled: bool,
+    pub lip_hover_delay: u32,
+    pub click_edge_menus: bool,
     /// `interfaceFont` / `monoFont`: empty means Nacre's default family.
     pub interface_font: String,
     pub mono_font: String,
@@ -110,6 +122,13 @@ impl Prefs {
             core.push("today".into());
         }
         let on = |key: &str| flag(key) != Some(false);
+        let number = |key: &str, fallback: i32, low: i32, high: i32| {
+            desktop
+                .get(key)
+                .and_then(Json::as_f64)
+                .filter(|v| v.is_finite())
+                .map_or(fallback, |v| v.round().clamp(low as f64, high as f64) as i32)
+        };
         let family = |key: &str| {
             desktop
                 .get(key)
@@ -130,6 +149,21 @@ impl Prefs {
             control_center_enabled: on("controlCenterEnabled"),
             top_bar_enabled: on("topBarEnabled"),
             frame_sheen: on("frameSheen"),
+            // JS `value ?? fallback`, bounded to the ranges Nacre's settings helper accepts
+            // (frameWidth 0..30, frameRounding 0..40, lipHoverDelay 0..800).
+            frame_width: number("frameWidth", 10, 0, 30),
+            frame_rounding: number("frameRounding", 25, 0, 40),
+            frame_left: on("frameLeftEnabled"),
+            frame_right: on("frameRightEnabled"),
+            frame_bottom: on("frameBottomEnabled"),
+            frame_top: on("frameTopEnabled"),
+            ai_sidebar_enabled: on("aiSidebarEnabled"),
+            lip_hover_delay: desktop
+                .get("lipHoverDelay")
+                .and_then(Json::as_f64)
+                .filter(|v| v.fract() == 0.)
+                .map_or(350, |v| v.clamp(0., 800.) as u32),
+            click_edge_menus: flag("clickEdgeMenus") == Some(true),
             interface_font: family("interfaceFont"),
             mono_font: family("monoFont"),
             text_offset: size - BODY_SIZE,
@@ -146,6 +180,18 @@ impl Prefs {
             window_hints: on("workspaceWindowHints"),
             rail_order: strings(layout.get("order"), false),
             rail_hidden: strings(layout.get("hidden"), false),
+        }
+    }
+    /// The frame the settings describe (`NacreFrame.qml`).
+    pub fn frame_settings(&self) -> crate::placement::FrameSettings {
+        crate::placement::FrameSettings {
+            width: self.frame_width as f32,
+            rounding: self.frame_rounding as f32,
+            left: self.frame_left,
+            right: self.frame_right,
+            bottom: self.frame_bottom,
+            top: self.frame_top,
+            bar: self.top_bar_enabled,
         }
     }
     /// Generic text style: Luau markup names `IBM Plex Sans` and
@@ -171,6 +217,11 @@ impl Prefs {
         let icons = self.workspace_icons.iter().map(|i| json!({ "icon": i }));
         [
             ("bar.dashboard.enabled".into(), Bool(self.dashboard_enabled)),
+            // The header: the bar's own height plus the top frame edge (`NacreFrame`).
+            (
+                "bar.height".into(),
+                Number(crate::placement::Frame::from_settings(&self.frame_settings()).top.into()),
+            ),
             (
                 "bar.workspace.count".into(),
                 Number(self.workspace_count.into()),
@@ -365,6 +416,52 @@ mod tests {
             set.bar_stores()["bar.dashboard.enabled"],
             bead::core::Value::Bool(false)
         );
+    }
+    #[test]
+    fn frame_and_lip_prefs_follow_qml_defaults_and_wrong_types() {
+        let d = Prefs::default();
+        assert_eq!((d.frame_width, d.frame_rounding), (10, 25));
+        assert!(d.frame_left && d.frame_right && d.frame_bottom && d.frame_top);
+        assert!(d.ai_sidebar_enabled && !d.click_edge_menus);
+        assert_eq!(d.lip_hover_delay, 350);
+        assert_eq!(d.frame_settings().width, 10.);
+        // Wrong types and non-integer delays mean unset; toggles are `!== false`.
+        let odd = Prefs::decode(
+            &json!({"frameWidth": "wide", "frameRounding": null, "frameLeftEnabled": 0,
+                    "lipHoverDelay": 120.5, "clickEdgeMenus": 1, "aiSidebarEnabled": "no"}),
+            &Json::Null,
+        );
+        assert_eq!(odd, d);
+        let set = Prefs::decode(
+            &json!({"frameWidth": 14.4, "frameRounding": 0, "frameLeftEnabled": false,
+                    "frameRightEnabled": false, "frameBottomEnabled": false,
+                    "frameTopEnabled": false, "lipHoverDelay": 0, "clickEdgeMenus": true,
+                    "aiSidebarEnabled": false}),
+            &Json::Null,
+        );
+        assert_eq!((set.frame_width, set.frame_rounding), (14, 0));
+        assert!(!set.frame_left && !set.frame_right && !set.frame_bottom && !set.frame_top);
+        assert_eq!(set.lip_hover_delay, 0);
+        assert!(set.click_edge_menus && !set.ai_sidebar_enabled);
+        // The delay is clamped to 0..800 and the sizes to sane bounds.
+        let extreme = Prefs::decode(
+            &json!({"lipHoverDelay": 5000, "frameWidth": 9999, "frameRounding": -4}),
+            &Json::Null,
+        );
+        assert_eq!(
+            (extreme.lip_hover_delay, extreme.frame_width, extreme.frame_rounding),
+            (800, 30, 0)
+        );
+        assert_eq!(
+            Prefs::decode(&json!({"lipHoverDelay": -3}), &Json::Null).lip_hover_delay,
+            0
+        );
+        assert_eq!(
+            set.bar_stores()["bar.height"],
+            bead::core::Value::Number(40.),
+            "bar only: no top frame edge"
+        );
+        assert_eq!(d.bar_stores()["bar.height"], bead::core::Value::Number(50.));
     }
     #[test]
     fn workspace_and_rail_prefs_follow_qml_defaults_and_wrong_types() {

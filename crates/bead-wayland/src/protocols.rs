@@ -15,6 +15,10 @@ impl CompositorHandler for App {
             self.window_scale(scale.max(1) as u32 * 120);
             return;
         }
+        if self.edge_surfaces.iter().any(|s| s.layer.wl_surface() == surface) {
+            // Integer scale only matters without wp_fractional_scale.
+            return;
+        }
         if let Some(i) = self
             .surfaces
             .iter()
@@ -136,6 +140,11 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
             && state.window_surface() == Some(surface)
         {
             state.window_scale(scale);
+            return;
+        }
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
+            && state.edge_scale(surface, scale)
+        {
             return;
         }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
@@ -300,6 +309,7 @@ impl OutputHandler for App {
     }
     fn new_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
         self.add_output(qh, output);
+        self.sync_edges();
     }
     fn update_output(
         &mut self,
@@ -308,6 +318,7 @@ impl OutputHandler for App {
         output: wl_output::WlOutput,
     ) {
         self.add_output(qh, output.clone());
+        self.sync_edges();
         if self.options.primary_factory.is_some() {
             let id = self.output_id(&output);
             let viewport = self.output.info(&output).and_then(|info| info.logical_size);
@@ -360,6 +371,7 @@ impl OutputHandler for App {
             self.release_panel();
         }
         self.surfaces.retain(|s| s.output != output);
+        self.edge_output_removed(&output);
         let removed: Vec<String> = self
             .wallpaper_surfaces
             .iter()
@@ -402,6 +414,9 @@ impl ShmHandler for App {
 }
 impl LayerShellHandler for App {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface) {
+        if self.edge_closed(layer) {
+            return;
+        }
         let removed: Vec<String> = self
             .wallpaper_surfaces
             .iter()
@@ -442,6 +457,9 @@ impl LayerShellHandler for App {
         config: LayerSurfaceConfigure,
         _: u32,
     ) {
+        if self.edge_configure(layer, config.new_size) {
+            return;
+        }
         if let Some(surface) = self
             .wallpaper_surfaces
             .iter_mut()
@@ -736,13 +754,20 @@ impl PointerHandler for App {
                 }
                 continue;
             }
-            let Some(surface) = self
+            if self.edge_pointer(event) {
+                continue;
+            }
+            let Some(bar) = self
                 .surfaces
                 .iter()
-                .find(|s| s.layer.wl_surface() == &event.surface)
+                .position(|s| s.layer.wl_surface() == &event.surface)
             else {
                 continue;
             };
+            if !self.surfaces[bar].companion {
+                self.edge_bar_pointer(bar, event);
+            }
+            let surface = &self.surfaces[bar];
             let panel = surface.companion;
             let surface_size = (surface.width, surface.height);
             let offset = surface.offset;
@@ -753,9 +778,11 @@ impl PointerHandler for App {
             if panel {
                 match event.kind {
                     PointerEventKind::Enter { .. } => {
+                        self.edge_panel_hover(true);
                         self.view_event(false, UiEvent::PointerRegion(true))
                     }
                     PointerEventKind::Leave { .. } => {
+                        self.edge_panel_hover(false);
                         self.view_event(false, UiEvent::PointerRegion(false))
                     }
                     _ => {}

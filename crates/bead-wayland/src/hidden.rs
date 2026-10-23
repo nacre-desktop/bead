@@ -28,6 +28,7 @@ impl App {
         drop(self.dismiss.take());
         self.surfaces.clear();
         if self.hidden {
+            self.sync_edges();
             return;
         }
         let keyboard_dismiss = self.panel_target
@@ -47,6 +48,7 @@ impl App {
         for output in outputs {
             self.add_output(&qh, output);
         }
+        self.sync_edges();
     }
 }
 impl App {
@@ -65,6 +67,16 @@ impl App {
         {
             self.close_panel();
         }
+        // The bar's thickness follows the frame settings live.
+        let thickness = self.bar_thickness();
+        for surface in self.surfaces.iter().filter(|s| !s.companion) {
+            if self.options.bar {
+                surface.layer.set_size(0, thickness);
+                surface.layer.set_exclusive_zone(thickness as i32);
+                surface.layer.commit();
+            }
+        }
+        self.sync_edges();
         let variant = control.decoration_variant();
         if variant != self.decoration_variant {
             self.decoration_variant = variant;

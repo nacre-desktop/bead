@@ -15,7 +15,7 @@ pub enum Attachment {
     Popout,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Frame {
     pub left: f32,
     pub right: f32,
@@ -23,16 +23,56 @@ pub struct Frame {
     pub bottom: f32,
     pub rounding: f32,
 }
+impl Frame {
+    /// NacreFrame defaults: 40px header + 10px frame, 25px contour rounding.
+    pub const DEFAULT: Frame = Frame {
+        left: 10.,
+        right: 10.,
+        top: 50.,
+        bottom: 10.,
+        rounding: 25.,
+    };
+    /// The frame the settings currently describe. Positioners and the static tiles read
+    /// it when they run, so a settings change needs no restart (B0047).
+    pub fn current() -> Frame {
+        *LIVE.lock().unwrap_or_else(|p| p.into_inner())
+    }
+    /// Publish a new live frame; true when it differs from the previous one.
+    pub fn set_current(frame: Frame) -> bool {
+        let mut live = LIVE.lock().unwrap_or_else(|p| p.into_inner());
+        std::mem::replace(&mut *live, frame) != frame
+    }
+    /// `NacreFrame.qml`: the header is the 40 px bar (when enabled) plus the top frame
+    /// edge; each side is the frame width unless its toggle is off.
+    pub fn from_settings(s: &FrameSettings) -> Frame {
+        let width = s.width.max(0.);
+        let edge = |on: bool| if on { width } else { 0. };
+        Frame {
+            left: edge(s.left),
+            right: edge(s.right),
+            bottom: edge(s.bottom),
+            top: if s.bar { BAR_HEIGHT } else { 0. } + edge(s.top),
+            rounding: s.rounding.max(0.),
+        }
+    }
+}
+static LIVE: std::sync::Mutex<Frame> = std::sync::Mutex::new(Frame::DEFAULT);
+/// The Nacre bar's own height inside the header (the rest is the top frame edge).
+pub const BAR_HEIGHT: f32 = 40.;
+/// Decoded frame settings (`frameWidth`, `frameRounding`, the four side toggles, bar on).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FrameSettings {
+    pub width: f32,
+    pub rounding: f32,
+    pub left: bool,
+    pub right: bool,
+    pub bottom: bool,
+    pub top: bool,
+    pub bar: bool,
+}
 impl Default for Frame {
     fn default() -> Self {
-        // NacreFrame defaults: 40px header + 10px frame, 25px contour rounding.
-        Self {
-            left: 10.,
-            right: 10.,
-            top: 50.,
-            bottom: 10.,
-            rounding: 25.,
-        }
+        Self::DEFAULT
     }
 }
 
@@ -148,14 +188,13 @@ impl Chrome {
     }
     fn svg(
         &self,
+        frame: Frame,
         output: (f32, f32),
         rectangles: &[Rect],
         crop: Rect,
         engaged: bool,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        let radius = 25_f64
-            .min(((output.0 - 20.).max(0.) / 2.) as f64)
-            .min(((output.1 - 60.).max(0.) / 2.) as f64);
+        let radius = frame.radius(output) as f64;
         let contour =
             crate::contour::geometry(output.0 as f64, output.1 as f64, rectangles, radius)?;
         let rgb = |c: [u8; 4]| format!("rgb({},{},{})", c[0], c[1], c[2]);
@@ -193,57 +232,92 @@ impl Chrome {
             rim
         ))
     }
+    /// The static frame tiles. The factory reads [`Frame::current`] on every call, so a
+    /// settings change (and a decoration variant bump) redraws them with the new frame.
     pub fn decorations(self) -> bead::wayland::DecorationFactory {
-        Arc::new(move |(w, h), engaged, panel| {
-            let (w, h) = (w as f32, h as f32);
-            let radius = 25_f32
-                .min((w - 20.).max(0.) / 2.)
-                .min((h - 60.).max(0.) / 2.);
-            let mut material = vec![
-                Rect::new(0., 0., w, 50.),
-                Rect::new(0., 0., 10., h),
-                Rect::new(w - 10., 0., 10., h),
-                Rect::new(0., h - 10., w, 10.),
-            ];
-            if let Some(panel) = panel {
-                material.push(body(panel.scene).translated(
-                    panel.origin.0 as f32 - panel.scene.bounds.x,
-                    panel.origin.1 as f32 - panel.scene.bounds.y,
-                ));
+        Arc::new(move |(w, h), engaged, panel| self.tiles(Frame::current(), (w, h), engaged, panel))
+    }
+    /// Tiles for an explicit frame: only the strips that carry material are made, each
+    /// including the rim's half pixel on both sides (disjoint crops, even coordinates).
+    pub fn tiles(
+        &self,
+        frame: Frame,
+        (w, h): (u32, u32),
+        engaged: bool,
+        panel: Option<bead::wayland::DecorationPanel<'_>>,
+    ) -> Result<Vec<bead::wayland::Decoration>, String> {
+        let (w, h) = (w as f32, h as f32);
+        let radius = frame.radius((w, h));
+        let mut material = frame.material((w, h));
+        if let Some(panel) = panel {
+            material.push(body(panel.scene).translated(
+                panel.origin.0 as f32 - panel.scene.bounds.x,
+                panel.origin.1 as f32 - panel.scene.bounds.y,
+            ));
+        }
+        let Frame {
+            left,
+            right,
+            top,
+            bottom,
+            ..
+        } = frame;
+        let side_top = if top > 0. { top + 2. } else { 0. };
+        let side_bottom = if bottom > 0. { h - bottom - 2. } else { h };
+        let corner = (radius - 1.).max(0.);
+        let mut crops = Vec::new();
+        if left > 0. {
+            crops.push(Rect::new(0., side_top, left + 2., side_bottom - side_top));
+        }
+        if right > 0. {
+            crops.push(Rect::new(
+                w - right - 2.,
+                side_top,
+                right + 2.,
+                side_bottom - side_top,
+            ));
+        }
+        if bottom > 0. {
+            crops.push(Rect::new(0., h - bottom - 2., w, bottom + 2.));
+        }
+        if top > 0. {
+            crops.push(Rect::new(0., top - 2., w, 4.));
+        }
+        // A concave corner exists where two frame edges meet; a screen edge has none.
+        let tl = left > 0. && top > 0.;
+        let tr = right > 0. && top > 0.;
+        let bl = left > 0. && bottom > 0.;
+        let br = right > 0. && bottom > 0.;
+        for (on, x, y) in [
+            (tl, left + 2., top + 2.),
+            (tr, w - right - 1. - radius, top + 2.),
+            (bl, left + 2., h - bottom - 1. - radius),
+            (br, w - right - 1. - radius, h - bottom - 1. - radius),
+        ] {
+            if on {
+                crops.push(Rect::new(x, y, corner, corner));
             }
-            let crops = [
-                // Disjoint crops include the rim's half-pixel on BOTH sides.
-                // Even logical coordinates map exactly at1x and1.5x.
-                Rect::new(0., 52., 12., (h - 64.).max(0.)),
-                Rect::new(w - 12., 52., 12., (h - 64.).max(0.)),
-                Rect::new(0., h - 12., w, 12.),
-                Rect::new(0., 48., w, 4.),
-                Rect::new(12., 52., radius - 1., radius - 1.),
-                Rect::new(w - 11. - radius, 52., radius - 1., radius - 1.),
-                Rect::new(12., h - 11. - radius, radius - 1., radius - 1.),
-                Rect::new(w - 11. - radius, h - 11. - radius, radius - 1., radius - 1.),
-            ];
-            crops
-                .into_iter()
-                .filter(|r| r.w > 0. && r.h > 0.)
-                .map(|rect| {
-                    let svg = self
-                        .svg((w, h), &material, rect, engaged)
-                        .map_err(|e| e.to_string())?;
-                    Ok(bead::wayland::Decoration {
-                        rect,
-                        svg: Arc::from(svg.into_bytes()),
-                    })
+        }
+        crops
+            .into_iter()
+            .filter(|r| r.w > 0. && r.h > 0.)
+            .map(|rect| {
+                let svg = self
+                    .svg(frame, (w, h), &material, rect, engaged)
+                    .map_err(|e| e.to_string())?;
+                Ok(bead::wayland::Decoration {
+                    rect,
+                    svg: Arc::from(svg.into_bytes()),
                 })
-                .collect()
-        })
+            })
+            .collect()
     }
     pub fn decorate(&self, scene: &mut Scene) -> Result<(), Box<dyn std::error::Error>> {
         use bead::render::Primitive;
         use std::hash::{Hash, Hasher};
         let body = body(scene);
         let output = (self.output.0 as f32, self.output.1 as f32);
-        let frame = Frame::default();
+        let frame = Frame::current();
         let top_inset = if matches!(
             self.attachment,
             Attachment::Popout | Attachment::ControlCenter | Attachment::Attached(Edge::Top)
@@ -253,14 +327,10 @@ impl Chrome {
             32.
         };
         let panel = frame.panel(self.attachment, output, (body.w, body.h), self.center);
-        let rectangles = [
-            Rect::new(0., 0., output.0, frame.top),
-            Rect::new(0., 0., frame.left, output.1),
-            Rect::new(output.0 - frame.right, 0., frame.right, output.1),
-            Rect::new(0., output.1 - frame.bottom, output.0, frame.bottom),
-            panel,
-        ];
+        let mut rectangles = frame.material(output);
+        rectangles.push(panel);
         let svg = self.svg(
+            frame,
             output,
             &rectangles,
             Rect::new(
@@ -324,6 +394,30 @@ impl Chrome {
 }
 
 impl Frame {
+    /// Contour rounding, bounded by the room left between the frame edges
+    /// (`NacreChrome`: `min(rounding, width / 2, height / 2)` of the opening).
+    pub fn radius(self, output: (f32, f32)) -> f32 {
+        self.rounding
+            .min(((output.0 - self.left - self.right).max(0.)) / 2.)
+            .min(((output.1 - self.top - self.bottom).max(0.)) / 2.)
+    }
+    /// The frame's own material rectangles (header and the enabled sides).
+    pub fn material(self, (w, h): (f32, f32)) -> Vec<Rect> {
+        let mut rects = Vec::new();
+        if self.top > 0. {
+            rects.push(Rect::new(0., 0., w, self.top));
+        }
+        if self.left > 0. {
+            rects.push(Rect::new(0., 0., self.left, h));
+        }
+        if self.right > 0. {
+            rects.push(Rect::new(w - self.right, 0., self.right, h));
+        }
+        if self.bottom > 0. {
+            rects.push(Rect::new(0., h - self.bottom, w, self.bottom));
+        }
+        rects
+    }
     pub fn panel(
         self,
         attachment: Attachment,
@@ -357,10 +451,12 @@ impl Frame {
         Rect::new(self.left + x, self.top + y, size.0, size.1)
     }
 
+    /// Panel origin for the live frame (settings change it without a restart).
     pub fn positioner(self, attachment: Attachment) -> PanelPositioner {
+        let _ = self;
         Arc::new(move |scene, center, output| {
             let body = body(scene);
-            let panel = self.panel(
+            let panel = Frame::current().panel(
                 attachment,
                 (output.0 as f32, output.1 as f32),
                 (body.w, body.h),
@@ -476,6 +572,153 @@ mod tests {
                 .all(|t| String::from_utf8_lossy(&t.svg).contains("opacity=\"0.25\""))
         );
     }
+    fn settings() -> FrameSettings {
+        FrameSettings {
+            width: 10.,
+            rounding: 25.,
+            left: true,
+            right: true,
+            bottom: true,
+            top: true,
+            bar: true,
+        }
+    }
+    fn rects(frame: Frame, size: (u32, u32)) -> Vec<(f32, f32, f32, f32)> {
+        let chrome = Chrome::new(Attachment::Attached(Edge::Top), &colors()).unwrap();
+        chrome
+            .tiles(frame, size, false, None)
+            .unwrap()
+            .iter()
+            .map(|t| (t.rect.x, t.rect.y, t.rect.w, t.rect.h))
+            .collect()
+    }
+
+    #[test]
+    fn settings_build_the_nacre_frame() {
+        assert_eq!(Frame::from_settings(&settings()), Frame::DEFAULT);
+        let wide = FrameSettings {
+            width: 14.,
+            rounding: 30.,
+            left: false,
+            bottom: false,
+            ..settings()
+        };
+        let frame = Frame::from_settings(&wide);
+        assert_eq!(
+            (frame.left, frame.right, frame.bottom, frame.top, frame.rounding),
+            (0., 14., 0., 54., 30.)
+        );
+        // No bar: the header is only the top edge; no top edge either: nothing.
+        let bar_off = FrameSettings {
+            bar: false,
+            ..settings()
+        };
+        assert_eq!(Frame::from_settings(&bar_off).top, 10.);
+        let bare = FrameSettings {
+            bar: false,
+            top: false,
+            ..settings()
+        };
+        assert_eq!(Frame::from_settings(&bare).top, 0.);
+        // Nonsense widths never go negative.
+        let negative = FrameSettings {
+            width: -5.,
+            rounding: -1.,
+            ..settings()
+        };
+        let frame = Frame::from_settings(&negative);
+        assert_eq!((frame.left, frame.top, frame.rounding), (0., 40., 0.));
+    }
+
+    #[test]
+    fn tiles_follow_the_frame_the_way_the_default_crops_do() {
+        // Default crops, exactly as before the frame became configurable.
+        assert_eq!(
+            rects(Frame::DEFAULT, (1920, 1200)),
+            [
+                (0., 52., 12., 1136.),
+                (1908., 52., 12., 1136.),
+                (0., 1188., 1920., 12.),
+                (0., 48., 1920., 4.),
+                (12., 52., 24., 24.),
+                (1884., 52., 24., 24.),
+                (12., 1164., 24., 24.),
+                (1884., 1164., 24., 24.),
+            ]
+        );
+        // A wider frame moves every crop with it.
+        let wide = Frame {
+            left: 14.,
+            right: 14.,
+            bottom: 14.,
+            top: 54.,
+            rounding: 25.,
+        };
+        let tiles = rects(wide, (1920, 1200));
+        assert_eq!(tiles[0], (0., 56., 16., 1200. - 56. - 16.));
+        assert_eq!(tiles[3], (0., 52., 1920., 4.));
+        assert_eq!(tiles[4], (16., 56., 24., 24.));
+        // A side that is off has neither its strip nor the corners that join it.
+        let no_left = Frame {
+            left: 0.,
+            ..Frame::DEFAULT
+        };
+        let tiles = rects(no_left, (1920, 1200));
+        assert_eq!(tiles.len(), 5, "{tiles:?}");
+        assert!(tiles.iter().all(|t| t.0 != 0. || t.2 == 1920.));
+        // Only the header: one band, no corners.
+        let top_only = Frame {
+            left: 0.,
+            right: 0.,
+            bottom: 0.,
+            ..Frame::DEFAULT
+        };
+        assert_eq!(rects(top_only, (1920, 1200)), [(0., 48., 1920., 4.)]);
+        // No frame at all: nothing to draw.
+        let none = Frame {
+            left: 0.,
+            right: 0.,
+            bottom: 0.,
+            top: 0.,
+            rounding: 25.,
+        };
+        assert!(rects(none, (1920, 1200)).is_empty());
+    }
+
+    #[test]
+    fn rounding_is_bounded_by_the_opening_and_zero_makes_square_joins() {
+        let frame = Frame::DEFAULT;
+        assert_eq!(frame.radius((1920., 1200.)), 25.);
+        // A 50 px opening can only round by 25; a 30 px one by 15.
+        assert_eq!(frame.radius((70., 1200.)), 25.);
+        assert_eq!(frame.radius((50., 1200.)), 15.);
+        assert_eq!(frame.radius((1920., 90.)), 15.);
+        assert_eq!(frame.radius((10., 10.)), 0.);
+        let square = Frame {
+            rounding: 0.,
+            ..Frame::DEFAULT
+        };
+        assert_eq!(rects(square, (1920, 1200)).len(), 4, "no corner tiles at 0");
+    }
+
+    #[test]
+    fn frame_tiles_stay_inside_the_memory_budget_for_any_width() {
+        let chrome = Chrome::new(Attachment::Attached(Edge::Top), &colors()).unwrap();
+        for width in [0., 1., 10., 24., 30.] {
+            let frame = Frame::from_settings(&FrameSettings {
+                width,
+                ..settings()
+            });
+            let tiles = chrome.tiles(frame, (2560, 1440), true, None).unwrap();
+            let bytes: usize = tiles
+                .iter()
+                .map(|t| (t.rect.w * 1.5).ceil() as usize * (t.rect.h * 1.5).ceil() as usize * 4)
+                .sum();
+            assert!(bytes < 2 * 1024 * 1024, "{width}: {bytes}");
+            assert!(tiles.len() <= 8);
+        }
+    }
+
     #[test]
     fn nacre_attachment_and_corner_threshold_match_the_published_rules() {
         assert_eq!(

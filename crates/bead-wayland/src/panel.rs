@@ -398,6 +398,7 @@ impl App {
             .ok_or("panel output not available")?;
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
+        self.edges_panel_changed(false);
         if let Some(source) = &mut self.panel_runtime {
             source.panel_center(self.panel_center);
         }
@@ -609,6 +610,7 @@ impl App {
         }
         self.notify_panel_owner(UiEvent::PanelDismissed);
         self.panel_target = false;
+        self.edges_panel_changed(true);
         drop(self.dismiss.take());
         if let Err(error) = self.sync_all_decorations() {
             self.fail(error);

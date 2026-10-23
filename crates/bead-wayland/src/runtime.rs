@@ -13,6 +13,8 @@ pub(super) struct App {
     pub(super) hidden: bool,
     pub(super) bar_off: bool,
     pub(super) decoration_variant: u64,
+    pub(super) edge_surfaces: Vec<edges::EdgeSurface>,
+    pub(super) edge: edges::EdgeState,
     pub(super) panel_runtime: Option<Box<dyn SceneSource>>,
     pub(super) panel_epoch: u64,
     pub(super) panel_name: Option<String>,
@@ -176,6 +178,8 @@ pub fn run_runtime(
         hidden: false,
         bar_off: false,
         decoration_variant: 0,
+        edge_surfaces: Vec::new(),
+        edge: Default::default(),
         panel_runtime: None,
         panel_epoch: 0,
         panel_name,
@@ -1442,7 +1446,7 @@ impl App {
                 layer.set_size(
                     0,
                     if self.options.bar && !companion {
-                        50
+                        self.bar_thickness()
                     } else if self.options.panel || companion {
                         0
                     } else {
@@ -1456,7 +1460,7 @@ impl App {
             layer.set_exclusive_zone(if self.options.test_passive {
                 -1
             } else if self.options.bar && !companion {
-                50
+                self.bar_thickness() as i32
             } else if self.options.panel || companion {
                 -1
             } else {

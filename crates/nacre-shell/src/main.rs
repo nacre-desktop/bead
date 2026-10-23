@@ -5,6 +5,8 @@ mod calendar;
 mod chat;
 mod commands;
 mod contour;
+mod frame_art;
+mod frame_config;
 mod dashboard;
 mod desktop;
 mod font_sources;
@@ -511,6 +513,7 @@ fn start(
     let tray_selection = tray::Selection::default();
     let panel_trace = options.trace_state;
     if core_views && options.bar {
+        options.edge_art = Some(frame_art::art(&colors)?);
         options.decorations = Some(
             placement::Chrome::new(
                 placement::Attachment::Attached(bead::core::Edge::Top),
@@ -602,6 +605,7 @@ fn start(
     // B0035: the owner's Nacre settings, read-only and live. Without the topics (no
     // daemon, older daemon) every default is Nacre's, so nothing changes.
     let gate = shell_control::Gate::new();
+    let frame_gate = gate.clone();
     let _prefs = _ui_provider.as_ref().and_then(|client| {
         let topic = |name| {
             client
@@ -620,6 +624,10 @@ fn start(
                     bead::core::animation::set_reduced_motion(p.reduce_motion);
                     bead::ui::text_style::set(p.text_style());
                     placement::set_sheen(p.frame_sheen);
+                    // The live frame first: the gate's watchers rebuild from it.
+                    placement::Frame::set_current(placement::Frame::from_settings(
+                        &p.frame_settings(),
+                    ));
                     gate.apply(p);
                 })
             },
@@ -800,6 +808,11 @@ fn start(
                 notice_views::osd(owner, style, true),
             );
         }
+        // B0047: the lips come from shell/frame/behavior.luau; a lip needs its view.
+        frame_gate.configure_frame(
+            frame_config::load(Path::new("shell")),
+            views.keys().cloned(),
+        );
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
         options.window = Some(settings::window_spec(
             std::path::PathBuf::from("shell"),

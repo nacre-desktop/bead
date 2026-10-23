@@ -4,9 +4,12 @@ mod accessibility;
 mod background;
 mod clipboard;
 mod decorations;
+mod edges;
 mod hidden;
+pub mod intent;
 mod panel;
 mod panels;
+pub use edges::{EdgeArt, EdgeChrome, LipState};
 pub use panels::Panels;
 mod policy;
 mod protocols;
@@ -147,6 +150,18 @@ pub trait ShellControl: Send + Sync {
     }
     fn decoration_variant(&self) -> u64 {
         0
+    }
+    /// Bar thickness along its edge, also its exclusive zone; `None` keeps the default.
+    fn bar_thickness(&self) -> Option<u32> {
+        None
+    }
+    /// Reserved screen edges and lips (B0047). Re-read after every change callback.
+    fn edge_chrome(&self) -> EdgeChrome {
+        EdgeChrome::default()
+    }
+    /// Whether hovering may open a lip's panel now; `open_panel` is the open panel's name.
+    fn edge_hover_allowed(&self, _open_panel: Option<&str>) -> bool {
+        true
     }
 }
 #[derive(Clone, Debug)]
@@ -400,6 +415,8 @@ pub struct Options {
     /// Optional per-output primary UI source. When absent the legacy shared UI is used.
     pub primary_factory: Option<PrimaryFactory>,
     pub decorations: Option<DecorationFactory>,
+    /// Artwork for the lips [`ShellControl::edge_chrome`] describes.
+    pub edge_art: Option<EdgeArt>,
     /// Standard compositor blur, only if advertised with the blur capability.
     pub background_blur: bool,
     pub namespace: String,
@@ -448,6 +465,7 @@ impl Default for Options {
         Self {
             primary_factory: None,
             decorations: None,
+            edge_art: None,
             background_blur: false,
             namespace: "bead-dev".into(),
             panel_spec: None,

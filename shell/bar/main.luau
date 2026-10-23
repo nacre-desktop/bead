@@ -7,10 +7,11 @@ local ws_on=ui.resolve_for_check(ui.bind("bar.workspace.enabled"))
 local tray_on=ui.resolve_for_check(ui.bind("bar.tray.enabled"))
 local dash_on=ui.resolve_for_check(ui.bind("bar.dashboard.enabled"))
 local focus_on=ui.resolve_for_check(ui.bind("bar.window.focus.enabled"))
+local header=ui.resolve_for_check(ui.bind("bar.height"))
 local function glyph(id,text,color)
     return ui.Text{id=id,text=text,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color=color or "secondary",text_align="center"}
 end
-return kit.Bar{edge="top",id="bar",width="100%",height=50,radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",
+return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",
     ui.Row{id="left",height=34,gap=12,align="center",
         launcher and kit.Button{id="brand",width=30,height=30,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-launcher"),on_activate=ui.action("launcher.open"),ui.Image{path="bar/assets/nacre-logo.svg",width=30,height=30}} or ui.Image{id="brand",path="bar/assets/nacre-logo.svg",width=30,height=30},
         ui.Row{id="capsule",height=34,padding_left=5,padding_right=5,gap=2,radius=17,fill="surfaceContainer",align="center",
