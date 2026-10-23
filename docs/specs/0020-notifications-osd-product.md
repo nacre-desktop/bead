@@ -1,6 +1,9 @@
 # B0020 — Resident notifications and OSD
 
-Status: **Implemented; review.** Consumer of Nacre N0017 (default-action marker
+Status: **Implemented; review.** The separate notice process described below was
+superseded by [B0030](0030-notices-in-main-shell.md): notices/OSD now run inside the main
+shell on its single daemon link and UI provider (the 32 smoke checks still pass there;
+the process-split memory and provider limits below are historical). Consumer of Nacre N0017 (default-action marker
 published at `83d73952`) and N0036 (brightness reply level, `40ba5d9b`). Gap-list
 unit 5 / Roadmap Feature 9. No live ownership or switch authorization.
 Runtime pin: nacre-protocol `652d6c4f` (contains the default-action marker; N0036
@@ -63,20 +66,21 @@ Paths below are relative to `nacre/shell/`.
   distinct), revision-checked plans for dismiss/forget/action/DND/clear, local expansion,
   hover (`set_hover`) and OSD-visible suppression (`set_inhibited`, sent from a worker, never the
   transport callback), OSD arming/serial/expiry/2000 ms hide with hover hold. Backend trait
-  `Notices` shared with the private compatibility owner. Launch: `nacre-shell --notification-daemon
-  SOCKET [--notification-provider] [--notification-action-on-click]`; never owns a bus name.
+  `Notices` shared with the private compatibility owner. Launch (B0030): the main shell with
+  `--notices [--notification-action-on-click]`; never owns a bus name. (B0020 originally ran
+  `nacre-shell --notification-daemon SOCKET --notification-provider` as a second process; removed.)
 - Views: `shell/notifications/main.luau` (card click, right-click dismiss, default hidden),
   `shell/osd/main.luau` (whole card hover target), dashboard Notifications page
   (DND, Clear history, Dismiss/Forget rows, bounded-window note).
 - OSD sources: `osd` topic when the daemon publishes it (none yet); else default-output
   volume from the `audio` topic; brightness from the `brightness.adjust` reply
-  `level_percent` (N0036), forwarded by the bar's key route to the notice process
-  (`bead.osd show brightness`). Brightness without a value is never shown.
+  `level_percent` (N0036), handed by the bar's key route to the in-process service
+  (B0030; B0020 forwarded it over `bead.osd show brightness` to the notice process). Brightness without a value is never shown.
 - Not done / limits: swipe-dismiss (no gesture event in the framework); popout history
   from the bar (history lives on the dashboard page); panel/session suppression (needs a
-  cross-process signal; only OSD suppression is sent); the daemon allows ONE UI provider,
-  so hover/suppression work only when the notice process is the provider
-  (`--notification-provider`) and the bar/launcher process is not: a Nacre contract decision.
+  cross-process signal; only OSD suppression was sent; B0030 sends it for any other shown
+  view); the daemon allows ONE UI provider, which made hover/suppression work only in a
+  notice-only process (resolved by B0030: one process, one provider).
   Clear history uses scope `history` (closed records). Keyboard-layout OSD deferred.
 - Generalization list additions: bead-ui host-action allowlist is hard-coded (`script.rs`)
   and should be host-registered; `PointerRegion` reaches every panel session.
@@ -93,8 +97,8 @@ Paths below are relative to `nacre/shell/`.
   `osd` producer (daemon has none).
 - Memory (desktop, CPU tiny-skia, debug stripped, medians of 5, 2 runs each): candidate minus control
   Pss idle +1.9 MiB, one popup +2.7, closed +2.3 (anon +1.6..1.9); daemon separate ~56 MiB.
-  This FAILS the +0.5 MiB relative gate; cause not yet isolated (link thread/runtime, protocol
-  decoding). Control hosted the bus in-process. Owner/lead decision needed.
+  This FAILED the +0.5 MiB relative gate (a second process pays its own runtime, Luau VM,
+  renderer and link); B0030 removes the process and re-measures against the main shell.
 
 ## Acceptance and stop conditions
 

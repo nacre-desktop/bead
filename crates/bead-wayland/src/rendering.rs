@@ -335,6 +335,7 @@ impl App {
             return;
         }
         let previous_frames = self.surfaces[index].frames;
+        let mut busy = false;
         let result = (|| -> Result<(), Box<dyn Error>> {
             let s = &mut self.surfaces[index];
             let (scene, renderer, _kind, panel) = if s.companion {
@@ -861,11 +862,17 @@ impl App {
                     track_repair(&mut b.pending, *region);
                 }
             }
-            let slot = s
+            let Some(slot) = s
                 .buffers
                 .iter()
                 .position(|b| !b.buffer.slot().has_active_buffers())
-                .ok_or("three buffers still in use at callback")?;
+            else {
+                // The compositor still holds every buffer (a slow release right after a
+                // resize): try again shortly rather than ending the whole shell.
+                s.redraw = true;
+                busy = true;
+                return Ok(());
+            };
             // A spare buffer left unpainted by pool compaction would otherwise be
             // repainted in full on the next edit. Adopt a painted buffer's pixels and
             // its pending repairs instead: copying is far cheaper than rasterising.
@@ -974,6 +981,21 @@ impl App {
             s.frames += 1;
             Ok(())
         })();
+        if busy {
+            let qh = qh.clone();
+            let retry = self.loop_handle.insert_source(
+                Timer::from_duration(Duration::from_millis(8)),
+                move |_, _, app| {
+                    if index < app.surfaces.len() {
+                        app.draw(index, &qh);
+                    }
+                    TimeoutAction::Drop
+                },
+            );
+            if let Err(error) = retry {
+                self.fail(error);
+            }
+        }
         if self.surfaces[index].frames > previous_frames
             && self.started.elapsed().as_secs_f64() > 2.
         {

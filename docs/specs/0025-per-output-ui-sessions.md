@@ -193,3 +193,11 @@ independent output projection/reload/failure; existing single-output tests pass.
 Product Rust size: +1,260 / −144 physical lines versus `b972a31`, excluding
 `cfg(test)` items, test files and proof examples. No temporary product duplicate,
 new system dependency, installed-shell change or live session was introduced.
+
+## B0030 note — 2026-10-23
+
+Notices and the OSD reuse these sessions rather than adding one: each bar session
+registers as a driver of the daemon notice service, and the popup stack/OSD are panel
+views offered through `UiEvent::CompanionOffer` on the leading session's output
+([B0030](0030-notices-in-main-shell.md)). No per-output notice session exists; the
+extra-output cost above is unchanged.
