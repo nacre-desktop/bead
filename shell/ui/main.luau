@@ -19,7 +19,7 @@ if has_detail then
         ui.Text{id="engine-guidance",text=message,visible=message~="",font_size=13.333,height=40,color="onSurfaceVariant"},
     }
 end
-return kit.Panel {edge="top",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
+return kit.Panel {edge="bottom",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
     open=ui.bind("panel.open"),transition="ease",duration=.2,
     radius=12,fill="surface",border_width=1,border_color="outlineVariant",
     padding_left=12,padding_right=20,padding_top=16,padding_bottom=18,gap=15,

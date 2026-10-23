@@ -34,7 +34,9 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         ("bead.desktop.audio".into(), Value::Text(audio.into())),
         ("bead.desktop.audio.available".into(), Value::Bool(s.audio.volume.is_some())),
         ("bead.desktop.battery".into(), Value::Text(if !s.battery.available { "battery_unknown" } else if s.battery.charging { "battery_charging_full" } else { "battery_full" }.into())),
-        ("bead.desktop.battery.value".into(), Value::Text(s.battery.percentage.map_or("—".into(), |n| format!("{n:.0}")))),
+        ("bead.desktop.battery.value".into(), Value::Text(s.battery.percentage.map_or(String::new(), |n| format!("{n:.0}")))),
+        // QML detail text sits 4 px after the glyph; the cell's 3 px padding closes it (none without a value).
+        ("bead.desktop.battery.value.width".into(), Value::Number(s.battery.percentage.map_or(3., |n| 7. + 7.5 * format!("{n:.0}").len() as f32 as f64))),
         ("bead.desktop.network".into(), Value::Text(if s.network.connected { "wifi" } else { "wifi_off" }.into())),
         ("bead.desktop.bluetooth".into(), Value::Text(if s.bluetooth.powered { "bluetooth" } else { "bluetooth_disabled" }.into())),
         ("bead.desktop.tray".into(), Value::list(s.tray.iter().filter(|t| t.visible).map(|t|serde_json::json!({"id":t.id,"title":t.title,"icon":format!("tray:{}",t.id),"attention":t.attention})).collect())),

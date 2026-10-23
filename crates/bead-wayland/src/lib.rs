@@ -155,6 +155,8 @@ pub trait ShellControl: Send + Sync {
     fn decoration_variant(&self) -> u64 {
         0
     }
+    /// The committed presentation palette changed (frame art follows it); bump the variant when it matters.
+    fn palette_changed(&self, _palette: &std::collections::BTreeMap<String, [u8; 4]>) {}
     /// Pearls (detached panels) at all.
     fn pearls_enabled(&self) -> bool {
         true

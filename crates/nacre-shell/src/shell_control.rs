@@ -147,6 +147,14 @@ impl ShellControl for Gate {
     fn decoration_variant(&self) -> u64 {
         self.variant.load(SeqCst)
     }
+    fn palette_changed(&self, palette: &std::collections::BTreeMap<String, [u8; 4]>) {
+        if crate::placement::set_live_palette(palette) {
+            self.variant.fetch_add(1, SeqCst);
+            for watcher in self.watchers.lock().unwrap_or_else(|p| p.into_inner()).iter() {
+                watcher();
+            }
+        }
+    }
     /// The header (bar plus top frame edge) is the bar surface's thickness and zone.
     fn bar_thickness(&self) -> Option<u32> {
         let settings = self.frame_lock().settings?;

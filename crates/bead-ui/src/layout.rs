@@ -130,6 +130,7 @@ pub const PROPERTIES: &[&str] = &[
     "selected_fill",
     "multiline",
     "masked",
+    "themed",
 ];
 pub fn allowed_property(name: &str) -> bool {
     PROPERTIES.contains(&name)
@@ -157,6 +158,8 @@ pub struct ViewSpec {
     pub border_width: f32,
     pub radius: f32,
     pub blur: f32,
+    /// Image: the SVG is a template whose `@role@` / `@role+@` tokens take palette colours (`+` lifts to readable contrast on the surface).
+    pub themed: bool,
     pub drag: bool,
     pub font_size: f32,
     pub family: String,
@@ -522,6 +525,7 @@ impl ViewSpec {
                 drag: boolean(p, "drag", false, source)?,
                 border_width: number(p, "border_width", 0., source)?,
                 blur: number(p, "blur", 0., source)?.clamp(0., 32.),
+                themed: boolean(p, "themed", false, source)?,
                 radius: number(
                     p,
                     "radius",
@@ -881,6 +885,11 @@ pub fn layout(
                     .clone()
                     .ok_or_else(|| source.error("Image requires icon or path"))?
             };
+            let path = if view.themed && own_visible {
+                themed_asset(&path, palette, &mut out.scene.asset_data).map_err(|e| source.error(e))?
+            } else {
+                path
+            };
             emit(Primitive::Image {
                 blur: view.blur,
                 rect: r,
@@ -970,4 +979,69 @@ pub fn layout(
         &mut output,
     )?;
     Ok(output)
+}
+
+fn luminance([r, g, b, _]: [u8; 4]) -> f64 {
+    let lin = |v: u8| {
+        let v = f64::from(v) / 255.;
+        if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+    };
+    lin(r) * 0.2126 + lin(g) * 0.7152 + lin(b) * 0.0722
+}
+fn contrast(a: [u8; 4], b: [u8; 4]) -> f64 {
+    let (a, b) = (luminance(a), luminance(b));
+    (a.max(b) + 0.05) / (a.min(b) + 0.05)
+}
+/// `NacreLogo`'s lift: blend toward the readable ink in 20 steps until the colour reaches `minimum` contrast on `bg`.
+fn lift(value: [u8; 4], bg: [u8; 4], fg: [u8; 4], minimum: f64) -> [u8; 4] {
+    if contrast(value, bg) >= minimum {
+        return value;
+    }
+    let target = if contrast(fg, bg) >= minimum {
+        fg
+    } else if contrast([255; 4], bg) >= contrast([0, 0, 0, 255], bg) {
+        [255; 4]
+    } else {
+        [0, 0, 0, 255]
+    };
+    for step in 1..=20 {
+        let mix = |i: usize| {
+            (f64::from(value[i]) + (f64::from(target[i]) - f64::from(value[i])) * f64::from(step) / 20.).round() as u8
+        };
+        let mixed = [mix(0), mix(1), mix(2), 255];
+        if contrast(mixed, bg) >= minimum {
+            return mixed;
+        }
+    }
+    target
+}
+/// Fill a themed SVG template from the live palette and register it as an in-memory asset.
+fn themed_asset(
+    path: &std::path::Path,
+    palette: &Palette,
+    assets: &mut std::collections::BTreeMap<PathBuf, std::sync::Arc<[u8]>>,
+) -> Result<PathBuf, String> {
+    use std::hash::{Hash, Hasher};
+    let bg = palette.get("surface").map_err(|e| e.to_string())?;
+    let fg = palette.get("onSurface").unwrap_or(bg);
+    let text = std::fs::read_to_string(path).map_err(|e| format!("themed image {}: {e}", path.display()))?;
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text.as_str();
+    while let Some(start) = rest.find('@') {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start + 1..];
+        let end = tail.find('@').ok_or("themed image: unterminated @token@")?;
+        let (name, lifted) = tail[..end].strip_suffix('+').map_or((&tail[..end], false), |n| (n, true));
+        let color = palette.get(name).map_err(|e| e.to_string())?;
+        let color = if lifted { lift(color, bg, fg, 3.4) } else { color };
+        out.push_str(&format!("#{:02x}{:02x}{:02x}", color[0], color[1], color[2]));
+        rest = &tail[end + 1..];
+    }
+    out.push_str(rest);
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    out.hash(&mut hash);
+    let name = PathBuf::from(format!("@themed-{:x}.svg", hash.finish()));
+    assets.retain(|key, _| !key.to_string_lossy().starts_with("@themed-") || *key == name);
+    assets.entry(name.clone()).or_insert_with(|| std::sync::Arc::from(out.into_bytes()));
+    Ok(name)
 }

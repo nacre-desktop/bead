@@ -27,13 +27,13 @@ pub fn spec(
     }];
     if let Some(motion) = &mut fallback.motion {
         motion.id = "launcher".into();
-        motion.edge = Edge::Top;
+        motion.edge = Edge::Bottom;
     }
     let cold = fallback.clone();
     PanelSpec {
         position: Some(
             crate::placement::Frame::default()
-                .positioner(crate::placement::Attachment::Attached(Edge::Top)),
+                .positioner(crate::placement::Attachment::Attached(Edge::Bottom)),
         ),
         engages_decorations: false,
         passive: false,
@@ -52,7 +52,7 @@ pub fn spec(
             let source = source.connect().map_err(|e| e.to_string())?;
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_frame(crate::placement::Attachment::Attached(Edge::Top), &colors)
+                .with_frame(crate::placement::Attachment::Attached(Edge::Bottom), &colors)
                 .and_then(|r| r.with_launcher(source))
                 .and_then(|r| r.with_launcher_memory(memory.clone()))
                 .and_then(|r| match &prefs {

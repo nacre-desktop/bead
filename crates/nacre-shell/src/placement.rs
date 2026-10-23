@@ -58,6 +58,22 @@ impl Frame {
         }
     }
 }
+/// The presentation palette the frame art follows (surface, primary, secondary); `None` until
+/// the wallpaper palette arrives, when each chrome keeps the colours it was built with.
+static LIVE_COLORS: std::sync::Mutex<Option<[[u8; 4]; 3]>> = std::sync::Mutex::new(None);
+/// Publish the live presentation palette; true when the frame art colours changed.
+pub fn set_live_palette(palette: &std::collections::BTreeMap<String, [u8; 4]>) -> bool {
+    let (Some(fill), Some(primary), Some(secondary)) = (
+        palette.get("surface"),
+        palette.get("primary"),
+        palette.get("secondary"),
+    ) else {
+        return false;
+    };
+    let next = Some([*fill, *primary, *secondary]);
+    let mut live = LIVE_COLORS.lock().unwrap_or_else(|p| p.into_inner());
+    std::mem::replace(&mut *live, next) != next
+}
 static LIVE: std::sync::Mutex<Frame> = std::sync::Mutex::new(Frame::DEFAULT);
 /// The Nacre bar's own height inside the header (the rest is the top frame edge).
 pub const BAR_HEIGHT: f32 = 40.;
@@ -203,6 +219,10 @@ impl Chrome {
         crop: Rect,
         engaged: bool,
     ) -> Result<String, Box<dyn std::error::Error>> {
+        let [fill, primary, secondary] = LIVE_COLORS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .unwrap_or([self.fill, self.primary, self.secondary]);
         let radius = frame.radius(output) as f64;
         let contour =
             crate::contour::geometry(output.0 as f64, output.1 as f64, rectangles, radius)?;
@@ -211,7 +231,7 @@ impl Chrome {
             if i == 3 {
                 255
             } else {
-                (self.primary[i] as f32 * 0.78 + [255., 249., 241.][i] * 0.22).round() as u8
+                (primary[i] as f32 * 0.78 + [255., 249., 241.][i] * 0.22).round() as u8
             }
         });
         let rim = if sheen() {
@@ -234,10 +254,10 @@ impl Chrome {
             output.0,
             output.1,
             rgb(highlight),
-            rgb(self.primary),
-            rgb(self.secondary),
+            rgb(primary),
+            rgb(secondary),
             contour.body,
-            rgb(self.fill),
+            rgb(fill),
             rim
         ))
     }

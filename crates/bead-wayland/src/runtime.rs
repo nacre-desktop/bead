@@ -735,6 +735,9 @@ impl App {
             if self.wallpaper_palette.as_ref() == Some(&palette_key)
                 || self.output_sessions.is_empty()
             {
+                if let Some(control) = &self.options.control {
+                    control.palette_changed(&palette_key);
+                }
                 self.wallpaper_palette = Some(palette_key);
                 self.install_wallpaper(frame);
                 self.request_dirty_wallpaper(&output_name);
@@ -903,6 +906,9 @@ impl App {
             return;
         }
         self.wallpaper_palette = Some(palette.clone());
+        if let Some(control) = &self.options.control {
+            control.palette_changed(&palette);
+        }
         if self.panel_runtime.is_some() {
             self.panel_ui(UiEvent::WallpaperPalette(palette));
         }
