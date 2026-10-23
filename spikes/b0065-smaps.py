@@ -4,9 +4,10 @@
 
   b0065-smaps.py dump LABEL BIN SRC      start one arm (b0047-frame.py Arm), save smaps idle and after a panel open/close
   b0065-smaps.py diff CTL_DIR CAND_DIR   table mapping -> PSS (KiB) per phase and delta
+  b0065-smaps.py memory PAIRS CTL CAND CTL_SRC CAND_SRC   alternating arms; never/once/several/combined, medians, CPU, no daemon
 
 SMOKE_ROOT as for b0047-frame.py. Never the live session."""
-import importlib.util, json, os, pathlib, re, subprocess, sys, time
+import importlib.util, json, os, pathlib, re, statistics, subprocess, sys, time
 
 HERE = pathlib.Path(__file__).parent
 spec = importlib.util.spec_from_file_location("b0047", HERE / "b0047-frame.py")
@@ -77,8 +78,71 @@ def diff(ctl, cand):
             print(f"{d:+8d} KiB  ctl {xa:7d} cand {yc:7d}  file {df:+7d}  {k[1]} {k[0][-70:]}")
 
 
+def memory_arm(label, binary, src, tag):
+    arm = b.Arm(label, binary, pathlib.Path(src))
+
+    def ipc(*a):
+        return subprocess.run([str(b.ROOT / binary), "ipc", "--socket", arm.cmdsock, *a], env=dict(arm.env, BEAD_PRIVATE_INPUT_PROOF="1"),
+                              capture_output=True, text=True, cwd=str(src), timeout=10)
+
+    def cycle(kind):
+        if kind == "launcher":
+            ipc("--json", "bead.panel", "open", "launcher")
+            time.sleep(3)
+            ipc("--json", "bead.panel", "close")
+        else:
+            for _ in range(2):
+                ipc("drawers", "toggle", "sound")
+                time.sleep(2)
+        time.sleep(1)
+
+    def phase(settle):
+        time.sleep(settle)
+        smp = []
+        for _ in range(7):
+            smp.append(b.rollup(arm.shell.pid))
+            time.sleep(2)
+        return {k: statistics.median(x[k] for x in smp) for k in b.KEYS} | {"max_pss": max(x["Pss"] for x in smp)}
+
+    try:
+        arm.start(tag)
+        r = {"label": label, "binary": binary}
+        r["never"] = phase(20)
+        cycle("launcher")
+        r["once"] = phase(20)
+        for kind in ("sound", "launcher", "sound", "launcher"):
+            cycle(kind)
+        r["several"] = phase(20)
+        for kind in ("launcher", "sound"):
+            cycle(kind)
+        r["combined"] = phase(20)
+        (arm.raw / "result.json").write_text(json.dumps(r, indent=1))
+        return r
+    finally:
+        arm.finish()
+
+
+def memory(pairs, ctl, cand, ctl_src, cand_src):
+    runs = []
+    for i in range(pairs):
+        arms = [("control", ctl, ctl_src), ("candidate", cand, cand_src)]
+        for label, binary, src in arms if i % 2 == 0 else arms[::-1]:
+            runs.append(memory_arm(label, binary, src, f"mem-{i}-{label}"))
+    rep = {"renderer": "cpu (tiny-skia), no daemon, launcher without fixture"}
+    for ph in ("never", "once", "several", "combined"):
+        med = lambda label, key: statistics.median(r[ph][key] for r in runs if r["label"] == label)
+        rep[ph] = {"control": round(med("control", "Pss"), 2), "candidate": round(med("candidate", "Pss"), 2),
+                   "delta": round(med("candidate", "Pss") - med("control", "Pss"), 2),
+                   "anon_delta": round(med("candidate", "Pss_Anon") - med("control", "Pss_Anon"), 2),
+                   "cand_max_pss": round(max(r[ph]["max_pss"] for r in runs if r["label"] == "candidate"), 2)}
+    (b.OUT / "memory.json").write_text(json.dumps({"summary": rep, "runs": runs}, indent=1))
+    print(json.dumps(rep, indent=1))
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "dump":
+    if sys.argv[1] == "memory":
+        memory(int(sys.argv[2]), *sys.argv[3:7])
+    elif sys.argv[1] == "dump":
         dump(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
         diff(sys.argv[2], sys.argv[3])
