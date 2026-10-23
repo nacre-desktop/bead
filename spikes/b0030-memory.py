@@ -79,6 +79,9 @@ class Arm:
         for d in ("r", "pr", "state", "config", "cache", "data", "home", "labwc"):
             (RUN / d).mkdir(parents=True, mode=0o700)
         os.chmod(RUN, 0o700)
+        for d in ("state/nacre", "state/nacre/shell", "state/nacre/shell/notifications", "state/nacre/shell/notifications/images"):
+            (RUN / d).mkdir(exist_ok=True)
+            os.chmod(RUN / d, 0o700)
         try:
             return self.measure()
         finally:

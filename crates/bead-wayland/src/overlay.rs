@@ -362,6 +362,9 @@ impl App {
                 if !o.source.commit() {
                     return;
                 }
+                if self.options.trace_state {
+                    println!("UI_STATE {}", o.source.state_summary());
+                }
                 scene
             }
             Ok(None) => return,
@@ -606,6 +609,10 @@ impl App {
             PointerEventKind::Release { button: 0x110, .. } => {
                 o.pressed = false;
                 Some(UiEvent::Release)
+            }
+            PointerEventKind::Press { button: 0x111, .. } => Some(UiEvent::ContextMenu { x, y }),
+            PointerEventKind::Press { button: 0x112, .. } => {
+                Some(UiEvent::SecondaryClick { x, y })
             }
             PointerEventKind::Axis {
                 vertical,

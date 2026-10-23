@@ -13,6 +13,9 @@ RAW = ROOT / "raw"; shutil.rmtree(RAW, ignore_errors=True); RAW.mkdir()
 for d in ("r", "pr", "state", "config", "cache", "data"):
     (RUN / d).mkdir(parents=True, mode=0o700)
 os.chmod(RUN, 0o700)
+# The managed daemon wants its private history directories to exist (0700) before it starts.
+for d in ("state/nacre", "state/nacre/shell", "state/nacre/shell/notifications", "state/nacre/shell/notifications/images"):
+    (RUN / d).mkdir(exist_ok=True); os.chmod(RUN / d, 0o700)
 procs = []
 results = []
 def check(name, ok, detail=""):
