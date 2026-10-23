@@ -1505,7 +1505,10 @@ impl Menu {
             && !view.grid.as_ref().is_some_and(|grid| {
                 grid.stamp == view.result_stamp && Arc::ptr_eq(&grid.rows, &view.rows)
             })
-            && view.rows.iter().all(|row| row["selected"].as_bool() == Some(false))
+            && view
+                .rows
+                .iter()
+                .all(|row| row["selected"].as_bool() == Some(false))
         {
             view.grid = Some(GridResult {
                 stamp: view.result_stamp.clone(),

@@ -90,17 +90,79 @@ fn local(primitive: &Primitive) -> Primitive {
     }
     p
 }
-fn signature(scene: &Scene, primitive: &Primitive, scale: f32) -> Result<u64> {
+/// Hash every field bit-exactly without allocating; `at_origin` ignores the position.
+pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut impl Hasher) {
+    let rect = |r: &Rect, hash: &mut _| {
+        let (x, y) = if at_origin { (0., 0.) } else { (r.x, r.y) };
+        for value in [x, y, r.w, r.h] {
+            f32::to_bits(value).hash(hash);
+        }
+    };
+    std::mem::discriminant(primitive).hash(hash);
+    match primitive {
+        Primitive::Rounded {
+            rect: r,
+            radius,
+            fill,
+            border,
+        } => {
+            rect(r, hash);
+            (radius.to_bits(), fill).hash(hash);
+            border
+                .map(|(color, width)| (color, width.to_bits()))
+                .hash(hash);
+        }
+        Primitive::Text {
+            align,
+            rect: r,
+            text,
+            family,
+            size,
+            color,
+        } => {
+            rect(r, hash);
+            (align, text, family, size.to_bits(), color).hash(hash);
+        }
+        Primitive::Image {
+            blur,
+            rect: r,
+            path,
+        } => {
+            rect(r, hash);
+            (blur.to_bits(), path).hash(hash);
+        }
+        Primitive::Shadow {
+            rect: r,
+            radius,
+            blur,
+        } => {
+            rect(r, hash);
+            (radius.to_bits(), blur.to_bits()).hash(hash);
+        }
+    }
+}
+fn signature(
+    scene: &Scene,
+    primitive: &Primitive,
+    scale: f32,
+    assets: &mut BTreeMap<std::path::PathBuf, u64>,
+) -> u64 {
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     scale.to_bits().hash(&mut hash);
-    serde_json::to_vec(&local(primitive))?.hash(&mut hash);
+    hash_primitive(primitive, true, &mut hash);
     if matches!(primitive, Primitive::Text { .. }) {
         scene.font_files.hash(&mut hash);
     }
     if let Primitive::Image { path, .. } = primitive {
-        scene.asset_data.get(path).hash(&mut hash);
+        // Icons repeat across tiles; hash each asset's bytes once per prepare.
+        if !assets.contains_key(path) {
+            let mut bytes = std::collections::hash_map::DefaultHasher::new();
+            scene.asset_data.get(path).hash(&mut bytes);
+            assets.insert(path.clone(), bytes.finish());
+        }
+        assets[path].hash(&mut hash);
     }
-    Ok(hash.finish())
+    hash.finish()
 }
 fn pixel_difference(before: &Pixmap, after: &Pixmap) -> Damage {
     let width = before.width().max(after.width());
@@ -239,6 +301,8 @@ impl TreeCache {
         }
         let mut ordinals = BTreeMap::<(String, &'static str), usize>::new();
         let mut items = Vec::with_capacity(scene.primitives.len());
+        let mut keys = Vec::with_capacity(scene.primitives.len());
+        let mut asset_keys = BTreeMap::new();
         let mut frame_hash = std::collections::hash_map::DefaultHasher::new();
         serde_json::to_vec(&scene.bounds)?.hash(&mut frame_hash);
         for (index, primitive) in scene.primitives.iter().enumerate() {
@@ -256,13 +320,16 @@ impl TreeCache {
             let ordinal = ordinals.entry((owner.clone(), kind)).or_default();
             let id = format!("{owner}/{kind}/{ordinal}");
             *ordinal += 1;
-            let key = signature(scene, primitive, scale)?;
+            let key = signature(scene, primitive, scale, &mut asset_keys);
+            keys.push(key);
             id.hash(&mut frame_hash);
             key.hash(&mut frame_hash);
-            serde_json::to_vec(primitive)?.hash(&mut frame_hash);
+            hash_primitive(primitive, false, &mut frame_hash);
             let clip = scene.clips.get(&index).copied();
             if let Some(clip) = clip {
-                serde_json::to_vec(&clip)?.hash(&mut frame_hash);
+                for value in [clip.x, clip.y, clip.w, clip.h] {
+                    value.to_bits().hash(&mut frame_hash);
+                }
             }
             let raster = if kind == "fill" {
                 None
@@ -407,7 +474,7 @@ impl TreeCache {
                 for f in [r.x - layer.bounds.x, r.y - layer.bounds.y, r.w, r.h] {
                     f.to_bits().hash(&mut key);
                 }
-                signature(scene, &item.primitive, scale)?.hash(&mut key);
+                keys[index].hash(&mut key);
                 own.push(item.id.clone());
             }
             let child_ids = children.remove(&layer.id).unwrap_or_default();

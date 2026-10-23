@@ -2,9 +2,9 @@
 //! Semantic surface damage, independent of back-buffer repaint history.
 use crate::{
     Damage, Rect,
-    tree::{Frame, rect},
+    tree::{Frame, hash_primitive, rect},
 };
-use std::hash::{Hash, Hasher};
+use std::hash::Hasher;
 #[derive(Clone)]
 struct Record {
     key: u64,
@@ -57,6 +57,60 @@ fn add(regions: &mut Vec<Damage>, mut next: Damage) {
     }
     regions.push(next);
 }
+/// Pair the items that differ between two frames, in order. Identical records are matched by a
+/// bounded longest-common-subsequence over the differing middle; each unmatched run between two
+/// matches then pairs by position, with the surplus an insertion or a removal.
+fn align(old: &[Record], new: &[Record]) -> Vec<(Option<usize>, Option<usize>)> {
+    const CELLS: usize = 1 << 16;
+    let common = old.len().min(new.len());
+    let prefix = (0..common)
+        .take_while(|&k| old[k].same_pixels(&new[k]))
+        .count();
+    let suffix = (0..common - prefix)
+        .take_while(|&k| old[old.len() - 1 - k].same_pixels(&new[new.len() - 1 - k]))
+        .count();
+    let (old_end, new_end) = (old.len() - suffix, new.len() - suffix);
+    let (rows, columns) = (old_end - prefix, new_end - prefix);
+    let mut anchors = Vec::new();
+    if rows > 0 && columns > 0 && rows * columns <= CELLS {
+        let width = columns + 1;
+        let mut length = vec![0u16; (rows + 1) * width];
+        for i in (0..rows).rev() {
+            for j in (0..columns).rev() {
+                length[i * width + j] = if old[prefix + i].same_pixels(&new[prefix + j]) {
+                    length[(i + 1) * width + j + 1] + 1
+                } else {
+                    length[(i + 1) * width + j].max(length[i * width + j + 1])
+                };
+            }
+        }
+        let (mut i, mut j) = (0, 0);
+        while i < rows && j < columns {
+            if old[prefix + i].same_pixels(&new[prefix + j]) {
+                anchors.push((prefix + i, prefix + j));
+                i += 1;
+                j += 1;
+            } else if length[(i + 1) * width + j] >= length[i * width + j + 1] {
+                i += 1;
+            } else {
+                j += 1;
+            }
+        }
+    }
+    anchors.push((old_end, new_end));
+    let mut pairs = Vec::new();
+    let (mut o, mut n) = (prefix, prefix);
+    for (anchor_old, anchor_new) in anchors {
+        for k in 0..(anchor_old - o).max(anchor_new - n) {
+            pairs.push((
+                (o + k < anchor_old).then_some(o + k),
+                (n + k < anchor_new).then_some(n + k),
+            ));
+        }
+        (o, n) = (anchor_old + 1, anchor_new + 1);
+    }
+    pairs
+}
 impl FrameDamage {
     pub fn update(
         &mut self,
@@ -69,7 +123,7 @@ impl FrameDamage {
         let mut current = Vec::with_capacity(frame.items.len());
         let mut dirty = Vec::new();
         let changed_size = self.dimensions != Some((width, height, frame.scale.to_bits()));
-        for (order, item) in frame.items.iter().enumerate() {
+        for item in &frame.items {
             let source = if let Some(raster) = &item.raster {
                 let original = rect(&item.primitive);
                 Rect::new(
@@ -102,7 +156,7 @@ impl FrameDamage {
                 raster.key
             } else {
                 let mut h = std::collections::hash_map::DefaultHasher::new();
-                serde_json::to_vec(&item.primitive)?.hash(&mut h);
+                hash_primitive(&item.primitive, false, &mut h);
                 h.finish()
             };
             let next = Record {
@@ -112,41 +166,48 @@ impl FrameDamage {
                 clip,
                 opacity: opacity.to_bits(),
             };
-            // Damage is a comparison of ordered pixels, not UI state IDs.
-            // Any insert/remove/reorder changes the corresponding paint slots.
-            match self.previous.get(order) {
-                None => add(&mut dirty, bounds),
-                Some(old) if !old.same_pixels(&next) => {
+            current.push(next);
+        }
+        // Damage is a comparison of ordered pixels, not UI state IDs. Identical items stay clean even
+        // when an insert or removal moved their paint slot (grid <-> list keeps the search bar).
+        for (old, new) in align(&self.previous, &current) {
+            let (old, new) = (
+                old.map(|i| &self.previous[i]),
+                new.map(|i| (&frame.items[i], &current[i])),
+            );
+            match (old, new) {
+                (None, None) => {}
+                (None, Some((_, next))) => add(&mut dirty, next.bounds),
+                (Some(old), None) => add(&mut dirty, old.bounds),
+                (Some(old), Some((item, next))) => {
+                    if old.same_pixels(next) {
+                        continue;
+                    }
                     if let Some(raster) = &item.raster
                         && raster.base_key == Some(old.key)
-                        && old.geometry.x == geometry.x
-                        && old.geometry.y == geometry.y
-                        && old.clip == clip
+                        && old.geometry.x == next.geometry.x
+                        && old.geometry.y == next.geometry.y
+                        && old.clip == next.clip
                         && old.opacity == next.opacity
                     {
                         let d = raster.changed;
                         let mut changed = Rect::new(
-                            geometry.x + d.x as f32 / frame.scale,
-                            geometry.y + d.y as f32 / frame.scale,
+                            next.geometry.x + d.x as f32 / frame.scale,
+                            next.geometry.y + d.y as f32 / frame.scale,
                             d.w as f32 / frame.scale,
                             d.h as f32 / frame.scale,
                         )
                         .pixels(frame.scale, width, height);
-                        if let Some(c) = clip {
+                        if let Some(c) = next.clip {
                             changed = intersect(changed, c.pixels(frame.scale, width, height));
                         }
                         add(&mut dirty, changed);
                     } else {
                         add(&mut dirty, old.bounds);
-                        add(&mut dirty, bounds);
+                        add(&mut dirty, next.bounds);
                     }
                 }
-                _ => {}
             }
-            current.push(next);
-        }
-        for old in self.previous.iter().skip(frame.items.len()) {
-            add(&mut dirty, old.bounds);
         }
         self.previous = current;
         self.dimensions = Some((width, height, frame.scale.to_bits()));
@@ -328,6 +389,66 @@ mod tests {
                 }
             }
         }
+    }
+    #[test]
+    fn an_insert_does_not_dirty_identical_items_that_only_changed_paint_slot() {
+        let item = |id: &str, rect: Rect| crate::tree::Item {
+            id: id.into(),
+            primitive: crate::Primitive::Rounded {
+                rect,
+                radius: 2.,
+                fill: [40, 40, 40, 255],
+                border: None,
+            },
+            clip: None,
+            raster: None,
+        };
+        let frame = |items| Frame {
+            _accounting: None,
+            items,
+            scale: 1.,
+            key: 0,
+            layer_count: 0,
+            layers: vec![],
+        };
+        let bar = item("bar", Rect::new(0., 90., 100., 20.));
+        let tail = |width| item("tail", Rect::new(110., 90., width, 20.));
+        let mut damage = FrameDamage::default();
+        damage
+            .update(
+                &frame(vec![
+                    item("a", Rect::new(0., 0., 50., 50.)),
+                    bar.clone(),
+                    tail(30.),
+                ]),
+                (0., 0.),
+                1.,
+                200,
+                200,
+            )
+            .unwrap();
+        let dirty = damage
+            .update(
+                &frame(vec![
+                    item("a", Rect::new(0., 0., 50., 50.)),
+                    item("b", Rect::new(60., 0., 30., 30.)),
+                    bar,
+                    tail(40.),
+                ]),
+                (0., 0.),
+                1.,
+                200,
+                200,
+            )
+            .unwrap();
+        // The inserted item and the changed last item, but not the shifted bar between them.
+        assert!(
+            dirty
+                .iter()
+                .all(|d| d.x >= 60 || d.y + d.h <= 50 || d.x >= 110),
+            "the shifted bar stayed clean: {dirty:?}"
+        );
+        assert!(dirty.iter().all(|d| !(d.x < 100 && d.y >= 90)), "{dirty:?}");
     }
     #[test]
     fn hover_is_local_and_removing_a_node_erases_its_old_bounds() {
