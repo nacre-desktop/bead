@@ -109,6 +109,12 @@ After Bead's core switch on Nacre, plan support for:
   image attach (`@icon:colors-*` rectangles decide the PNG) is Nacre-side in `nacre-shell/src/colors.rs`; the colours
   methods live only there.
 
+- B0059: a window's view can retire itself (`CompanionVisibility(false)` in the window slot, as in the panel slot), so a
+  Done or Skip button ends a window and, in app mode, its process. The tour pages, tiles, help and links are Luau/catalog
+  data; `nacre-shell/src/welcome.rs` only maps closed vocabularies (routes, links, settings pages) and projects the window
+  size, availability and the daemon's `learn.shortcuts` rows. Text blocks are sized by a Luau estimate (`textH`) until a
+  text-measurement primitive exists.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

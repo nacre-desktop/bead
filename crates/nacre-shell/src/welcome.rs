@@ -307,10 +307,11 @@ pub fn window_spec(
         }),
         model: Arc::new(|args| {
             // `nacre welcome [home|colors|shortcuts|apps|ready|help]`; anything else shows the first page.
-            let page = match args.first().and_then(Json::as_str) {
-                Some(p @ ("colors" | "shortcuts" | "apps" | "ready" | "help")) => p,
-                _ => "welcome",
-            };
+            let page = args
+                .first()
+                .and_then(Json::as_str)
+                .filter(|p| ["colors", "shortcuts", "apps", "ready", "help"].contains(p))
+                .unwrap_or("welcome");
             BTreeMap::from([
                 ("welcome.step".into(), Value::Text(page.into())),
                 ("welcome.guide".into(), Value::Text(String::new())),
