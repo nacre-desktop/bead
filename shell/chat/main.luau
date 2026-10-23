@@ -7,7 +7,7 @@ local kit=require("bead.kit")
 local T=kit.tokens
 local function get(name) return ui.resolve_for_check(ui.bind(name)) end
 local px=function(pt) return pt*4/3 end
-local BODY,CAPTION,TITLE=px(T.text.body),px(T.text.caption),px(T.text.title)
+local BODY,CAPTION=px(T.text.body),px(T.text.caption)
 local H=get("chat.height")
 local section=get("chat.section")
 local E,BTN,INNER,TABS,TOP=get("chat.edge"),get("chat.button"),get("chat.inner"),get("chat.tabs"),get("chat.top")
