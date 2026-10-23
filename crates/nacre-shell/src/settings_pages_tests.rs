@@ -173,6 +173,7 @@ async fn lab(topics: Vec<(&str, Json)>, methods: &[&str]) -> Lab {
                                 {"id": "kitty", "label": "Kitty", "status": "not-published"},
                                 {"id": "qt", "label": "Qt", "status": "paused"}]}),
                         },
+                        None if m == "system.status" => Reply::Ok { ok: status() },
                         None => Reply::Ok {
                             ok: json!({"changed": true}),
                         },
@@ -230,6 +231,16 @@ fn option_args(row: &Json) -> Vec<String> {
         .collect()
 }
 
+/// A `system.status` reply (N0051 C6).
+fn status() -> Json {
+    json!({"checked": "2026-10-23T20:00:00Z", "release": "0123456789abcdef0123",
+        "services": {"nacre-shell.service": "active", "nacre-brain.service": "failed"},
+        "failed_services": ["nacre-brain.service"], "config_errors": "",
+        "drift": ["~/.config/niri/config.kdl", "~/.config/kitty/kitty.conf"],
+        "brain_sync": "synced 5 min ago", "performance": {"label": "idle", "cpu_core_percent": 1.4, "memory_mib": 41.0},
+        "session_event": "login", "updates_age_seconds": 7200,
+        "aur_review": {"mode": "required", "source": "registered-profile-setting", "profile": "default"}})
+}
 fn desktop() -> Json {
     store(
         "desktop",
@@ -331,11 +342,11 @@ async fn without_flags_everything_is_shown_and_missing_flags_are_false() {
     .await;
     assert!(nav_ids(&model).contains(&"brain".to_string()));
     drop(settings);
-    // A published flag map that does not name a flag means false (QML), and `bluetooth` and
-    // `battery` come from their topics.
+    // A published flag map that does not name a flag means false (QML); `bluetooth` and `battery`
+    // are flags of the topic (N0051 C1), never derived from the other topics.
     let l = lab(
         vec![
-            ("capabilities", caps(json!({"ai": true}))),
+            ("capabilities", caps(json!({"ai": true, "battery": true, "bluetooth": true}))),
             ("bluetooth", json!({"health": health(), "adapters": {"order": ["hci0"], "items": {"hci0": {"name": "hci0", "powered": true, "discovering": false}}}, "devices": {"order": [], "items": {}}})),
             ("battery", json!({"health": health(), "percentage": 50.0, "charging": false})),
             ("settings.store.desktop", desktop()),
@@ -858,7 +869,7 @@ async fn bluetooth_page_powers_scans_and_connects_known_devices_only() {
                     "dev_2": {"adapter": "hci0", "name": "Speaker", "connected": false, "paired": true, "trusted": false, "pairing": false}}}})),
             ("settings.store.desktop", desktop()),
         ],
-        &["settings.set", "bluetooth.set_power", "bluetooth.set_discovery", "bluetooth.connect", "bluetooth.disconnect"],
+        &["settings.set", "bluetooth.set_power", "bluetooth.set_discovery", "bluetooth.connect", "bluetooth.disconnect", "bluetooth.set_trusted"],
     )
     .await;
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
@@ -900,44 +911,370 @@ async fn bluetooth_page_powers_scans_and_connects_known_devices_only() {
         )
     );
     pause().await;
+    // Trust is a second button on each device: it writes the opposite of what is published.
+    assert_eq!(
+        row(&rows, "btdev:dev_1")["buttons"][1]["id"],
+        "do:bt-trust|dev_1|off"
+    );
+    settings.act("do:bt-trust|dev_2|on", "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "bluetooth.set_trusted".into(),
+            json!({"device": "dev_2", "trusted": true})
+        )
+    );
+    pause().await;
     // An id the daemon never published is not sent.
     settings.act("do:bt-connect|../../x", "", wake());
+    settings.act("do:bt-trust|../../x|on", "", wake());
     assert!(l.quiet());
 }
 
-// ---- contracts that do not exist yet ---------------------------------------------------------------
+// ---- N0051 contracts: history clears, input store, shortcuts, status, launches ----------------------
+
+async fn settle_calls(settings: &Settings, at: &Stores) {
+    for _ in 0..100 {
+        settings.project(at);
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
 
 #[tokio::test(flavor = "current_thread")]
-async fn unpublished_contracts_show_a_requires_line_and_send_nothing() {
+async fn privacy_page_clears_clipboard_and_launcher_history_after_a_second_press() {
+    let mut l = lab(
+        vec![("settings.store.desktop", desktop())],
+        &[
+            "settings.set",
+            "clipboard.clear_history",
+            "launcher.clear_history",
+        ],
+    )
+    .await;
+    let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
+    let at = stores("privacy");
+    let model = until(&settings, &at, has("privacy.clipboard")).await;
+    let rows = items(&model);
+    for (id, op) in [
+        ("privacy.clipboard", "clear-clipboard"),
+        ("privacy.launcher", "clear-launcher"),
+    ] {
+        assert_eq!(
+            row(&rows, id)["options"][0]["id"],
+            format!("do:confirm|{op}"),
+            "armed by a first press"
+        );
+        assert_eq!(row(&rows, id)["options"][0]["enabled"], true);
+    }
+    // The first press only arms; a different row's confirmation does not carry over.
+    settings.act("do:clear-clipboard", "", wake());
+    assert!(l.quiet());
+    settings.act("do:confirm|clear-launcher", "", wake());
+    settings.act("do:clear-clipboard", "", wake());
+    assert!(l.quiet(), "armed for the launcher, not the clipboard");
+    settings.act("do:confirm|clear-clipboard", "", wake());
+    let rows = items(&settings.project(&at));
+    assert_eq!(
+        row(&rows, "privacy.clipboard")["options"][0]["id"],
+        "do:clear-clipboard"
+    );
+    settings.act("do:clear-clipboard", "", wake());
+    assert_eq!(
+        l.call().await,
+        ("clipboard.clear_history".into(), json!({}))
+    );
+    settle_calls(&settings, &at).await;
+    settings.act("do:confirm|clear-launcher", "", wake());
+    settings.act("do:clear-launcher", "", wake());
+    assert_eq!(l.call().await, ("launcher.clear_history".into(), json!({})));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn keyboard_page_writes_layouts_and_touchpad_and_lists_the_shortcuts() {
+    let mut l = lab(
+        vec![
+            ("capabilities", caps(json!({"input.controls": true, "touchpad": true}))),
+            ("settings.store.desktop", desktop()),
+            ("settings.store.software-input", store("software-input", 4,
+                json!({"keyboardLayouts": "us", "touchpadEnabled": true}))),
+            ("shortcuts", json!({"health": health(), "items": {"order": ["k0", "k1"], "items": {
+                "k0": {"key": "SUPER+Q", "description": "Close window"},
+                "k1": {"key": "SUPER+SHIFT+S", "description": "", "submap": null, "menu": "actions.emoji"}}}})),
+        ],
+        &["settings.set", "shortcuts.refresh"],
+    )
+    .await;
+    let layouts = [
+        ("us", "English (US)"),
+        ("no", "Norwegian"),
+        ("de", "German"),
+    ];
+    let settings = Settings::new(Some(l.client.clone()), &root())
+        .unwrap()
+        .with_layouts(&layouts);
+    let at = stores("keyboard-mouse");
+    let model = until(&settings, &at, |m| {
+        has("key:k0")(m) && m["settings.writable"] == Value::Bool(true)
+    })
+    .await;
+    // The list is asked for when the page opens (the compositor config is not watched).
+    assert_eq!(l.call().await, ("shortcuts.refresh".into(), json!({})));
+    let rows = items(&model);
+    assert_eq!(row(&rows, "key:k0")["label"], "Close window");
+    assert_eq!(row(&rows, "key:k0")["value"], "SUPER+Q");
+    assert_eq!(
+        row(&rows, "key:k1")["label"],
+        "SUPER+SHIFT+S",
+        "no description: the key"
+    );
+    assert_eq!(
+        row(&rows, "keyboard-mouse.keyboard.keyboardLayouts")["value"],
+        "us"
+    );
+    let picker = row(&rows, "layout.picker");
+    assert_eq!(picker["items"].as_array().unwrap().len(), 3);
+    assert_eq!(picker["items"][0]["selected"], true);
+    // Adding a layout writes the comma-separated list, fenced by the revision.
+    settings.act("do:layout|no", "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "settings.set".into(),
+            json!({"store": "software-input", "key": ["keyboardLayouts"], "value": "us,no", "rev": 4})
+        )
+    );
+    settle_calls(&settings, &at).await;
+    // An id the host list does not have never reaches the wire.
+    settings.act("do:layout|xx;yy", "", wake());
+    assert!(l.quiet());
+    settings.act("do:layout-reset", "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "settings.set".into(),
+            json!({"store": "software-input", "key": ["keyboardLayouts"], "value": "", "rev": 4})
+        )
+    );
+    settle_calls(&settings, &at).await;
+    settings.act("set:keyboard-mouse.touchpad.touchpadEnabled", "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "settings.set".into(),
+            json!({"store": "software-input", "key": ["touchpadEnabled"], "value": false, "rev": 4})
+        )
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn power_page_refreshes_and_starts_the_service_with_the_packages_menu_as_fallback() {
     let mut l = lab(
         vec![
             (
                 "capabilities",
-                caps(json!({"ai": false, "brain": false, "packages": true})),
+                caps(json!({"powerProfiles": false, "battery": true})),
+            ),
+            ("settings.store.desktop", desktop()),
+            ("settings.store.power", store("power", 2, json!({}))),
+        ],
+        &[
+            "settings.set",
+            "capabilities.refresh",
+            "tools.launch",
+            "ui.dispatch",
+        ],
+    )
+    .await;
+    let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
+    settings.subscribe(Arc::new(|| {}));
+    let at = stores("power");
+    let model = until(&settings, &at, has("power.profiles.fix")).await;
+    let rows = items(&model);
+    assert_eq!(
+        row(&rows, "power.profiles.retry")["options"][0]["id"],
+        "do:refresh-caps"
+    );
+    assert_eq!(
+        row(&rows, "power.profiles.fix")["options"][0]["id"],
+        "do:open|power-service"
+    );
+    settings.act("do:refresh-caps", "", wake());
+    assert_eq!(l.call().await, ("capabilities.refresh".into(), json!({})));
+    settle_calls(&settings, &at).await;
+    settings.act("do:open|power-service", "", wake());
+    assert_eq!(
+        l.call().await,
+        ("tools.launch".into(), json!({"tool": "power-service"}))
+    );
+    settle_calls(&settings, &at).await;
+    // Without `powerprofilesctl` the daemon answers `unavailable`: the packages menu opens.
+    l.fail
+        .lock()
+        .unwrap()
+        .insert("tools.launch".into(), ErrorCode::Unavailable);
+    settings.act("do:open|power-service", "", wake());
+    assert_eq!(l.call().await.0, "tools.launch");
+    settle_calls(&settings, &at).await;
+    assert_eq!(
+        l.call().await,
+        (
+            "ui.dispatch".into(),
+            json!({"target": "nacre", "method": "menu", "args": ["software.packages", "power-profiles-daemon"]})
+        )
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn system_page_shows_the_status_and_launches_the_aur_policy_and_setup() {
+    let mut l = lab(
+        vec![
+            (
+                "capabilities",
+                caps(json!({"packages": true, "ai": false, "brain": false})),
             ),
             ("settings.store.desktop", desktop()),
             ("settings.store.profile", store("profile", 1, json!({}))),
         ],
-        &["settings.set"],
+        &[
+            "settings.set",
+            "system.status",
+            "tools.launch",
+            "ui.dispatch",
+            "brain.open",
+        ],
     )
     .await;
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
-    let system = items(&until(&settings, &stores("system"), has("system.health")).await);
-    assert_eq!(row(&system, "system.health")["kind"], "help");
-    assert!(
-        row(&system, "system.health")["label"]
-            .as_str()
-            .unwrap()
-            .contains("requires a Nacre contract")
+    let at = stores("system");
+    let model = until(&settings, &at, has("status.release")).await;
+    assert_eq!(l.call().await, ("system.status".into(), json!({})));
+    let rows = items(&model);
+    assert_eq!(row(&rows, "status.release")["value"], "0123456789ab");
+    assert_eq!(row(&rows, "status.service:nacre-brain")["value"], "failed");
+    assert_eq!(row(&rows, "status.drift")["value"], "2");
+    assert_eq!(row(&rows, "status.config")["value"], "Valid");
+    assert_eq!(row(&rows, "status.updates")["value"], "2 h ago");
+    // Read-only: the status rows have no button, and the AUR policy shows its provenance.
+    let aur = row(&rows, "system.packages.aurProvenance");
+    assert_eq!(aur["options"][0]["id"], "do:open|aur-review-policy");
+    assert!(aur["description"].as_str().unwrap().contains("required"));
+    settings.act("do:open|aur-review-policy", "", wake());
+    assert_eq!(
+        l.call().await,
+        ("tools.launch".into(), json!({"tool": "aur-review-policy"}))
     );
+    settle_calls(&settings, &at).await;
+    // Welcome is a route to the shell; the updates view does not exist in Bead.
+    assert_eq!(
+        row(&rows, "system.welcome")["options"][0]["id"],
+        "do:open|welcome"
+    );
+    assert!(rows.iter().all(|r| r["id"] != "system.updates"));
+    settings.act("do:open|welcome", "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "ui.dispatch".into(),
+            json!({"target": "welcomeApp", "method": "open", "args": []})
+        )
+    );
+    settle_calls(&settings, &at).await;
+    // Add-ons: `nacre setup` for each missing one; Brain opens through its own method.
     let addons = items(&until(&settings, &stores("addons"), has("addon.ai")).await);
-    assert_eq!(row(&addons, "addon.brain")["kind"], "help");
-    settings.act("do:save-workflow", "", wake());
-    settings.act("do:lock", "", wake());
-    assert!(
-        l.quiet(),
-        "methods that are not advertised are never called"
+    assert_eq!(
+        row(&addons, "addon.brain")["options"][0]["id"],
+        "do:open|setup"
     );
+    settings.act("do:open|setup", "", wake());
+    assert_eq!(
+        l.call().await,
+        ("tools.launch".into(), json!({"tool": "setup"}))
+    );
+    settle_calls(&settings, &at).await;
+    settings.act("do:open|brain", "", wake());
+    assert_eq!(l.call().await, ("brain.open".into(), json!({})));
+    settle_calls(&settings, &at).await;
+    // Anything outside the closed set is ignored.
+    settings.act("do:open|rm -rf", "", wake());
+    assert!(l.quiet());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn app_launch_buttons_use_the_closed_set_and_stay_dim_without_the_method() {
+    let mut l = lab(
+        vec![
+            ("capabilities", caps(json!({"ai": true, "brain": true}))),
+            ("settings.store.desktop", desktop()),
+            ("settings.store.ai-settings", store("ai-settings", 1, json!({}))),
+            ("audio", json!({"health": health(), "default_output": "", "default_input": "",
+                "nodes": {"order": [], "items": {}}})),
+            ("network", json!({"health": health(), "wireless_enabled": true,
+                "devices": {"order": [], "items": {}},
+                "access_points": {"order": [], "items": {}}, "connections": {"order": [], "items": {}}})),
+        ],
+        &["settings.set", "tools.launch", "ui.dispatch", "brain.open"],
+    )
+    .await;
+    let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
+    let ai = items(&until(&settings, &stores("nacre-ai"), has("ai.open")).await);
+    assert_eq!(row(&ai, "ai.open")["options"][0]["id"], "do:open|sidebar");
+    assert_eq!(
+        row(&ai, "ai.accounts")["options"][0]["id"],
+        "do:open|ai-workspace"
+    );
+    settings.act("do:open|sidebar", "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "ui.dispatch".into(),
+            json!({"target": "nacre", "method": "left", "args": []})
+        )
+    );
+    let at = stores("nacre-ai");
+    settle_calls(&settings, &at).await;
+    settings.act("do:open|ai-workspace", "", wake());
+    assert_eq!(
+        l.call().await,
+        ("tools.launch".into(), json!({"tool": "ai-workspace"}))
+    );
+    settle_calls(&settings, &at).await;
+    let sound = items(&until(&settings, &stores("sound"), has("sound.routing")).await);
+    assert_eq!(
+        row(&sound, "sound.routing")["options"][0]["id"],
+        "do:open|audio-manager"
+    );
+    settings.act("do:open|audio-manager", "", wake());
+    assert_eq!(
+        l.call().await,
+        ("tools.launch".into(), json!({"tool": "audio-manager"}))
+    );
+    settle_calls(&settings, &at).await;
+    let net = items(&until(&settings, &stores("network"), has("network.editor")).await);
+    assert_eq!(
+        row(&net, "network.editor")["options"][0]["id"],
+        "do:open|connection-editor"
+    );
+    settings.act("do:open|connection-editor", "", wake());
+    assert_eq!(
+        l.call().await,
+        ("tools.launch".into(), json!({"tool": "connection-editor"}))
+    );
+    drop(settings);
+    // A daemon that advertises none of the methods: the buttons are dim and nothing is sent.
+    let mut l2 = lab(
+        vec![
+            ("capabilities", caps(json!({"ai": true}))),
+            ("settings.store.desktop", desktop()),
+        ],
+        &["settings.set"],
+    )
+    .await;
+    let settings = Settings::new(Some(l2.client.clone()), &root()).unwrap();
+    let ai = items(&until(&settings, &stores("nacre-ai"), has("ai.open")).await);
+    assert_eq!(row(&ai, "ai.accounts")["options"][0]["enabled"], false);
+    settings.act("do:open|ai-workspace", "", wake());
+    assert!(l2.quiet());
+    let _ = &mut l;
 }
 
 // ---- goldens ----------------------------------------------------------------------------------------
@@ -1035,6 +1372,21 @@ fn topics_for_goldens() -> Vec<(&'static str, Json)> {
         ),
         ("settings.store.profile", store("profile", 1, json!({}))),
         (
+            "settings.store.software-input",
+            store(
+                "software-input",
+                1,
+                json!({"keyboardLayouts": "us,no", "touchpadEnabled": true}),
+            ),
+        ),
+        (
+            "shortcuts",
+            json!({"health": health(), "items": {"order": ["k0", "k1", "k2"], "items": {
+                "k0": {"key": "SUPER+Q", "description": "Close window"},
+                "k1": {"key": "SUPER+SPACE", "description": "Open the launcher"},
+                "k2": {"key": "SUPER+SHIFT+S", "description": "Take a screenshot"}}}}),
+        ),
+        (
             "settings.store.ai-settings",
             store("ai-settings", 1, json!({})),
         ),
@@ -1083,6 +1435,12 @@ fn custom_page_goldens() {
         ("settings-bluetooth-1", "bluetooth", "", false),
         ("settings-power-1", "power", "", false),
         ("settings-keyboard-mouse-1", "keyboard-mouse", "", false),
+        (
+            "settings-keyboard-layouts-1",
+            "keyboard-mouse",
+            "nor",
+            false,
+        ),
         ("settings-privacy-1", "privacy", "", false),
         ("settings-system-1", "system", "", false),
         ("settings-nacre-ai-1", "nacre-ai", "", false),
@@ -1108,7 +1466,15 @@ fn custom_page_goldens() {
         let settings = Settings::new(None, &root())
             .unwrap()
             .with_sources(fixed)
-            .with_zones(&zones);
+            .with_zones(&zones)
+            .with_layouts(&[
+                ("us", "English (US)"),
+                ("no", "Norwegian"),
+                ("de", "German"),
+                ("nl", "Dutch"),
+                ("fr", "French"),
+            ])
+            .with_status(status());
         let at = stores(page)
             .reconcile(&BTreeMap::from([(
                 "settings.pick.text".into(),

@@ -2,8 +2,9 @@
 //! B0063: the registry's custom sections (`customType`) and action rows. This is the Nacre edge of
 //! the Settings window: it knows which topics and methods the published contracts (N0042, N0046,
 //! N0047, N0049) give each section and turns them into generic rows (`info`, `actions`, `device`,
-//! `picker`, `help`) that `shell/settings/main.luau` draws with kit components. A control whose
-//! contract is not published is a `help` row saying so; the precise ask is in spec 0063.
+//! `picker`, `help`) that `shell/settings/main.luau` draws with kit components. B0070: the
+//! contracts of N0051 (history clears, input store, shortcuts, status, tools, launches) replace
+//! the "requires a Nacre contract" lines; a control with no contract left is still a `help` row.
 use super::*;
 
 /// The controller's fixed presets (N0049) and their texts.
@@ -22,6 +23,101 @@ const MAX_ZONES: usize = 2048;
 const ZONE_ROWS: usize = 8;
 const HISTORY_ROWS: usize = 20;
 const NODE_NAME_LEN: usize = 128;
+const SHORTCUT_ROWS: usize = 150;
+const SERVICE_ROWS: usize = 16;
+const LAYOUT_ROWS: usize = 8;
+const MAX_LAYOUTS: usize = 1024;
+const LAYOUT_LIST: &str = "/usr/share/X11/xkb/rules/base.lst";
+const MAX_LAYOUT_FILE: u64 = 4 << 20;
+const MAX_LAYOUT_TEXT: usize = 160;
+
+/// A history the Privacy page clears: the confirm/op name, the method and the texts.
+struct History {
+    op: &'static str,
+    method: &'static str,
+    params: fn() -> Json,
+    confirm: &'static str,
+    done: &'static str,
+}
+const HISTORIES: [History; 3] = [
+    History {
+        op: "clear-history",
+        method: "notifications.clear",
+        params: || json!({"scope": "history"}),
+        confirm: "bead.settings.history-confirm",
+        done: "",
+    },
+    History {
+        op: "clear-clipboard",
+        method: "clipboard.clear_history",
+        params: || json!({}),
+        confirm: "bead.settings.clipboard-confirm",
+        done: "bead.settings.history-cleared",
+    },
+    History {
+        op: "clear-launcher",
+        method: "launcher.clear_history",
+        params: || json!({}),
+        confirm: "bead.settings.launcher-confirm",
+        done: "bead.settings.history-cleared",
+    },
+];
+/// A launch button: the closed set of what a Settings control may start, by key. The first is
+/// the daemon method and its parameters, the second what to ask instead when the daemon
+/// answers `unavailable` (the power service fix without `powerprofilesctl` opens the packages menu).
+type Launch = (&'static str, Json, Option<(&'static str, Json)>);
+fn launch(key: &str) -> Option<Launch> {
+    let dispatch = |target: &str, method: &str, args: Json| json!({"target": target, "method": method, "args": args});
+    Some(match key {
+        "sidebar" => ("ui.dispatch", dispatch("nacre", "left", json!([])), None),
+        "welcome" => (
+            "ui.dispatch",
+            dispatch("welcomeApp", "open", json!([])),
+            None,
+        ),
+        "colors" => (
+            "ui.dispatch",
+            dispatch("colorsApp", "open", json!([])),
+            None,
+        ),
+        "brain" => ("brain.open", json!({}), None),
+        "power-service" => (
+            "tools.launch",
+            json!({"tool": key}),
+            Some((
+                "ui.dispatch",
+                dispatch(
+                    "nacre",
+                    "menu",
+                    json!(["software.packages", "power-profiles-daemon"]),
+                ),
+            )),
+        ),
+        "audio-manager" | "connection-editor" | "setup" | "ai-workspace" | "aur-review-policy" => {
+            ("tools.launch", json!({"tool": key}), None)
+        }
+        _ => return None,
+    })
+}
+/// The ids of the `! layout` section of an XKB `base.lst`, with their names.
+fn parse_layouts(text: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut inside = false;
+    for line in text.lines() {
+        if let Some(section) = line.strip_prefix('!') {
+            inside = section.trim() == "layout";
+        } else if inside && let Some((id, name)) = line.trim().split_once(char::is_whitespace) {
+            let ok = (1..=16).contains(&id.len())
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+            if ok && out.len() < MAX_LAYOUTS {
+                out.push((id.to_owned(), short(name, 60)));
+            }
+        }
+    }
+    out
+}
 
 /// The `(id, topic)` pairs a section reads besides the stores its settings name.
 type Rows = (Vec<Json>, Vec<String>);
@@ -149,17 +245,8 @@ impl Settings {
             "sound.devices" => (self.sound_rows(editable), topic("audio")),
             "network.devices" => (self.network_rows(editable, state), topic("network")),
             "bluetooth.devices" => (self.bluetooth_rows(editable), topic("bluetooth")),
-            "system.health" => (
-                vec![requires(
-                    "system.health",
-                    &tr("bead.settings.desktop-health", &[]),
-                )],
-                vec![],
-            ),
-            "keyboard-mouse.shortcuts" => (
-                vec![requires("shortcuts", &tr("bead.settings.shortcuts", &[]))],
-                vec![],
-            ),
+            "system.health" => (self.status_rows(), vec![]),
+            "keyboard-mouse.shortcuts" => (self.shortcut_rows(), topic("shortcuts")),
             "addons.optional" => (self.addon_rows(), vec![]),
             "nacre-ai.assistant" => (self.assistant_rows(), vec![]),
             _ => return None,
@@ -228,8 +315,34 @@ impl Settings {
                 editable,
             ),
             "notifications-history" => {
-                self.clear_history_row(id, &label, &description, state, editable)
+                self.clear_history_row(&HISTORIES[0], id, &label, &description, state, editable)
             }
+            "clipboard-history" => {
+                self.clear_history_row(&HISTORIES[1], id, &label, &description, state, editable)
+            }
+            "launcher-history" => {
+                self.clear_history_row(&HISTORIES[2], id, &label, &description, state, editable)
+            }
+            "power-refresh" => actions(
+                id,
+                &label,
+                &description,
+                vec![opt(
+                    "do:refresh-caps".into(),
+                    &label,
+                    false,
+                    self.can("capabilities.refresh"),
+                )],
+                self.can("capabilities.refresh"),
+            ),
+            "power-fix" => self.launch_row(id, &label, &description, "power-service"),
+            "setup" => self.launch_row(id, &label, &description, "setup"),
+            "brain" => self.launch_row(id, &label, &description, "brain"),
+            "welcome" => self.launch_row(id, &label, &description, "welcome"),
+            "colors-studio" => self.launch_row(id, &label, &description, "colors"),
+            "aur-review-policy" => self.aur_row(id, &label),
+            // Bead has no updates view (B0068): the route is refused, so there is no button.
+            "updates" => return None,
             // Bead previews its own lock; the idle policy and the font list have no Bead page.
             "lock-preview" | "idle-policy" | "fonts" => return None,
             _ => requires(id, &label),
@@ -238,24 +351,61 @@ impl Settings {
         Some(row)
     }
 
+    /// A button that starts one of the closed set of `launch` targets; the daemon method must be
+    /// advertised.
+    fn launch_row(&self, id: &str, label: &str, description: &str, key: &str) -> Json {
+        let can = launch(key).is_some_and(|(method, ..)| self.can(method));
+        let mut row = actions(
+            id,
+            "",
+            description,
+            vec![opt(format!("do:open|{key}"), label, false, can)],
+            can,
+        );
+        row["own"] = json!(true);
+        row
+    }
+    /// The AUR review policy: the daemon's provenance when `system.status` has it, and the
+    /// button that opens the policy view.
+    fn aur_row(&self, id: &str, label: &str) -> Json {
+        let policy = self
+            .state
+            .borrow()
+            .status
+            .as_ref()
+            .map(|s| s["aur_review"].clone())
+            .filter(Json::is_object)
+            .map(|p| {
+                format!(
+                    "{} · {} · {}",
+                    short(p["mode"].as_str().unwrap_or(""), 32),
+                    short(p["source"].as_str().unwrap_or(""), 64),
+                    short(p["profile"].as_str().unwrap_or(""), 64)
+                )
+            })
+            .unwrap_or_default();
+        self.launch_row(id, label, &policy, "aur-review-policy")
+    }
+
     fn clear_history_row(
         &self,
+        history: &History,
         id: &str,
         label: &str,
         description: &str,
         state: &State,
         editable: bool,
     ) -> Json {
-        let can = editable && self.can("notifications.clear");
-        if state.confirm == "clear-history" {
+        let can = editable && self.can(history.method);
+        if state.confirm == history.op {
             return actions(
                 id,
                 label,
                 description,
                 vec![
                     opt(
-                        "do:clear-history".into(),
-                        &tr("bead.settings.history-confirm", &[]),
+                        format!("do:{}", history.op),
+                        &tr(history.confirm, &[]),
                         true,
                         can,
                     ),
@@ -273,7 +423,12 @@ impl Settings {
             id,
             label,
             description,
-            vec![opt("do:confirm|clear-history".into(), label, false, can)],
+            vec![opt(
+                format!("do:confirm|{}", history.op),
+                &tr("bead.settings.history-clear", &[]),
+                false,
+                can,
+            )],
             can,
         )
     }
@@ -407,6 +562,7 @@ impl Settings {
                 .map_or(0, |o| o.len() as u64)
         });
         let mut clear = self.clear_history_row(
+            &HISTORIES[0],
             "history.clear",
             &tr("bead.settings.history-clear", &[]),
             "",
@@ -518,7 +674,7 @@ impl Settings {
     }
 
     fn addon_rows(&self) -> Vec<Json> {
-        // QML offers an install button for each missing add-on; the installer is a host action.
+        // QML offers an install button for each missing add-on; `nacre setup` runs in a terminal.
         let flags = self.caps.borrow().clone();
         let missing = |flag: &str| {
             flags
@@ -531,7 +687,7 @@ impl Settings {
             ("brain", "bead.settings.addon-brain"),
         ] {
             if missing(flag) {
-                rows.push(requires(&format!("addon.{flag}"), &tr(label, &[])));
+                rows.push(self.launch_row(&format!("addon.{flag}"), &tr(label, &[]), "", "setup"));
             }
         }
         rows
@@ -540,8 +696,13 @@ impl Settings {
         vec![
             json!({"id": "ai.sidebar", "kind": "link", "page": "panels/ai-sidebar",
                 "label": tr("bead.settings.ai-sidebar", &[]), "description": ""}),
-            requires("ai.open", &tr("bead.settings.ai-open", &[])),
-            requires("ai.accounts", &tr("bead.settings.ai-accounts", &[])),
+            self.launch_row("ai.open", &tr("bead.settings.ai-open", &[]), "", "sidebar"),
+            self.launch_row(
+                "ai.accounts",
+                &tr("bead.settings.ai-accounts", &[]),
+                "",
+                "ai-workspace",
+            ),
         ]
     }
 
@@ -584,9 +745,11 @@ impl Settings {
                 rows.push(help(&format!("sound:{kind}:none"), &tr(none, &[])));
             }
         }
-        rows.push(requires(
+        rows.push(self.launch_row(
             "sound.routing",
             &tr("bead.settings.sound-routing", &[]),
+            "",
+            "audio-manager",
         ));
         rows
     }
@@ -703,9 +866,11 @@ impl Settings {
                     "detail": "", "icon": "wifi", "buttons": buttons}));
             }
         }
-        rows.push(requires(
+        rows.push(self.launch_row(
             "network.editor",
             &tr("bead.settings.network-editor", &[]),
+            "",
+            "connection-editor",
         ));
         rows
     }
@@ -761,10 +926,12 @@ impl Settings {
             } else if paired {
                 detail.push(tr("bead.settings.paired", &[]));
             }
+            let trusted = device["trusted"] == true;
             if let Some(battery) = device["battery"].as_u64() {
                 detail.push(format!("{battery}%"));
             }
-            let can = editable && paired && !(device["pairing"] == true);
+            let idle = editable && !(device["pairing"] == true);
+            let can = idle && paired;
             let (verb, label) = if connected {
                 ("bt-disconnect", "bead.settings.disconnect")
             } else {
@@ -777,16 +944,280 @@ impl Settings {
             };
             rows.push(
                 json!({"id": format!("btdev:{id}"), "kind": "device", "own": true,
-                "enabled": can, "title": short(device["name"].as_str().unwrap_or(id), 48),
+                "enabled": idle, "title": short(device["name"].as_str().unwrap_or(id), 48),
                 "detail": detail.join(" · "), "icon": "bluetooth",
                 "buttons": [{"id": format!("do:{verb}|{id}"), "label": tr(label, &[]),
-                    "selected": connected, "enabled": can && self.can(method)}]}),
+                    "selected": connected, "enabled": can && self.can(method)},
+                    {"id": format!("do:bt-trust|{id}|{}", if trusted { "off" } else { "on" }),
+                    "label": tr(if trusted { "bead.settings.untrust" } else { "bead.settings.trust" }, &[]),
+                    "selected": trusted, "enabled": idle && self.can("bluetooth.set_trusted")}]}),
             );
         }
         if !any {
             rows.push(help("bluetooth.none", &tr("bead.settings.bt-none", &[])));
         }
         rows
+    }
+
+    // ---- N0051 pages: shortcuts, status, input store ------------------------------------------
+
+    /// `software-input` settings with an adapter in the registry that `settings.set` now writes.
+    pub(super) fn input_adapter(setting: &Json) -> bool {
+        setting["store"]["id"] == "software-input"
+            && matches!(
+                setting["adapter"].as_str(),
+                Some("keyboard-layout" | "touchpad-enabled")
+            )
+    }
+
+    fn shortcut_rows(&self) -> Vec<Json> {
+        let Some(topic) = self.topic("shortcuts").filter(healthy) else {
+            return vec![help("shortcuts", &tr("bead.settings.shortcuts-none", &[]))];
+        };
+        let mut rows: Vec<Json> = entities(&topic["items"])
+            .take(SHORTCUT_ROWS)
+            .map(|(id, item)| {
+                let key = short(item["key"].as_str().unwrap_or(""), 64);
+                let description = short(item["description"].as_str().unwrap_or(""), 120);
+                let label = if description.is_empty() {
+                    key.clone()
+                } else {
+                    description
+                };
+                info(&format!("key:{id}"), &label, &key, "")
+            })
+            .collect();
+        let total = topic["items"]["order"].as_array().map_or(0, Vec::len);
+        if rows.is_empty() {
+            rows.push(help("shortcuts", &tr("bead.settings.shortcuts-none", &[])));
+        } else if total > rows.len() {
+            rows.push(help(
+                "shortcuts.more",
+                &tr("bead.settings.shortcuts-more", &[]),
+            ));
+        }
+        rows
+    }
+
+    /// The System page's read-only status (`system.status`, read when the page opens).
+    fn status_rows(&self) -> Vec<Json> {
+        let state = self.state.borrow();
+        let Some(status) = &state.status else {
+            let text = if self.can("system.status") {
+                "bead.settings.status-loading"
+            } else {
+                "bead.settings.status-unavailable"
+            };
+            return vec![help("system.health", &tr(text, &[]))];
+        };
+        let text = |v: &Json, max| short(v.as_str().unwrap_or(""), max);
+        let line = |id: &str, label: &str, value: String, detail: &str| {
+            info(&format!("status.{id}"), &tr(label, &[]), &value, detail)
+        };
+        let mut rows = vec![line(
+            "release",
+            "bead.settings.status-release",
+            status["release"]
+                .as_str()
+                .map(|r| short(&r.chars().take(12).collect::<String>(), 12))
+                .unwrap_or_else(|| tr("bead.settings.status-unknown", &[])),
+            "",
+        )];
+        if let Some(services) = status["services"].as_object() {
+            let mut names: Vec<&String> = services.keys().collect();
+            names.sort();
+            for name in names.into_iter().take(SERVICE_ROWS) {
+                let unit = short(name.trim_end_matches(".service"), 48);
+                rows.push(info(
+                    &format!("status.service:{unit}"),
+                    &unit,
+                    &text(&services[name], 32),
+                    "",
+                ));
+            }
+        }
+        let errors = text(&status["config_errors"], 200);
+        rows.push(line(
+            "config",
+            "bead.settings.status-config",
+            if errors.is_empty() {
+                tr("bead.settings.status-config-ok", &[])
+            } else {
+                errors
+            },
+            "",
+        ));
+        let drift: Vec<&str> = status["drift"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Json::as_str)
+            .collect();
+        rows.push(line(
+            "drift",
+            "bead.settings.status-drift",
+            drift.len().to_string(),
+            &drift
+                .iter()
+                .take(3)
+                .map(|d| short(d, 60))
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+        rows.push(line(
+            "sync",
+            "bead.settings.status-sync",
+            status["brain_sync"]
+                .as_str()
+                .map(|s| short(s, 120))
+                .unwrap_or_else(|| tr("bead.settings.status-none", &[])),
+            "",
+        ));
+        if let Some(event) = status["session_event"].as_str() {
+            rows.push(line(
+                "event",
+                "bead.settings.status-event",
+                short(event, 120),
+                "",
+            ));
+        }
+        if let Some(sample) = status["performance"].as_object() {
+            let number = |k: &str| sample.get(k).and_then(Json::as_f64).unwrap_or(0.);
+            rows.push(line(
+                "sample",
+                "bead.settings.status-sample",
+                tr(
+                    "bead.settings.status-sample-value",
+                    &[
+                        ("cpu", &format!("{:.0}", number("cpu_core_percent"))),
+                        ("memory", &format!("{:.0}", number("memory_mib"))),
+                    ],
+                ),
+                "",
+            ));
+        }
+        if let Some(age) = status["updates_age_seconds"].as_u64() {
+            rows.push(line(
+                "updates",
+                "bead.settings.status-updates",
+                ago(std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_millis() as u64)
+                    .saturating_sub(age.saturating_mul(1000))),
+                "",
+            ));
+        }
+        rows
+    }
+
+    /// Rows that follow a registry setting: the keyboard layout picker.
+    pub(super) fn after_row(&self, setting: &Json, editable: bool, state: &State) -> Vec<Json> {
+        if setting["adapter"] != "keyboard-layout" || !Self::input_adapter(setting) {
+            return Vec::new();
+        }
+        let can = editable && self.document("software-input").2 && self.can(super::METHOD);
+        let current = self.layout_list();
+        let tokens: Vec<String> = state
+            .pick
+            .split_whitespace()
+            .map(str::to_lowercase)
+            .collect();
+        let matching: Vec<&(String, String)> = state
+            .layouts
+            .iter()
+            .filter(|(id, name)| {
+                let hay = format!("{id} {}", name.to_lowercase());
+                tokens.iter().all(|t| hay.contains(t))
+            })
+            .collect();
+        let shown: Vec<Json> = matching
+            .iter()
+            .take(LAYOUT_ROWS)
+            .map(|(id, name)| {
+                json!({"id": format!("do:layout|{id}"), "label": format!("{name} ({id})"),
+                    "selected": current.contains(id)})
+            })
+            .collect();
+        let more = matching.len().saturating_sub(LAYOUT_ROWS);
+        let empty = if state.layouts.is_empty() {
+            tr("bead.settings.layout-unavailable", &[])
+        } else {
+            tr("bead.settings.layout-none", &[])
+        };
+        vec![
+            json!({"id": "layout.picker", "kind": "picker", "enabled": can,
+                "label": tr("bead.settings.layout-pick", &[]),
+                "placeholder": tr("bead.settings.layout-filter", &[]),
+                "items": shown, "empty": empty,
+                "more": if more > 0 { tr("bead.settings.zone-more", &[("count", &more.to_string())]) } else { String::new() }}),
+            actions(
+                "layout.reset",
+                "",
+                "",
+                vec![opt(
+                    "do:layout-reset".into(),
+                    &tr("bead.settings.layout-reset", &[]),
+                    false,
+                    can && !current.is_empty(),
+                )],
+                can && !current.is_empty(),
+            ),
+        ]
+    }
+    /// The info row of the layout setting: the chosen ids, or the system default.
+    pub(super) fn layout_row(&self, setting: &Json, mut row: Json) -> Json {
+        let list = self.layout_list().join(", ");
+        row["kind"] = "info".into();
+        row["value"] = if list.is_empty() {
+            tr("bead.settings.default-value", &[])
+        } else {
+            list
+        }
+        .into();
+        row["own"] = json!(true);
+        row["id"] = setting["id"].clone();
+        row
+    }
+    /// The layout ids of the `software-input` store, in order.
+    fn layout_list(&self) -> Vec<String> {
+        let (_, data, _) = self.document("software-input");
+        data["keyboardLayouts"]
+            .as_str()
+            .unwrap_or("")
+            .split(',')
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(String::from)
+            .collect()
+    }
+    /// Add or remove one known layout; an empty list is the system default.
+    fn toggle_layout(&self, id: &str, wake: CallWake) {
+        if !self.state.borrow().layouts.iter().any(|(l, _)| l == id) {
+            return;
+        }
+        let mut list = self.layout_list();
+        if let Some(at) = list.iter().position(|l| l == id) {
+            list.remove(at);
+        } else {
+            list.push(id.into());
+        }
+        let joined = list.join(",");
+        if joined.len() <= MAX_LAYOUT_TEXT {
+            self.set_layouts(&joined, wake);
+        } else {
+            self.state.borrow_mut().message = "bead.settings.layout-too-long".into();
+        }
+    }
+    fn set_layouts(&self, value: &str, wake: CallWake) {
+        let Some(setting) = self
+            .registry
+            .setting("keyboard-mouse.keyboard.keyboardLayouts")
+        else {
+            return;
+        };
+        if self.registry.editable("keyboard-mouse") && self.document("software-input").2 {
+            self.submit(setting, json!(value), wake);
+        }
     }
 
     // ---- theme targets (B0064) ---------------------------------------------------------------
@@ -847,10 +1278,15 @@ impl Settings {
                 if std::mem::take(&mut state.retarget) {
                     state.targets_asked = false;
                 }
+                let fallback = state.fallback.take();
                 match reply {
                     Ok(_) => {
                         state.message.clear();
                         state.notice = std::mem::take(&mut state.on_ok);
+                    }
+                    Err(e) if e.code == "unavailable" && fallback.is_some() => {
+                        state.on_ok.clear();
+                        state.queued = fallback;
                     }
                     Err(e) => {
                         state.on_ok.clear();
@@ -884,6 +1320,19 @@ impl Settings {
                         .collect();
                 }
             }
+            if let Some(ticket) = &mut state.status_fetch
+                && let Some(reply) = ticket.try_take()
+            {
+                state.status_fetch = None;
+                if let Ok(reply) = reply {
+                    state.status = Some(reply).filter(Json::is_object);
+                }
+            }
+            if let Some(ticket) = &mut state.shortcuts_fetch
+                && ticket.try_take().is_some()
+            {
+                state.shortcuts_fetch = None;
+            }
             if let Some(ticket) = &mut state.zones_fetch
                 && let Some(reply) = ticket.try_take()
             {
@@ -914,32 +1363,62 @@ impl Settings {
         }
     }
 
-    /// Start the reads a page needs: the time zone list, the theme target statuses.
+    /// Start the reads a page needs: the time zone list, the theme target statuses, the system
+    /// status, the shortcuts refresh and the keyboard layout list.
     pub(super) fn fetch(&self, page: &str) {
-        if page == "colors/app-theming" {
-            self.fetch_targets();
+        match page {
+            "colors/app-theming" => self.fetch_targets(),
+            "date-time-language" => {
+                let mut state = self.state.borrow_mut();
+                if !state.zones_asked && state.zones_fetch.is_none() {
+                    state.zones_fetch = self.begin_read("time.zones");
+                    state.zones_asked = state.zones_fetch.is_some();
+                }
+            }
+            "system" => {
+                let mut state = self.state.borrow_mut();
+                if !state.status_asked && state.status_fetch.is_none() {
+                    state.status_fetch = self.begin_read("system.status");
+                    state.status_asked = state.status_fetch.is_some();
+                }
+            }
+            "keyboard-mouse" => {
+                let mut state = self.state.borrow_mut();
+                // The compositor config is not watched: the list is asked for when the page opens.
+                if !state.shortcuts_asked && state.shortcuts_fetch.is_none() {
+                    state.shortcuts_fetch = self.begin_read("shortcuts.refresh");
+                    state.shortcuts_asked = state.shortcuts_fetch.is_some();
+                }
+                if !state.layouts_asked {
+                    state.layouts_asked = true;
+                    state.layouts = std::fs::File::open(LAYOUT_LIST)
+                        .and_then(|f| {
+                            let mut text = String::new();
+                            std::io::Read::read_to_string(
+                                &mut std::io::Read::take(f, MAX_LAYOUT_FILE),
+                                &mut text,
+                            )
+                            .map(|_| parse_layouts(&text))
+                        })
+                        .unwrap_or_default();
+                }
+            }
+            _ => {}
         }
-        if page != "date-time-language" {
-            return;
-        }
-        let mut state = self.state.borrow_mut();
-        if state.zones_asked || state.zones_fetch.is_some() {
-            return;
-        }
-        let (Some((boot, timeout)), Some(client)) = (self.ready_for("time.zones"), &self.client)
-        else {
-            return;
-        };
-        state.zones_asked = true;
-        if let Ok(ticket) = client.begin_call(
-            "time.zones".into(),
-            json!({}),
-            timeout,
-            CallGuard { boot, version: 1 },
-            self.wake.borrow().clone(),
-        ) {
-            state.zones_fetch = Some(ticket);
-        }
+    }
+
+    /// Begin a read-only call with no parameters, if the daemon advertises it.
+    fn begin_read(&self, method: &str) -> Option<CallTicket> {
+        let ((boot, timeout), client) = (self.ready_for(method)?, self.client.as_ref()?);
+        client
+            .begin_call(
+                method.into(),
+                json!({}),
+                timeout,
+                CallGuard { boot, version: 1 },
+                self.wake.borrow().clone(),
+            )
+            .ok()
     }
 
     fn fetch_targets(&self) {
@@ -947,21 +1426,8 @@ impl Settings {
         if state.targets_asked || state.targets_fetch.is_some() {
             return;
         }
-        let (Some((boot, timeout)), Some(client)) =
-            (self.ready_for("colors.targets"), &self.client)
-        else {
-            return;
-        };
-        state.targets_asked = true;
-        if let Ok(ticket) = client.begin_call(
-            "colors.targets".into(),
-            json!({}),
-            timeout,
-            CallGuard { boot, version: 1 },
-            self.wake.borrow().clone(),
-        ) {
-            state.targets_fetch = Some(ticket);
-        }
+        state.targets_fetch = self.begin_read("colors.targets");
+        state.targets_asked = state.targets_fetch.is_some();
     }
 
     /// A level change: one call at a time, the newest target waits for the one in flight.
@@ -983,6 +1449,13 @@ impl Settings {
             parts.next().unwrap_or(""),
         );
         let mut changes = BTreeMap::new();
+        if let Some(history) = HISTORIES.iter().find(|h| h.op == op) {
+            let armed = std::mem::take(&mut self.state.borrow_mut().confirm) == op;
+            if armed {
+                self.call(history.method, (history.params)(), wake, history.done);
+            }
+            return changes;
+        }
         match op {
             "confirm" => self.state.borrow_mut().confirm = a.into(),
             "cancel" => {
@@ -992,11 +1465,25 @@ impl Settings {
                 state.secret.clear();
                 changes.insert("settings.secret".into(), Value::Text(String::new()));
             }
-            "clear-history" => {
-                let armed = std::mem::take(&mut self.state.borrow_mut().confirm) == "clear-history";
-                if armed {
-                    self.call("notifications.clear", json!({"scope": "history"}), wake, "");
+            "open" if self.state.borrow().pending.is_none() => {
+                if let Some((method, params, fallback)) = launch(a) {
+                    self.call(method, params, wake, "");
+                    let mut state = self.state.borrow_mut();
+                    state.fallback = fallback
+                        .filter(|_| state.pending.is_some())
+                        .map(|(m, p)| (m.to_owned(), p));
                 }
+            }
+            "refresh-caps" => self.call("capabilities.refresh", json!({}), wake, ""),
+            "layout" => self.toggle_layout(a, wake),
+            "layout-reset" => self.set_layouts("", wake),
+            "bt-trust" if self.known("bluetooth", "devices", a) && (b == "on" || b == "off") => {
+                self.call(
+                    "bluetooth.set_trusted",
+                    json!({"device": a, "trusted": b == "on"}),
+                    wake,
+                    "",
+                );
             }
             "app-theme"
                 if (b == "on" || b == "off")
@@ -1199,5 +1686,20 @@ impl Settings {
         }
         self.state.borrow_mut().joining.clear();
         self.call("network.connect", params, wake, "");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn layout_list_is_the_layout_section_of_base_lst() {
+        let text = "! model\n  pc105  Generic\n\n! layout\n  us   English (US)\n  no   Norwegian\n  BAD! x\n\n! variant\n  nodeadkeys no: Norwegian (no dead keys)\n";
+        assert_eq!(
+            super::parse_layouts(text),
+            [
+                ("us".to_string(), "English (US)".to_string()),
+                ("no".into(), "Norwegian".into())
+            ]
+        );
     }
 }

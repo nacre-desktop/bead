@@ -1748,7 +1748,7 @@ dependencies = [
 [[package]]
 name = "nacre-protocol"
 version = "0.1.0-dev.2"
-source = "git+https://github.com/nacre-desktop/nacre?rev=09cf91fc0596010a9c66411469bba300b1120113#09cf91fc0596010a9c66411469bba300b1120113"
+source = "git+https://github.com/nacre-desktop/nacre?rev=f3193ec0baf5133a1b20eb7f41112abc8d331d2d#f3193ec0baf5133a1b20eb7f41112abc8d331d2d"
 dependencies = [
  "schemars",
  "serde",

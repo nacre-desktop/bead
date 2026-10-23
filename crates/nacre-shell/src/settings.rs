@@ -23,9 +23,9 @@ pub const METHOD: &str = "settings.set";
 const MAX_TEXT: usize = 200;
 const MAX_ITEMS: usize = 64;
 const MAX_RESULTS: usize = 40;
-/// Followed while the window is open: the registry's capability flags, and the two topics that
-/// answer the `bluetooth` and `battery` conditions the flags topic does not carry.
-const ALWAYS: &[&str] = &["capabilities", "bluetooth", "battery"];
+/// Followed while the window is open: the registry's capability flags (N0051 C1 publishes
+/// `bluetooth` and `battery` there too).
+const ALWAYS: &[&str] = &["capabilities"];
 
 pub struct Registry {
     navigation: Json,
@@ -191,6 +191,17 @@ struct State {
     targets_fetch: Option<CallTicket>,
     targets_asked: bool,
     retarget: bool,
+    /// The keyboard layouts `(id, name)` of the host's `base.lst`, read when the page opens.
+    layouts: Vec<(String, String)>,
+    layouts_asked: bool,
+    /// `system.status` and `shortcuts.refresh`: the calls are made when their page opens.
+    status: Option<Json>,
+    status_fetch: Option<CallTicket>,
+    status_asked: bool,
+    shortcuts_fetch: Option<CallTicket>,
+    shortcuts_asked: bool,
+    /// What to ask instead when the call in flight is answered `unavailable`.
+    fallback: Option<(String, Json)>,
     /// The text of the picker's filter field, as of the last projection.
     pick: String,
     /// What the last finished call wants said (not an error), cleared by the next action.
@@ -238,6 +249,29 @@ impl Settings {
             let mut state = self.state.borrow_mut();
             state.zones = zones.iter().map(|z| z.to_string()).collect();
             state.zones_asked = true;
+        }
+        self
+    }
+    /// The `system.status` reply the daemon would have given (previews and tests).
+    #[cfg(test)]
+    pub fn with_status(self, status: Json) -> Self {
+        {
+            let mut state = self.state.borrow_mut();
+            state.status = Some(status);
+            state.status_asked = true;
+        }
+        self
+    }
+    /// The keyboard layout list the host would have given (previews and tests).
+    #[cfg(test)]
+    pub fn with_layouts(self, layouts: &[(&str, &str)]) -> Self {
+        {
+            let mut state = self.state.borrow_mut();
+            state.layouts = layouts
+                .iter()
+                .map(|(i, n)| (i.to_string(), n.to_string()))
+                .collect();
+            state.layouts_asked = true;
         }
         self
     }
@@ -368,24 +402,9 @@ impl Settings {
             .filter(Json::is_object);
         *self.caps.borrow_mut() = flags;
     }
-    /// A flag of the `capabilities` topic. A flag the topic does not name is false (as QML), except
-    /// `bluetooth` and `battery`, which the registry names but the topic does not carry (a Nacre
-    /// ask): they come from the topics themselves.
+    /// A flag of the `capabilities` topic. A flag the topic does not name is false (as QML).
     fn flag(&self, flags: &Json, name: &str) -> bool {
-        if let Some(value) = flags.get(name).and_then(Json::as_bool) {
-            return value;
-        }
-        let healthy = |t: &Json| t["health"]["available"] == true;
-        match name {
-            "bluetooth" => self.topic("bluetooth").is_some_and(|t| {
-                healthy(&t)
-                    && t["adapters"]["items"]
-                        .as_object()
-                        .is_some_and(|a| !a.is_empty())
-            }),
-            "battery" => self.topic("battery").is_some_and(|t| healthy(&t)),
-            _ => false,
-        }
+        flags.get(name).and_then(Json::as_bool).unwrap_or(false)
     }
     fn holds(&self, flags: &Json, condition: &Json) -> bool {
         if let Some(name) = condition["capability"].as_str() {
@@ -418,7 +437,9 @@ impl Settings {
     /// (launcher entries, startup apps) and editors only the QML shell has.
     fn unavailable(&self, setting: &Json) -> bool {
         let id = setting["id"].as_str().unwrap_or("");
-        (setting.get("adapter").is_some() && !self.app_theme(setting))
+        (setting.get("adapter").is_some()
+            && !self.app_theme(setting)
+            && !Self::input_adapter(setting))
             || setting.get("backend").is_some()
             || matches!(setting["entityType"].as_str(), Some("entry" | "startup"))
             || (setting.get("editorOwned").is_some()
@@ -452,6 +473,9 @@ impl Settings {
             )
             .into();
             return row;
+        }
+        if setting["adapter"] == "keyboard-layout" {
+            return self.layout_row(setting, row);
         }
         let value = self.current(setting);
         // Staged values show as the pending choice until applied or discarded.
@@ -572,6 +596,7 @@ impl Settings {
                     }
                 }
                 body.push(self.row(setting, editable, state));
+                body.extend(self.after_row(setting, editable, state));
             }
             if section.get("customType").is_some() {
                 match self.custom_rows(section, editable, state) {
@@ -712,7 +737,7 @@ impl Settings {
         let ready = self.ready().is_some();
         self.state.borrow_mut().pick = text("settings.pick.text");
         // Which topics the page reads decides the leases; rows are built after they open. The
-        // capability flags and the two topics that stand in for missing flags stay followed.
+        // capability flags stay followed.
         self.refresh_caps();
         let mut wanted = if searching {
             Vec::new()
@@ -819,6 +844,8 @@ impl Settings {
                     state.secret.clear();
                     state.message.clear();
                     state.notice.clear();
+                    state.status_asked = false;
+                    state.shortcuts_asked = false;
                 }
                 return BTreeMap::from([
                     ("settings.page".into(), Value::Text(self.page_for(payload))),
