@@ -191,6 +191,14 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
         validate(&call)?;
         return Err(crate::app::route(call.id, "chat", "toggle", &[]));
     }
+    // The QML session menu (`nacre session`) is the top-right power view, not a launcher route.
+    if call.target == "nacre" && call.method == "session" {
+        validate(&call)?;
+        call.target = "bead.panel".into();
+        call.method = "toggle".into();
+        call.args = vec![Value::String("session".into())];
+        return Ok(call);
+    }
     // B0045/B0052: `nacre settings [page]` opens the Settings app (deep link by page id).
     if call.target == "nacre"
         && call.method == "settings"

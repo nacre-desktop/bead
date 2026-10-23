@@ -20,7 +20,7 @@ CTL = 'NACRE_DAEMON_SOCKET="$XDG_RUNTIME_DIR/nacre/daemon.sock" exec {bin}/nacre
 # Alt is the nested niri's Mod key; the outer compositor keeps Super.
 BINDS = [('Space', 'nacre launcher ""', 'launcher'), ('O', 'drawers toggle dashboard', 'dashboard'),
          ('I', 'nacre settings', 'settings window'), ('A', 'nacre left', 'AI sidebar'),
-         ('X', 'nacre menu power ""', 'session menu'), ('V', 'nacre clipboard', 'clipboard'),
+         ('X', 'nacre session', 'session menu'), ('V', 'nacre clipboard', 'clipboard'),
          ('W', 'nacre launcher ">wallpaper "', 'wallpaper picker'), ('Period', 'nacre menu actions.emoji ""', 'emoji'),
          ('K', 'nacre menu learn.shortcuts ""', 'shortcut list'), ('Z', 'nacre hide', 'hide / show the shell')]
 CHEAT_SHEET = 'Bead preview (private nested window). Keys, with the nested compositor Mod = Alt:\n' + '\n'.join(

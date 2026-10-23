@@ -32,7 +32,8 @@ impl Launch {
             ("launcher.route".into(), text("apps")),
             (
                 "launcher.engine_route".into(),
-                text(self.route.as_deref().unwrap_or("")),
+                // The QML opens the launcher on Home (`openMode("apps")` sets route "home"); a typed query searches everything.
+                text(self.route.as_deref().unwrap_or(if self.query.trim().is_empty() { "home" } else { "" })),
             ),
             ("launcher.selection".into(), text("")),
             ("launcher.scroll.y".into(), Value::Number(0.)),
@@ -247,5 +248,8 @@ mod tests {
         assert_eq!(model["launcher.mode"], Value::Text("apps".into()));
         let plain = routed("launcher", &["a"]).model();
         assert_eq!(plain["launcher.engine_route"], Value::Text(String::new()));
+        // No query and no route opens on Home, as the QML does.
+        let home = routed("launcher", &[""]).model();
+        assert_eq!(home["launcher.engine_route"], Value::Text("home".into()));
     }
 }

@@ -65,7 +65,7 @@ STATES = {
                    [('ui', 'nacre', 'close')], 0),
     'osd-microphone': ([('only', 'qml', ('ui', 'nacre', 'previewFeedback', 'microphone')), ('only', 'bead', ('level', 'source', 0.45))],
                        [('ui', 'nacre', 'close')], 0),
-    'session': ([('only', 'qml', ('ui', 'nacre', 'session')), ('only', 'bead', ('shell', 'bead.panel', 'open', 'session'))],
+    'session': ([('ui', 'nacre', 'session')],
                 [('ui', 'nacre', 'close')], 1.0),
     'settings': ([('ui', 'nacre', 'settings'), ('sleep', 1.5)], [('app_close', 'settings')], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
