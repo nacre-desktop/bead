@@ -113,7 +113,12 @@ pub fn on_external_change(notify: Notify) {
     *EXTERNAL_NOTIFY.lock().unwrap_or_else(|p| p.into_inner()) = Some(notify);
 }
 fn externals() -> Vec<External> {
-    EXTERNAL.lock().unwrap_or_else(|p| p.into_inner()).iter().map(|(_, e)| *e).collect()
+    EXTERNAL
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .map(|(_, e)| *e)
+        .collect()
 }
 static LIVE: std::sync::Mutex<Frame> = std::sync::Mutex::new(Frame::DEFAULT);
 /// The Nacre bar's own height inside the header (the rest is the top frame edge).

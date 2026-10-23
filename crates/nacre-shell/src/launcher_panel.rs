@@ -52,7 +52,10 @@ pub fn spec(
             let source = source.connect().map_err(|e| e.to_string())?;
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_frame(crate::placement::Attachment::Attached(Edge::Bottom), &colors)
+                .with_frame(
+                    crate::placement::Attachment::Attached(Edge::Bottom),
+                    &colors,
+                )
                 .and_then(|r| r.with_launcher(source))
                 .and_then(|r| r.with_launcher_memory(memory.clone()))
                 .and_then(|r| match &prefs {

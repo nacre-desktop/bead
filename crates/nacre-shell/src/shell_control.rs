@@ -41,7 +41,12 @@ pub struct Gate {
 impl Gate {
     /// Run the watchers (something the tiles depend on changed outside the settings).
     pub fn notify(&self) {
-        for watcher in self.watchers.lock().unwrap_or_else(|p| p.into_inner()).iter() {
+        for watcher in self
+            .watchers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .iter()
+        {
             watcher();
         }
     }
@@ -157,7 +162,12 @@ impl ShellControl for Gate {
         crate::app::set_live_palette(palette);
         if crate::placement::set_live_palette(palette) {
             self.variant.fetch_add(1, SeqCst);
-            for watcher in self.watchers.lock().unwrap_or_else(|p| p.into_inner()).iter() {
+            for watcher in self
+                .watchers
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .iter()
+            {
                 watcher();
             }
         }

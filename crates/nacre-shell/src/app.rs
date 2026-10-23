@@ -55,10 +55,19 @@ fn live_palette_file(dir: &Path) -> Option<PathBuf> {
     let live = LIVE.lock().unwrap_or_else(|p| p.into_inner()).clone()?;
     let colours: serde_json::Map<String, Value> = live
         .iter()
-        .map(|(role, c)| (role.clone(), json!(format!("{:02x}{:02x}{:02x}", c[0], c[1], c[2]))))
+        .map(|(role, c)| {
+            (
+                role.clone(),
+                json!(format!("{:02x}{:02x}{:02x}", c[0], c[1], c[2])),
+            )
+        })
         .collect();
     let path = dir.join("palette-live.json");
-    std::fs::write(&path, json!({"formatVersion": 1, "colours": colours}).to_string()).ok()?;
+    std::fs::write(
+        &path,
+        json!({"formatVersion": 1, "colours": colours}).to_string(),
+    )
+    .ok()?;
     Some(path)
 }
 
@@ -180,10 +189,16 @@ fn describe_panel(app: &str, socket: &Path, child: &mut std::process::Child) {
         let Ok(reply) = ipc::call(socket, &call, Duration::from_millis(300)) else {
             continue;
         };
-        let state = reply.result.as_ref().and_then(Value::as_str).and_then(|t| serde_json::from_str::<Value>(t).ok())
+        let state = reply
+            .result
+            .as_ref()
+            .and_then(Value::as_str)
+            .and_then(|t| serde_json::from_str::<Value>(t).ok())
             .or(reply.result);
         let Some(state) = state else { continue };
-        let size = state["size"].as_array().and_then(|s| Some((s.first()?.as_f64()?, s.get(1)?.as_f64()?)));
+        let size = state["size"]
+            .as_array()
+            .and_then(|s| Some((s.first()?.as_f64()?, s.get(1)?.as_f64()?)));
         if let (Some(true), Some((w, h))) = (state["target_open"].as_bool(), size) {
             placement::set_external(
                 app,
