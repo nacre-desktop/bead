@@ -170,7 +170,7 @@ exposed a harness defect, not a product result:
 The swap reset works on the laptop (7.3 GiB → 22 MiB, with MemAvailable >
 swap + 8 GiB). Evidence: ~/.local/share/nacre/ai/lead/bead-laptop-reference-20261022/evidence-*.
 
-Prep for the night of 2026-10-24 (Claude worker, current main `2da79c9`: B0037–B0060, notices in
+Prep for the night of 2026-10-24 (Claude worker, current main `56b9499`: B0037–B0063, notices in
 process, frame, pearls, app mode): the candidate and helper examples were rebuilt from that exact
 commit (Rust 1.99.0, release, `--locked`, Arch container on prod; the build script stops on any
 cargo error). The launcher now (a) records `measured_process` from the PID's cmdline and
