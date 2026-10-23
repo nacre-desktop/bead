@@ -44,6 +44,23 @@ pub struct Host {
     palette: PathBuf,
 }
 static HOST: OnceLock<Host> = OnceLock::new();
+/// The presentation palette the shell last committed (B0056): an app starts with it, so it wears the wallpaper's colours
+/// and not the bundle's static ones.
+static LIVE: std::sync::Mutex<Option<BTreeMap<String, [u8; 4]>>> = std::sync::Mutex::new(None);
+pub fn set_live_palette(palette: &BTreeMap<String, [u8; 4]>) {
+    *LIVE.lock().unwrap_or_else(|p| p.into_inner()) = Some(palette.clone());
+}
+/// Orient format 1 file of the live palette beside the app sockets (owner-only directory), if one has arrived.
+fn live_palette_file(dir: &Path) -> Option<PathBuf> {
+    let live = LIVE.lock().unwrap_or_else(|p| p.into_inner()).clone()?;
+    let colours: serde_json::Map<String, Value> = live
+        .iter()
+        .map(|(role, c)| (role.clone(), json!(format!("{:02x}{:02x}{:02x}", c[0], c[1], c[2]))))
+        .collect();
+    let path = dir.join("palette-live.json");
+    std::fs::write(&path, json!({"formatVersion": 1, "colours": colours}).to_string()).ok()?;
+    Some(path)
+}
 
 /// Called once by the shell: app sockets live beside its command socket (owner-only directory).
 pub fn configure(command_socket: &Path, daemon: Option<PathBuf>, palette: PathBuf) {
@@ -114,7 +131,7 @@ impl Host {
             .arg("--command-socket")
             .arg(self.socket(name))
             .arg("--palette")
-            .arg(&self.palette);
+            .arg(live_palette_file(&self.dir).unwrap_or_else(|| self.palette.clone()));
         if let Some(daemon) = &self.daemon {
             command.arg("--daemon-socket").arg(daemon);
         }

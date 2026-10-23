@@ -296,8 +296,17 @@ class Arm:
             self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
                       'call', name + 'App', 'close'], check=False)
         else:  # the app process listens on app-NAME.sock beside the shell's command socket
-            self.run([str(Path(self.args.bead_bin).resolve() / 'nacre-shell'), 'ipc', '--socket',
-                      str(self.runtime / f'app-{name}.sock'), '--json', 'bead.window', 'close'], check=False)
+            # Newline-delimited JSON on the app's own socket (the shell's CLI only knows catalogue routes).
+            import socket
+            request = json.dumps({'version': 1, 'id': 1, 'target': 'bead.window', 'method': 'close', 'args': []}) + '\n'
+            try:
+                with socket.socket(socket.AF_UNIX) as client:
+                    client.settimeout(3)
+                    client.connect(str(self.runtime / f'app-{name}.sock'))
+                    client.sendall(request.encode())
+                    client.recv(4096)
+            except OSError as error:
+                self.errors.append(f'closing {name}: {error}')
 
     def set_level(self, node, value):
         """The daemon's osd service polls `wpctl get-volume` after each `pactl subscribe` line (fake tools, see start_daemon)."""

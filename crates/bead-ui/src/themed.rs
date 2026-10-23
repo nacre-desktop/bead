@@ -69,3 +69,44 @@ pub(crate) fn themed_asset(
     assets.entry(name.clone()).or_insert_with(|| std::sync::Arc::from(out.into_bytes()));
     Ok(name)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn palette(roles: &[(&str, [u8; 4])]) -> Palette {
+        Palette(std::sync::Arc::new(
+            roles.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
+        ))
+    }
+    fn fill(svg: &str, palette: &Palette) -> String {
+        let path = PathBuf::from("a.themed.svg");
+        let mut assets = std::collections::BTreeMap::from([(path.clone(), std::sync::Arc::from(svg.as_bytes()))]);
+        let name = themed_asset(&path, palette, &mut assets).unwrap();
+        String::from_utf8(assets[&name].to_vec()).unwrap()
+    }
+    #[test]
+    fn tokens_take_palette_colours_and_lift_only_when_marked() {
+        let dark = palette(&[
+            ("surface", [9, 19, 18, 255]),
+            ("onSurface", [224, 239, 236, 255]),
+            ("primary", [20, 60, 55, 255]),
+        ]);
+        assert_eq!(fill("<a fill='@primary@'/>", &dark), "<a fill='#143c37'/>");
+        let lifted = fill("<a fill='@primary+@'/>", &dark);
+        assert_ne!(lifted, "<a fill='#143c37'/>");
+        // The lift reaches the contrast it promises.
+        let hex = u32::from_str_radix(&lifted[10..16], 16).unwrap();
+        let color = [(hex >> 16) as u8, (hex >> 8) as u8, hex as u8, 255];
+        assert!(contrast(color, [9, 19, 18, 255]) >= 3.4);
+        assert_eq!(fill("<a fill='@primary+@'/>", &dark), lifted);
+    }
+    #[test]
+    fn an_unknown_role_or_open_token_is_an_error() {
+        let p = palette(&[("surface", [0, 0, 0, 255])]);
+        let path = PathBuf::from("a.themed.svg");
+        for svg in ["@nope@", "@primary"] {
+            let mut assets = std::collections::BTreeMap::from([(path.clone(), std::sync::Arc::from(svg.as_bytes()))]);
+            assert!(themed_asset(&path, &p, &mut assets).is_err());
+        }
+    }
+}

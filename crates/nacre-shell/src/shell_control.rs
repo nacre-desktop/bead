@@ -154,6 +154,7 @@ impl ShellControl for Gate {
         self.variant.load(SeqCst) + crate::placement::external_rev()
     }
     fn palette_changed(&self, palette: &std::collections::BTreeMap<String, [u8; 4]>) {
+        crate::app::set_live_palette(palette);
         if crate::placement::set_live_palette(palette) {
             self.variant.fetch_add(1, SeqCst);
             for watcher in self.watchers.lock().unwrap_or_else(|p| p.into_inner()).iter() {
