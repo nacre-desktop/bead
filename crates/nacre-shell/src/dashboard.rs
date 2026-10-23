@@ -1106,7 +1106,11 @@ mod more_tests;
 fn clock_text(clock: &str, twelve: bool) -> String {
     match clock.split_once(':').map(|(h, m)| (h.parse::<u32>(), m)) {
         Some((Ok(h), m)) if twelve && h < 24 && m.len() == 2 => {
-            format!("{}:{m} {}", (h + 11) % 12 + 1, if h < 12 { "AM" } else { "PM" })
+            format!(
+                "{}:{m} {}",
+                (h + 11) % 12 + 1,
+                if h < 12 { "AM" } else { "PM" }
+            )
         }
         _ => clock.to_owned(),
     }

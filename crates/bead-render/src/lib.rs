@@ -217,7 +217,10 @@ impl Scene {
     /// While a revealing panel is partly open: the visible window over its body (generous on
     /// the other sides so the shadow margin stays).
     pub fn reveal_window(&self) -> Option<Rect> {
-        let m = self.motion.as_ref().filter(|m| m.reveal && m.progress < 1.)?;
+        let m = self
+            .motion
+            .as_ref()
+            .filter(|m| m.reveal && m.progress < 1.)?;
         let body = self.primitives.iter().find_map(|p| match p {
             Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => Some(*rect),
             _ => None,
@@ -234,7 +237,12 @@ impl Scene {
             Rect::new(body.x - M, body.y - M, M + body.w * p, body.h + 2. * M)
         } else {
             let left = body.x + body.w * (1. - p);
-            Rect::new(left, body.y - M, body.x + body.w + M - left, body.h + 2. * M)
+            Rect::new(
+                left,
+                body.y - M,
+                body.x + body.w + M - left,
+                body.h + 2. * M,
+            )
         })
     }
     pub fn bounds(&self) -> Rect {
