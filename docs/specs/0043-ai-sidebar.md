@@ -15,6 +15,12 @@ Reference: QML `LeftDrawer.qml`, `ChatPane.qml`, `NacreChatSession.qml`; contrac
 | Adapter (GPL) | `nacre-shell/src/chat.rs` | The only file naming `ai.chat`: topic -> `Entry` list, calls, approval rows, heartbeat, geometry stores. |
 | View | `shell/chat/{main,behavior}.luau` | Panel composed from kit components and `kit.tokens`; geometry numbers are projected from the scale, no pixel literals. |
 
+## Hosting (B0052)
+
+The sidebar is an on-demand app process (`nacre-shell --app chat`), a layer-shell left-edge panel with the same placement
+(`Frame::positioner(Attached(Left))`) and view; the shell only routes `nacre left` / `drawers toggle left`. Everything
+below that says "closed panel drops X" is now "the process exits".
+
 ## Behavior
 
 - Open: `nacre left` and `drawers toggle left` toggle the `chat` panel (left edge, 470 wide, at most 810 high and 150 short of the output). Esc closes.

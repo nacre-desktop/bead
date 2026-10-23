@@ -1,0 +1,334 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! On-demand app mode (B0052, ADR 0005). The same binary runs as `nacre-shell --app NAME [ARG]`:
+//! one window or one edge panel, its own daemon connection as a plain client (never a second UI
+//! provider), no bar and no primary surface. The process ends when its window or panel closes.
+//!
+//! Two halves share this file: [`Host`] runs in the always-on shell (find the running app and
+//! forward the request, or start it) and [`run`] is the app process. The shell holds no app
+//! state beyond one path; everything an app allocates dies with its process.
+use crate::{chat, nacre_source, placement, popouts, prefs, settings};
+use bead::{
+    render::Palette,
+    services::ipc::{self, Call, Reply},
+    wayland::{Options, Panels},
+};
+use serde_json::{Value, json};
+use std::{
+    collections::BTreeMap,
+    error::Error,
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
+
+/// Apps the shell can start. A third-party app adds a branch to [`run`] and a route in
+/// `commands::map_views`; the launch, single-instance and exit rules are shared.
+pub const APPS: [&str; 2] = ["settings", "chat"];
+
+/// Topics every app follows: Nacre's text catalog and the settings that shape the look.
+const TOPICS: [&str; 5] = [
+    "i18n",
+    prefs::DESKTOP,
+    prefs::DASHBOARD,
+    prefs::PROFILE,
+    prefs::LAUNCHER_LAYOUT,
+];
+
+pub struct Host {
+    exe: PathBuf,
+    dir: PathBuf,
+    daemon: Option<PathBuf>,
+    palette: PathBuf,
+}
+static HOST: OnceLock<Host> = OnceLock::new();
+
+/// Called once by the shell: app sockets live beside its command socket (owner-only directory).
+pub fn configure(command_socket: &Path, daemon: Option<PathBuf>, palette: PathBuf) {
+    let (Some(dir), Ok(exe)) = (command_socket.parent(), std::env::current_exe()) else {
+        return;
+    };
+    let _ = HOST.set(Host {
+        exe,
+        dir: dir.into(),
+        daemon,
+        palette,
+    });
+}
+/// Open, deep-link or toggle an app for a routed command. Never blocks on the app's startup.
+pub fn route(id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
+    match HOST.get() {
+        Some(host) => host.route(id, name, method, args),
+        None => Reply::error(id, "unavailable", "apps are not configured in this shell"),
+    }
+}
+
+impl Host {
+    pub fn socket(&self, name: &str) -> PathBuf {
+        self.dir.join(format!("app-{name}.sock"))
+    }
+    pub fn route(&self, id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
+        if !APPS.contains(&name) {
+            return Reply::error(id, "unknown_app", "no such app");
+        }
+        // Windows take the open call (a second open deep-links the running one); panels the
+        // given panel method (`toggle` closes the running sidebar).
+        let (target, method) = if name == "settings" {
+            ("bead.window", "open")
+        } else {
+            ("bead.panel", method)
+        };
+        let call = Call {
+            version: 1,
+            id: 1,
+            target: target.into(),
+            method: method.into(),
+            args: args.to_vec(),
+            output: None,
+        };
+        match ipc::call(&self.socket(name), &call, Duration::from_millis(800)) {
+            Ok(reply) if reply.error.is_none() => return Reply::ok(id, Value::Null),
+            Ok(reply) => {
+                let error = reply.error.expect("checked");
+                return Reply::error(id, &error.code, error.message);
+            }
+            Err(_) => {}
+        }
+        match self.spawn(name, args) {
+            Ok(()) => Reply::ok(id, Value::Null),
+            Err(error) => Reply::error(id, "spawn", error),
+        }
+    }
+    /// Starts the app detached from the shell's stdio. Single-instance is the socket bind: a
+    /// second process that loses the race exits at once.
+    fn spawn(&self, name: &str, args: &[Value]) -> Result<(), String> {
+        use std::os::unix::process::CommandExt;
+        let mut command = std::process::Command::new(&self.exe);
+        command.arg("--app").arg(name);
+        for arg in args.iter().filter_map(Value::as_str) {
+            command.arg(arg);
+        }
+        command
+            .arg("--command-socket")
+            .arg(self.socket(name))
+            .arg("--palette")
+            .arg(&self.palette);
+        if let Some(daemon) = &self.daemon {
+            command.arg("--daemon-socket").arg(daemon);
+        }
+        let mut child = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .map_err(|e| format!("{name}: {e}"))?;
+        // Reap it when it exits; the closing app leaves no zombie in the shell.
+        std::thread::Builder::new()
+            .name("bead-app-reap".into())
+            .stack_size(64 * 1024)
+            .spawn(move || {
+                let _ = child.wait();
+            })
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// The app process: `cli` is everything after `--app`.
+pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
+    let name = cli.first().ok_or("--app needs a name")?.as_str();
+    if !APPS.contains(&name) {
+        return Err(format!("unknown app: {name}").into());
+    }
+    let mut args = Vec::new();
+    let mut daemon = None;
+    let mut command_socket = None;
+    let mut palette = PathBuf::from("shell/palette.json");
+    let mut output = None;
+    let mut rest = cli[1..].iter();
+    while let Some(arg) = rest.next() {
+        let mut value = |what: &str| rest.next().cloned().ok_or(format!("{arg} needs {what}"));
+        match arg.as_str() {
+            "--daemon-socket" => daemon = Some(PathBuf::from(value("a path")?)),
+            "--command-socket" => command_socket = Some(PathBuf::from(value("a path")?)),
+            "--palette" => palette = value("a path")?.into(),
+            "--output" => output = Some(value("a name")?),
+            flag if flag.starts_with("--") => {
+                return Err(format!("unknown argument: {flag}").into());
+            }
+            positional => args.push(json!(positional)),
+        }
+    }
+    let colors = Palette::read(&palette)
+        .or_else(|_| Palette::parse(include_bytes!("../../../shell/palette.json")))?;
+    crate::i18n::init();
+    // A plain client of the daemon: it follows topics and calls methods, registers nothing.
+    let client = daemon
+        .map(|socket| {
+            let mut config =
+                nacre_source::Config::new(socket, TOPICS.iter().map(|t| t.to_string()).collect());
+            config.client = format!("nacre-app-{name}");
+            if name == "chat" {
+                config.event = Some(Arc::new(chat::route_event));
+            }
+            nacre_source::Client::start(config)
+        })
+        .transpose()
+        .map_err(|e| e.to_string())?;
+    let topic = |client: &nacre_source::Client, topic: &str| {
+        client
+            .topic(topic)
+            .ok()
+            .map(|t| Arc::new(t) as Arc<dyn bead::core::source::Source>)
+    };
+    let _i18n = client.as_ref().and_then(|client| {
+        let sink: crate::i18n_source::Sink = Arc::new(bead::ui::i18n::install);
+        crate::i18n_source::Service::start(topic(client, "i18n")?, sink).ok()
+    });
+    // The look follows the owner's settings like the shell's: motion, text style, frame size.
+    let (first, first_seen) = std::sync::mpsc::sync_channel::<()>(1);
+    let _prefs = client.as_ref().and_then(|client| {
+        prefs::Service::start_with(
+            topic(client, prefs::DESKTOP)?,
+            topic(client, prefs::DASHBOARD)?,
+            topic(client, prefs::PROFILE),
+            topic(client, prefs::LAUNCHER_LAYOUT),
+            Arc::new(move |p: &prefs::Prefs| {
+                bead::core::animation::set_reduced_motion(p.reduce_motion);
+                bead::ui::text_style::set(p.text_style());
+                placement::set_sheen(p.frame_sheen);
+                placement::Frame::set_current(placement::Frame::from_settings(&p.frame_settings()));
+                let _ = first.try_send(());
+            }),
+        )
+        .ok()
+    });
+    let mut options = Options {
+        namespace: format!("nacre-app-{name}"),
+        command_socket,
+        output,
+        interactive: true,
+        keyboard_focus: true,
+        app: Some(args),
+        ..Options::default()
+    };
+    let fill = colors.get("surface")?;
+    let root = PathBuf::from("shell");
+    match name {
+        "settings" => {
+            options.window = Some(settings::window_spec(
+                root,
+                palette,
+                colors,
+                client.clone(),
+                false,
+            )?);
+        }
+        _ => {
+            // The panel's position reads the live frame: give the first settings a moment.
+            let _ = first_seen.recv_timeout(Duration::from_millis(150));
+            let spec = popouts::chat(
+                client.clone().ok_or("the sidebar needs the daemon")?,
+                palette,
+                colors,
+                Default::default(),
+                false,
+            )?;
+            options.panels = Some(Panels::new(
+                "chat".into(),
+                BTreeMap::from([("chat".into(), spec)]),
+            )?);
+        }
+    }
+    bead::wayland::run(options, crate::sound::fallback(fill))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn host(dir: &Path, exe: &Path) -> Host {
+        Host {
+            exe: exe.into(),
+            dir: dir.into(),
+            daemon: Some("/run/fake/daemon.sock".into()),
+            palette: "shell/palette.json".into(),
+        }
+    }
+    fn private_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("bead-app-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        dir
+    }
+    #[test]
+    fn unknown_apps_are_refused_and_an_unconfigured_shell_says_so() {
+        let dir = private_dir("unknown");
+        let reply = host(&dir, Path::new("/bin/true")).route(7, "nope", "toggle", &[]);
+        assert_eq!(reply.error.unwrap().code, "unknown_app");
+        let reply = route(8, "settings", "open", &[]);
+        assert_eq!(reply.id, 8);
+        assert_eq!(reply.error.unwrap().code, "unavailable");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn a_missing_app_is_started_with_its_page_socket_and_daemon() {
+        let dir = private_dir("spawn");
+        let out = dir.join("argv.txt");
+        let script = dir.join("fake-app.sh");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\n", out.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let reply = host(&dir, &script).route(3, "settings", "open", &[json!("appearance")]);
+        assert!(reply.error.is_none());
+        let started = std::time::Instant::now();
+        while !out.exists() && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let argv = std::fs::read_to_string(&out).unwrap();
+        let lines: Vec<_> = argv.lines().collect();
+        let socket = dir.join("app-settings.sock");
+        assert_eq!(
+            lines,
+            [
+                "--app",
+                "settings",
+                "appearance",
+                "--command-socket",
+                socket.to_str().unwrap(),
+                "--palette",
+                "shell/palette.json",
+                "--daemon-socket",
+                "/run/fake/daemon.sock"
+            ]
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn a_running_app_gets_the_call_and_nothing_is_started() {
+        let dir = private_dir("running");
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let _server = ipc::Server::bind(dir.join("app-chat.sock"), move |call| {
+            log.lock()
+                .unwrap()
+                .push((call.target.clone(), call.method.clone()));
+            Reply::ok(call.id, Value::Null)
+        })
+        .unwrap();
+        // The executable does not exist: a spawn attempt would fail the route.
+        let reply = host(&dir, Path::new("/nonexistent/app")).route(5, "chat", "toggle", &[]);
+        assert!(reply.error.is_none(), "{:?}", reply.error);
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [("bead.panel".to_string(), "toggle".to_string())]
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

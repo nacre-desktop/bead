@@ -140,7 +140,7 @@ pub fn from_strings(target: String, method: String, values: &[String]) -> Result
         args: converted,
         output: None,
     };
-    if !["bead", "bead.panel", "bead.window"].contains(&call.target.as_str()) {
+    if !["bead", "bead.panel"].contains(&call.target.as_str()) {
         c.validate(&call)?;
     }
     Ok(call)
@@ -182,27 +182,22 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     // The AI sidebar (QML left drawer): `nacre left` and `drawers toggle left` both
-    // toggle it, as in the QML shell.
+    // toggle it, as in the QML shell. It is an on-demand app process (B0052).
     let left = (call.target == "nacre" && call.method == "left")
         || (call.target == "drawers"
             && call.method == "toggle"
             && call.args.first().and_then(Value::as_str) == Some("left"));
     if left {
         validate(&call)?;
-        call.target = "bead.panel".into();
-        call.method = "toggle".into();
-        call.args = vec![Value::String("chat".into())];
-        return Ok(call);
+        return Err(crate::app::route(call.id, "chat", "toggle", &[]));
     }
-    // B0045: `nacre settings [page]` opens the Settings window (deep link by page id).
+    // B0045/B0052: `nacre settings [page]` opens the Settings app (deep link by page id).
     if call.target == "nacre"
         && call.method == "settings"
         && call.args.len() <= 1
         && call.args.iter().all(Value::is_string)
     {
-        call.target = "bead.window".into();
-        call.method = "open".into();
-        return Ok(call);
+        return Err(crate::app::route(call.id, "settings", "open", &call.args));
     }
     // The QML right sidebar (control center): `drawers toggle right` toggles it and
     // `nacre controls home|edit` opens it.
@@ -277,7 +272,7 @@ pub fn map_launcher(call: Call) -> Result<Call, Reply> {
     Ok(call)
 }
 pub fn map(mut call: Call) -> Result<Call, Reply> {
-    if ["bead", "bead.panel", "bead.osd", "bead.window"].contains(&call.target.as_str()) {
+    if ["bead", "bead.panel", "bead.osd"].contains(&call.target.as_str()) {
         return Ok(call);
     }
     validate(&call)?;

@@ -91,6 +91,11 @@ After Bead's core switch on Nacre, plan support for:
   tunings and the allowed views come from the application; the film/landing/border art is Nacre-specific in
   `nacre-shell/src/pearls.rs` and is not yet a replaceable kit component.
 
+- B0052: `bead_wayland::Options::app` (on-demand app process: no primary surface, opens one window or the default
+  panel at start with its arguments, ends when it closes). Product-agnostic; the launch, single-instance and
+  deep-link routing (`nacre-shell/src/app.rs`, `Host::route`) is the template for third-party apps: add a name
+  to `APPS`, a branch in `app::run` and a route. The framework crate has no app names.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

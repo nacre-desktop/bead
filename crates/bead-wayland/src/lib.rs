@@ -485,6 +485,10 @@ pub struct Options {
     pub window: Option<WindowSpec>,
     /// Detachable panels; none: panels cannot detach.
     pub pearls: Option<PearlOptions>,
+    /// On-demand app process (ADR 0005): `Some(args)` opens the window (or the default
+    /// panel) with those arguments at start, creates no primary surface, and ends the
+    /// process when that window or panel closes.
+    pub app: Option<Vec<serde_json::Value>>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -529,6 +533,7 @@ impl Default for Options {
             control: None,
             window: None,
             pearls: None,
+            app: None,
         }
     }
 }

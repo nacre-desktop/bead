@@ -260,9 +260,11 @@ impl App {
         if self.output.outputs().any(|output| {
             name.map_or_else(
                 || {
-                    self.surfaces
-                        .iter()
-                        .any(|s| !s.companion && s.output == output)
+                    self.options.app.is_some()
+                        || self
+                            .surfaces
+                            .iter()
+                            .any(|s| !s.companion && s.output == output)
                 },
                 |name| {
                     self.output
@@ -426,7 +428,10 @@ impl App {
             .outputs()
             .find(|o| {
                 output.map_or_else(
-                    || self.surfaces.iter().any(|s| !s.companion && s.output == *o),
+                    || {
+                        self.options.app.is_some()
+                            || self.surfaces.iter().any(|s| !s.companion && s.output == *o)
+                    },
                     |name| self.output.info(o).and_then(|i| i.name).as_deref() == Some(name),
                 )
             })
@@ -687,6 +692,10 @@ impl App {
             self.primary_idle(&output, true);
         }
         self.panel_target = false;
+        // An app process lives exactly as long as its panel.
+        if self.options.app.is_some() && self.app_pending.is_none() {
+            self.signal.stop();
+        }
         self.panel_ambient = false;
         self.panel_center = None;
         self.panel_epoch = self.next_epoch();

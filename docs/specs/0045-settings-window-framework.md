@@ -30,8 +30,8 @@ Bead is a general framework. Nothing here hard-codes the owner's setup:
 `app_id nacre-settings`, 960x640, min 560x400. xdg-shell toplevel (sctk `XdgShell`, server-side decorations requested),
 configure/resize, `request_close`, min size, fractional scale + viewporter, CPU/SHM renderer, three SHM buffers sized to the
 configured geometry. Keyboard (Ctrl+W/Q closes, Escape and editing keys reach the view), pointer, scroll and cursor shape go
-through the same `UiEvent`s as panels. Calls: `bead.window open [page]`, `bead.window close`. `nacre settings [page]` is mapped
-to `bead.window open` by `commands::map_views` (the existing QML route, now with an optional page: the deep link).
+through the same `UiEvent`s as panels. Calls (to the app process's own socket): `bead.window open [page]`, `bead.window close`. `nacre settings [page]` reaches
+them through `app::route` (the existing QML route, now with an optional page: the deep link).
 Missing xdg-shell makes `open` fail with a reply; nothing else changes.
 
 Not done (listed, not hidden): no IME for the window (typing uses key events), no frame-callback pacing (draws are
@@ -39,9 +39,10 @@ throttled to 8 ms and wait for a free buffer), no GL path (CPU only, by design f
 
 ## Process placement (ADR 0005)
 
-One UI process: the window is a session in the shell process (`worker::Source` on the script worker, like a panel). ADR 0005's
-"on-demand windows stay separate apps" line is superseded by this unit per the task: no hard reason for a separate process
-was found (shared Luau/font/renderer code, the daemon connection and palette are already in the shell). Not an ADR change.
+Superseded by B0052: Settings is an on-demand app process (`nacre-shell --app settings [page]`), as ADR 0005 says. The
+first version of this unit ran it as a session inside the shell and left +0.69 to +0.92 MiB PSS behind after one
+open/close (gate +0.5 not met); the shell no longer holds any Settings state. The window, factory and adapter below are
+unchanged; only the host moved.
 
 ## Lifecycle
 

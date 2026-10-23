@@ -255,9 +255,51 @@ impl App {
         println!("WINDOW_OPEN epoch={epoch}");
         Ok(())
     }
+    /// App mode start: open the window now, or queue the default panel for the first output.
+    pub(super) fn app_start(&mut self) {
+        let Some(args) = self.options.app.clone() else {
+            return;
+        };
+        if self.options.window.is_some() {
+            if let Err(error) = self.open_window(&args) {
+                self.fail(error);
+            }
+        } else {
+            self.app_pending = Some(args);
+            self.app_open_pending();
+        }
+    }
+    /// Called on output changes: open the pending app panel on the first output that can place it.
+    pub(super) fn app_open_pending(&mut self) {
+        if self.app_pending.is_none() {
+            return;
+        }
+        let Some(info) = self
+            .output
+            .outputs()
+            .filter_map(|o| self.output.info(&o))
+            .find(|i| {
+                i.logical_size.is_some_and(|(w, h)| w > 0 && h > 0)
+                    && self
+                        .options
+                        .output
+                        .as_ref()
+                        .is_none_or(|n| i.name.as_ref() == Some(n))
+            })
+        else {
+            return;
+        };
+        self.app_pending = None;
+        if let Err(error) = self.request_panel_at(None, info.name.as_deref(), true, None) {
+            self.fail(error);
+        }
+    }
     pub(super) fn close_window(&mut self) {
         if self.window.take().is_none() {
             return;
+        }
+        if self.options.app.is_some() {
+            self.signal.stop();
         }
         if self
             .keyboard_surface

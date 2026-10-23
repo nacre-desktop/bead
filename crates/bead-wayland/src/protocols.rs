@@ -334,6 +334,7 @@ impl OutputHandler for App {
         self.add_output(qh, output);
         self.restore_pearls();
         self.sync_edges();
+        self.app_open_pending();
     }
     fn update_output(
         &mut self,
@@ -344,6 +345,7 @@ impl OutputHandler for App {
         self.add_output(qh, output.clone());
         self.restore_pearls();
         self.sync_edges();
+        self.app_open_pending();
         if self.options.primary_factory.is_some() {
             let id = self.output_id(&output);
             let viewport = self.output.info(&output).and_then(|info| info.logical_size);

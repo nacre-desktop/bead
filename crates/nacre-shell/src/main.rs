@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+mod app;
 mod backends;
 mod bar_routes;
 mod calendar;
@@ -98,6 +99,9 @@ fn start(
 
     if cli.first().is_some_and(|a| a == "helper") {
         return commands::helper_client(&cli[1..]);
+    }
+    if cli.first().is_some_and(|a| a == "--app") {
+        return app::run(&cli[1..]);
     }
     if cli.first().is_some_and(|a| a == "ipc") {
         return commands::client(&cli[1..]);
@@ -724,16 +728,6 @@ fn start(
                 "session".into(),
                 popouts::session(client.clone(), palette.clone(), colors.clone(), panel_trace)?,
             );
-            views.insert(
-                "chat".into(),
-                popouts::chat(
-                    client.clone(),
-                    palette.clone(),
-                    colors.clone(),
-                    Default::default(),
-                    panel_trace,
-                )?,
-            );
         }
         let status_colors = std::sync::Arc::new(colors.clone());
         let status_palette = std::sync::Arc::new(palette.clone());
@@ -839,13 +833,10 @@ fn start(
                 .and_then(|p| p.parent().map(|d| d.join("pearls.json"))),
         ));
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
-        options.window = Some(settings::window_spec(
-            std::path::PathBuf::from("shell"),
-            palette.clone(),
-            colors.clone(),
-            _ui_provider.clone(),
-            panel_trace,
-        )?);
+        // B0052: Settings and the AI sidebar are separate on-demand processes.
+        if let Some(socket) = &options.command_socket {
+            app::configure(socket, daemon_socket.clone(), palette.clone());
+        }
     }
     let notification_owner = std::sync::Arc::new(std::sync::OnceLock::new());
     if notification_mode {

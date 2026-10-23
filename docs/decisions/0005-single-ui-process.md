@@ -18,6 +18,20 @@ windows (Settings, Colors, Welcome, AI sidebar, Brain) stay separate apps.
 Crash isolation (ADR 0003) still holds, because services live outside the view
 in the Nacre daemon.
 
+## On-demand apps (B0052, 2026-10-23)
+"On-demand windows stay separate apps" is implemented as app mode: the same `nacre-shell` binary run as
+`nacre-shell --app NAME [ARG]`. An app is one xdg window (Settings) or one layer-shell edge panel (AI
+sidebar). It shares code (kit, theme, fonts, renderer, Luau), never memory with the shell.
+- The always-on shell only routes: `nacre settings [page]` and the sidebar toggle go to `app::route`, which calls
+  the running app on its own owner-only socket (a second open deep-links the window; a toggle closes the panel) or
+  starts it. The shell keeps no app state (B0045's Settings and B0043's sidebar were first built inside the shell
+  process and left +0.7 to +0.9 MiB PSS behind after one open/close; a process returns all of it).
+- Single instance is the socket bind. The app ends when its window or panel closes; a crash never reaches the shell.
+- An app has its own daemon connection with a client role. It registers nothing, so the daemon still sees exactly
+  one UI provider.
+- Reports: an app's memory and CPU are listed per app and not charged to the always-on 25 MiB budget; the shell's
+  own gate is relative to a control with the same binary left idle.
+
 ## Consequences
 - B0030 moves notices into the main process; the separate-process path gets an
   expiry.

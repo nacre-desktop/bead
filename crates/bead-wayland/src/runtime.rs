@@ -72,6 +72,8 @@ pub(super) struct App {
     pub(super) xdg: Option<smithay_client_toolkit::shell::xdg::XdgShell>,
     pub(super) window: Option<window::Win>,
     pub(super) window_epoch: u64,
+    /// App mode: the open request still waiting for the first usable output (panel apps).
+    pub(super) app_pending: Option<Vec<serde_json::Value>>,
     pub(super) shm: Shm,
     pub(super) fractional: Option<WpFractionalScaleManagerV1>,
     pub(super) viewporter: Option<WpViewporter>,
@@ -186,7 +188,8 @@ pub fn run_runtime(
         event_sender: None,
         dismiss: None,
         hidden: false,
-        bar_off: false,
+        // App mode never creates the bar-shaped primary surface; its one window or panel is the UI.
+        bar_off: options.app.is_some(),
         decoration_variant: 0,
         edge_surfaces: Vec::new(),
         edge: Default::default(),
@@ -245,6 +248,7 @@ pub fn run_runtime(
         xdg: App::bind_xdg(&globals, &qh),
         window: None,
         window_epoch: 0,
+        app_pending: None,
         shm: Shm::bind(&globals, &qh)?,
         fractional: globals.bind(&qh, 1..=1, ()).ok(),
         viewporter: globals.bind(&qh, 1..=1, ()).ok(),
@@ -297,7 +301,7 @@ pub fn run_runtime(
             },
         )?;
     }
-    if app.runtime.is_some() || app.options.primary_factory.is_some() {
+    if app.runtime.is_some() || app.options.primary_factory.is_some() || app.options.app.is_some() {
         let (sender, receiver) = calloop::channel::channel::<UiEvent>();
         loop_.handle().insert_source(receiver, |event, _, app| {
             if let calloop::channel::Event::Msg(event) = event {
@@ -412,6 +416,7 @@ pub fn run_runtime(
     for output in app.output.outputs() {
         app.add_output(&qh, output);
     }
+    app.app_start();
     if let Some(ms) = app.options.debug_luau_stall_ms {
         loop_.handle().insert_source(
             Timer::from_duration(Duration::from_millis(4100)),
