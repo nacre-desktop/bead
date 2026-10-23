@@ -296,8 +296,15 @@ impl App {
         );
     }
     pub(super) fn release_overlay(&mut self) {
-        if self.overlay.take().is_none() {
+        let Some(overlay) = self.overlay.take() else {
             return;
+        };
+        let output = overlay.output.clone();
+        drop(overlay);
+        // With no view of either slot up, the primary session may shed its warm caches,
+        // as it does when the panel slot closes.
+        if !self.panel_target && self.panel_runtime.is_none() {
+            self.primary_idle(&output, true);
         }
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         // SAFETY: allocator trim only; the source, renderer and buffers are gone.
