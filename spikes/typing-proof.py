@@ -74,7 +74,7 @@ def sample(env,raw,compositor,stop):
                     if profile_mode=='clocks':assert not profiles,'clock-only run emitted stage traces'
                     window=segment[segment.index('INPUT_RECEIVED'):];window=window[:window.index('UI_PRESENTED')]
                     rows.append({'index':index,'input_ns':start,'presented_ns':int(ns),'latency_ms':(int(ns)-start)/1e6,'cpu_ms':(int(endcpu)-cpu)/1e6,'update':int(update),'refresh_ns':int(refresh) or None,'profiles':profiles,'keymap_events_after_input':len(re.findall(r'wl_keyboard[^\n]*keymap\(',window))if wire_debug else None})
-                    time.sleep(.04)
+                    time.sleep(float(os.environ.get('BEAD_TYPING_PAUSE','.04')))
                 assert 'PRESENTATION clock_id=1' in matrix.log_text(path)
                 idle=None
                 if os.environ.get('BEAD_TYPING_IDLE_SECONDS'):
