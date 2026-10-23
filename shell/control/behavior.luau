@@ -13,6 +13,7 @@ return {stores={
     ["cc.page"]="home",["cc.detail"]="",["cc.scroll"]=0,["cc.max_height"]=800,
     ["cc.src"]={},["cc.views"]={},["cc.saved"]={},["cc.saved_known"]=false,["cc.writable"]=false,["cc.message"]="",
     ["cc.battery"]="",["cc.battery_icon"]="battery_full",
+    ["cc.notices"]={},["cc.notice_count"]=0,["cc.notice_ready"]=false,["cc.notice_clear"]=false,
     ["cc.edited"]=false,["cc.order"]={},["cc.drag"]="",
 },actions={
     close=function(s) s["panel.open"]=false end,

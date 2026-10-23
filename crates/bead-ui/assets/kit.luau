@@ -97,6 +97,7 @@ return function(ui, tokens)
                 ui.Row{id="chevron-row",width=40,height=p.height,align="center",justify="center",glyph("chevron","chevron_right",color)}}
         end
         return ui.Row(props(kids,{id=p.id,width=p.width,height=p.height,radius=tokens.radii.large,align="center",
+            position=p.position,left=p.left,top=p.top,
             fill=armed and (p.on and "primaryContainer" or "surfaceContainer") or ui.alpha("surfaceContainer",.4)}))
     end
     function kit.ToggleTile(p) return tile(p,"toggle") end

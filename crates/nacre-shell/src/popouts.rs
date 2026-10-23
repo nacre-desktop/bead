@@ -141,8 +141,9 @@ pub(crate) fn core_sound_with_root(
     })
 }
 
-/// Session menu side panel (B0023). It leases nothing: the shared daemon
-/// client supplies the capability check and the single `session.request` call.
+/// Session menu (B0023), docked as the control sidebar's Power page (B0067): the control centre's width and, like it,
+/// as tall as the framed viewport. It leases nothing: the shared daemon client supplies the capability check and the
+/// single `session.request` call.
 pub fn session(
     client: crate::nacre_source::Client,
     palette: PathBuf,
@@ -150,13 +151,13 @@ pub fn session(
     trace: bool,
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
     let fill = colors.get("surface")?;
-    let (width, height) = (200., 300.);
+    let (width, height) = (424., 300.);
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = width;
     fallback.bounds = Rect::new(-32., -32., width + 64., height + 64.);
     fallback.primitives = vec![Primitive::Rounded {
         rect: Rect::new(0., 0., width, height),
-        radius: 12.,
+        radius: 16.,
         fill,
         border: None,
     }];

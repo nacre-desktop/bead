@@ -876,7 +876,14 @@ fn settings_wallpaper_and_colors_pages_are_editable_registry_rows() {
         let Value::List(items) = &model["settings.items"] else {
             panic!()
         };
-        (items.to_vec(), model["settings.readonly"].clone())
+        // B0067: rows travel inside their section.
+        let flat = items
+            .iter()
+            .flat_map(|row| {
+                std::iter::once(row.clone()).chain(row["rows"].as_array().cloned().unwrap_or_default())
+            })
+            .collect();
+        (flat, model["settings.readonly"].clone())
     };
     let kind = |rows: &[Json], id: &str| {
         rows.iter()

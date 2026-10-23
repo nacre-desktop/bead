@@ -25,7 +25,17 @@ fn stores(page: &str) -> Stores {
         ]))
         .unwrap()
 }
+/// The projected rows as a flat list: each section is followed by the rows it carries (B0067 nests them).
 fn items(model: &BTreeMap<String, Value>) -> Vec<Json> {
+    let mut out = Vec::new();
+    for row in nested_items(model) {
+        let inner = row["rows"].as_array().cloned().unwrap_or_default();
+        out.push(row);
+        out.extend(inner);
+    }
+    out
+}
+fn nested_items(model: &BTreeMap<String, Value>) -> Vec<Json> {
     match &model["settings.items"] {
         Value::List(rows) => rows.to_vec(),
         other => panic!("{other:?}"),
@@ -1486,7 +1496,7 @@ fn custom_page_goldens() {
             settings.act("do:net-connect|guest", "", wake());
         }
         let mut model = settings.project(&at);
-        let mut rows = Json::Array(items(&model));
+        let mut rows = Json::Array(nested_items(&model));
         enable_all(&mut rows);
         // (The fake topics are connected, but there is no daemon: methods are not advertised.)
         model.insert(

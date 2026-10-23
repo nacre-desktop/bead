@@ -405,8 +405,8 @@ impl App {
                 scene.offset.0 = 32. + dx;
                 scene.offset.1 = 32. + dy;
             }
-            if let (Some(progress), Some(motion)) = (reveal_progress, &mut scene.motion) {
-                motion.progress = progress;
+            if let Some(progress) = reveal_progress {
+                scene.reveal(progress);
             }
 
             let scale = s.scale120 as f32 / 120.;
@@ -1357,6 +1357,7 @@ mod input_tests {
             fade: true,
             reveal: false,
             progress: 1.,
+            parts: Vec::new(),
         });
         scene.offset = (32., -18.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 50]));

@@ -29,12 +29,18 @@ fn panel(client: &crate::nacre_source::Client) -> Runtime {
     runtime.commit();
     runtime
 }
+/// B0067: the entries sit in the dock's grid, so a node is found by its own id at the end of its path.
+fn is_node(node_id: &str, id: &str) -> bool {
+    node_id == format!("session-popout.{id}")
+        || node_id.ends_with(&format!(".{id}.main"))
+        || node_id.ends_with(&format!(".{id}"))
+}
 fn press(runtime: &mut Runtime, id: &str) {
     let node = runtime
         .session
         .view_nodes()
         .iter()
-        .find(|n| n.id == format!("session-popout.{id}"))
+        .find(|n| is_node(&n.id, id))
         .unwrap_or_else(|| {
             panic!(
                 "{id} missing in {:?}",
@@ -69,14 +75,14 @@ fn node_exists(runtime: &Runtime, id: &str) -> bool {
         .session
         .view_nodes()
         .iter()
-        .any(|n| n.id == format!("session-popout.{id}"))
+        .any(|n| is_node(&n.id, id))
 }
 fn label(runtime: &Runtime, id: &str) -> String {
     runtime
         .session
         .view_nodes()
         .iter()
-        .find(|n| n.id == format!("session-popout.{id}"))
+        .find(|n| is_node(&n.id, id))
         .unwrap()
         .label
         .clone()
@@ -101,7 +107,7 @@ async fn panel_is_inert_without_the_capability() {
             .session
             .view_nodes()
             .iter()
-            .all(|n| !n.id.starts_with("session-popout.act-"))
+            .all(|n| !n.id.contains(".act-") || n.action.is_none())
     );
     refresh(&mut runtime);
     assert!(calls.try_recv().is_err());
@@ -178,24 +184,23 @@ async fn keyboard_enter_confirms_and_labels_are_accessible() {
     let (dir, menu, mut calls) = lab(true, replies).await;
     let mut runtime = panel(&menu.client());
     refresh(&mut runtime);
-    assert_eq!(label(&runtime, "act-suspend"), "Suspend");
+    assert_eq!(label(&runtime, "act-lock"), "Lock screen");
     assert_eq!(label(&runtime, "act-logout"), "Log out");
     // Tab to Log out, Enter asks, a second Enter confirms.
     for _ in 0..8 {
         command(&mut runtime, "tab");
         if runtime.session.stores.get("bead.focused")
-            == Some(&bead::core::Value::Text("session-popout.act-logout".into()))
+            == Some(&bead::core::Value::Text("session-popout.act-logout.main".into()))
         {
             break;
         }
     }
     assert_eq!(
         runtime.session.stores.get("bead.focused"),
-        Some(&bead::core::Value::Text("session-popout.act-logout".into()))
+        Some(&bead::core::Value::Text("session-popout.act-logout.main".into()))
     );
     command(&mut runtime, "enter");
     assert_eq!(label(&runtime, "confirm"), "Confirm log out");
-    assert!(!node_exists(&runtime, "act-logout"));
     assert!(calls.try_recv().is_err(), "asking sends nothing");
     command(&mut runtime, "enter");
     assert_eq!(
@@ -206,18 +211,18 @@ async fn keyboard_enter_confirms_and_labels_are_accessible() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn clicking_suspend_acts_at_once_and_replaces_a_pending_prompt() {
-    let replies = vec![ok(serde_json::json!({"changed":true}))];
+async fn clicking_lock_acts_at_once_and_replaces_a_pending_prompt() {
+    let replies = vec![ok(serde_json::json!({"changed":false}))];
     let (dir, menu, mut calls) = lab(true, replies).await;
     let mut runtime = panel(&menu.client());
     refresh(&mut runtime);
     press(&mut runtime, "act-shutdown");
     assert_eq!(label(&runtime, "confirm"), "Confirm power off");
     assert!(calls.try_recv().is_err());
-    press(&mut runtime, "act-suspend");
+    press(&mut runtime, "act-lock");
     assert_eq!(
         calls.recv().await.unwrap(),
-        serde_json::json!({"action":"suspend","confirmed":true})
+        serde_json::json!({"action":"lock"})
     );
     std::fs::remove_dir_all(dir).ok();
 }

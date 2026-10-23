@@ -8,23 +8,45 @@ local tx=kit.tokens.text
 local writable=ui.resolve_for_check(ui.bind("settings.writable"))
 local searching=ui.resolve_for_check(ui.bind("settings.searching"))
 local function act(arg) return ui.action("settings.do",arg) end
+-- B0067: the QML rail. Width huge*7+xl, group captions huge+hairline tall, items huge+compact tall with a caption-size
+-- label and an accent wash on the current page (SettingsView.qml).
+local RAIL=sp.huge*7+sp.xl
 local function nav(item)
     if item.kind=="group" then
-        return ui.Text{id="group",text=item.label,height=28,font_size=tx.caption*4/3,color="onSurfaceVariant"}
+        return ui.Text{id="group",text=item.label,height=sp.huge+sp.hairline,padding_left=sp.md,padding_top=sp.md,font_size=tx.caption*4/3,color="onSurfaceVariant"}
     end
-    return ui.Button{id="page",width="fill",height=40,radius=kit.tokens.radii.small,padding=0,color="onSurface",
-        selected=item.selected,fill="transparent",selected_fill=ui.tint("surface","onSurface",.12),
-        hover_fill=ui.tint("surface","onSurface",.04),aria_label=item.label,on_activate=act("page:"..item.id),
+    return ui.Button{id="page",width="fill",height=sp.huge+sp.compact,radius=kit.tokens.radii.small,padding=0,color="onSurface",
+        selected=item.selected,fill="transparent",selected_fill=ui.alpha("primary",.18),
+        hover_fill=ui.alpha("onSurface",.06),aria_label=item.label,on_activate=act("page:"..item.id),
         ui.Row{grow=1,gap=sp.compact,align="center",padding_left=sp.md,
             ui.Text{id="icon",text=item.icon,family="Material Symbols Rounded",font_size=kit.tokens.icons.large*4/3,width=24,height=28},
-            ui.Text{id="label",text=item.label,font_size=tx.body*4/3,grow=1,height=24}}}
+            ui.Text{id="label",text=item.label,font_size=tx.caption*4/3,grow=1,height=18}}}
 end
-local function row(item)
+local row
+local function section(item)
+    local children={id="section",width="fill",shrink=0,padding=sp.xl,gap=sp.xs,radius=kit.tokens.radii.medium,fill="surfaceContainer"}
+    children[1]=ui.Text{id="title",text=item.label,height=24,font_size=tx.title*4/3,color="onSurface"}
+    children[2]=ui.Text{id="detail",text=item.description or "",visible=(item.description or "")~="",height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}
+    -- Kit rows use fixed child ids, so each row sits in its own uniquely named wrapper.
+    for i,child in ipairs(item.rows or {}) do
+        table.insert(children,ui.Column{id="r"..i,width="fill",shrink=0,row(child)})
+    end
+    return ui.Column(children)
+end
+-- A setting the shell cannot offer: its label and description stay, with the reason as a muted caption (QML SettingsRow).
+local function unavailable(item)
+    return ui.Column{id="unavailable",width="fill",shrink=0,gap=sp.hairline,padding_left=sp.sm,padding_top=sp.sm,padding_bottom=sp.sm,
+        ui.Text{id="label",text=item.title,height=20,font_size=tx.body*4/3,color="onSurfaceVariant"},
+        ui.Text{id="description",text=item.description or "",visible=(item.description or "")~="",height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"},
+        ui.Text{id="note",text=item.note,height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}}
+end
+function row(item)
     local on=item.enabled and (writable or item.own)
     local id=item.id
     local k=item.kind
     local node
-    if k=="section" then return kit.SectionHeader{id="section",label=item.label,description=item.description}
+    if k=="section" then return section(item)
+    elseif k=="help" and item.note then return unavailable(item)
     elseif k=="help" then return kit.HelpText{id="help",text=item.label}
     elseif k=="link" then
         return ui.Button{id="link",width="fill",height=56,shrink=0,radius=kit.tokens.radii.small,padding_left=sp.md,
@@ -76,14 +98,27 @@ local function row(item)
     end
     return node
 end
-return ui.Row{id="settings",width="100%",height="100%",fill="surface",
-    ui.Column{id="sidebar",width=240,height="100%",padding=sp.md,gap=sp.sm,fill="surfaceContainerLow",
+-- B0067: the QML window: a 64 px header (logo, window title, current page at the right) over a rule, then a raised
+-- rail and the page with section cards, inset by lg.
+local function header()
+    return ui.Column{id="header-box",width="fill",height=65,shrink=0,
+        ui.Row{id="header",width="fill",height=64,shrink=0,align="center",gap=sp.lg,padding_left=sp.xl,padding_right=sp.xl,
+            ui.Image{id="logo",path="settings/assets/nacre-logo.themed.svg",width=kit.tokens.icons.hero,height=kit.tokens.icons.hero,shrink=0,aria_label=ui.tr("bead.settings.title")},
+            ui.Text{id="window-title",text=ui.tr("bead.settings.title"),height=28,grow=1,font_size=tx.title*4/3,color="onSurface"},
+            ui.Text{id="current",text=ui.bind("settings.title"),height=20,font_size=tx.caption*4/3,color="onSurfaceVariant"}},
+        ui.Box{id="rule",width="fill",height=1,fill="outlineVariant"}}
+end
+return ui.Column{id="settings",width="100%",height="100%",fill="surface",
+    header(),
+    ui.Row{id="body",width="fill",grow=1,padding=sp.lg,gap=sp.xxl,
+    ui.Column{id="sidebar",width=RAIL,height="100%",shrink=0,padding=sp.md,gap=sp.sm,radius=kit.tokens.radii.medium,fill="surfaceContainer",
         kit.TextInput{id="search",text=ui.bind("settings.search"),placeholder=ui.tr("bead.settings.search-placeholder"),
+            height=sp.huge+sp.md,fill="surface",border_width=1,border_color="outlineVariant",
             width="fill",aria_label=ui.tr("bead.settings.search-placeholder")},
         ui.Scroll{id="nav-scroll",scroll=ui.bind("settings.nav.scroll"),grow=1,
-            ui.Column{id="nav-list",width="fill",gap=sp.hairline,
+            ui.Column{id="nav-list",width="fill",gap=sp.xs,
                 ui.Repeat{id="nav",model=ui.bind("settings.nav"),key="id",render=nav}}}},
-    ui.Column{id="content",grow=1,height="100%",padding=sp.xl,gap=sp.sm,
+    ui.Column{id="content",grow=1,height="100%",gap=sp.sm,
         ui.Text{id="title",text=ui.bind("settings.title"),height=32,font_size=tx.headline*4/3,color="onSurface"},
         ui.Text{id="description",text=ui.bind("settings.description"),visible=not searching,height=20,font_size=tx.body*4/3,color="onSurfaceVariant"},
         ui.Text{id="readonly",text=ui.tr("bead.settings.read-only"),visible=ui.bind("settings.readonly"),height=20,font_size=tx.caption*4/3,color="onSurfaceVariant"},
@@ -91,5 +126,5 @@ return ui.Row{id="settings",width="100%",height="100%",fill="surface",
         ui.Text{id="notice",text=ui.bind("settings.notice"),visible=ui.bind("settings.noticed"),height=20,font_size=tx.caption*4/3,color="primary"},
         ui.Text{id="empty",text=ui.tr("bead.settings.no-results"),visible=ui.bind("settings.empty"),height=20,font_size=tx.body*4/3,color="onSurfaceVariant"},
         ui.Scroll{id="items-scroll",scroll=ui.bind("settings.scroll"),grow=1,
-            ui.Column{id="items",width="fill",gap=sp.xs,
-                ui.Repeat{id="rows",model=ui.bind("settings.items"),key="id",render=row}}}}}
+            ui.Column{id="items",width="fill",gap=searching and sp.xs or sp.xl,
+                ui.Repeat{id="rows",model=ui.bind("settings.items"),key="id",render=row}}}}}}

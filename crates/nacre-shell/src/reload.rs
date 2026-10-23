@@ -1858,6 +1858,9 @@ impl SceneSource for Runtime {
         if let Some(chat) = &self.chat {
             chat.set_viewport(width, height);
         }
+        if let Some(menu) = &self.session_menu {
+            menu.set_viewport(height);
+        }
         if let Some(colors) = &self.colors {
             colors.set_viewport(width);
         }
@@ -2241,10 +2244,10 @@ impl SceneSource for Runtime {
                 _ => {}
             }
             // Keyboard path: the item that now asks holds focus, so Enter confirms.
-            let focus = menu.confirming().map_or(BTreeMap::new(), |_| {
+            let focus = menu.confirming().map_or(BTreeMap::new(), |key| {
                 BTreeMap::from([(
                     "bead.focused".into(),
-                    bead::core::Value::Text("session-popout.confirm".into()),
+                    bead::core::Value::Text(format!("session-popout.act-{key}.main")),
                 )])
             });
             let scene = self.session.update(focus)?;
@@ -3104,7 +3107,7 @@ impl SceneSource for Runtime {
                     self.session.update(key.map_or(BTreeMap::new(), |key| {
                         BTreeMap::from([(
                             "bead.focused".into(),
-                            bead::core::Value::Text(format!("session-popout.act-{key}")),
+                            bead::core::Value::Text(format!("session-popout.act-{key}.main")),
                         )])
                     }))?
                 }

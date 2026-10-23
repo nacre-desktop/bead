@@ -20,7 +20,8 @@ local function usable(t)
         local s=src[t.source]
         return s~=nil and s.available==true and (not t.need or s[t.need]==true)
     end
-    return t.view~=nil and views[t.view]==true
+    if t.view then return views[t.view]==true end
+    return t.page~=nil
 end
 local defaults={}
 for _,t in ipairs(reg.tiles) do if t.default then table.insert(defaults,t.id) end end
@@ -68,6 +69,24 @@ local function build_tile(t,w,h)
         return kit.SliderTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,value=s.value or 0,
             on_toggle=s.toggle and act("toggle") or nil,on_change=s.set and "cc.do" or nil,
             change_arg=function(n) return "set:"..t.source..":"..n end}
+    elseif t.kind=="segmented" then
+        -- Light | Dark | Auto as one control (QML NacreControlAppearance); the daemon names the mode that is set.
+        local modes={{"light","light_mode","bead.panel.control-mode-light"},{"dark","dark_mode","bead.panel.control-mode-dark"},
+            {"auto","brightness_auto","bead.panel.control-mode-auto"}}
+        local seg=(w-2*T.spacing.xs)/#modes
+        local row={id=id,width=w,height=h,gap=T.spacing.xs}
+        for i,m in ipairs(modes) do
+            local picked=s.mode==m[1]
+            local ink=picked and "onPrimaryContainer" or "onSurface"
+            local name=ui.tr(m[3])
+            row[i]=kit.Button{id="mode-"..m[1],width=seg,height=h,padding=0,radius=T.radii.full,selected=picked,
+                fill=picked and "primaryContainer" or "surfaceContainer",aria_label=ui.tr(m[3]),
+                on_activate=s.toggle and ui.action("cc.do","choose:"..t.source..":"..m[1]) or nil,
+                ui.Row{id="mode-row-"..m[1],width=seg,height=h,gap=T.spacing.xs,align="center",justify="center",
+                    glyph("mode-icon-"..m[1],m[2],ink,T.icons.medium*4/3),
+                    ui.Text{id="mode-label-"..m[1],text=name,width=(utf8.len(name) or 4)*8+4,height=22,shrink=0,font_size=CAPTION,color=ink}}}
+        end
+        return ui.Row(row)
     elseif t.kind=="link" then
         -- A tile that can switch things opens its picker in place; the battery panel stays one row away.
         local choosing=s.choices and #s.choices>0
@@ -80,8 +99,41 @@ local function build_tile(t,w,h)
         on_activate=s.toggle and act("toggle") or opener,on_detail=s.toggle and opener or nil,
         detail_label=ui.tr("bead.panel.control-details",{name=label})}
 end
+local NOTICE_H=70
+local function notice_card(n)
+    return kit.Card{id="notice-"..n.id,width=INNER,height=NOTICE_H,shrink=0,padding=T.spacing.sm,gap=0,padding_left=T.spacing.md,
+        ui.Text{id="app",text=n.app,width=INNER-2*T.spacing.md,height=16,font_size=CAPTION,color="onSurfaceVariant"},
+        ui.Text{id="summary",text=n.summary,width=INNER-2*T.spacing.md,height=22,font_size=BODY,color="onSurface"},
+        ui.Text{id="body",text=n.body,width=INNER-2*T.spacing.md,height=16,font_size=CAPTION,color="onSurfaceVariant"}}
+end
+local function notices_empty()
+    local text=get("cc.notice_ready") and ui.tr("bead.panel.control-notices-empty") or ui.tr("bead.panel.control-notices-loading")
+    return {ui.Text{id="notices-empty",text=text,width=INNER,height=CAPTION*2,font_size=CAPTION,color="onSurfaceVariant"},CAPTION*2}
+end
+-- The notification summary under the tiles (the QML NacreControlNotices): title, count, clear and "view all",
+-- then the newest two entries; `limit` 0 on the full page, which lists every projected entry instead.
+local function notices(limit,page)
+    local list=get("cc.notices")
+    local count=get("cc.notice_count")
+    local clear=get("cc.notice_clear")
+    local row={id="notices-head",width=INNER,height=HEAD,gap=GAP,align="center",
+        ui.Text{id="notices-title",text=ui.tr("bead.panel.control-notifications"),height=HEAD,grow=1,shrink=1,font_size=T.text.title*4/3,color="onSurface"}}
+    if count>0 then row[#row+1]=ui.Text{id="notices-count",text=tostring(count),height=HEAD,font_size=BODY,color="onSurfaceVariant"} end
+    row[#row+1]=kit.IconButton{id="notices-clear",text="delete_sweep",aria_label=ui.tr("bead.panel.control-notices-clear"),width=HEAD,height=HEAD,
+        on_activate=clear and ui.action("cc.do","clear:notifications") or nil}
+    if not page then
+        row[#row+1]=kit.IconButton{id="notices-all",text="chevron_right",aria_label=ui.tr("bead.panel.control-notices-all"),width=HEAD,height=HEAD,
+            on_activate=ui.action("detail","notifications")}
+    end
+    local items={{ui.Row(row),HEAD}}
+    if #list==0 then table.insert(items,notices_empty()) end
+    for i,n in ipairs(list) do
+        if not limit or i<=limit then table.insert(items,{notice_card(n),NOTICE_H}) end
+    end
+    return items
+end
 local function home()
-    local status_w=INNER-2*HEAD-2*GAP
+    local status_w=INNER-3*HEAD-3*GAP
     local status={id="status",width=INNER,height=HEAD,gap=GAP,align="center",
         kit.Button{id="battery-status",width=status_w,height=HEAD,padding=0,fill="transparent",hover_fill="transparent",
             aria_label=ui.tr("bead.panel.control-battery-details"),on_activate=views.battery and ui.action("view.open","battery") or nil,
@@ -90,6 +142,8 @@ local function home()
                 ui.Text{id="battery-text",text=get("cc.battery"),width=status_w-40,height=24,font_size=BODY,color="onSurface"}}},
         kit.IconButton{id="edit",text="edit",aria_label=ui.tr("bead.panel.control-edit"),width=HEAD,height=HEAD,
             on_activate=ui.action("begin",table.concat(order,","))},
+        kit.IconButton{id="settings",text="settings",aria_label=ui.tr("bead.panel.control-settings"),width=HEAD,height=HEAD,
+            on_activate=ui.action("cc.do","open:settings")},
         kit.IconButton{id="power",text="power_settings_new",aria_label=ui.tr("bead.panel.control-power"),width=HEAD,height=HEAD,
             on_activate=views.session and ui.action("view.open","session") or nil}}
     local list={}
@@ -113,6 +167,7 @@ local function home()
         local grid,height=kit.TileGrid{id="grid",width=INNER,gap=GAP,sizes=reg.layout.sizes,tiles=list}
         table.insert(items,{grid,height})
     end
+    for _,item in ipairs(notices(2,false)) do table.insert(items,item) end
     return stack("home",items)
 end
 local function row_button(id,icon,label,detail,action,sub)
@@ -175,8 +230,23 @@ local function catalog()
     end
     return stack("catalog",items)
 end
+local function notifications_page()
+    local dnd=src["notifications.dnd"]
+    local items={header(ui.tr("bead.panel.control-notifications"),ui.action("page","home"))}
+    if dnd and dnd.toggle then
+        table.insert(items,{kit.Button{id="dnd-switch",width=INNER,height=HEAD+T.spacing.sm,padding=0,radius=T.radii.full,
+            fill=dnd.on and "primary" or "surfaceContainerHigh",aria_label=ui.tr("bead.panel.control-dnd"),on_activate=ui.action("cc.do","toggle:notifications.dnd"),
+            ui.Row{id="dnd-row",width=INNER,height=HEAD+T.spacing.sm,align="center",justify="center",
+                ui.Text{id="dnd-label",text=ui.tr("bead.panel.control-dnd").." · "..(dnd.status or ""),width=INNER-T.spacing.lg*2,height=22,
+                    text_align="center",font_size=BODY,color=dnd.on and "onPrimary" or "onSurface"}}},HEAD+T.spacing.sm})
+    end
+    for _,item in ipairs(notices(nil,true)) do table.insert(items,item) end
+    return stack("detail",items)
+end
 local function detail()
-    local t=reg.by_id[get("cc.detail")]
+    local id=get("cc.detail")
+    if id=="notifications" or id=="dnd" then return notifications_page() end
+    local t=reg.by_id[id]
     local s=t and t.source and src[t.source] or {}
     local items={header(t and ui.tr(t.label) or "",ui.action("page","home"))}
     if t and t.page then
@@ -206,7 +276,8 @@ elseif page=="catalog" then body,content=catalog()
 elseif page=="detail" then body,content=detail()
 else body,content=home() end
 local max=get("cc.max_height")
-local height=math.min(max,content+2*PAD)
+-- B0067: the dock is as tall as the framed viewport (the QML sidebar keeps the full frame height); long pages scroll.
+local height=max
 local inner=body
 if content+2*PAD>max then
     inner=ui.Scroll{id="scroll",scroll=ui.bind("cc.scroll"),width=INNER,height=height-2*PAD,body}

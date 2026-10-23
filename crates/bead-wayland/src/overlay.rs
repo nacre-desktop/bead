@@ -486,8 +486,8 @@ impl App {
             if matches!(motion.edge, bead_core::Edge::Top | bead_core::Edge::Bottom) {
                 scene.offset.0 = ((o.size.0 as f32 - scene.width) / 2.).max(0.);
             }
-            if reveal && let Some(m) = &mut scene.motion {
-                m.progress = progress;
+            if reveal {
+                scene.reveal(progress);
             }
         }
         o.offset = scene.offset;

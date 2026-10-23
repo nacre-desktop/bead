@@ -169,6 +169,9 @@ pub struct Motion {
     pub reveal: bool,
     /// Eased open progress, written by the presenter every frame (1 = fully open).
     pub progress: f32,
+    /// The primitives that make the panel body (its shadow and fill) with their open-state shapes, found on the
+    /// first revealing frame: they shrink with `progress` so the growing edge keeps its rounded corners and shadow.
+    pub parts: Vec<(usize, Primitive)>,
 }
 impl Motion {
     /// Scene opacity at a progress: the progress itself when fading, else opaque once any of it is shown.
@@ -206,25 +209,110 @@ pub struct Scene {
     pub bounds: Rect,
 }
 impl Scene {
-    /// The clip for a primitive: its own (scroll viewport) intersected with the reveal window.
+    /// The clip for a primitive: its own (scroll viewport) intersected with the reveal window. The body parts
+    /// (shadow and fill) are not clipped: `reveal` reshapes them instead.
     pub fn clip_at(&self, index: usize) -> Option<Rect> {
         let own = self.clips.get(&index).copied();
-        match (own, self.reveal_window()) {
+        let window = match &self.motion {
+            Some(m) if m.parts.iter().any(|(i, _)| *i == index) => None,
+            _ => self.reveal_window(),
+        };
+        match (own, window) {
             (Some(a), Some(b)) => Some(a.intersect(b)),
             (a, b) => a.or(b),
+        }
+    }
+    /// The open-state body of a revealing panel: the first fill of the scene.
+    fn reveal_body(&self) -> Option<Rect> {
+        let from_parts = self.motion.as_ref().and_then(|m| {
+            m.parts.iter().find_map(|(_, p)| match p {
+                Primitive::Rounded { rect, .. } => Some(*rect),
+                _ => None,
+            })
+        });
+        from_parts.or_else(|| {
+            self.primitives.iter().find_map(|p| match p {
+                Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => Some(*rect),
+                _ => None,
+            })
+        })
+    }
+    /// B0067: set the eased progress of a revealing panel and reshape its body: the fill and its shadow cover only
+    /// the revealed part of the body (rounded on the growing edge, shadow following), while the content stays put
+    /// under `reveal_window`. Idempotent: the open-state shapes are kept in `Motion::parts`.
+    pub fn reveal(&mut self, progress: f32) {
+        let Some(edge) = self.motion.as_ref().filter(|m| m.reveal).map(|m| m.edge) else {
+            return;
+        };
+        if self.motion.as_ref().is_some_and(|m| m.parts.is_empty())
+            && let Some(body) = self.reveal_body()
+        {
+            let grown = Rect::new(body.x - 30., body.y - 30., body.w + 60., body.h + 60.);
+            let parts: Vec<(usize, Primitive)> = self
+                .primitives
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| match p {
+                    Primitive::Rounded { rect, .. } => *rect == body,
+                    Primitive::Shadow { rect, .. } => *rect == grown,
+                    _ => false,
+                })
+                .map(|(i, p)| (i, p.clone()))
+                .collect();
+            if let Some(m) = &mut self.motion {
+                m.parts = parts;
+            }
+        }
+        let Some(body) = self.reveal_body() else {
+            return;
+        };
+        let now = Self::revealed(body, edge, progress);
+        let Some(m) = &mut self.motion else { return };
+        m.progress = progress;
+        for (index, original) in &m.parts {
+            let shaped = match original {
+                Primitive::Rounded {
+                    radius,
+                    fill,
+                    border,
+                    ..
+                } => Primitive::Rounded {
+                    rect: now,
+                    radius: *radius,
+                    fill: *fill,
+                    border: *border,
+                },
+                Primitive::Shadow { radius, blur, .. } => Primitive::Shadow {
+                    rect: Rect::new(now.x - 30., now.y - 30., now.w + 60., now.h + 60.),
+                    radius: *radius,
+                    blur: *blur,
+                },
+                other => other.clone(),
+            };
+            if let Some(slot) = self.primitives.get_mut(*index) {
+                *slot = shaped;
+            }
+        }
+    }
+    /// The part of `body` that is open at `progress`, growing out of `edge`.
+    fn revealed(body: Rect, edge: bead_core::Edge, progress: f32) -> Rect {
+        let p = progress.clamp(0., 1.);
+        let (ix, iy) = edge.inward();
+        if iy > 0. {
+            Rect::new(body.x, body.y, body.w, body.h * p)
+        } else if iy < 0. {
+            Rect::new(body.x, body.y + body.h * (1. - p), body.w, body.h * p)
+        } else if ix > 0. {
+            Rect::new(body.x, body.y, body.w * p, body.h)
+        } else {
+            Rect::new(body.x + body.w * (1. - p), body.y, body.w * p, body.h)
         }
     }
     /// While a revealing panel is partly open: the visible window over its body (generous on
     /// the other sides so the shadow margin stays).
     pub fn reveal_window(&self) -> Option<Rect> {
-        let m = self
-            .motion
-            .as_ref()
-            .filter(|m| m.reveal && m.progress < 1.)?;
-        let body = self.primitives.iter().find_map(|p| match p {
-            Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => Some(*rect),
-            _ => None,
-        })?;
+        let m = self.motion.as_ref().filter(|m| m.reveal && m.progress < 1.)?;
+        let body = self.reveal_body()?;
         let p = m.progress.clamp(0., 1.);
         const M: f32 = 4096.;
         let (ix, iy) = m.edge.inward();
@@ -237,12 +325,7 @@ impl Scene {
             Rect::new(body.x - M, body.y - M, M + body.w * p, body.h + 2. * M)
         } else {
             let left = body.x + body.w * (1. - p);
-            Rect::new(
-                left,
-                body.y - M,
-                body.x + body.w + M - left,
-                body.h + 2. * M,
-            )
+            Rect::new(left, body.y - M, body.x + body.w + M - left, body.h + 2. * M)
         })
     }
     pub fn bounds(&self) -> Rect {
@@ -1314,6 +1397,72 @@ mod tests {
         let rects = text_selection(&scene, "ab\ncd", 1, 4, family, 16., 200.).unwrap();
         assert_eq!(rects.len(), 2);
         assert!(rects[1].y > rects[0].y);
+    }
+    /// B0067: a revealing panel's fill and shadow shrink with the progress (rounded on the growing edge, shadow following)
+    /// while its content stays put under the window, and full progress restores the open-state shapes exactly.
+    #[test]
+    fn reveal_reshapes_the_body_and_its_shadow_and_restores_them() {
+        let body = Rect::new(32., 32., 300., 200.);
+        let mut scene = font_pool_scene();
+        scene.primitives = vec![
+            Primitive::Shadow {
+                rect: Rect::new(2., 2., 360., 260.),
+                radius: 18.,
+                blur: 10.,
+            },
+            Primitive::Rounded {
+                rect: body,
+                radius: 18.,
+                fill: [1, 2, 3, 255],
+                border: None,
+            },
+            Primitive::Text {
+                rect: Rect::new(40., 40., 100., 20.),
+                text: "x".into(),
+                family: "IBM Plex Sans".into(),
+                size: 14.,
+                color: [9, 9, 9, 255],
+                align: None,
+            },
+        ];
+        scene.motion = Some(Motion {
+            id: "m".into(),
+            open: true,
+            duration: 0.36,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: Vec::new(),
+        });
+        scene.reveal(0.5);
+        let Primitive::Rounded { rect, radius, .. } = &scene.primitives[1] else {
+            panic!()
+        };
+        assert_eq!((rect.y, rect.h, *radius), (32., 100., 18.));
+        let Primitive::Shadow { rect, .. } = &scene.primitives[0] else {
+            panic!()
+        };
+        assert_eq!((rect.y, rect.h), (2., 160.));
+        // The shapes are not clipped (they were reshaped); the content is, to the revealed window.
+        assert!(scene.clip_at(0).is_none() && scene.clip_at(1).is_none());
+        let window = scene.clip_at(2).unwrap();
+        assert!((window.y + window.h - 132.).abs() < 0.01, "{window:?}");
+        // Applying again from a different progress starts from the open-state shapes, not the previous frame.
+        scene.reveal(0.25);
+        let Primitive::Rounded { rect, .. } = &scene.primitives[1] else {
+            panic!()
+        };
+        assert_eq!(rect.h, 50.);
+        scene.reveal(1.);
+        let Primitive::Rounded { rect, .. } = &scene.primitives[1] else {
+            panic!()
+        };
+        assert_eq!(*rect, body);
+        assert!(scene.clip_at(2).is_none());
     }
     fn font_pool_scene() -> Scene {
         let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

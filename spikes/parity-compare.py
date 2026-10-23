@@ -44,7 +44,10 @@ HERE = Path(__file__).resolve().parent
 #   ('qml_app', app, method, *args) QML only: `quickshell ipc call APP METHOD ARGS` (Bead arm: a ('ui', APP, METHOD, ARGS) step)
 #   ('only', 'qml'|'bead', step)    a step for one arm (the shells' preview/trigger routes differ)
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
+#   ('pointer', x, y) / ('press', x, y) / ('release',)   B0067: a virtual pointer on the private parent compositor (logical px; needs --pointer-tool)
 #   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
+# Logical pointer targets for the pointer states (2880x1800 at 1.5: the control dock's first tile).
+PTR = {'control-tile': (1600, 150)}
 STATES = {
     'idle': ([], [], 0),
     'launcher': ([('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
@@ -67,6 +70,12 @@ STATES = {
     'popout-audio': ([('ui', 'nacre', 'popout', 'audio', '1520')], [('ui', 'nacre', 'close')], 0),
     'control-center': ([('ui', 'nacre', 'controls', 'home')], [('ui', 'nacre', 'close')], 1.2),
     'control-network': ([('ui', 'nacre', 'controls', 'network')], [('ui', 'nacre', 'close')], 0),
+    # B0067: pointer states (need --pointer-tool): hover and press on the first control tile, and the right-edge lip
+    'control-hover': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('pointer', PTR['control-tile'][0], PTR['control-tile'][1])],
+                      [('release',), ('ui', 'nacre', 'close')], 0),
+    'control-pressed': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('press', PTR['control-tile'][0], PTR['control-tile'][1])],
+                        [('release',), ('ui', 'nacre', 'close')], 0),
+    'lip-hover-right': ([('pointer', 1919, 600), ('sleep', 1.0)], [('pointer', 960, 600)], 0),
     'control-bluetooth': ([('ui', 'nacre', 'controls', 'bluetooth')], [('ui', 'nacre', 'close')], 0),
     'notification': ([('notify', 'Parity check', 'The same notification in both shells.'), ('sleep', 1.5)], [('ui', 'nacre', 'close')], 1.2),
     'osd-volume': ([('only', 'qml', ('ui', 'nacre', 'previewFeedback', 'volume')), ('only', 'bead', ('level', 'sink', 0.62))],
@@ -381,6 +390,34 @@ class Arm:
         with (self.root / 'fakeaudio/events').open('a') as events:
             events.write(f"Event 'change' on {node} #1\n")
 
+    def pointer(self, x, y, mode=None):
+        """B0067: hover or press at a logical position through spikes/virtual-pointer.c (wlr-virtual-pointer on the private
+        parent labwc; the nested niri receives it as a normal pointer). `press` holds the button until release_pointer."""
+        tool = self.args.pointer_tool
+        if not tool or not Path(tool).is_file():
+            self.errors.append('no --pointer-tool: pointer states are skipped')
+            return
+        width, height = self.args.size
+        scale = self.geometry['scale']
+        command = [tool, str(round(x * scale)), str(round(y * scale)), str(width), str(height)] + ([mode] if mode else [])
+        env = dict(self.env, WAYLAND_DISPLAY=self.env['BEAD_PARENT'])
+        if mode == 'press':
+            self.held = subprocess.Popen(command, env=env, start_new_session=True)
+            self.procs.append(self.held)
+            time.sleep(0.4)
+        else:
+            subprocess.run(command, env=env, timeout=10, check=False)
+            time.sleep(0.3)
+
+    def release_pointer(self):
+        held, self.held = getattr(self, 'held', None), None
+        if held is not None and held.poll() is None:
+            held.terminate()
+            try:
+                held.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                stop(held, 2)
+
     def notify(self, summary, body):
         self.run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications', '--object-path',
                   '/org/freedesktop/Notifications', '--method', 'org.freedesktop.Notifications.Notify', 'parity', '0', '',
@@ -416,6 +453,12 @@ class Arm:
                     self.steps([step[2]])
             elif kind == 'level':
                 self.set_level(step[1], step[2])
+            elif kind == 'pointer':
+                self.pointer(step[1], step[2])
+            elif kind == 'press':
+                self.pointer(step[1], step[2], 'press')
+            elif kind == 'release':
+                self.release_pointer()
             elif kind == 'bluez':
                 self.run(['gdbus', 'call', '--session', '--dest', 'org.bead.FakeBluez', '--object-path', '/ctl',
                           '--method', 'org.bead.FakeBluez.Set', step[1], step[2]], check=False)
@@ -433,19 +476,37 @@ class Arm:
         self.run(command, timeout=30)
 
     def sequence(self, name, trigger, seconds):
-        """Frames of one transition: (milliseconds after the trigger, jpeg). grim of a 0.4-scaled output is ~100ms."""
+        """Frames of one transition: (milliseconds after the trigger, jpeg). B0067: grim processes are started every
+        --seq-interval ms WITHOUT waiting for the previous one (a single grim is ~100 ms), so the frame rate is bounded by
+        the interval, not by grim; the stamp is the spawn time plus half of the fast-quartile capture latency (same method
+        for both arms, so the comparison is unbiased)."""
         frames_dir = self.root / 'seq'
         shutil.rmtree(frames_dir, ignore_errors=True)
         frames_dir.mkdir()
-        stamps = []
+        region = REGIONS.get(name.rsplit('-', 1)[0])
+        interval = self.args.seq_interval / 1000
+        jobs = []
         start = time.monotonic()
-        trigger()
+        # The trigger runs beside the capture: a state opened by several dispatches (toggle, then tab) takes longer than a
+        # short transition, which a sequential trigger would hide (B0067: the dashboard looked instant in Bead).
+        import threading
+        runner = threading.Thread(target=trigger)
+        runner.start()
         index = 0
         while time.monotonic() - start < seconds:
             before = time.monotonic()
-            self.grab(frames_dir / f'{index:03}.ppm', self.args.seq_scale, REGIONS.get(name.rsplit('-', 1)[0]))
-            stamps.append(round(((before + time.monotonic()) / 2 - start) * 1000))
+            command = ['grim'] + (['-g', region] if region else []) + ['-s', str(self.args.seq_scale), str(frames_dir / f'{index:03}.ppm')]
+            jobs.append((subprocess.Popen(command, env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL), before))
             index += 1
+            time.sleep(max(0.0, before + interval - time.monotonic()))
+        runner.join()
+        latencies, spawned = [], []
+        for process, before in jobs:
+            process.wait(timeout=30)
+            latencies.append(time.monotonic() - before)
+            spawned.append(before)
+        fast = sorted(latencies)[:max(1, len(latencies) // 4)]
+        stamps = [round((before + sum(fast) / len(fast) / 2 - start) * 1000) for before in spawned]
         from PIL import Image
         out = self.out / 'seq' / name
         shutil.rmtree(out, ignore_errors=True)
@@ -547,8 +608,15 @@ def settle_ms(stamps, directory):
     first, last = images[0], images[-1]
     changing = [t for t, image in zip(stamps, images) if distance(image, first) > 0.6]
     unsettled = [t for t, image in zip(stamps, images) if distance(image, last) > 0.6]
+    # B0067: bottom and right edge of the pixels that differ from the first frame (px of the sequence image): a growing panel
+    # shows its direction and, with the stamps, its speed and easing at the frame rate of --seq-interval.
+    edges = []
+    for t, image in zip(stamps, images):
+        box = ImageChops.difference(first, image).point(lambda v: 255 if v > 24 else 0).getbbox()
+        edges.append([t, box[3] if box else 0, box[2] if box else 0])
     return {'start': changing[0] if changing else None, 'end': (unsettled[-1] if unsettled else None),
-            'frames': len(files), 'progress': progress_times(stamps, [distance(image, last) for image in images])}
+            'frames': len(files), 'progress': progress_times(stamps, [distance(image, last) for image in images]),
+            'edge': edges}
 
 
 def progress_times(stamps, distances):
@@ -583,7 +651,7 @@ def motion(directory):
     return rows
 
 
-def strip(directory, stamps, path, count=8, height=170):
+def strip(directory, stamps, path, count=12, height=170):
     from PIL import Image, ImageDraw
     files = sorted(directory.glob('*.jpg'))
     if not files:
@@ -670,6 +738,9 @@ def write_html(out, names, results, baseline, args):
                 timing = ' / '.join(f'{arm}: ' + (f'{v["start"]}..{v["end"]} ms, {v["frames"]} frames, progress 10/50/90 % at {"/".join(str((v.get("progress") or {}).get(k, "-")) for k in ("t10", "t50", "t90"))} ms' if v else 'n/a')
                                     for arm, v in row[phase].items())
                 seqs += f'<p class="t">{phase} transition, first change..settled: {html.escape(timing)}</p>'
+                for arm, v in row[phase].items():
+                    if v and v.get('edge'):
+                        seqs += f'<p class="t">{arm} bottom edge (ms:px): ' + ' '.join(f'{t}:{b}' for t, b, _ in v['edge']) + '</p>'
                 for arm in ['qml', 'bead']:
                     if (out / 'strips' / f'{name}-{phase}-{arm}.jpg').is_file():
                         seqs += f'<div class="strip">{arm}<br><img loading="lazy" src="strips/{name}-{phase}-{arm}.jpg"></div>'
@@ -709,6 +780,8 @@ def main():
     parser.add_argument('--settle', type=float, default=2.0, help='seconds between a state opening and its screenshot')
     parser.add_argument('--boot-settle', type=float, default=4.0)
     parser.add_argument('--seq-scale', type=float, default=0.5)
+    parser.add_argument('--pointer-tool', default='', help='built spikes/virtual-pointer.c (hover and pressed states); empty skips them')
+    parser.add_argument('--seq-interval', type=int, default=25, help='ms between overlapped grim captures of a transition (B0067)')
     parser.add_argument('--baseline', help='an earlier results.json: adds a before value to the gallery')
     parser.add_argument('--title', default='')
     parser.add_argument('--gallery-only', action='store_true', help='rebuild index.html/results.json from existing captures')
@@ -747,7 +820,7 @@ def main():
                     env.pop(key, None)
                 command = ['dbus-run-session', '--', sys.executable, __file__, '--run-arm', arm, '--private', private]
                 for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'settle', 'boot_settle',
-                             'seq_scale']:
+                             'seq_scale', 'seq_interval', 'pointer_tool']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
                 command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else [])

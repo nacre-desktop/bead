@@ -379,6 +379,7 @@ fn start(
             fade: true,
             reveal: false,
             progress: 1.,
+            parts: Vec::new(),
         });
         options.companion = Some((companion, panel_renderer.unwrap_or(default_panel_renderer)));
     }

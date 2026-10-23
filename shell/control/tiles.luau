@@ -8,7 +8,7 @@
 local layout={
     width=424,
     -- tiles per row and row height for each size; heights are multiples of the shared scale
-    sizes={full={per_row=1,height=56},half={per_row=2,height=66},third={per_row=3,height=76}},
+    sizes={full={per_row=1,height=56},segment={per_row=1,height=40},half={per_row=2,height=66},third={per_row=3,height=76}},
 }
 local tiles={
     {id="volume",kind="slider",size="full",icon="volume_up",label="bead.panel.control-volume",source="audio.output",default=true},
@@ -21,10 +21,10 @@ local tiles={
     {id="vpn",kind="toggle",size="half",icon="vpn_key",label="bead.panel.control-vpn",source="vpn.state",ask="vpn topic"},
     {id="battery",kind="link",size="half",icon="balance",label="bead.panel.control-battery",source="power.profile",view="battery",ask="power.set_profile",default=true},
     {id="awake",kind="toggle",size="half",icon="coffee",label="bead.panel.control-awake",source="stay-awake.state",ask="stay_awake.set",need="toggle",default=true},
-    {id="dnd",kind="toggle",size="half",icon="do_not_disturb_on",label="bead.panel.control-dnd",source="notifications.dnd",page="bead.panel.control-dnd-text",default=true},
+    {id="dnd",kind="toggle",size="half",icon="do_not_disturb_on",label="bead.panel.control-dnd",source="notifications.dnd",page="notifications",default=true},
     {id="mic",kind="toggle",size="half",icon="mic",label="bead.panel.control-mic",source="audio.input",ask="audio.set_mute",need="toggle"},
     {id="night",kind="toggle",size="half",icon="nightlight",label="bead.panel.control-night",source="night-light.state",ask="night_light.set",default=true},
-    {id="appearance",kind="toggle",size="half",icon="palette",label="bead.panel.control-appearance",source="appearance.mode",ask="appearance.set_mode",need="toggle",default=true},
+    {id="appearance",kind="segmented",size="segment",icon="palette",label="bead.panel.control-appearance",source="appearance.mode",ask="appearance.set_mode",need="toggle",default=true},
     {id="screenshot",kind="button",size="third",icon="screenshot",label="bead.panel.control-screenshot",source="screenshot.capture",ask="screenshot.capture",need="press"},
     {id="record",kind="toggle",size="third",icon="videocam",label="bead.panel.control-record",source="recorder.state",ask="recorder.start",need="toggle"},
     {id="picker",kind="button",size="third",icon="colorize",label="bead.panel.control-picker",source="color-picker.pick",ask="color_picker.pick",need="press"},
@@ -33,7 +33,7 @@ local tiles={
     {id="displays",kind="button",size="third",icon="desktop_windows",label="bead.panel.control-displays",source="displays.layout",ask="displays topic"},
     {id="wallpaper",kind="button",size="third",icon="wallpaper",label="bead.panel.control-wallpaper",source="settings.window",ask="bead.window open"},
     {id="next-wallpaper",kind="button",size="third",icon="skip_next",label="bead.panel.control-next-wallpaper",source="wallpaper.next",ask="wallpaper.next",need="press"},
-    {id="notifications",kind="button",size="third",icon="notifications",label="bead.panel.control-notifications",view="dashboard-notifications"},
+    {id="notifications",kind="button",size="third",icon="notifications",label="bead.panel.control-notifications",page="notifications"},
 }
 local by_id={}
 for _,t in ipairs(tiles) do by_id[t.id]=t end

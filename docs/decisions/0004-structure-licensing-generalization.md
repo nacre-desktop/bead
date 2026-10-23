@@ -122,6 +122,11 @@ After Bead's core switch on Nacre, plan support for:
 
 - B0068: `bead_wayland::PaletteFeed` (`Options::palette_feed`): a live presentation palette for a process without a
   wallpaper consumer (an app process); the Nacre adapter (`wallpaper::Feed`) reads the daemon's `wallpaper.active` topic.
+- B0066/B0067: panel motion is `edge`, `duration`, `curve`, `slide_distance`, `fade`, `reveal` (+ the runtime `progress`): a
+  revealing panel stays put and grows out of its edge (`Scene::reveal`: its fill and shadow shrink with the progress, rounded on
+  the growing edge; the content is clipped to the revealed window). Product-agnostic; which panel reveals is Luau/Rust spec data.
+  `ui.Column{radius,fill,...}` section cards (`kit.Card`) and the nested-rows projection (`rows` inside a settings `section`) stay
+  in `nacre-shell/src/settings.rs`; the pointer tool `spikes/virtual-pointer.c` is harness-only.
 
 ## Housekeeping (later)
 

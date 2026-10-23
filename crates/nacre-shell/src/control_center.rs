@@ -68,6 +68,7 @@ struct St {
     targets: BTreeMap<String, f64>,
     /// An interactive tool was started: the host closes the panel (N0046: "close your panels first").
     close: bool,
+    /// The viewport height; `cc.max_height` is what remains inside the live frame.
     max_height: f64,
 }
 impl Default for St {
@@ -206,7 +207,7 @@ impl ControlCenter {
         }
     }
     pub fn set_viewport(&self, _width: u32, height: u32) {
-        self.st.borrow_mut().max_height = (f64::from(height) - 150.).max(240.);
+        self.st.borrow_mut().max_height = f64::from(height);
     }
     pub fn subscribe(&self, notify: Notify) -> bead::core::source::Result<Vec<Subscription>> {
         *self.notify.borrow_mut() = Some(notify.clone());
@@ -539,6 +540,7 @@ impl ControlCenter {
                 "id": source, "available": true, "on": reading.on, "value": reading.value,
                 "status": reading.status, "icon": reading.icon, "toggle": verbs.toggle,
                 "set": verbs.set && choices.is_empty(), "press": verbs.press, "choices": choices,
+                "mode": reading.node.as_deref().filter(|_| *source == "appearance.mode").unwrap_or(""),
             }))
         })
         .collect()
@@ -649,9 +651,57 @@ impl ControlCenter {
     pub fn take_close(&self) -> bool {
         std::mem::take(&mut self.st.borrow_mut().close)
     }
+    /// B0067: the dock's gear. The window route can wait on its socket, so it runs off the UI thread.
+    fn open_settings(&self) {
+        self.st.borrow_mut().close = true;
+        std::thread::spawn(|| {
+            let _ = crate::app::route(0, "settings", "open", &[]);
+        });
+    }
+    /// B0067: the notification summary the dock shows under the tiles: the newest two history entries,
+    /// the stored count and whether the history has loaded (the QML `NacreControlNotices`).
+    fn notices(&self) -> Vec<(String, Value)> {
+        let data = self.data("notifications").filter(|d| healthy(d));
+        let history = data.as_ref().map(|d| &d["history"]);
+        let rows: Vec<Json> = history
+            .and_then(|h| h["order"].as_array())
+            .into_iter()
+            .flatten()
+            .rev()
+            .filter_map(|id| {
+                let item = &history?["items"][id.as_str()?];
+                Some(json!({
+                    "id": id.as_str()?, "app": item["app_name"].as_str().unwrap_or(""),
+                    "summary": item["summary"].as_str().unwrap_or(""), "body": item["body"].as_str().unwrap_or(""),
+                }))
+            })
+            .take(2)
+            .collect();
+        let count = data
+            .as_ref()
+            .and_then(|d| d["history_count"].as_u64())
+            .unwrap_or(rows.len() as u64);
+        let ready = data
+            .as_ref()
+            .is_some_and(|d| d["history_storage"]["ready"] == true);
+        vec![
+            ("cc.notices".into(), Value::list(rows)),
+            ("cc.notice_count".into(), Value::Number(count as f64)),
+            ("cc.notice_ready".into(), Value::Bool(ready)),
+            (
+                "cc.notice_clear".into(),
+                Value::Bool(count > 0 && self.can("notifications.clear")),
+            ),
+        ]
+    }
     fn choose(&self, source: &str, choice: &str) {
         if source == "power.profile" && PROFILES.contains(&choice) {
             self.begin(source, "power.set_profile", json!({"profile": choice}));
+        } else if source == "appearance.mode" && MODES.contains(&choice) {
+            // B0067: the segmented Light | Dark | Auto control names its mode; tapping the current one is a no-op.
+            if self.read(source).and_then(|r| r.node).as_deref() != Some(choice) {
+                self.begin(source, "appearance.set_mode", json!({"mode": choice}));
+            }
         }
     }
     /// The call a slider target means: `(method, params)`, or `None` when it already holds.
@@ -724,6 +774,11 @@ impl ControlCenter {
             "toggle" => self.toggle(source),
             "press" => self.press(source),
             "choose" => self.choose(source, rest),
+            "clear" if source == "notifications" => {
+                self.begin(source, "notifications.clear", json!({"scope": "history"}));
+            }
+            // The QML gear: open the Settings window, closing the dock as `openSettings` does.
+            "open" if source == "settings" => self.open_settings(),
             "set" => {
                 if let Ok(percent) = rest.parse::<f64>()
                     && percent.is_finite()
@@ -897,6 +952,8 @@ impl ControlCenter {
             .as_ref()
             .is_some_and(|data| data["charging"] == true);
         let saved = self.saved();
+        let frame = crate::placement::Frame::current();
+        let frame_height = f64::from(frame.top) + f64::from(frame.bottom);
         let st = self.st.borrow();
         BTreeMap::from([
             ("cc.src".into(), Value::list(self.sources())),
@@ -934,8 +991,15 @@ impl ControlCenter {
                     "battery_full"
                 }),
             ),
-            ("cc.max_height".into(), Value::Number(st.max_height)),
+            // B0067: the dock is as tall as the framed viewport (QML: the sidebar keeps the full frame height).
+            (
+                "cc.max_height".into(),
+                Value::Number((st.max_height - frame_height).max(240.)),
+            ),
         ])
+        .into_iter()
+        .chain(self.notices())
+        .collect()
     }
 }
 

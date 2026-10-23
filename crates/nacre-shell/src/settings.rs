@@ -458,20 +458,19 @@ impl Settings {
             return self.target_row(setting, row);
         }
         if self.unavailable(setting) {
+            let reason = if setting["unavailableId"].is_string() {
+                self.registry.text(setting, "unavailableId")
+            } else if setting.get("adapter").is_some() {
+                // A helper adapter in QML: Bead needs a published contract for it.
+                tr("bead.settings.requires-contract", &[])
+            } else {
+                tr("bead.settings.not-here", &[])
+            };
+            // B0067: the QML row keeps its label and description and adds a muted caption with the reason.
             row["kind"] = "help".into();
-            row["description"] = "".into();
-            row["label"] = format!(
-                "{label}: {}",
-                if setting["unavailableId"].is_string() {
-                    self.registry.text(setting, "unavailableId")
-                } else if setting.get("adapter").is_some() {
-                    // A helper adapter in QML: Bead needs a published contract for it.
-                    tr("bead.settings.requires-contract", &[])
-                } else {
-                    tr("bead.settings.not-here", &[])
-                }
-            )
-            .into();
+            row["title"] = label.clone().into();
+            row["note"] = reason.clone().into();
+            row["label"] = format!("{label}: {reason}").into();
             return row;
         }
         if setting["adapter"] == "keyboard-layout" {
@@ -635,9 +634,10 @@ impl Settings {
             if body.is_empty() {
                 continue;
             }
+            // B0067: the rows travel inside their section, which the view draws as one raised card.
             items.push(json!({"id": format!("section:{sid}"), "kind": "section",
-                "label": registry.text(section, "labelId"), "description": registry.text(section, "descriptionId")}));
-            items.extend(body);
+                "label": registry.text(section, "labelId"), "description": registry.text(section, "descriptionId"),
+                "rows": body}));
         }
         (items, topics)
     }

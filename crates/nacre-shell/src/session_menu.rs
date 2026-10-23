@@ -98,18 +98,24 @@ pub struct SessionMenu {
     client: Client,
     confirm_timeout: Duration,
     state: RefCell<State>,
+    /// The output height; the Power dock is as tall as the framed viewport (B0067).
+    viewport: std::cell::Cell<f64>,
 }
 impl SessionMenu {
     pub fn new(client: Client) -> Self {
         Self {
             client,
             confirm_timeout: CONFIRM_TIMEOUT,
+            viewport: std::cell::Cell::new(0.),
             state: RefCell::new(State {
                 phase: Phase::Idle,
                 message: String::new(),
                 done: false,
             }),
         }
+    }
+    pub fn set_viewport(&self, height: u32) {
+        self.viewport.set(f64::from(height));
     }
     /// Connected daemon, known boot and the exact method at version 1.
     fn ready(&self) -> Option<(String, Duration)> {
@@ -248,7 +254,16 @@ impl SessionMenu {
         } else {
             tr(&state.message, &[])
         };
+        let frame = crate::placement::Frame::current();
         let mut stores = BTreeMap::from([
+            (
+                "view.height".into(),
+                Value::Number(if self.viewport.get() > 0. {
+                    (self.viewport.get() - f64::from(frame.top) - f64::from(frame.bottom)).max(240.)
+                } else {
+                    300.
+                }),
+            ),
             ("session.enabled".into(), Value::Bool(ready)),
             (
                 "session.busy".into(),

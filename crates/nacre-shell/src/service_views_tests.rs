@@ -936,8 +936,8 @@ fn session_menu_goldens_idle_confirming_and_disabled() -> Result<()> {
                     ("session.confirm_action".into(), Value::Text(action.into())),
                 ]),
                 Config {
-                    width: 260,
-                    height: 360,
+                    width: 490,
+                    height: 500,
                     scale,
                 },
             )?;
@@ -947,7 +947,13 @@ fn session_menu_goldens_idle_confirming_and_disabled() -> Result<()> {
                 .iter()
                 .filter(|n| n.action.is_some())
                 .count();
-            assert_eq!(acting, if enabled { 5 } else { 0 }, "{name}");
+            // Four tiles and the back arrow; asking adds Cancel and the confirmation; disabled leaves only the back arrow.
+            let expected = match (enabled, action) {
+                (true, "") => 5,
+                (true, _) => 7,
+                (false, _) => 1,
+            };
+            assert_eq!(acting, expected, "{name}");
             let frame = h.render()?;
             let golden = root()
                 .join("tests/goldens")

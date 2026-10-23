@@ -42,7 +42,17 @@ fn fixture_with(desktop: Json, topics: &[(&str, Json)]) -> (Settings, Arc<FakeSo
         source,
     )
 }
+/// The projected rows as a flat list: each section is followed by the rows it carries (B0067 nests them).
 fn items(model: &BTreeMap<String, Value>) -> Vec<Json> {
+    let mut out = Vec::new();
+    for row in nested_items(model) {
+        let inner = row["rows"].as_array().cloned().unwrap_or_default();
+        out.push(row);
+        out.extend(inner);
+    }
+    out
+}
+fn nested_items(model: &BTreeMap<String, Value>) -> Vec<Json> {
     match &model["settings.items"] {
         Value::List(rows) => rows.to_vec(),
         other => panic!("{other:?}"),
@@ -506,8 +516,7 @@ fn settings_window_goldens() {
 /// together: staged apply, editing text, a swatch, a list and disabled controls.
 #[test]
 fn form_kit_gallery_golden() {
-    let rows = vec![
-        json!({"id":"s1","kind":"section","label":"Controls","description":"One of every row kind"}),
+    let body = vec![
         json!({"id":"t1","kind":"toggle","label":"Toggle on","description":"A switch","enabled":true,"checked":true}),
         json!({"id":"t2","kind":"toggle","label":"Needs apply","description":"Pending value","enabled":true,"checked":true,"staged":true,"apply":true}),
         json!({"id":"c1","kind":"choice","label":"Segmented choice","description":"","enabled":true,
@@ -519,6 +528,10 @@ fn form_kit_gallery_golden() {
         json!({"id":"l1","kind":"list","label":"List","enabled":true,"editing":false,"items":[{"id":"l1|rm:0","label":"first"},{"id":"l1|rm:1","label":"second"}]}),
         json!({"id":"d1","kind":"toggle","label":"Disabled toggle","description":"","enabled":false,"checked":false}),
         json!({"id":"h1","kind":"help","label":"Help text under the controls."}),
+        json!({"id":"h2","kind":"help","label":"Quiet: unavailable","title":"Quiet setting","description":"What it does","note":"Not available here"}),
+    ];
+    let rows = vec![
+        json!({"id":"s1","kind":"section","label":"Controls","description":"One of every row kind","rows":body}),
     ];
     let model = BTreeMap::from([
         (
