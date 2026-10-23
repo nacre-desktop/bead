@@ -179,9 +179,11 @@ def validate_arm(raw_root: pathlib.Path, compositor: str, label: str) -> tuple[b
     main_rows.extend(row.get("backend") for row in residency.get("closed", []))
     main_rows.extend(residency.get(phase, {}).get("backend")
                      for phase in ("never", "once", "several", "combined"))
-    panel_rows = [row.get("backend") for row in residency.get("warm", [])]
-    panel_rows.extend(residency.get(phase, {}).get("backend")
-                      for phase in ("once", "several", "combined"))
+    # Panel backend is only observable while a panel is open: the "warm" rows are the
+    # samples taken with target_open. The settled once/several/combined phase rows are
+    # captured after close (panel_active=False -> "inactive" by design), so they are
+    # judged as main-bar rows only, not as panel rows.
+    panel_rows = [row.get("backend") for row in residency.get("warm", [])] or [None]
     if (any(not isinstance(row, dict) or row.get("main_bar") != "cpu" for row in main_rows)
             or any(not isinstance(row, dict) or row.get("opened_panel") not in
                    ("cpu", "cpu (configured dashboard renderer)", "cpu-fallback", "native-gl")

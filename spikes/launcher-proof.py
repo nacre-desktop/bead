@@ -58,9 +58,15 @@ def renderer_evidence(pid, log, requested, panel_active=False):
     maps=pathlib.Path(f'/proc/{pid}/maps').read_text()
     argv=pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().decode(errors='replace').split('\0')
     argv=[arg for arg in argv if arg]
+    return classify_renderer(argv,maps,log.read_text(errors='replace'),requested,panel_active)
+
+def classify_renderer(argv, maps, text, requested, panel_active=False):
+    """Pure classifier. RENDER_POLICY/BUFFER markers exist only in newer builds; the
+    frozen control build emits none, so its CPU panel is affirmed from argv
+    (`--renderer auto` is CPU for --bar/--core-views) plus a /proc maps scan with no
+    GL/Vulkan libraries. Mapped GL libraries without a marker stay 'unknown' (blocked)."""
     libraries=sorted({pathlib.Path(line.split()[-1]).name for line in maps.splitlines()
                       if '/' in line.split()[-1] and re.search(r'(libGL|libEGL|iris_dri|libgallium|LLVM|vulkan)',line,re.I)})
-    text=log.read_text(errors='replace')
     selected=argv[argv.index('--renderer')+1] if '--renderer' in argv and argv.index('--renderer')+1<len(argv) else None
     main='cpu' if ('--bar' in argv and '--core-views' in argv
                    and ((requested=='production' and selected=='auto')
@@ -69,7 +75,7 @@ def renderer_evidence(pid, log, requested, panel_active=False):
     if panel_active and re.search(r'RENDER_POLICY .*transition=gl-to-cpu', text): panel='cpu-fallback'
     elif panel_active and (re.search(r'RENDER_POLICY .*companion=true',text) or re.search(r'BUFFER companion=true .*transport=GL',text)): panel='native-gl'
     elif panel_active and requested=='cpu' and '--panel-renderer' in argv and argv[argv.index('--panel-renderer')+1:argv.index('--panel-renderer')+2]==['cpu']: panel='cpu'
-    elif panel_active and requested=='production' and 'GPU_SHARED' not in text and not re.search(r'transport=GL',text): panel='cpu (configured dashboard renderer)'
+    elif panel_active and requested=='production' and not libraries and 'GPU_SHARED' not in text and not re.search(r'transport=GL',text): panel='cpu (configured dashboard renderer)'
     wallpaper_active=bool(re.search(r'WALLPAPER_SURFACE_COMMITTED',text))
     return {'requested':requested,'main_bar':main,'opened_panel':panel,'measured_argv':argv,
             'wallpaper_surface_committed':wallpaper_active,

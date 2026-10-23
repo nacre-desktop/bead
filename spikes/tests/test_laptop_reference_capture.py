@@ -165,6 +165,39 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             self.assertEqual(report["arm_validity"]["niri/B1"]["valid"], False)
             self.assertEqual(report["absolute_verdict"], "INCOMPLETE / STOP")
 
+    def test_a1_closed_phase_rows_inactive_panel_is_valid_with_warm_cpu_rows(self):
+        # Reproduces laptop run 3 A1: settled phase rows record opened_panel "inactive".
+        with tempfile.TemporaryDirectory(prefix="bead-laptop-a1-") as temp:
+            root = pathlib.Path(temp)
+            self.make_batch(root)
+            path = root / "niri" / "B1" / "niri" / "dashboard-residency.json"
+            residency = json.loads(path.read_text())
+            for phase in ("once", "several", "combined"):
+                residency[phase]["backend"]["opened_panel"] = "inactive"
+            for row in residency["warm"]:
+                row["backend"]["opened_panel"] = "cpu (configured dashboard renderer)"
+            path.write_text(json.dumps(residency))
+            report = capture.summarize(root, ["niri"], rehearsal=False)
+            self.assertTrue(report["arm_validity"]["niri/B1"]["valid"])
+            residency["warm"] = []
+            path.write_text(json.dumps(residency))
+            report = capture.summarize(root, ["niri"], rehearsal=False)
+            self.assertFalse(report["arm_validity"]["niri/B1"]["valid"])
+
+    def test_control_without_markers_is_affirmed_cpu_from_argv_and_maps(self):
+        argv = ["nacre-shell", "--bar", "--core-views", "--renderer", "auto"]
+        cpu = launcher_proof.classify_renderer(argv, "7f00 r-xp /usr/lib/libc.so.6\n", "", "production", True)
+        self.assertEqual((cpu["main_bar"], cpu["opened_panel"]), ("cpu", "cpu (configured dashboard renderer)"))
+        closed = launcher_proof.classify_renderer(argv, "", "", "production", False)
+        self.assertEqual(closed["opened_panel"], "inactive")
+
+    def test_gl_libraries_without_marker_stay_unknown(self):
+        argv = ["nacre-shell", "--bar", "--core-views", "--renderer", "auto"]
+        maps = "7f00 r-xp 0 00:00 0 /usr/lib/libEGL.so.1\n"
+        row = launcher_proof.classify_renderer(argv, maps, "", "production", True)
+        self.assertEqual(row["opened_panel"], "unknown")
+        self.assertIn("libEGL.so.1", row["gpu_libraries"])
+
     def test_runtime_estimate_covers_default_and_optional_cpu_batch(self):
         self.assertEqual(capture.estimate_runtime(["niri"], include_cpu=False), (45, 41.0))
         self.assertEqual(capture.estimate_runtime(["niri"], include_cpu=True), (90, 82.0))
