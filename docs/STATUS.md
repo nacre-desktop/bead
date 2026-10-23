@@ -1,5 +1,16 @@
 # Status
 
+## 2026-10-23 — B0030 notices/OSD inside the main shell (review)
+
+Notices and the OSD are now transient panel views of the one shell process, offered by the
+bar sessions on the shell's single daemon link and UI provider; the separate notice process
+is gone. Relative memory gate (desktop, CPU tiny-skia, 5 alternating pairs): idle +0.381 MiB
+(anon +0.07) PASS, popup shown +1.27, closed -0.52 (anon +0.25). Nested smoke 35/35. Popups
+now yield to any other shown view (launcher/dashboard too). Also fixed a whole-shell failure
+when all SHM buffers were still held after a popup resize. Full Ubuntu CI job on dev-2: 430
+tests, fmt, clippy, boundary, features, Luau, spikes, services, deny all pass. Product lines
++415/-134, framework +66/-2. See [B0030](specs/0030-notices-in-main-shell.md). No live change.
+
 ## 2026-10-23 — B0020 notifications/OSD consumer implemented (review)
 
 Bead now consumes the daemon's notifications producer (N0017 default-action marker, N0036

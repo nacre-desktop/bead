@@ -73,7 +73,38 @@ bar session's output rather than a compositor-focused one.
 
 ## Evidence
 
-Filled in below after the runs (memory table, CI receipt).
+Memory (desktop, nested niri on labwc headless, 1280x720@1, **CPU tiny-skia** renderer,
+release builds with default features, `--bar --core-views --ui-provider`, five alternating
+control/candidate pairs, medians of five 1 s samples per arm and phase, then medians over
+arms; control `3ad5bc7` = the same shell without `--notices`; swap 0 B before every arm,
+MemAvailable 12 GiB; DRM not measured, unknown). Candidate `nacre-shell` sha256
+`5e443958af28...`, control `8378c4a6560c...`.
+
+| Phase | Control Pss [min-max] MiB | Candidate Pss [min-max] MiB | Delta Pss | Delta anon | Delta file | Delta shmem | SwapPss | Gate (+0.5) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| idle | 30.41 [30.33-30.76] | 30.79 [30.41-30.85] | **+0.381** | +0.070 | +0.297 | 0 | 0 | PASS |
+| one popup shown | 30.44 [30.29-30.79] | 31.71 [31.27-31.83] | +1.270 | +0.641 | +0.502 | +0.154 | 0 | cost while shown |
+| after close (10 s) | 30.51 [30.39-30.89] | 29.99 [29.60-30.12] | -0.515 | +0.246 | -0.726 | 0 | 0 | PASS |
+
+B0020 (separate process, same host class): +1.9 idle / +2.7 popup / +2.3 closed. Idle is
+within the gate: anonymous growth is 0.07 MiB and the rest is file-backed text of the
+larger binary (shared libraries are the same). The popup phase is the cost of the
+resident view (Luau VM and scene for the stack, one 444x181 CPU surface: anon +0.64, SHM
++0.15, file +0.50 of touched code); it is released when the popup closes (closed anon
++0.25 MiB, below the 1 MiB unexplained-growth limit; file-backed pages read below the control).
+Nothing is retained per notice.
+
+Nested smoke, final binary: `spikes/notice-daemon-smoke.py` 35/35 (the 32 B0020 checks,
+including shell restart, daemon loss without owner fallback and the untouched real name,
+plus: popups are the `notices` panel view; another view suppresses via `set_inhibited`
+and lifting it replays nothing).
+
+Defect found and fixed on the way: a popup resize right after opening could find all three
+SHM buffers still held by the compositor and `draw` failed the whole shell ("three buffers
+still in use at callback"; 1 in 14 nested popups before, 0 in 70 after; the same code
+serves every panel). The draw is now retried 8 ms later (`bead-wayland/rendering.rs`).
+
+CI receipt: see STATUS.
 
 ## Temporary duplicates and expiry
 
