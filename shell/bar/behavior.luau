@@ -7,5 +7,5 @@ return {stores={["bar.height"]=50,["bar.notifications.count"]=0,["bar.launcher"]
     ["bar.notifications.tail"]=function(s) return 7+7.5*#tostring(math.min(999,s["bar.notifications.count"])) end,
     -- QML NacreActiveTitle: with no focused window the title reads "Desktop".
     ["bar.title"]=function(s) local t=s["bead.focused_title"] return t~="" and t or tr("bead.bar.desktop-title") end,
-    ["bar.title.width"]=function(s) local t=s["bead.focused_title"] return math.min(550,#(t~="" and t or tr("bead.bar.desktop-title"))*9.6) end,
+    ["bar.title.width"]=function(s) local t=s["bead.focused_title"] return math.min(550,#(t~="" and t or tr("bead.bar.desktop-title"))*8.7) end,
 }}

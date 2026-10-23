@@ -70,9 +70,11 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
                         border_width=on and 1 or lit and 0 or 1.5,border_color=on and ui.alpha("onSurface",0.5) or ui.alpha(accent,0.9)})
                     if lit then
                         add(ui.Box{id="enamel",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size,radius=size/2,fill=ui.alpha("inverseSurface",on and 0.4 or 0.1)})
+                        -- the QML enamel runs light (top) to deep (bottom): a sheen over the upper half
+                        add(ui.Box{id="sheen",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size*.55,radius=size*.275,fill=ui.alpha("inverseSurface",on and 0.3 or 0.12)})
                         add(ui.Box{id="specular",position="absolute",left=16-size/2+size*.23,top=14-size/2+size*.14,width=size*.44,height=size*.23,radius=size*.115,fill=ui.alpha("inverseSurface",on and 0.6 or 0.3)})
                     end
-                    add(ui.Text{id="number",position="absolute",left=16-size/2,top=14-size/2,text=label,width=size,height=size,font_size=#label<2 and 11 or 9,family="IBM Plex Sans",text_align="center",color=lit and "onPrimary" or "onSurfaceVariant"})
+                    add(ui.Text{id="number",position="absolute",left=16-size/2,top=14-size/2+1.5,text=label,width=size,height=size,font_size=#label<2 and 11 or 9,family="IBM Plex Sans",text_align="center",color=lit and "onPrimary" or "onSurfaceVariant"})
                     add(ui.Row{id="apps",position="absolute",left=33,top=0,width=math.max(0,width-33),height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)})
                     local face=hinted and ui.tint("surfaceContainer",accent,0.15) or "surfaceContainer"
                     button=kit.Button{id="workspace",position="absolute",left=gs,top=0,width=width,height=28,radius=14,padding=0,fill=face,hover_fill=hinted and face or "surfaceContainerHigh",shrink=0,
@@ -94,7 +96,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
     },
     ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=10,height=30,justify="center",align="center",gap=7,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
         ui.Text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
-        ui.Text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=ui.bind("bar.title"),height=24,width=ui.bind("bar.title.width"),max_width=550,family="JetBrainsMono Nerd Font",font_size=16,color="primary"},
+        ui.Text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=ui.bind("bar.title"),height=24,width=ui.bind("bar.title.width"),max_width=550,family="IBM Plex Sans",font_size=16,color="primary"},
         kit.Tooltip{id="tray-tooltip",edge="top",bar_size=-8,left=0,width="100%",height=30,padding=3,visible=ui.bind("bead.desktop.tray.tooltip.visible"),
             ui.Text{text=ui.bind("bead.desktop.tray.tooltip"),height=24,width="100%",font_size=13,color="onSurface"},
         },

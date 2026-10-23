@@ -500,7 +500,24 @@ def settle_ms(stamps, directory):
     changing = [t for t, image in zip(stamps, images) if distance(image, first) > 0.6]
     unsettled = [t for t, image in zip(stamps, images) if distance(image, last) > 0.6]
     return {'start': changing[0] if changing else None, 'end': (unsettled[-1] if unsettled else None),
-            'frames': len(files)}
+            'frames': len(files), 'progress': progress_times(stamps, [distance(image, last) for image in images])}
+
+
+def progress_times(stamps, distances):
+    """Easing comparison: progress = 1 - distance(frame, final) / distance(first, final), a monotone proxy for how far the
+    transition is. Returns the times (ms, linearly interpolated) at which it passes 10, 50 and 90 %."""
+    total = distances[0]
+    if total < 0.6:
+        return None
+    progress = [1 - d / total for d in distances]
+    out = {}
+    for level in (0.1, 0.5, 0.9):
+        for i in range(1, len(progress)):
+            if progress[i] >= level > progress[i - 1] or (progress[i] >= level and i == 1):
+                span = progress[i] - progress[i - 1]
+                out[f't{round(level * 100)}'] = round(stamps[i - 1] + (stamps[i] - stamps[i - 1]) * ((level - progress[i - 1]) / span if span > 0 else 1))
+                break
+    return out
 
 
 def motion(directory):
@@ -602,7 +619,7 @@ def write_html(out, names, results, baseline, args):
         seqs = ''
         for phase in ['open', 'close']:
             if phase in row:
-                timing = ' / '.join(f'{arm}: ' + (f'{v["start"]}..{v["end"]} ms, {v["frames"]} frames' if v else 'n/a')
+                timing = ' / '.join(f'{arm}: ' + (f'{v["start"]}..{v["end"]} ms, {v["frames"]} frames, progress 10/50/90 % at {"/".join(str((v.get("progress") or {}).get(k, "-")) for k in ("t10", "t50", "t90"))} ms' if v else 'n/a')
                                     for arm, v in row[phase].items())
                 seqs += f'<p class="t">{phase} transition, first change..settled: {html.escape(timing)}</p>'
                 for arm in ['qml', 'bead']:
