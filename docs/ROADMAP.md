@@ -369,3 +369,12 @@ Widgets made for Bead can be dragged and dropped between "widget hosts": the top
   - **Budget:** animate only when the data is active and the host is visible; pause on fullscreen, lock and battery. Shared sources such as one spectrum serve all widgets.
   - **User widgets:** ~/.config/bead/widgets/ with live reload.
   - **Order:** API + bar/side hosts (port the clock and pearls) → edit mode → desktop canvas + music/effects → more widgets + docs.
+- **Fully customizable bars (owner, 2026-10-23):**
+  - **Hidden tile grid:** each bar is an invisible tile grid, shown only while dragging.
+  - **Spans:** widgets occupy a span that can be resized within the widget's min/max per variant; a long music widget can span many tiles.
+  - **Regions:** left, centre and right anchored regions.
+  - **Everything removable:** pearls, title, status, clock and logo are all widgets, and an empty bar or no bar at all is valid.
+  - **Pills:** a pill is a container widget filled with smaller widgets; today's status pill is one example.
+  - **Presets:** "Nacre default" equals today's bar exactly; layouts can be saved, shared and reset.
+  - **Other hosts:** side bars use the same rule vertically, the dashboard uses a 2D span grid, and the desktop is a free canvas with snapping.
+  - **Plan:** today's bar pieces get wrapped as widgets after the switch; the trial switch is not blocked.
