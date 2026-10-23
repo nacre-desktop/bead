@@ -26,6 +26,22 @@ matrix = load('preview_matrix', ROOT / 'spikes/bar-matrix.py')
 clocks = load('preview_clocks', ROOT / 'spikes/process-clock.py')
 
 
+def display_alive(path):
+    """False once the nested compositor's Wayland socket is gone or refuses connections (the compositor exited,
+    for instance Alt+Shift+Q). A zombie child keeps no listener, so this is what the preview watches."""
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(.2)
+    try:
+        probe.connect(str(path))
+        return True
+    except (FileNotFoundError, ConnectionRefusedError):
+        return False
+    except OSError:
+        return True  # busy or slow is not gone
+    finally:
+        probe.close()
+
+
 TOUR = [('bar', None, None), ('launcher', 'nacre', ['launcher', '']), ('dashboard', 'drawers', ['toggle', 'dashboard']),
         ('settings', 'nacre', ['settings']), ('sidebar', 'nacre', ['left']), ('session', 'nacre', ['menu', 'power', ''])]
 
@@ -149,8 +165,13 @@ def sample_full(env, raw, compositor, stop):
             print('PREVIEW_TOUR_DONE ' + str(out), flush=True)
         else:
             print('PREVIEW_READY full=true', flush=True)
+            tick = 0
             while bar.poll() is None and daemon.poll() is None:
                 time.sleep(.1)
+                tick += 1
+                if tick % 5 == 0 and not display_alive(env['WAYLAND_DISPLAY']):
+                    print('PREVIEW_COMPOSITOR_GONE tearing down the shell and daemon', flush=True)
+                    break
     finally:
         if bar is not None:
             stop(bar)
