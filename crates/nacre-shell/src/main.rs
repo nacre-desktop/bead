@@ -33,6 +33,7 @@ mod ui_provider;
 mod wallpaper;
 #[cfg(test)]
 mod wallpaper_decode;
+mod wallpaper_motion;
 mod workspace_rows;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
@@ -822,9 +823,14 @@ fn start(
         scene.bounds = Rect::new(-32., -32., 464., 65.);
         scene.motion = None;
     }
+    let mut wallpaper_consumer = None;
+    let mut _motion_wallpaper = None;
     if let Some(socket) = daemon_socket.clone() {
         match wallpaper::Consumer::start(socket) {
-            Ok(provider) => options.wallpaper = Some(provider),
+            Ok(provider) => {
+                wallpaper_consumer = Some(provider.clone());
+                options.wallpaper = Some(provider);
+            }
             Err(_) => eprintln!("WALLPAPER_DISABLED code=contract_unavailable"),
         }
     }
@@ -858,6 +864,21 @@ fn start(
         let shared_desktop = bar.then(bead::services::Desktop::start);
         if let Some(desktop) = &shared_desktop {
             let _ = desktop_owner.set(desktop.clone());
+        }
+        // B0046: motion wallpaper control; the decoder runs in `bead-wallpaper-video`.
+        if let Some(wallpaper) = wallpaper_consumer.take() {
+            _motion_wallpaper = wallpaper_motion::Controller::start(wallpaper_motion::Deps {
+                wallpaper,
+                picker: _ui_provider.as_ref().and_then(|client| {
+                    client.topic(prefs::WALLPAPER_PICKER).ok().map(|t| {
+                        std::sync::Arc::new(t) as std::sync::Arc<dyn bead::core::source::Source>
+                    })
+                }),
+                backend: shared_backend
+                    .clone()
+                    .map(|b| b as std::sync::Arc<dyn bead::backends::Backend>),
+                desktop: shared_desktop.clone(),
+            });
         }
         let prefs_source = _prefs
             .as_ref()

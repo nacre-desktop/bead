@@ -221,6 +221,7 @@ pub fn start(
         crate::prefs::DASHBOARD,
         crate::prefs::PROFILE,
         crate::prefs::LAUNCHER_LAYOUT,
+        crate::prefs::WALLPAPER_PICKER,
     ];
     let mut config = crate::nacre_source::Config::new(daemon, topics.map(String::from).to_vec());
     // `ai.chat` `send_failed` events restore the sidebar composer (B0043).

@@ -20,6 +20,18 @@ pub struct Battery {
     pub available: bool,
     pub percentage: Option<f64>,
     pub charging: bool,
+    /// UPower `OnBattery`: the machine runs on battery power right now.
+    #[serde(default)]
+    pub on_battery: bool,
+}
+/// The login session's state from logind, for consumers that stop work while nobody can
+/// see the screen.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Session {
+    /// `LockedHint` of the current session.
+    pub locked: bool,
+    /// Between `PrepareForSleep(true)` and the wake-up.
+    pub sleeping: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Network {
@@ -96,6 +108,8 @@ pub struct Snapshot {
     pub date: Option<LocalDate>,
     pub audio: Audio,
     pub battery: Battery,
+    #[serde(default)]
+    pub session: Session,
     pub network: Network,
     pub bluetooth: Bluetooth,
     pub tray: Vec<TrayItem>,

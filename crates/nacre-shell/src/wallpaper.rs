@@ -68,6 +68,20 @@ impl Consumer {
         Ok(state)
     }
 
+    /// Motion source of the active wallpaper: the additive optional `motion` member of the
+    /// published `current` pair (a video or animation file for the poster being shown).
+    /// `None` for a still wallpaper, an older daemon, or an unavailable/stale state.
+    pub(crate) fn motion(&self) -> Option<bead_wallpaper::protocol::Source> {
+        let snapshot = Source::snapshot(&self.topic);
+        snapshot.connected.then(|| parse_motion(&snapshot.data))?
+    }
+    pub(crate) fn watch_motion(
+        &self,
+        changed: Arc<dyn Fn() + Send + Sync>,
+    ) -> Option<Subscription> {
+        Source::subscribe(&self.topic, Arc::new(move |_| changed())).ok()
+    }
+
     /// Palette is deliberately committed from the matching activation pair only
     /// after the corresponding background buffer is attached and committed.
     #[allow(dead_code)]
@@ -192,6 +206,40 @@ impl bead::wayland::WallpaperProvider for Consumer {
             displayed.remove(output);
         }
     }
+}
+
+/// `current.motion` = `{kind: "video"|"animation", path, file_identity}`. Same path rules as
+/// the poster (absolute, local, no `..`), a regular non-symlink file, and the published
+/// identity must still match, so a swapped file is never played.
+pub(crate) fn parse_motion(state: &serde_json::Value) -> Option<bead_wallpaper::protocol::Source> {
+    use nacre_protocol::wallpaper::WallpaperFileIdentity;
+    if state.get("available")? != true || state.get("stale")? != false {
+        return None;
+    }
+    let motion = state.get("current")?.get("motion")?;
+    let path = motion.get("path")?.as_str()?;
+    if !matches!(motion.get("kind")?.as_str()?, "video" | "animation")
+        || path.len() > 4096
+        || path.contains(['\0', '\n'])
+        || path.contains("://")
+        || !std::path::Path::new(path).is_absolute()
+        || std::path::Path::new(path)
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return None;
+    }
+    let identity: WallpaperFileIdentity =
+        serde_json::from_value(motion.get("file_identity")?.clone()).ok()?;
+    let linked = std::fs::symlink_metadata(path).ok()?;
+    if !linked.is_file() || !identity.matches(&linked) {
+        return None;
+    }
+    Some(bead_wallpaper::protocol::Source::Video {
+        path: path.to_owned(),
+        fit: bead_wallpaper::protocol::Fit::Crop,
+        looped: true,
+    })
 }
 
 pub(crate) struct Decoded {

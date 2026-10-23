@@ -14,6 +14,8 @@ pub const DESKTOP: &str = "settings.store.desktop";
 pub const DASHBOARD: &str = "settings.store.dashboard";
 pub const PROFILE: &str = "settings.store.profile";
 pub const LAUNCHER_LAYOUT: &str = "settings.store.launcher-layout";
+/// Read by the motion wallpaper controller (`wallpaper_motion`), not by `Prefs`.
+pub const WALLPAPER_PICKER: &str = "settings.store.wallpaper-picker";
 /// Nacre's `NacreDashboardRegistry.core` order, the default of `dashboard.tabs`.
 const CORE: [&str; 4] = ["today", "media", "weather", "system"];
 /// Tab lists written before the core set was fixed; QML treats them as unset.

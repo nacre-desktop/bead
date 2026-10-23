@@ -29,6 +29,7 @@ fn data() -> serde_json::Value {
             available: true,
             percentage: Some(83.),
             charging: true,
+            ..Default::default()
         },
         ..Default::default()
     };

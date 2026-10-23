@@ -406,6 +406,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bead-wallpaper"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bead-wayland"
 version = "0.1.0"
 dependencies = [

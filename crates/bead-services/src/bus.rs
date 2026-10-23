@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::{
-    Action, Battery, Bluetooth, MenuEntry, Network, TrayItem,
+    Action, Battery, Bluetooth, MenuEntry, Network, Session, TrayItem,
     runtime::{Command, Shared},
 };
 use futures_util::StreamExt;
@@ -45,6 +45,7 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
         }
         shared.change(|s| {
             s.battery = Battery::default();
+            s.session = Session::default();
             s.network = Network::default();
             s.bluetooth = Bluetooth::default();
             s.tray.clear();
@@ -97,6 +98,7 @@ async fn connect(
     let tray_actions = Connection::session().await?;
     let mut tray_events = tray.subscribe();
     refresh_sensors(shared, &system).await;
+    refresh_lock(shared, &system).await;
     refresh_tray(shared, &tray);
     shared.change(update_clock);
     loop {
@@ -129,10 +131,44 @@ async fn connect(
                 let interface=header.interface().map(|s|s.as_str()).unwrap_or("");
                 let path=header.path().map(|s|s.as_str()).unwrap_or("");
                 let owner_change=interface=="org.freedesktop.DBus" && header.member().is_some_and(|s|s.as_str()=="NameOwnerChanged") && message.body().deserialize::<(String,String,String)>().is_ok_and(|(name,_,_)|["org.freedesktop.UPower","org.freedesktop.NetworkManager","org.bluez"].contains(&name.as_str()));
+                if path.starts_with("/org/freedesktop/login1") {
+                    if header.member().is_some_and(|s| s.as_str() == "PrepareForSleep")
+                        && let Ok(sleeping) = message.body().deserialize::<bool>()
+                    {
+                        shared.change(|s| s.session.sleeping = sleeping);
+                    }
+                    refresh_lock(shared, &system).await;
+                }
                 if owner_change || path.starts_with("/org/freedesktop/UPower") || path.starts_with("/org/freedesktop/NetworkManager") || path.starts_with("/org/bluez") || interface=="org.freedesktop.DBus.ObjectManager" {refresh_sensors(shared,&system).await;}
             }
         }
     }
+}
+/// `LockedHint` of the caller's own session (`GetSession("auto")`); unknown reads as unlocked.
+async fn refresh_lock(shared: &Shared, connection: &Connection) {
+    let locked = tokio::time::timeout(Duration::from_secs(1), async {
+        let manager = Proxy::new(
+            connection,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+        )
+        .await?;
+        let path: OwnedObjectPath = manager.call("GetSession", &("auto",)).await?;
+        let session = properties(
+            connection,
+            "org.freedesktop.login1",
+            path.as_str(),
+            "org.freedesktop.login1.Session",
+        )
+        .await?;
+        Ok::<_, zbus::Error>(boolean(&session, "LockedHint"))
+    })
+    .await
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or(false);
+    shared.change(|s| s.session.locked = locked);
 }
 fn update_clock(snapshot: &mut crate::Snapshot) {
     let (text, date) = clock();
@@ -221,10 +257,19 @@ async fn refresh_sensors(shared: &Shared, connection: &Connection) {
         .await?;
         let percentage =
             number(&p, "Percentage").filter(|v| v.is_finite() && (0.0..=100.0).contains(v));
+        let on_battery = properties(
+            connection,
+            "org.freedesktop.UPower",
+            "/org/freedesktop/UPower",
+            "org.freedesktop.UPower",
+        )
+        .await
+        .is_ok_and(|root| boolean(&root, "OnBattery"));
         Ok::<_, zbus::Error>(Battery {
             available: boolean(&p, "IsPresent") && uint(&p, "Type") == 2 && percentage.is_some(),
             percentage,
             charging: matches!(uint(&p, "State"), 1 | 4),
+            on_battery,
         })
     })
     .await

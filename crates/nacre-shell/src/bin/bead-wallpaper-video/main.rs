@@ -1,0 +1,722 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//! `bead-wallpaper-video`: a small, product-neutral motion-wallpaper renderer. It is a
+//! separate process on purpose (the shell UI never links or decodes video); a crash here
+//! only removes this process's surfaces, so the static wallpaper underneath stays visible.
+//!
+//! One libmpv decoder serves every output. Frames are rendered by mpv's software render
+//! API straight into shared-memory buffers of per-output layer surfaces (layer `bottom`, no
+//! input). Hardware decoding uses copy-back (`auto-copy`) and falls back to software on its
+//! own. Protocol: `bead_wallpaper::protocol` JSON lines on stdin/stdout.
+mod mpv;
+
+use bead_wallpaper::protocol::{self, Command, Decoder, Event, Source};
+use calloop::{
+    EventLoop, LoopHandle, LoopSignal,
+    channel::{self, Channel},
+    ping::make_ping,
+    signals::{Signal, Signals},
+    timer::{TimeoutAction, Timer},
+};
+use smithay_client_toolkit::{
+    compositor::{CompositorHandler, CompositorState, Region},
+    delegate_registry,
+    output::{OutputHandler, OutputState},
+    reexports::calloop_wayland_source::WaylandSource,
+    registry::{ProvidesRegistryState, RegistryState},
+    registry_handlers,
+    shell::{
+        WaylandSurface,
+        wlr_layer::{
+            Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
+            LayerSurfaceConfigure,
+        },
+    },
+    shm::{
+        Shm, ShmHandler,
+        slot::{Buffer, SlotPool},
+    },
+};
+use std::{
+    collections::BTreeSet,
+    io::{BufRead, Write},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use wayland_client::{
+    Connection, Dispatch, QueueHandle, delegate_noop,
+    globals::registry_queue_init,
+    protocol::{wl_callback, wl_output, wl_shm, wl_surface},
+};
+use wayland_protocols::wp::viewporter::client::{
+    wp_viewport::WpViewport, wp_viewporter::WpViewporter,
+};
+
+const NAMESPACE: &str = "bead-wallpaper-video";
+/// A frame callback that does not arrive within this long means the output is not being
+/// presented (switched off, or fully occluded): stop decoding until it comes back.
+const STARVED_AFTER: Duration = Duration::from_millis(1500);
+const MAX_BUFFERS: usize = 2;
+
+/// `*` in the render list stands for every output (used when the controller knows none).
+fn wants(render: &BTreeSet<String>, name: &str) -> bool {
+    render.contains(name) || render.contains("*")
+}
+
+fn emit(event: &Event) {
+    let mut out = std::io::stdout().lock();
+    let _ = out.write_all(protocol::encode(event).as_bytes());
+    let _ = out.flush();
+}
+
+struct Out {
+    output: wl_output::WlOutput,
+    name: String,
+    layer: LayerSurface,
+    viewport: Option<WpViewport>,
+    pool: SlotPool,
+    buffers: Vec<Buffer>,
+    /// Index of the buffer last attached.
+    current: Option<usize>,
+    /// Buffer size in pixels and the logical surface size it is shown at.
+    pixels: (u32, u32),
+    logical: (i32, i32),
+    scale: i32,
+    configured: bool,
+    shown: bool,
+    pending: Option<Instant>,
+    stale: bool,
+    first_frame: bool,
+}
+
+struct Engine {
+    registry: RegistryState,
+    output_state: OutputState,
+    compositor: CompositorState,
+    layers: LayerShell,
+    shm: Shm,
+    viewporter: Option<WpViewporter>,
+    qh: QueueHandle<Engine>,
+    handle: LoopHandle<'static, Engine>,
+    signal: LoopSignal,
+    wake: Arc<calloop::ping::Ping>,
+    hwdec: bool,
+    outs: Vec<Out>,
+    source: Option<Source>,
+    decoder: Decoder,
+    render: BTreeSet<String>,
+    player: Option<mpv::Player>,
+    /// Where to restart after the decoder was released.
+    resume_s: f64,
+    /// Failed to start or crashed; no retry until a new source.
+    failed: bool,
+    starved: bool,
+    timer_armed: bool,
+}
+
+impl Engine {
+    fn command(&mut self, command: Command) {
+        match command {
+            Command::Quit => self.signal.stop(),
+            Command::Source { source } => {
+                self.player = None;
+                self.resume_s = 0.0;
+                self.failed = false;
+                self.starved = false;
+                self.render.clear();
+                self.decoder = Decoder::Release;
+                for out in &mut self.outs {
+                    out.first_frame = false;
+                }
+                self.source = source;
+                if self.source.is_some() {
+                    self.ensure_outputs();
+                } else {
+                    self.unmap_all();
+                }
+            }
+            Command::State { decoder, render } => {
+                let new: BTreeSet<String> = render.into_iter().collect();
+                for out in &mut self.outs {
+                    if wants(&new, &out.name) && !wants(&self.render, &out.name) {
+                        out.stale = true;
+                    }
+                }
+                self.render = new;
+                self.decoder = decoder;
+                self.reconcile();
+                for index in 0..self.outs.len() {
+                    self.draw(index);
+                }
+            }
+        }
+    }
+
+    /// Bring the decoder in line with the wanted state.
+    fn reconcile(&mut self) {
+        let wanted = self.source.is_some() && self.decoder != Decoder::Release && !self.failed;
+        if !wanted {
+            if let Some(player) = self.player.take() {
+                self.resume_s = player.position().unwrap_or(self.resume_s);
+                drop(player);
+                self.compact();
+            }
+            return;
+        }
+        if self.player.is_none() {
+            self.start_player();
+        }
+        if let Some(player) = &self.player {
+            player.set_paused(self.decoder == Decoder::Pause || self.starved);
+        }
+    }
+
+    fn start_player(&mut self) {
+        let Some(Source::Video { path, fit, looped }) = self.source.clone() else {
+            return;
+        };
+        let result = mpv::Player::new(self.hwdec, self.wake.clone()).and_then(|player| {
+            player
+                .load(&path, fit, looped, self.resume_s)
+                .map(|()| player)
+        });
+        match result {
+            Ok(player) => self.player = Some(player),
+            Err(message) => {
+                self.failed = true;
+                emit(&Event::Error { message });
+            }
+        }
+    }
+
+    /// The mpv wakeup: events and a possible new frame.
+    fn woken(&mut self) {
+        let Some(player) = &self.player else { return };
+        let mut failure = None;
+        for notice in player.notices() {
+            match notice {
+                mpv::Notice::Loaded => {
+                    if let Some(mode) = player.hwdec() {
+                        emit(&Event::Hwdec { mode });
+                    }
+                }
+                mpv::Notice::Failed(message) => failure = Some(message),
+            }
+        }
+        if let Some(message) = failure {
+            self.player = None;
+            self.failed = true;
+            emit(&Event::Error { message });
+            return;
+        }
+        if player.frame_ready() {
+            for out in &mut self.outs {
+                if wants(&self.render, &out.name) {
+                    out.stale = true;
+                }
+            }
+            let mut drawn = false;
+            for index in 0..self.outs.len() {
+                drawn |= self.draw(index);
+            }
+            if !drawn && let Some(player) = &self.player {
+                // Consume the frame so mpv keeps its clock moving.
+                player.skip();
+            }
+        }
+    }
+
+    fn draw(&mut self, index: usize) -> bool {
+        let Self {
+            player,
+            outs,
+            render,
+            ..
+        } = self;
+        let (Some(player), Some(out)) = (player.as_ref(), outs.get_mut(index)) else {
+            return false;
+        };
+        if !out.configured || !out.stale || out.pending.is_some() || !wants(render, &out.name) {
+            return false;
+        }
+        let (width, height) = out.pixels;
+        if width == 0 || height == 0 {
+            return false;
+        }
+        let stride = (width as usize * 4).next_multiple_of(64);
+        let mut chosen = None;
+        for (i, buffer) in out.buffers.iter_mut().enumerate() {
+            if buffer.canvas(&mut out.pool).is_some() {
+                chosen = Some(i);
+                break;
+            }
+        }
+        if chosen.is_none() && out.buffers.len() < MAX_BUFFERS {
+            match out.pool.create_buffer(
+                width as i32,
+                height as i32,
+                stride as i32,
+                wl_shm::Format::Xrgb8888,
+            ) {
+                Ok((buffer, _)) => {
+                    out.buffers.push(buffer);
+                    chosen = Some(out.buffers.len() - 1);
+                }
+                Err(_) => return false,
+            }
+        }
+        let Some(i) = chosen else { return false };
+        let Some(canvas) = out.buffers[i].canvas(&mut out.pool) else {
+            return false;
+        };
+        if !player.render(width, height, stride, canvas) {
+            return false;
+        }
+        let surface = out.layer.wl_surface().clone();
+        if let Some(viewport) = &out.viewport {
+            viewport.set_destination(out.logical.0.max(1), out.logical.1.max(1));
+            surface.set_buffer_scale(1);
+        } else {
+            surface.set_buffer_scale(out.scale.max(1));
+        }
+        if out.buffers[i].attach_to(&surface).is_err() {
+            return false;
+        }
+        surface.damage_buffer(0, 0, width as i32, height as i32);
+        surface.frame(&self.qh, Frame(surface.clone()));
+        out.layer.commit();
+        out.current = Some(i);
+        out.shown = true;
+        out.stale = false;
+        out.pending = Some(Instant::now());
+        if !out.first_frame {
+            out.first_frame = true;
+            emit(&Event::FirstFrame {
+                output: out.name.clone(),
+            });
+        }
+        self.arm_starve_timer();
+        true
+    }
+
+    fn arm_starve_timer(&mut self) {
+        if self.timer_armed {
+            return;
+        }
+        self.timer_armed = true;
+        let _ = self
+            .handle
+            .insert_source(Timer::from_duration(STARVED_AFTER), |_, _, engine| {
+                engine.timer_armed = false;
+                engine.check_starved();
+                TimeoutAction::Drop
+            });
+    }
+
+    fn check_starved(&mut self) {
+        let now = Instant::now();
+        let stalled = self.decoder == Decoder::Play
+            && self.player.is_some()
+            && self.outs.iter().any(|out| {
+                wants(&self.render, &out.name)
+                    && out
+                        .pending
+                        .is_some_and(|since| now.duration_since(since) >= STARVED_AFTER)
+            });
+        if stalled && !self.starved {
+            self.starved = true;
+            self.reconcile();
+        } else if self.player.is_some() && self.outs.iter().any(|o| o.pending.is_some()) {
+            self.arm_starve_timer();
+        }
+    }
+
+    /// Drop the spare buffer and shrink the pool to the one frame that stays on screen.
+    fn compact(&mut self) {
+        for out in &mut self.outs {
+            let Some(current) = out.current.filter(|_| out.buffers.len() > 1) else {
+                continue;
+            };
+            let (width, height) = out.pixels;
+            let stride = (width as usize * 4).next_multiple_of(64);
+            let len = stride * height as usize;
+            let Ok(mut pool) = SlotPool::new(len.max(4096), &self.shm) else {
+                continue;
+            };
+            let Ok((buffer, canvas)) = pool.create_buffer(
+                width as i32,
+                height as i32,
+                stride as i32,
+                wl_shm::Format::Xrgb8888,
+            ) else {
+                continue;
+            };
+            let slot = out.buffers[current].slot();
+            let old = out.pool.raw_data_mut(&slot);
+            let count = old.len().min(canvas.len());
+            canvas[..count].copy_from_slice(&old[..count]);
+            let surface = out.layer.wl_surface().clone();
+            if buffer.attach_to(&surface).is_err() {
+                continue;
+            }
+            surface.damage_buffer(0, 0, width as i32, height as i32);
+            out.layer.commit();
+            out.pool = pool;
+            out.buffers = vec![buffer];
+            out.current = Some(0);
+        }
+    }
+
+    fn unmap_all(&mut self) {
+        for out in &mut self.outs {
+            let surface = out.layer.wl_surface();
+            surface.attach(None, 0, 0);
+            out.layer.commit();
+            out.buffers.clear();
+            out.current = None;
+            out.shown = false;
+            out.pending = None;
+            out.stale = false;
+            if let Ok(pool) = SlotPool::new(4096, &self.shm) {
+                out.pool = pool;
+            }
+        }
+    }
+
+    fn ensure_outputs(&mut self) {
+        let outputs: Vec<_> = self.output_state.outputs().collect();
+        for output in outputs {
+            self.ensure_output(&output);
+        }
+    }
+
+    fn ensure_output(&mut self, output: &wl_output::WlOutput) {
+        if self.source.is_none() {
+            return;
+        }
+        let Some(info) = self.output_state.info(output) else {
+            return;
+        };
+        let Some(name) = info.name.clone() else {
+            return;
+        };
+        let scale = info.scale_factor.max(1);
+        let mode = info
+            .modes
+            .iter()
+            .find(|mode| mode.current)
+            .map(|mode| mode.dimensions);
+        if let Some(index) = self.outs.iter().position(|o| o.output == *output) {
+            let out = &mut self.outs[index];
+            out.scale = scale;
+            let pixels = Self::pixels(out.viewport.is_some(), mode, out.logical, scale);
+            if pixels != out.pixels {
+                out.pixels = pixels;
+                out.buffers.clear();
+                out.current = None;
+                out.stale = true;
+                if let Ok(pool) = SlotPool::new(4096, &self.shm) {
+                    out.pool = pool;
+                }
+            }
+            return;
+        }
+        let surface = self.compositor.create_surface(&self.qh);
+        if let Ok(empty) = Region::new(&self.compositor) {
+            surface.set_input_region(Some(empty.wl_region()));
+        }
+        let viewport = self
+            .viewporter
+            .as_ref()
+            .map(|manager| manager.get_viewport(&surface, &self.qh, ()));
+        let layer = self.layers.create_layer_surface(
+            &self.qh,
+            surface,
+            Layer::Bottom,
+            Some(NAMESPACE),
+            Some(output),
+        );
+        layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
+        layer.set_size(0, 0);
+        layer.set_exclusive_zone(-1);
+        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        layer.commit();
+        let Ok(pool) = SlotPool::new(4096, &self.shm) else {
+            return;
+        };
+        self.outs.push(Out {
+            output: output.clone(),
+            name,
+            layer,
+            viewport,
+            pool,
+            buffers: Vec::new(),
+            current: None,
+            pixels: (0, 0),
+            logical: (0, 0),
+            scale,
+            configured: false,
+            shown: false,
+            pending: None,
+            stale: true,
+            first_frame: false,
+        });
+    }
+
+    /// With a viewporter the buffer is the output's native mode, scaled to the logical
+    /// size by the compositor; without one it is the logical size times the integer scale.
+    fn pixels(
+        viewporter: bool,
+        mode: Option<(i32, i32)>,
+        logical: (i32, i32),
+        scale: i32,
+    ) -> (u32, u32) {
+        let (w, h) = match (viewporter, mode) {
+            (true, Some(mode)) => mode,
+            _ => (logical.0 * scale, logical.1 * scale),
+        };
+        if w <= 0 || h <= 0 || w > 16_384 || h > 16_384 {
+            return (0, 0);
+        }
+        (w as u32, h as u32)
+    }
+
+    fn frame_done(&mut self, surface: &wl_surface::WlSurface) {
+        let Some(index) = self
+            .outs
+            .iter()
+            .position(|o| o.layer.wl_surface() == surface)
+        else {
+            return;
+        };
+        self.outs[index].pending = None;
+        if self.starved {
+            self.starved = false;
+            self.reconcile();
+        }
+        self.draw(index);
+    }
+
+    fn remove_layer(&mut self, layer: &LayerSurface) {
+        self.outs.retain(|out| out.layer != *layer);
+    }
+}
+
+impl CompositorHandler for Engine {
+    fn scale_factor_changed(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: i32,
+    ) {
+    }
+    fn transform_changed(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: wl_output::Transform,
+    ) {
+    }
+    fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: u32) {}
+    fn surface_enter(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: &wl_output::WlOutput,
+    ) {
+    }
+    fn surface_leave(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: &wl_output::WlOutput,
+    ) {
+    }
+}
+/// Frame callbacks carry their surface so presentation stalls can be told per output.
+struct Frame(wl_surface::WlSurface);
+impl Dispatch<wl_callback::WlCallback, Frame> for Engine {
+    fn event(
+        engine: &mut Self,
+        _: &wl_callback::WlCallback,
+        event: wl_callback::Event,
+        data: &Frame,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if matches!(event, wl_callback::Event::Done { .. }) {
+            engine.frame_done(&data.0);
+        }
+    }
+}
+delegate_noop!(Engine: ignore WpViewporter);
+delegate_noop!(Engine: ignore WpViewport);
+impl OutputHandler for Engine {
+    fn output_state(&mut self) -> &mut OutputState {
+        &mut self.output_state
+    }
+    fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, output: wl_output::WlOutput) {
+        self.ensure_output(&output);
+    }
+    fn update_output(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        output: wl_output::WlOutput,
+    ) {
+        self.ensure_output(&output);
+    }
+    fn output_destroyed(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        output: wl_output::WlOutput,
+    ) {
+        self.outs.retain(|out| out.output != output);
+    }
+}
+impl ShmHandler for Engine {
+    fn shm_state(&mut self) -> &mut Shm {
+        &mut self.shm
+    }
+}
+impl LayerShellHandler for Engine {
+    fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface) {
+        self.remove_layer(layer);
+    }
+    fn configure(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        layer: &LayerSurface,
+        configure: LayerSurfaceConfigure,
+        _: u32,
+    ) {
+        let Some(index) = self.outs.iter().position(|o| o.layer == *layer) else {
+            return;
+        };
+        let mode = self
+            .output_state
+            .info(&self.outs[index].output)
+            .and_then(|info| info.modes.iter().find(|m| m.current).map(|m| m.dimensions));
+        let out = &mut self.outs[index];
+        let logical = (configure.new_size.0 as i32, configure.new_size.1 as i32);
+        let pixels = Self::pixels(out.viewport.is_some(), mode, logical, out.scale);
+        if pixels != out.pixels {
+            out.buffers.clear();
+            out.current = None;
+            if let Ok(pool) = SlotPool::new(4096, &self.shm) {
+                out.pool = pool;
+            }
+            out.stale = true;
+        }
+        out.logical = logical;
+        out.pixels = pixels;
+        out.configured = true;
+        self.draw(index);
+    }
+}
+delegate_registry!(Engine);
+impl ProvidesRegistryState for Engine {
+    fn registry(&mut self) -> &mut RegistryState {
+        &mut self.registry
+    }
+    registry_handlers![OutputState];
+}
+smithay_client_toolkit::delegate_dispatch2!(Engine);
+
+fn run(hwdec: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = Connection::connect_to_env()?;
+    let (globals, queue) = registry_queue_init(&conn)?;
+    let qh = queue.handle();
+    let mut event_loop: EventLoop<Engine> = EventLoop::try_new()?;
+    let handle = event_loop.handle();
+    WaylandSource::new(conn.clone(), queue).insert(handle.clone())?;
+    let (ping, ping_source) = make_ping()?;
+    handle.insert_source(ping_source, |(), _, engine| engine.woken())?;
+    handle.insert_source(
+        Signals::new(&[Signal::SIGINT, Signal::SIGTERM])?,
+        |_, _, engine| engine.signal.stop(),
+    )?;
+    let (sender, receiver): (_, Channel<Command>) = channel::channel();
+    handle.insert_source(receiver, |event, _, engine| match event {
+        channel::Event::Msg(command) => engine.command(command),
+        channel::Event::Closed => engine.signal.stop(),
+    })?;
+    std::thread::Builder::new()
+        .name("wallpaper-stdin".into())
+        .spawn(move || {
+            for line in std::io::stdin().lock().lines() {
+                let Ok(line) = line else { break };
+                match protocol::decode::<Command>(&line) {
+                    Ok(command) => {
+                        if sender.send(command).is_err() {
+                            return;
+                        }
+                    }
+                    Err(error) => emit(&Event::Error {
+                        message: format!("bad command: {error}"),
+                    }),
+                }
+            }
+            let _ = sender.send(Command::Quit);
+        })?;
+    let mut engine = Engine {
+        registry: RegistryState::new(&globals),
+        output_state: OutputState::new(&globals, &qh),
+        compositor: CompositorState::bind(&globals, &qh)?,
+        layers: LayerShell::bind(&globals, &qh)?,
+        shm: Shm::bind(&globals, &qh)?,
+        viewporter: globals.bind(&qh, 1..=1, ()).ok(),
+        qh,
+        handle: handle.clone(),
+        signal: event_loop.get_signal(),
+        wake: Arc::new(ping),
+        hwdec,
+        outs: Vec::new(),
+        source: None,
+        decoder: Decoder::Release,
+        render: BTreeSet::new(),
+        player: None,
+        resume_s: 0.0,
+        failed: false,
+        starved: false,
+        timer_armed: false,
+    };
+    emit(&Event::Ready {
+        pid: std::process::id(),
+    });
+    event_loop.run(None, &mut engine, |_| {})?;
+    Ok(())
+}
+
+fn main() {
+    let mut hwdec = true;
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--hwdec=no" => hwdec = false,
+            "--hwdec=auto" => hwdec = true,
+            "--check" => {
+                // Whether this host can play at all (libmpv present); for diagnostics.
+                match mpv::available() {
+                    Ok(()) => return,
+                    Err(error) => {
+                        eprintln!("{error}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("usage: bead-wallpaper-video [--hwdec=auto|no] [--check]");
+                std::process::exit(2);
+            }
+        }
+    }
+    if let Err(error) = run(hwdec) {
+        eprintln!("bead-wallpaper-video: {error}");
+        std::process::exit(1);
+    }
+}
