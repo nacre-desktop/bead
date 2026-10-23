@@ -2,6 +2,7 @@
 mod backends;
 mod bar_routes;
 mod calendar;
+mod chat;
 mod commands;
 mod contour;
 mod dashboard;
@@ -687,6 +688,16 @@ fn start(
             views.insert(
                 "session".into(),
                 popouts::session(client.clone(), palette.clone(), colors.clone(), panel_trace)?,
+            );
+            views.insert(
+                "chat".into(),
+                popouts::chat(
+                    client.clone(),
+                    palette.clone(),
+                    colors.clone(),
+                    Default::default(),
+                    panel_trace,
+                )?,
             );
         }
         let status_colors = std::sync::Arc::new(colors.clone());

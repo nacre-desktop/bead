@@ -43,6 +43,8 @@ pub struct Runtime {
     status_control_subscription: Option<bead::core::source::Subscription>,
     session_menu: Option<std::rc::Rc<crate::session_menu::SessionMenu>>,
     session_menu_subscription: Option<bead::core::source::Subscription>,
+    chat: Option<std::rc::Rc<crate::chat::Chat>>,
+    chat_subscription: Vec<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     launcher_memory: Option<crate::launcher::Memory>,
@@ -251,6 +253,8 @@ impl Runtime {
             status_control_subscription: None,
             session_menu: None,
             session_menu_subscription: None,
+            chat: None,
+            chat_subscription: Vec::new(),
             dashboard: None,
             dashboard_subscription: Vec::new(),
             launcher_memory: None,
@@ -587,6 +591,38 @@ impl Runtime {
         }
         self.actions.grant("session.control");
         self.session_menu = Some(menu);
+        Ok(self)
+    }
+    /// AI sidebar (B0043): the `ai.chat` topic of the edge channel and its published calls.
+    pub fn with_chat(mut self, chat: crate::chat::Chat) -> Result<Self, Box<dyn Error>> {
+        if self.launcher.is_some()
+            || self.calendar.is_some()
+            || self.status.is_some()
+            || self.dashboard.is_some()
+            || self.session_menu.is_some()
+            || self.chat.is_some()
+        {
+            return Err("one data projector per panel".into());
+        }
+        self.session.stores = self.session.stores.reconcile(&chat.remembered())?;
+        self.session.stores = self.session.stores.reconcile(&BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text(String::new()),
+        )]))?;
+        self.session.stores.commit(BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text("chat.composer".into()),
+        )]))?;
+        let chat = std::rc::Rc::new(chat);
+        let projector = chat.clone();
+        self.session
+            .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+        self.actions.register("chat.do", "chat.control")?;
+        self.actions.grant("chat.control");
+        if let Some(chrome) = &mut self.chrome {
+            chrome.set_engaged(true);
+        }
+        self.chat = Some(chat);
         Ok(self)
     }
     pub fn with_core_battery_status(
@@ -1411,6 +1447,12 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=status_control_subscription"),
             }
         }
+        if let Some(chat) = &self.chat {
+            match chat.subscribe(wakeup.clone()) {
+                Ok(subscriptions) => self.chat_subscription = subscriptions,
+                Err(_) => eprintln!("SOURCE_ERROR code=chat_subscription"),
+            }
+        }
         if let Some(menu) = &self.session_menu {
             let wakeup = wakeup.clone();
             match menu.subscribe(std::sync::Arc::new(move || {
@@ -1538,6 +1580,9 @@ impl SceneSource for Runtime {
     fn viewport(&mut self, width: u32, height: u32) -> bool {
         if let Some(chrome) = &mut self.chrome {
             chrome.output = (width, height);
+        }
+        if let Some(chat) = &self.chat {
+            chat.set_viewport(width, height);
         }
         self.session.set_viewport(width, height)
     }
@@ -1713,6 +1758,24 @@ impl SceneSource for Runtime {
             });
             dashboard.act(arg, wake);
             let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(chat), Some((_, name, bead::core::Value::Text(arg)))) =
+            (&self.chat, &host_action)
+            && name == "chat.do"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, shift: false } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let outcome = chat.act(arg, &self.session.stores);
+            if let Some(copied) = outcome.copy {
+                self.wakeup
+                    .as_ref()
+                    .ok_or("clipboard event channel unavailable")?(
+                    UiEvent::ClipboardSet(copied)
+                );
+            }
+            let scene = self.session.update(outcome.stores)?;
             return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)
@@ -2501,7 +2564,13 @@ impl SceneSource for Runtime {
                     self.publish_status_pill()?
                 }
                 "tab" => self.session.focus_next(shift)?,
+                "enter" if shift && self.session.focused_multiline() => {
+                    self.session.input_newline()?
+                }
                 "enter" => self.session.activate_focused()?,
+                "up" | "down" if self.session.focused_multiline() => {
+                    self.session.input_vertical(command == "up", shift)?
+                }
                 "up" | "down" => self.session.focus_next(command == "up")?,
                 "left" | "right" if self.session.focused_range() => {
                     self.session.step_range(command == "left")?
@@ -2817,6 +2886,8 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
 mod bar_routes_runtime_tests;
 #[cfg(test)]
 mod bluetooth_power_tests;
+#[cfg(test)]
+mod chat_runtime_tests;
 #[cfg(test)]
 mod launcher_reopen_tests;
 #[cfg(test)]

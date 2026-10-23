@@ -223,6 +223,8 @@ pub fn start(
         crate::prefs::LAUNCHER_LAYOUT,
     ];
     let mut config = crate::nacre_source::Config::new(daemon, topics.map(String::from).to_vec());
+    // `ai.chat` `send_failed` events restore the sidebar composer (B0043).
+    config.event = Some(Arc::new(crate::chat::route_event));
     let slot: Arc<OnceLock<crate::nacre_source::WeakClient>> = Default::default();
     let own = slot.clone();
     config.provider = Some((

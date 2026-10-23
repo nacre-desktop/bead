@@ -413,3 +413,72 @@ fn status_at_root_mode(
         }),
     })
 }
+
+/// Draft text and section survive a closed panel inside this process only; typed text
+/// is never written to disk (`state.rs`). Cleared by the shell exiting.
+pub type ChatMemory = Arc<std::sync::Mutex<std::collections::BTreeMap<String, bead::core::Value>>>;
+
+/// AI sidebar (B0043), the QML left drawer: 470 wide on the left edge. The `ai.chat`
+/// topic lease, the layout caches and the heartbeat exist only for the open panel.
+pub fn chat(
+    client: crate::nacre_source::Client,
+    palette: PathBuf,
+    colors: Palette,
+    memory: ChatMemory,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    let fill = colors.get("surface")?;
+    let (width, height) = (crate::chat::WIDTH as f32, 650.);
+    let mut fallback = crate::sound::fallback(fill);
+    fallback.width = width;
+    fallback.bounds = Rect::new(-32., -32., width + 64., height + 64.);
+    fallback.primitives = vec![Primitive::Rounded {
+        rect: Rect::new(0., 0., width, height),
+        radius: 18.,
+        fill,
+        border: None,
+    }];
+    if let Some(motion) = &mut fallback.motion {
+        motion.id = "chat".into();
+        motion.edge = bead::core::Edge::Left;
+        motion.duration = 0.2;
+    }
+    let cold = fallback.clone();
+    Ok(PanelSpec {
+        position: Some(crate::placement::Frame::default().positioner(
+            crate::placement::Attachment::Attached(bead::core::Edge::Left),
+        )),
+        engages_decorations: true,
+        passive: false,
+        keyboard_focus: true,
+        initial_open: false,
+        fallback,
+        renderer: RendererKind::Cpu,
+        factory: Arc::new(move |open| {
+            let topic = client.lease_topic("ai.chat").map_err(|e| e.to_string())?;
+            let session = bead::ui::Session::new(
+                PathBuf::from("shell"),
+                "chat/main.luau".into(),
+                palette.clone(),
+                colors.clone(),
+                cold.clone(),
+            );
+            let chat = crate::chat::Chat::new(
+                Some(client.clone()),
+                Arc::new(topic),
+                crate::chat::system_meter(),
+            )
+            .with_memory(memory.clone());
+            crate::reload::Runtime::panel_session(session, open)
+                .with_trace(trace)
+                .with_view_edge("left")?
+                .with_frame(
+                    crate::placement::Attachment::Attached(bead::core::Edge::Left),
+                    &colors,
+                )
+                .and_then(|runtime| runtime.with_chat(chat))
+                .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
+                .map_err(|e| e.to_string())
+        }),
+    })
+}

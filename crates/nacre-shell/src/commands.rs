@@ -181,6 +181,19 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
+    // The AI sidebar (QML left drawer): `nacre left` and `drawers toggle left` both
+    // toggle it, as in the QML shell.
+    let left = (call.target == "nacre" && call.method == "left")
+        || (call.target == "drawers"
+            && call.method == "toggle"
+            && call.args.first().and_then(Value::as_str) == Some("left"));
+    if left {
+        validate(&call)?;
+        call.target = "bead.panel".into();
+        call.method = "toggle".into();
+        call.args = vec![Value::String("chat".into())];
+        return Ok(call);
+    }
     if call.target == "nacre" && call.method == "tab" {
         validate(&call)?;
         let page = call.args[0]
