@@ -63,17 +63,22 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
                     width=32+shown*18+(more~="" and 20 or 0)+(hinted and 4 or 0)
                     local lit=on or item.occupied==true
                     local size=on and 22 or lit and 20 or 18
+                    local parts={}
+                    local function add(node) parts[#parts+1]=node end
+                    -- QML NacreWorkspacePearl: 22 px current / 20 occupied / 18 empty; enamel (accent warmed toward cream) with a specular highlight, ring in onSurface (current) or accent (empty).
+                    add(ui.Box{id="pearl",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size,radius=size/2,fill=lit and accent or "surfaceContainer",
+                        border_width=on and 1 or lit and 0 or 1.5,border_color=on and ui.alpha("onSurface",0.5) or ui.alpha(accent,0.9)})
+                    if lit then
+                        add(ui.Box{id="enamel",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size,radius=size/2,fill=ui.alpha("inverseSurface",on and 0.4 or 0.1)})
+                        add(ui.Box{id="specular",position="absolute",left=16-size/2+size*.23,top=14-size/2+size*.14,width=size*.44,height=size*.23,radius=size*.115,fill=ui.alpha("inverseSurface",on and 0.6 or 0.3)})
+                    end
+                    add(ui.Text{id="number",position="absolute",left=16-size/2,top=14-size/2,text=label,width=size,height=size,font_size=#label<2 and 11 or 9,family="IBM Plex Sans",text_align="center",color=lit and "onPrimary" or "onSurfaceVariant"})
+                    add(ui.Row{id="apps",position="absolute",left=33,top=0,width=math.max(0,width-33),height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)})
                     local face=hinted and ui.tint("surfaceContainer",accent,0.15) or "surfaceContainer"
                     button=kit.Button{id="workspace",position="absolute",left=gs,top=0,width=width,height=28,radius=14,padding=0,fill=face,hover_fill=hinted and face or "surfaceContainerHigh",shrink=0,
                         border_width=hinted and 1 or 0,border_color=ui.alpha(accent,0.24),
                         on_activate=activate,
-                        -- QML NacreWorkspacePearl: 22 px current / 20 occupied / 18 empty; enamel (accent warmed toward cream) with a specular highlight, ring in onSurface (current) or accent (empty).
-                        ui.Box{id="pearl",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size,radius=size/2,fill=lit and accent or "surfaceContainer",
-                            border_width=on and 1 or lit and 0 or 1.5,border_color=on and ui.alpha("onSurface",0.5) or ui.alpha(accent,0.9)},
-                        lit and ui.Box{id="enamel",position="absolute",left=16-size/2,top=14-size/2,width=size,height=size,radius=size/2,fill=ui.alpha("inverseSurface",on and 0.4 or 0.1)} or nil,
-                        lit and ui.Box{id="specular",position="absolute",left=16-size/2+size*.23,top=14-size/2+size*.14,width=size*.44,height=size*.23,radius=size*.115,fill=ui.alpha("inverseSurface",on and 0.6 or 0.3)} or nil,
-                        ui.Text{id="number",position="absolute",left=16-size/2,top=14-size/2,text=label,width=size,height=size,font_size=#label<2 and 11 or 9,family="IBM Plex Sans",text_align="center",color=lit and "onPrimary" or "onSurfaceVariant"},
-                        ui.Row{id="apps",position="absolute",left=33,top=0,width=math.max(0,width-33),height=28,gap=3,align="center",visible=#apps>0,table.unpack(apps)},
+                        table.unpack(parts),
                     }
                 end
                 local kids={}
