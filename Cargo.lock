@@ -1763,6 +1763,8 @@ dependencies = [
  "accesskit",
  "bead",
  "bead-test",
+ "bead-wallpaper",
+ "calloop",
  "fontconfig",
  "fontdb",
  "freedesktop-icons",
@@ -1775,7 +1777,10 @@ dependencies = [
  "serde",
  "serde_json",
  "skrifa 0.44.0",
+ "smithay-client-toolkit",
  "tokio",
+ "wayland-client",
+ "wayland-protocols",
 ]
 
 [[package]]
