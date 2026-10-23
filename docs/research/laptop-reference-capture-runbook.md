@@ -13,7 +13,7 @@ B0002 archive and rehashed against its recorded identity. Keep the bundle and
 manifest together. Stage the bundle contents at:
 
 ```text
-~/.local/share/nacre/ai/lead/bead-laptop-reference-20261022/artifacts/
+~/.local/share/nacre/ai/lead/bead-laptop-reference-20261023/artifacts/
 ```
 
 The checkout's `shell/tests/fixtures/dashboard` tree must match the fixture-tree

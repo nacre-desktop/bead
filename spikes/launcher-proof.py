@@ -81,6 +81,12 @@ def classify_renderer(argv, maps, text, requested, panel_active=False):
             'wallpaper_surface_committed':wallpaper_active,
             'gpu_libraries':libraries,'evidence_source':'measured PID /proc maps plus Bead renderer log markers'}
 
+def fail_on_ui_error(text):
+    # A Luau/runtime error never recovers; report it instead of waiting out the timeout.
+    for line in text.splitlines():
+        if line.startswith('UI_ERROR'):raise RuntimeError('UI_ERROR before first presentation: '+line[:300])
+    return False
+
 def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
     acceptance=dashboard_residency.acceptance_config(os.environ)
     bundle_root=pathlib.Path(bundle_root or os.environ.get('BEAD_HARDENING_BUNDLE_ROOT',ROOT)).resolve()
@@ -218,7 +224,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             check_keyboard_keeper(keeper,stage)
         with log.open('w')as stream:
             client=subprocess.Popen(command,cwd=bundle_root or ROOT,env=env,stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
-            matrix.wait_log(log,lambda t:'UI_PRESENTED generation=1'in t and 'source_error=false'in t)
+            matrix.wait_log(log,lambda t:fail_on_ui_error(t)or('UI_PRESENTED generation=1'in t and 'source_error=false'in t))
             assert 'PRESENTATION clock_id=1'in matrix.log_text(log)
             call('state',target='nacre')
             if acceptance:

@@ -59,6 +59,20 @@ def canonical_tree_hash(root: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+def check_candidate_shell_tree(candidate: dict) -> None:
+    """The candidate runs the checkout's shell/ tree, so the binary must come from that exact tree.
+
+    A binary built from an older Bead revision than the checkout fails inside the
+    UI (Luau API mismatch, `UI_ERROR`) long before a valid arm exists.
+    """
+    expected = candidate.get("shell_git_tree")
+    actual = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD:shell"], text=True).strip()
+    if not expected or expected != actual:
+        raise RuntimeError(
+            f"candidate was built from shell/ tree {expected} (revision {candidate.get('source_revision')}) "
+            f"but this checkout has shell/ tree {actual}; rebuild the candidate from this checkout")
+
+
 def load_manifest(path: pathlib.Path) -> dict:
     value = json.loads(path.read_text())
     if value.get("schema_version") != 1:
@@ -77,6 +91,7 @@ def load_manifest(path: pathlib.Path) -> dict:
         artifact["path"] = str(binary)
     if value["control"].get("sha256") != FROZEN_CONTROL_SHA256 or not value["control"].get("exact_original_binary_identity"):
         raise RuntimeError("control is not the exact B0002 frozen binary; no reference capture may start")
+    check_candidate_shell_tree(value["candidate"])
     fixture_root = pathlib.Path(value.get("dashboard_fixtures", ROOT / "shell/tests/fixtures/dashboard")).resolve(strict=True)
     fixture_hash = canonical_tree_hash(fixture_root)
     if fixture_hash != value.get("dashboard_fixtures_sha256"):
@@ -422,7 +437,7 @@ def terminate_owned(process: subprocess.Popen) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    default_home = pathlib.Path.home() / ".local/share/nacre/ai/lead/bead-laptop-reference-20261022"
+    default_home = pathlib.Path.home() / ".local/share/nacre/ai/lead/bead-laptop-reference-20261023"
     parser.add_argument("--manifest", type=pathlib.Path, default=default_home / "artifacts/manifest.json")
     parser.add_argument("--output", type=pathlib.Path,
                         default=default_home / ("evidence-" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")))

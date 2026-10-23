@@ -2,6 +2,7 @@ import importlib.util
 import json
 import pathlib
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -62,7 +63,9 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
                 "schema_version": 1,
                 "control": {"path": "control", "sha256": expected_control,
                             "exact_original_binary_identity": True},
-                "candidate": {"path": "candidate", "sha256": capture.sha256(candidate)},
+                "candidate": {"path": "candidate", "sha256": capture.sha256(candidate),
+                              "shell_git_tree": subprocess.check_output(
+                                  ["git", "-C", str(ROOT), "rev-parse", "HEAD:shell"], text=True).strip()},
                 "control_bundle_root": "control-bundle",
                 "control_bundle_sha256": capture.canonical_tree_hash(bundle),
                 "dashboard_fixtures_sha256": capture.canonical_tree_hash(fixture_root),
@@ -74,6 +77,17 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
                 loaded = capture.load_manifest(manifest)
             self.assertEqual(loaded["control_bundle_root"], str(bundle.resolve()))
             self.assertEqual(loaded["dashboard_fixtures"], str(fixture_root.resolve()))
+
+    def test_candidate_built_from_a_different_shell_tree_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "rebuild the candidate"):
+            capture.check_candidate_shell_tree({"source_revision": "old", "shell_git_tree": "0" * 40})
+        with self.assertRaisesRegex(RuntimeError, "rebuild the candidate"):
+            capture.check_candidate_shell_tree({"source_revision": "old"})
+
+    def test_ui_error_aborts_the_bar_wait_instead_of_timing_out(self):
+        with self.assertRaisesRegex(RuntimeError, "UI_ERROR"):
+            launcher_proof.fail_on_ui_error("READY\nUI_ERROR bar/main.luau:14:1: nil value\n")
+        self.assertFalse(launcher_proof.fail_on_ui_error("READY output=1\n"))
 
     def test_control_and_candidate_use_their_matched_ui_bundle_roots(self):
         with tempfile.TemporaryDirectory(prefix="bead-reference-bundles-") as temp:
