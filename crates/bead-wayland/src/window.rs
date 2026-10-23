@@ -271,6 +271,31 @@ impl App {
         unsafe {
             libc::malloc_trim(0);
         }
+        // The accessibility bridge keeps the last tree it was given: hand it the bar's again
+        // so the closed window's nodes are not retained.
+        let tree = self
+            .output_sessions
+            .values()
+            .find_map(|s| s.source.as_ref().and_then(|s| s.accessibility_tree()))
+            .or_else(|| self.runtime.as_ref().and_then(|r| r.accessibility_tree()));
+        if let (Some(bridge), Some(tree)) = (&mut self.accessibility, tree) {
+            bridge.update(tree);
+        }
+        // Worker packets queued before the close still own their rasters until the event
+        // loop discards them: trim once more after that queue has drained (as panels do).
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        let _ = self.loop_handle.insert_source(
+            Timer::from_duration(Duration::from_millis(150)),
+            |_, _, app| {
+                if app.window.is_none() {
+                    // SAFETY: allocator trim only.
+                    unsafe {
+                        libc::malloc_trim(0);
+                    }
+                }
+                TimeoutAction::Drop
+            },
+        );
         println!("WINDOW_CLOSED resident=0");
     }
     pub(super) fn window_scale(&mut self, scale120: u32) {

@@ -631,11 +631,12 @@ impl Runtime {
     pub fn with_settings(
         mut self,
         client: Option<crate::nacre_source::Client>,
+        root: &std::path::Path,
     ) -> Result<Self, Box<dyn Error>> {
         if self.settings.is_some() {
             return Err("one data projector per panel".into());
         }
-        let settings = std::rc::Rc::new(crate::settings::Settings::new(client)?);
+        let settings = std::rc::Rc::new(crate::settings::Settings::new(client, root)?);
         let projector = settings.clone();
         self.session
             .set_projector(Box::new(move |stores| Ok(projector.project(stores))));

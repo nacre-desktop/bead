@@ -25,7 +25,10 @@ fn fixture(desktop: Json) -> (Settings, Arc<FakeSource>) {
     let source = Arc::new(FakeSource::new(doc("desktop", 1, desktop)).unwrap());
     let sources: BTreeMap<String, Arc<dyn Source>> =
         BTreeMap::from([("desktop".into(), source.clone() as Arc<dyn Source>)]);
-    (Settings::new(None).unwrap().with_sources(sources), source)
+    (
+        Settings::new(None, &root()).unwrap().with_sources(sources),
+        source,
+    )
 }
 fn items(model: &BTreeMap<String, Value>) -> Vec<Json> {
     match &model["settings.items"] {
@@ -192,7 +195,7 @@ async fn store_read_write_round_trip_over_the_wire_and_live_updates() {
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    let settings = Settings::new(Some(client.clone())).unwrap();
+    let settings = Settings::new(Some(client.clone()), &root()).unwrap();
     let woken = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counter = woken.clone();
     settings.subscribe(Arc::new(move || {
@@ -375,7 +378,7 @@ fn typing_in_the_search_field_is_fast() {
     let session =
         bead::ui::Session::new(root(), "settings/main.luau".into(), palette, colors, cold);
     let mut runtime = crate::reload::Runtime::new(session)
-        .with_settings(None)
+        .with_settings(None, &root())
         .unwrap();
     runtime.services(Box::new(|_| {}));
     runtime.viewport(960, 640);

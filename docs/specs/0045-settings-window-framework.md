@@ -45,7 +45,7 @@ was found (shared Luau/font/renderer code, the daemon connection and palette are
 
 ## Lifecycle
 
-Nothing is resident until `open`: no source, renderer, buffers or store lease. `close` (button, Ctrl+W, compositor close)
+Nothing is resident until `open`: no source, renderer, buffers, registry or store lease (the registry JSON is read from the shell bundle on open, not embedded in the binary). `close` (button, Ctrl+W, compositor close)
 drops the window, its worker (joined), renderer, pool and buffers, the adapter (registry, store leases, subscriptions) and
 calls `malloc_trim`. Store topics: permanent topics (`settings.store.desktop`) are followed, other stores are leased only
 while the shown page reads them and released on page change.
@@ -64,7 +64,7 @@ apply contracts exist (N-A5); that is why `bead.json` lists editable pages.
 ## Search
 
 Pages and settings by label, description, synonyms and key (all tokens must match, 40 results). A result opens its page.
-Typing: median 1.7 ms per key in a debug build on prod (budget 8 ms release), see Checks.
+Typing (key into the search field, stage + commit): release p50 0.20 ms, max 3.1 ms (budget 8 ms); debug p50 1.7 ms.
 
 ## Temporary duplicates and expiry
 
@@ -83,3 +83,18 @@ See the report; goldens: `settings-{appearance-1,appearance-1.5,notifications-1,
 - Notifications history section (needs the `notifications` topic list + clear method; B0030 owns the service).
 - Remaining pages: add to `bead.json` as their apply contracts land; custom sections as Luau pages.
 - Narrow layout, IME, window title from the page.
+
+## Memory (desktop, private nested niri, CPU renderer (tiny-skia), no daemon, 3 alternating pairs, release builds)
+
+Candidate minus control (`ca4c19c`), median Pss MiB: idle (window never opened) -0.01 to +0.15 (runs vary; gate +0.5: pass);
+open window +5.4 (anon +3.6, SHM +1.4; expected, not gated); **closed and settled +0.69 to +0.92 (anon +0.6): gate +0.5 NOT met**,
+anon growth stays under the 1 MiB rule. Tried without effect: second `malloc_trim` after the worker queue drains, handing the
+accessibility bridge the bar tree on close, registry read from disk instead of embedded, `MALLOC_ARENA_MAX=1` (worse, +0.9).
+The ~0.6 MiB anon residue after one open/close is unexplained; next step is a heap profile of the closed state. Window mapped
+as `nacre-settings`, close and reopen with a page deep link worked in every arm. GL not used.
+
+## Checks (prod Ubuntu 24.04 container, CI job steps)
+
+fmt, clippy -D warnings, `cargo test --workspace` (settings: 9 tests), memory_policy trace tests, renderer feature checks,
+minimal example, Luau analyze, spikes/packaging python tests (git checkout), services check, cargo-deny: all passed.
+Existing `bead-services ipc::inherited_listener` test flaked once under parallel load (passes alone and on rerun; untouched code).

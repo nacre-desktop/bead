@@ -766,6 +766,7 @@ fn start(
         }
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
         options.window = Some(settings::window_spec(
+            std::path::PathBuf::from("shell"),
             palette.clone(),
             colors.clone(),
             _ui_provider.clone(),

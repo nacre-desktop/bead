@@ -14,10 +14,10 @@ use bead::core::{
 use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
-const NAVIGATION: &str = include_str!("../../../shell/settings/registry/navigation.json");
-const REGISTRY: &str = include_str!("../../../shell/settings/registry/settings.json");
-const ENGLISH: &str = include_str!("../../../shell/settings/registry/en.json");
-const OVERLAY: &str = include_str!("../../../shell/settings/registry/bead.json");
+/// Registry files are read from the shell bundle when the window opens and dropped on close,
+/// so they cost nothing in the binary or while the window is closed.
+const REGISTRY_DIR: &str = "settings/registry";
+const MAX_REGISTRY_FILE: u64 = 1 << 20;
 pub const METHOD: &str = "settings.set";
 const MAX_TEXT: usize = 200;
 const MAX_ITEMS: usize = 64;
@@ -31,13 +31,27 @@ pub struct Registry {
     default_page: String,
 }
 impl Registry {
-    pub fn load() -> Result<Self, String> {
-        let parse = |text: &str| serde_json::from_str::<Json>(text).map_err(|e| e.to_string());
-        let overlay = parse(OVERLAY)?;
+    pub fn load(root: &std::path::Path) -> Result<Self, String> {
+        use std::io::Read;
+        let read = |name: &str| -> Result<Vec<u8>, String> {
+            let path = root.join(REGISTRY_DIR).join(name);
+            let mut bytes = Vec::new();
+            std::fs::File::open(&path)
+                .and_then(|f| f.take(MAX_REGISTRY_FILE + 1).read_to_end(&mut bytes))
+                .map_err(|e| format!("{}: {e}", path.display()))?;
+            if bytes.len() as u64 > MAX_REGISTRY_FILE {
+                return Err(format!("{}: too large", path.display()));
+            }
+            Ok(bytes)
+        };
+        let parse = |name: &str| {
+            serde_json::from_slice::<Json>(&read(name)?).map_err(|e| format!("{name}: {e}"))
+        };
+        let overlay = parse("bead.json")?;
         Ok(Self {
-            navigation: parse(NAVIGATION)?,
-            settings: parse(REGISTRY)?,
-            english: serde_json::from_str(ENGLISH).map_err(|e| e.to_string())?,
+            navigation: parse("navigation.json")?,
+            settings: parse("settings.json")?,
+            english: serde_json::from_slice(&read("en.json")?).map_err(|e| e.to_string())?,
             editable: overlay["editable"]
                 .as_array()
                 .into_iter()
@@ -163,11 +177,11 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new(client: Option<Client>) -> Result<Self, String> {
+    pub fn new(client: Option<Client>, root: &std::path::Path) -> Result<Self, String> {
         Ok(Self {
             client,
             fixtures: Default::default(),
-            registry: Registry::load()?,
+            registry: Registry::load(root)?,
             open: Default::default(),
             wake: Default::default(),
             state: Default::default(),
@@ -709,6 +723,7 @@ impl Settings {
 
 /// The Settings window as a framework `WindowSpec`: one factory, one deep-link mapping.
 pub fn window_spec(
+    root: std::path::PathBuf,
     palette: std::path::PathBuf,
     colors: bead::render::Palette,
     client: Option<Client>,
@@ -729,7 +744,7 @@ pub fn window_spec(
         fallback,
         factory: Arc::new(move |_| {
             let session = bead::ui::Session::new(
-                "shell".into(),
+                root.clone(),
                 "settings/main.luau".into(),
                 palette.clone(),
                 colors.clone(),
@@ -737,7 +752,7 @@ pub fn window_spec(
             );
             crate::reload::Runtime::new(session)
                 .with_trace(trace)
-                .with_settings(client.clone())
+                .with_settings(client.clone(), &root)
                 .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),
