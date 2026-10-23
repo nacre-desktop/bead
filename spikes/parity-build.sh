@@ -1,12 +1,13 @@
 #!/bin/sh
 # Build Bead (this tree) and the Nacre daemon for the parity harness, on a remote host in an Arch container.
 # The Nacre daemon is kept between runs; REBUILD_NACRE=1 rebuilds it after Nacre moved.
+# BEAD_REV=origin/main builds a control instead of HEAD.
 # usage: spikes/parity-build.sh HOST TASK NACRE_CHECKOUT ORIENT_CHECKOUT   (run from the Bead worktree root)
 # Output: ~/nacre-lead/TASK/out/{nacre-shell,nacre-helper,...} on HOST. Fails on any cargo error.
 set -eu
 HOST=$1; TASK=$2; NACRE=$3; ORIENT=$4
 T=$(mktemp -d); R=nacre-lead/$TASK
-git archive --format=tar.gz -o "$T/bead.tgz" HEAD
+git archive --format=tar.gz -o "$T/bead.tgz" "${BEAD_REV:-HEAD}"
 git -C "$NACRE" archive --format=tar.gz -o "$T/nacre.tgz" origin/main
 O=$(git -C "$NACRE" ls-tree origin/main deps/orient | awk '{print $3}')
 git -C "$ORIENT" archive --format=tar.gz -o "$T/orient.tgz" "$O"

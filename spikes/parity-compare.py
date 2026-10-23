@@ -396,6 +396,14 @@ class Arm:
                 self.run(['gdbus', 'call', '--session', '--dest', 'org.bead.FakeBluez', '--object-path', '/ctl',
                           '--method', 'org.bead.FakeBluez.Set', step[1], step[2]], check=False)
 
+    def rss(self):
+        """VmRSS and RssAnon (KiB) of the shell process: the relative memory gate compares two builds with this, same host and flags."""
+        try:
+            fields = dict(line.split(':', 1) for line in Path(f'/proc/{self.shell.pid}/status').read_text().splitlines() if ':' in line)
+            return {key: int(fields[key].split()[0]) for key in ('VmRSS', 'RssAnon') if key in fields}
+        except (OSError, ValueError):
+            return {}
+
     def grab(self, path, scale=None, region=None):
         command = ['grim'] + (['-g', region] if region else []) + (['-s', str(scale)] if scale else []) + [str(path)]
         self.run(command, timeout=30)
@@ -440,12 +448,14 @@ class Arm:
                 else:
                     self.steps(opens)
                 time.sleep(self.args.settle)
+                info['rss_kib'] = self.rss()
                 self.grab(shots / (name + '.png'))
                 if seconds and closes:
                     info['close_ms'] = self.sequence(name + '-close', lambda: self.steps(closes), seconds)
                 else:
                     self.steps(closes)
                 time.sleep(0.6)
+                info['rss_closed_kib'] = self.rss()
             except Exception as error:
                 self.errors.append(str(error)[:300])
             info['errors'] = self.errors
