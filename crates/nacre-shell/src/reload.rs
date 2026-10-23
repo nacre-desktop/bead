@@ -50,6 +50,7 @@ pub struct Runtime {
     chat_subscription: Vec<bead::core::source::Subscription>,
     settings: Option<std::rc::Rc<crate::settings::Settings>>,
     colors: Option<std::rc::Rc<crate::colors::Colors>>,
+    welcome: Option<std::rc::Rc<crate::welcome::Welcome>>,
     control: Option<std::rc::Rc<crate::control_center::ControlCenter>>,
     control_subscription: Vec<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
@@ -288,6 +289,7 @@ impl Runtime {
             chat_subscription: Vec::new(),
             settings: None,
             colors: None,
+            welcome: None,
             control: None,
             control_subscription: Vec::new(),
             dashboard: None,
@@ -764,6 +766,23 @@ impl Runtime {
         self.actions.register("colors.do", "colors.control")?;
         self.actions.grant("colors.control");
         self.colors = Some(colors);
+        Ok(self)
+    }
+    /// B0059 Welcome window: app availability, shortcut rows and the window size over the tour view.
+    pub fn with_welcome(
+        mut self,
+        welcome: crate::welcome::Welcome,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.welcome.is_some() {
+            return Err("one data projector per panel".into());
+        }
+        let welcome = std::rc::Rc::new(welcome);
+        let projector = welcome.clone();
+        self.session
+            .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+        self.actions.register("welcome.do", "welcome.control")?;
+        self.actions.grant("welcome.control");
+        self.welcome = Some(welcome);
         Ok(self)
     }
     /// Control center (B0049): tile data sources, the stored tile order and its published write.
@@ -1674,6 +1693,12 @@ impl SceneSource for Runtime {
                 wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
             }));
         }
+        if let Some(welcome) = &self.welcome {
+            let wakeup = wakeup.clone();
+            welcome.subscribe(std::sync::Arc::new(move || {
+                wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
+            }));
+        }
         if let Some(dashboard) = &self.dashboard {
             match dashboard.subscribe(wakeup.clone()) {
                 Ok(subscription) => self.dashboard_subscription = subscription,
@@ -1808,6 +1833,9 @@ impl SceneSource for Runtime {
         if let Some(colors) = &self.colors {
             colors.set_viewport(width);
         }
+        if let Some(welcome) = &self.welcome {
+            welcome.set_viewport(width, height);
+        }
         self.session.set_viewport(width, height)
     }
     fn watch(
@@ -1843,6 +1871,17 @@ impl SceneSource for Runtime {
                     self.notification_hover = Some(key);
                 }
             }
+        }
+        // Welcome: Enter advances the tour, except on a tile of the page itself (QML parity).
+        if self.welcome.is_some()
+            && matches!(&event, UiEvent::Command { command, .. } if command == "enter")
+            && !matches!(self.session.stores.get("bead.focused"),
+                Some(bead::core::Value::Text(focused)) if focused.contains(".canvas."))
+        {
+            self.session.stores.commit(BTreeMap::from([(
+                "bead.focused".into(),
+                bead::core::Value::Text(crate::welcome::NEXT.into()),
+            )]))?;
         }
         let mut host_action = match &event {
             UiEvent::Click { x, y }
@@ -2121,6 +2160,25 @@ impl SceneSource for Runtime {
                 Some(Ok(scene)) => scene,
                 _ => self.session.update(changes)?,
             };
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(welcome), Some((_, name, bead::core::Value::Text(arg)))) =
+            (&self.welcome, &host_action)
+            && name == "welcome.do"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let outcome = welcome.act(arg);
+            if outcome.close {
+                // The window retires itself, as a panel's view does.
+                self.wakeup
+                    .as_ref()
+                    .ok_or("window close event channel unavailable")?(
+                    UiEvent::CompanionVisibility(false),
+                );
+            }
+            let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)
@@ -2846,6 +2904,8 @@ impl SceneSource for Runtime {
             UiEvent::Reload => Some(self.session.reload()?),
             // The Colors view sizes its pieces from the window width: project again.
             UiEvent::Relayout if self.colors.is_some() => self.session.update(BTreeMap::new())?,
+            // The Welcome layout reads the window size: a resize projects it again.
+            UiEvent::Relayout if self.welcome.is_some() => self.session.update(BTreeMap::new())?,
             UiEvent::Relayout => self.session.relayout()?,
             UiEvent::PanelDetached(detached) => {
                 if detached != self.detached && self.spare_chrome.is_some() {
@@ -3047,6 +3107,14 @@ impl SceneSource for Runtime {
                         );
                     }
                     self.session.update(values)?
+                }
+                "escape" if self.welcome.is_some() => {
+                    self.wakeup
+                        .as_ref()
+                        .ok_or("window close event channel unavailable")?(
+                        UiEvent::CompanionVisibility(false),
+                    );
+                    None
                 }
                 "escape" if self.bar => {
                     self.status_pill.escape();

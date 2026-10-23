@@ -246,7 +246,12 @@ impl App {
         }
         if let UiEvent::Window(epoch, event) = event {
             if self.window.as_ref().is_some_and(|w| w.epoch() == epoch) {
-                self.window_ui(*event);
+                // A window's view can retire itself (a Done button, Escape), as a panel's does.
+                if matches!(&*event, UiEvent::CompanionVisibility(false)) {
+                    self.close_window();
+                } else {
+                    self.window_ui(*event);
+                }
             }
             return;
         }

@@ -44,6 +44,9 @@ mod wallpaper;
 #[cfg(test)]
 mod wallpaper_decode;
 mod wallpaper_motion;
+mod welcome;
+#[cfg(test)]
+mod welcome_tests;
 mod workspace_rows;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};

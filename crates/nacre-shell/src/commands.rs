@@ -213,6 +213,15 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
             .collect();
         return Err(crate::app::route(call.id, "colors", "open", &args));
     }
+    // B0059: Welcome opens as its own app at a tour page. `welcomeApp open PAGE` is the route
+    // Nacre's launcher row and first-login claim already call (it is in the route catalog).
+    if call.target == "welcomeApp"
+        && call.method == "open"
+        && call.args.len() == 1
+        && call.args.iter().all(Value::is_string)
+    {
+        return Err(crate::app::route(call.id, "welcome", "open", &call.args));
+    }
     // The QML right sidebar (control center): `drawers toggle right` toggles it and
     // `nacre controls home|edit` opens it.
     let right = (call.target == "drawers"
@@ -401,6 +410,15 @@ mod tests {
         let close = from_strings("nacre".into(), "close".into(), &[]).unwrap();
         let mapped = map(close).unwrap();
         assert_eq!(mapped.method, "close");
+    }
+    #[test]
+    fn welcome_open_is_an_app_route() {
+        let open = from_strings("welcomeApp".into(), "open".into(), &["apps".into()]).unwrap();
+        // The shell is not configured in unit tests: the app route answers, nothing else does.
+        assert_eq!(
+            map_views(open).unwrap_err().error.unwrap().code,
+            "unavailable"
+        );
     }
     #[test]
     fn core_dashboard_tab_routes_keep_canonical_indices_and_refuse_extras() {

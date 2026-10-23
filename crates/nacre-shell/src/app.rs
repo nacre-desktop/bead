@@ -6,7 +6,9 @@
 //! Two halves share this file: [`Host`] runs in the always-on shell (find the running app and
 //! forward the request, or start it) and [`run`] is the app process. The shell holds no app
 //! state beyond one path; everything an app allocates dies with its process.
-use crate::{chat, colors as colors_app, nacre_source, placement, popouts, prefs, settings};
+use crate::{
+    chat, colors as colors_app, nacre_source, placement, popouts, prefs, settings, welcome,
+};
 use bead::{
     render::Palette,
     services::ipc::{self, Call, Reply},
@@ -24,7 +26,7 @@ use std::{
 
 /// Apps the shell can start. A third-party app adds a branch to [`run`] and a route in
 /// `commands::map_views`; the launch, single-instance and exit rules are shared.
-pub const APPS: [&str; 3] = ["settings", "chat", "colors"];
+pub const APPS: [&str; 4] = ["settings", "chat", "colors", "welcome"];
 
 /// Topics every app follows: Nacre's text catalog and the settings that shape the look.
 const TOPICS: [&str; 5] = [
@@ -73,7 +75,7 @@ impl Host {
         }
         // Windows take the open call (a second open deep-links the running one); panels the
         // given panel method (`toggle` closes the running sidebar).
-        let (target, method) = if name == "settings" || name == "colors" {
+        let (target, method) = if matches!(name, "settings" | "colors" | "welcome") {
             ("bead.window", "open")
         } else {
             ("bead.panel", method)
@@ -162,6 +164,10 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let colors = Palette::read(&palette)
         .or_else(|_| Palette::parse(include_bytes!("../../../shell/palette.json")))?;
     crate::i18n::init();
+    // An app that opens another (Welcome's tiles) calls it the way the shell does.
+    if let Some(socket) = &command_socket {
+        configure(socket, daemon.clone(), palette.clone());
+    }
     // A plain client of the daemon: it follows topics and calls methods, registers nothing.
     let client = daemon
         .map(|socket| {
@@ -218,6 +224,15 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let fill = colors.get("surface")?;
     let root = PathBuf::from("shell");
     match name {
+        "welcome" => {
+            options.window = Some(welcome::window_spec(
+                root,
+                palette,
+                colors,
+                client.clone(),
+                false,
+            )?);
+        }
         "settings" => {
             options.window = Some(settings::window_spec(
                 root,
