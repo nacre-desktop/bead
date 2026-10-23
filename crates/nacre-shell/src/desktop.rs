@@ -367,7 +367,10 @@ mod tests {
         };
         let state = values(&s, "stale-id");
         assert_eq!(state["bead.desktop.audio.available"], Value::Bool(false));
-        assert_eq!(state["bead.desktop.battery.value"], Value::Text(String::new()));
+        assert_eq!(
+            state["bead.desktop.battery.value"],
+            Value::Text(String::new())
+        );
         assert_eq!(state["bead.desktop.menu"], Value::list(vec![]));
         let Value::List(tray) = &state["bead.desktop.tray"] else {
             panic!()
