@@ -40,6 +40,7 @@ HERE = Path(__file__).resolve().parent
 #   ('sleep', seconds)
 #   ('shell', target, method, *args) a call on Bead's own command socket (views the daemon vocabulary lacks)
 #   ('app_close', name)             close Settings (an app window in both shells)
+#   ('qml_settings', page)          QML only: `quickshell ipc call settingsApp open PAGE` (Bead: ('shell', 'nacre', 'settings', PAGE))
 #   ('only', 'qml'|'bead', step)    a step for one arm (the shells' preview/trigger routes differ)
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
 STATES = {
@@ -68,6 +69,35 @@ STATES = {
     'session': ([('ui', 'nacre', 'session')],
                 [('ui', 'nacre', 'close')], 1.0),
     'settings': ([('ui', 'nacre', 'settings'), ('sleep', 1.5)], [('app_close', 'settings')], 0),
+    # B0063: one state per Settings page, opened by deep link in both shells
+    'settings-date-time-language': ([('only', 'qml', ('qml_settings', 'date-time-language')), ('only', 'bead', ('shell', 'nacre', 'settings', 'date-time-language')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-notifications': ([('only', 'qml', ('qml_settings', 'notifications')), ('only', 'bead', ('shell', 'nacre', 'settings', 'notifications')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-windows-workspaces-workflows': ([('only', 'qml', ('qml_settings', 'windows-workspaces/workflows')), ('only', 'bead', ('shell', 'nacre', 'settings', 'windows-workspaces/workflows')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-lock-login': ([('only', 'qml', ('qml_settings', 'lock-login')), ('only', 'bead', ('shell', 'nacre', 'settings', 'lock-login')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-privacy': ([('only', 'qml', ('qml_settings', 'privacy')), ('only', 'bead', ('shell', 'nacre', 'settings', 'privacy')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-keyboard-mouse': ([('only', 'qml', ('qml_settings', 'keyboard-mouse')), ('only', 'bead', ('shell', 'nacre', 'settings', 'keyboard-mouse')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-power': ([('only', 'qml', ('qml_settings', 'power')), ('only', 'bead', ('shell', 'nacre', 'settings', 'power')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-system': ([('only', 'qml', ('qml_settings', 'system')), ('only', 'bead', ('shell', 'nacre', 'settings', 'system')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-nacre-ai': ([('only', 'qml', ('qml_settings', 'nacre-ai')), ('only', 'bead', ('shell', 'nacre', 'settings', 'nacre-ai')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-addons': ([('only', 'qml', ('qml_settings', 'addons')), ('only', 'bead', ('shell', 'nacre', 'settings', 'addons')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-sound': ([('only', 'qml', ('qml_settings', 'sound')), ('only', 'bead', ('shell', 'nacre', 'settings', 'sound')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-network': ([('only', 'qml', ('qml_settings', 'network')), ('only', 'bead', ('shell', 'nacre', 'settings', 'network')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-bluetooth': ([('only', 'qml', ('qml_settings', 'bluetooth')), ('only', 'bead', ('shell', 'nacre', 'settings', 'bluetooth')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
+    'settings-appearance': ([('only', 'qml', ('qml_settings', 'appearance')), ('only', 'bead', ('shell', 'nacre', 'settings', 'appearance')), ('sleep', 2.0)],
+    [('app_close', 'settings')], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
     'pearl-detached': ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.2), ('ui', 'pearls', 'detach')], [('ui', 'nacre', 'close')], 0),
 }
@@ -343,6 +373,9 @@ class Arm:
                     self.errors.append(f'{" ".join(step[1:])}: {error}')
             elif kind == 'app_close':
                 self.app_close(step[1])
+            elif kind == 'qml_settings':
+                self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
+                          'call', 'settingsApp', 'open', step[1]], check=False)
             elif kind == 'only':
                 if step[1] == self.name:
                     self.steps([step[2]])

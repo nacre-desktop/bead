@@ -1055,3 +1055,36 @@ fn custom_page_goldens() {
         golden(name, &mut h);
     }
 }
+
+#[test]
+fn search_finds_the_new_pages_and_their_actions() {
+    let settings = Settings::new(None, &root()).unwrap();
+    let find = |query: &str| {
+        let at = Stores::default()
+            .reconcile(&BTreeMap::from([
+                ("settings.page".into(), Value::Text("appearance".into())),
+                ("settings.search".into(), Value::Text(query.into())),
+            ]))
+            .unwrap();
+        items(&settings.project(&at))
+    };
+    // Pages by label, registry actions by label, settings by their words.
+    assert!(
+        find("bluetooth")
+            .iter()
+            .any(|r| r["id"] == "page:bluetooth")
+    );
+    assert!(find("sound").iter().any(|r| r["id"] == "page:sound"));
+    assert!(
+        find("lock screen")
+            .iter()
+            .any(|r| r["id"] == "action:lock-login.lock-now")
+    );
+    assert!(
+        find("repeat")
+            .iter()
+            .any(|r| r["id"] == "setting:keyboard-mouse.keyboard.keyRepeatRate")
+    );
+    assert!(find("profile").iter().any(|r| r["page"] == "power"));
+    assert!(find("clipboard").iter().any(|r| r["page"] == "privacy"));
+}

@@ -434,6 +434,9 @@ impl Settings {
                 "{label}: {}",
                 if setting["unavailableId"].is_string() {
                     self.registry.text(setting, "unavailableId")
+                } else if setting.get("adapter").is_some() {
+                    // A helper adapter in QML: Bead needs a published contract for it.
+                    tr("bead.settings.requires-contract", &[])
                 } else {
                     tr("bead.settings.not-here", &[])
                 }
