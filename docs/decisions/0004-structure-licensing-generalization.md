@@ -141,7 +141,7 @@ After Bead's core switch on Nacre, plan support for:
 
 - B0073: text `font_weight` (1–1000, default 400) flows to the neutral renderer and its cache key; the shell chooses the weights.
 
-- B0077: `Session::action_values(name, argument)` evaluates a declared Luau action for host key bindings; the host stages its values through the existing validate-then-commit update path. No product key names enter the framework.
+- B0077: `Session::action_values(name, argument)` evaluates a declared Luau action for host key bindings; the host stages its values through the existing validate-then-commit update path. No product key names enter the framework. The reusable Luau `shell/kit/virtual-list.luau` accepts model/scroll/row metrics/render callback; it uses bounded spacers and automatic extents for long lists, with no product IDs. Its module is imported only by views that use it.
 
 ## Housekeeping (later)
 

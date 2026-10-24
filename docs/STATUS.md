@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-24 — B0077 extras surfaces (review candidate)
+
+Overview, Commands and Keyboard shortcuts now have independent lazy Luau surfaces,
+replacing the mode aliases to the launcher. Overview groups daemon windows by
+workspace and focuses through N0040; shortcuts use N0051; the palette uses opaque
+menu-engine activation. Closed workers release their subscriptions and payloads.
+Capture handles, semantic window moves and an engine route matching QML Palette
+content/order remain explicit asks in [B0077](specs/0077-overview-palette-keybindings.md).
+Remote checks and private QML/Bead evidence are recorded there; no live install.
+
 ## 2026-10-24 — B0076 docked device details (review)
 
 Wi-Fi, Bluetooth, battery and audio now reuse their popout bodies inside the

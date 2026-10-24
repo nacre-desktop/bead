@@ -235,6 +235,12 @@ class Arm:
 
     def start_compositor(self):
         a = self.args
+        # The parent compositor also gets a private HOME/XDG tree, before it starts.
+        for name in ['home', 'data', 'config', 'state/nacre', 'cache']:
+            (self.root / name).mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.env.update(HOME=str(self.root / 'home'), XDG_DATA_HOME=str(self.root / 'data'),
+                        XDG_CONFIG_HOME=str(self.root / 'config'), XDG_STATE_HOME=str(self.root / 'state'),
+                        XDG_CACHE_HOME=str(self.root / 'cache'))
         parent_runtime = self.root / 'pr'
         parent_runtime.mkdir(mode=0o700)
         config = self.root / 'labwc'
@@ -265,7 +271,18 @@ class Arm:
                 raise RuntimeError('private parent output does not match pointer coordinates')
             (self.out / 'parent-geometry.json').write_text(json.dumps(outputs))
         niri_config = self.root / 'niri.kdl'
-        niri_config.write_text(NIRI_CONFIG)
+        config_text = NIRI_CONFIG
+        if getattr(a, "shortcut_fixture", False):
+            # Real private bindings, read by BOTH desktop-extras keys and shortcuts.refresh.
+            # Their actions are harmless even if a key is accidentally sent during capture.
+            bindings = self.root / 'fixture-bindings.kdl'
+            bindings.write_text('// Generated from compositor-contract.json; private parity fixture.\nbinds {\n'
+                                '    Super+Tab repeat=false hotkey-overlay-title="Nacre:overview" { spawn-sh "true"; }\n'
+                                '    Super+Ctrl+Space repeat=false hotkey-overlay-title="Nacre:palette" { spawn-sh "true"; }\n'
+                                '    Super+K repeat=false hotkey-overlay-title="Nacre:shortcuts" { spawn-sh "true"; }\n}\n')
+            config_text += 'include ' + json.dumps(str(bindings)) + '\n'
+        niri_config.write_text(config_text)
+        self.env['NACRE_NIRI_CONFIG'] = str(niri_config)
         env = dict(self.env, WAYLAND_DISPLAY=str(socket))
         for key in ['NIRI_SOCKET', 'HYPRLAND_INSTANCE_SIGNATURE', 'DISPLAY']:
             env.pop(key, None)
@@ -967,6 +984,7 @@ def main():
     parser.add_argument('--presentation', default='~/.local/state/nacre/presentation.json',
                         help='record copied read-only into both private states (wallpaper + palette); empty for none')
     parser.add_argument('--cpu', action='store_true', help='Bead on the CPU renderer')
+    parser.add_argument('--shortcut-fixture', action='store_true', help='include three harmless generated bindings in the private niri configuration')
     parser.add_argument('--settle', type=float, default=2.0, help='seconds between a state opening and its screenshot')
     parser.add_argument('--boot-settle', type=float, default=4.0)
     parser.add_argument('--seq-scale', type=float, default=0.5)
@@ -979,6 +997,9 @@ def main():
     parser.add_argument('--run-arm', help=argparse.SUPPRESS)
     parser.add_argument('--private', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    # Resolve caller-owned read-only inputs before the arm receives its private HOME.
+    if args.presentation:
+        args.presentation = str(Path(args.presentation).expanduser().resolve())
     args.size = tuple(int(v) for v in args.size.split('x'))
     args.states = list(STATES) if args.states == 'all' else args.states.split(',')
     unknown = [s for s in args.states if s not in STATES]
@@ -1017,6 +1038,11 @@ def main():
                 runtime = Path(private) / 'r'
                 runtime.mkdir(mode=0o700)
                 env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_DATA_DIRS='/usr/local/share:/usr/share')
+                for name in ['home', 'config', 'data', 'state', 'cache']:
+                    Path(private, name).mkdir(mode=0o700, exist_ok=True)
+                env.update(HOME=str(Path(private, 'home')), XDG_CONFIG_HOME=str(Path(private, 'config')),
+                           XDG_DATA_HOME=str(Path(private, 'data')), XDG_STATE_HOME=str(Path(private, 'state')),
+                           XDG_CACHE_HOME=str(Path(private, 'cache')))
                 for key in ['NIRI_SOCKET', 'HYPRLAND_INSTANCE_SIGNATURE', 'DISPLAY', 'NACRE_DAEMON_SOCKET',
                             'NACRE_QS_CONFIG', 'DBUS_SESSION_BUS_ADDRESS']:
                     env.pop(key, None)
@@ -1025,7 +1051,7 @@ def main():
                              'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
-                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else [])
+                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--shortcut-fixture'] if args.shortcut_fixture else [])
                 log(f'arm {arm} starting')
                 child = subprocess.Popen(command, env=env, start_new_session=True)
                 try:

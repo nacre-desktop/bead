@@ -1,9 +1,25 @@
 # B0077 — Overview, palette and keybindings
 
-Status: **Review candidate; visual evidence and full checks in progress.** QML reference: Nacre `16436a34` (`origin/main` when this unit started)
+Status: **Review — native surfaces implemented; exact palette content parity awaits an engine contract.** QML reference: Nacre `16436a34` (`origin/main` when this unit started)
 (`nacre/shell/modules/extras/{Overview,Palette,Keybindings}.qml`).
 
 ## Reference behavior and parity targets
+
+All three use `SearchSurface`: 16 px outer margins, a 30 px heading with 17 pt
+primary-colored title and Close action, then a 44 px search field with 15 px
+horizontal padding, radius 22 and surfaceContainerHigh fill. The body begins at
+y=122 and ends 16 px above the bottom. Default body height 450 gives total 562;
+Overview overrides it as below. Search receives focus on creation. Down/Up move
+selection (or scroll the sheet), Enter chooses, Escape dismisses; attached
+activation closes the surface. The shared launcher host animates the entire
+content with a 300 ms OutCubic slide from the bottom, without fading. Bead's
+existing `ease` curve is that cubic; its top attachment follows the owner's
+launcher-edge choice rather than the QML bottom attachment.
+
+Wheel behavior is shared `FastScroll`: 600 logical pixels per wheel notch,
+210 ms OutCubic smoothing, pixel deltas multiplied by 3, and a 65 ms release
+interval before kinetic flicking (velocity bounded to 2600). Bead currently uses
+the kit's immediate wheel scrolling; kinetic/smoothed wheel parity remains open.
 
 ### Overview
 
@@ -91,7 +107,11 @@ Shortcut entries require `key` and `description`, and may include nullable
 
 `shell/extras/{main,behavior,tokens}.luau` contains all three views. The shared kit
 Panel, Button, TextInput, Grid and Scroll primitives provide the surface and
-controls. Tokens own geometry, palette roles, typography, grid columns and
+controls. A reusable `shell/kit/virtual-list.luau` materializes only viewport rows
+and two overscan rows, preserving the complete source order and extent. Its
+chunked automatic extents handle the 2048-row contract without exceeding the
+SDK's 20,000-pixel single-dimension limit. A 1000-row fixture retains all data,
+paints fewer than 200 primitives, and scrolls into later rows. Tokens own geometry, palette roles, typography, grid columns and
 preview slots; the Luau workspace-count/scroll defaults are replaceable settings
 inputs. Stable daemon window/workspace IDs join rows, rather than title/index.
 The overview filters output-local state, groups and sorts workspaces, searches
@@ -111,9 +131,11 @@ The new general framework primitive is `Session::action_values(name, argument)`:
 evaluate a declared Luau action for host key bindings and stage its values through
 the existing validated update transaction. It contains no Nacre key or route IDs.
 Factories retain only their construction inputs. Runtime creation leases the
-compositor/shortcuts topic; worker retirement drops leases, subscriptions, pending
-calls, results, the VM and assets. Trace coverage checks the topic payload's weak
-reference disappears after retirement. Fake-daemon tests exercise the actual
+compositor/shortcuts topic when not already subscribed by the bar. The existing
+permanent compositor topic is reused without a second subscription. Worker
+retirement drops view subscriptions, owned leases, pending calls, results, the VM
+and assets. Trace coverage checks an owned topic payload's weak reference disappears
+after retirement; the bar's existing permanent payload correctly remains its own. Fake-daemon tests exercise the actual
 Luau view's search/Enter path as well as RPC shapes and activation fencing.
 
 Acceptance: each view matches the QML idle/open/hover/pressed states in paired
@@ -141,14 +163,68 @@ feature checks; no local build, test, nested session or capture.
   parity for content/ordering/brain behavior remains blocked on this publication.
 - No temporary duplicate implementation planned.
 
-## Result
+## Validation and evidence
 
-Remote validation/captures are in progress; final commands and paired metrics
-will be recorded here before handoff. No live desktop run or install is authorized.
+The complete `.github/workflows/ci.yml` job was replayed in a remote Arch
+container: fmt, clippy with warnings denied, workspace tests, trace memory-policy
+tests, renderer feature configurations, facade example, actual Luau SDK/schema
+analysis (131 modules), Python spike/packaging suites, motion-wallpaper smoke,
+private service/SNI lifecycles and cargo-deny including independent framework
+crate graphs. All passed. Commands include:
 
-Known behavioral gaps: no live thumbnails or drag/drop pending the contracts
-above; no ChatWindowTitle PID override or configured workspace icons/names feed;
-search resets effective selection on query changes, but scroll resets on the next
-navigation event rather than immediately during typing. The sheet adds an explicit
-refresh control; QML refreshes only on creation. Top-edge placement is deliberate.
-No temporary duplicate catalog, provider or rendering implementation was added.
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -j2 -- -D warnings
+cargo test --workspace --locked -j2
+cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::
+cargo test -p nacre-shell --no-default-features --locked -j2 extras::
+```
+
+The nine extras tests cover focus/workspace admission, shortcut refresh,
+opaque activation and engine navigation, nullable menu fields, the existing
+bar-owned compositor topic, real-view CPU image decoding, keyboard Close,
+release activation, immediate reopen, long-list windowing, and six rendered
+goldens at scales 1 and 1.5. Goldens were regenerated and visually reviewed.
+`RUST_TEST_THREADS=1 RAYON_NUM_THREADS=2` avoids scheduling flakes in the existing
+50 ms recovery/markup guards on the shared CI host; the guards were unchanged.
+The native harness's Python checks were repeated after its fixture/environment
+changes. No local build or test, live desktop run, install, or Nacre source
+change was performed. Normal container additions included the workflow's build
+libraries, DejaVu/IBM Plex fonts, swaybg, wlr-randr and wlr-protocols for the
+private pointer tool.
+
+Private nested niri comparison uses identical 2880×1800 outputs at scale 1.5,
+wallpaper, palette and settings. The parent output is synthetic 60 Hz, not
+physical scanout timing. Three harmless generated-format bindings are included
+in each private compositor for a populated shortcut sheet; both QML's helper
+and N0051 read that same file. HOME/XDG paths are private before D-Bus and the
+parent compositor start. Swap prechecks and per-process SwapPss gates remain
+unchanged. Open/close frame sequences and hover/pressed Close states are in the
+private gallery. Pairs and machine-readable results are in
+[evidence/0077](evidence/0077/).
+
+| Open view | Aligned panel RMSE | Whole-frame RMSE |
+| --- | ---: | ---: |
+| Overview | pending | pending |
+| Commands | pending | pending |
+| Keyboard shortcuts | pending | pending |
+
+RMSE is percent of full-scale RGB. Panel crops use the known body rectangles
+recorded in `panel-metrics.json`; they align QML's bottom attachment with Bead's
+owner-requested top attachment. Whole-frame values retain that placement
+difference, the bar and the independently ported Settings window behind the
+overview. These are measurements, not a claim of complete visual parity.
+Lifecycle traces prove scoped ownership; no new relative PSS/DRM acceptance
+measurement is claimed for this unit.
+
+Known gaps: thumbnails and workspace drag/drop await the contracts above;
+the existing engine's action-group content/order and `brain:` behavior differ
+from Palette.qml. Custom workspace settings icons/names, ChatWindowTitle PID
+captions and full window-caption normalization are not fed into this view yet.
+The kit's focused-input outline and font rasterization differ from QML; wheel
+scrolling is immediate rather than FastScroll's smoothing/inertia. Search
+resets effective selection on query changes, but scroll resets on the next
+navigation event. Loading uses a generic unavailable message before the first
+snapshot/result. The sheet adds a Refresh control. UI strings and local search
+case folding still need localization/Unicode parity. No duplicate catalog,
+provider or temporary legacy implementation was added.
