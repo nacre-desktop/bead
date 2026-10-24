@@ -1,0 +1,79 @@
+{
+ "idle": {
+  "rmse": 3.89,
+  "changed_pct": 7.636,
+  "bar_rmse": 6.922,
+  "bbox": [
+   2,
+   17,
+   2865,
+   1785
+  ]
+ },
+ "control-center": {
+  "rmse": 6.552,
+  "changed_pct": 8.928,
+  "bar_rmse": 6.949,
+  "bbox": [
+   2,
+   17,
+   2878,
+   1785
+  ]
+ },
+ "control-audio": {
+  "rmse": 5.929,
+  "changed_pct": 9.775,
+  "bar_rmse": 7.012,
+  "bbox": [
+   2,
+   15,
+   2878,
+   1785
+  ]
+ },
+ "control-battery": {
+  "rmse": 4.508,
+  "changed_pct": 7.199,
+  "bar_rmse": 6.973,
+  "bbox": [
+   2,
+   15,
+   2878,
+   1785
+  ]
+ },
+ "popout-audio": {
+  "rmse": 5.862,
+  "changed_pct": 10.213,
+  "bar_rmse": 6.957,
+  "bbox": [
+   2,
+   17,
+   2878,
+   1785
+  ]
+ },
+ "popout-battery": {
+  "rmse": 5.04,
+  "changed_pct": 8.036,
+  "bar_rmse": 6.962,
+  "bbox": [
+   2,
+   17,
+   2865,
+   1785
+  ]
+ },
+ "settings-date-time-language": {
+  "rmse": 8.979,
+  "changed_pct": 7.298,
+  "bar_rmse": 7.638,
+  "bbox": [
+   2,
+   16,
+   2865,
+   1785
+  ]
+ }
+}

@@ -60,8 +60,64 @@ silent, battery/profile constants). `fake-power.py` is py_compiled in CI (python
 
 ## Evidence
 
-See `docs/specs/evidence/0083/` (QML left, Bead right; rmse is the harness's per-pixel RMS over 0-255). Results and
-the list of differences are appended below by the capture step.
+`docs/specs/evidence/0083/*.png` are QML (left) | Bead (right) pairs from `spikes/parity-compare.py` on the owner's
+desktop (private nested niri, 2880x1800 at scale 1.5, the owner's presentation record, one run per arm; CPU-independent,
+Bead on its default renderer; swap 13 MiB before and after; both arms started from one build of this tree plus Nacre
+`c6dc627b`). `rmse.json` has the harness metrics; rmse is the per-pixel RMS over 0-255 on the whole frame, so the
+shared wallpaper keeps it low. `bar_rmse` is the bar strip alone.
+
+| State | rmse | changed % | bar rmse |
+| --- | --- | --- | --- |
+| idle | 3.890 | 7.64 | 6.92 |
+| control-center (home) | 6.552 | 8.93 | 6.95 |
+| control-audio (Sound detail) | 5.929 | 9.78 | 7.01 |
+| control-battery (Power & brightness detail) | 4.508 | 7.20 | 6.97 |
+| popout-audio | 5.862 | 10.21 | 6.96 |
+| popout-battery | 5.040 | 8.04 | 6.96 |
+| settings-date-time-language | 8.979 | 7.30 | 7.58 |
+
+Same fixtures in both arms: header "63% 2h 10m remaining" matches, Sound lists "Fixture speakers"/"Fixture headphones"
+and "Fixture microphone" at 45 %, Power & brightness has Power saver / Balanced (active) / Performance.
+
+QML audio: Quickshell reads PipeWire, so the QML arm runs a private `pipewire` with null sinks/source of the same
+names, a `default` metadata object naming the defaults, and `channelVolumes` 0.45 cubed (`spikes/parity-compare.py`
+`start_pipewire`, config from `fake_system.pipewire_conf()`); Quickshell reads 0.45, so QML and the daemon agree on
+the percentage. The QML arm also lists its own "Quickshell Peak Detect" stream under Applications (a Quickshell
+artifact, not a fixture).
+
+### Differences found (product visuals are not changed in this unit)
+
+Control centre home:
+- QML has the volume slider with device name and a thumb, Bead shows "Volume" with a thumbless bar; QML tile grid
+  (Wi-Fi, Bluetooth, Airplane mode, VPN, Power mode, Stay awake, Do Not Disturb) and the Screenshot/Clipboard/Updates/
+  Display settings/Wallpaper/Next wallpaper/Notifications quick-action grid are absent or reduced in Bead (Airplane, VPN
+  and the grid do not appear; Wi-Fi, Do Not Disturb and Stay awake are dimmed); the Bluetooth subtitle reads "Fixture
+  headphones" in QML and "Fixture" in Bead; the notifications header has DND/Clear pills in QML, icon buttons in Bead.
+- Bar: Bead's updates counter shows 13 where QML shows 0 (different update sources in the private session), and its
+  volume glyph is the speaker without waves.
+
+Sound detail (also the Sound popout): Bead's sliders have no fill or thumb (the level is only the "45%" text), it adds a device caption under "Output" and "Input", and has no "Input level" meter; the Applications
+list is empty in Bead (QML's one row is its own peak detector). The back button is an outlined square in Bead.
+
+Power & brightness detail: Bead's three profile buttons are shorter, dimmed, with the icon at the left instead of
+centered above the label (QML: taller, icon centered). Battery popout: same text ("63%", "2h 10m remaining", "Balanced")
+and wrapping of "Performance", same card width, but Bead's profile buttons are dimmed with a left icon and its text
+block sits 4 px higher.
+
+Settings, Date, time and language: Bead has the new IP-lookup row (QML has none by design); both show Language,
+Fahrenheit and Weather location. QML shows the Date and time controls from `timedatectl` (unavailable in the private
+session), Bead says "Time settings are not available on this system."
+
+These are listed for follow-up units; none is a harness defect.
+
+## Findings fixed on the way
+
+- `status_views.rs`: with the audio topic live the control centre and the Sound popout reported `UI_ERROR unknown state
+  audio.level` (their stores are declared from the first, unavailable projection, which lacked `audio.level` and
+  `audio.level_available`). Both keys are now in the unavailable projection too, with a test that live keys never exceed
+  the unavailable ones. This was invisible in unit tests (no live projection after an unavailable one) and only appeared
+  with the harness fakes.
+- `i18n.rs` test now also reads label ids from the Settings registry JSON.
 
 ## Temporary duplicates
 
