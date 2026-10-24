@@ -93,6 +93,22 @@ pub(crate) struct Info {
     pub rect: pearl::Rect,
 }
 
+fn placement_monitor<'a>(
+    rect: pearl::Rect,
+    origin: Option<&str>,
+    monitors: &'a [Monitor],
+) -> Option<&'a Monitor> {
+    monitors
+        .iter()
+        .find(|monitor| monitor.rect.contains(rect.centre()))
+        .or_else(|| {
+            monitors
+                .iter()
+                .find(|monitor| Some(monitor.name.as_str()) == origin)
+        })
+        .or_else(|| monitors.first())
+}
+
 /// The resident-panel state, as one movable unit.
 pub(crate) struct Group {
     runtime: Option<Box<dyn SceneSource>>,
@@ -465,7 +481,6 @@ impl App {
                 .is_some_and(|p| p.native.is_some())
     }
     fn promote_native_pearl(&mut self) -> Result<(), String> {
-        let xdg = self.xdg.as_ref().ok_or("compositor has no xdg-shell")?;
         let id = self.pearl.ok_or("no pearl to promote")?.id;
         let name = self.panel_name.clone().ok_or("pearl has no view")?;
         let native = self
@@ -474,28 +489,14 @@ impl App {
             .as_ref()
             .and_then(|p| p.native.clone())
             .ok_or("native pearl options unavailable")?;
-        // Native pearls currently use the rendered body's fixed size. A stale
-        // saved size must not make a much wider body appear beyond the output.
         if let Some([_, _, w, h]) = self
             .companion
             .as_ref()
-            .and_then(|(scene, _, _)| rendering::content_input_rect(scene))
-            && let Some(monitor) = self.monitors().into_iter().find(|monitor| {
-                self.surfaces
-                    .iter()
-                    .any(|surface| surface.companion && surface.output_name == monitor.name)
-            })
-            && let Some(info) = self.pearl
+            .and_then(|(scene, _, _)| rendering::content_window_rect(scene))
         {
-            let rect = pearl::Rect::new(info.rect.x, info.rect.y, w as f64, h as f64);
-            let rect = pearl::recover(
-                Some(rect),
-                (w as f64, h as f64),
-                &monitor.rect,
-                &self.tuning(),
-            );
-            self.pearl = Some(Info { rect, ..info });
+            self.bound_native_pearl_body(w, h);
         }
+        let xdg = self.xdg.as_ref().ok_or("compositor has no xdg-shell")?;
         let qh = self.qh.clone();
         let indices: Vec<_> = self
             .surfaces
@@ -530,7 +531,7 @@ impl App {
             window.set_app_id("bead.pearl");
             window.set_min_size(Some((1, 1)));
             if let Some((scene, _, _)) = &self.companion
-                && let Some([x, y, w, h]) = rendering::content_input_rect(scene)
+                && let Some([x, y, w, h]) = rendering::content_window_rect(scene)
             {
                 smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
                     &window,
@@ -597,7 +598,105 @@ impl App {
         }
         Ok(())
     }
-    fn place_native_pearl(&self, first: bool) {
+
+    fn bound_native_pearl_body(&mut self, w: i32, h: i32) {
+        if w <= 0 || h <= 0 {
+            return;
+        }
+        let Some(info) = self.pearl.filter(|info| info.kind == Kind::Pearl) else {
+            return;
+        };
+        let monitors = self.monitors();
+        let origin = self
+            .surfaces
+            .iter()
+            .find(|s| s.companion)
+            .map(|s| s.output_name.as_str());
+        let Some(monitor) = placement_monitor(info.rect, origin, &monitors) else {
+            return;
+        };
+        let rect = pearl::Rect::new(info.rect.x, info.rect.y, w as f64, h as f64);
+        let rect = pearl::recover(
+            Some(rect),
+            (w as f64, h as f64),
+            &monitor.rect,
+            &self.tuning(),
+        );
+        self.pearl = Some(Info { rect, ..info });
+        if let Some(output) = self.output_named(&monitor.name) {
+            self.panel_output = Some(output.clone());
+            for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
+                surface.output = output.clone();
+                surface.output_name = monitor.name.clone();
+            }
+            if let Some(source) = &mut self.panel_runtime
+                && source.viewport(monitor.rect.w as u32, monitor.rect.h as u32)
+                && let Some(sender) = &self.event_sender
+            {
+                let _ = sender.send(UiEvent::Panel(
+                    self.panel_epoch,
+                    Box::new(UiEvent::Relayout),
+                ));
+            }
+        }
+    }
+
+    /// A restored pearl can map before its worker replaces the placeholder scene.
+    /// Keep native buffer size and window geometry in step with accepted content.
+    pub(super) fn sync_native_pearl_scene(&mut self) -> bool {
+        if !self
+            .surfaces
+            .iter()
+            .any(|s| s.companion && s.native.is_some())
+        {
+            return false;
+        }
+        let Some((scene, _, _)) = &self.companion else {
+            return false;
+        };
+        let width = scene.bounds.w.ceil().max(1.) as u32;
+        let height =
+            (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
+                .ceil()
+                .max(1.) as u32;
+        let body = rendering::content_window_rect(scene);
+        let previous = self.pearl.map(|info| info.rect);
+        if let Some([_, _, w, h]) = body {
+            self.bound_native_pearl_body(w, h);
+        }
+        let mut changed = previous != self.pearl.map(|info| info.rect);
+        for surface in self
+            .surfaces
+            .iter_mut()
+            .filter(|s| s.companion && s.native.is_some())
+        {
+            if surface.width != width || surface.height != height {
+                surface.callbacks.invalidate();
+                surface.width = width;
+                surface.height = height;
+                surface.redraw = true;
+                changed = true;
+            }
+            if let Some(viewport) = &surface.viewport {
+                viewport.set_destination(width as i32, height as i32);
+            }
+            let window = surface.native.as_ref().unwrap();
+            if let Some([x, y, w, h]) = body {
+                smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
+                    window,
+                    x.max(0) as u32,
+                    y.max(0) as u32,
+                    w.max(1) as u32,
+                    h.max(1) as u32,
+                );
+                window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
+                window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
+            }
+            window.commit();
+        }
+        changed
+    }
+    pub(super) fn place_native_pearl(&self, first: bool) {
         let (Some(info), Some(name), Some(native)) = (
             self.pearl,
             self.panel_name.as_ref(),
@@ -688,46 +787,13 @@ impl App {
             .map_or(self.surfaces[i].height.max(1), |v| v.get());
         let resized =
             self.surfaces[i].native_configure_size != Some((configured_width, configured_height));
-        let (width, height, body) = self.companion.as_ref().map_or(
-            (configured_width, configured_height, None),
-            |(scene, _, _)| {
-                (
-                    scene.bounds.w.ceil().max(1.) as u32,
-                    (scene.bounds.y + scene.bounds.h + scene.offset.1)
-                        .ceil()
-                        .max(1.) as u32,
-                    rendering::content_input_rect(scene),
-                )
-            },
-        );
         let surface = &mut self.surfaces[i];
-        surface.width = width;
-        surface.height = height;
         surface.configured = true;
         surface.native_configure_size = Some((configured_width, configured_height));
         surface.redraw = true;
-        if let Some(viewport) = &surface.viewport {
-            viewport.set_destination(width as i32, height as i32);
-        }
-        if let (Some(window), Some([x, y, w, h])) = (&surface.native, body) {
-            smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
-                window,
-                x.max(0) as u32,
-                y.max(0) as u32,
-                w.max(1) as u32,
-                h.max(1) as u32,
-            );
-            window.commit();
-        }
-        if !first
-            && resized
-            && let Some(info) = &mut self.pearl
-        {
-            info.rect.w = configured_width as f64;
-            info.rect.h = configured_height as f64;
-        }
-        if first {
-            self.place_native_pearl(first);
+        let content_changed = self.sync_native_pearl_scene();
+        if first || content_changed {
+            self.place_native_pearl(true);
         } else if resized {
             self.save_pearls();
         }
@@ -1093,7 +1159,7 @@ impl App {
         };
         self.pearl_seq += 1;
         let id = self.pearl_seq;
-        let fallback_size = rendering::content_input_rect(&spec.fallback)
+        let fallback_size = rendering::content_window_rect(&spec.fallback)
             .map(|body| (body[2].max(1) as f64, body[3].max(1) as f64))
             .unwrap_or((spec.fallback.bounds.w as f64, spec.fallback.bounds.h as f64));
         let rect = pearl::recover(rect, fallback_size, &monitor.rect, &self.tuning());
@@ -1395,6 +1461,7 @@ impl App {
         }
     }
 }
+
 impl Group {
     pub(crate) fn is_pearl(&self) -> bool {
         self.info.is_some_and(|i| i.kind == Kind::Pearl)
@@ -1448,5 +1515,37 @@ impl App {
         self.guide_last.clear();
         drop(gone);
         self.release_pearl_watch_if_idle();
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+
+    #[test]
+    fn a_released_rect_selects_its_new_output_before_the_origin_fallback() {
+        let monitors = [
+            Monitor {
+                name: "A".into(),
+                rect: pearl::Rect::new(0., 0., 1920., 1200.),
+                frame: Default::default(),
+            },
+            Monitor {
+                name: "B".into(),
+                rect: pearl::Rect::new(1920., 0., 1920., 1200.),
+                frame: Default::default(),
+            },
+        ];
+        let moved = pearl::Rect::new(2200., 300., 600., 400.);
+        assert_eq!(
+            placement_monitor(moved, Some("A"), &monitors).unwrap().name,
+            "B"
+        );
+        let stale = pearl::Rect::new(100000., 100000., 100., 100.);
+        assert_eq!(
+            placement_monitor(stale, Some("B"), &monitors).unwrap().name,
+            "B"
+        );
+        assert!(placement_monitor(stale, Some("B"), &[]).is_none());
     }
 }

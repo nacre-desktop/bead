@@ -2,10 +2,8 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
-/// Shadows reserve buffer space, but must not intercept adjacent controls.
-/// Retained layout bounds survive a shell replacing its background primitive.
-pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
-    let body = scene
+fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
+    scene
         .layers
         .iter()
         .find(|layer| layer.parent.is_none())
@@ -20,7 +18,30 @@ pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
                     }
                     _ => None,
                 })
-        })?;
+        })
+}
+
+/// Native window geometry describes the complete body, even during its reveal.
+pub(super) fn content_window_rect(scene: &Scene) -> Option<[i32; 4]> {
+    let body = content_body(scene).filter(|body| body.w > 0. && body.h > 0.)?;
+    let body = if scene.motion.is_some() {
+        body.translated(-scene.bounds.x, -scene.bounds.y)
+    } else {
+        body.translated(scene.offset.0, scene.offset.1)
+    };
+    let (x, y) = (body.x.floor(), body.y.floor());
+    Some([
+        x as i32,
+        y as i32,
+        ((body.x + body.w).ceil() - x).max(0.) as i32,
+        ((body.y + body.h).ceil() - y).max(0.) as i32,
+    ])
+}
+
+/// Shadows reserve buffer space, but must not intercept adjacent controls.
+/// Retained layout bounds survive a shell replacing its background primitive.
+pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
+    let body = content_body(scene)?;
     let painted = body.translated(scene.offset.0, scene.offset.1);
     // An entering panel may slide across adjacent surfaces. Keep hit testing
     // inside its final content footprint throughout the animation.
@@ -1609,8 +1630,10 @@ mod input_tests {
         });
         scene.offset = (32., -18.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 50]));
+        assert_eq!(content_window_rect(&scene), Some([32, 32, 200, 100]));
         scene.offset = (32., -100.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 0]));
+        assert_eq!(content_window_rect(&scene), Some([32, 32, 200, 100]));
         scene.offset = (32., 32.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 100]));
     }

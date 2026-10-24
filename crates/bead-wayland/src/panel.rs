@@ -661,6 +661,10 @@ impl App {
         if !changed && !force_draw {
             return;
         }
+        if changed && self.sync_native_pearl_scene() {
+            self.place_native_pearl(true);
+            self.schedule_pearl_save();
+        }
         let qh = self.qh.clone();
         let indices: Vec<_> = self
             .surfaces

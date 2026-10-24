@@ -453,7 +453,8 @@ impl Placement {
 ///
 /// Saved dimensions are retained up to the current output's usable size. Invalid
 /// geometry uses `fallback_size` and is centred; otherwise the saved position is
-/// clamped into the monitor with the configured margin.
+/// repaired into the monitor with the configured margin. Fully visible saved
+/// geometry is unchanged, including panels just detached from a thinner frame.
 pub fn recover(saved: Option<Rect>, fallback_size: (f64, f64), monitor: &Rect, t: &Tuning) -> Rect {
     let valid_monitor = monitor.finite() && monitor.w > 0. && monitor.h > 0.;
     if !valid_monitor {
@@ -470,6 +471,14 @@ pub fn recover(saved: Option<Rect>, fallback_size: (f64, f64), monitor: &Rect, t
         1.
     };
     let valid_saved = saved.filter(|r| r.finite() && r.w > 0. && r.h > 0.);
+    if let Some(body) = valid_saved
+        && body.x >= monitor.x
+        && body.y >= monitor.y
+        && body.x + body.w <= monitor.x + monitor.w
+        && body.y + body.h <= monitor.y + monitor.h
+    {
+        return body;
+    }
     let mut body = valid_saved.unwrap_or_else(|| Rect::new(0., 0., fallback_w, fallback_h));
     body.w = body.w.min((monitor.w - 2. * t.margin).max(1.));
     body.h = body.h.min((monitor.h - 2. * t.margin).max(1.));
@@ -601,6 +610,16 @@ mod tests {
 
     #[test]
     fn recover_keeps_valid_size_and_repairs_bad_or_offscreen_saved_geometry() {
+        let attached = Rect::new(410., 600., 1100., 590.);
+        assert_eq!(
+            recover(
+                Some(attached),
+                (1., 1.),
+                &Rect::new(0., 0., 1920., 1200.),
+                &t()
+            ),
+            attached
+        );
         let monitor = Rect::new(1920., 0., 1280., 800.);
         let saved = recover(
             Some(Rect::new(-900., 900., 400., 300.)),
