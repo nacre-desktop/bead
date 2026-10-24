@@ -59,7 +59,7 @@ shared wallpaper keeps it low. `bar_rmse` is the bar strip alone.
 | control-battery (Power & brightness detail) | 4.508 | 7.20 | 6.97 |
 | popout-audio | 5.862 | 10.21 | 6.96 |
 | popout-battery | 5.040 | 8.04 | 6.96 |
-| settings-date-time-language | 8.979 | 7.30 | 7.58 |
+| settings-date-time-language | 8.766 | 7.15 | 7.59 |
 
 Same fixtures in both arms: header "63% 2h 10m remaining" matches, Sound lists "Fixture speakers"/"Fixture headphones"
 and "Fixture microphone" at 45 %, Power & brightness has Power saver / Balanced (active) / Performance.

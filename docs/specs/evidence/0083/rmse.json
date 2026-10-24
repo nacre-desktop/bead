@@ -66,9 +66,9 @@
   ]
  },
  "settings-date-time-language": {
-  "rmse": 8.979,
-  "changed_pct": 7.298,
-  "bar_rmse": 7.638,
+  "rmse": 8.766,
+  "changed_pct": 7.152,
+  "bar_rmse": 7.585,
   "bbox": [
    2,
    16,
