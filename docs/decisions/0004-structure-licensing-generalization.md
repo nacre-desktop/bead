@@ -78,6 +78,9 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0076: optional `bundle.json` lists root-relative shared Luau modules in a view’s validated reload snapshot;
+  no sibling views are loaded implicitly. Optional `kit.SliderTile.on_detail` opens caller-owned details without changing its level or toggle action.
+
 - B0072: opt-in `Button.activate_on_release` with pointer/model/reload cancellation and `focus_on_pointer`,
   and `kit.Paragraph.advance` for a theme's average glyph width; neither names a shell or service.
 - B0074: `RevealArt` callbacks return content-sized SVG bounds as well as bytes; the scene keeps its layout bounds and restores settled artwork. Reveal clocks start at admission; contour generation stays in the shell adapter.

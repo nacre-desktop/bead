@@ -290,6 +290,24 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
             _ => {}
         }
     }
+    // The control view owns its docked pages. Keep the section for the bar runtime,
+    // which selects the dock and sends the page through CompanionModel.
+    if call.target == "nacre"
+        && call.method == "controls"
+        && call
+            .args
+            .first()
+            .and_then(Value::as_str)
+            .is_some_and(|page| {
+                matches!(
+                    page,
+                    "home" | "edit" | "network" | "bluetooth" | "battery" | "audio" | "sound"
+                )
+            })
+    {
+        validate(&call)?;
+        return Ok(call);
+    }
     // B0068: `nacre controls` sections the control centre does not own: `session` is the session view,
     // `notifications` the dashboard's notification page; `updates` has no Bead view.
     if call.target == "nacre" && call.method == "controls" {
@@ -629,7 +647,12 @@ mod tests {
             );
             let call = from_strings("nacre".into(), "controls".into(), &[view.into()]).unwrap();
             let mapped = map_views(call).unwrap();
-            assert_eq!(mapped.method, "open");
+            if view == "calendar" {
+                assert_eq!(mapped.method, "open");
+            } else {
+                assert_eq!(mapped.target, "nacre");
+                assert_eq!(mapped.method, "controls");
+            }
             assert_eq!(mapped.args, vec![Value::String(view.into())]);
         }
         for route in ["sound", "audio"] {

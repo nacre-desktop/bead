@@ -555,6 +555,7 @@ pub fn control_center(
                 .with_view_edge("right")?
                 .with_frame(crate::placement::Attachment::ControlCenter, &colors)
                 .and_then(|runtime| runtime.with_control_center(control))
+                .and_then(|runtime| runtime.with_docked_details(client.clone()))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),

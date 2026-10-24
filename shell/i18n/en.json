@@ -443,6 +443,8 @@
   "bead.panel.control-appearance": "Appearance",
   "bead.panel.control-awake": "Stay awake",
   "bead.panel.control-back": "Back",
+  "bead.panel.control-sound": "Sound",
+  "bead.panel.control-power-brightness": "Power & brightness",
   "bead.panel.control-battery": "Power mode",
   "bead.panel.control-battery-details": "Open power and battery details",
   "bead.panel.control-battery-unknown": "Connected to power",

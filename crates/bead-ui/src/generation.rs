@@ -390,6 +390,41 @@ impl Generation {
                 }
             }
         }
+        // Optional shared modules are explicit, root-relative snapshots. This keeps
+        // sibling views out of the bundle unless the application actually reuses them.
+        let manifest = entry.parent().unwrap_or(Path::new("")).join("bundle.json");
+        if loader.root.join(&manifest).is_file() {
+            #[derive(serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Bundle {
+                modules: Vec<PathBuf>,
+            }
+            let bundle: Bundle = loader.json(&manifest)?;
+            if bundle.modules.len() + loader.sources.len() > 256 {
+                return Err(Diagnostic::new(
+                    &manifest,
+                    1,
+                    1,
+                    "UI bundle exceeds256sources",
+                ));
+            }
+            for module in bundle.modules {
+                if module.extension().and_then(|s| s.to_str()) != Some("luau")
+                    || !module
+                        .components()
+                        .all(|part| matches!(part, std::path::Component::Normal(_)))
+                {
+                    return Err(Diagnostic::new(
+                        &manifest,
+                        1,
+                        1,
+                        "shared modules must be root-relative Luau paths",
+                    ));
+                }
+                let bytes = loader.read(&module)?;
+                script::Script::validate_source(&bytes, &module)?;
+            }
+        }
         // Root assets are snapshots too, including ones initially outside the scroll viewport.
         for item in fs::read_dir(&loader.root).map_err(|e| Diagnostic::new(entry, 1, 1, e))? {
             let item = item.map_err(|e| Diagnostic::new(entry, 1, 1, e))?;

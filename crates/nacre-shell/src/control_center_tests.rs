@@ -23,13 +23,13 @@ fn audio() -> Json {
 }
 fn network() -> Json {
     json!({"health": health(), "wireless_enabled": true,
-        "devices": {"items": {}, "order": []}, "connections": {"items": {}, "order": []},
+        "devices": {"items": {"d": {"name":"Wi-Fi","kind":"wireless","connected":true}}, "order": ["d"]}, "connections": {"items": {}, "order": []},
         "access_points": {"order": ["ap"], "items": {"ap": {"device": "d", "name": "Home", "strength": 70, "secured": true, "active": true}}}})
 }
 fn bluetooth() -> Json {
     json!({"health": health(),
-        "adapters": {"order": ["hci0"], "items": {"hci0": {"name": "hci0", "powered": true}}},
-        "devices": {"order": ["d1"], "items": {"d1": {"name": "Buds", "connected": true}}}})
+        "adapters": {"order": ["hci0"], "items": {"hci0": {"name": "hci0", "powered": true, "discovering": false}}},
+        "devices": {"order": ["d1"], "items": {"d1": {"name": "Buds", "connected": true, "adapter":"hci0", "paired":true, "trusted":true, "pairing":false}}}})
 }
 fn power() -> Json {
     json!({"health": health(), "active": "balanced",
@@ -1185,10 +1185,7 @@ fn tiles_dispatch_host_actions_and_the_detail_page_opens_in_place() -> bead_test
     );
     assert_eq!(
         action(&h, "tile-network.detail-open"),
-        (
-            Some("view.open".into()),
-            Some(Value::Text("network".into()))
-        )
+        (Some("detail".into()), Some(Value::Text("network".into())))
     );
     assert_eq!(
         action(&h, "tile-clipboard.main"),
@@ -1267,17 +1264,10 @@ fn the_profile_picker_and_one_shot_tiles_dispatch_their_verbs() -> bead_test::Re
         Some(&Value::Text("battery".into()))
     );
     assert_eq!(
-        action(&h, "choice-power-saver"),
+        action(&h, "profiles.power-saver"),
         (
             Some("cc.do".into()),
             Some(Value::Text("choose:power.profile:power-saver".into()))
-        )
-    );
-    assert_eq!(
-        action(&h, "details"),
-        (
-            Some("view.open".into()),
-            Some(Value::Text("battery".into()))
         )
     );
     Ok(())
@@ -1376,4 +1366,189 @@ async fn audio_picker_rechecks_device_kind_and_uses_the_published_node_id() {
         call(&mut lab).await,
         ("audio.set_default".into(), json!({"node":"out"}))
     );
+}
+
+// B0076: the real dock composes the same controlled adapters as bar popouts.
+#[tokio::test(flavor = "current_thread")]
+async fn docked_pages_keep_the_surface_route_actions_and_return_home() -> bead_test::Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    let mut methods = ALL.to_vec();
+    methods.push("power.set_profile");
+    let mut lab = lab(&methods).await;
+    let control = control_for(&lab).await;
+    let palette_path = root().join("palette.json");
+    let colors = bead::render::Palette::read(&palette_path)?;
+    let cold = crate::sound::fallback(colors.get("surface")?);
+    let session = bead::ui::Session::new(
+        root(),
+        "control/main.luau".into(),
+        palette_path,
+        colors,
+        cold,
+    );
+    let mut runtime = crate::reload::Runtime::new(session)
+        .with_control_center(control)?
+        .with_docked_details(lab.client.clone())?;
+    runtime.isolate_state(&lab.dir.join("dock-recovery"));
+    runtime.services(Box::new(|_| {}));
+    runtime.stage(UiEvent::Reload)?;
+    runtime.commit();
+    for (page, part, action, arg) in [
+        ("network", "wifi-radio", "network.toggle_wifi", ""),
+        ("bluetooth", "bluetooth-power", "bluetooth.toggle_power", ""),
+        (
+            "battery",
+            "profiles.power-saver",
+            "cc.do",
+            "choose:power.profile:power-saver",
+        ),
+        ("audio", "audio.output.mute", "cc.do", "toggle:audio.output"),
+    ] {
+        runtime.stage(UiEvent::Model(BTreeMap::from([
+            ("cc.page".into(), Value::Text("detail".into())),
+            ("cc.detail".into(), Value::Text(page.into())),
+            (
+                "bead.focused".into(),
+                Value::Text("control-center.detail.header.back".into()),
+            ),
+        ])))?;
+        runtime.commit();
+        let nodes = runtime.session.view_nodes();
+        assert!(
+            nodes
+                .iter()
+                .any(|node| node.id == "control-center.detail.header.back"),
+            "{page}"
+        );
+        let node = nodes
+            .iter()
+            .find(|node| node.id.contains(part))
+            .unwrap_or_else(|| {
+                panic!(
+                    "{page}: missing {part}: {:?}",
+                    nodes.iter().map(|n| (&n.id, &n.action)).collect::<Vec<_>>()
+                )
+            });
+        assert_eq!(node.action.as_deref(), Some(action), "{page}");
+        if !arg.is_empty() {
+            assert_eq!(node.action_arg, Some(Value::Text(arg.into())));
+        }
+        // At both reference scales the dock's new page is a reviewed golden.
+        for scale in [1., 1.5] {
+            let mut h = harness(runtime.session.stores.values().clone(), "detail", scale)?;
+            golden(&format!("docked-{page}"), &mut h, scale)?;
+        }
+        let rect = bead::ui::rect(&node.draw);
+        runtime.stage(UiEvent::Click {
+            x: rect.x + rect.w / 2.,
+            y: rect.y + rect.h / 2.,
+        })?;
+        runtime.commit();
+        let expected = match page {
+            "network" => ("network.set_wifi", json!({"enabled":false})),
+            "bluetooth" => (
+                "bluetooth.set_power",
+                json!({"adapter":"hci0","powered":false}),
+            ),
+            "battery" => ("power.set_profile", json!({"profile":"power-saver"})),
+            _ => ("audio.set_mute", json!({"target":"sink","muted":true})),
+        };
+        assert_eq!(
+            call(&mut lab).await,
+            (expected.0.into(), expected.1),
+            "{page}"
+        );
+        runtime.stage(UiEvent::Command {
+            command: "escape".into(),
+            shift: false,
+        })?;
+        runtime.commit();
+        assert_eq!(
+            runtime.session.stores.get("cc.page"),
+            Some(&Value::Text("home".into()))
+        );
+        assert_eq!(
+            runtime.session.stores.get("panel.open"),
+            Some(&Value::Bool(true))
+        );
+    }
+    for event in [
+        UiEvent::Model(BTreeMap::from([(
+            "cc.page".into(),
+            Value::Text("home".into()),
+        )])),
+        UiEvent::PanelVisibility(false),
+    ] {
+        runtime.session.stores = runtime.session.stores.reconcile(&BTreeMap::from([
+            (
+                "network.secret".into(),
+                Value::Text("private wifi password".into()),
+            ),
+            ("bluetooth.secret".into(), Value::Text("123456".into())),
+        ]))?;
+        runtime.stage(event)?;
+        runtime.commit();
+        for key in ["network.secret", "bluetooth.secret"] {
+            assert_eq!(
+                runtime.session.stores.get(key),
+                Some(&Value::Text(String::new()))
+            );
+        }
+    }
+    drop(runtime);
+    let mut retired = std::collections::BTreeSet::new();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while retired.len() < TOPICS.len() + 1 {
+            retired.extend(lab.unsubs.recv().await.expect("lease release"));
+        }
+    })
+    .await?;
+    assert!(
+        TOPICS
+            .iter()
+            .chain([&STORE_TOPIC])
+            .all(|topic| retired.contains(*topic))
+    );
+    Ok(())
+}
+
+#[test]
+fn unsupported_tiles_hide_and_catalog_order_is_the_unsaved_default() -> bead_test::Result<()> {
+    let mut out = base();
+    out.insert("cc.saved_known".into(), Value::Bool(false));
+    let mut h = harness(out.clone(), "home", 1.)?;
+    let y = |needle: &str| {
+        bead::ui::rect(
+            &h.session
+                .view_nodes()
+                .iter()
+                .find(|node| node.id.contains(needle))
+                .unwrap()
+                .draw,
+        )
+        .y
+    };
+    assert!(y("tile-volume.toggle") < y("tile-mic-volume.toggle"));
+    golden("default-order", &mut h, 1.)?;
+    let Value::List(items) = out["cc.src"].clone() else {
+        panic!()
+    };
+    out.insert(
+        "cc.src".into(),
+        Value::list(
+            items
+                .iter()
+                .filter(|item| {
+                    !matches!(
+                        item["id"].as_str(),
+                        Some("audio.output" | "brightness.level" | "keyboard.backlight")
+                    )
+                })
+                .cloned()
+                .collect(),
+        ),
+    );
+    let mut h = harness(out, "home", 1.)?;
+    golden("unsupported", &mut h, 1.)?;
+    Ok(())
 }

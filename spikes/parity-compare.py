@@ -82,6 +82,8 @@ STATES = {
     'popout-battery': ([('ui', 'nacre', 'popout', 'battery', '1640')], [('ui', 'nacre', 'close')], 0),
     'popout-audio': ([('ui', 'nacre', 'popout', 'audio', '1520')], [('ui', 'nacre', 'close')], 0),
     'control-center': ([('ui', 'nacre', 'controls', 'home')], [('ui', 'nacre', 'close')], 1.2),
+    'control-battery': ([('ui', 'nacre', 'controls', 'battery')], [('ui', 'nacre', 'close')], 0),
+    'control-audio': ([('ui', 'nacre', 'controls', 'audio')], [('ui', 'nacre', 'close')], 0),
     'control-network': ([('ui', 'nacre', 'controls', 'network')], [('ui', 'nacre', 'close')], 0),
     # B0067: pointer states (need --pointer-tool): same semantic Bluetooth toggle per arm.
     'control-hover': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('pointer-target', 'control-tile')],

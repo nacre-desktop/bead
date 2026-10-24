@@ -113,7 +113,8 @@ return function(ui, tokens)
     function kit.SliderTile(p)
         local color,armed=ink({available=p.available}),p.available~=false
         local pad=tokens.spacing.lg
-        local inner=p.width-pad*2-40-tokens.spacing.sm
+        local detail_width=p.on_detail and tokens.spacing.huge or 0
+        local inner=p.width-pad*2-40-tokens.spacing.sm-detail_width
         local control
         if armed and p.on_change then
             control=kit.Slider{id="level",width=inner,value=p.value,min=0,max=100,step=p.step or 5,label=p.label,
@@ -130,7 +131,10 @@ return function(ui, tokens)
                 ui.Row{id="level-head",width=inner,height=20,align="center",
                     ui.Text{id="label",text=p.label,width=inner-56,height=20,font_size=tokens.text.caption*4/3,color=color},
                     ui.Text{id="value",text=p.detail or "",width=56,height=20,shrink=0,text_align="right",font_size=tokens.text.caption*4/3,color="onSurfaceVariant"}},
-                control}}
+                control},
+            if p.on_detail then kit.IconButton{id="detail",text="chevron_right",width=detail_width,height=40,
+                aria_label=p.detail_label or p.label,on_activate=armed and p.on_detail or nil} else nil,
+        }
     end
     -- Packs tiles into rows by size: `sizes[size]={per_row,height}`; a tile is
     -- `{size,build=function(width,height) return node end}`. A change of size starts a new row. Returns the

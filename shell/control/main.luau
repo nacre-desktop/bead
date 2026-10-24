@@ -23,6 +23,10 @@ local function usable(t)
     if t.view then return views[t.view]==true end
     return t.page~=nil
 end
+local function supported(t)
+    local s=t.source and src[t.source]
+    return not t.hide_unsupported or (s~=nil and s.available==true)
+end
 local defaults={}
 for _,t in ipairs(reg.tiles) do if t.default then table.insert(defaults,t.id) end end
 local order
@@ -37,10 +41,11 @@ local function glyph(id,name,color,size)
     local px=size or T.icons.large*4/3
     return ui.Text{id=id,text=name,family="Material Symbols Rounded",font_size=px,width=px+2,height=24,shrink=0,color=color or "onSurface"}
 end
-local function stack(id,items)
-    local kids={id=id,width=INNER,gap=GAP,shrink=0}
+local function stack(id,items,spacing)
+    spacing=spacing or GAP
+    local kids={id=id,width=INNER,gap=spacing,shrink=0}
     local total=0
-    for i,item in ipairs(items) do kids[#kids+1]=item[1] total=total+item[2]+(i>1 and GAP or 0) end
+    for i,item in ipairs(items) do kids[#kids+1]=item[1] total=total+item[2]+(i>1 and spacing or 0) end
     kids.height=total
     return ui.Column(kids),total
 end
@@ -57,16 +62,17 @@ local function message()
     return {ui.Text{id="message",text=text~="" and text or ui.tr("bead.panel.control-readonly"),width=INNER,height=CAPTION*3,font_size=CAPTION,
         color=text~="" and "error" or "onSurfaceVariant"},CAPTION*3}
 end
-local function build_tile(t,w,h)
+local function build_tile(t,w,h,embedded)
     local s=t.source and src[t.source] or {}
     local label=ui.tr(t.label)
     local function act(verb) return ui.action("cc.do",verb..":"..t.source) end
     local opener
-    if t.view and views[t.view] then opener=ui.action("view.open",t.view)
+    if t.dock and not embedded then opener=ui.action("detail",t.dock)
+    elseif t.view and views[t.view] then opener=ui.action("view.open",t.view)
     elseif t.page then opener=ui.action("detail",t.id) end
     local id="tile-"..t.id
     if t.kind=="slider" then
-        return kit.SliderTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,value=s.value or 0,
+        return kit.SliderTile{id=id,width=w,height=h,on_detail=opener,detail_label=label,icon=s.icon or t.icon,label=label,detail=s.status,value=s.value or 0,
             on_toggle=s.toggle and act("toggle") or nil,on_change=s.set and "cc.do" or nil,
             change_arg=function(n) return "set:"..t.source..":"..n end}
     elseif t.kind=="segmented" then
@@ -88,8 +94,8 @@ local function build_tile(t,w,h)
         end
         return ui.Row(row)
     elseif t.kind=="link" then
-        -- A tile that can switch things opens its picker in place; the battery panel stays one row away.
-        local choosing=s.choices and #s.choices>0
+        -- Link tiles open their dock page or their local choice list.
+        local choosing=not t.dock and s.choices and #s.choices>0
         return kit.LinkTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,
             on_activate=choosing and ui.action("detail",t.id) or opener}
     elseif t.kind=="button" then
@@ -136,7 +142,7 @@ local function home()
     local status_w=INNER-3*HEAD-3*GAP
     local status={id="status",width=INNER,height=HEAD,gap=GAP,align="center",
         kit.Button{id="battery-status",width=status_w,height=HEAD,padding=0,fill="transparent",hover_fill="transparent",
-            aria_label=ui.tr("bead.panel.control-battery-details"),on_activate=views.battery and ui.action("view.open","battery") or nil,
+            aria_label=ui.tr("bead.panel.control-battery-details"),on_activate=views.battery and ui.action("detail","battery") or nil,
             ui.Row{id="battery-row",width=status_w,height=HEAD,gap=T.spacing.xs,align="center",
                 glyph("battery-glyph",get("cc.battery_icon"),"primary"),
                 ui.Text{id="battery-text",text=get("cc.battery"),width=status_w-40,height=24,font_size=BODY,color="onSurface"}}},
@@ -149,9 +155,9 @@ local function home()
     local list={}
     for _,id in ipairs(order) do
         local t=reg.by_id[id]
-        if t then
+        if t and supported(t) then
             local ok=usable(t)
-            -- The QML dims an unavailable tile (alpha .4) instead of dropping it; the veil does the same.
+            -- Supported but temporarily unavailable tiles retain their explanatory state.
             table.insert(list,{size=t.size,build=function(w,h)
                 local tile=build_tile(t,w,h)
                 if ok then return tile end
@@ -184,7 +190,7 @@ local function edit()
     local visible={}
     for _,id in ipairs(order) do
         local t=reg.by_id[id]
-        if t and usable(t) then table.insert(visible,{id=id,label=ui.tr(t.label),icon=t.icon}) end
+        if t and supported(t) then table.insert(visible,{id=id,label=ui.tr(t.label),icon=t.icon}) end
     end
     for _,item in ipairs(visible) do
         item.build=function(w,h)
@@ -245,6 +251,22 @@ local function notifications_page()
 end
 local function detail()
     local id=get("cc.detail")
+    local dock={network={function() return require("../status/network-body")({width=INNER}) end,"bead.panel.control-network"},
+        bluetooth={function() return require("../status/bluetooth-body")({width=INNER}) end,"bead.panel.control-bluetooth"},
+        battery={function() return require("../status/battery-body")({width=INNER}) end,"bead.panel.control-power-brightness"},
+        audio={function() return require("../sound/body")({width=INNER}) end,"bead.panel.control-sound"}}
+    if dock[id] then
+        local node,height=dock[id][1]()
+        local items={header(ui.tr(dock[id][2]),ui.action("page","home")),{node,height}}
+        if id=="battery" then
+            for _,tile in ipairs({reg.by_id.brightness,reg.by_id.keyboard}) do
+                if supported(tile) then
+                    table.insert(items,{build_tile(tile,INNER,reg.layout.sizes.full.height,true),reg.layout.sizes.full.height})
+                end
+            end
+        end
+        return stack("detail",items,T.spacing.lg)
+    end
     if id=="notifications" or id=="dnd" then return notifications_page() end
     local t=reg.by_id[id]
     local s=t and t.source and src[t.source] or {}

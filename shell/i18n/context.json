@@ -434,6 +434,8 @@
   "bead.panel.control-appearance": "Bead control center: name of the light or dark appearance tile, shown under its icon and in the edit lists.",
   "bead.panel.control-awake": "Bead control center: name of the stay-awake toggle tile, shown under its icon and in the edit lists.",
   "bead.panel.control-back": "Bead control center: accessible name of the back button on a detail, edit or catalog page; returns to the tile grid or the previous page.",
+  "bead.panel.control-sound": "Control dock: title of the audio detail page.",
+  "bead.panel.control-power-brightness": "Control dock: title of the battery profiles and brightness detail page.",
   "bead.panel.control-battery": "Bead control center: name of the power profile tile that opens the battery panel, shown under its icon and in the edit lists.",
   "bead.panel.control-battery-details": "Bead control center: accessible name of the battery status button in the header; opens the battery panel.",
   "bead.panel.control-battery-unknown": "Bead control center: header text when the battery level is not known.",

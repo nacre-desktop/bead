@@ -394,3 +394,43 @@ fn bad_asset_and_unused_broken_ui_files_do_not_replace_good_views() {
     session.reject(error.to_string());
     assert_eq!(session.current.primitives.len(), old);
 }
+
+#[test]
+fn shared_markup_modules_are_snapshotted_and_reload_is_atomic() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    fs::create_dir(fixture.0.join("view")).unwrap();
+    fs::write(
+        fixture.0.join("view/behavior.luau"),
+        "return {stores={},actions={},computed={}}",
+    )
+    .unwrap();
+    fs::write(
+        fixture.0.join("view/main.luau"),
+        "return require(\"../shared\")()",
+    )
+    .unwrap();
+    fs::write(fixture.0.join("shared.luau"), "local ui=require(\"bead.ui\"); return function() return ui.Box{width=20,height=20,fill=\"surface\"} end").unwrap();
+    fs::write(
+        fixture.0.join("view/bundle.json"),
+        r#"{"modules":["shared.luau"]}"#,
+    )
+    .unwrap();
+    session.entry = "view/main.luau".into();
+    let scene = session.reload().unwrap();
+    session.commit(scene);
+    let old = session.current.primitives.len();
+    assert!(old > 0);
+    fs::write(fixture.0.join("shared.luau"), "return { broken").unwrap();
+    let error = session.reload().err().unwrap();
+    assert_eq!(error.file, "shared.luau");
+    assert_eq!(session.current.primitives.len(), old);
+    fs::write(
+        fixture.0.join("view/bundle.json"),
+        r#"{"modules":["../outside.luau"]}"#,
+    )
+    .unwrap();
+    let error = session.reload().err().unwrap();
+    assert_eq!(error.file, "view/bundle.json");
+    assert!(error.message.contains("root-relative"));
+}

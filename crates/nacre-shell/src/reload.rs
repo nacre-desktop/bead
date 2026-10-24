@@ -44,6 +44,8 @@ pub struct Runtime {
     calendar_subscription: Option<bead::core::source::Subscription>,
     i18n_subscription: Option<bead::ui::i18n::Subscription>,
     status: Option<std::rc::Rc<crate::status_views::Status>>,
+    dock_status: BTreeMap<String, std::rc::Rc<crate::status_views::Status>>,
+    dock_subscriptions: Vec<bead::core::source::Subscription>,
     status_subscription: Option<bead::core::source::Subscription>,
     status_control_subscription: Option<bead::core::source::Subscription>,
     session_menu: Option<std::rc::Rc<crate::session_menu::SessionMenu>>,
@@ -139,11 +141,23 @@ impl Runtime {
             Some(bead::core::Value::Text(view)) if view == "hidden" => "status-popout.ssid",
             _ => return Ok(scene),
         };
-        if self.session.stores.get("bead.focused") == Some(&bead::core::Value::Text(field.into())) {
+        let field = if self.dock_status.is_empty() {
+            field.to_owned()
+        } else {
+            format!(
+                "{}{field}",
+                match self.session.stores.get("cc.detail_focus_prefix") {
+                    Some(bead::core::Value::Text(prefix)) => prefix.as_str(),
+                    _ => "",
+                }
+            )
+        };
+        if self.session.stores.get("bead.focused") == Some(&bead::core::Value::Text(field.clone()))
+        {
             return Ok(scene);
         }
         // `update` builds on the committed stores, so the pending changes ride along.
-        changes.insert("bead.focused".into(), bead::core::Value::Text(field.into()));
+        changes.insert("bead.focused".into(), bead::core::Value::Text(field));
         Ok(self.session.update(changes)?.or(scene))
     }
     fn publish_status_pill(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
@@ -244,6 +258,12 @@ impl Runtime {
             })
     }
 
+    #[cfg(test)]
+    pub(crate) fn isolate_state(&mut self, path: &std::path::Path) {
+        self.state_file = None;
+        self.session.restore_on_start(BTreeMap::new());
+        self.session.enable_recovery(path.into());
+    }
     pub fn new(session: bead::ui::Session) -> Self {
         Self::for_output(session, None)
     }
@@ -287,6 +307,8 @@ impl Runtime {
             calendar_subscription: None,
             i18n_subscription: None,
             status: None,
+            dock_status: BTreeMap::new(),
+            dock_subscriptions: Vec::new(),
             status_subscription: None,
             status_control_subscription: None,
             session_menu: None,
@@ -875,6 +897,104 @@ impl Runtime {
         }
         self.control = Some(control);
         Ok(self)
+    }
+    /// Compose the existing service adapters for the dock; no extra surface or runtime.
+    /// Leases and adapter state die with the open control view.
+    pub fn with_docked_details(
+        mut self,
+        client: crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        self = self.with_core_network_control(
+            std::sync::Arc::new(client.lease_topic("network")?),
+            client.clone(),
+        )?;
+        self.dock_status.insert(
+            "network".into(),
+            self.status.take().ok_or("network adapter missing")?,
+        );
+        self = self.with_core_bluetooth_control(
+            std::sync::Arc::new(client.lease_topic("bluetooth")?),
+            client.clone(),
+        )?;
+        self.dock_status.insert(
+            "bluetooth".into(),
+            self.status.take().ok_or("Bluetooth adapter missing")?,
+        );
+        self =
+            self.with_core_battery_status(std::sync::Arc::new(client.lease_topic("battery")?))?;
+        self.dock_status.insert(
+            "battery".into(),
+            self.status.take().ok_or("battery adapter missing")?,
+        );
+        self = self.with_core_audio_status(std::sync::Arc::new(client.lease_topic("audio")?))?;
+        self.dock_status.insert(
+            "audio".into(),
+            self.status.take().ok_or("audio adapter missing")?,
+        );
+        let control = self.control.clone().ok_or("control adapter required")?;
+        let pages = self.dock_status.clone();
+        self.session.set_projector(Box::new(move |stores| {
+            let mut values = control.project(stores);
+            if let Some(bead::core::Value::Text(page)) = stores.get("cc.detail")
+                && stores.get("cc.page") == Some(&bead::core::Value::Text("detail".into()))
+                && let Some(status) = pages.get(page)
+            {
+                values.extend(status.project());
+                let focused = match stores.get("bead.focused") {
+                    Some(bead::core::Value::Text(id)) => id.as_str(),
+                    _ => "",
+                };
+                if let (Some(bead::core::Value::Text(prefix)), Some(bead::core::Value::Text(back))) =
+                    (stores.get("cc.detail_focus_prefix"), stores.get("cc.back_focus"))
+                    && !focused.starts_with(prefix)
+                {
+                    values.insert("bead.focused".into(), bead::core::Value::Text(back.clone()));
+                }
+
+                values.insert(
+                    "cc.audio_devices".into(),
+                    bead::core::Value::list(control.audio_devices()),
+                );
+            }
+            Ok(values)
+        }));
+        Ok(self)
+    }
+    fn leave_docked_flow(&self) {
+        for status in self.dock_status.values() {
+            status.network_cancel();
+            status.bluetooth_pair_leave();
+        }
+    }
+    fn cleared_docked_secrets() -> BTreeMap<String, bead::core::Value> {
+        BTreeMap::from([
+            (
+                "network.secret".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "network.hidden_ssid".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            (
+                "bluetooth.secret".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+            ("network.reveal".into(), bead::core::Value::Bool(false)),
+            ("bluetooth.reveal".into(), bead::core::Value::Bool(false)),
+        ])
+    }
+    fn active_status(&self) -> Option<std::rc::Rc<crate::status_views::Status>> {
+        self.status.clone().or_else(|| {
+            if self.session.stores.get("cc.page") != Some(&bead::core::Value::Text("detail".into()))
+            {
+                return None;
+            }
+            let Some(bead::core::Value::Text(page)) = self.session.stores.get("cc.detail") else {
+                return None;
+            };
+            self.dock_status.get(page).cloned()
+        })
     }
     /// Reuse the control centre's guarded calls with a status view and only its topic leases.
     pub fn with_status_controls(
@@ -1774,6 +1894,19 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=status_control_subscription"),
             }
         }
+        for status in self.dock_status.values() {
+            match status.subscribe(wakeup.clone()) {
+                Ok(subscription) => self.dock_subscriptions.push(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=dock_subscription"),
+            }
+            let wakeup = wakeup.clone();
+            let notify = std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new())));
+            match status.subscribe_control_link(notify) {
+                Ok(subscription) => self.dock_subscriptions.push(subscription),
+                Err(error) if error.code == "unavailable" => {}
+                Err(_) => eprintln!("SOURCE_ERROR code=dock_control_subscription"),
+            }
+        }
         if let Some(chat) = &self.chat {
             match chat.subscribe(wakeup.clone()) {
                 Ok(subscriptions) => self.chat_subscription = subscriptions,
@@ -2054,6 +2187,17 @@ impl SceneSource for Runtime {
         {
             return Ok(None);
         }
+        if !self.dock_status.is_empty()
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+            && host_action
+                .as_ref()
+                .is_some_and(|(_, name, _)| matches!(name.as_str(), "page" | "detail"))
+            && let Some(status) = self.active_status()
+        {
+            status.network_cancel();
+            status.bluetooth_pair_leave();
+        }
         if let Some((_, name, arg)) = &mut host_action
             && name == "view.open"
             && *arg == bead::core::Value::Text("sound".into())
@@ -2113,7 +2257,7 @@ impl SceneSource for Runtime {
             let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
                 wakeup(UiEvent::Model(BTreeMap::new()));
             });
-            if let Some(status) = &self.status {
+            if let Some(status) = self.active_status() {
                 status.wifi_action(callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
@@ -2144,7 +2288,7 @@ impl SceneSource for Runtime {
                 crate::status_views::SECRET_STORE.to_owned(),
                 bead::core::Value::Text(String::new()),
             )]);
-            if let Some(status) = &self.status {
+            if let Some(status) = self.active_status() {
                 match (name.as_str(), arg) {
                     ("network.open", bead::core::Value::Text(view)) => status.network_open(view),
                     ("network.cancel", _) => {
@@ -2182,7 +2326,7 @@ impl SceneSource for Runtime {
             let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
                 wakeup(UiEvent::Model(BTreeMap::new()));
             });
-            if let Some(status) = &self.status {
+            if let Some(status) = self.active_status() {
                 status.network_link_action(name, key, callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
@@ -2359,7 +2503,7 @@ impl SceneSource for Runtime {
             let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
                 wakeup(UiEvent::Model(BTreeMap::new()));
             });
-            if let Some(status) = &self.status {
+            if let Some(status) = self.active_status() {
                 status.bluetooth_action(callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
@@ -2388,7 +2532,7 @@ impl SceneSource for Runtime {
             });
             // A typed PIN or passkey leaves the input buffer once it was used or the flow ended.
             let mut clear = true;
-            if let Some(status) = &self.status {
+            if let Some(status) = self.active_status() {
                 match (name.as_str(), arg) {
                     ("bluetooth.pair", bead::core::Value::Text(key)) => {
                         status.bluetooth_pair(key, callback)
@@ -2636,6 +2780,13 @@ impl SceneSource for Runtime {
                     )))?
             }
             UiEvent::Model(mut values) => {
+                if !self.dock_status.is_empty()
+                    && (values.contains_key("cc.page") || values.contains_key("cc.detail"))
+                {
+                    self.leave_docked_flow();
+                    values.extend(Self::cleared_docked_secrets());
+                }
+
                 if self.workspaces.view.follow(&values)
                     && let Some(backend) = &self.backend
                 {
@@ -2755,8 +2906,12 @@ impl SceneSource for Runtime {
                 if open {
                     self.tray_requested_close = false;
                 }
-                self.session
-                    .update(panel_visibility_changes(open, self.launcher.is_some()))?
+                let mut values = panel_visibility_changes(open, self.launcher.is_some());
+                if !open && !self.dock_status.is_empty() {
+                    self.leave_docked_flow();
+                    values.extend(Self::cleared_docked_secrets());
+                }
+                self.session.update(values)?
             }
             UiEvent::Fatal(error) => return Err(error.into()),
             UiEvent::Worker(_) => return Err("worker packet cannot reach script executor".into()),
@@ -2815,6 +2970,57 @@ impl SceneSource for Runtime {
                                 bead::services::ipc::Reply::error(call.id, "notifications", e)
                             }
                         },
+                        ("nacre", "controls")
+                            if call
+                                .args
+                                .first()
+                                .and_then(serde_json::Value::as_str)
+                                .is_some_and(|page| {
+                                    matches!(
+                                        page,
+                                        "home"
+                                            | "edit"
+                                            | "network"
+                                            | "bluetooth"
+                                            | "battery"
+                                            | "audio"
+                                            | "sound"
+                                    )
+                                }) =>
+                        {
+                            self.actions.authorize("view.open")?;
+                            let page = call.args[0].as_str().unwrap_or("home");
+                            let detail = !matches!(page, "home" | "edit");
+                            let page = if page == "sound" { "audio" } else { page };
+                            let wakeup = self
+                                .wakeup
+                                .as_ref()
+                                .ok_or("control event channel unavailable")?;
+                            wakeup(UiEvent::CompanionSelect {
+                                view: "control".into(),
+                                output: call.output.clone(),
+                                toggle: false,
+                                center: None,
+                            });
+                            wakeup(UiEvent::CompanionModel(BTreeMap::from([
+                                (
+                                    "cc.page".into(),
+                                    bead::core::Value::Text(
+                                        if detail { "detail" } else { page }.into(),
+                                    ),
+                                ),
+                                (
+                                    "cc.detail".into(),
+                                    bead::core::Value::Text(if detail { page } else { "" }.into()),
+                                ),
+                                ("cc.scroll".into(), bead::core::Value::Number(0.)),
+                                (
+                                    "bead.focused".into(),
+                                    bead::core::Value::Text(String::new()),
+                                ),
+                            ])));
+                            bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                        }
                         ("drawers", "toggle")
                             if call.args.first().and_then(serde_json::Value::as_str)
                                 == Some("dashboard")
@@ -3227,14 +3433,14 @@ impl SceneSource for Runtime {
                     }))?
                 }
                 "escape"
-                    if self.status.is_some()
+                    if self.active_status().is_some()
                         && matches!(
                             self.session.stores.get("network.view"),
                             Some(bead::core::Value::Text(view)) if view != "list"
                         ) =>
                 {
                     // Esc leaves the prompt, hidden form or saved list before it closes the panel.
-                    if let Some(status) = &self.status {
+                    if let Some(status) = self.active_status() {
                         status.network_cancel();
                     }
                     self.session.update(BTreeMap::from([
@@ -3251,12 +3457,12 @@ impl SceneSource for Runtime {
                 }
                 "escape"
                     if self
-                        .status
+                        .active_status()
                         .as_ref()
                         .is_some_and(|status| status.bluetooth_pairing_open()) =>
                 {
                     // Esc cancels the pairing page before it closes the panel.
-                    if let Some(status) = &self.status {
+                    if let Some(status) = self.active_status() {
                         status.bluetooth_pair_cancel();
                     }
                     self.session.update(BTreeMap::from([
@@ -3265,6 +3471,24 @@ impl SceneSource for Runtime {
                             bead::core::Value::Text(String::new()),
                         ),
                         ("bluetooth.reveal".into(), bead::core::Value::Bool(false)),
+                    ]))?
+                }
+                "escape"
+                    if !self.dock_status.is_empty()
+                        && self.session.stores.get("cc.page")
+                            != Some(&bead::core::Value::Text("home".into())) =>
+                {
+                    self.session.update(BTreeMap::from([
+                        ("cc.page".into(), bead::core::Value::Text("home".into())),
+                        ("cc.scroll".into(), bead::core::Value::Number(0.)),
+                        (
+                            "network.secret".into(),
+                            bead::core::Value::Text(String::new()),
+                        ),
+                        (
+                            "bluetooth.secret".into(),
+                            bead::core::Value::Text(String::new()),
+                        ),
                     ]))?
                 }
                 "escape" if self.session.stores.get("panel.open").is_some() => {
@@ -3279,7 +3503,7 @@ impl SceneSource for Runtime {
                         .get(crate::status_views::BLUETOOTH_SECRET_STORE)
                         .is_some()
                     {
-                        if let Some(status) = &self.status {
+                        if let Some(status) = self.active_status() {
                             status.bluetooth_pair_leave();
                         }
                         values.insert(
@@ -3293,7 +3517,7 @@ impl SceneSource for Runtime {
                         .get(crate::status_views::SECRET_STORE)
                         .is_some()
                     {
-                        if let Some(status) = &self.status {
+                        if let Some(status) = self.active_status() {
                             status.network_cancel();
                         }
                         values.insert(

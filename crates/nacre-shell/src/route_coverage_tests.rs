@@ -33,7 +33,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("nacre.close", Panel("bead.panel", "close")),
     ("nacre.settings", App),
     ("nacre.left", App),
-    ("nacre.controls", Panel("bead.panel", "open")),
+    ("nacre.controls", Runtime("nacre", "controls")),
     ("nacre.session", Panel("bead.panel", "toggle")),
     ("drawers.toggle", Runtime("drawers", "toggle")),
     ("brightness.step", Runtime("brightness", "step")),
