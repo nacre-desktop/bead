@@ -31,7 +31,8 @@ ADR 0005. Its memory and CPU are reported separately (table below).
 
 ## Design choices and why
 
-- **libmpv, software render API, copy-back hardware decode.** The renderer loads `libmpv.so.2` with `dlopen`
+- **(Superseded by B0099 for hosts with a GPU: EGL presentation + zero-copy VA-API; the text below describes the
+  shared-memory path, which remains the fallback.) libmpv, software render API, copy-back hardware decode.** The renderer loads `libmpv.so.2` with `dlopen`
   (no build dependency, no new crate, nothing to cargo-deny; a missing library only disables video and is
   reported as an event). mpv renders the frame already scaled and cropped into a `wl_shm` buffer
   (`panscan=1.0` is the QML's `PreserveAspectCrop`). Hardware decode is `hwdec=vaapi-copy`; if VA-API is
@@ -153,7 +154,8 @@ None.
 - Nacre unit for the `motion` field (above) - blocks the daily switch.
 - Dashboard Today "Pause wallpaper" button (writes `wallpaper-picker.paused` through `settings.set`); the
   renderer already honours the key.
-- Zero-copy GL/dmabuf render path and fractional-scale-exact buffers.
+- Fractional-scale-exact buffers. (The zero-copy GL/dmabuf render path was done in
+  [B0099](0099-wallpaper-hwdec.md).)
 - niri does not report fullscreen windows to the adapter (`fullscreen: None`); with the default `pauseCovered`
   every tiled window already pauses, so only `pauseCovered=false` + fullscreen on niri is not detected.
 - Rotated outputs (buffer transform) and an explicit wlr-output-power DPMS signal.

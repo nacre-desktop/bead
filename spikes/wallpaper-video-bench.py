@@ -3,7 +3,7 @@
 """B0099 CPU/PSS bench for the video wallpaper: bead-wallpaper-video vs the QML shell's NacreDesktopVideo.
 
 Private everything: a headless labwc parent, a nested niri (default 2880x1800 at scale 1.5), one wallpaper
-process, and the same clip for both arms. Phases: playing, covered (paused, as the policy does), resumed.
+process, and the same clip for both arms. Phases: playing, covered (paused, as the policy does), released (Bead only), resumed.
 Prints one JSON object. Run it on a test host (never the owner's laptop), under the desktop lock:
   flock ~/nacre-lead/desktop-heavy.lock python3 wallpaper-video-bench.py --arm bead --bin ./bead-wallpaper-video \
       --video clip.mp4 --libdir rt/usr/lib
@@ -173,7 +173,11 @@ ShellRoot {{
     pids = {"renderer": target, "niri": niri.pid, "labwc": labwc.pid}
     time.sleep(8)
     result["alive"] = Path(f"/proc/{target}").exists()
-    for phase, action in (("playing", None), ("covered", cover), ("resumed", play)):
+    phases = [("playing", None), ("covered", cover)]
+    if args.arm == "bead":  # the policy releases the decoder after a long pause; QML has no such state
+        phases.append(("released", lambda: send({"cmd": "state", "decoder": "release", "render": []})))
+    phases.append(("resumed", play))
+    for phase, action in phases:
         if action:
             action()
             time.sleep(3)
