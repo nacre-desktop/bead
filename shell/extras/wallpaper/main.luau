@@ -205,6 +205,6 @@ local children={
 if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end
 return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=width,height=height,
   duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=height,fade=false,radius=T.panel.radius,
-  fill=carousel and "surface" or "transparent",border_width=carousel and T.panel.border or 0,
+  fill="surface",border_width=carousel and T.panel.border or 0,
   border_color="outlineVariant",padding=0,gap=0,
   on_activate=ui.action("close"),aria_label="Close wallpaper picker",table.unpack(children)}
