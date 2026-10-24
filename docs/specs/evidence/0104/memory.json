@@ -1,0 +1,703 @@
+{
+  "arms": {
+    "candidate-m1": {
+      "all_drm_fd_sets_empty": true,
+      "argv0_matches_expected": true,
+      "capture_returncode": 0,
+      "containment_status": "complete",
+      "drm_fd_sample_count": 8,
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "quiet_swapin_bytes": 0,
+      "shell_sha256": "1a296893a1afec3af409521a8ff4362a1675c96fff40f5c8072fe3a7dfcb7cda",
+      "states": {
+        "pearl-docked": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30356,
+          "pss_file_kib": 52539,
+          "pss_kib": 86833,
+          "pss_shmem_kib": 3938,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34294
+        },
+        "pearl-idle": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 20888,
+          "pss_file_kib": 51934,
+          "pss_kib": 73524,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 21590
+        },
+        "pearl-native-detached": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 31708,
+          "pss_file_kib": 52404,
+          "pss_kib": 88160,
+          "pss_shmem_kib": 4048,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 35756
+        },
+        "pearl-native-ipc-close": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 22564,
+          "pss_file_kib": 51000,
+          "pss_kib": 74266,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 23266
+        }
+      }
+    },
+    "candidate-m2": {
+      "all_drm_fd_sets_empty": true,
+      "argv0_matches_expected": true,
+      "capture_returncode": 0,
+      "containment_status": "complete",
+      "drm_fd_sample_count": 8,
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "quiet_swapin_bytes": 0,
+      "shell_sha256": "1a296893a1afec3af409521a8ff4362a1675c96fff40f5c8072fe3a7dfcb7cda",
+      "states": {
+        "pearl-docked": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30584,
+          "pss_file_kib": 52064,
+          "pss_kib": 86586,
+          "pss_shmem_kib": 3938,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34522
+        },
+        "pearl-idle": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 20884,
+          "pss_file_kib": 51336,
+          "pss_kib": 72922,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 21586
+        },
+        "pearl-native-detached": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30988,
+          "pss_file_kib": 51981,
+          "pss_kib": 87017,
+          "pss_shmem_kib": 4048,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 35036
+        },
+        "pearl-native-ipc-close": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 21976,
+          "pss_file_kib": 50541,
+          "pss_kib": 73219,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 22678
+        }
+      }
+    },
+    "candidate-m3": {
+      "all_drm_fd_sets_empty": true,
+      "argv0_matches_expected": true,
+      "capture_returncode": 0,
+      "containment_status": "complete",
+      "drm_fd_sample_count": 8,
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "quiet_swapin_bytes": 0,
+      "shell_sha256": "1a296893a1afec3af409521a8ff4362a1675c96fff40f5c8072fe3a7dfcb7cda",
+      "states": {
+        "pearl-docked": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30348,
+          "pss_file_kib": 52646,
+          "pss_kib": 86932,
+          "pss_shmem_kib": 3938,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34286
+        },
+        "pearl-idle": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 20928,
+          "pss_file_kib": 52031,
+          "pss_kib": 73661,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 21630
+        },
+        "pearl-native-detached": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 32964,
+          "pss_file_kib": 52508,
+          "pss_kib": 89520,
+          "pss_shmem_kib": 4048,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 37012
+        },
+        "pearl-native-ipc-close": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 22616,
+          "pss_file_kib": 51100,
+          "pss_kib": 74418,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 23318
+        }
+      }
+    },
+    "control-m1": {
+      "all_drm_fd_sets_empty": true,
+      "argv0_matches_expected": true,
+      "capture_returncode": 0,
+      "containment_status": "complete",
+      "drm_fd_sample_count": 8,
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "quiet_swapin_bytes": 0,
+      "shell_sha256": "1f6b7bf6728a926d4769c489f62361f703bcd0e7a3a4257752a6936f95adb0fc",
+      "states": {
+        "pearl-docked": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30592,
+          "pss_file_kib": 52172,
+          "pss_kib": 87418,
+          "pss_shmem_kib": 4654,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 35246
+        },
+        "pearl-idle": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 20920,
+          "pss_file_kib": 51544,
+          "pss_kib": 73166,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 21622
+        },
+        "pearl-native-detached": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30796,
+          "pss_file_kib": 52031,
+          "pss_kib": 86875,
+          "pss_shmem_kib": 4048,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34844
+        },
+        "pearl-native-ipc-close": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 21716,
+          "pss_file_kib": 50659,
+          "pss_kib": 73077,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 22418
+        }
+      }
+    },
+    "control-m2": {
+      "all_drm_fd_sets_empty": true,
+      "argv0_matches_expected": true,
+      "capture_returncode": 0,
+      "containment_status": "complete",
+      "drm_fd_sample_count": 8,
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "quiet_swapin_bytes": 0,
+      "shell_sha256": "1f6b7bf6728a926d4769c489f62361f703bcd0e7a3a4257752a6936f95adb0fc",
+      "states": {
+        "pearl-docked": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30352,
+          "pss_file_kib": 52293,
+          "pss_kib": 86583,
+          "pss_shmem_kib": 3938,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34290
+        },
+        "pearl-idle": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 20828,
+          "pss_file_kib": 51668,
+          "pss_kib": 73198,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 21530
+        },
+        "pearl-native-detached": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30680,
+          "pss_file_kib": 52088,
+          "pss_kib": 86816,
+          "pss_shmem_kib": 4048,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34728
+        },
+        "pearl-native-ipc-close": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 21592,
+          "pss_file_kib": 50716,
+          "pss_kib": 73010,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 22294
+        }
+      }
+    },
+    "control-m3": {
+      "all_drm_fd_sets_empty": true,
+      "argv0_matches_expected": true,
+      "capture_returncode": 0,
+      "containment_status": "complete",
+      "drm_fd_sample_count": 8,
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "quiet_swapin_bytes": 0,
+      "shell_sha256": "1f6b7bf6728a926d4769c489f62361f703bcd0e7a3a4257752a6936f95adb0fc",
+      "states": {
+        "pearl-docked": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30724,
+          "pss_file_kib": 52536,
+          "pss_kib": 87198,
+          "pss_shmem_kib": 3938,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34662
+        },
+        "pearl-idle": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 20920,
+          "pss_file_kib": 51837,
+          "pss_kib": 73459,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 21622
+        },
+        "pearl-native-detached": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 30780,
+          "pss_file_kib": 52344,
+          "pss_kib": 87172,
+          "pss_shmem_kib": 4048,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 34828
+        },
+        "pearl-native-ipc-close": {
+          "drm_kib": 0,
+          "errors": [],
+          "pss_anon_kib": 21764,
+          "pss_file_kib": 50936,
+          "pss_kib": 73402,
+          "pss_shmem_kib": 702,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 22466
+        }
+      }
+    }
+  },
+  "capture": {
+    "backend": "CPU shell and panel renderers",
+    "build_profile": "debug, stripped; identical profile/features for both arms",
+    "capture_flags": [
+      "--cpu"
+    ],
+    "containment_memory_swap_max_bytes": 0,
+    "file_backed_policy": "Pss_File and total PSS are informational, not gated",
+    "geometry_logical": [
+      1920,
+      1200
+    ],
+    "geometry_physical": [
+      2880,
+      1800
+    ],
+    "host_swap_used_each_arm_bytes": 0,
+    "order": [
+      "control-m1",
+      "candidate-m1",
+      "control-m2",
+      "candidate-m2",
+      "control-m3",
+      "candidate-m3"
+    ],
+    "pre_arm_swap_gate_bytes": 67108864,
+    "primary_metric": "Pss_Anon + Pss_Shmem + verified DRM + SwapPss",
+    "primary_samples": "drive[state].rss_kib for idle, docked, detached, and exact IPC-closed; each state settled 12 seconds; IPC-closed samples after numbered pearl-close",
+    "provider_limit": "Audio, battery and Bluetooth use private fixtures; updates were not stubbed and used the host checkupdates provider. Observations are not a fully fixture-controlled acceptance run.",
+    "quiet_swapin_bytes_each_arm": 0,
+    "scale": 1.5,
+    "shell_priority_nice": 10
+  },
+  "diagnostic": {
+    "m3_full_smaps_captured": false,
+    "stack_sample_candidate_m2_post_detach_kib": {
+      "Private_Dirty": 236,
+      "Pss": 236,
+      "Rss": 236
+    }
+  },
+  "evidence_privacy": "Raw paired screenshots remain private because the updates provider exposed host package-update inventory. No screenshots are published.",
+  "functional_close_refresh": {
+    "bead": {
+      "ctrl_w": {
+        "cleanup_close_request_returncode": null,
+        "closed_by_ctrl_w": true,
+        "window_present": true,
+        "wtype_returncode": 0,
+        "wtype_stderr": ""
+      },
+      "native_close": {
+        "closed": [
+          "Nacre Pearl Launcher 2"
+        ],
+        "method": "niri close-window request",
+        "niri_request_returncode": 0,
+        "remaining": [],
+        "wtype_returncode": 0,
+        "wtype_stderr": ""
+      },
+      "state_errors": {
+        "pearl-native-close": [],
+        "pearl-native-ctrlw": []
+      }
+    },
+    "qml": {
+      "ctrl_w": {
+        "cleanup_close_request_returncode": null,
+        "closed_by_ctrl_w": true,
+        "window_present": true,
+        "wtype_returncode": 0,
+        "wtype_stderr": ""
+      },
+      "native_close": {
+        "closed": [
+          "Nacre Pearl Launcher 2"
+        ],
+        "method": "niri close-window request",
+        "niri_request_returncode": 0,
+        "remaining": [],
+        "wtype_returncode": 0,
+        "wtype_stderr": ""
+      },
+      "state_errors": {
+        "pearl-native-close": [],
+        "pearl-native-ctrlw": []
+      }
+    },
+    "super_q": "Both synthetic key attempts fell back to niri close-window in QML and Bead. Native close delivery passed; the final Super+Q chord is not proved."
+  },
+  "gate": {
+    "anon_over_1MiB_pairs": [
+      {
+        "delta_kib": 2184,
+        "pair": 3,
+        "state": "pearl-native-detached"
+      }
+    ],
+    "anon_single_change_stop_limit_kib": 1024,
+    "failed_median_phases": [
+      "pearl-native-detached",
+      "pearl-native-ipc-close"
+    ],
+    "passed": false,
+    "relative_limit_median_kib": 512,
+    "status": "fail"
+  },
+  "missing_final_proofs": [
+    "native away/dock roundtrip",
+    "stale restore/restart",
+    "GL smoke",
+    "direct held-pull pair",
+    "Super+Q key chord (native close request passed via fallback)",
+    "Fully fixture-controlled QML parity capture with stubbed updates provider"
+  ],
+  "paired_deltas_kib": {
+    "pearl-docked": {
+      "median": {
+        "anon_kib": -236,
+        "drm_kib": 0,
+        "pss_file_kib": 110,
+        "pss_kib": -266,
+        "shmem_kib": 0,
+        "swap_pss_kib": 0,
+        "unreclaimable_kib": -376
+      },
+      "pairs": [
+        {
+          "anon_kib": -236,
+          "drm_kib": 0,
+          "pss_file_kib": 367,
+          "pss_kib": -585,
+          "shmem_kib": -716,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": -952
+        },
+        {
+          "anon_kib": 232,
+          "drm_kib": 0,
+          "pss_file_kib": -229,
+          "pss_kib": 3,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 232
+        },
+        {
+          "anon_kib": -376,
+          "drm_kib": 0,
+          "pss_file_kib": 110,
+          "pss_kib": -266,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": -376
+        }
+      ]
+    },
+    "pearl-idle": {
+      "median": {
+        "anon_kib": 8,
+        "drm_kib": 0,
+        "pss_file_kib": 194,
+        "pss_kib": 202,
+        "shmem_kib": 0,
+        "swap_pss_kib": 0,
+        "unreclaimable_kib": 8
+      },
+      "pairs": [
+        {
+          "anon_kib": -32,
+          "drm_kib": 0,
+          "pss_file_kib": 390,
+          "pss_kib": 358,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": -32
+        },
+        {
+          "anon_kib": 56,
+          "drm_kib": 0,
+          "pss_file_kib": -332,
+          "pss_kib": -276,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 56
+        },
+        {
+          "anon_kib": 8,
+          "drm_kib": 0,
+          "pss_file_kib": 194,
+          "pss_kib": 202,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 8
+        }
+      ]
+    },
+    "pearl-native-detached": {
+      "median": {
+        "anon_kib": 912,
+        "drm_kib": 0,
+        "pss_file_kib": 164,
+        "pss_kib": 1285,
+        "shmem_kib": 0,
+        "swap_pss_kib": 0,
+        "unreclaimable_kib": 912
+      },
+      "pairs": [
+        {
+          "anon_kib": 912,
+          "drm_kib": 0,
+          "pss_file_kib": 373,
+          "pss_kib": 1285,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 912
+        },
+        {
+          "anon_kib": 308,
+          "drm_kib": 0,
+          "pss_file_kib": -107,
+          "pss_kib": 201,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 308
+        },
+        {
+          "anon_kib": 2184,
+          "drm_kib": 0,
+          "pss_file_kib": 164,
+          "pss_kib": 2348,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 2184
+        }
+      ]
+    },
+    "pearl-native-ipc-close": {
+      "median": {
+        "anon_kib": 848,
+        "drm_kib": 0,
+        "pss_file_kib": 164,
+        "pss_kib": 1016,
+        "shmem_kib": 0,
+        "swap_pss_kib": 0,
+        "unreclaimable_kib": 848
+      },
+      "pairs": [
+        {
+          "anon_kib": 848,
+          "drm_kib": 0,
+          "pss_file_kib": 341,
+          "pss_kib": 1189,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 848
+        },
+        {
+          "anon_kib": 384,
+          "drm_kib": 0,
+          "pss_file_kib": -175,
+          "pss_kib": 209,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 384
+        },
+        {
+          "anon_kib": 852,
+          "drm_kib": 0,
+          "pss_file_kib": 164,
+          "pss_kib": 1016,
+          "shmem_kib": 0,
+          "swap_pss_kib": 0,
+          "unreclaimable_kib": 852
+        }
+      ]
+    }
+  },
+  "preliminary_only": [
+    "Earlier development screenshots are informational; exact executable identity was not recorded for those frames. They are excluded from final-source acceptance and memory gates."
+  ],
+  "source": {
+    "candidate_binary_sha256": "1a296893a1afec3af409521a8ff4362a1675c96fff40f5c8072fe3a7dfcb7cda",
+    "candidate_commit": "19b529b",
+    "candidate_gl_binary_sha256": "631b461a4437bc61672933e06fb98f9d25af69a4c42ab3179ce08bd5aac01c49",
+    "control_binary_sha256": "1f6b7bf6728a926d4769c489f62361f703bcd0e7a3a4257752a6936f95adb0fc",
+    "control_commit": "417ac32",
+    "control_shared_patch": {
+      "description": "Same four-line Stop-preemption fix as candidate; no B0104 feature changes",
+      "patched_worker_sha256": "3a5ba91d6ca0aa200f50b6bf23e379a90236d897cfc66a05c9b19f40c4eb7c1c"
+    },
+    "helper_binary_sha256": "ee2c3617fbefdec499ff06a74a425fb193f0e7200ca87239245be7868d7d592c",
+    "integrated_ci_commit": "2e7a82422f747381bd6defb53a06bf68c37ff6f2",
+    "orient_commit": "3efe8d1",
+    "qml_commit": "3afcdc64ec5a2150d660bfb5aabb888d3d028ec7",
+    "runtime_equal_to_capture_commit": true
+  }
+}

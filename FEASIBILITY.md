@@ -1,5 +1,22 @@
 # Feasibility
 
+## 2026-10-25 — B0104 pearl drag/close, memory stop
+
+Logical dragging and native-window close repairs pass the full remote Arch checks.
+Three alternating private CPU pairs fail detached/closed unreclaimable memory.
+The +2.133 MiB detached anon outlier trips the owner stop line; its cause is unresolved.
+Captures stopped and the candidate remains unpublished, with final parity proofs incomplete.
+
+| CPU debug, paired median Δ | Unreclaimable MiB | PSS MiB (info) | ≤+0.5 gate |
+| --- | ---: | ---: | --- |
+| Idle | +0.008 | +0.197 | pass |
+| Docked | −0.367 | −0.260 | pass |
+| Detached | +0.891 | +1.255 | **fail** |
+| Closed | +0.828 | +0.992 | **fail** |
+
+DRM and SwapPss are verified zero; file-backed deltas are informational.
+[Components, close checks and remaining proofs](docs/specs/0104-pearls-drag.md).
+
 ## 2026-10-25 — B0097 joined panel reveals and status anchors
 
 Launcher/control frame joins and invoking-icon status placement are implemented.

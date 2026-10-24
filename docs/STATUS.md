@@ -33,6 +33,19 @@ wheel easing while keeping non-content gestures raw. Matched evidence, memory,
 full remote Arch CI, an unresolved transient memory sample and explicit
 physical-wheel/integration limits are in
 [B0098](specs/0098-sidebar-settings-owner.md). No live change or laptop acceptance claim.
+## 2026-10-25 — B0104 pearl drag/close (blocked candidate)
+
+Logical relative dragging, native close, bounded recovery and view-state persistence
+are implemented; full remote Arch CI passes. Three alternating private CPU pairs
+fail the detached/closed unreclaimable gate at +0.891/+0.828 MiB. One detached
+anon delta is +2.133 MiB and triggers the owner stop line. Captures stopped;
+final move/dock, stale and GL refreshes remain incomplete. Ctrl+W and native
+close requests pass in QML/Bead; the synthetic Super+Q chord falls back in both.
+[B0104](specs/0104-pearls-drag.md) records components, images and known gaps.
+Updates were not stubbed; raw images stay private and parity needs a fixture rerun.
+Candidate remains unpublished; no live change or laptop-cap claim.
+
+## 2026-10-24 — B0103 control input (blocked candidate)
 
 
 ## 2026-10-24 — B0103 control input (blocked candidate)
