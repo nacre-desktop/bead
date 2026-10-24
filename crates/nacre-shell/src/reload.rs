@@ -49,6 +49,7 @@ pub struct Runtime {
     status_subscription: Option<bead::core::source::Subscription>,
     status_control_subscription: Option<bead::core::source::Subscription>,
     extras: Option<std::rc::Rc<crate::extras::Extras>>,
+    prompt: Option<std::rc::Rc<crate::prompt::Prompt>>,
     extras_subscription: Vec<bead::core::source::Subscription>,
     extras_wake: Option<std::sync::Arc<std::sync::Mutex<Option<crate::nacre_source::CallWake>>>>,
     session_menu: Option<std::rc::Rc<crate::session_menu::SessionMenu>>,
@@ -315,6 +316,7 @@ impl Runtime {
             status_subscription: None,
             status_control_subscription: None,
             extras: None,
+            prompt: None,
             extras_subscription: Vec::new(),
             extras_wake: None,
             session_menu: None,
@@ -783,6 +785,27 @@ impl Runtime {
             "bead.focused".into(),
             bead::core::Value::Text("extras.search".into()),
         )]))?;
+        Ok(self)
+    }
+    /// B0093 selector prompt: the request as stores, the answer through the responder.
+    pub fn with_prompt(mut self, prompt: crate::prompt::Prompt) -> Result<Self, Box<dyn Error>> {
+        let prompt = std::rc::Rc::new(prompt);
+        let projector = prompt.clone();
+        self.session
+            .set_projector(Box::new(move |stores| Ok(projector.project(stores))));
+        self.actions.register("prompt.do", "prompt.control")?;
+        self.actions.grant("prompt.control");
+        let focus = if prompt.stores().get("prompt.kind")
+            == Some(&bead::core::Value::Text("input".into()))
+        {
+            "prompt.value"
+        } else {
+            "prompt.search"
+        };
+        let mut initial = prompt.stores();
+        initial.insert("bead.focused".into(), bead::core::Value::Text(focus.into()));
+        self.session.stores = self.session.stores.reconcile(&initial)?;
+        self.prompt = Some(prompt);
         Ok(self)
     }
     /// Session menu panel (B0023). Controls stay disabled until the daemon
@@ -1962,6 +1985,12 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=extras_subscription"),
             }
         }
+        if let Some(prompt) = &self.prompt {
+            let wakeup = wakeup.clone();
+            prompt.watch(std::sync::Arc::new(move || {
+                wakeup(bead::wayland::UiEvent::Model(BTreeMap::new()));
+            }));
+        }
         if let Some(menu) = &self.session_menu {
             let wakeup = wakeup.clone();
             match menu.subscribe(std::sync::Arc::new(move || {
@@ -2169,6 +2198,31 @@ impl SceneSource for Runtime {
                     owner.hover(&key, true);
                     self.notification_hover = Some(key);
                 }
+            }
+        }
+        if let Some(prompt) = &self.prompt {
+            let action = match &event {
+                UiEvent::Command { command, .. } => match command.as_str() {
+                    "up" if !self.session.focused_multiline() => Some("prompt.prev"),
+                    "down" if !self.session.focused_multiline() => Some("prompt.next"),
+                    "enter" if self.session.focused_action().is_none() => Some("prompt.choose"),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(action) = action {
+                let mut values = self
+                    .session
+                    .action_values(action, bead::core::Value::Bool(true))?;
+                let request = match values.remove("prompt.request") {
+                    Some(bead::core::Value::Text(s)) => s,
+                    _ => String::new(),
+                };
+                if !request.is_empty() {
+                    values.extend(prompt.act(&request, &self.session.stores));
+                }
+                let scene = self.session.update(values)?;
+                return self.finish_scene(scene, false);
             }
         }
         if self.extras.is_some() {
@@ -2553,6 +2607,22 @@ impl SceneSource for Runtime {
                 );
             }
             let scene = self.session.update(outcome.changes)?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(prompt), Some((_, name, bead::core::Value::Text(request)))) =
+            (&self.prompt, &host_action)
+            && name == "prompt.do"
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let changes = prompt.act(request, &self.session.stores);
+            let released = if matches!(&event, UiEvent::Release) {
+                self.session.release()?
+            } else {
+                None
+            };
+            let scene = self.session.update(changes)?.or(released);
             return self.finish_scene(scene, false);
         }
         if let (Some(extras), Some((_, name, bead::core::Value::Text(request)))) =
@@ -3608,6 +3678,14 @@ impl SceneSource for Runtime {
                         ),
                     ]))?
                 }
+                "escape" if self.prompt.is_some() => {
+                    let changes = self
+                        .prompt
+                        .as_ref()
+                        .map(|prompt| prompt.act("cancel", &self.session.stores))
+                        .unwrap_or_default();
+                    self.session.update(changes)?
+                }
                 "escape" if self.session.stores.get("panel.open").is_some() => {
                     // A half-typed password never outlives its panel.
                     let mut values = std::collections::BTreeMap::from([(
@@ -4011,6 +4089,8 @@ mod link_runtime_tests;
 mod output_runtime_tests;
 #[cfg(test)]
 mod pairing_runtime_tests;
+#[cfg(test)]
+mod prompt_runtime_tests;
 #[cfg(test)]
 mod session_menu_runtime_tests;
 #[cfg(test)]

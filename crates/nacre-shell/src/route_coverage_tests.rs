@@ -185,35 +185,23 @@ fn extra_sections_and_drawers_map_to_bead_views() {
     assert_eq!(pearl.args, vec![Value::String("control".into())]);
 }
 
+/// B0093: `menuPrompt open|cancel ID` go to the on-demand prompt app (unconfigured in unit tests); an id
+/// that is not 32 hex digits is refused before anything starts.
 #[test]
-fn a_selector_prompt_is_answered_cancelled_so_the_tool_does_not_wait() {
-    use std::os::unix::fs::PermissionsExt;
-    let dir = std::env::temp_dir().join(format!("bead-prompt-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let out = dir.join("stdin.json");
-    let script = dir.join("helper.sh");
-    std::fs::write(
-        &script,
-        format!(
-            "#!/bin/sh\nprintf '%s ' \"$@\" > {0}.args\ncat > {0}\n",
-            out.display()
-        ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+fn a_selector_prompt_routes_to_its_app_and_bad_ids_are_refused() {
     let ident = "0123456789abcdef0123456789abcdef";
-    crate::commands::refuse_prompt_for_test(&script, ident).unwrap();
-    let args = std::fs::read_to_string(format!("{}.args", out.display())).unwrap();
-    assert_eq!(args.trim(), format!("menu-cli respond {ident}"));
-    let response: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
-    assert_eq!(response["cancelled"], true);
-    assert_eq!(response["value"], "");
-    assert!(response["error"].as_str().is_some_and(|e| !e.is_empty()));
-    // A valid id is acknowledged; `cancel` has nothing to cancel.
-    let cancel = map_views(call("menuPrompt", "cancel", &[ident])).unwrap_err();
-    assert!(cancel.error.is_none());
-    let _ = std::fs::remove_dir_all(dir);
+    for method in ["open", "cancel"] {
+        let reply = map_views(call("menuPrompt", method, &[ident])).unwrap_err();
+        assert_eq!(
+            reply.error.as_ref().map(|e| e.message.as_str()),
+            Some("apps are not configured in this shell"),
+            "{method}"
+        );
+        assert_eq!(
+            code(call("menuPrompt", method, &["../../etc"])),
+            "invalid-route"
+        );
+    }
 }
 
 /// B0084: every `nacrectl ui` call Nacre's niri/Hyprland binds and app wrappers issue

@@ -32,6 +32,7 @@ mod placement;
 mod player_art;
 mod popouts;
 mod prefs;
+mod prompt;
 mod reload;
 #[cfg(test)]
 mod route_coverage_tests;

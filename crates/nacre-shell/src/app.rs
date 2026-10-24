@@ -7,7 +7,7 @@
 //! forward the request, or start it) and [`run`] is the app process. The shell holds no app
 //! state beyond one path; everything an app allocates dies with its process.
 use crate::{
-    chat, colors as colors_app, nacre_source, placement, popouts, prefs, settings, welcome,
+    chat, colors as colors_app, nacre_source, placement, popouts, prefs, prompt, settings, welcome,
 };
 use bead::{
     render::Palette,
@@ -26,7 +26,7 @@ use std::{
 
 /// Apps the shell can start. A third-party app adds a branch to [`run`] and a route in
 /// `commands::map_views`; the launch, single-instance and exit rules are shared.
-pub const APPS: [&str; 4] = ["settings", "chat", "colors", "welcome"];
+pub const APPS: [&str; 5] = ["settings", "chat", "colors", "welcome", "prompt"];
 
 /// Topics every app follows: Nacre's text catalog and the settings that shape the look.
 const TOPICS: [&str; 5] = [
@@ -91,6 +91,14 @@ pub fn route(id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
     }
 }
 
+/// The selector prompt route (`menuPrompt open|cancel ID`).
+pub fn prompt(id: u64, method: &str, ident: &str) -> Reply {
+    match HOST.get() {
+        Some(host) => host.prompt(id, method, ident),
+        None => Reply::error(id, "unavailable", "apps are not configured in this shell"),
+    }
+}
+
 impl Host {
     pub fn socket(&self, name: &str) -> PathBuf {
         self.dir.join(format!("app-{name}.sock"))
@@ -123,6 +131,34 @@ impl Host {
             Err(_) => {}
         }
         match self.spawn(name, args) {
+            Ok(()) => Reply::ok(id, Value::Null),
+            Err(error) => Reply::error(id, "spawn", error),
+        }
+    }
+    /// B0093 selector prompt. `open` starts the prompt app for a request; a prompt that is already up
+    /// (a stale one of a killed tool) is refused, so the new tool fails at once instead of waiting.
+    /// `cancel` closes the prompt that is up and never starts one.
+    pub fn prompt(&self, id: u64, method: &str, ident: &str) -> Reply {
+        let call = |method: &str| Call {
+            version: 1,
+            id: 1,
+            target: "bead.panel".into(),
+            method: method.into(),
+            args: vec![],
+            output: None,
+        };
+        let socket = self.socket("prompt");
+        let up = ipc::call(&socket, &call("state"), Duration::from_millis(300)).is_ok();
+        if method == "cancel" {
+            if up {
+                let _ = ipc::call(&socket, &call("close"), Duration::from_millis(800));
+            }
+            return Reply::ok(id, Value::Null);
+        }
+        if up {
+            return Reply::error(id, "busy", "another selector is already open");
+        }
+        match self.spawn("prompt", &[json!(ident)]) {
             Ok(()) => Reply::ok(id, Value::Null),
             Err(error) => Reply::error(id, "spawn", error),
         }
@@ -297,7 +333,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
         output,
         interactive: true,
         keyboard_focus: true,
-        app: Some(args),
+        app: Some(args.clone()),
         ..Options::default()
     };
     let fill = colors.get("surface")?;
@@ -334,6 +370,30 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
                 colors,
                 client.clone(),
                 false,
+            )?);
+        }
+        "prompt" => {
+            let ident = args
+                .first()
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let helper = prompt::helper_binary();
+            let request = prompt::Request::read(&helper, &ident).inspect_err(|_| {
+                // Answer the waiting tool at once instead of leaving it to its timeout.
+                let _ = prompt::respond(
+                    &helper,
+                    &ident,
+                    "",
+                    true,
+                    &crate::i18n::tr("bead.prompt.unavailable", &[]),
+                );
+            })?;
+            let _ = first_seen.recv_timeout(Duration::from_millis(150));
+            let spec = prompt::panel(palette, colors, helper, ident, request, false)?;
+            options.panels = Some(Panels::new(
+                "prompt".into(),
+                BTreeMap::from([("prompt".into(), spec)]),
             )?);
         }
         _ => {

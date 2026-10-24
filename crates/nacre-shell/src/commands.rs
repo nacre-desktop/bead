@@ -2,7 +2,7 @@
 //! Audited compatibility signatures; features without native handlers fail explicitly.
 use bead::services::ipc::{Call, Reply};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 #[derive(Deserialize)]
 pub struct Catalog {
     pub routes: Vec<Route>,
@@ -184,47 +184,6 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
-/// B0068 `menuPrompt`: the selector prompt for `nacre-menu pick|input` has no Bead view yet. Opening
-/// answers the waiting tool at once with a cancelled response (instead of leaving it to time out), so
-/// scripts fail fast and visibly; `cancel` has nothing to cancel.
-const PROMPT_UNSUPPORTED: &str = "Selector prompts are not supported by this shell yet";
-fn helper_binary() -> std::path::PathBuf {
-    std::env::var_os("NACRE_HELPER")
-        .map(Into::into)
-        .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").unwrap_or_default();
-            std::path::Path::new(&home).join(".local/share/nacre/shell/tools/nacre-helper")
-        })
-}
-fn refuse_prompt(helper: &std::path::Path, ident: &str) -> Result<(), String> {
-    use std::io::Write;
-    let mut child = bead::services::process::command(helper)
-        .args(["menu-cli", "respond", ident])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    let response = json!({"value": "", "cancelled": true, "error": PROMPT_UNSUPPORTED});
-    child
-        .stdin
-        .take()
-        .ok_or("no stdin")?
-        .write_all(format!("{response}\n").as_bytes())
-        .map_err(|e| e.to_string())?;
-    child.wait().map(drop).map_err(|e| e.to_string())
-}
-#[cfg(test)]
-pub fn refuse_prompt_for_test(helper: &std::path::Path, ident: &str) -> Result<(), String> {
-    refuse_prompt(helper, ident)
-}
-fn is_prompt_id(ident: &str) -> bool {
-    ident.len() == 32
-        && ident
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-}
-
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     // Native extras have their own lazy surfaces; menu routes remain engine-owned.
     if call.target == "nacre"
@@ -257,24 +216,18 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
         validate(&call)?;
         return Err(Reply::ok(call.id, Value::Null));
     }
+    // B0093: the selector prompt is its own on-demand app (`--app prompt ID`); `cancel` closes it.
     if call.target == "menuPrompt" && matches!(call.method.as_str(), "open" | "cancel") {
         validate(&call)?;
         let ident = call.args[0].as_str().unwrap_or_default().to_owned();
-        if !is_prompt_id(&ident) {
+        if !crate::prompt::is_id(&ident) {
             return Err(Reply::error(
                 call.id,
                 "invalid-route",
                 "invalid selector id",
             ));
         }
-        if call.method == "open" {
-            std::thread::spawn(move || {
-                if let Err(error) = refuse_prompt(&helper_binary(), &ident) {
-                    eprintln!("MENU_PROMPT_REFUSE_FAILED {error}");
-                }
-            });
-        }
-        return Err(Reply::ok(call.id, Value::Null));
+        return Err(crate::app::prompt(call.id, &call.method, &ident));
     }
     // `drawers toggle launcher|session` are the launcher and session keys; the other QML drawer
     // names (osd preview, pinned flags, preview-only) are QML preview state with no Bead view.

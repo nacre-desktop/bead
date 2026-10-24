@@ -296,9 +296,9 @@
     ]
    ],
    "qml": "NacreMenuPrompt.qml",
-   "bead": "partial",
-   "spec": "B0068",
-   "note": "Bead has no selector prompt view; it answers the waiting `nacre-menu pick|input` at once with a cancelled response (fail fast). Needs a Bead prompt unit."
+   "bead": "done",
+   "spec": "B0093",
+   "note": "Starts the on-demand prompt app (`--app prompt ID`): it reads the request with `menu-cli read-request` and answers with `menu-cli respond`."
   },
   {
    "id": "menuPrompt.cancel",
@@ -311,8 +311,8 @@
    ],
    "qml": "NacreMenuPrompt.qml",
    "bead": "done",
-   "spec": "B0068",
-   "note": "Nothing is ever open, so there is nothing to cancel."
+   "spec": "B0093",
+   "note": "Closes the prompt app if one is up (which answers cancelled when nobody did); never starts one."
   }
  ],
  "commands": [
