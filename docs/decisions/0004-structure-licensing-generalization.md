@@ -78,6 +78,11 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0090: `bead_wayland::CaptureHub` / `Options::capture` (leased, rate-limited toplevel capture over
+  ext-image-copy-capture with foreign-toplevel sources; thumbnails as small files the renderer already loads by path;
+  capability detection, no product ids). Which windows to lease, the interval and the bound are the application's
+  (`nacre-shell/src/extras.rs`); the tile is Luau.
+
 - B0080: `ui.memo(key, inputs, render)` is a generation-owned, byte-bounded pure markup cache
   with automatic store-read invalidation; the engine has no product or component IDs.
 
