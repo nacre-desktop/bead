@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Validated worker candidates and IME synchronization.
 use super::*;
+fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
+    matches!(
+        event,
+        UiEvent::CompanionSelect { .. }
+            | UiEvent::CompanionOffer { .. }
+            | UiEvent::CompanionVisibility(true)
+            | UiEvent::ShellHidden(_)
+            | UiEvent::LivePalette(_)
+            | UiEvent::ControlChanged
+    )
+}
+
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
         if self.options.primary_factory.is_some()
@@ -279,6 +291,13 @@ impl App {
                 // The epoch prevents an old worker from closing its replacement.
                 if matches!(&*event, UiEvent::CompanionVisibility(false)) {
                     self.close_panel();
+                    return;
+                }
+                if panel_event_belongs_to_host(&event) {
+                    // Panel Runtime emits host commands through its wakeup sender.
+                    // After the epoch check, dispatch those commands at the App
+                    // level instead of feeding them back into the panel script.
+                    self.ui(*event);
                     return;
                 }
                 if matches!(&*event, UiEvent::Reload) {
@@ -879,5 +898,32 @@ impl App {
         }
         self.ime_last = current;
         self.ime_sensitive = sensitive;
+    }
+}
+
+#[cfg(test)]
+mod panel_event_routing_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn companion_selection_from_panel_is_dispatched_by_the_host() {
+        let event = UiEvent::CompanionSelect {
+            view: "dashboard-media".into(),
+            output: Some("fixture-output".into()),
+            toggle: false,
+            center: None,
+        };
+        assert!(panel_event_belongs_to_host(&event));
+        assert!(panel_event_belongs_to_host(&UiEvent::CompanionVisibility(
+            true
+        )));
+        assert!(!panel_event_belongs_to_host(&UiEvent::CompanionVisibility(
+            false
+        )));
+        assert!(!panel_event_belongs_to_host(&UiEvent::Reload));
+        assert!(!panel_event_belongs_to_host(&UiEvent::Model(
+            BTreeMap::new()
+        )));
     }
 }
