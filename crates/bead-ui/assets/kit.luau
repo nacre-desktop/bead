@@ -337,7 +337,7 @@ return function(ui, tokens)
         local width=padding+text_width+(has_icon and extra or 0)
         local base=p.selected and "primary" or "surfaceContainerHigh"
         local pressed=value(ui.bind("bead.pressed"),false)
-        local out=props(p,{width=width,height=math.max(34,size+tokens.spacing.md),padding=0,radius=tokens.radii.full,activate_on_release=true,
+        local out=props(p,{width=width,height=math.max(34,size+tokens.spacing.md),padding=0,radius=tokens.radii.full,activate_on_release=true,focus_ring=false,
             fill=ui.alpha(base,alpha),hover_fill=p.on_activate and ui.tint(base,"onSurface",pressed and .12 or .08) or ui.alpha(base,alpha),aria_label=p.label},
             {label=true,label_width=true,glyph=true,compact=true,selected=true})
         local gap=label~="" and has_icon and (compact and tokens.spacing.xs or tokens.spacing.sm) or 0
