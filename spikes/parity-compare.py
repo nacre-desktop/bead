@@ -110,6 +110,8 @@ STATES = {
     'wallpaper-dynamic': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
     'wallpaper-activated': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('key', 'Right'), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
     'wallpaper-settled': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('ui', 'nacre', 'close'), ('sleep', 7)], [], 0),
+    'wallpaper-spotlight-settled': ([('wallpaper-pref', 'static', 'spotlight'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('ui', 'nacre', 'close'), ('sleep', 7)], [], 0),
+    'wallpaper-hexagons-settled': ([('wallpaper-pref', 'static', 'hexagons'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('ui', 'nacre', 'close'), ('sleep', 7)], [], 0),
     'menu-power': ([('ui', 'nacre', 'menu', 'power', '')], [('ui', 'nacre', 'close')], 0),
     'dashboard-0': ([('ui', 'drawers', 'toggle', 'dashboard'), ('ui', 'nacre', 'tab', '0')], [('ui', 'nacre', 'close')], 1.4),
     # B0067: the same open, measured after one open/close (the view is built and warm), to tell a cold first frame from the motion
@@ -1168,7 +1170,7 @@ os.execv(real, [real, *args])
                     info['ui_state'] = state
                     if not isinstance(state, dict) or state.get('launcher') is not True:
                         raise RuntimeError('launcher capture is not an open launcher')
-                if name.startswith('wallpaper-') and name != 'wallpaper-settled':
+                if name.startswith('wallpaper-') and not name.endswith('-settled'):
                     state = self.dispatch('nacre', 'state')
                     if isinstance(state, str):
                         state = json.loads(state)
