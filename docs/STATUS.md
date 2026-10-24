@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-24 — B0076 docked device details (review)
+
+Wi-Fi, Bluetooth, battery and audio now reuse their popout bodies inside the
+control dock. Unsupported tiles hide and unsaved order follows QML’s catalog.
+Shared modules remain part of atomic reload; page actions and lease retirement
+are tested. Full Arch CI and private paired captures are recorded in
+[B0076](specs/0076-docked-detail-pages.md), with explicit residual visual gaps.
+No live change or new memory-acceptance claim.
+
 ## 2026-10-24 — B0074 dashboard first reveal (review)
 
 The reveal clock now starts at admission and transient contour SVGs use content-sized
