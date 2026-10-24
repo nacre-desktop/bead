@@ -460,6 +460,11 @@ impl Session {
         ])
     }
     pub(super) fn stage_state(&mut self, stores: Stores) -> Result<Option<Scene>, Diagnostic> {
+        let base = self.stores.revision();
+        self.stage_state_from(stores, base)
+    }
+    /// Stage `stores`; `base` is the revision they were derived from (nothing to paint when it is unchanged).
+    fn stage_state_from(&mut self, stores: Stores, base: u64) -> Result<Option<Scene>, Diagnostic> {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
@@ -493,7 +498,7 @@ impl Session {
         }
         // A service notification may carry no local store edits. Consult the
         // external projector before deciding that its wakeup changed nothing.
-        if stores.revision() == self.stores.revision() {
+        if stores.revision() == base {
             return Ok(None);
         }
         let (mut scene, mut nodes) =
@@ -569,7 +574,13 @@ impl Session {
         &mut self,
         changes: BTreeMap<String, Value>,
     ) -> Result<Option<Scene>, Diagnostic> {
-        let mut stores = self.stores.clone();
+        // A change in the same event (a hover, then a service value) builds on the staged state, not on the
+        // committed one, so the later scene still carries the earlier change.
+        let mut stores = match &self.pending {
+            Some(pending) if pending.generation.is_none() => pending.stores.clone(),
+            _ => self.stores.clone(),
+        };
+        let base = stores.revision();
         stores
             .commit(changes)
             .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
@@ -577,7 +588,7 @@ impl Session {
             self.stores = stores;
             return Ok(None);
         }
-        self.stage_state(stores)
+        self.stage_state_from(stores, base)
     }
     /// Host-owned models stay current without painting when no binding reads them.
     /// Behavior/input updates continue through the ordinary staged transaction.

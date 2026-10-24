@@ -35,11 +35,12 @@ return function(ui, constructors, allowed, arrayMarker)
         return result
     end
     ui.alpha = function(role, alpha)
-        return {role=string_arg(role, "alpha role"), alpha=number_arg(alpha, "alpha")}
+        -- A colour expression (a tint) keeps its own alpha under this one.
+        return {role=type(role)=="table" and (role.base ~= nil or role.role ~= nil) and role or string_arg(role, "alpha role"), alpha=type(alpha)=="table" and alpha.__bind and alpha or number_arg(alpha, "alpha")}
     end
     ui.tint = function(base, over, alpha)
         return {base=type(base)=="table" and base or string_arg(base,"tint base"),
-            over=type(over)=="table" and over or string_arg(over,"tint over"), alpha=number_arg(alpha, "tint alpha")}
+            over=type(over)=="table" and over or string_arg(over,"tint over"), alpha=type(alpha)=="table" and alpha.__bind and alpha or number_arg(alpha, "tint alpha")}
     end
     ui.bind = function(name)
         return {__bind=string_arg(name, "bind name")}

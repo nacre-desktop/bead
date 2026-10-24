@@ -264,6 +264,39 @@ fn dimension<T: FromLength + FromPercent + TaffyAuto>(
             .ok_or_else(|| source.error(format!("{name} needs pixels, percentage, fill or auto"))),
     }
 }
+/// Colour properties whose expressions may carry a bound amount (`ui.alpha(role, ui.bind(..))`).
+const COLOR_PROPERTIES: [&str; 5] = [
+    "fill",
+    "color",
+    "border_color",
+    "hover_fill",
+    "selected_fill",
+];
+/// A copy of an expression with every nested binding replaced by its value; `None` when it has none.
+fn resolve_nested(
+    value: &Json,
+    resolve: &Resolve<'_>,
+    source: &Source,
+) -> Result<Option<Json>, Diagnostic> {
+    let Json::Object(object) = value else {
+        return Ok(None);
+    };
+    let mut out = object.clone();
+    let mut changed = false;
+    for (key, inner) in object {
+        if let Some(path) = binding(Some(inner)) {
+            out.insert(
+                key.clone(),
+                serde_json::to_value(resolve(path)?).map_err(|e| source.error(e))?,
+            );
+            changed = true;
+        } else if let Some(next) = resolve_nested(inner, resolve, source)? {
+            out.insert(key.clone(), next);
+            changed = true;
+        }
+    }
+    Ok(changed.then_some(Json::Object(out)))
+}
 fn binding(value: Option<&Json>) -> Option<&str> {
     value.and_then(|v| v.get("__bind")).and_then(Json::as_str)
 }
@@ -292,6 +325,10 @@ impl ViewSpec {
                         name.clone(),
                         serde_json::to_value(resolve(path)?).map_err(|e| raw.source.error(e))?,
                     );
+                } else if COLOR_PROPERTIES.contains(&name.as_str())
+                    && let Some(resolved) = resolve_nested(value, resolve, &raw.source)?
+                {
+                    props.to_mut().insert(name.clone(), resolved);
                 }
             }
             let p = props.as_ref();
@@ -670,14 +707,18 @@ pub(super) fn color(
         Some(Json::Object(object)) if object.contains_key("role") => {
             let role = object
                 .get("role")
-                .and_then(Json::as_str)
                 .ok_or_else(|| source.error("color role must be text"))?;
             let alpha = object
                 .get("alpha")
                 .and_then(Json::as_f64)
                 .filter(|a| (0. ..=1.).contains(a))
                 .ok_or_else(|| source.error("alpha needs0..1"))?;
-            let mut c = palette.get(role).map_err(|e| source.error(e))?;
+            let mut c = match role {
+                Json::String(role) => palette.get(role).map_err(|e| source.error(e))?,
+                // A tint or another alpha expression: its own alpha is scaled by this one.
+                Json::Object(_) => color(Some(role), default, palette, source)?,
+                _ => return Err(source.error("color role must be text")),
+            };
             c[3] = (f64::from(c[3]) * alpha).round() as u8;
             Ok(c)
         }

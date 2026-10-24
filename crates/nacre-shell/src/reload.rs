@@ -3125,6 +3125,10 @@ impl SceneSource for Runtime {
                     )))?
             }
             UiEvent::Model(mut values) => {
+                // The host's edge cue only reaches views that declare it.
+                values.retain(|id, _| {
+                    !id.starts_with("bead.edge.") || self.session.stores.get(id).is_some()
+                });
                 if !self.dock_status.is_empty()
                     && (values.contains_key("cc.page") || values.contains_key("cc.detail"))
                 {

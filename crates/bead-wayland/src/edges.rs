@@ -84,6 +84,9 @@ pub(super) struct EdgeState {
     hover_opened: Option<String>,
     panel_hovered: bool,
     exit_epoch: u64,
+    /// The bar-hosted dwell cue's opacity (0..1) and its fade timer.
+    cue_fade: f32,
+    cue_epoch: u64,
 }
 fn key(output: &str, lip: &str) -> String {
     format!("{output}/{lip}")
@@ -92,6 +95,8 @@ const SIDES: [Edge; 4] = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
 /// Pointer leave to panel close for a hover-opened panel (QML's 130-140 ms exit timers).
 const EXIT_MS: u64 = 130;
 const FRAME: Duration = Duration::from_millis(16);
+/// The cue box fades in and out linearly over this long (QML `NacreHoverCue`).
+const CUE_FADE_S: f32 = 0.12;
 
 fn strip_geometry(edge: Edge, extent: u32) -> Geometry {
     let (anchor, size) = match edge {
@@ -512,6 +517,9 @@ impl App {
             return;
         };
         self.edge.dwell.cancel();
+        // The panel opens: the cue vanishes with it, as QML hides the cue while its dashboard is visible.
+        self.edge.cue_fade = 0.;
+        self.edge.cue_epoch = self.edge.cue_epoch.wrapping_add(1);
         let Some((output, id)) = k.split_once('/') else {
             return;
         };
@@ -542,7 +550,79 @@ impl App {
         }
         self.redraw_lip(&k);
     }
+    /// Tell the bar's view how far the hover dwell of its own lip has filled (`bead.edge.dwell`, 0..1) and how
+    /// visible its cue is (`bead.edge.fade`, a 120 ms linear fade): the view draws them.
+    fn publish_cue(&mut self, k: &str) {
+        let Some((_, id)) = k.split_once('/') else {
+            return;
+        };
+        if !self
+            .edge
+            .chrome
+            .lips
+            .iter()
+            .any(|l| l.id == id && self.bar_hosts(l))
+        {
+            return;
+        }
+        let progress = self.lip_progress(k);
+        let target = f32::from(progress > 0.);
+        self.publish_cue_values(k);
+        if self.edge.cue_fade != target {
+            self.edge.cue_epoch = self.edge.cue_epoch.wrapping_add(1);
+            let epoch = self.edge.cue_epoch;
+            let (k, mut last) = (k.to_owned(), Instant::now());
+            let _ =
+                self.loop_handle
+                    .insert_source(Timer::from_duration(FRAME), move |_, _, app| {
+                        if app.edge.cue_epoch != epoch {
+                            return TimeoutAction::Drop;
+                        }
+                        let now = Instant::now();
+                        let step = now.duration_since(last).as_secs_f32() / CUE_FADE_S;
+                        last = now;
+                        let target = f32::from(app.lip_progress(&k) > 0.);
+                        let fade = app.edge.cue_fade;
+                        app.edge.cue_fade = if target > fade {
+                            (fade + step).min(target)
+                        } else {
+                            (fade - step).max(target)
+                        };
+                        let done = app.edge.cue_fade == target;
+                        app.publish_cue_values(&k);
+                        if done {
+                            TimeoutAction::Drop
+                        } else {
+                            TimeoutAction::ToDuration(FRAME)
+                        }
+                    });
+        }
+    }
+    fn publish_cue_values(&mut self, k: &str) {
+        let Some((output, _)) = k.split_once('/') else {
+            return;
+        };
+        let values = std::collections::BTreeMap::from([
+            (
+                "bead.edge.dwell".to_owned(),
+                bead_core::Value::Number(f64::from(self.lip_progress(k))),
+            ),
+            (
+                "bead.edge.fade".to_owned(),
+                bead_core::Value::Number(f64::from(self.edge.cue_fade)),
+            ),
+        ]);
+        let event = UiEvent::Model(values);
+        match self.output_sessions.get(output) {
+            Some(session) => {
+                let epoch = session.epoch;
+                self.ui(UiEvent::Output(epoch, output.to_owned(), Box::new(event)));
+            }
+            None => self.ui(event),
+        }
+    }
     fn redraw_lip(&mut self, k: &str) {
+        self.publish_cue(k);
         let Some((output, id)) = k.split_once('/') else {
             return;
         };

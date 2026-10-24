@@ -17,6 +17,16 @@ local focus_on=ui.resolve_for_check(ui.bind("bar.window.focus.enabled"))
 local updates_on=ui.resolve_for_check(ui.bind("bar.updates.enabled"))
 local updates_n=ui.resolve_for_check(ui.bind("bar.updates.count"))
 local header=ui.resolve_for_check(ui.bind("bar.height"))
+local ws_count=ui.resolve_for_check(ui.bind("bar.workspace.count"))
+local ws_icons=ui.resolve_for_check(ui.bind("bar.workspace.icons"))
+local thread=true
+for _,entry in ws_icons do if entry.icon~="" then thread=false end end
+-- QML NacreWorkspaceRow.tint: pearls blend primary -> secondary -> tertiary by position along the row.
+local function pearl_accent(at)
+    local position=math.min(1,at/math.max(1,ws_count-1))
+    if position<=0.5 then return ui.tint("primary","secondary",position*2) end
+    return ui.tint("secondary","tertiary",(position-0.5)*2)
+end
 local function glyph(id,text,color)
     return centered_text{id=id,text=text,width=t.icon_width,shrink=0,family="Material Symbols Rounded",font_size=t.icon_font,color=color or "secondary",text_align="center"}
 end
@@ -24,8 +34,10 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
     ui.Row{id="left",height=34,gap=12,align="center",
         launcher and kit.Button{id="brand",width=t.brand_size,height=t.brand_size,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-launcher"),on_activate=ui.action("launcher.open"),ui.Image{path="bar/assets/nacre-logo.themed.svg",width=t.brand_size,height=t.brand_size}} or ui.Image{id="brand",path="bar/assets/nacre-logo.themed.svg",width=t.brand_size,height=t.brand_size},
         ui.Row{id="capsule",height=34,padding_left=5,padding_right=5,gap=2,radius=17,fill="surfaceContainer",align="center",
+            -- QML workspaceThread: a 1 px primary -> secondary -> tertiary line at 12 % behind the pearls, inset 16 px.
+            thread and kit.tokens.gradients and ui.Image{id="thread",position="absolute",left=21,right=21,top=16.5,height=1,path="bar/assets/workspace-thread.themed.svg"} or ui.Box{id="thread",width=0,height=0,shrink=0,visible=false},
             ui.Repeat{id="workspaces",model=ui.bind("bead.workspaces"),key="id",render=function(item)
-                local accent=({"primary","secondary","tertiary"})[((item.index or 1)-1)%3+1]
+                local accent=pearl_accent((item.index or 1)-1)
                 local label=item.label or item.name or ""
                 local on=item.active
                 local activate=ws_on and ui.action("backend.workspace.switch",item.id) or nil
@@ -78,15 +90,14 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
                         add(ui.Box{id="active-capsule",position="absolute",left=0,top=(t.workspace_height-t.active_height)/2,width=width,height=t.active_height,radius=t.active_radius,
                             fill=ui.tint("surfaceContainer",accent,.15),border_width=1,border_color=ui.alpha(accent,.24)})
                     end
-                    -- QML NacreWorkspacePearl: 22 px current / 20 occupied / 18 empty; enamel (accent warmed toward cream) with a specular highlight, ring in onSurface (current) or accent (empty).
-                    add(ui.Box{id="pearl",position="absolute",left=16-size/2,top=t.workspace_height/2-size/2,width=size,height=size,radius=size/2,fill=lit and accent or "surfaceContainer"})
-                    if lit then
-                        -- Cream enamel, not a second rounded oval over the pearl.
-                        add(ui.Box{id="enamel",position="absolute",left=16-size/2,top=t.workspace_height/2-size/2,width=size,height=size,radius=size/2,fill=ui.tint(accent,t.pearl_cream,on and .4 or .1)})
-                        if kit.tokens.gradients then
-                            add(ui.Image{id="enamel-gradient",position="absolute",left=16-size/2,top=t.workspace_height/2-size/2,width=size,height=size,
-                                path="bar/assets/pearl-"..accent..(on and "-current" or "-occupied")..".themed.svg"})
-                        end
+                    -- QML NacreWorkspacePearl: 22 px current / 20 occupied / 18 empty. The enamel is a flat accent warmed toward
+                    -- cream with a neutral cream/secondary shading and specular highlight over it, so any blended accent works.
+                    -- Gradients on: the plain accent under the shading; off: the flat warmed colour (QML numberSurface).
+                    local shaded=lit and kit.tokens.gradients
+                    add(ui.Box{id="pearl",position="absolute",left=16-size/2,top=t.workspace_height/2-size/2,width=size,height=size,radius=size/2,fill=lit and (shaded and accent or ui.tint(accent,t.pearl_cream,on and .4 or .1)) or "surfaceContainer"})
+                    if shaded then
+                        add(ui.Image{id="enamel-gradient",position="absolute",left=16-size/2,top=t.workspace_height/2-size/2,width=size,height=size,
+                            path="bar/assets/pearl-"..(on and "current" or "occupied")..".themed.svg"})
                     end
                     local stroke=on and t.pearl_current_border or not lit and t.pearl_empty_border or 0
                     if stroke>0 then
@@ -112,12 +123,18 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
             end},
         },
     },
+    -- QML NacreHoverCue: while the dashboard dwell fills (`bead.edge.dwell`, 0..1 over the hover delay) a 32 px pill
+    -- outline and tint fade in (`bead.edge.fade`, 120 ms) and a 2 px trace grows from the centre to both ends.
+    -- The 2 px halo margin is part of the box, so everything stays at non-negative offsets.
+    ui.Row{id="title-cue",position="absolute",left="28%",right="28%",top=7,height=36,justify="center",visible=ui.bind("bar.title.cue.visible"),
+        ui.Box{id="cue",width=ui.bind("bar.title.cue.halo.width"),height=36,radius=18,fill=ui.alpha("primary",ui.bind("bar.title.cue.halo")),
+            ui.Box{id="body",position="absolute",left=2,top=2,width=ui.bind("bar.title.cue.extent"),height=32,radius=16,fill=ui.alpha("primary",ui.bind("bar.title.cue.body")),border_width=1,border_color=ui.alpha("primary",ui.bind("bar.title.cue.border"))},
+            ui.Box{id="title-trace",position="absolute",left=ui.bind("bar.title.trace.left"),top=31,width=ui.bind("bar.title.trace.width"),height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))},
+        },
+    },
     ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=t.title_top,height=t.title_height,justify="center",align="center",gap=7,fill="transparent",hover_fill="transparent",focus_ring=false,edge_hover=true,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
         centered_text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
         centered_text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=ui.bind("bar.title"),height=24,width=ui.bind("bar.title.width"),max_width=550,family="IBM Plex Sans",font_size=16,color="primary"},
-        ui.Row{id="title-cue",position="absolute",left=0,right=0,bottom=0,height=t.title_trace_height,justify="center",visible=ui.bind("bar.title.hover"),
-            ui.Box{id="title-trace",width=ui.bind("bar.title.cue.width"),height=t.title_trace_height,radius=1,fill="primary"},
-        },
         kit.Tooltip{id="tray-tooltip",edge="top",bar_size=-8,left=0,width="100%",height=30,padding=3,visible=ui.bind("bead.desktop.tray.tooltip.visible"),
             ui.Text{text=ui.bind("bead.desktop.tray.tooltip"),height=24,width="100%",font_size=13,color="onSurface"},
         },

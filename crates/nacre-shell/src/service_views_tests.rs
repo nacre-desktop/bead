@@ -465,6 +465,11 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
             h.session.stores.get("bead.hovered"),
             Some(&Value::Text("bar.title-band".into()))
         );
+        // The host feeds the dwell fill: half way, cue fully faded in.
+        h.update(std::collections::BTreeMap::from([
+            ("bead.edge.dwell".into(), Value::Number(0.5)),
+            ("bead.edge.fade".into(), Value::Number(1.)),
+        ]))?;
         let trace = h
             .scene()
             .layers
@@ -473,7 +478,7 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
             .ok_or("title underline missing")?;
         assert!(
             !trace.own.is_empty(),
-            "the title underline must paint on hover"
+            "the title underline must paint while the dwell fills"
         );
         let hover = h.pose((0., 0.), 1.)?;
         let golden = root()

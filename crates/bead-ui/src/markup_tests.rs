@@ -83,6 +83,26 @@ return ui.Button{id="target",text="Target",width=100,height=40,edge_hover=true,o
 }
 
 #[test]
+fn an_update_in_the_same_event_keeps_the_staged_hover() {
+    let (_f, mut s) = deferred_fixture();
+    let (x, y) = node_center(&s, "deferred");
+    // Hover is staged but not yet committed when a service value arrives in the same event.
+    assert!(s.hover(x, y).unwrap().is_some());
+    let scene = s
+        .update(BTreeMap::from([("count".into(), Value::Number(7.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.hovered"),
+        Some(&Value::Text("panel.deferred".into()))
+    );
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(7.)));
+    // An unchanged value adds nothing to paint: the staged hover scene stands.
+    assert!(s.hover(x, y).unwrap().is_none());
+}
+
+#[test]
 fn release_activated_button_defers_luau_focus_and_host_action_until_exactly_once() {
     let (_f, mut s) = deferred_fixture();
     if let Some(scene) = s.focus_id("panel.normal").unwrap() {
