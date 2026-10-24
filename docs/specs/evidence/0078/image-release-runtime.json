@@ -1,0 +1,19 @@
+{
+  "renderer": "CPU",
+  "configuration": "release; --trace-state",
+  "output": "2880x1800 at scale 1.5, private nested niri",
+  "records": [
+    {
+      "observed_image_rasters": 3,
+      "retained_image_bytes": 0
+    }
+  ],
+  "panel_idle_released": true,
+  "assertions": "PASS",
+  "note": "weak references observe decoded pixel allocations without retaining them; sampled after panel retirement, before process shutdown",
+  "source": "f4970ff",
+  "verified_hero_layers_baked": [
+    "dashboard.stage.weather.hero.sky.illustration/image/0",
+    "dashboard.stage.weather.hero.sky.shade/image/0"
+  ]
+}

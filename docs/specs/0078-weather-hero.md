@@ -47,8 +47,10 @@ QML’s “Photo:” / “cropped/softened” prose; author and licence remain v
 
 ## Validation
 
-**Blocked from integration by the per-phase +0.5 MiB memory gate.** Code and
-functional checks are complete; this candidate is not published.
+Lead decision: **open-phase content images accepted by lead 2026-10-24; closed phase within noise**.
+The +0.5 MiB relative gate applies to always-on idle and
+closed-after-release memory. Content image growth while Weather is open is accepted;
+publication follows the decoded-raster release proof below.
 
 Full CI-equivalent ran in an Arch container with Rust 1.99, DejaVu/IBM Plex fonts,
 swaybg/wlr-randr and Sway's file capability removed. See [commands](evidence/0078/check.sh)
@@ -88,17 +90,33 @@ QML/helper `16436a343e3f20f9bf990a1abf6571ecb82fd44f`.
 | Closed | 32.591 | 32.812 | +0.221 |
 
 [Raw memory samples](evidence/0078/memory.json) also retain paired medians:
-open +2.452 MiB, closed +0.597 MiB. Both fail the strict per-phase gate.
+open +2.452 MiB, closed +0.597 MiB. Lead accepts the open image working set and
+the closed result as noise, considering the -1.033 MiB own-baseline median.
 Open paired anonymous growth is +2.609 MiB; file-backed +0.052 MiB, SHM unchanged.
 Two 846×447 RGBA hero image rasters alone require 2.885 MiB of pixel storage,
 which explains the added working set. DRM and process SwapPss are measured zero.
 Closed minus each candidate's initial idle is -1.033/-1.171/+7.623 MiB. The last
 sample's increase is file-backed +7.096 and SHM +0.699 MiB, with anonymous -0.172;
-it is not proof that every close settles within +0.5 MiB. The median-total closed
-increase is small, but file/buffer refault activity needs a time-series proof.
+the outlier is therefore file/SHM residency, not anonymous decoded hero pixels.
 
-Owner decision: allow the measured image working set, or authorize a separate
-image-memory/rendering unit before integration. Existing full-resolution Image
-rasters cannot be assumed to fit a +0.5 MiB phase allowance. No new daemon
-contract, animation primitive, desktop install or preview refresh was attempted.
-Product delta: +105/-5 lines; no framework or dependency changes.
+A trace-only `memory_policy` test prepares the actual Weather markup at scale 1.5,
+asserts the two decoded rasters total 3,025,296 bytes, holds a presented frame to
+prove it still owns pixels after renderer eviction, then drops the final frame
+and asserts **zero retained image bytes**. The existing local-photo test separately
+proves its encoded snapshot is released with the view. The generic Wayland close
+trace observes prepared image pixels only through weak references; 100 ms after
+panel retirement it asserts zero and reports `PANEL_IMAGE_RELEASE`.
+The [trace-feature test](evidence/0078/image-release-test.txt) passed with
+`open_bytes=3025296 closed_bytes=0`. A private nested niri release-binary run with
+`--trace-state` confirmed both hero layers were baked, then reported
+`PANEL_IMAGE_RELEASE image_rasters=3 image_bytes=0` after retirement and before
+process shutdown. [Runtime proof](evidence/0078/image-release-runtime.json).
+All observed prepared image allocations were released; no retention fix was needed.
+
+Decode inspection: SVGs already rasterize at display size (846×447 for this hero),
+not their source viewBox size. Bitmap images are resized to the display-cover
+rectangle before cache admission; original decoded source pixels are transient.
+There is no cheap source-sized retained raster to remove, so rendering is unchanged.
+No new daemon contract, animation primitive, desktop install or preview refresh.
+Product delta: +130/-5 lines. The only framework addition is a generic weak
+image-lifetime trace probe; no rendering or dependency changes.

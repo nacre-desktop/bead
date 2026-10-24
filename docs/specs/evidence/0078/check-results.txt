@@ -1,8 +1,6 @@
-Candidate source: ec3a572; Arch container, Rust 1.99, cargo -j2, nice 10.
-Full check.sh core commands completed successfully on the final source.
-The capture-manifest suite initially rejected the modified temporary checkout;
-recording its final source snapshot and rerunning that suite resolved the error.
-Remaining CI commands then completed with exit 0, CI_OK and BUILD_OK.
+Continuation source: f4970ff; Arch container, Rust 1.99, cargo -j2, nice 10.
+The complete CI-equivalent script ran on the final formatted source snapshot.
+Exit 0, CI_OK and BUILD_OK; no resumed/partial run was needed in this continuation.
 Formatting: PASS.
 Clippy workspace/all-targets, warnings denied: PASS.
 HEADLESS_SERVICE_BOUNDARY_OK default+all-features.
@@ -19,3 +17,8 @@ Private SNI/DBusMenu lifecycle: 3 passed, 0 failed.
 cargo-deny shell and each independent framework graph: PASS.
 Goldens regenerated and visually inspected at 1x and 1.5x.
 All new weather condition/daylight, full city, settings, crop/release tests: PASS.
+Trace memory_policy::tests::weather_hero_image_bytes_return_to_zero_after_close:
+PASS; open_bytes=3025296 closed_bytes=0, two display-sized 846x447 images.
+Private nested niri, CPU release binary, --trace-state: PASS.
+PANEL_IMAGE_RELEASE image_rasters=3 image_bytes=0, before process shutdown.
+Lead 2026-10-24: open content images accepted; closed phase within noise.

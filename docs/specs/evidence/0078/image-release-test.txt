@@ -1,0 +1,7 @@
+Trace-feature test, Arch container, Rust 1.99, CPU renderer at output scale 1.5.
+Test: memory_policy::tests::weather_hero_image_bytes_return_to_zero_after_close
+MEMORY_POLICY_WEATHER_IMAGE_RELEASE open_bytes=3025296 closed_bytes=0
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 488 filtered out
+The test also verifies each prepared image is 846x447 pixels and that a held
+presented frame keeps the pixels alive until its final reference is dropped.
+Existing weather_local_photo_crops_keeps_credit_and_releases_the_asset: PASS.
