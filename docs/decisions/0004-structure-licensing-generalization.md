@@ -78,6 +78,9 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0080: `ui.memo(key, inputs, render)` is a generation-owned, byte-bounded pure markup cache
+  with automatic store-read invalidation; the engine has no product or component IDs.
+
 - B0079: `focus_ring` lets a view suppress the default focus outline while retaining input focus.
 
 - B0076: optional `bundle.json` lists root-relative shared Luau modules in a view’s validated reload snapshot;

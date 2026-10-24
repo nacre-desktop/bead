@@ -1580,3 +1580,99 @@ return ui.Panel{id="panel",width=300,height=200,padding=0,
             .any(|p| matches!(p, Primitive::Rounded { rect, .. } if rect.w == 1.))
     );
 }
+
+#[test]
+fn memo_tracks_store_reads_inputs_and_repeat_identity() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"
+local ui=require("bead.ui")
+return ui.Panel{id="panel",width=400,height=240,
+ ui.Repeat{id="items",model=ui.bind("rows"),key="id",render=function(item)
+  return ui.memo("row",item,function(p)
+   return ui.memo("inner",p,function(q)
+    return ui.Button{id="tile",text=ui.resolve_for_check(ui.bind("query"))..q.name,
+      on_activate=ui.action("select",q.id),width=100,height=30}
+   end)
+  end)
+ end}}
+"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let ids = s
+        .view_nodes()
+        .iter()
+        .filter(|n| n.action.is_some())
+        .map(|n| n.id.clone())
+        .collect::<Vec<_>>();
+    for query in ["first ", "second "] {
+        let scene = s
+            .update(BTreeMap::from([(
+                "query".into(),
+                Value::Text(query.into()),
+            )]))
+            .unwrap()
+            .unwrap();
+        assert!(
+            scene
+                .primitives
+                .iter()
+                .any(|p| matches!(p,Primitive::Text{text,..}if text==&format!("{query}Alpha")))
+        );
+        s.commit(scene);
+        assert_eq!(
+            s.view_nodes()
+                .iter()
+                .filter(|n| n.action.is_some())
+                .map(|n| n.id.clone())
+                .collect::<Vec<_>>(),
+            ids
+        );
+    }
+    let scene = s
+        .update(BTreeMap::from([(
+            "rows".into(),
+            Value::list(vec![serde_json::json!({"id":"a","name":"Replaced"})]),
+        )]))
+        .unwrap()
+        .unwrap();
+    assert!(
+        scene
+            .primitives
+            .iter()
+            .any(|p| matches!(p,Primitive::Text{text,..}if text=="second Replaced"))
+    );
+    s.commit(scene);
+    assert_eq!(
+        s.view_nodes().iter().filter(|n| n.action.is_some()).count(),
+        1
+    );
+}
+
+#[test]
+fn memo_expansion_is_bounded_and_a_rejected_reload_keeps_the_view() {
+    let f = fixture();
+    let mut s = session(&f);
+    let before = s.state_summary();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"
+local ui=require("bead.ui")
+local function large()
+ local nodes={}
+ for i=1,64 do nodes[i]=ui.Text{id="text"..i,text=string.rep("x",1024),height=1} end
+ return ui.Column{id="chunk",table.unpack(nodes)}
+end
+local nodes={}
+for i=1,200 do nodes[i]=ui.memo("large",{},large) end
+error("memo loop escaped early admission")
+return ui.Panel{id="panel",width=400,height=240,table.unpack(nodes)}
+"#,
+    )
+    .unwrap();
+    let error = s.reload().err().expect("oversized memo must fail");
+    assert!(error.message.contains("exceeds 8 MiB"), "{error:?}");
+    assert_eq!(s.state_summary(), before);
+}

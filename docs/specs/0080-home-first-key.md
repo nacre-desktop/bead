@@ -30,7 +30,9 @@ No live desktop tests, deployment or Nacre changes are part of this unit.
 General primitive under evaluation: an opt-in, one-pass asynchronous projection
 recheck after markup can replace an already superseded view before raster work;
 it never waits. Buffer adoption copies only the complement of complete repairs.
-Neither change adds persistent caches or changes the focused compaction timeout.
+Neither change retains extra SHM buffers or changes the focused compaction timeout.
+Sidebar, Quick and prefix hints opt into `ui.memo`: a generation-owned pure-markup
+cache (128/32 KiB payload/index, 8 MiB work/output), released with the view.
 Linux frame allocations receive best-effort huge-page
 advice on their existing mapped pages, including shared slot boundary pages;
 host policy is unchanged.

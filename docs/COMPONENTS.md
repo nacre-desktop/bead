@@ -73,6 +73,15 @@ into generation, session and interaction modules; Wayland execution is split
 into runtime, transactions, rendering and protocol dispatch. Public API exports
 are retained.
 
+`ui.memo(key, inputs, render)` caches a pure markup subtree within its generation.
+Use a unique key per definition and pass every non-store input explicitly; store
+reads inside `render(inputs)` are tracked automatically. Bindings, layout, actions
+and Repeat scopes still receive normal validation. The payload/index limits are
+128/32 KiB, with 8 MiB per-build memo work and expanded-output limits (nested
+fragments count again, so a cold nested build may reach the work limit even
+when its final tree is smaller). Oversized inputs bypass admission. No VM is retained;
+generation retirement releases all fragments.
+
 ## Nacre tray preview
 
 The bar's private/legacy `--core-views` preview uses the existing headless tray

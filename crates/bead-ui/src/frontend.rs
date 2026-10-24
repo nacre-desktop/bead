@@ -110,8 +110,41 @@ type Materialized = (
     BTreeMap<String, Value>,
     bead_core::cache::Charge,
 );
+struct Fragment {
+    bytes: usize,
+    raw: RawNode,
+    reads: BTreeMap<String, Value>,
+    _charge: Option<bead_core::cache::Charge>,
+}
+fn expand_fragments(
+    raw: &mut RawNode,
+    fragments: &[std::rc::Rc<Fragment>],
+    remaining: &mut usize,
+) -> mlua::Result<()> {
+    if let Some(index) = raw.props.get("__memo").and_then(serde_json::Value::as_u64) {
+        let fragment = fragments
+            .get(index as usize)
+            .ok_or_else(|| mlua::Error::runtime("invalid memo fragment"))?;
+        let bytes = crate::layout::raw_bytes(&fragment.raw);
+        *remaining = remaining
+            .checked_sub(bytes)
+            .ok_or_else(|| mlua::Error::runtime("expanded markup exceeds 8 MiB"))?;
+        let scope = raw.scope.take();
+        *raw = fragment.raw.clone();
+        if scope.is_some() {
+            raw.scope = scope;
+        }
+    } else {
+        for child in &mut raw.children {
+            expand_fragments(child, fragments, remaining)?;
+        }
+    }
+    Ok(())
+}
 pub struct LuauFrontEnd {
     compiled: Sources,
+    fragments: RefCell<bead_core::cache::Lru<(String, String), std::rc::Rc<Fragment>>>,
+    fragment_budget: bead_core::cache::Budget,
     materialized: RefCell<Option<Materialized>>,
     kit: Vec<u8>,
     install: Vec<u8>,
@@ -161,6 +194,11 @@ impl LuauFrontEnd {
                 "markup-values",
                 8 * bead_core::cache::MIB,
             ),
+            fragments: RefCell::new(bead_core::cache::Lru::new(
+                "markup-fragment-index",
+                32 * 1024,
+            )),
+            fragment_budget: bead_core::cache::Budget::new("markup-fragments", 128 * 1024),
             compiled,
             vm_build_bytes: std::cell::Cell::new(0),
             materialized: RefCell::new(None),
@@ -171,7 +209,9 @@ impl LuauFrontEnd {
     pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
         (
             self._compiled_charge.bytes(),
-            self.values_budget.used(),
+            self.values_budget.used()
+                + self.fragment_budget.used()
+                + self.fragments.borrow().bytes(),
             self.vm_build_bytes.get(),
         )
     }
@@ -190,10 +230,16 @@ impl FrontEnd for LuauFrontEnd {
             return Ok(raw.clone());
         }
         let reads = RefCell::new(BTreeMap::new());
+        let scopes = RefCell::new(Vec::<BTreeMap<String, Value>>::new());
+        let fragments = RefCell::new(Vec::<std::rc::Rc<Fragment>>::new());
+        let fragment_remaining = std::cell::Cell::new(8 * bead_core::cache::MIB);
         let upstream = resolve;
         let record = |name: &str| {
             let value = upstream(name)?;
             reads.borrow_mut().insert(name.to_owned(), value.clone());
+            for scope in scopes.borrow_mut().iter_mut() {
+                scope.insert(name.to_owned(), value.clone());
+            }
             Ok(value)
         };
         let resolve: &Resolve<'_> = &record;
@@ -230,6 +276,91 @@ impl FrontEnd for LuauFrontEnd {
                         }
                         Ok(value)
                     })?,
+                )?;
+                sdk.set(
+                    "memo",
+                    scope.create_function(
+                        |lua, (name, inputs, render): (String, mlua::Value, Function)| {
+                            if name.is_empty() || name.len() > 256 {
+                                return Err(mlua::Error::runtime("memo name exceeds bound"));
+                            }
+                            let json: serde_json::Value = lua.from_value(inputs.clone())?;
+                            let inputs_key =
+                                serde_json::to_string(&json).map_err(mlua::Error::external)?;
+                            if inputs_key.len() > 16 * 1024 {
+                                return render.call::<mlua::Value>(inputs);
+                            }
+                            let key = (name, inputs_key);
+                            let cached = self.fragments.borrow().get(&key).cloned();
+                            let fragment = if let Some(cached) = cached.filter(|cached| {
+                                cached.reads.iter().all(|(name, value)| {
+                                    resolve(name).is_ok_and(|next| next == *value)
+                                })
+                            }) {
+                                cached
+                            } else {
+                                scopes.borrow_mut().push(BTreeMap::new());
+                                let result = render.call::<mlua::Value>(inputs);
+                                let observed = scopes.borrow_mut().pop().expect("memo read scope");
+                                let mut raw: RawNode = lua.from_value(result?)?;
+                                let mut remaining = 8 * bead_core::cache::MIB;
+                                expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
+                                let bytes = crate::layout::raw_bytes(&raw)
+                                    + observed
+                                        .iter()
+                                        .map(|(k, v)| {
+                                            k.capacity() + 64 + bead_core::cache::value_bytes(v)
+                                        })
+                                        .sum::<usize>();
+                                self.fragments.borrow_mut().remove(&key);
+                                let charge = loop {
+                                    match self.fragment_budget.reserve(bytes) {
+                                        Ok(charge) => break Some(charge),
+                                        Err(_) => {
+                                            if self.fragments.borrow_mut().pop_lru().is_none() {
+                                                break None;
+                                            }
+                                        }
+                                    }
+                                };
+                                let fragment = std::rc::Rc::new(Fragment {
+                                    bytes,
+                                    raw,
+                                    reads: observed,
+                                    _charge: charge,
+                                });
+                                if fragment._charge.is_some() {
+                                    let metadata = key.0.capacity() + key.1.capacity() + 128;
+                                    let _ = self.fragments.borrow_mut().insert(
+                                        key,
+                                        fragment.clone(),
+                                        metadata,
+                                    );
+                                }
+                                fragment
+                            };
+                            fragment_remaining.set(
+                                fragment_remaining
+                                    .get()
+                                    .checked_sub(fragment.bytes)
+                                    .ok_or_else(|| {
+                                        mlua::Error::runtime("memo work exceeds 8 MiB")
+                                    })?,
+                            );
+                            let index = fragments.borrow().len();
+                            fragments.borrow_mut().push(fragment);
+                            let marker = lua.create_table()?;
+                            marker.set("kind", "group")?;
+                            let props = lua.create_table()?;
+                            props.set("__memo", index)?;
+                            marker.set("props", props)?;
+                            let children = lua.create_table()?;
+                            children.set_metatable(Some(lua.array_metatable()))?;
+                            marker.set("children", children)?;
+                            marker.set("source", lua.to_value(&source(lua, entry))?)?;
+                            Ok(mlua::Value::Table(marker))
+                        },
+                    )?,
                 )?;
                 sdk.set("tr", crate::i18n::lua_function(&lua)?)?;
                 sdk.set(
@@ -361,7 +492,12 @@ impl FrontEnd for LuauFrontEnd {
                     .eval()?;
                 drop(eval_profile);
                 let _serde_profile = bead_core::profile::Span::new("markup_serde");
-                lua.from_value(node)
+                let mut raw: RawNode = lua.from_value(node)?;
+                let mut remaining = (8 * bead_core::cache::MIB)
+                    .checked_sub(crate::layout::raw_bytes(&raw))
+                    .ok_or_else(|| mlua::Error::runtime("markup exceeds 8 MiB"))?;
+                expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
+                Ok(raw)
             })
         })();
         // The markup sandbox is temporary; this is its end-of-build allocation,
