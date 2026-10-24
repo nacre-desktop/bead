@@ -45,33 +45,56 @@ mod tests {
             Path::new("dashboard/weather/main.luau"),
             &root.join("palette.json"),
             BTreeMap::from([
-                ("dashboard.weather.code".into(), bead::core::Value::Number(3.)),
-                ("dashboard.weather.day".into(), bead::core::Value::Bool(true)),
+                (
+                    "dashboard.weather.code".into(),
+                    bead::core::Value::Number(3.),
+                ),
+                (
+                    "dashboard.weather.day".into(),
+                    bead::core::Value::Bool(true),
+                ),
             ]),
             Default::default(),
         )?;
         let mut renderer = TreeCpuRenderer::default();
         renderer.prepare(panel.scene(), 1.5)?;
-        let frame = renderer.prepared_frame().ok_or("unprepared Weather frame")?;
-        let images: Vec<_> = frame.items.iter()
+        let frame = renderer
+            .prepared_frame()
+            .ok_or("unprepared Weather frame")?;
+        let images: Vec<_> = frame
+            .items
+            .iter()
             .filter(|item| matches!(item.primitive, Primitive::Image { .. }))
             .filter_map(|item| item.raster.as_ref())
             .map(|raster| {
                 // Existing SVG decoding is display-sized, including fractional output scale.
                 assert_eq!((raster.pixels.width(), raster.pixels.height()), (846, 447));
                 Arc::downgrade(&raster.pixels)
-            }).collect();
-        let live_bytes = || images.iter().filter_map(std::sync::Weak::upgrade)
-            .map(|pixels| pixels.data().len()).sum::<usize>();
+            })
+            .collect();
+        let live_bytes = || {
+            images
+                .iter()
+                .filter_map(std::sync::Weak::upgrade)
+                .map(|pixels| pixels.data().len())
+                .sum::<usize>()
+        };
         assert_eq!(images.len(), 2, "both hero layers must have decoded pixels");
         assert_eq!(live_bytes(), 2 * 846 * 447 * 4);
         // release_panel drops the source/scene and the companion renderer; prepared
         // frames share the pixels, so neither cache eviction nor hiding is enough.
         drop(panel);
         drop(renderer);
-        assert!(live_bytes() > 0, "the held presented frame must own its images");
+        assert!(
+            live_bytes() > 0,
+            "the held presented frame must own its images"
+        );
         drop(frame);
-        assert_eq!(live_bytes(), 0, "image bytes retained after panel retirement");
+        assert_eq!(
+            live_bytes(),
+            0,
+            "image bytes retained after panel retirement"
+        );
         println!("MEMORY_POLICY_WEATHER_IMAGE_RELEASE open_bytes=3025296 closed_bytes=0");
         Ok(())
     }
