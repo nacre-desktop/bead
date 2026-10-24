@@ -135,7 +135,7 @@ elseif layout=="spotlight" then
     local y=(hero_height-card_h)/2
     if distance<side_slots+1 then area[#area+1]=card(item,card_w,card_h,x,y,item.selected,nil) end
   end
-  body=ui.Scroll{id="spotlight-strip",position="absolute",left=T.wallpaper.content_inset,top=hero_y,width=body_w,height=hero_height,
+  body=ui.Scroll{id="spotlight-strip",position="absolute",left=T.wallpaper.content_inset,top=hero_y,width=body_w,height=hero_height,scroll=ui.bind("extras.wallpaper.carousel_scroll"),
     ui.Box{width=body_w,height=hero_height,shrink=0,table.unpack(area)}}
 else
   local area_w=width-T.wallpaper.content_inset*2
