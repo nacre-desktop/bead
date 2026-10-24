@@ -171,7 +171,7 @@ local head_height=34
 local out_kids,out_heights={},{}
 local function put(node,h) table.insert(out_kids,node);table.insert(out_heights,h) end
 put(ui.Row{id="wifi-row",width=content,height=head_height,align="center",gap=T.spacing.md,
-    ui.Text{id="wifi-label",visible=not embedded,text=ui.tr("bead.panel.wifi"),height=(T.text.body+1)*4/3*LINE,grow=1,font_size=(T.text.body+1)*4/3,
+    ui.Text{id="wifi-label",visible=not embedded,text=ui.tr("bead.panel.wifi"),height=(T.text.body+1)*4/3*LINE,width=content-pill_width(ui.tr("bead.panel.network-scan"),"refresh")-46-T.spacing.md*2,shrink=0,font_size=(T.text.body+1)*4/3,
         color=enabled and "onSurface" or "onSurfaceVariant"},
     pill("scan",ui.tr("bead.panel.network-scan"),"refresh",ui.action("network.scan"),scan_on),
     ui.Box{id="heading-space",visible=embedded,grow=1,height=1},
