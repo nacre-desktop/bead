@@ -197,7 +197,7 @@ STATES = {
     'sidebar-hover': ([('ui', 'nacre', 'left'), ('sleep', 0.8), ('pointer', 80, 342)], [('release',), ('ui', 'nacre', 'left')], 0),
     'sidebar-pressed': ([('ui', 'nacre', 'left'), ('sleep', 0.8), ('press', 80, 342)], [('release',), ('ui', 'nacre', 'left')], 0),
     'sidebar-conversation': ([('ui', 'nacre', 'left'), ('chat-seed',), ('sleep', 1.0)], [('ui', 'nacre', 'left')], 0),
-    'sidebar-pinned': ([('ui', 'nacre', 'left'), ('chat-seed',), ('sleep', 1.0), ('pin',), ('click', 1600, 600), ('sleep', 0.3)], [('ui', 'nacre', 'left')], 0),
+    'sidebar-pinned': ([('ui', 'nacre', 'left'), ('chat-seed',), ('sleep', 1.0), ('pin',), ('click', 1600, 600), ('sleep', 0.3)], [('pin',), ('click', 1600, 600), ('sleep', 0.6)], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
     # B0093: the selector prompt (`nacre-menu pick|input`), the same request through the same helper in both shells
     'menu-pick': ([('prompt', 'pick'), ('sleep', 0.2)], [('prompt_end',)], 1.0),
@@ -1135,6 +1135,14 @@ os.execv(real, [real, *args])
                 time.sleep(self.args.closed_settle)
                 info['rss_closed_kib'] = self.rss()
                 info['rss_apps_closed_kib'] = self.app_rss()
+                if name == 'sidebar-pinned':
+                    if self.name == 'bead' and 'chat' in info['rss_apps_closed_kib']:
+                        raise RuntimeError('unpinned sidebar did not close on outside click')
+                    if self.name == 'qml':
+                        state = self.dispatch('nacre', 'state')
+                        if isinstance(state, str): state = json.loads(state)
+                        if state.get('left'): raise RuntimeError('unpinned QML sidebar did not close')
+                    info['unpin_then_outside_closes'] = True
                 info['dispatch_trace'] = self.dispatch_trace
                 if info['rss_closed_kib'].get('SwapPss') != 0:
                     raise RuntimeError('nonzero or unavailable closed process SwapPss')
