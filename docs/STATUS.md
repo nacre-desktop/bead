@@ -1,5 +1,17 @@
 # Status
 
+## 2026-10-24 — B0071 visual parity round 5 (review)
+
+Dashboard artwork now grows with rounded corners and a moving rim; four status
+popouts join the top bar and share its colour. Nested CPU RMSE before→after:
+Wi-Fi 17.825→10.248%, Bluetooth 15.277→5.532%, battery 14.339→4.846%, audio
+19.316→7.200% with matched deterministic starting state. Pointer captures verify
+the parent geometry and sample the same Bluetooth toggle; brightness/keyboard
+OSDs have read-only fixtures and follow the active palette. Full remote Arch CI
+passed; goldens inspected. Remaining content/control/typography and ~75 ms warm
+open offset are explicit in [B0071](specs/0071-visual-parity-5.md). Relative UI
+PSS+DRM was not rerun. No live changes or Nacre/launcher edits.
+
 ## 2026-10-23 — B0030 notices/OSD inside the main shell (review)
 
 Notices and the OSD are now transient panel views of the one shell process, offered by the

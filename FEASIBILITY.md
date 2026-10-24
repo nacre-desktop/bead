@@ -1,5 +1,22 @@
 # Feasibility
 
+## 2026-10-24 — B0071 growing frame and status popout parity
+
+The dashboard now redraws its joined contour at each reveal height.
+Status popouts attach to the bar instead of the control dock, with matching body colour.
+Private nested CPU captures show lower errors; visual/control gaps remain in B0071.
+Full remote CI passed. Relative UI memory was not measured in this unit.
+
+| Whole-image RMSE % | Before | After |
+| --- | ---: | ---: |
+| Wi-Fi | 17.825 | 10.248 |
+| Bluetooth | 15.277 | 5.532 |
+| Battery | 14.339 | 4.846 |
+| Audio, matched initial width | 19.316 | 7.200 |
+
+See [B0071](docs/specs/0071-visual-parity-5.md) for normalized audio setup,
+per-progress evidence, pointer/OSD fixtures and limits. No live validation.
+
 ## 2026-10-22 — B0025 per-output sessions: acceptance passes
 
 Outputs own runtime/view/update/commit/input lifetimes; services and immutable resources remain shared.
