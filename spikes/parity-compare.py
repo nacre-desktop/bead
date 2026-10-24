@@ -504,8 +504,13 @@ class Arm:
             with Image.open(fixture_image) as image:
                 image.verify()
             log(f'fixture image verified: {fixture_image.name}, {fixture_image.stat().st_size} bytes')
+            # Bootstrap before the private daemon starts. An explicit absent
+            # endpoint disables the helper's native private-compositor fallback.
+            fixture_env = dict(self.env)
+            fixture_env.pop('NACRE_DAEMON_SOCKET', None)
+            fixture_env.pop('NACRE_DAEMON_CLIENT', None)
             try:
-                self.run([helper, 'wallpaper-media', 'select', str(fixture_image)], timeout=45)
+                self.run([helper, 'wallpaper-media', 'select', str(fixture_image)], timeout=45, env=fixture_env)
             except subprocess.CalledProcessError as error:
                 raise RuntimeError('fixture wallpaper select failed: ' + (error.stdout + '\n' + error.stderr).strip()[-3000:]) from error
             if not (self.root / 'state/nacre/presentation.json').is_file():
