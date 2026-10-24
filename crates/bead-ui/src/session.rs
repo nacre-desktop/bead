@@ -40,6 +40,14 @@ pub struct Session {
     pub(super) attempts: u64,
     pub(super) watcher: Option<super::watcher::Subscription>,
     pub(super) restore: Option<BTreeMap<String, Value>>,
+    pub(super) deferred_action: Option<DeferredAction>,
+    pub(super) deferred_gesture: bool,
+}
+pub(super) struct DeferredAction {
+    pub(super) id: String,
+    pub(super) action: String,
+    pub(super) argument: Value,
+    pub(super) pointer: (f32, f32),
 }
 impl Session {
     pub fn set_projector(&mut self, projector: Projector) {
@@ -80,6 +88,8 @@ impl Session {
             attempts: 0,
             watcher: None,
             restore: None,
+            deferred_action: None,
+            deferred_gesture: false,
         }
     }
     pub fn restore_on_start(&mut self, values: BTreeMap<String, Value>) {
@@ -217,6 +227,17 @@ impl Session {
         }
     }
     fn reload_current(&mut self) -> Result<Scene, Diagnostic> {
+        self.deferred_gesture = false;
+        if self.deferred_action.take().is_some()
+            && self.stores.get("bead.pressed") == Some(&Value::Bool(true))
+        {
+            self.stores
+                .commit(BTreeMap::from([(
+                    "bead.pressed".into(),
+                    Value::Bool(false),
+                )]))
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
         self.attempts += 1;
         self.pending = None;
         let watch_revision = self
@@ -326,6 +347,7 @@ impl Session {
             self.runtime_palette = runtime_palette;
             self.current = scene;
             self.current_nodes = nodes;
+            self.cancel_invalid_deferred();
             self.committed_editors = self.editors.clone();
         }
     }
@@ -402,6 +424,22 @@ impl Session {
                 .commit(BTreeMap::from([("bead.focused".into(), Value::Text(next))]))
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
             (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+        }
+
+        if self.deferred_action.as_ref().is_some_and(|pending| {
+            stores.get("bead.pressed") != Some(&Value::Bool(true))
+                || !super::interaction::deferred_matches(&nodes, pending)
+        }) {
+            self.deferred_action = None;
+            if stores.get("bead.pressed") == Some(&Value::Bool(true)) {
+                stores
+                    .commit(BTreeMap::from([(
+                        "bead.pressed".into(),
+                        Value::Bool(false),
+                    )]))
+                    .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+                (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+            }
         }
 
         scene.font_files = self.current.font_files.clone();

@@ -2,6 +2,7 @@
 //! B0049: control-center sources against fixtures, tile-store persistence against a fake
 //! daemon, the Luau view's drag reorder, and goldens for the four pages.
 use super::*;
+use crate::launcher_quick::Quick;
 use crate::nacre_source::Config;
 use bead_test::{Harness, Input, source::FakeSource};
 use nacre_protocol::{Capability, ErrorCode, Failure, Message, Reply, framing};
@@ -184,6 +185,7 @@ struct Lab {
     client: Client,
     calls: mpsc::UnboundedReceiver<(String, Json)>,
     fail: Arc<Mutex<BTreeMap<String, ErrorCode>>>,
+    unsubs: mpsc::UnboundedReceiver<Vec<String>>,
 }
 impl Drop for Lab {
     fn drop(&mut self) {
@@ -194,6 +196,17 @@ async fn lab(methods: &[&str]) -> Lab {
     lab_with(methods, controls()).await
 }
 async fn lab_with(methods: &[&str], published: Json) -> Lab {
+    lab_with_permanent(methods, published, Vec::new()).await
+}
+async fn lab_with_permanent(methods: &[&str], published: Json, permanent: Vec<String>) -> Lab {
+    lab_with_payloads(methods, published, permanent, notifications()).await
+}
+async fn lab_with_payloads(
+    methods: &[&str],
+    published: Json,
+    permanent: Vec<String>,
+    notices: Json,
+) -> Lab {
     use std::os::unix::fs::PermissionsExt;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -207,8 +220,10 @@ async fn lab_with(methods: &[&str], published: Json) -> Lab {
     let listener = UnixListener::bind(&socket).unwrap();
     std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
     let (calls_tx, calls) = mpsc::unbounded_channel();
+    let (unsubs_tx, unsubs) = mpsc::unbounded_channel();
     let fail: Arc<Mutex<BTreeMap<String, ErrorCode>>> = Default::default();
     let failing = fail.clone();
+    let notices = Arc::new(notices);
     let advertised: Vec<String> = methods.iter().map(|m| m.to_string()).collect();
     tokio::spawn(async move {
         let mut boot = 0;
@@ -251,6 +266,7 @@ async fn lab_with(methods: &[&str], published: Json) -> Lab {
                     topics: TOPICS
                         .iter()
                         .chain([&STORE_TOPIC])
+                        .chain([&"dashboard.updates"])
                         .map(|name| (name.to_string(), 1))
                         .collect(),
                     methods,
@@ -265,8 +281,12 @@ async fn lab_with(methods: &[&str], published: Json) -> Lab {
                         for topic in topics {
                             let data = if topic == STORE_TOPIC {
                                 store(tiles.clone(), rev)
+                            } else if topic == "dashboard.updates" {
+                                json!({"health": health(), "count": 0, "text": "No updates"})
                             } else if topic == "controls" {
                                 published.clone()
+                            } else if topic == "notifications" {
+                                (*notices).clone()
                             } else {
                                 topic_data(&topic)
                             };
@@ -281,6 +301,9 @@ async fn lab_with(methods: &[&str], published: Json) -> Lab {
                             .await
                             .unwrap();
                         }
+                    }
+                    Message::Unsub { topics } => {
+                        let _ = unsubs_tx.send(topics);
                     }
                     Message::Call { id, m, p, .. } => {
                         let _ = calls_tx.send((m.clone(), p.clone()));
@@ -315,12 +338,13 @@ async fn lab_with(methods: &[&str], published: Json) -> Lab {
             }
         }
     });
-    let client = Client::start(Config::new(socket, vec![])).unwrap();
+    let client = Client::start(Config::new(socket, permanent)).unwrap();
     Lab {
         dir,
         client,
         calls,
         fail,
+        unsubs,
     }
 }
 async fn control_for(lab: &Lab) -> ControlCenter {
@@ -381,6 +405,217 @@ const ALL: [&str; 6] = [
     "notifications.set_dnd",
     SET,
 ];
+
+#[test]
+fn launcher_quick_runtime_calls_only_on_release_and_keeps_search_focus() {
+    use bead::wayland::{SceneSource, UiEvent};
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _guard = rt.enter();
+    crate::i18n::init();
+    let mut lab = rt.block_on(lab(&[
+        "notifications.set_dnd",
+        "night_light.set",
+        "stay_awake.set",
+    ]));
+    let h = Harness::load(
+        &root(),
+        Path::new("ui/main.luau"),
+        &root().join("palette.json"),
+        BTreeMap::new(),
+        bead_test::Config {
+            width: 1920,
+            height: 1200,
+            scale: 1.,
+        },
+    )
+    .unwrap();
+    let mut runtime = crate::reload::Runtime::new(h.session)
+        .with_launcher(None)
+        .unwrap()
+        .with_launcher_quick(Quick::lease(lab.client.clone()).unwrap())
+        .unwrap();
+    for _ in 0..500 {
+        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        runtime.commit();
+        if runtime
+            .session
+            .view_nodes()
+            .iter()
+            .filter(|node| node.action.as_deref() == Some("launcher.quick"))
+            .count()
+            == 3
+        {
+            break;
+        }
+        rt.block_on(tokio::time::sleep(Duration::from_millis(10)));
+    }
+    for (id, method) in [
+        ("actions.controls.dnd", "notifications.set_dnd"),
+        ("actions.controls.night-light", "night_light.set"),
+        ("actions.controls.stay-awake", "stay_awake.set"),
+    ] {
+        let node = runtime
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| {
+                node.action.as_deref() == Some("launcher.quick")
+                    && node.action_arg == Some(Value::Text(id.into()))
+            })
+            .expect("published Quick button");
+        let rect = bead::ui::rect(&node.draw);
+        let (x, y) = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+        runtime.stage(UiEvent::Hover { x, y }).unwrap();
+        runtime.commit();
+        runtime.stage(UiEvent::Click { x, y }).unwrap();
+        runtime.commit();
+        assert!(
+            lab.calls.try_recv().is_err(),
+            "press must not change daemon state"
+        );
+        runtime.stage(UiEvent::Release).unwrap();
+        runtime.commit();
+        assert_eq!(
+            rt.block_on(call(&mut lab)),
+            (method.into(), json!({"enabled": true}))
+        );
+        assert_eq!(
+            runtime.session.stores.get("bead.focused"),
+            Some(&Value::Text("launcher.search".into()))
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn launcher_quick_calls_published_toggles_and_releases_all_topic_leases() {
+    let methods = ["notifications.set_dnd", "night_light.set", "stay_awake.set"];
+    let mut controls = controls();
+    controls["night_light"]["enabled"] = json!(true);
+    controls["stay_awake"]["enabled"] = json!(true);
+    let mut notices = notifications();
+    notices["do_not_disturb"] = json!(true);
+    let mut lab = lab_with_payloads(&methods, controls, Vec::new(), notices).await;
+    let quick = Quick::lease(lab.client.clone()).unwrap();
+    let mut projected = BTreeMap::new();
+    for _ in 0..500 {
+        projected = quick.project(&Stores::default());
+        let Value::List(rows) = &projected["launcher.quick"] else {
+            panic!("quick rows")
+        };
+        if rows
+            .iter()
+            .all(|row| row["status"].as_str().is_some_and(|s| s != "—"))
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(projected["launcher.updates.count"], Value::Number(0.));
+    let Value::List(rows) = &projected["launcher.quick"] else {
+        panic!("quick rows")
+    };
+    assert!(
+        rows.iter()
+            .all(|row| row["on"] == true && row["enabled"] == true)
+    );
+    let ids = [
+        (
+            "actions.controls.dnd",
+            "notifications.set_dnd",
+            json!({"enabled": false}),
+        ),
+        (
+            "actions.controls.night-light",
+            "night_light.set",
+            json!({"enabled": false}),
+        ),
+        (
+            "actions.controls.stay-awake",
+            "stay_awake.set",
+            json!({"enabled": false}),
+        ),
+    ];
+    for (index, (id, method, params)) in ids.iter().enumerate() {
+        quick.act(id);
+        if index == 0 {
+            // The first request occupies the source's guarded in-flight slot immediately.
+            quick.act(id);
+        }
+        assert_eq!(call(&mut lab).await, ((*method).into(), params.clone()));
+        for _ in 0..30 {
+            quick.project(&Stores::default());
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "duplicate pending action was sent"
+    );
+    drop(quick);
+    let mut released = Vec::new();
+    for _ in 0..500 {
+        while let Ok(topics) = lab.unsubs.try_recv() {
+            released.extend(topics);
+        }
+        if ["controls", "notifications", "dashboard.updates"]
+            .iter()
+            .all(|topic| released.iter().any(|item| item == topic))
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    for topic in ["controls", "notifications", "dashboard.updates"] {
+        assert!(
+            released.iter().any(|item| item == topic),
+            "missing lease release for {topic}: {released:?}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn launcher_quick_reuses_permanent_notifications_subscription() {
+    let mut lab = lab_with_permanent(&[], controls(), vec!["notifications".into()]).await;
+    let quick = Quick::lease(lab.client.clone()).unwrap();
+    let mut projected = BTreeMap::new();
+    for _ in 0..500 {
+        projected = quick.project(&Stores::default());
+        let Value::List(rows) = &projected["launcher.quick"] else {
+            panic!("quick rows")
+        };
+        if rows[0]["status"]
+            .as_str()
+            .is_some_and(|status| status != "—")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let Value::List(rows) = &projected["launcher.quick"] else {
+        panic!("quick rows")
+    };
+    assert_eq!(rows[0]["on"], false);
+    drop(quick);
+    let mut released = Vec::new();
+    for _ in 0..500 {
+        while let Ok(topics) = lab.unsubs.try_recv() {
+            released.extend(topics);
+        }
+        if released.contains(&"controls".into()) && released.contains(&"dashboard.updates".into()) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(released.contains(&"controls".into()));
+    assert!(released.contains(&"dashboard.updates".into()));
+    assert!(
+        !released.contains(&"notifications".into()),
+        "permanent notifications topic was unsubscribed"
+    );
+}
 
 #[tokio::test(flavor = "current_thread")]
 async fn tiles_call_only_published_methods_with_the_current_state() {

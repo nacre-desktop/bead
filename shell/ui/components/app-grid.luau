@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui = require("bead.ui")
 local kit = require("bead.kit")
+local M = require("./metrics")
 local Tile = ui.component("AppTile", {item={id="string",name="string",icon="string",selected="boolean",favorite="boolean",favoriteId="string"}}, function(p)
     return ui.Box{id="tile-wrap",width="fill",height="fill",
         ui.Button {id="tile",height="fill",width="fill",radius=11,padding=0,
@@ -23,7 +24,7 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
 end)
 return ui.component("AppGrid",{},function(_)
     local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width"))
-    local width=math.min(1100,viewport*.9)-12-20-152-18-6
+    local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.search.text")))
     return kit.VirtualGrid{id="app-grid",scroll=ui.bind("launcher.scroll.y"),
         width=width,height=400,min_cell_width=110,gap_x=6,gap_y=5,row_height=76.2,
         model=ui.bind("launcher.apps"),key="id",render=function(item)return Tile{item=item}end}

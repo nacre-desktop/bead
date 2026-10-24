@@ -4,6 +4,9 @@ local kit = require("bead.kit")
 local Sidebar = require("./components/sidebar")
 local AppGrid = require("./components/app-grid")
 local Results = require("./components/results")
+local Quick = require("./components/quick")
+local M = require("./components/metrics")
+local show_quick=M.show(ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("launcher.search.text")))
 -- QML NacreAppBrowser prefixHints: five 24 px chips at the search field's right end while the query is empty.
 local hints={"> "..ui.tr("bead.launcher.hint-actions"),"= "..ui.tr("bead.launcher.hint-calculate"),"# "..ui.tr("bead.launcher.hint-brain"),": "..ui.tr("bead.launcher.hint-files"),"? "..ui.tr("bead.launcher.hint-ai")}
 local chips={}
@@ -46,7 +49,9 @@ return kit.Panel {edge="bottom",id="launcher",width=1100,height=590,max_width="9
                 or ui.Box{id="results-host",grow=1,Results{}},
             ui.Box{height=10},
         },
+        show_quick and ui.Box{width=M.quick_width+M.quick_gap,height=0,shrink=0} or nil,
     },
+    show_quick and Quick{} or ui.Box{id="quick",position="absolute",visible=false,width=0,height=0},
     kit.TextInput{id="search",text=ui.bind("launcher.search.text"),placeholder=ui.tr("bead.launcher.search-placeholder"),
         height=49,padding=15,radius=10,font_size=16,width="fill"},
     ui.Row{id="hints",position="absolute",right=34,top=535,height=24,gap=6,visible=ui.bind("launcher.hints"),table.unpack(chips)},

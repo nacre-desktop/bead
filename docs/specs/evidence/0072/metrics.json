@@ -1,0 +1,531 @@
+{
+  "reference": "Nacre 2748720",
+  "control": "Bead 86c8d9a",
+  "backend": "CPU tiny-skia",
+  "size": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "parity": {
+    "idle": {
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "metrics": {
+        "rmse": 2.447,
+        "changed_pct": 1.723,
+        "bar_rmse": 6.64,
+        "bbox": [
+          2,
+          17,
+          2865,
+          1785
+        ]
+      }
+    },
+    "launcher": {
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "metrics": {
+        "rmse": 4.166,
+        "changed_pct": 1.163,
+        "bar_rmse": 6.64,
+        "bbox": [
+          2,
+          17,
+          2865,
+          1785
+        ]
+      },
+      "open": {
+        "qml": {
+          "start": 174,
+          "end": 349,
+          "frames": 56,
+          "progress": {
+            "t10": 152,
+            "t50": 164,
+            "t90": 295
+          }
+        },
+        "bead": {
+          "start": 149,
+          "end": 299,
+          "frames": 56,
+          "progress": {
+            "t10": 135,
+            "t50": 167,
+            "t90": 300
+          }
+        }
+      },
+      "close": {
+        "qml": {
+          "start": 124,
+          "end": 300,
+          "frames": 56,
+          "progress": {
+            "t10": 105,
+            "t50": 136,
+            "t90": 225
+          }
+        },
+        "bead": {
+          "start": 149,
+          "end": 200,
+          "frames": 56,
+          "progress": {
+            "t10": 130,
+            "t50": 153,
+            "t90": 190
+          }
+        }
+      }
+    },
+    "launcher-hover": {
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "metrics": {
+        "rmse": 4.142,
+        "changed_pct": 1.172,
+        "bar_rmse": 6.644,
+        "bbox": [
+          2,
+          17,
+          2865,
+          1785
+        ]
+      }
+    },
+    "launcher-pressed": {
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "metrics": {
+        "rmse": 4.118,
+        "changed_pct": 1.118,
+        "bar_rmse": 6.644,
+        "bbox": [
+          2,
+          17,
+          2865,
+          1785
+        ]
+      }
+    }
+  },
+  "motion_note": "25 ms scheduling; estimated capture stamps, not physical scanout. Existing launcher easing differs.",
+  "binary_sha256": {
+    "control": "fd18b98247375cbc73009f6c56f89bfa8b691d90fa39b846d89f35f59d6a9a83",
+    "candidate": "5ad3c2649f7c1e34dc0822a6b02f1bf0f121580975b9c777a58c898657f2ac7a"
+  },
+  "lanes": {
+    "backend": "CPU tiny-skia",
+    "control": "86c8d9a",
+    "output": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "pairs": 5,
+    "typing": {
+      "first": {
+        "control": {
+          "median": 17.656464,
+          "min": 17.531604,
+          "max": 18.193227
+        },
+        "candidate": {
+          "median": 18.358637,
+          "min": 17.672264,
+          "max": 18.586648
+        }
+      },
+      "a": {
+        "control": {
+          "median": 6.719751,
+          "min": 6.386291,
+          "max": 6.760281
+        },
+        "candidate": {
+          "median": 6.670002,
+          "min": 6.578861,
+          "max": 6.910892
+        }
+      },
+      "back": {
+        "control": {
+          "median": 9.004844,
+          "min": 8.972506500000001,
+          "max": 9.059303
+        },
+        "candidate": {
+          "median": 7.952197,
+          "min": 7.637642,
+          "max": 7.9814875
+        }
+      },
+      "cpu_p50": {
+        "control": {
+          "median": 8.331869,
+          "min": 8.289799,
+          "max": 8.50406
+        },
+        "candidate": {
+          "median": 7.285815,
+          "min": 7.149455,
+          "max": 7.365094
+        }
+      },
+      "cpu_p99": {
+        "control": {
+          "median": 17.656464,
+          "min": 17.531604,
+          "max": 18.193227
+        },
+        "candidate": {
+          "median": 18.358637,
+          "min": 17.672264,
+          "max": 18.586648
+        }
+      },
+      "presented_p99": {
+        "control": {
+          "median": 15.643434,
+          "min": 15.595984,
+          "max": 16.467033
+        },
+        "candidate": {
+          "median": 15.788983,
+          "min": 15.204225,
+          "max": 16.127283
+        }
+      }
+    },
+    "open": {
+      "control": {
+        "median": 29.977818499999998,
+        "min": 29.353752,
+        "max": 30.188761,
+        "arms": [
+          29.859045000000002,
+          29.353752,
+          30.188761,
+          30.165193000000002,
+          29.977818499999998
+        ]
+      },
+      "candidate": {
+        "median": 30.001292499999998,
+        "min": 29.781398,
+        "max": 30.527831,
+        "arms": [
+          30.297665000000002,
+          30.527831,
+          30.001292499999998,
+          29.781398,
+          29.861418
+        ]
+      },
+      "paired_delta": [
+        0.43862000000000023,
+        1.174078999999999,
+        -0.18746850000000137,
+        -0.3837950000000028,
+        -0.11640049999999746
+      ],
+      "paired_median_delta": -0.11640049999999746
+    },
+    "memory": {
+      "initial": {
+        "control": {
+          "Total": 10.763671875,
+          "Pss_Anon": 5.6875,
+          "Pss_File": 4.3125,
+          "Pss_Shmem": 0.685546875,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "candidate": {
+          "Total": 10.9189453125,
+          "Pss_Anon": 6.03515625,
+          "Pss_File": 4.1943359375,
+          "Pss_Shmem": 0.685546875,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_median": {
+          "Total": -0.052734375,
+          "Pss_Anon": 0.3359375,
+          "Pss_File": -0.0458984375,
+          "Pss_Shmem": 0.0,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_range": {
+          "Total": [
+            -1.9052734375,
+            0.423828125
+          ],
+          "Pss_Anon": [
+            -0.0859375,
+            0.546875
+          ],
+          "Pss_File": [
+            -2.4521484375,
+            0.087890625
+          ],
+          "Pss_Shmem": [
+            0.0,
+            0.0
+          ],
+          "SwapPss": [
+            0.0,
+            0.0
+          ],
+          "DRM": [
+            0,
+            0
+          ]
+        }
+      },
+      "shown1": {
+        "control": {
+          "Total": 47.8515625,
+          "Pss_Anon": 24.9609375,
+          "Pss_File": 16.123046875,
+          "Pss_Shmem": 7.001953125,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "candidate": {
+          "Total": 47.7802734375,
+          "Pss_Anon": 24.74609375,
+          "Pss_File": 16.0322265625,
+          "Pss_Shmem": 7.001953125,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_median": {
+          "Total": -0.0986328125,
+          "Pss_Anon": -0.21484375,
+          "Pss_File": -0.09375,
+          "Pss_Shmem": 0.0,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_range": {
+          "Total": [
+            -1.52734375,
+            -0.03515625
+          ],
+          "Pss_Anon": [
+            -0.59375,
+            0.05859375
+          ],
+          "Pss_File": [
+            -1.3828125,
+            0.2958984375
+          ],
+          "Pss_Shmem": [
+            0.0,
+            0.0
+          ],
+          "SwapPss": [
+            0.0,
+            0.0
+          ],
+          "DRM": [
+            0,
+            0
+          ]
+        }
+      },
+      "closed1": {
+        "control": {
+          "Total": 9.080078125,
+          "Pss_Anon": 6.875,
+          "Pss_File": 1.5205078125,
+          "Pss_Shmem": 0.685546875,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "candidate": {
+          "Total": 9.017578125,
+          "Pss_Anon": 6.8125,
+          "Pss_File": 1.5283203125,
+          "Pss_Shmem": 0.685546875,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_median": {
+          "Total": -0.0322265625,
+          "Pss_Anon": -0.109375,
+          "Pss_File": 0.0087890625,
+          "Pss_Shmem": 0.0,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_range": {
+          "Total": [
+            -0.1328125,
+            0.2509765625
+          ],
+          "Pss_Anon": [
+            -0.1171875,
+            0.2421875
+          ],
+          "Pss_File": [
+            -0.0556640625,
+            0.0810546875
+          ],
+          "Pss_Shmem": [
+            0.0,
+            0.0
+          ],
+          "SwapPss": [
+            0.0,
+            0.0
+          ],
+          "DRM": [
+            0,
+            0
+          ]
+        }
+      },
+      "shown2": {
+        "control": {
+          "Total": 48.5947265625,
+          "Pss_Anon": 25.828125,
+          "Pss_File": 15.9501953125,
+          "Pss_Shmem": 7.001953125,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "candidate": {
+          "Total": 48.142578125,
+          "Pss_Anon": 25.2265625,
+          "Pss_File": 15.8583984375,
+          "Pss_Shmem": 7.001953125,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_median": {
+          "Total": -0.625,
+          "Pss_Anon": -0.53515625,
+          "Pss_File": -0.1005859375,
+          "Pss_Shmem": 0.0,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_range": {
+          "Total": [
+            -2.0458984375,
+            -0.267578125
+          ],
+          "Pss_Anon": [
+            -0.76953125,
+            -0.2109375
+          ],
+          "Pss_File": [
+            -1.3828125,
+            0.267578125
+          ],
+          "Pss_Shmem": [
+            -0.69921875,
+            0.0
+          ],
+          "SwapPss": [
+            0.0,
+            0.0
+          ],
+          "DRM": [
+            0,
+            0
+          ]
+        }
+      },
+      "closed2": {
+        "control": {
+          "Total": 11.1953125,
+          "Pss_Anon": 7.1953125,
+          "Pss_File": 3.314453125,
+          "Pss_Shmem": 0.685546875,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "candidate": {
+          "Total": 11.169921875,
+          "Pss_Anon": 7.1328125,
+          "Pss_File": 3.193359375,
+          "Pss_Shmem": 0.685546875,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_median": {
+          "Total": 0.0439453125,
+          "Pss_Anon": -0.15625,
+          "Pss_File": 0.0048828125,
+          "Pss_Shmem": 0.0,
+          "SwapPss": 0.0,
+          "DRM": 0
+        },
+        "paired_delta_range": {
+          "Total": [
+            -0.423828125,
+            1.935546875
+          ],
+          "Pss_Anon": [
+            -0.359375,
+            0.29296875
+          ],
+          "Pss_File": [
+            -0.251953125,
+            2.294921875
+          ],
+          "Pss_Shmem": [
+            0.0,
+            0.0
+          ],
+          "SwapPss": [
+            0.0,
+            0.0
+          ],
+          "DRM": [
+            0,
+            0
+          ]
+        }
+      }
+    }
+  },
+  "guards": {
+    "final_headline_arms": 20,
+    "accepted_parity_arms": 2,
+    "host_swap_in_pages": 0,
+    "process_swap_pss_mib": 0,
+    "cpu_client_drm_mib": 0,
+    "swap_reset_performed": false,
+    "discarded_parity_arm_host_swap_in_pages": 1
+  },
+  "verdict": {
+    "first_key_cpu_8ms": "FAIL",
+    "flip_key_cpu_8ms_median": "PASS",
+    "launcher_open_delta_2ms": "PASS",
+    "relative_memory_0_5mib": "PASS"
+  },
+  "closed_median_pair_split_mib": {
+    "pair": 2,
+    "anonymous": 0.0390625,
+    "file": 0.0048828125,
+    "shmem": 0,
+    "total": 0.0439453125
+  }
+}

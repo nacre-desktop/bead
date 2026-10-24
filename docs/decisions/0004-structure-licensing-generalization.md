@@ -78,6 +78,8 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0072: opt-in `Button.activate_on_release` with pointer/model/reload cancellation and `focus_on_pointer`,
+  and `kit.Paragraph.advance` for a theme's average glyph width; neither names a shell or service.
 - B0043: `bead_ui::transcript` (message list layout, windowing, bounded caches),
   `bead_ui::markdown` (block subset), `kit.Transcript`, `kit.Composer`, and
   `TextInput multiline` (Shift+Enter, wrapped caret, vertical moves). Chat-agnostic;

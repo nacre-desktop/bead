@@ -38,6 +38,8 @@ pub struct Runtime {
     detached: bool,
     launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
     launcher_subscription: Option<bead::core::source::Subscription>,
+    launcher_quick: Option<std::rc::Rc<crate::launcher_quick::Quick>>,
+    launcher_quick_subscription: Vec<bead::core::source::Subscription>,
     calendar: Option<std::rc::Rc<crate::calendar::Calendar>>,
     calendar_subscription: Option<bead::core::source::Subscription>,
     i18n_subscription: Option<bead::ui::i18n::Subscription>,
@@ -279,6 +281,8 @@ impl Runtime {
             detached: false,
             launcher: None,
             launcher_subscription: None,
+            launcher_quick: None,
+            launcher_quick_subscription: Vec::new(),
             calendar: None,
             calendar_subscription: None,
             i18n_subscription: None,
@@ -507,6 +511,26 @@ impl Runtime {
         self.actions.grant("launcher");
         self.launcher = Some(menu);
         self.fonts = crate::font_sources::Selector::default().with_ascii();
+        Ok(self)
+    }
+    /// Quick control leases, projections and pending calls die with the launcher runtime.
+    pub fn with_launcher_quick(
+        mut self,
+        quick: crate::launcher_quick::Quick,
+    ) -> Result<Self, Box<dyn Error>> {
+        let menu = self
+            .launcher
+            .clone()
+            .ok_or("quick controls need a launcher")?;
+        let quick = std::rc::Rc::new(quick);
+        let projector = quick.clone();
+        self.session.set_projector(Box::new(move |stores| {
+            let mut changes = menu.project(stores)?;
+            changes.extend(projector.project(stores));
+            Ok(changes)
+        }));
+        self.actions.register("launcher.quick", "launcher")?;
+        self.launcher_quick = Some(quick);
         Ok(self)
     }
     pub fn with_calendar(
@@ -1804,6 +1828,12 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=launcher_subscription"),
             }
         }
+        if let Some(quick) = &self.launcher_quick {
+            match quick.subscribe(wakeup.clone()) {
+                Ok(subscriptions) => self.launcher_quick_subscription = subscriptions,
+                Err(_) => eprintln!("SOURCE_ERROR code=launcher_quick_subscription"),
+            }
+        }
         if let Some(owner) = &self.notifications {
             self.notification_subscription =
                 Some(owner.subscribe(wakeup.clone(), self.notification_primary));
@@ -1977,8 +2007,9 @@ impl SceneSource for Runtime {
             )]))?;
         }
         let mut host_action = match &event {
-            UiEvent::Click { x, y }
-            | UiEvent::ContextMenu { x, y }
+            UiEvent::Click { x, y } => self.session.press_action_at(*x, *y),
+            UiEvent::Release => self.session.release_action(),
+            UiEvent::ContextMenu { x, y }
             | UiEvent::SecondaryClick { x, y }
             | UiEvent::HorizontalScroll { x, y, .. }
             | UiEvent::Scroll { x, y, .. } => self.session.action_at(*x, *y),
@@ -2400,6 +2431,21 @@ impl SceneSource for Runtime {
                 UiEvent::CompanionVisibility(true)
             );
             return Ok(None);
+        }
+        if let (Some(quick), Some((_, name, bead::core::Value::Text(id)))) =
+            (&self.launcher_quick, &host_action)
+            && name == "launcher.quick"
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            quick.act(id);
+            let scene = if matches!(&event, UiEvent::Release) {
+                self.session.release()?
+            } else {
+                self.session.update(BTreeMap::new())?
+            };
+            return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, bead::core::Value::Text(row_id)))) =
             (&self.launcher, &host_action)

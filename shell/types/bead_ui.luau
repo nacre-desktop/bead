@@ -29,6 +29,8 @@ export type Props = {
     selected:any?,
     visible:any?,
     on_activate:any?,
+    activate_on_release:any?,
+    focus_on_pointer:any?,
     scroll:any?,
     fill:any?,
     color:any?,

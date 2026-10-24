@@ -1,7 +1,52 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Hit testing, focus, range controls, Unicode editing and accessibility actions.
 use super::*;
+pub(super) fn deferred_matches(nodes: &[Node], pending: &super::session::DeferredAction) -> bool {
+    let (x, y) = pending.pointer;
+    let inside =
+        |rect: Rect| x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
+    nodes
+        .iter()
+        .rev()
+        .find(|node| {
+            let rect = rect(&node.draw);
+            node.focusable && inside(rect) && node.clip.is_none_or(inside)
+        })
+        .is_some_and(|node| {
+            node.activate_on_release
+                && node.id == pending.id
+                && node.action.as_deref() == Some(pending.action.as_str())
+                && node.action_arg.clone().unwrap_or(Value::Bool(true)) == pending.argument
+        })
+}
 impl Session {
+    fn deferred_valid(&self) -> Option<(String, String, Value)> {
+        if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) {
+            return None;
+        }
+        let pending = self.deferred_action.as_ref()?;
+        deferred_matches(&self.current_nodes, pending).then(|| {
+            (
+                pending.id.clone(),
+                pending.action.clone(),
+                pending.argument.clone(),
+            )
+        })
+    }
+    pub(super) fn cancel_invalid_deferred(&mut self) {
+        if self.deferred_action.is_some() && self.deferred_valid().is_none() {
+            self.deferred_action = None;
+        }
+    }
+    fn track_deferred_pointer(&mut self, x: f32, y: f32) -> bool {
+        let was_pending = self.deferred_action.is_some();
+        if let Some(pending) = &mut self.deferred_action {
+            pending.pointer = (x, y);
+        }
+        self.cancel_invalid_deferred();
+        was_pending && self.deferred_action.is_none()
+    }
+
     pub(super) fn hit(&self, x: f32, y: f32, scroll: bool) -> Option<&Node> {
         let generation = self.generation.as_ref()?;
         if generation.markup_entry.is_none() {
@@ -25,43 +70,101 @@ impl Session {
         self.click_at(x, y, true)
     }
     pub fn release(&mut self) -> Result<Option<Scene>, Diagnostic> {
-        if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) {
+        let deferred = self.deferred_valid();
+        self.deferred_action = None;
+        self.deferred_gesture = false;
+        if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) && deferred.is_none() {
             return Ok(None);
         }
-        self.update(BTreeMap::from([(
-            "bead.pressed".into(),
-            Value::Bool(false),
-        )]))
+        let Some(generation) = &self.generation else {
+            return Ok(None);
+        };
+        let mut stores = self.stores.clone();
+        if stores.get("bead.pressed").is_some() {
+            stores
+                .commit(BTreeMap::from([(
+                    "bead.pressed".into(),
+                    Value::Bool(false),
+                )]))
+                .map_err(|e| generation.script.error(e))?;
+        }
+        if let Some((id, action, argument)) = deferred {
+            let focus_on_pointer = self
+                .current_nodes
+                .iter()
+                .find(|node| node.id == id)
+                .is_none_or(|node| node.focus_on_pointer);
+            if focus_on_pointer {
+                stores
+                    .commit(BTreeMap::from([("bead.focused".into(), Value::Text(id))]))
+                    .map_err(|e| generation.script.error(e))?;
+            }
+            stores = generation.script.action(&action, &stores, argument)?;
+        }
+        self.stage_state(stores)
     }
     fn click_at(&mut self, x: f32, y: f32, press: bool) -> Result<Option<Scene>, Diagnostic> {
+        if press {
+            self.deferred_action = None;
+            self.deferred_gesture = false;
+        }
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
         let hit = self.hit(x, y, false);
-        let (action, focused) = hit.map_or((None, String::new()), |node| {
-            (
-                node.action.clone(),
-                if node.input.is_some() || node.focusable {
-                    node.id.clone()
-                } else {
-                    String::new()
-                },
-            )
-        });
+        let deferred = hit.is_some_and(|node| node.activate_on_release && node.action.is_some());
+        let preserve_focus = press && hit.is_some_and(|node| !node.focus_on_pointer);
+        let (action, focused, deferred_action, action_arg) =
+            hit.map_or((None, String::new(), None, Value::Bool(true)), |node| {
+                (
+                    if deferred { None } else { node.action.clone() },
+                    if !deferred && (node.input.is_some() || node.focusable) {
+                        node.id.clone()
+                    } else {
+                        String::new()
+                    },
+                    deferred.then(|| {
+                        (
+                            node.id.clone(),
+                            node.action.clone().unwrap(),
+                            node.action_arg.clone().unwrap_or(Value::Bool(true)),
+                        )
+                    }),
+                    node.action_arg.clone().unwrap_or(Value::Bool(true)),
+                )
+            });
         let mut stores = self.stores.clone();
-        stores
-            .commit(BTreeMap::from([(
-                "bead.focused".into(),
-                Value::Text(focused),
-            )]))
-            .map_err(|e| generation.script.error(e))?;
+        // A press can arrive before its preceding hover frame was committed.
+        if press
+            && self.stores.get("bead.hovered").is_some()
+            && let Some((id, _, _)) = &deferred_action
+        {
+            stores
+                .commit(BTreeMap::from([(
+                    "bead.hovered".into(),
+                    Value::Text(id.clone()),
+                )]))
+                .map_err(|e| generation.script.error(e))?;
+        }
+        if !deferred && !preserve_focus {
+            stores
+                .commit(BTreeMap::from([(
+                    "bead.focused".into(),
+                    Value::Text(focused),
+                )]))
+                .map_err(|e| generation.script.error(e))?;
+        }
+        if press && let Some((id, action, argument)) = deferred_action {
+            self.deferred_gesture = true;
+            self.deferred_action = Some(super::session::DeferredAction {
+                id,
+                action,
+                argument,
+                pointer: (x, y),
+            });
+        }
         if let Some(action) = action {
-            stores = generation.script.action(
-                &action,
-                &stores,
-                hit.and_then(|node| node.action_arg.clone())
-                    .unwrap_or(Value::Bool(true)),
-            )?;
+            stores = generation.script.action(&action, &stores, action_arg)?;
         }
         if press && self.stores.get("bead.pressed").is_some() {
             stores
@@ -99,6 +202,24 @@ impl Session {
         self.stage_state(stores)
     }
     pub fn drag(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        let deferred_gesture = self.deferred_gesture;
+        let canceled = self.track_deferred_pointer(x, y);
+        if deferred_gesture {
+            let hovered = self
+                .hit(x, y, false)
+                .map_or(String::new(), |node| node.id.clone());
+            let mut changes = BTreeMap::from([("bead.hovered".into(), Value::Text(hovered))]);
+            if canceled && self.stores.get("bead.pressed") == Some(&Value::Bool(true)) {
+                changes.insert("bead.pressed".into(), Value::Bool(false));
+            }
+            return self.update(changes);
+        }
+        if canceled && self.stores.get("bead.pressed") == Some(&Value::Bool(true)) {
+            return self.update(BTreeMap::from([(
+                "bead.pressed".into(),
+                Value::Bool(false),
+            )]));
+        }
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
             return Ok(None);
         };
@@ -155,13 +276,25 @@ impl Session {
         matches!(self.stores.get("bead.focused"),Some(Value::Text(id)) if self.current_nodes.iter().any(|n|n.drag && &n.id==id))
     }
     pub fn hover(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        let canceled = self.track_deferred_pointer(x, y);
         if self.stores.get("bead.hovered").is_none() {
-            return Ok(None);
+            return if canceled {
+                self.update(BTreeMap::from([(
+                    "bead.pressed".into(),
+                    Value::Bool(false),
+                )]))
+            } else {
+                Ok(None)
+            };
         }
         let id = self
             .hit(x, y, false)
             .map_or(String::new(), |node| node.id.clone());
-        self.update(BTreeMap::from([("bead.hovered".into(), Value::Text(id))]))
+        let mut changes = BTreeMap::from([("bead.hovered".into(), Value::Text(id))]);
+        if canceled {
+            changes.insert("bead.pressed".into(), Value::Bool(false));
+        }
+        self.update(changes)
     }
     pub fn focus_next(&mut self, backward: bool) -> Result<Option<Scene>, Diagnostic> {
         let ids: Vec<_> = self
@@ -220,6 +353,19 @@ impl Session {
             node.action.clone()?,
             node.action_arg.clone().unwrap_or(Value::Bool(true)),
         ))
+    }
+    /// Host action at a press; opted-in buttons defer host routing until release.
+    pub fn press_action_at(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
+        let node = self.hit(x, y, false)?;
+        if node.activate_on_release {
+            None
+        } else {
+            self.action_at(x, y)
+        }
+    }
+    /// Host action recorded by an opted-in press, if release remains over that action.
+    pub fn release_action(&self) -> Option<(String, String, Value)> {
+        self.deferred_valid()
     }
     pub fn focused_action(&self) -> Option<(String, String, Value)> {
         let Value::Text(focused) = self.stores.get("bead.focused")? else {

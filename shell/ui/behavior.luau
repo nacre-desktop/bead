@@ -8,10 +8,12 @@ return {
     ["launcher.search.text"] = "", ["launcher.scroll.y"] = 0,
     ["launcher.conversion.value"]="", ["launcher.conversion.description"]="",
     ["launcher.conversion.error"]="", ["launcher.message"]="",
+    ["launcher.quick"]={}, ["launcher.quick_error"]="", ["launcher.updates.count"]=-1,
   },
   actions = {
     select_app = function(s,id) s["launcher.selection"] = id end,
     toggle_favorite = function(s,id) s["launcher.selection"] = id end,
+    ["launcher.quick"] = function(_) end,
     navigate = function(s,id)
       s["launcher.engine_route"]=(id=="apps" or id=="actions") and "" or id
       s["launcher.route"]=(id=="actions") and id or "apps"

@@ -558,7 +558,7 @@ impl App {
             }
             PointerEventKind::Release { button: 0x110, .. } => {
                 win.pressed = false;
-                None
+                Some(UiEvent::Release)
             }
             PointerEventKind::Axis {
                 vertical,

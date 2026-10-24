@@ -20,6 +20,7 @@ mod i18n_source;
 mod key_routes;
 mod launcher;
 mod launcher_panel;
+mod launcher_quick;
 mod memory_policy;
 mod nacre_source;
 mod notice_service;
@@ -712,6 +713,7 @@ fn start(
                 fixture: menu_fixture.clone(),
                 socket: daemon_socket.clone(),
                 shared: shared_menu_source,
+                client: _ui_provider.clone(),
             },
             panel_trace,
             launcher_memory.clone().ok_or("launcher state missing")?,
@@ -996,7 +998,12 @@ fn start(
                     let runtime = if ui_entry_is_launcher {
                         let source =
                             launcher::source(menu_fixture.as_deref(), daemon_socket.as_deref())?;
-                        runtime.with_launcher(source)?
+                        let quick = launcher::SourceChoice {
+                            socket: daemon_socket.clone(),
+                            ..Default::default()
+                        }
+                        .quick()?;
+                        runtime.with_launcher(source)?.with_launcher_quick(quick)?
                     } else {
                         runtime
                     };

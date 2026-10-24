@@ -257,6 +257,35 @@ impl ControlCenter {
         self.ready(method).is_some()
     }
 
+    /// Launcher Quick reads only the three control-centre-backed toggles.
+    pub(crate) fn quick_state(
+        &self,
+        source: &str,
+    ) -> Option<(bool, bool, bool, String, &'static str)> {
+        let reading = self.read(source)?;
+        let enabled = self.verbs(source, &reading).toggle && !reading.locked;
+        Some((
+            reading.on,
+            enabled,
+            reading.locked,
+            reading.status,
+            reading.icon,
+        ))
+    }
+    pub(crate) fn quick_pending(&self, source: &str) -> bool {
+        self.st
+            .borrow()
+            .calls
+            .iter()
+            .any(|call| call.source == source)
+    }
+    pub(crate) fn poll_quick(&self) {
+        self.poll();
+    }
+    pub(crate) fn quick_message(&self) -> String {
+        self.st.borrow().message.clone()
+    }
+
     // ---- sources: topic data -> reading, verbs -> published calls -------------------------
 
     fn read(&self, source: &str) -> Option<Reading> {

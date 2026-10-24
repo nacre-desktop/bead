@@ -35,6 +35,287 @@ fn session(f: &Fixture) -> Session {
     session.commit(scene);
     session
 }
+
+fn deferred_fixture() -> (Fixture, Session) {
+    let f = Fixture::new();
+    fs::create_dir_all(f.0.join("ui")).unwrap();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {
+ stores={count=0,last=""},
+ actions={select=function(s,id) s.count=s.count+1;s.last=id end}, computed={}
+}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=240,height=120,
+ ui.Button{id="deferred",width=120,height=40,text="Deferred",on_activate=ui.action("select","deferred"),activate_on_release=true,
+  ui.Box{id="switch-visual",width=100,height=24,ui.Box{id="switch-track",width=28,height=16},ui.Text{id="switch-label",text="DND"}}},
+ ui.Button{id="normal",width=120,height=40,text="Normal",on_activate=ui.action("select","normal")}}
+"#).unwrap();
+    let s = session(&f);
+    (f, s)
+}
+fn node_center(s: &Session, id: &str) -> (f32, f32) {
+    let node = s
+        .current_nodes
+        .iter()
+        .find(|node| node.id.ends_with(id))
+        .unwrap();
+    let Primitive::Rounded { rect, .. } = &node.draw else {
+        panic!("button node geometry")
+    };
+    (rect.x + rect.w / 2., rect.y + rect.h / 2.)
+}
+
+#[test]
+fn release_activated_button_defers_luau_focus_and_host_action_until_exactly_once() {
+    let (_f, mut s) = deferred_fixture();
+    if let Some(scene) = s.focus_id("panel.normal").unwrap() {
+        s.commit(scene);
+    }
+    let focused = s.stores.get("bead.focused").cloned();
+    let (x, y) = node_center(&s, "deferred");
+    assert_eq!(s.press_action_at(x, y), None);
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.hovered"),
+        Some(&Value::Text("panel.deferred".into())),
+        "a deferred press records its hover target even without a prior hover commit"
+    );
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(0.)));
+    assert_eq!(s.stores.get("bead.focused"), focused.as_ref());
+    assert_eq!(s.stores.get("bead.pressed"), Some(&Value::Bool(true)));
+    assert_eq!(
+        s.release_action(),
+        Some((
+            "panel.deferred".into(),
+            "select".into(),
+            Value::Text("deferred".into())
+        ))
+    );
+    if let Some(scene) = s.release().unwrap() {
+        s.commit(scene);
+    }
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(1.)));
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("deferred".into())));
+    assert_eq!(
+        s.stores.get("bead.focused"),
+        Some(&Value::Text("panel.deferred".into()))
+    );
+    assert_eq!(s.stores.get("bead.pressed"), Some(&Value::Bool(false)));
+    assert_eq!(s.release_action(), None);
+    assert!(s.release().unwrap().is_none());
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(1.)));
+}
+
+#[test]
+fn release_activation_cancels_when_pointer_leaves_or_model_removes_target() {
+    let (_f, mut s) = deferred_fixture();
+    let (x, y) = node_center(&s, "deferred");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.drag(230., 110.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.release_action(), None);
+    assert_eq!(
+        s.stores.get("bead.hovered"),
+        Some(&Value::Text(String::new()))
+    );
+    let (normal_x, normal_y) = node_center(&s, "normal");
+    let scene = s.drag(normal_x, normal_y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.hovered"),
+        Some(&Value::Text("panel.normal".into()))
+    );
+    assert_eq!(
+        s.release_action(),
+        None,
+        "re-entering another button does not revive activation"
+    );
+    let scene = s.hover(-1., -1.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.hovered"),
+        Some(&Value::Text(String::new()))
+    );
+    assert!(
+        s.release().unwrap().is_none(),
+        "the canceled gesture has nothing to release"
+    );
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(0.)));
+
+    let (_f, mut s) = deferred_fixture();
+    let (x, y) = node_center(&s, "deferred");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.hover(-1., -1.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.release_action(), None, "leave outside cancels the press");
+    assert_eq!(s.stores.get("bead.pressed"), Some(&Value::Bool(false)));
+
+    let (_f, mut s) = deferred_fixture();
+    let (x, y) = node_center(&s, "deferred");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.reload().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.release_action(),
+        None,
+        "reload cancels the old generation's pending action"
+    );
+
+    let (_f, mut s) = deferred_fixture();
+    let (x, y) = node_center(&s, "deferred");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s
+        .update(BTreeMap::from([(
+            "bead.pressed".into(),
+            Value::Bool(false),
+        )]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.release_action(),
+        None,
+        "a pending action requires a live pressed state"
+    );
+}
+
+#[test]
+fn model_argument_change_or_disable_cancels_pending_release() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.0.join("ui")).unwrap();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {
+ stores={count=0,rows={{id="one",enabled=true,arg="first"}}},
+ actions={select=function(s,id) s.count=s.count+1;s.selected=id end}, computed={}
+}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=240,height=120,ui.Repeat{id="items",model=ui.bind("rows"),key="id",render=function(item)
+ return ui.Button{id="tile",width=120,height=40,text="Tile",on_activate=item.enabled and ui.action("select",item.arg) or nil,activate_on_release=true}
+end}}
+"#).unwrap();
+    let mut s = session(&f);
+    let (x, y) = node_center(&s, "tile");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s
+        .update_model(BTreeMap::from([(
+            "rows".into(),
+            Value::list(vec![
+                serde_json::json!({"id":"one","enabled":true,"arg":"second"}),
+            ]),
+        )]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.release_action(),
+        None,
+        "changed action arguments cancel the original press"
+    );
+    let (x, y) = node_center(&s, "tile");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s
+        .update_model(BTreeMap::from([(
+            "rows".into(),
+            Value::list(vec![
+                serde_json::json!({"id":"one","enabled":false,"arg":"second"}),
+            ]),
+        )]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.release_action(),
+        None,
+        "disabled model row cancels the pending press"
+    );
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(0.)));
+}
+
+#[test]
+fn default_button_press_and_keyboard_enter_remain_immediate() {
+    let (_f, mut s) = deferred_fixture();
+    let (x, y) = node_center(&s, "normal");
+    assert_eq!(
+        s.press_action_at(x, y),
+        Some((
+            "panel.normal".into(),
+            "select".into(),
+            Value::Text("normal".into())
+        ))
+    );
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(1.)));
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("normal".into())));
+
+    let (_f, mut s) = deferred_fixture();
+    if let Some(scene) = s.focus_id("panel.deferred").unwrap() {
+        s.commit(scene);
+    }
+    let scene = s.activate_focused().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(1.)));
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("deferred".into())));
+}
+
+#[test]
+fn focus_on_pointer_false_preserves_focus_but_keeps_keyboard_activation() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.0.join("ui")).unwrap();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {
+ stores={count=0,last=""},
+ actions={select=function(s,id) s.count=s.count+1;s.last=id end}, computed={}
+}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=240,height=120,
+ ui.Button{id="previous",width=120,height=40,text="Previous",on_activate=ui.action("select","previous")},
+ ui.Button{id="quiet-focus",width=120,height=40,text="Quick",on_activate=ui.action("select","quick"),activate_on_release=true,focus_on_pointer=false}}
+"#).unwrap();
+    let mut s = session(&f);
+    if let Some(scene) = s.focus_id("panel.previous").unwrap() {
+        s.commit(scene);
+    }
+    let (x, y) = node_center(&s, "quiet-focus");
+    assert_eq!(s.press_action_at(x, y), None);
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.focused"),
+        Some(&Value::Text("panel.previous".into()))
+    );
+    let scene = s.release().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(1.)));
+    assert_eq!(
+        s.stores.get("bead.focused"),
+        Some(&Value::Text("panel.previous".into()))
+    );
+
+    if let Some(scene) = s.focus_id("panel.quiet-focus").unwrap() {
+        s.commit(scene);
+    }
+    let scene = s.activate_focused().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(2.)));
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("quick".into())));
+}
 #[test]
 fn panel_transition_selects_cubic_in_out_without_changing_legacy_curves() {
     use bead_core::animation::Curve;

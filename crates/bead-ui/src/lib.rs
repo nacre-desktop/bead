@@ -66,6 +66,10 @@ pub struct Node {
     pub bind: BTreeMap<String, String>,
     pub visible: Option<String>,
     pub action: Option<String>,
+    #[serde(default)]
+    pub activate_on_release: bool,
+    #[serde(default = "default_true")]
+    pub focus_on_pointer: bool,
     pub icon: Option<String>,
     pub input: Option<String>,
     pub scroll: Option<String>,
@@ -86,6 +90,9 @@ pub struct Node {
     pub clip: Option<Rect>,
     #[serde(default)]
     pub label: String,
+}
+fn default_true() -> bool {
+    true
 }
 impl Node {
     fn diagnostic(&self, message: impl ToString) -> Diagnostic {

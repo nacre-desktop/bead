@@ -1,5 +1,16 @@
 # Status
 
+## 2026-10-24 — B0072 launcher Quick controls (review; CPU gate fails)
+
+The launcher now projects DND, night light, stay awake and a known updates count
+from scoped daemon topics, reusing control-centre calls. Luau owns layout and
+release activation preserves search focus. Full remote Arch CI, fake-daemon
+lease/call tests, goldens and matched private QML/Bead captures pass.
+Five desktop CPU pairs against B0073/main: first key 18.359 vs 17.656 ms (**8 ms
+fails in both**); flip keys 6.670/7.952 ms; paired open delta −0.116 ms; final
+closed PSS+DRM+SwapPss delta +0.044 MiB (memory passes). No live change.
+See [B0072](specs/0072-launcher-quick-controls.md) for source gaps and evidence.
+
 ## 2026-10-24 — B0073 status controls and parity (review)
 
 Status popouts now share QML switch/button styling, network empty-state metrics,

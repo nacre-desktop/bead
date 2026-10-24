@@ -900,7 +900,7 @@ fn paint_with_scratch(
             continue;
         }
 
-        let clip = item.clip.map_or(damage, |r| {
+        let mut clip = item.clip.map_or(damage, |r| {
             intersection(
                 damage,
                 r.translated(offset.0, offset.1)
@@ -924,6 +924,7 @@ fn paint_with_scratch(
             if overlap.w == 0 || overlap.h == 0 {
                 continue;
             }
+            clip = overlap;
         }
         // Interior coverage excludes every antialiased corner and stroke.
         // Only fully opaque interior pixels can bypass the masked blend pipeline.

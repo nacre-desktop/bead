@@ -482,11 +482,13 @@ return function(ui, tokens)
             kit.Button{id="discard",text=p.discard_label,width=96,on_activate=p.on_discard}}
     end
     function kit.BlurredArtwork(p) return ui.Image(props(p,{blur=12})) end
-    -- Wrapped text. The kit has no text measurement, so lines break by an average advance of 0.56 em
-    -- per character (a conservative width for proportional fonts); `max_lines` ends with an ellipsis.
+    -- Wrapped text. Callers may supply their font's average advance in em (default 0.56).
+    -- `max_lines` ends with an ellipsis.
     function kit.Paragraph(p)
         local size=p.font_size or tokens.text.body*4/3
-        local per=math.max(1,math.floor(p.width/(size*.56)))
+        local advance=p.advance or .56
+        assert(type(advance)=="number" and advance>0,"advance must be positive")
+        local per=math.max(1,math.floor(p.width/(size*advance)))
         local lines,line={},""
         for word in string.gmatch(p.text or "","%S+") do
             local joined=line=="" and word or line.." "..word

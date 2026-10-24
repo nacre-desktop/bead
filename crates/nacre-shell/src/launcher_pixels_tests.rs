@@ -11,6 +11,7 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
 }
 fn harness(query: &str, scroll: f64) -> Result<Harness> {
+    crate::i18n::init();
     let update = std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1");
     let selected = std::env::var_os("BEAD_ROW_REFERENCE_BUNDLE");
     if selected.is_some() && !update {
@@ -28,6 +29,15 @@ fn harness(query: &str, scroll: f64) -> Result<Harness> {
             ("launcher.result_count".into(), Value::Number(320.)),
             ("launcher.search.text".into(), Value::Text(query.into())),
             ("launcher.scroll.y".into(), Value::Number(scroll)),
+            (
+                "launcher.quick".into(),
+                Value::list(vec![
+                    serde_json::json!({"id":"actions.controls.dnd","label":"Do not disturb","reason":"Silence notification popups","status":"Off","icon":"notifications","on":false,"enabled":true}),
+                    serde_json::json!({"id":"actions.controls.night-light","label":"Night light","reason":"Make the screen warmer","status":"On","icon":"nightlight","on":true,"enabled":true}),
+                    serde_json::json!({"id":"actions.controls.stay-awake","label":"Stay awake","reason":"Prevent automatic sleep","status":"Off","icon":"coffee","on":false,"enabled":true}),
+                ]),
+            ),
+            ("launcher.updates.count".into(), Value::Number(7.)),
         ]),
         Config {
             width: 1920,
@@ -36,6 +46,43 @@ fn harness(query: &str, scroll: f64) -> Result<Harness> {
         },
         BTreeMap::from([("fixture".into(), root.join("tests/icon.svg"))]),
     )
+}
+
+#[test]
+fn quick_buttons_keep_their_control_ids_and_unknown_updates_stay_hidden() -> Result<()> {
+    let mut h = harness("", 0.)?;
+    let ids = h
+        .session
+        .view_nodes()
+        .iter()
+        .filter(|node| node.action.as_deref() == Some("launcher.quick"))
+        .map(|node| node.action_arg.clone().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        [
+            "actions.controls.dnd",
+            "actions.controls.night-light",
+            "actions.controls.stay-awake"
+        ]
+        .map(|id| Value::Text(id.into()))
+    );
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .filter(|node| node.action.as_deref() == Some("launcher.quick"))
+            .all(|node| bead::ui::rect(&node.draw).h == 50.),
+        "the QML default descriptions fit single-line, 50-pixel rows"
+    );
+    h.update(BTreeMap::from([(
+        "launcher.updates.count".into(),
+        Value::Number(-1.),
+    )]))?;
+    assert!(!h.session.view_nodes().iter().any(|node| {
+        matches!(&node.draw, bead::render::Primitive::Text { text, .. } if text == "7 updates" || text == "Up to date")
+    }));
+    Ok(())
 }
 
 #[test]
@@ -49,6 +96,16 @@ fn real_launcher_grid_results_and_scrolled_pixels_match_accepted_markup() -> Res
         assert_eq!(
             h.scene().motion.as_ref().map(|motion| motion.id.as_str()),
             Some("launcher")
+        );
+        assert_eq!(
+            h.session
+                .view_nodes()
+                .iter()
+                .filter(|n| n.action.as_deref() == Some("launcher.quick"))
+                .count(),
+            3,
+            "Quick remains beside ordinary search results: {query:?}; viewport={:?}",
+            h.session.stores.get("bead.viewport.width")
         );
         let source = h.render()?;
         let width = (h.scene().bounds.w * 1.5).ceil() as u32;

@@ -48,7 +48,7 @@ HERE = Path(__file__).resolve().parent
 #   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
 # Logical pointer targets (2880x1800 at 1.5), per arm. Bluetooth is available
 # in both arms through the private BlueZ fixture.
-PTR = {'control-tile': {'qml': (1790, 290), 'bead': (1800, 290)}}
+PTR = {'control-tile': {'qml': (1790, 290), 'bead': (1800, 290)}, 'launcher-quick': (1350, 745)}
 # A normal press is sampled before QML's long-press detail timer can fire.
 STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed': 0.05}
 # QML audio inherits the preceding popup's width. Establish the same explicit
@@ -58,6 +58,10 @@ STATE_PREPARE = {'popout-audio': [('ui', 'nacre', 'popout', 'network', '1560'), 
 STATES = {
     'idle': ([], [], 0),
     'launcher': ([('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
+    'launcher-hover': ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.4), ('pointer', *PTR['launcher-quick'])],
+                       [('ui', 'nacre', 'close')], 0),
+    'launcher-pressed': ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.4), ('press', *PTR['launcher-quick'])],
+                         [('release',), ('ui', 'nacre', 'close')], 0),
     'launcher-typed': ([('ui', 'nacre', 'launcher', 'fi')], [('ui', 'nacre', 'close')], 0),
     'launcher-wallpapers': ([('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 0),
     'menu-power': ([('ui', 'nacre', 'menu', 'power', '')], [('ui', 'nacre', 'close')], 0),
@@ -370,9 +374,22 @@ class Arm:
         else:
             root = self.root / 'bead'
             shutil.copytree(a.bead_shell, root / 'shell')
+            # Pin the same read-only presentation inputs as QML even when this
+            # private daemon does not advertise wallpaper.active.
+            presentation = self.root / 'state/nacre/presentation.json'
+            palette = root / 'palette.json'
+            if presentation.is_file():
+                record = json.loads(presentation.read_text())
+                palette.write_text(json.dumps({'formatVersion': 1, 'mode': record['mode'], 'colours': record['colours']}))
+                poster = record.get('poster')
+                if poster and Path(poster).is_file():
+                    background_tool = shutil.which('swaybg') or str(Path(a.bead_bin).resolve() / 'swaybg')
+                    self.spawn([background_tool, '--output', self.geometry['name'], '--image', poster, '--mode', 'fill'], 'matched-wallpaper')
+            else:
+                palette = root / 'shell/palette.json'
             commands = self.runtime / 'bead-command.sock'
             command = [str(Path(a.bead_bin).resolve() / 'nacre-shell'), '--bar', '--core-views', '--ui-provider',
-                       '--notices', '--daemon-socket', str(self.endpoint), '--command-socket', str(commands)]
+                       '--notices', '--daemon-socket', str(self.endpoint), '--command-socket', str(commands), '--palette', str(palette)]
             if a.cpu:
                 command += ['--renderer', 'cpu', '--panel-renderer', 'cpu']
             self.shell = self.spawn(command, 'shell', cwd=root)
@@ -666,7 +683,16 @@ os.execv(real, [real, *args])
                 else:
                     self.steps(opens)
                 time.sleep(STATE_SETTLE.get(name, self.args.settle))
+                if name.startswith('launcher'):
+                    state = self.dispatch('nacre', 'state')
+                    if isinstance(state, str):
+                        state = json.loads(state)
+                    info['ui_state'] = state
+                    if not isinstance(state, dict) or state.get('launcher') is not True:
+                        raise RuntimeError('launcher capture is not an open launcher')
                 info['rss_kib'] = self.rss()
+                if info['rss_kib'].get('SwapPss') != 0:
+                    raise RuntimeError('nonzero or unavailable process SwapPss')
                 self.grab(shots / (name + '.png'))
                 if seconds and closes:
                     info['close_ms'] = self.sequence(name + '-close', lambda: self.steps(closes), seconds)
@@ -675,6 +701,8 @@ os.execv(real, [real, *args])
                 time.sleep(0.6)
                 info['rss_closed_kib'] = self.rss()
                 info['dispatch_trace'] = self.dispatch_trace
+                if info['rss_closed_kib'].get('SwapPss') != 0:
+                    raise RuntimeError('nonzero or unavailable closed process SwapPss')
             except Exception as error:
                 self.errors.append(str(error)[:300])
             info['errors'] = self.errors

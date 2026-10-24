@@ -1,5 +1,22 @@
 # Feasibility
 
+## 2026-10-24 — B0072 launcher Quick controls
+
+The launcher gains scoped controls and a published updates-count consumer.
+Fake-daemon and native pointer evidence pass; unknown state stays disabled or hidden.
+Memory and opening gates pass. First-key CPU still misses 8 ms in both builds.
+Full remote CI passes; this is a review candidate, with no live switch.
+
+| CPU renderer, five private desktop pairs | Main | Quick |
+| --- | ---: | ---: |
+| First key / `a` / BackSpace CPU ms | 17.656 / 6.720 / 9.005 | 18.359 / 6.670 / 7.952 |
+| Launcher open ms | 29.978 | 30.001 |
+| Final closed PSS+DRM+SwapPss MiB | 11.195 | 11.170 |
+
+Paired median open delta −0.116 ms; closed delta +0.044 MiB. DRM/SwapPss zero.
+See [B0072](docs/specs/0072-launcher-quick-controls.md) for category splits,
+rejected mask shortcut, guard retry and remaining contract/visual gaps.
+
 ## 2026-10-24 — B0071 growing frame and status popout parity
 
 The dashboard now redraws its joined contour at each reveal height.

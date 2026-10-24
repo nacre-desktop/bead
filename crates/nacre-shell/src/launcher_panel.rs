@@ -49,6 +49,7 @@ pub fn spec(
                 colors.clone(),
                 cold.clone(),
             );
+            let quick = source.quick().map_err(|e| e.to_string())?;
             let source = source.connect().map_err(|e| e.to_string())?;
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
@@ -57,6 +58,7 @@ pub fn spec(
                     &colors,
                 )
                 .and_then(|r| r.with_launcher(source))
+                .and_then(|r| r.with_launcher_quick(quick))
                 .and_then(|r| r.with_launcher_memory(memory.clone()))
                 .and_then(|r| match &prefs {
                     Some(source) => r.with_prefs(source.clone()),

@@ -52,8 +52,25 @@ pub struct SourceChoice {
     pub fixture: Option<std::path::PathBuf>,
     pub socket: Option<std::path::PathBuf>,
     pub shared: Option<Arc<dyn Source>>,
+    pub client: Option<crate::nacre_source::Client>,
 }
 impl SourceChoice {
+    /// Acquired by the panel factory, never by the persistent bar configuration.
+    pub fn quick(&self) -> Result<crate::launcher_quick::Quick, Box<dyn std::error::Error>> {
+        let client = if let Some(client) = &self.client {
+            Some(client.clone())
+        } else if let Some(socket) = &self.socket {
+            Some(crate::nacre_source::Client::start(
+                crate::nacre_source::Config::new(socket.clone(), Vec::new()),
+            )?)
+        } else {
+            None
+        };
+        Ok(match client {
+            Some(client) => crate::launcher_quick::Quick::lease(client)?,
+            None => crate::launcher_quick::Quick::new(None, Vec::new()),
+        })
+    }
     pub fn connect(&self) -> Result<Option<Arc<dyn Source>>, Box<dyn std::error::Error>> {
         if let Some(source) = &self.shared {
             Ok(Some(source.clone()))

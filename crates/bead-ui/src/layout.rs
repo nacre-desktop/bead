@@ -101,6 +101,8 @@ pub const PROPERTIES: &[&str] = &[
     "selected",
     "visible",
     "on_activate",
+    "activate_on_release",
+    "focus_on_pointer",
     "scroll",
     "fill",
     "color",
@@ -148,6 +150,8 @@ pub struct ViewSpec {
     pub visible: bool,
     pub action: Option<String>,
     pub argument: Option<Value>,
+    pub activate_on_release: bool,
+    pub focus_on_pointer: bool,
     pub input: Option<String>,
     /// TextInput accepts newlines (Shift+Enter) and wraps at its width.
     pub multiline: bool,
@@ -487,6 +491,14 @@ impl ViewSpec {
                     Ok::<_, Diagnostic>((name.to_owned(), argument))
                 })
                 .transpose()?;
+            let activate_on_release = boolean(p, "activate_on_release", false, source)?;
+            let focus_on_pointer = boolean(p, "focus_on_pointer", true, source)?;
+            if activate_on_release && raw.kind != Widget::Button {
+                return Err(source.error("activate_on_release is only valid on Button"));
+            }
+            if p.contains_key("focus_on_pointer") && raw.kind != Widget::Button {
+                return Err(source.error("focus_on_pointer is only valid on Button"));
+            }
             let child_scope = if p.contains_key("id") && raw.kind != Widget::Group {
                 format!("{id}.")
             } else {
@@ -521,6 +533,8 @@ impl ViewSpec {
                 visible,
                 action: action.as_ref().map(|a| a.0.clone()),
                 argument: action.and_then(|a| a.1),
+                activate_on_release,
+                focus_on_pointer,
                 input,
                 multiline: boolean(p, "multiline", false, source)?,
                 masked: boolean(p, "masked", false, source)?,
@@ -918,6 +932,8 @@ pub fn layout(
                 bind: BTreeMap::new(),
                 visible: None,
                 action: view.action.clone(),
+                activate_on_release: view.activate_on_release,
+                focus_on_pointer: view.focus_on_pointer,
                 icon: None,
                 input: view.input.clone(),
                 scroll: None,

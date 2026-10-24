@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
 local kit=require("bead.kit")
+local M=require("./metrics")
 local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string",selected="boolean",description="string",favorite="boolean",favoriteId="string"}},function(p)
     local item=p.item
     return ui.Box{id="result-wrap",width="fill",height="fill",
@@ -26,7 +27,7 @@ local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string
 end)
 return ui.component("Results",{},function(_)
     local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width"))
-    local width=math.min(1100,viewport*.9)-12-20-152-18-6
+    local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.search.text")))
     return kit.VirtualGrid{id="results",scroll=ui.bind("launcher.scroll.y"),width=width,height=400,min_cell_width=width,
         gap_x=0,gap_y=3,row_height=55,total_count=ui.bind("launcher.total_count"),model=ui.bind("launcher.apps"),key="id",render=function(item)return Row{item=item}end}
 end)
