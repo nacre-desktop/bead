@@ -487,14 +487,13 @@ impl Extras {
                 let active = topic.snapshot();
                 wallpaper_revision = active.data["revision"].as_u64().unwrap_or_default();
             }
-            if let (Some(actions), Some(boot)) = (&self.wallpaper_actions, boot.as_deref()) {
-                if let Some(revision) = actions
+            if let (Some(actions), Some(boot)) = (&self.wallpaper_actions, boot.as_deref())
+                && let Some(revision) = actions
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .confirmed_revision(boot)
-                {
-                    wallpaper_revision = wallpaper_revision.max(revision);
-                }
+            {
+                wallpaper_revision = wallpaper_revision.max(revision);
             }
             if let Some(settings) = &self.wallpaper_settings {
                 let snapshot = settings.snapshot();

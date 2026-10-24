@@ -1603,6 +1603,24 @@ fn wallpaper_picker_goldens() -> bead_test::Result<()> {
                 matches!(primitive, bead::render::Primitive::Image { path, .. } if path.file_name().is_some_and(|name| name == "sample.png"))),
                 "populated picker must render wallpaper thumbnails");
             let frame = harness.render()?;
+            for primitive in &harness.scene().primitives {
+                if let bead::render::Primitive::Text {
+                    text,
+                    rect,
+                    family,
+                    size,
+                    ..
+                } = primitive
+                    && ["Static", "Dynamic", "Carousel", "Spotlight", "Hexagons"]
+                        .contains(&text.as_str())
+                {
+                    assert_eq!(
+                        bead::render::text_lines(harness.scene(), text, family, *size, rect.w)?,
+                        1,
+                        "toolbar label {text} must fit one visible line"
+                    );
+                }
+            }
             let path = root.join(format!(
                 "tests/goldens/wallpaper-picker-{layout}-{kind}-{scale}.png"
             ));

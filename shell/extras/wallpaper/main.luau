@@ -51,11 +51,12 @@ end
 local hex_clip={{.25,0},{.75,0},{1,.5},{.75,1},{.25,1},{0,.5}}
 
 local function button(id,label,active,request)
-  return kit.Button{id=id,aria_label=label,text=label,shrink=0,height=toolbar_h,padding=0,
-    padding_left=T.wallpaper.choice_padding,padding_right=T.wallpaper.choice_padding,
-    font_size=T.palette.description_font,text_align="center",color=active and "onPrimary" or "onSurface",
+  local line_h=math.ceil(T.palette.description_font*1.4)
+  return kit.Button{id=id,aria_label=label,width=T.wallpaper.choice_widths[id],shrink=0,height=toolbar_h,padding=0,
     radius=T.panel.close_radius,fill=active and "primary" or "surfaceContainerHigh",
-    hover_fill=active and "primary" or "surfaceContainerHigh",activate_on_release=true,on_activate=ui.action("extras.do",request)}
+    hover_fill=active and "primary" or "surfaceContainerHigh",activate_on_release=true,on_activate=ui.action("extras.do",request),
+    ui.Text{position="absolute",left=0,top=(toolbar_h-line_h)/2,width="fill",height=line_h,
+      text=label,font_size=T.palette.description_font,text_align="center",color=active and "onPrimary" or "onSurface"}}
 end
 local function nav_button(id,label,glyph,action)
   return kit.Button{id=id,aria_label=label,width=T.wallpaper.nav_width,height=T.wallpaper.nav_height,padding=0,
