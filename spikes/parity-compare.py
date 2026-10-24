@@ -467,6 +467,7 @@ class Arm:
                         XDG_STATE_HOME=str(self.root / 'state'), XDG_CACHE_HOME=str(self.root / 'cache'),
                         NACRE_DAEMON_SOCKET=str(self.endpoint), NACRE_COMPOSITOR='niri', NACRE_NIRI_HOVER_STREAM='0',
                         NACRE_HELPER_TOOLS=str(Path(a.nacre).resolve() / 'nacre/shell-tools'),
+                        NACRE_HELPER_BINARY=str(Path(a.bead_bin).resolve() / 'nacre-helper'),
                         DBUS_SYSTEM_BUS_ADDRESS=self.env['DBUS_SESSION_BUS_ADDRESS'],
                         BEAD_PRIVATE_INPUT_PROOF='1', PIPEWIRE_REMOTE='bead-private-unavailable', PULSE_SERVER='unix:' + str(self.root / 'no-pulse'),
                         GIO_USE_VFS='local', GVFS_DISABLE_FUSE='1', QT_NO_XDG_DESKTOP_PORTAL='1', GTK_USE_PORTAL='0')
@@ -498,7 +499,15 @@ class Arm:
                           '-threads', '1', '-pix_fmt', 'yuv420p', '-y', str(folder / f'motion-{index + 1}.mp4')], timeout=30)
         if a.wallpaper_fixture:
             helper = str(Path(a.bead_bin).resolve() / 'nacre-helper')
-            self.run([helper, 'wallpaper-media', 'select', str(home / 'Pictures/Wallpapers/generated-1.png')], timeout=45)
+            fixture_image = home / 'Pictures/Wallpapers/generated-1.png'
+            from PIL import Image
+            with Image.open(fixture_image) as image:
+                image.verify()
+            log(f'fixture image verified: {fixture_image.name}, {fixture_image.stat().st_size} bytes')
+            try:
+                self.run([helper, 'wallpaper-media', 'select', str(fixture_image)], timeout=45)
+            except subprocess.CalledProcessError as error:
+                raise RuntimeError('fixture wallpaper select failed: ' + (error.stdout + '\n' + error.stderr).strip()[-3000:]) from error
             if not (self.root / 'state/nacre/presentation.json').is_file():
                 raise RuntimeError('fixture wallpaper did not produce a private presentation')
         # No audio server here: stand-ins make the daemon see the fixed machine of spikes/fake_system.py (2 sinks, 1 source,
@@ -1083,8 +1092,8 @@ os.execv(real, [real, *args])
     def sequence(self, name, trigger, seconds):
         """Frames of one transition: (milliseconds after the trigger, jpeg). B0067: grim processes are started every
         --seq-interval ms WITHOUT waiting for the previous one (a single grim is ~100 ms), so the frame rate is bounded by
-        the interval, not by grim; the stamp is the spawn time plus half of the fast-quartile capture latency (same method
-        for both arms, so the comparison is unbiased)."""
+        the interval, not by grim. Stamps record process spawn time relative to the trigger;
+        capture scheduling adds uncertainty, so these are image-sequence proxies, not scanout timings."""
         frames_dir = self.root / 'seq'
         shutil.rmtree(frames_dir, ignore_errors=True)
         frames_dir.mkdir()
@@ -1105,13 +1114,9 @@ os.execv(real, [real, *args])
             index += 1
             time.sleep(max(0.0, before + interval - time.monotonic()))
         runner.join()
-        latencies, spawned = [], []
-        for process, before in jobs:
+        for process, _ in jobs:
             process.wait(timeout=30)
-            latencies.append(time.monotonic() - before)
-            spawned.append(before)
-        fast = sorted(latencies)[:max(1, len(latencies) // 4)]
-        stamps = [round((before + sum(fast) / len(fast) / 2 - start) * 1000) for before in spawned]
+        stamps = [round((before - start) * 1000) for _, before in jobs]
         from PIL import Image
         out = self.out / 'seq' / name
         shutil.rmtree(out, ignore_errors=True)
