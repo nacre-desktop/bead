@@ -172,6 +172,18 @@ animations {
 '''
 
 
+# B0077: close controls exercise the same semantic hover/press state at each
+# shell's attached edge. QML is bottom attached; Bead follows the owner's top edge.
+for _name in ("overview", "palette", "keybindings"):
+    _overview = _name == "overview"
+    _target = "extras-close-" + _name
+    PTR[_target] = {"qml": (1400 if _overview else 1320, 419 if _overview else 659),
+                    "bead": (1400 if _overview else 1320, 81)}
+    _open, _close, _seconds = STATES[_name]
+    STATES[_name + "-hover"] = (_open + [("sleep", 1.0), ("pointer-target", _target)], _close, 0)
+    STATES[_name + "-pressed"] = (_open + [("sleep", 1.0), ("press-target", _target)], [("release",)] + _close, 0)
+
+
 def log(message):
     print(time.strftime('%H:%M:%S ') + message, flush=True)
 

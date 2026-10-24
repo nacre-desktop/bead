@@ -27,7 +27,7 @@ local function row(item, selected)
   end
   local activate = item.disabled ~= true and ui.action("extras.do","activate:"..tostring(item.id)) or nil
   return ui.Button{id="palette-"..tostring(item.id),width="fill",height=row_h,radius=row_r,padding=T.palette.padding,
-    fill=selected and "secondaryContainer" or "surfaceContainer",hover_fill="secondaryContainer",on_activate=activate,
+    fill=selected and "secondaryContainer" or "surfaceContainer",hover_fill="secondaryContainer",activate_on_release=true,focus_on_pointer=false,on_activate=activate,
     aria_label=(item.name or "").." "..(item.description or ""),
     ui.Row{width="fill",height=row_h-T.palette.padding*2,gap=T.palette.content_gap,align="center",
       ui.Text{text=item.kind == "app" and "apps" or item.icon or "apps",family="Material Symbols Rounded",width=T.palette.icon_size,height=T.palette.icon_size,
@@ -42,7 +42,7 @@ local function window_tile(item)
   return ui.Button{id="window-"..tostring(item.id),width=item.tile_width,height=item.tile_height,
     radius=T.overview.thumbnail_radius,padding=T.overview.tile_padding,
     fill="transparent",hover_fill="transparent",
-    on_activate=ui.action("extras.do","focus:"..tostring(item.id)),aria_label=item.title or item.app_id or "Window",
+    activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do","focus:"..tostring(item.id)),aria_label=item.title or item.app_id or "Window",
     ui.Box{id="preview",position="absolute",left=0,top=0,width=item.tile_width,height=item.preview_height,
       radius=T.overview.thumbnail_radius,fill=selected and "secondaryContainer" or "surfaceContainerHigh",
       ui.Image{position="absolute",left=(item.tile_width-T.overview.icon_size)/2,top=(item.preview_height-T.overview.icon_size)/2,
@@ -71,7 +71,7 @@ local function workspace_card(group)
   local kids = {
     ui.Button{id="workspace-title",position="absolute",left=T.overview.workspace_title_left,top=T.overview.workspace_title_top,width=T.overview.workspace_title_width,
       height=T.overview.workspace_title_height,padding=0,radius=T.overview.workspace_title_radius,fill="transparent",
-      on_activate=ui.action("extras.do","workspace:"..tostring(ws.index)),aria_label=ws.name or ("Workspace "..tostring(ws.index)),
+      activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do","workspace:"..tostring(ws.index)),aria_label=ws.name or ("Workspace "..tostring(ws.index)),
       ui.Row{width="fill",height=T.overview.workspace_title_height,gap=T.overview.title_icon_gap,align="center",
         ui.Text{text="workspaces",family="Material Symbols Rounded",font_size=T.overview.workspace_icon_font,
           color="primary",width=T.overview.workspace_icon_width,height=T.overview.workspace_title_height},
@@ -120,9 +120,9 @@ local heading = {
   ui.Text{id="title",text=ui.bind("extras.title"),width=0,grow=1,height=T.panel.heading_height,font_size=T.panel.heading_font,color="primary"},
 }
 if shortcuts then heading[#heading+1] = kit.IconButton{id="refresh",aria_label="Refresh shortcuts",text="refresh",width=T.panel.refresh_size,height=T.panel.refresh_size,padding=0,
-  on_activate=ui.action("extras.do","refresh")} end
+  activate_on_release=true,on_activate=ui.action("extras.do","refresh")} end
 heading[#heading+1] = kit.Button{id="close",text="Close",aria_label="Close",width=T.panel.close_width,height=T.panel.close_height,padding=0,font_size=T.panel.close_font,
-  on_activate=ui.action("extras.close")}
+  activate_on_release=true,on_activate=ui.action("extras.close")}
 
 return kit.Panel{id="extras",edge="top",open=ui.bind("panel.open"),width=width,height=panel_height,
   duration=T.panel.duration,transition="ease",fade=false,radius=T.panel.radius,fill="surface",border_width=T.panel.border,border_color="outlineVariant",

@@ -2562,7 +2562,7 @@ impl SceneSource for Runtime {
         if let (Some(extras), Some((_, name, bead::core::Value::Text(request)))) =
             (&self.extras, &host_action)
             && name == "extras.do"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -2575,7 +2575,11 @@ impl SceneSource for Runtime {
                 &self.session.stores,
                 std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new()))),
             );
-            let scene = self.session.update(BTreeMap::new())?;
+            let scene = if matches!(&event, UiEvent::Release) {
+                self.session.release()?
+            } else {
+                self.session.update(BTreeMap::new())?
+            };
             return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)
