@@ -84,8 +84,8 @@ local function card(item, card_w, card_h, x, y, selected_card, clip)
   if clip==hex_clip then
     kids[#kids+1]=ui.Image{id="hex-outline",position="absolute",left=0,top=0,width=card_w,height=card_h,
       path=selected_card and "extras/wallpaper/assets/hex-selected.themed.svg" or "extras/wallpaper/assets/hex-idle.themed.svg"}
-    kids[#kids+1]=ui.Text{id="hex-title",position="absolute",left=card_w*T.wallpaper.hex_caption_left_fraction,top=card_h-T.wallpaper.hex_caption_bottom,
-      width=card_w*T.wallpaper.hex_caption_width_fraction,height=T.wallpaper.hex_caption_height,text=item.title or "",font_size=T.palette.description_font,
+    kids[#kids+1]=ui.Text{id="hex-title",position="absolute",left=T.wallpaper.hex_caption_inset,top=card_h-T.wallpaper.hex_caption_bottom,
+      width=math.max(0,card_w-T.wallpaper.hex_caption_inset*2),height=T.wallpaper.hex_caption_height,text=item.title or "",font_size=T.palette.description_font,
       text_align="center",color=T.wallpaper.photo_ink}
   end
   return ui.Button{id="wallpaper-"..tostring(item.selection_index),position="absolute",left=x,top=y,
