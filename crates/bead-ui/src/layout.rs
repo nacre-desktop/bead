@@ -265,17 +265,19 @@ impl ViewSpec {
             if *count > 8192 {
                 return Err(raw.source.error("view exceeds8192nodes"));
             }
-            let mut props = raw.props.clone();
-            for (name, value) in &mut props {
+            let mut props = std::borrow::Cow::Borrowed(&raw.props);
+            for (name, value) in &raw.props {
                 if !allowed_property(name) {
                     return Err(raw.source.error(format!("unknown property {name}")));
                 }
                 if let Some(path) = binding(Some(value)) {
-                    *value =
-                        serde_json::to_value(resolve(path)?).map_err(|e| raw.source.error(e))?;
+                    props.to_mut().insert(
+                        name.clone(),
+                        serde_json::to_value(resolve(path)?).map_err(|e| raw.source.error(e))?,
+                    );
                 }
             }
-            let p = &props;
+            let p = props.as_ref();
             let source = &raw.source;
             let local = text(p, "id", &format!("_layout{position}"), source)?;
             if matches!(

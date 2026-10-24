@@ -80,6 +80,7 @@ impl Packet {
 enum Job {
     PanelCenter(Option<f32>),
     Presented(u64),
+    FramePresented,
     Idle(bool),
     Stage(UiEvent, Vec<f32>),
     Viewport(u32, u32),
@@ -218,6 +219,7 @@ impl SceneSource for Source {
                         Job::PanelCenter(center) => source.panel_center(center),
                         Job::Stop => break,
                         Job::Presented(revision) => source.presented(revision),
+                        Job::FramePresented => source.frame_presented(),
                         Job::Idle(value) => {
                             idle = value;
                             source.set_idle(value);
@@ -423,6 +425,9 @@ impl SceneSource for Source {
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         Ok(())
+    }
+    fn frame_presented(&mut self) {
+        let _ = self.send(Job::FramePresented);
     }
     fn presented(&mut self, revision: u64) {
         let _ = self.send(Job::Presented(revision));

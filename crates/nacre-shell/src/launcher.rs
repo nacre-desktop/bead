@@ -358,9 +358,14 @@ impl Fixture {
         for reply in queries.values() {
             rows(reply.clone())?;
         }
+        let favorites = data
+            .get("preferences")
+            .map(parse_favorites)
+            .transpose()?
+            .unwrap_or_default();
         Ok(Self {
             publisher: source::Publisher::new("menu-fixture".into(), data)?,
-            favorites: Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new())),
+            favorites: Arc::new(std::sync::Mutex::new(favorites)),
         })
     }
 }
@@ -3055,6 +3060,29 @@ mod tests {
         assert_eq!(before[1]["selected"], false);
         assert_eq!(after[0]["selected"], false);
         assert_eq!(after[1]["selected"], true);
+    }
+    #[test]
+    fn fixture_preferences_seed_the_published_load_reply() {
+        let preferences =
+            json!({"favorites":["org.example.app.desktop"],"hidden":[],"recent":[],"usage":{}});
+        let fixture = Arc::new(
+            Fixture::new(
+                json!({"queries":{"":fixture_reply("",vec![])},"preferences":preferences}),
+            )
+            .unwrap(),
+        );
+        let menu = Menu::new(Some(fixture.clone())).unwrap();
+        let reply = menu
+            .runtime
+            .block_on(fixture.invoke("menu.preferences".into(), json!({"action":"load"})))
+            .unwrap();
+        assert_eq!(reply["favorites"], json!(["org.example.app.desktop"]));
+        assert!(
+            Fixture::new(
+                json!({"queries":{"":fixture_reply("",vec![])},"preferences":{"favorites":[false]}})
+            )
+            .is_err()
+        );
     }
     #[test]
     fn exact_fixture_queries_do_not_filter_or_rank() {

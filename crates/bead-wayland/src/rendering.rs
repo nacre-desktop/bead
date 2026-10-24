@@ -48,6 +48,7 @@ fn copy_outside_repairs(
     width: u32,
     height: u32,
     repairs: &[Damage],
+    zero_target: bool,
 ) {
     let mut ordered = repairs.iter().collect::<Vec<_>>();
     ordered.sort_unstable_by_key(|r| r.x);
@@ -61,15 +62,57 @@ fn copy_outside_repairs(
             let left = r.x.min(width);
             if left > x {
                 let range = row + x as usize * 4..row + left as usize * 4;
-                target[range.clone()].copy_from_slice(&source[range]);
+                copy_adopted_span(&source[range.clone()], &mut target[range], zero_target);
             }
             x = x.max(r.x.saturating_add(r.w).min(width));
         }
         if x < width {
             let range = row + x as usize * 4..row + width as usize * 4;
-            target[range.clone()].copy_from_slice(&source[range]);
+            copy_adopted_span(&source[range.clone()], &mut target[range], zero_target);
         }
     }
+}
+
+fn copy_adopted_span(source: &[u8], target: &mut [u8], zero_target: bool) {
+    if !zero_target {
+        target.copy_from_slice(source);
+        return;
+    }
+    static ZERO: [u8; 4096] = [0; 4096];
+    for (source, target) in source.chunks(ZERO.len()).zip(target.chunks_mut(ZERO.len())) {
+        // Fresh slots in a new SHM pool are zero-filled. Avoid faulting their
+        // transparent margins into residency just to copy zeroes.
+        // SAFETY: both read ranges contain source.len() bytes (at most 4096).
+        if unsafe { libc::memcmp(source.as_ptr().cast(), ZERO.as_ptr().cast(), source.len()) } != 0
+        {
+            target.copy_from_slice(source);
+        }
+    }
+}
+
+/// Best-effort huge-page advice on complete base pages inside an existing frame.
+/// Keep partial edge pages outside the advised range.
+fn advise_frame_pages(bytes: &mut [u8]) {
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: sysconf has no pointer or process-state preconditions.
+        let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        if page <= 0 {
+            return;
+        }
+        let page = page as usize;
+        let begin = (bytes.as_mut_ptr() as usize).next_multiple_of(page);
+        let end = (bytes.as_mut_ptr() as usize + bytes.len()) / page * page;
+        if end > begin {
+            // SAFETY: page-aligned subrange of this live, writable SHM mapping.
+            // Failure merely retains ordinary small-page allocation behavior.
+            unsafe {
+                libc::madvise(begin as *mut _, end - begin, libc::MADV_HUGEPAGE);
+            }
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = bytes;
 }
 
 /// Quiet time before an idle SHM pool is compacted. A surface that holds keyboard
@@ -892,7 +935,7 @@ impl App {
                 // SlotPool rounds each slot to a 64-byte boundary.
                 s.pool = SlotPool::new(size.next_multiple_of(64) * 3, &self.shm)?;
                 for _ in 0..3 {
-                    let (buffer, _) = s.pool.create_buffer(
+                    let (buffer, canvas) = s.pool.create_buffer(
                         w,
                         h,
                         stride,
@@ -902,6 +945,9 @@ impl App {
                             wl_shm::Format::Argb8888
                         },
                     )?;
+                    if scene.motion.is_some() {
+                        advise_frame_pages(canvas);
+                    }
                     s.buffers.push(Reusable {
                         buffer,
                         pending: vec![Damage::full(w as u32, h as u32)],
@@ -962,6 +1008,7 @@ impl App {
             // for an unpainted spare left by pool compaction.
             if let Some(from) = adopt {
                 let pending = s.buffers[from].pending.clone();
+                let zero_target = !s.buffers[slot].painted;
                 // A held source is read-only; canvas() is only used for the free target.
                 let (source, len) = {
                     let held = s.buffers[from].buffer.slot();
@@ -978,6 +1025,7 @@ impl App {
                         w as u32,
                         h as u32,
                         &pending,
+                        zero_target,
                     );
                     s.buffers[slot].pending = pending;
                 }
@@ -1398,7 +1446,15 @@ mod repair_tests {
                     .unwrap();
                     let adopted = adopt.map(|from| (from, buffers[from].clone()));
                     if let Some((_, (bytes, pending, _))) = &adopted {
-                        copy_outside_repairs(bytes, &mut buffers[slot].0, width, height, pending);
+                        let zero_target = !buffers[slot].2;
+                        copy_outside_repairs(
+                            bytes,
+                            &mut buffers[slot].0,
+                            width,
+                            height,
+                            pending,
+                            zero_target,
+                        );
                         buffers[slot].1 = pending.clone();
                     }
                     let (bytes, pending, painted) = &mut buffers[slot];

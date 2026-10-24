@@ -522,6 +522,7 @@ impl Runtime {
         self.session
             .set_projector(Box::new(move |stores| projector.project(stores)));
         self.session.set_projection_coalescing(true);
+        self.session.set_deferred_markup_cleanup(true);
         self.session.stores = self
             .session
             .stores
@@ -3706,6 +3707,24 @@ impl SceneSource for Runtime {
     }
     fn resource_counts(&self) -> String {
         let mut counts = self.session.resource_counts();
+        if bead::core::profile::enabled() && self.launcher.is_some() {
+            use bead::core::Value;
+            let stores = &self.session.stores;
+            let pending = stores.get("launcher.pending") == Some(&Value::Bool(true));
+            let home = matches!(stores.get("launcher.engine_route"), Some(Value::Text(route)) if route.split('.').next() == Some("home"))
+                && matches!(stores.get("launcher.search.text"), Some(Value::Text(query)) if query.trim().is_empty());
+            let number = |name| match stores.get(name) {
+                Some(Value::Number(n)) => *n as usize,
+                _ => 0,
+            };
+            let favorites = match stores.get("launcher.apps") {
+                Some(Value::List(rows)) => {
+                    rows.iter().filter(|row| row["favorite"] == true).count()
+                }
+                _ => 0,
+            };
+            counts.push_str(&format!(" menu_pending={pending} menu_home={home} menu_count={} menu_total={} menu_favorites={favorites}", number("launcher.result_count"), number("launcher.total_count")));
+        }
         if std::env::var_os("BEAD_SERVICE_DIAGNOSTICS").is_some() {
             if let Some(desktop) = &self.desktop {
                 let (tasks, retained) = desktop.bus_task_counts();
@@ -3740,6 +3759,9 @@ impl SceneSource for Runtime {
                 .session
                 .focused_action()
                 .is_some_and(|(_, name, _)| name == "close")
+    }
+    fn frame_presented(&mut self) {
+        self.session.finish_frame();
     }
     fn presented(&mut self, revision: u64) {
         if self.session.presented(revision).is_err() {

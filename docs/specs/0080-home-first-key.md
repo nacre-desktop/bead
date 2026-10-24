@@ -31,3 +31,11 @@ General primitive under evaluation: an opt-in, one-pass asynchronous projection
 recheck after markup can replace an already superseded view before raster work;
 it never waits. Buffer adoption copies only the complement of complete repairs.
 Neither change adds persistent caches or changes the focused compaction timeout.
+The launcher also opts into bounded post-frame sandbox cleanup: every build uses
+a fresh VM, at most one completed VM is charged/held, and frame completion or
+close releases it. This moves destruction after presentation; it does not claim
+to remove that CPU work. Linux frame allocations receive best-effort huge-page
+advice only within their existing page-aligned extent; host policy is unchanged.
+Fresh SHM adoption leaves already-zero transparent blocks untouched. The fixture
+can seed canonical `menu.preferences` so favourites have their real star state;
+the same fixture support and numeric readiness probes are used for the control.
