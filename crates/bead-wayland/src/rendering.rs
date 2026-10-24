@@ -41,6 +41,37 @@ pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
     ])
 }
 
+/// Adopt only pixels the following complete repairs will leave untouched.
+fn copy_outside_repairs(
+    source: &[u8],
+    target: &mut [u8],
+    width: u32,
+    height: u32,
+    repairs: &[Damage],
+) {
+    let mut ordered = repairs.iter().collect::<Vec<_>>();
+    ordered.sort_unstable_by_key(|r| r.x);
+    for y in 0..height {
+        let row = y as usize * width as usize * 4;
+        let mut x = 0;
+        for r in &ordered {
+            if y < r.y || y >= r.y.saturating_add(r.h) || r.w == 0 {
+                continue;
+            }
+            let left = r.x.min(width);
+            if left > x {
+                let range = row + x as usize * 4..row + left as usize * 4;
+                target[range.clone()].copy_from_slice(&source[range]);
+            }
+            x = x.max(r.x.saturating_add(r.w).min(width));
+        }
+        if x < width {
+            let range = row + x as usize * 4..row + width as usize * 4;
+            target[range.clone()].copy_from_slice(&source[range]);
+        }
+    }
+}
+
 /// Quiet time before an idle SHM pool is compacted. A surface that holds keyboard
 /// focus (an open launcher) waits longer: the retire-and-repaint costs the next
 /// key ~2.4 ms of UI CPU (B0040), and hiding the panel destroys its pool anyway.
@@ -836,6 +867,7 @@ impl App {
                 // An explicitly permitted automatic fallback uses the same retained Scene.
                 renderer.prepare(scene, scale)?;
             }
+            let repair_profile = bead_core::profile::Span::new("repair_setup");
             let format = if cfg!(target_endian = "little")
                 && !self.options.force_argb
                 && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
@@ -928,26 +960,27 @@ impl App {
             // An older painted slot can still owe an entire animation repaint.
             // Copy fresher pixels and their matching repairs together, just as
             // for an unpainted spare left by pool compaction.
-            if let Some(from) = adopt
-                // The source is still held by the compositor, so canvas() refuses it;
-                // reading it is sound, only writing is not.
-                && let (source, len) = {
+            if let Some(from) = adopt {
+                let pending = s.buffers[from].pending.clone();
+                // A held source is read-only; canvas() is only used for the free target.
+                let (source, len) = {
                     let held = s.buffers[from].buffer.slot();
                     let data = s.pool.raw_data_mut(&held);
                     (data.as_ptr(), data.len())
-                }
-                && let Some(target) = s.buffers[slot].buffer.canvas(&mut s.pool)
-            {
-                // SAFETY: both slots are distinct ranges of the same live pool mapping,
-                // which canvas() does not move or resize; the copy stays inside both.
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        source,
-                        target.as_mut_ptr(),
-                        len.min(target.len()),
-                    )
                 };
-                s.buffers[slot].pending = s.buffers[from].pending.clone();
+                if let Some(target) = s.buffers[slot].buffer.canvas(&mut s.pool) {
+                    // SAFETY: distinct slots in the same live, unmoved pool mapping.
+                    // Repairs fully replace their pixels, so only their complement
+                    // needs the adopted contents. The source is never written.
+                    copy_outside_repairs(
+                        unsafe { std::slice::from_raw_parts(source, len) },
+                        target,
+                        w as u32,
+                        h as u32,
+                        &pending,
+                    );
+                    s.buffers[slot].pending = pending;
+                }
             }
             let b = &mut s.buffers[slot];
             b.painted = true;
@@ -962,6 +995,7 @@ impl App {
                 std::slice::from_ref(&bounding)
             };
             let start = Instant::now();
+            drop(repair_profile);
             let compose_profile = bead_core::profile::Span::new("compose");
             let canvas = b
                 .buffer
@@ -995,6 +1029,7 @@ impl App {
             if self.started.elapsed().as_secs_f64() > 2. {
                 s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
             }
+            let _commit_profile = bead_core::profile::Span::new("commit");
             for region in &regions {
                 s.layer.wl_surface().damage_buffer(
                     region.x as i32,
@@ -1363,7 +1398,7 @@ mod repair_tests {
                     .unwrap();
                     let adopted = adopt.map(|from| (from, buffers[from].clone()));
                     if let Some((_, (bytes, pending, _))) = &adopted {
-                        buffers[slot].0.copy_from_slice(bytes);
+                        copy_outside_repairs(bytes, &mut buffers[slot].0, width, height, pending);
                         buffers[slot].1 = pending.clone();
                     }
                     let (bytes, pending, painted) = &mut buffers[slot];

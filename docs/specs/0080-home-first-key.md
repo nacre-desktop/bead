@@ -26,3 +26,8 @@ Before every arm require host swap below 64 MiB; require zero host swap-in and
 process SwapPss throughout. Keep the existing containment/watchdog checks.
 Record memory backend and anonymous/file/shared residency separately.
 No live desktop tests, deployment or Nacre changes are part of this unit.
+
+General primitive under evaluation: an opt-in, one-pass asynchronous projection
+recheck after markup can replace an already superseded view before raster work;
+it never waits. Buffer adoption copies only the complement of complete repairs.
+Neither change adds persistent caches or changes the focused compaction timeout.

@@ -17,6 +17,7 @@ pub type Projector = Box<dyn Fn(&Stores) -> Result<BTreeMap<String, Value>, Diag
 /// The state owner survives every view/script replacement.
 pub struct Session {
     projector: Option<Projector>,
+    coalesce_projection: bool,
     recovery_path: Option<PathBuf>,
     recovered: Option<bead_core::recovery::Restored>,
     recorded_revision: Option<u64>,
@@ -53,6 +54,11 @@ impl Session {
     pub fn set_projector(&mut self, projector: Projector) {
         self.projector = Some(projector);
     }
+    /// Recheck an asynchronous projection once after markup, without waiting.
+    /// A reply already ready replaces the intermediate scene before raster work.
+    pub fn set_projection_coalescing(&mut self, enabled: bool) {
+        self.coalesce_projection = enabled;
+    }
     pub fn new(
         root: PathBuf,
         entry: PathBuf,
@@ -62,6 +68,7 @@ impl Session {
     ) -> Self {
         Self {
             projector: None,
+            coalesce_projection: false,
             recovery_path: None,
             recovered: None,
             recorded_revision: None,
@@ -412,6 +419,18 @@ impl Session {
         }
         let (mut scene, mut nodes) =
             generation.materialize(&stores, &self.palette, self.viewport)?;
+        if self.coalesce_projection
+            && let Some(projector) = &self.projector
+        {
+            let revision = stores.revision();
+            let changes = projector(&stores)?;
+            stores
+                .commit(changes)
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+            if stores.revision() != revision {
+                (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+            }
+        }
         if let Some(Value::Text(focused)) = stores.get("bead.focused")
             && !focused.is_empty()
             && !nodes

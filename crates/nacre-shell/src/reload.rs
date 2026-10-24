@@ -521,6 +521,7 @@ impl Runtime {
         let projector = menu.clone();
         self.session
             .set_projector(Box::new(move |stores| projector.project(stores)));
+        self.session.set_projection_coalescing(true);
         self.session.stores = self
             .session
             .stores

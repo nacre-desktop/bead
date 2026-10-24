@@ -27,7 +27,7 @@ return {
   computed = {
     -- Keep the last accepted model's geometry while its replacement is in flight.
     ["launcher.display_query"]=function(s) return s["launcher.pending"] and s["launcher.result_query"] or s["launcher.search.text"] end,
-    ["launcher.quick_allowed"]=function(s) return not s["launcher.search.text"]:match("^%s*=") end,
+    ["launcher.quick_allowed"]=function(s) return not s["launcher.display_query"]:match("^%s*=") end,
     ["launcher.results"]=function(s) return not s["launcher.grid"] end,
     ["launcher.home"]=function(s) return (s["launcher.engine_route"]:match("^[^.]+"))=="home" and s["launcher.display_query"]:match("^%s*$")~=nil end,
     ["launcher.hints"]=function(s) return s["launcher.display_query"]=="" end,

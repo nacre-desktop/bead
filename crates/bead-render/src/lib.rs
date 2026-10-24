@@ -819,8 +819,10 @@ impl Renderer for CpuRenderer {
                             TextAlign::Right => cosmic_text::Align::Right,
                         }),
                     );
-                    let _profile = bead_core::profile::Span::new("shape");
+                    let profile = bead_core::profile::Span::new("shape");
                     buf.shape_until_scroll(fonts, false);
+                    drop(profile);
+                    let _raster_profile = bead_core::profile::Span::new("raster");
                     for run in buf.layout_runs() {
                         for glyph in run.glyphs {
                             if let Some(face) = fonts.db().face(glyph.font_id) {

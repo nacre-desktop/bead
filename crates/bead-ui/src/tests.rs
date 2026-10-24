@@ -127,6 +127,54 @@ fn external_projector_refreshes_without_local_edits_and_keeps_atomic_failure() {
     assert!(session.pending.is_none());
 }
 #[test]
+fn coalesced_projection_is_bounded_and_rejects_a_failed_final_reply_atomically() {
+    for fail in [false, true] {
+        let fixture = Fixture::new();
+        let mut session = fixture.session();
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let count = calls.clone();
+        session.set_projector(Box::new(move |_| {
+            let n = count.get() + 1;
+            count.set(n);
+            if n == 2 && fail {
+                return Err(Diagnostic::new(Path::new("external"), 1, 1, "late failure"));
+            }
+            Ok(BTreeMap::from([(
+                "search.text".into(),
+                Value::Text(if n == 1 { "pending" } else { "ready" }.into()),
+            )]))
+        }));
+        session.set_projection_coalescing(true);
+        let result = session.update(BTreeMap::new());
+        assert_eq!(
+            calls.get(),
+            2,
+            "one recheck, with no waiting or unbounded loop"
+        );
+        assert_eq!(
+            session.stores.get("search.text"),
+            Some(&Value::Text("default".into()))
+        );
+        if fail {
+            assert!(result.is_err());
+            assert!(session.pending.is_none());
+        } else {
+            let scene = result.unwrap().unwrap();
+            assert!(
+                scene
+                    .primitives
+                    .iter()
+                    .any(|p| matches!(p, Primitive::Text { text, .. } if text == "ready"))
+            );
+            session.commit(scene);
+            assert_eq!(
+                session.stores.get("search.text"),
+                Some(&Value::Text("ready".into()))
+            );
+        }
+    }
+}
+#[test]
 fn normalized_entry_and_final_palette_and_watch_race_checks() {
     let fixture = Fixture::new();
     let (generation, stores) =
