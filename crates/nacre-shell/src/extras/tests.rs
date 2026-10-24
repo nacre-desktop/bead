@@ -276,6 +276,19 @@ async fn palette_mode_keeps_the_daemon_order_for_empty_typed_and_prefixed_querie
     }
 }
 #[tokio::test(flavor = "current_thread")]
+async fn a_closed_panel_forgets_the_typed_query() {
+    let lab = lab().await;
+    let palette = Extras::new(Kind::Palette, lab.client.clone()).unwrap();
+    let closed = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("extras.query".into(), Value::Text("set".into())),
+            ("panel.open".into(), Value::Bool(false)),
+        ]))
+        .unwrap();
+    let model = palette.project(&closed, None);
+    assert_eq!(model["extras.query"], Value::Text(String::new()));
+}
+#[tokio::test(flavor = "current_thread")]
 async fn palette_activates_a_typed_row_with_its_own_ticket() {
     let mut lab = lab().await;
     let palette = Extras::new(Kind::Palette, lab.client.clone()).unwrap();

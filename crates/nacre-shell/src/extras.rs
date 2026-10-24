@@ -246,6 +246,10 @@ impl Extras {
         if let Some(query) = next_query {
             values.insert("extras.query".into(), Value::Text(query));
         }
+        // QML builds its search surface per opening, so a closed panel forgets the typed text.
+        if matches!(stores.get("panel.open"), Some(Value::Bool(false))) && !text.is_empty() {
+            values.insert("extras.query".into(), Value::Text(String::new()));
+        }
         if std::mem::take(&mut state.close) {
             values.insert("panel.open".into(), Value::Bool(false));
         }
