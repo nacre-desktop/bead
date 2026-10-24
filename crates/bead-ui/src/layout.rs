@@ -138,7 +138,16 @@ pub const PROPERTIES: &[&str] = &[
     "masked",
 ];
 pub fn allowed_property(name: &str) -> bool {
-    PROPERTIES.contains(&name)
+    static SORTED: std::sync::OnceLock<[&str; PROPERTIES.len()]> = std::sync::OnceLock::new();
+    SORTED
+        .get_or_init(|| {
+            let mut names = [""; PROPERTIES.len()];
+            names.copy_from_slice(PROPERTIES);
+            names.sort_unstable();
+            names
+        })
+        .binary_search(&name)
+        .is_ok()
 }
 
 pub struct ViewSpec {
