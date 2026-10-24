@@ -68,6 +68,7 @@ def main():
         return p
 
     base = {k: v for k, v in os.environ.items() if k in ("PATH", "DBUS_SESSION_BUS_ADDRESS", "LANG", "HOME")}
+    base.update(GIO_USE_VFS="local", GVFS_DISABLE_FUSE="1")
     base["HOME"] = str(root / "home")
     (root / "home").mkdir(mode=0o700)
     try:
@@ -100,18 +101,29 @@ def main():
         denv = dict(cenv, XDG_DATA_HOME=str(root / "data"), XDG_CONFIG_HOME=str(root / "config"), XDG_STATE_HOME=str(root / "state"),
                     XDG_CACHE_HOME=str(root / "cache"), NACRE_DAEMON_SOCKET=str(sock), NACRE_COMPOSITOR="hyprland",
                     NACRE_HELPER_TOOLS=str(a.tools), DBUS_SYSTEM_BUS_ADDRESS=base["DBUS_SESSION_BUS_ADDRESS"],
-                    PIPEWIRE_REMOTE="bead-private-unavailable", PULSE_SERVER="unix:" + str(root / "no-pulse"))
+                    PIPEWIRE_REMOTE="bead-private-unavailable", PULSE_SERVER="unix:" + str(root / "no-pulse"), GIO_USE_VFS="local", GVFS_DISABLE_FUSE="1")
         ctl = root / "nacrectl"
         ctl.symlink_to((a.bin / "nacre-helper").resolve())
-        spawn([str(ctl), "daemon", "--notifications=daemon"], "daemon", denv)
+        spawn([str((a.bin / "nacre-helper").resolve()), "daemon", "--notifications=daemon"], "daemon", denv)
         wait(lambda: sh([str(ctl), "call", "--timeout", "2000", "daemon.status", "{}"], env=denv).returncode == 0, 40, "daemon")
-        # Windows: distinct colours and titles.
-        colours = [41, 42, 44, 45, 46, 43, 101, 102]
+        # Windows: a tiny shm client (spikes/shm-window.c) with distinct colours and titles.
+        build = root / "build"
+        build.mkdir()
+        xml = "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml"
+        sh(["wayland-scanner", "client-header", xml, str(build / "xdg-shell-client-protocol.h")], check=True)
+        sh(["wayland-scanner", "private-code", xml, str(build / "xdg-shell-protocol.c")], check=True)
+        src = pathlib.Path(__file__).with_name("shm-window.c")
+        done = sh(["gcc", "-O1", "-I", str(build), "-o", str(build / "shm-window"), str(src), str(build / "xdg-shell-protocol.c"), "-lwayland-client"])
+        if done.returncode:
+            raise RuntimeError(done.stderr)
+        winprocs = []
+        colours = ["c0392b", "27ae60", "2980b9", "8e44ad", "d35400", "16a085", "7f8c8d", "f1c40f"]
         for i in range(a.windows):
-            spawn(["alacritty", "--title", f"preview-{i + 1}", "-e", "sh", "-c",
-                   f"printf '\\033[{colours[i % len(colours)]}m\\033[2J\\033[H window {i + 1} '; sleep 3600"],
-                  f"win{i + 1}", dict(cenv, LIBGL_ALWAYS_SOFTWARE="1"))
-        wait(lambda: len(json.loads(sh(["hyprctl", "-j", "clients"], env=cenv).stdout or "[]")) >= a.windows, 40, "windows")
+            winprocs.append(spawn([str(build / "shm-window"), f"preview-{i + 1}", "bead.preview", colours[i % len(colours)]], f"win{i + 1}", cenv))
+        try:
+            wait(lambda: len(json.loads(sh(["hyprctl", "-j", "clients"], env=cenv).stdout or "[]")) >= a.windows, 40, "windows")
+        except RuntimeError:
+            raise RuntimeError("windows missing: exit codes %s; hyprctl: %s" % ([p.poll() for p in winprocs], sh(["hyprctl", "-j", "clients"], env=cenv)))
         time.sleep(2)
         report["clients"] = [(c["class"], c["title"]) for c in json.loads(sh(["hyprctl", "-j", "clients"], env=cenv).stdout)]
         # Shell.
