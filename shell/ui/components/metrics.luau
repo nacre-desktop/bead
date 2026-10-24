@@ -22,8 +22,8 @@ M.quick_icons={
     ["actions.controls.stay-awake"]="coffee",
 }
 M.width=function(viewport) return math.min(1100,viewport*.9) end
-M.show=function(viewport,query) return M.width(viewport)>=T.icons.hero*30-S.xl-S.hairline and not (query and query:match("^%s*=")) end
-M.content_width=function(viewport,query)
-    return M.width(viewport)-12-20-152-18-6-(M.show(viewport,query) and M.quick_width+M.quick_gap or 0)
+M.show=function(viewport,allowed) return M.width(viewport)>=T.icons.hero*30-S.xl-S.hairline and allowed~=false end
+M.content_width=function(viewport,allowed)
+    return M.width(viewport)-12-20-152-18-6-(M.show(viewport,allowed) and M.quick_width+M.quick_gap or 0)
 end
 return M

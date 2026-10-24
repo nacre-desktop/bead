@@ -1446,6 +1446,17 @@ impl Menu {
                 }),
             ),
         ]);
+        if stores.get("launcher.result_query").is_some() {
+            delta.insert(
+                "launcher.result_query".into(),
+                Value::Text(
+                    view.result_request
+                        .as_ref()
+                        .map(|request| request.0.clone())
+                        .unwrap_or_default(),
+                ),
+            );
+        }
         if let Some(mode) = restore_mode {
             delta.insert("launcher.mode".into(), Value::Text(mode));
         }
@@ -1701,6 +1712,7 @@ mod tests {
         let mut stores = Stores::default()
             .reconcile(&BTreeMap::from([
                 ("launcher.search.text".into(), Value::Text(String::new())),
+                ("launcher.result_query".into(), Value::Text(String::new())),
                 ("launcher.selection".into(), Value::Text(String::new())),
                 ("launcher.engine_route".into(), Value::Text(String::new())),
                 ("launcher.scroll.y".into(), Value::Number(0.)),
@@ -1717,6 +1729,7 @@ mod tests {
             .unwrap();
         let pending = menu.project(&stores).unwrap();
         assert_eq!(pending["launcher.pending"], Value::Bool(true));
+        assert_eq!(pending["launcher.result_query"], Value::Text(String::new()));
         assert_eq!(pending["launcher.result_count"], Value::Number(1.));
         assert_eq!(menu.view.borrow().rows[0]["id"], "old");
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
@@ -1737,6 +1750,10 @@ mod tests {
             )]))
             .unwrap();
         let latest = project_wait(&menu, &stores).unwrap();
+        assert_eq!(
+            latest["launcher.result_query"],
+            Value::Text("latest".into())
+        );
         stores = stores.reconcile(&latest).unwrap();
         stores.commit(latest).unwrap();
         assert_eq!(menu.view.borrow().rows[0]["id"], "latest");
@@ -1744,6 +1761,10 @@ mod tests {
         let after_stale_delay = project_wait(&menu, &stores).unwrap();
         assert_eq!(menu.view.borrow().rows[0]["id"], "latest");
         assert_eq!(after_stale_delay["launcher.pending"], Value::Bool(false));
+        assert_eq!(
+            after_stale_delay["launcher.result_query"],
+            Value::Text("latest".into())
+        );
         stores
             .commit(BTreeMap::from([(
                 "launcher.engine_route".into(),

@@ -6,7 +6,7 @@ local AppGrid = require("./components/app-grid")
 local Results = require("./components/results")
 local Quick = require("./components/quick")
 local M = require("./components/metrics")
-local show_quick=M.show(ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("launcher.search.text")))
+local show_quick=M.show(ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
 -- QML NacreAppBrowser prefixHints: five 24 px chips at the search field's right end while the query is empty.
 local hints={"> "..ui.tr("bead.launcher.hint-actions"),"= "..ui.tr("bead.launcher.hint-calculate"),"# "..ui.tr("bead.launcher.hint-brain"),": "..ui.tr("bead.launcher.hint-files"),"? "..ui.tr("bead.launcher.hint-ai")}
 local chips={}

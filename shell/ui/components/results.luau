@@ -27,7 +27,7 @@ local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string
 end)
 return ui.component("Results",{},function(_)
     local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width"))
-    local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.search.text")))
+    local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
     return kit.VirtualGrid{id="results",scroll=ui.bind("launcher.scroll.y"),width=width,height=400,min_cell_width=width,
         gap_x=0,gap_y=3,row_height=55,total_count=ui.bind("launcher.total_count"),model=ui.bind("launcher.apps"),key="id",render=function(item)return Row{item=item}end}
 end)

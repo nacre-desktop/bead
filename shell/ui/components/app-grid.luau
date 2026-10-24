@@ -24,7 +24,7 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
 end)
 return ui.component("AppGrid",{},function(_)
     local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width"))
-    local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.search.text")))
+    local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
     return kit.VirtualGrid{id="app-grid",scroll=ui.bind("launcher.scroll.y"),
         width=width,height=400,min_cell_width=110,gap_x=6,gap_y=5,row_height=76.2,
         model=ui.bind("launcher.apps"),key="id",render=function(item)return Tile{item=item}end}

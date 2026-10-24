@@ -372,3 +372,33 @@ fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
     assert_eq!(bare, ["home", "apps", "actions"]);
     Ok(())
 }
+
+#[test]
+fn pending_query_keeps_the_accepted_model_geometry_until_replacement() -> Result<()> {
+    let mut h = harness("", 0.)?;
+    let grid = |h: &Harness| {
+        h.session
+            .view_nodes()
+            .iter()
+            .any(|n| n.id.ends_with("app-grid"))
+    };
+    assert!(grid(&h));
+    h.update(BTreeMap::from([
+        ("launcher.search.text".into(), Value::Text("a".into())),
+        ("launcher.pending".into(), Value::Bool(true)),
+    ]))?;
+    assert!(
+        grid(&h),
+        "old grid rows must not be reshaped as pending search rows"
+    );
+    assert_eq!(
+        h.session.stores.get("launcher.search.text"),
+        Some(&Value::Text("a".into()))
+    );
+    h.update(BTreeMap::from([
+        ("launcher.result_query".into(), Value::Text("a".into())),
+        ("launcher.pending".into(), Value::Bool(false)),
+    ]))?;
+    assert!(!grid(&h), "accepted search results must use row geometry");
+    Ok(())
+}
