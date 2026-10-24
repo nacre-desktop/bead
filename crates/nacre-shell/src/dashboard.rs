@@ -217,10 +217,9 @@ pub fn spec(
     let fill = colors.get("surface")?;
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = 984.;
-    // Match the joined top frame's two-pixel upper inset, avoiding a second
-    // full panel SHM geometry when the prepared scene becomes available.
-    fallback.bounds = Rect::new(-32., -2., 1048., 684.);
-    fallback.offset = (32., 2.);
+    // Match the renderer's full padded companion geometry before the joined
+    // frame art is prepared; that decorator leaves scene bounds and offset intact.
+    fallback.bounds = Rect::new(-32., -32., 1048., 714.);
     fallback.primitives = vec![Primitive::Rounded {
         rect: Rect::new(0., 0., 984., 650.),
         radius: 18.,

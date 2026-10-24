@@ -6,12 +6,39 @@ use bead_test::{Config, Harness, Result, source::FakeSource};
 #[test]
 fn today_companion_fallback_surface_matches_joined_frame_geometry() -> Result<()> {
     use bead::render::{Palette, Primitive};
+    use bead::wayland::{SceneSource, UiEvent};
 
-    let palette = Arc::new(root().join("palette.json"));
-    let colors = Arc::new(Palette::read(&palette)?);
+    let palette_path = root().join("palette.json");
+    let colors = Arc::new(Palette::read(&palette_path)?);
+    let harness = Harness::load(
+        &root(),
+        Path::new("dashboard/today/main.luau"),
+        &palette_path,
+        BTreeMap::new(),
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.5,
+        },
+    )?;
+    let dashboard = Dashboard::new(
+        Page::Today,
+        Arc::new(FakeSource::new(fixture("calendar"))?),
+        None,
+        true,
+    );
+    let mut runtime = crate::reload::Runtime::new(harness.session)
+        .with_dashboard_view(dashboard)?
+        .with_frame(
+            crate::placement::Attachment::Attached(bead::core::Edge::Top),
+            &colors,
+        )?;
+    let prepared = runtime
+        .stage(UiEvent::Reload)?
+        .ok_or("decorated Today runtime should produce its first scene")?;
     let spec = super::spec(
         Page::Today,
-        palette,
+        Arc::new(palette_path),
         colors,
         Choice {
             client: None,
@@ -23,19 +50,22 @@ fn today_companion_fallback_surface_matches_joined_frame_geometry() -> Result<()
     )?;
 
     let fallback = &spec.fallback;
-    assert_eq!(fallback.bounds.x + fallback.offset.0, 0.);
-    assert_eq!(fallback.bounds.y + fallback.offset.1, 0.);
-    assert_eq!(fallback.bounds.h, 684.);
-    let companion_height = fallback.bounds.y + fallback.bounds.h + fallback.offset.1;
-    assert_eq!(companion_height, 684.);
-    let visible_body_height = fallback
+    assert_eq!(fallback.width, prepared.width);
+    assert_eq!(fallback.bounds, prepared.bounds);
+    assert_eq!(fallback.offset, prepared.offset);
+    let fallback_surface_height = fallback.bounds.y + fallback.bounds.h + fallback.offset.1;
+    let prepared_surface_height = prepared.bounds.y + prepared.bounds.h + prepared.offset.1;
+    assert_eq!(fallback_surface_height, prepared_surface_height);
+    let fallback_body = fallback
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            Primitive::Rounded { rect, .. } if rect.x == 0. && rect.y == 0. => Some(rect.h),
+            Primitive::Rounded { rect, .. } if rect.x == 0. && rect.y == 0. => Some(*rect),
             _ => None,
         });
-    assert_eq!(visible_body_height, Some(650.));
+    assert_eq!(fallback_body, Some(crate::placement::body(&prepared)));
+    assert_eq!(fallback_surface_height, 714.);
+    assert_eq!(crate::placement::body(&prepared).h, 650.);
     Ok(())
 }
 
