@@ -110,7 +110,7 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                     let ok = if m == "menu.query" {
                         json!({"query":p["query"],"mode":"apps","route":p["route"],"catalog_rev":7,"order":["action"],"items":{"action":{"name":"Open Settings","kind":"action","activation":"opaque-ticket","disabled":false}}})
                     } else if m == "menu.activate" {
-                        json!({"keep_open":false})
+                        json!({"keep_open":true,"view":{"route":"actions.windows","query":"edited"}})
                     } else {
                         json!({"changed":true})
                     };
@@ -422,10 +422,15 @@ async fn shared_bar_compositor_and_nullable_menu_fields_load_real_views() {
             .with_extras(extras)
             .unwrap();
         runtime.services(Box::new(|_| {}));
-        runtime
+        let scene = runtime
             .stage(UiEvent::Reload)
             .unwrap()
             .expect("real topic-backed view loads");
+        // Exercise decoding too: a staged icon is not proof its bytes render.
+        use bead::render::Renderer;
+        bead::render::tree::TreeCpuRenderer::default()
+            .prepare(&scene, 1.)
+            .unwrap();
         runtime.commit();
         let label = match kind {
             Kind::Overview => "Editor",
@@ -471,4 +476,33 @@ async fn shared_bar_compositor_and_nullable_menu_fields_load_real_views() {
             );
         }
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn palette_navigation_applies_engine_query_and_schedules_its_route() {
+    let lab = lab().await;
+    let palette = Extras::new(Kind::Palette, lab.client.clone()).unwrap();
+    ready(&palette, &stores("")).await;
+    let woke = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let signal = woke.clone();
+    let wake: CallWake = Arc::new(move || {
+        signal.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    palette.act("activate:action", &stores(""), Arc::new(|| {}));
+    let mut query = None;
+    for _ in 0..200 {
+        let model = palette.project(&stores(""), Some(wake.clone()));
+        if let Some(Value::Text(text)) = model.get("extras.query") {
+            query = Some(text.clone());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(query.as_deref(), Some("edited"));
+    assert!(woke.load(std::sync::atomic::Ordering::SeqCst));
+    let model = ready(&palette, &stores("edited")).await;
+    assert!(!model.contains_key("panel.open"));
+    assert!(
+        matches!(&palette.state.borrow().result,Some((_,result)) if result.route=="actions.windows" && result.query=="edited")
+    );
 }

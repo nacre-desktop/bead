@@ -201,6 +201,7 @@ impl Extras {
                     json!({"id":id,"name":row.name,"description":row.description.as_deref().unwrap_or_default(),"icon":row.icon.as_deref().unwrap_or("apps"),"kind":row.kind,"disabled":row.disabled}))).collect();
             }
         }
+        let mut next_query = None;
         if let Some(ticket) = &mut state.action
             && let Some(reply) = ticket.try_take()
         {
@@ -213,8 +214,14 @@ impl Extras {
                     {
                         state.close = !result.keep_open;
                         if let Some(view) = result.view {
-                            state.route = view.route;
+                            if let Some(route) = view.route {
+                                state.route = Some(route);
+                            }
+                            next_query = view.query;
                             state.wanted = None;
+                            if let Some(wake) = &wake {
+                                wake();
+                            }
                         }
                     } else {
                         state.message = "Invalid command response".into();
@@ -232,6 +239,9 @@ impl Extras {
             ("extras.windows".into(), Value::list(windows)),
             ("extras.workspaces".into(), Value::list(workspaces)),
         ]);
+        if let Some(query) = next_query {
+            values.insert("extras.query".into(), Value::Text(query));
+        }
         if state.close {
             values.insert("panel.open".into(), Value::Bool(false));
         }

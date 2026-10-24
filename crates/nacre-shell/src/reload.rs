@@ -1759,14 +1759,15 @@ impl Runtime {
                     *path = if std::env::var_os("BEAD_MATCHED_ICONS").is_some() {
                         std::env::var_os("BEAD_ICON_PATH")
                             .map(std::path::PathBuf::from)
-                            .unwrap_or_else(|| "@bead-icon-fallback".into())
+                            .unwrap_or_else(|| "@bead-icon-fallback.svg".into())
                     } else {
                         freedesktop_icons::lookup(icon)
                             .with_size(48)
                             .find()
-                            .unwrap_or_else(|| "@bead-icon-fallback".into())
+                            .unwrap_or_else(|| "@bead-icon-fallback.svg".into())
                     };
-                    let data = if path.as_path() == std::path::Path::new("@bead-icon-fallback") {
+                    let data = if path.as_path() == std::path::Path::new("@bead-icon-fallback.svg")
+                    {
                         std::sync::Arc::from(include_bytes!("../../../shell/sample.svg").as_slice())
                     } else if !reload {
                         if let Some(data) = self.session.asset_snapshot(path) {

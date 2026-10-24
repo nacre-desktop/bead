@@ -19,22 +19,24 @@ local function row(item, selected)
   local row_r = shortcuts and T.shortcuts.row_radius or T.palette.row_radius
   if shortcuts then
     return ui.Box{id="shortcut-"..tostring(item.id),width="fill",height=row_h,radius=row_r,fill="surfaceContainer",
-      ui.Text{id="shortcut-key",position="absolute",left=T.shortcuts.padding,top=0,width=T.shortcuts.key_width,height=row_h,
+      ui.Text{id="shortcut-key",position="absolute",left=T.shortcuts.padding,top=T.shortcuts.text_top,width=T.shortcuts.key_width,height=T.shortcuts.text_height,
         text=item.key or "",font_size=T.shortcuts.font,color="primary",family="JetBrains Mono NF"},
-      ui.Text{id="shortcut-description",position="absolute",left=T.shortcuts.description_offset,top=0,
-        width=body_width-T.shortcuts.description_offset-T.shortcuts.padding,height=row_h,text=item.description or "",
+      ui.Text{id="shortcut-description",position="absolute",left=T.shortcuts.description_offset,top=T.shortcuts.text_top,
+        width=body_width-T.shortcuts.description_offset-T.shortcuts.padding,height=T.shortcuts.text_height,text=item.description or "",
         font_size=T.shortcuts.font,color="onSurface"}}
   end
   local activate = item.disabled ~= true and ui.action("extras.do","activate:"..tostring(item.id)) or nil
   return ui.Button{id="palette-"..tostring(item.id),width="fill",height=row_h,radius=row_r,padding=T.palette.padding,
     fill=selected and "secondaryContainer" or "surfaceContainer",hover_fill="secondaryContainer",activate_on_release=true,focus_on_pointer=false,on_activate=activate,
     aria_label=(item.name or "").." "..(item.description or ""),
-    ui.Row{width="fill",height=row_h-T.palette.padding*2,gap=T.palette.content_gap,align="center",
-      ui.Text{text=item.kind == "app" and "apps" or item.icon or "apps",family="Material Symbols Rounded",width=T.palette.icon_size,height=T.palette.icon_size,
-        font_size=T.palette.icon_font,color="primary"},
-      ui.Column{grow=1,gap=T.palette.description_gap,
-        ui.Text{id="palette-name",text=item.name or "",height=T.palette.name_height,font_size=T.palette.name_font,color="onSurface"},
-        ui.Text{id="palette-description",text=item.description or "",height=T.palette.description_height,font_size=T.palette.description_font,color="onSurfaceVariant"}}}}
+    ui.Text{position="absolute",left=T.palette.padding,top=T.palette.icon_top,
+      text=item.kind == "app" and "apps" or item.icon or "apps",family="Material Symbols Rounded",width=T.palette.icon_size,height=T.palette.icon_height,
+      font_size=T.palette.icon_font,color="primary"},
+    ui.Text{id="palette-name",position="absolute",left=T.palette.label_left,top=T.palette.padding,width=body_width-T.palette.label_left-T.palette.padding,
+      text=item.name or "",height=T.palette.name_height,font_size=T.palette.name_font,color="onSurface"},
+    ui.Text{id="palette-description",position="absolute",left=T.palette.label_left,top=T.palette.description_top,width=body_width-T.palette.label_left-T.palette.padding,
+      text=item.description or "",height=T.palette.description_height,font_size=T.palette.description_font,color="onSurfaceVariant"}}
+
 end
 
 local function window_tile(item)
@@ -48,8 +50,8 @@ local function window_tile(item)
       ui.Image{position="absolute",left=(item.tile_width-T.overview.icon_size)/2,top=(item.preview_height-T.overview.icon_size)/2,
         icon=item.icon or "application-x-executable",width=T.overview.icon_size,height=T.overview.icon_size,
         aria_label=item.title or "Window"}},
-    ui.Text{id="window-title",position="absolute",left=0,top=item.preview_height+T.overview.title_gap,
-      width=item.tile_width,height=T.overview.title_height,text=item.title or item.app_id or "Window",
+    ui.Text{id="window-title",position="absolute",left=0,top=item.tile_height-T.overview.caption_height,
+      width=item.tile_width,height=T.overview.caption_height,text=item.title or item.app_id or "Window",
       font_size=T.overview.title_font,color="onSurface",text_align="left"}}
 end
 
@@ -80,12 +82,12 @@ local function workspace_card(group)
     ui.Scroll{id="window-grid-extent",position="absolute",left=T.overview.tile_left,top=T.overview.tile_top,
       scroll=ui.bind("extras.window_scroll."..tostring(math.clamp(ws.index,1,64))),width=T.overview.tile_area_width,height=T.overview.thumbnail_height,
       ui.Grid{id="window-grid",width=T.overview.tile_area_width,height=tile_extent,
-        columns=columns,row_height=tile_h-T.overview.tile_cell_inset,
+        columns=columns,row_height=tile_h,
         gap_x=T.overview.window_gap_x,gap_y=T.overview.window_gap_y,
         table.unpack(tiles)}},
   }
   if count == 0 then
-    kids[#kids+1] = ui.Text{id="workspace-empty",position="absolute",left=0,top=T.overview.empty_top,
+    kids[#kids+1] = ui.Text{id="workspace-empty",position="absolute",left=T.overview.tile_left,top=T.overview.empty_top,
       width=T.overview.tile_area_width,height=T.overview.empty_height,text="Empty",
       font_size=T.overview.empty_font,text_align="center",color="onSurfaceVariant"}
   end
@@ -121,8 +123,12 @@ local heading = {
 }
 if shortcuts then heading[#heading+1] = kit.IconButton{id="refresh",aria_label="Refresh shortcuts",text="refresh",width=T.panel.refresh_size,height=T.panel.refresh_size,padding=0,
   activate_on_release=true,on_activate=ui.action("extras.do","refresh")} end
-heading[#heading+1] = kit.Button{id="close",text="Close",aria_label="Close",width=T.panel.close_width,height=T.panel.close_height,padding=0,font_size=T.panel.close_font,
-  activate_on_release=true,on_activate=ui.action("extras.close")}
+heading[#heading+1] = kit.Button{id="close",aria_label="Close",width=T.panel.close_width,height=T.panel.close_height,padding=0,
+  radius=T.panel.close_radius,fill="surfaceContainerHigh",hover_fill="surfaceContainerHigh",activate_on_release=true,on_activate=ui.action("extras.close"),
+  ui.Row{width=T.panel.close_width,height=T.panel.close_height,gap=T.panel.close_gap,align="center",justify="center",
+    ui.Text{text="close",family="Material Symbols Rounded",width=T.panel.close_icon,height=T.panel.close_content_height,font_size=T.panel.close_icon,color="onSurface"},
+    ui.Text{text="Close",width=T.panel.close_label_width,height=T.panel.close_content_height,font_size=T.panel.close_font,color="onSurface"}}}
+
 
 return kit.Panel{id="extras",edge="top",open=ui.bind("panel.open"),width=width,height=panel_height,
   duration=T.panel.duration,transition="ease",fade=false,radius=T.panel.radius,fill="surface",border_width=T.panel.border,border_color="outlineVariant",
