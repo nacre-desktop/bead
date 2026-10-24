@@ -719,15 +719,13 @@ impl App {
                     }
                 }
                 self.scene = scene;
-                if self.options.panel
-                    && let Some(motion) = &self.scene.motion
-                {
-                    let anchor = match motion.edge {
+                if self.options.panel && (self.processing_panel || self.scene.motion.is_some()) {
+                    let anchor = self.scene.motion.as_ref().map(|motion| match motion.edge {
                         bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP,
                         bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP,
                         bead_core::Edge::Top => Anchor::TOP,
                         bead_core::Edge::Bottom => Anchor::BOTTOM,
-                    };
+                    });
                     for surface in self.surfaces.iter().filter(|s| {
                         s.native.is_none()
                             && s.companion == self.processing_panel
@@ -739,7 +737,7 @@ impl App {
                                 &surface.output,
                                 &self.scene,
                             );
-                        } else {
+                        } else if let Some(anchor) = anchor {
                             surface.layer.set_anchor(anchor);
                         }
                         surface.layer.commit();
