@@ -15,3 +15,6 @@ No protocol dependency or fixture is embedded in a Bead framework crate.
 B0020 adds the six `notifications-*.jsonl` producer transcripts from Nacre
 `652d6c4f` (N0017 default-action marker included); `notice_service` tests replay
 them through the bounded mirror.
+
+B0089 moves the pin to the Nacre N0063 commit (`8b704fb1`); the `menu-palette.jsonl` transcript
+(Nacre N0061-era `menu_transcripts()` addition) is copied from its `protocol/fixtures`.
