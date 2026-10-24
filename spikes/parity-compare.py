@@ -206,23 +206,26 @@ STATES.update({
 STATE_PREPARE['popout-audio-muted'] = STATE_PREPARE['popout-audio-peak'] = STATE_PREPARE['popout-audio']
 # B0095 (need --fake-wifi, and --pointer-tool for the scan clicks): the Wi-Fi list idle, while a scan runs (the fake takes 2 s) and
 # after it, in the bar popout and the docked page. The scan button is clicked in both shells; two more networks appear.
-PTR['wifi-scan'] = {'qml': (1700, 100), 'bead': (1700, 100)}
-PTR['wifi-scan-docked'] = {'qml': (1700, 100), 'bead': (1700, 100)}
+PTR['wifi-scan'] = {'qml': (1621, 82), 'bead': (1621, 82)}
+PTR['wifi-switch-docked'] = {'qml': (1869, 131), 'bead': (1869, 131)}
+PTR['wifi-scan-docked'] = {'qml': (1567, 131), 'bead': (1567, 131)}
 _SCAN_CLOSE = [('ui', 'nacre', 'close'), ('nm', 'reset', 'now')]
 STATES.update({
     'popout-network-wifi': ([('ui', 'nacre', 'popout', 'network', '1560')], [('ui', 'nacre', 'close')], 0),
-    'popout-network-scanning': ([('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 1.2), ('press-target', 'wifi-scan'), ('release',)],
+    'popout-network-scanning': ([('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 1.2), ('pointer-target', 'wifi-scan'), ('sleep', 0.5), ('press-target', 'wifi-scan'), ('sleep', 0.15), ('release',)],
                                 _SCAN_CLOSE, 0),
-    'popout-network-scanned': ([('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 1.2), ('press-target', 'wifi-scan'), ('release',)],
-                               _SCAN_CLOSE, 0),
+    # The scan is asked of the fake NetworkManager directly (a click on the button is not delivered in the nested session, see
+    # the scanning states): both shells then show the two networks that appear.
+    'popout-network-scanned': ([('nm', 'scan', 'now'), ('sleep', 3.0), ('ui', 'nacre', 'popout', 'network', '1560')], _SCAN_CLOSE, 0),
     'control-network-wifi': ([('ui', 'nacre', 'controls', 'network')], [('ui', 'nacre', 'close')], 0),
-    'control-network-scanning': ([('ui', 'nacre', 'controls', 'network'), ('sleep', 1.2), ('press-target', 'wifi-scan-docked'), ('release',)],
+    'control-network-ptrtest': ([('ui', 'nacre', 'controls', 'network'), ('sleep', 1.2), ('press-target', 'wifi-scan-docked'), ('sleep', 0.3)],
+                                [('release',), ('ui', 'nacre', 'close')], 0),
+    'control-network-probe': ([('nmcli-probe',), ('ui', 'nacre', 'controls', 'network'), ('sleep', 1.5)], [('nm', 'reset', 'now')], 0),
+    'control-network-scanning': ([('ui', 'nacre', 'controls', 'network'), ('sleep', 1.2), ('pointer-target', 'wifi-scan-docked'), ('sleep', 0.5), ('press-target', 'wifi-scan-docked'), ('sleep', 0.15), ('release',)],
                                  _SCAN_CLOSE, 0),
-    'control-network-scanned': ([('ui', 'nacre', 'controls', 'network'), ('sleep', 1.2), ('press-target', 'wifi-scan-docked'), ('release',)],
-                                _SCAN_CLOSE, 0),
+    'control-network-scanned': ([('nm', 'scan', 'now'), ('sleep', 3.0), ('ui', 'nacre', 'controls', 'network')], _SCAN_CLOSE, 0),
 })
-STATE_SETTLE.update({'popout-network-scanning': 0.6, 'popout-network-scanned': 3.4,
-                     'control-network-scanning': 0.6, 'control-network-scanned': 3.4})
+STATE_SETTLE.update({'popout-network-scanning': 0.6, 'control-network-scanning': 0.6})
 # Where each transition happens, in logical pixels ("x,y wxh"): a grim region is much faster than the whole output, which
 # is what gives a usable frame rate for the animation timing.
 REGIONS = {
@@ -499,12 +502,13 @@ class Arm:
             channels = '[ %s ]' % ' '.join([f'{cubed:.6f}'] * (1 if 'microphone' in name else 2))
             self.run(['pw-cli', 's', str(nodes[name]), 'Props', '{ mute: false, channelVolumes: %s }' % channels])
         # B0095: the application streams (spikes/fake_system.py STREAMS) as unlinked pw-cat nodes with a name, an icon and a volume.
+        # One at a time, so the node ids (and with them the order Quickshell lists them in) are the same in every run.
         commands = fake_system.stream_commands()
-        for name, command, volume in commands:
+        for count, (name, command, volume) in enumerate(commands, 1):
             self.spawn(command, name)
-        wait_until(lambda: len([o for o in json.loads(self.run(['pw-dump']).stdout) if o.get('type') == 'PipeWire:Interface:Node'
-                                and str(o['info']['props'].get('node.name', '')).startswith('fixture-stream-')]) == len(commands),
-                   20, 'the stream nodes')
+            wait_until(lambda: len([o for o in json.loads(self.run(['pw-dump']).stdout) if o.get('type') == 'PipeWire:Interface:Node'
+                                    and str(o['info']['props'].get('node.name', '')).startswith('fixture-stream-')]) == count,
+                       20, 'the stream node ' + name)
         # pw-cat resets a stream's volume while it connects: set it again until pw-dump shows it.
         def volumes_set():
             dump = json.loads(self.run(['pw-dump']).stdout)
@@ -825,6 +829,9 @@ os.execv(real, [real, *args])
                     self.steps([step[2]])
             elif kind == 'level':
                 self.set_level(step[1], step[2])
+            elif kind == 'nmcli-probe':
+                r = self.run(['nmcli', '--wait', '15', '--colors', 'no', '--fields', 'IN-USE', 'device', 'wifi', 'list', '--rescan', 'yes'], timeout=30, check=False)
+                self.errors.append(f'PROBE nmcli rc={r.returncode} {r.stdout[:80]!r} {r.stderr[:200]!r} which={shutil.which("nmcli")}')
             elif kind == 'mute':
                 self.set_mute(step[1], step[2])
             elif kind == 'pointer':
@@ -969,15 +976,21 @@ os.execv(real, [real, *args])
             if (name in STATE_SETTLE or name in ('control-hover', 'control-pressed', 'lip-hover-right')) and self.errors:
                 raise RuntimeError(f'{name} failed: {"; ".join(self.errors)}')
         (self.out / 'drive.json').write_text(json.dumps(results, indent=1))
+        try:  # B0095: which methods the private daemon offered (a missing control explains a dimmed button)
+            status = self.call('daemon.status', {})
+            (self.out / 'daemon-methods.json').write_text(json.dumps(status)[:6000])
+        except Exception as error:
+            (self.out / 'daemon-methods.json').write_text(json.dumps(str(error)))
 
     def shutdown(self):
         for process in reversed(self.procs):
             stop(process)
         # Keep the shell log with the captures (frame/motion traces, errors).
-        try:
-            shutil.copy(self.logs / 'shell.log', self.out / 'shell.log')
-        except OSError:
-            pass
+        for name in ('shell', 'fake-nm'):
+            try:
+                shutil.copy(self.logs / f'{name}.log', self.out / f'{name}.log')
+            except OSError:
+                pass
 
 
 def run_arm(args):

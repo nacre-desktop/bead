@@ -10,6 +10,7 @@ same changes. No real VPN, secret or network is involved: activation just walks 
 Control (same bus): `org.bead.FakeNm` at `/ctl`, method `Set(key, value)`:
   connect work|home   make that profile Activated at once
   disconnect work|home drop it
+  scan now            (--wifi) a scan, as if a client asked: new networks appear after SCAN_SECONDS
   reset               back to the start state (nothing active; with --wifi the scan results too)"""
 import sys
 import time
@@ -252,6 +253,8 @@ class Control(dbus.service.Object):
             for path, node in list(self.manager.actives.items()):
                 if node.props['Connection'] == profile[0]:
                     self.manager.drop(path)
+        elif key == 'scan' and self.wifi:
+            self.wifi.RequestScan({})
         elif key == 'reset':
             self.manager.reset()
             if self.wifi:

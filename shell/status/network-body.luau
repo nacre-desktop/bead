@@ -30,18 +30,6 @@ local adapter_text=not checked and (not enabled and ui.tr("bead.panel.network-no
 local adapter_note=kit.Paragraph{id="wifi-message",text=adapter_text,width=width-padding*2,font_size=BODY,color="onSurfaceVariant"}
 local health_text=get("network.health_message")
 local health_note=kit.Paragraph{id="network-health",text=health_text,width=width-padding*2,font_size=BODY,color="onSurfaceVariant"}
-local empty_sections={ui.Box{id="empty-network-groups",visible=false,height=0}}
-if #rows==0 then
-    local function empty_section(id,title,detail)
-        return ui.Column{id=id,height=38,gap=T.spacing.sm-2,
-            ui.Text{id="group-title",text=title,height=18,font_size=CAPTION,font_weight=500,color="onSurfaceVariant"},
-            ui.Text{id="group-empty",text=detail,height=18,font_size=(T.text.caption-1)*4/3,color="onSurfaceVariant"}}
-    end
-    empty_sections={ui.Column{id="empty-network-groups",width=width-padding*2,gap=T.radii.medium,
-        empty_section("connected",ui.tr("bead.common.connected"),ui.tr("bead.common.not-connected")),
-        empty_section("known",ui.tr("bead.panel.network-known"),ui.tr("bead.panel.network-none-known")),
-        empty_section("available",ui.tr("bead.panel.network-available"),ui.tr("bead.panel.network-no-nearby"))}}
-end
 -- Page children with their heights, so the panel height follows the content and tokens.
 local kids,heights={},{}
 local function add(node,h)
@@ -121,41 +109,85 @@ if view=="saved" then
     message_line("link-message","network.link_message",get("network.link_message")~="")
     return Page()
 end
+-- The list view (B0095: laid out as QML's NacreNetworkPopup). QML sizes text by its line box (about 1.295 times
+-- the font size); the groups are Connected, Known and Available, always present, each with its rows or a hint.
+local LINE=1.295
+local ICON=(T.icons.large-1)*4/3
+local NAME=(T.text.caption+1)*4/3
+local ROWH,LIST_MAX,GROUP_GAP,ROW_GAP=56,210,16,6
+local content=width-padding*2
+local titles={connected=ui.tr("bead.common.connected"),known=ui.tr("bead.panel.network-known"),available=ui.tr("bead.panel.network-available")}
+local hints={connected=ui.tr("bead.common.not-connected"),known=ui.tr("bead.panel.network-none-known"),available=ui.tr("bead.panel.network-no-nearby")}
+-- QML ActionButton (compact): a pill of the content plus 18 px, 34 px high; dimmed when it cannot act.
+-- Bead lays text out in the box it is given, so the pill is as wide as its label is estimated to be.
+local function text_width(text,px) text=tostring(text);return math.ceil((utf8.len(text) or #text)*px*.49) end
+local function pill_width(label,glyph) return text_width(label,CAPTION)+(glyph and T.icons.small*4/3+T.spacing.xs or 0)+18 end
+local function pill(id,label,glyph,action,armed)
+    local ink=armed and "onSurface" or "onSurfaceVariant"
+    local inner=pill_width(label,glyph)-18
+    if not glyph then
+        return kit.Button{id=id,width=inner+18,height=34,padding=0,padding_top=(34-CAPTION*LINE)/2,radius=T.radii.full,shrink=0,
+            fill=ui.alpha("surfaceContainerHigh",armed and 1 or .4),aria_label=label,on_activate=armed and action or nil,
+            text=label,font_size=CAPTION,text_align="center",color=ink}
+    end
+    return kit.Button{id=id,width=inner+18,height=34,padding=0,radius=T.radii.full,shrink=0,
+        fill=ui.alpha("surfaceContainerHigh",armed and 1 or .4),aria_label=label,on_activate=armed and action or nil,
+        ui.Row{id=id.."-row",width=inner+18,height=34,padding_left=9,gap=T.spacing.xs,align="center",
+            glyph and ui.Text{id="glyph",text=glyph,family="Material Symbols Rounded",width=T.icons.small*4/3,height=T.icons.small*4/3*LINE,font_size=T.icons.small*4/3,color=ink,shrink=0} or nil,
+            ui.Text{id="label",text=label,width=math.ceil(text_width(label,CAPTION)*1.4),height=CAPTION*LINE,font_size=CAPTION,color=ink,shrink=0}}}
+end
+local function link_card(item)
+    local ink=item.active and "onPrimaryContainer" or "onSurface"
+    local glyph=item.strength>75 and "signal_wifi_4_bar" or item.strength>45 and "network_wifi_3_bar" or "network_wifi_1_bar"
+    local act=item.active and ui.action("network.disconnect",item.id) or ui.action("network.connect",item.id)
+    return ui.Row{id="link",width=content,height=ROWH,shrink=0,radius=T.radii.medium,padding_left=T.spacing.md,padding_right=6,gap=5,align="center",
+        fill=item.active and "primaryContainer" or "surfaceContainer",
+        ui.Text{id="link-icon",text=glyph,family="Material Symbols Rounded",width=25,height=ICON*LINE,font_size=ICON,color=ink,shrink=0},
+        ui.Text{id="link-name",text=item.label,height=NAME*LINE,width=content-12-6-25-10-pill_width(item.action),font_size=NAME,color=ink,shrink=0},
+        pill(item.active and "connected-action" or "available-action",item.action,nil,act,item.enabled)}
+end
+local list_children,list_height={},0
+for _,g in ipairs({"connected","known","available"}) do
+    local cards={}
+    for _,item in ipairs(rows) do if item.group==g then cards[#cards+1]=link_card(item) end end
+    local body_height=#cards>0 and #cards*ROWH+(#cards-1)*ROW_GAP or CAPTION*.9*LINE
+    local box={id="group-"..g,width=content,gap=ROW_GAP,shrink=0,
+        ui.Text{id="group-title",text=titles[g],height=CAPTION*LINE,font_size=CAPTION,font_weight=500,color="onSurfaceVariant"}}
+    if #cards>0 then for _,card in ipairs(cards) do box[#box+1]=card end
+    else box[#box+1]=ui.Text{id="group-empty",text=hints[g],height=CAPTION*.9*LINE,font_size=CAPTION*.9,color="onSurfaceVariant"} end
+    list_children[#list_children+1]=ui.Column(box)
+    list_height=list_height+CAPTION*LINE+ROW_GAP+body_height
+end
+list_height=list_height+GROUP_GAP*(#list_children-1)
+local groups=ui.Column{id="groups",width=content,gap=GROUP_GAP,shrink=0,table.unpack(list_children)}
+local list_node,list_shown=groups,list_height
+if not embedded and list_height>LIST_MAX then
+    list_node=ui.Scroll{id="links",scroll=ui.bind("network.scroll"),width=content,height=LIST_MAX,groups}
+    list_shown=LIST_MAX
+end
+local head_height=34
+local out_kids,out_heights={},{}
+local function put(node,h) table.insert(out_kids,node);table.insert(out_heights,h) end
+put(ui.Row{id="wifi-row",width=content,height=head_height,align="center",gap=T.spacing.md,
+    ui.Text{id="wifi-label",visible=not embedded,text=ui.tr("bead.panel.wifi"),height=(T.text.body+1)*4/3*LINE,grow=1,font_size=(T.text.body+1)*4/3,
+        color=enabled and "onSurface" or "onSurfaceVariant"},
+    pill("scan",ui.tr("bead.panel.network-scan"),"refresh",ui.action("network.scan"),scan_on),
+    ui.Box{id="heading-space",visible=embedded,grow=1,height=1},
+    kit.Switch{id="wifi-radio",checked=ui.bind("network.wifi_checked"),aria_label=ui.tr("bead.panel.wifi-radio"),
+        on_activate=enabled and ui.action("network.toggle_wifi") or nil}},head_height)
+if adapter_text~="" and adapter_text~=nil then put(adapter_note,adapter_note.props.height) end
+put(list_node,list_shown)
+if #rows==0 and checked then
+    put(ui.Text{id="no-nearby",text=ui.tr("bead.panel.network-no-nearby"),width=content,height=NAME*LINE,font_size=NAME,color="onSurfaceVariant"},NAME*LINE)
+end
+if get("network.link_visible") then
+    put(ui.Text{id="link-message",text=ui.bind("network.link_message"),font_size=CAPTION,height=20,color="onSurfaceVariant"},20)
+end
+if health_text~="" and health_text~=nil then put(health_note,health_note.props.height) end
+for _,node in ipairs(footer) do put(node,32) end
+local total=2*padding+gap*(#out_heights-1)
+for _,h in ipairs(out_heights) do total=total+h end
 return panel(embedded,{id="status-popout",edge=get("view.edge"),
-    open=ui.bind("panel.open"),duration=duration,width=width,
-    height=math.max(get("network.height"),get("view.height"),#rows==0 and padding*2+36+adapter_note.props.height+38*3+T.radii.medium*2+health_note.props.height+gap*3 or 0)+(#rows+(get("network.link_visible") and 1 or 0))*(gap-T.spacing.sm)+(can_more and 32+gap or 0),padding=padding,
-    gap=gap,radius=T.radii.medium,fill="surface",
-    ui.Row{id="wifi-row",width=width-padding*2,height=36,align="center",gap=T.spacing.md,
-        ui.Text{id="wifi-label",visible=not embedded,text=ui.tr("bead.panel.wifi"),height=28,width=width-padding*2-T.spacing.xxl*2-T.spacing.md*2-T.spacing.huge*4,font_size=(T.text.body+1)*4/3,
-            color=enabled and "onSurface" or "onSurfaceVariant"},
-        kit.Button{id="scan",width=T.spacing.huge*4,height=34,padding=0,radius=T.radii.full,fill=ui.alpha("surfaceContainerHigh",scan_on and 1 or .4),
-            aria_label=ui.bind("network.scan_label"),on_activate=scan_on and ui.action("network.scan") or nil,
-            ui.Row{width=T.spacing.huge*4,height=34,gap=T.spacing.xs,align="center",justify="center",
-                ui.Text{text="refresh",family="Material Symbols Rounded",width=16,height=24,font_size=T.icons.small*4/3,color=ui.alpha("onSurface",scan_on and 1 or .4)},
-                ui.Text{text=ui.tr("bead.panel.network-scan"),height=24,font_size=CAPTION,color=ui.alpha("onSurface",scan_on and 1 or .4)}}},
-        ui.Box{id="heading-space",visible=embedded,grow=1,height=1},
-        kit.Switch{id="wifi-radio",checked=ui.bind("network.wifi_checked"),aria_label=ui.tr("bead.panel.wifi-radio"),
-            on_activate=enabled and ui.action("network.toggle_wifi") or nil},
-    },
-    adapter_note,
-    empty_sections[1],
-    ui.Repeat{id="links",model=ui.bind("network.rows"),key="id",render=function(item)
-        local ink=item.active and "onPrimaryContainer" or "onSurface"
-        local quiet=item.active and "onPrimaryContainer" or "onSurfaceVariant"
-        return kit.Button{id="link",height=56,padding_left=T.spacing.md,padding_right=T.spacing.sm,
-            radius=T.radii.medium,fill=item.active and "primaryContainer" or "surfaceContainer",
-            aria_label=item.label,
-            on_activate=item.enabled and (item.active and ui.action("network.disconnect",item.id) or ui.action("network.connect",item.id)) or nil,
-            ui.Row{id="link-row",width=link_inner,height=48,align="center",gap=T.spacing.md,
-                ui.Text{id="link-icon",text=item.secured and "wifi_lock" or "wifi",family="Material Symbols Rounded",
-                    width=T.icons.medium*4/3,height=24,font_size=T.icons.medium*4/3,color=quiet,shrink=0},
-                ui.Text{id="link-name",text=item.label,height=32,width=name_width,font_size=BODY,color=ink},
-                ui.Text{id="link-action",text=item.action,height=24,width=action_width,shrink=0,font_size=CAPTION,color=quiet},
-            },
-        }
-    end},
-    ui.Text{id="link-message",visible=ui.bind("network.link_visible"),text=ui.bind("network.link_message"),font_size=CAPTION,height=20,color="onSurfaceVariant"},
-    health_note,
-    table.unpack(footer),
-})
+    open=ui.bind("panel.open"),duration=duration,width=width,height=total,padding=padding,
+    gap=gap,radius=T.radii.medium,fill="surface",table.unpack(out_kids)})
 end
