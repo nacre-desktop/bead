@@ -49,12 +49,13 @@ return panel(embedded,{id="status-popout",edge="top",open=ui.bind("panel.open"),
                 local tile_width=(inner-T.spacing.sm*2)/3
                 local label_size=(T.text.caption-1)*4/3
                 local label_height=math.min(2,math.ceil((utf8.len(label) or #label)*label_size*.5/tile_width))*T.spacing.xl
-                local ink=selected and "onPrimaryContainer" or "onSurfaceVariant"
+                local icon_ink=selected and "onPrimaryContainer" or "onSurfaceVariant"
+                local ink=selected and "onPrimaryContainer" or "onSurface"
                 table.insert(tiles,kit.Button{id=profile.id,padding=0,
                     on_activate=choice and ui.action("cc.do","choose:power.profile:"..choice.id) or nil,width=(inner-T.spacing.sm*2)/3,height=72,
                     radius=T.radii.large,fill=selected and "primaryContainer" or "surfaceContainer",
-                    ui.Column{width=(inner-T.spacing.sm*2)/3,height=72,align="center",justify="center",gap=T.spacing.xs,
-                        ui.Text{text=profile.icon,family="Material Symbols Rounded",height=24,font_size=T.icons.medium*4/3,color=ink},
+                    ui.Column{width=(inner-T.spacing.sm*2)/3,height=72,align="center",justify="center",gap=T.spacing.xs+2,
+                        ui.Text{text=profile.icon,family="Material Symbols Rounded",width=tile_width,height=24,text_align="center",font_size=T.icons.large*4/3,color=icon_ink},
                         ui.Text{text=label,width=tile_width,height=label_height,font_size=label_size,text_align="center",color=ink}}
                 })
             end

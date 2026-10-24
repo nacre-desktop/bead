@@ -42,28 +42,25 @@ local function level(id,label)
   kit.IconButton{id="mute",position="absolute",left=T.spacing.sm,top=22,width=28,height=28,padding=0,fill="transparent",
    text=id=="audio.input" and (item.on and "mic_off" or "mic") or (item.on and "volume_off" or "volume_up"),
    aria_label=label,on_activate=item.toggle and ui.action("cc.do","toggle:"..id) or nil,color="primary"},
-  item.set and kit.Slider{id="level",position="absolute",left=42,top=24,width=content_width-104,value=item.value,
-   label=label,on_change="cc.do",change_arg=function(n) return "set:"..id..":"..tostring(n) end}
-   or ui.Box{id="level",position="absolute",left=42,top=35,width=content_width-104,height=6,radius=3,fill="surfaceContainerHigh"},
+  kit.Slider{id="level",position="absolute",left=42,top=23,width=content_width-104,value=item.value,label=label,
+   enabled=item.set==true,on_change=item.set and "cc.do" or nil,change_arg=function(n) return "set:"..id..":"..tostring(n) end},
   ui.Text{id="value",position="absolute",left=content_width-56,top=32,width=42,height=20,text=item.available and item.status or "—",
    text_align="right",font_size=T.text.caption*4/3,color="onSurfaceVariant"}}
 end
 local streams=ui.resolve_for_check(ui.bind("audio.streams")) or {}
-local output_height=24+20+ROW+T.spacing.xs*2+output_count*(44+T.spacing.xs)
-local input_height=24+20+ROW+T.spacing.xs*2+input_count*(44+T.spacing.xs)
+local output_height=24+ROW+T.spacing.xs*2+output_count*(44+T.spacing.xs)
+local input_height=24+ROW+T.spacing.xs*2+input_count*(44+T.spacing.xs)
 local stream_height=#streams==0 and 36 or #streams*64+(#streams-1)*T.spacing.xs
 local apps_height=20+stream_height+T.spacing.xs
 local height=padding*2+output_height+input_height+apps_height+T.spacing.md*2
 return panel(embedded,{id="sound",edge="top",open=ui.bind("panel.open"),duration=ui.bind("view.duration"),width=width,height=height,padding=padding,gap=T.spacing.md,
  ui.Column{id="output",width=content_width,height=output_height,gap=T.spacing.xs,
   ui.Text{id="output-heading",text=ui.tr("bead.dashboard.audio-output"),width=content_width,height=24,font_size=T.text.body*4/3,font_weight=500,color="onSurface"},
-  ui.Text{id="device",width=content_width,text=ui.bind("status.device"),height=20,font_size=T.text.caption*4/3,color="onSurfaceVariant"},
   output_devices,
   level("audio.output",ui.resolve_for_check(ui.bind("status.device"))),
  },
  ui.Column{id="input",width=content_width,height=input_height,gap=T.spacing.xs,
   ui.Text{id="input-heading",text=ui.tr("bead.dashboard.audio-input"),width=content_width,height=24,font_size=T.text.body*4/3,font_weight=500,color="onSurface"},
-  ui.Text{id="input-device",width=content_width,text=ui.bind("audio.input_device"),height=20,font_size=T.text.caption*4/3,color="onSurfaceVariant"},
   input_devices,
   level("audio.input",ui.resolve_for_check(ui.bind("audio.input_device"))),
  },

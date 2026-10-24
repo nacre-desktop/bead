@@ -39,6 +39,8 @@ const TOPICS: [&str; 5] = [
 
 pub struct Host {
     exe: PathBuf,
+    /// The shell's own command socket (`nacre clipboard` and the other routed commands).
+    command: PathBuf,
     dir: PathBuf,
     daemon: Option<PathBuf>,
     palette: PathBuf,
@@ -78,10 +80,27 @@ pub fn configure(command_socket: &Path, daemon: Option<PathBuf>, palette: PathBu
     };
     let _ = HOST.set(Host {
         exe,
+        command: command_socket.into(),
         dir: dir.into(),
         daemon,
         palette,
     });
+}
+/// Runs a no-argument `nacre <method>` command through the shell's own socket (a tile that opens the launcher).
+pub fn command(method: &str) -> bool {
+    let Some(host) = HOST.get() else {
+        return false;
+    };
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "nacre".into(),
+        method: method.into(),
+        args: Vec::new(),
+        output: None,
+    };
+    ipc::call(&host.command, &call, Duration::from_millis(800))
+        .is_ok_and(|reply| reply.error.is_none())
 }
 /// Open, deep-link or toggle an app for a routed command. Never blocks on the app's startup.
 pub fn route(id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
@@ -433,6 +452,7 @@ mod tests {
     fn host(dir: &Path, exe: &Path) -> Host {
         Host {
             exe: exe.into(),
+            command: dir.join("command.sock"),
             dir: dir.into(),
             daemon: Some("/run/fake/daemon.sock".into()),
             palette: "shell/palette.json".into(),

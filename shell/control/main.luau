@@ -22,7 +22,7 @@ local function usable(t)
         return s~=nil and s.available==true and (not t.need or s[t.need]==true)
     end
     if t.view then return views[t.view]==true end
-    return t.page~=nil
+    return t.page~=nil or t.open~=nil
 end
 local function supported(t)
     local s=t.source and src[t.source]
@@ -73,7 +73,7 @@ local function build_tile(t,w,h,embedded)
     elseif t.page then opener=ui.action("detail",t.id) end
     local id="tile-"..t.id
     if t.kind=="slider" then
-        return kit.SliderTile{id=id,width=w,height=h,on_detail=opener,detail_label=label,icon=s.icon or t.icon,label=label,detail=s.status,value=s.value or 0,
+        return kit.SliderTile{id=id,width=w,height=h,on_detail=opener,detail_label=label,icon=s.icon or t.icon,label=label,caption=s.label~="" and s.label or nil,detail=s.status,value=s.value or 0,
             on_toggle=s.toggle and act("toggle") or nil,on_change=s.set and "cc.do" or nil,
             change_arg=function(n) return "set:"..t.source..":"..n end}
     elseif t.kind=="segmented" then
@@ -97,12 +97,14 @@ local function build_tile(t,w,h,embedded)
     elseif t.kind=="link" then
         -- Link tiles open their dock page or their local choice list.
         local choosing=not t.dock and s.choices and #s.choices>0
-        return kit.LinkTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,
+        return kit.LinkTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,on=s.on==true,
             on_activate=choosing and ui.action("detail",t.id) or opener}
     elseif t.kind=="button" then
-        return kit.ButtonTile{id=id,width=w,height=h,icon=t.icon,label=label,on_activate=s.press and act("press") or opener}
+        return kit.ButtonTile{id=id,width=w,height=h,icon=t.icon,label=label,on_activate=t.open and ui.action("cc.do","open:"..t.open) or s.press and act("press") or opener}
     end
-    return kit.ToggleTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=s.status,on=s.on==true,
+    -- the mic switch shares its source with the microphone slider, so its words are On/Off, not the level
+    local detail=t.onoff and (s.on and ui.tr("bead.common.on") or ui.tr("bead.common.off")) or s.status
+    return kit.ToggleTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=detail,on=s.on==true,
         on_activate=s.toggle and act("toggle") or opener,on_detail=s.toggle and opener or nil,
         detail_label=ui.tr("bead.panel.control-details",{name=label})}
 end

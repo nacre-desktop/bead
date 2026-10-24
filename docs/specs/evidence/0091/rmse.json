@@ -1,0 +1,32 @@
+{
+ "control-center": {
+  "frame_before": 6.577,
+  "frame_after": 6.777,
+  "panel_before": 28.114,
+  "panel_after": 29.195
+ },
+ "control-audio": {
+  "frame_before": 6.084,
+  "frame_after": 5.404,
+  "panel_before": 25.722,
+  "panel_after": 20.973
+ },
+ "control-battery": {
+  "frame_before": 4.507,
+  "frame_after": 4.473,
+  "panel_before": 13.797,
+  "panel_after": 13.453
+ },
+ "popout-audio": {
+  "frame_before": 6.011,
+  "frame_after": 5.486,
+  "panel_before": 24.732,
+  "panel_after": 20.992
+ },
+ "popout-battery": {
+  "frame_before": 5.039,
+  "frame_after": 5.056,
+  "panel_before": 17.568,
+  "panel_after": 17.68
+ }
+}

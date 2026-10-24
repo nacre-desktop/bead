@@ -399,8 +399,7 @@ class Arm:
         wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.bluez', '--object-path', '/',
                                                        '--method', 'org.freedesktop.DBus.ObjectManager.GetManagedObjects'])),
                    20, 'the fake org.bluez')
-        if self.name == 'qml':
-            self.start_pipewire()
+        self.start_pipewire()  # QML reads it directly; the Nacre daemon only offers audio.set_volume while its socket exists (B0091)
         command = [str(Path(a.bead_bin).resolve() / 'nacre-helper'), 'daemon']
         if self.name == 'bead':
             command.append('--notifications=daemon')
@@ -410,7 +409,7 @@ class Arm:
         wait_until(lambda: self._try(lambda: self.call('daemon.status', {})), 30, 'the private daemon')
 
     def start_pipewire(self):
-        """QML reads audio through PipeWire, not pactl: its arm gets a private server with the same nodes (spikes/fake_system.py),
+        """QML reads audio through PipeWire, not pactl (the daemon reads pactl but needs the socket to offer volume writes): each arm gets a private server with the same nodes (spikes/fake_system.py),
         the same default sink/source and the same level (PipeWire stores volume cubed, as pactl's percentage does)."""
         conf = self.root / 'config/pipewire/pipewire.conf.d'
         conf.mkdir(parents=True, exist_ok=True)

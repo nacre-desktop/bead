@@ -37,6 +37,33 @@ const ACTIONS: [(&str, &str); 3] = [
     ("wallpaper.next", "wallpaper.next"),
 ];
 const MAX_TILES: usize = 64;
+/// Tile sets the QML shell migrates to its current default while the stored defaults revision is below 2.
+const PREVIOUS_DEFAULTS: [&[&str]; 2] = [
+    &[
+        "volume",
+        "brightness",
+        "network",
+        "bluetooth",
+        "battery",
+        "night",
+        "dnd",
+        "awake",
+        "appearance",
+    ],
+    &[
+        "volume",
+        "mic-volume",
+        "brightness",
+        "keyboard",
+        "network",
+        "bluetooth",
+        "battery",
+        "night",
+        "dnd",
+        "awake",
+        "appearance",
+    ],
+];
 /// The QML shell waited this long after closing its panel before an interactive tool started.
 const CLOSE_DELAY: Duration = Duration::from_millis(320);
 
@@ -100,6 +127,8 @@ struct Reading {
     status: String,
     icon: &'static str,
     node: Option<String>,
+    /// What a level control names under its icon (QML: the device description); empty uses the tile's own label.
+    label: String,
     /// The profiles a picker offers: `(id, shown name, active)`.
     choices: Vec<(String, String, bool)>,
     /// A note the backend attaches to the state (the profile daemon's degradation reason).
@@ -193,14 +222,15 @@ fn audio_reading(data: &Json, default: &str) -> Option<Reading> {
         } else {
             format!("{percent}%")
         },
-        icon: match (default, muted || percent == 0.) {
+        icon: match (default, muted) {
             ("default_input", true) => "mic_off",
             ("default_input", false) => "mic",
             (_, true) => "volume_off",
-            _ if percent < 50. => "volume_down",
+            _ if percent < 35. => "volume_down",
             _ => "volume_up",
         },
         node: Some(id.to_owned()),
+        label: node["name"].as_str().unwrap_or_default().to_owned(),
         ..Default::default()
     })
 }
@@ -449,6 +479,7 @@ impl ControlCenter {
                     value,
                     status: format!("{value}%"),
                     icon: "brightness_6",
+                    label: name.clone(),
                     node: Some(name.clone()),
                     ..Default::default()
                 })
@@ -613,7 +644,7 @@ impl ControlCenter {
                 .collect();
             Some(json!({
                 "id": source, "available": true, "on": reading.on, "value": reading.value,
-                "status": reading.status, "icon": reading.icon, "toggle": verbs.toggle,
+                "status": reading.status, "label": reading.label, "icon": reading.icon, "toggle": verbs.toggle,
                 "set": verbs.set && choices.is_empty(), "press": verbs.press, "choices": choices,
                 "note": reading.note,
                 "mode": reading.node.as_deref().filter(|_| *source == "appearance.mode").unwrap_or(""),
@@ -728,10 +759,21 @@ impl ControlCenter {
         std::mem::take(&mut self.st.borrow_mut().close)
     }
     /// B0067: the dock's gear. The window route can wait on its socket, so it runs off the UI thread.
-    fn open_settings(&self) {
+    fn open_settings(&self, page: &str) {
+        self.st.borrow_mut().close = true;
+        let args: Vec<Json> = (!page.is_empty())
+            .then(|| Json::String(page.to_owned()))
+            .into_iter()
+            .collect();
+        std::thread::spawn(move || {
+            let _ = crate::app::route(0, "settings", "open", &args);
+        });
+    }
+    /// The QML clipboard tile: the launcher in its clipboard mode, with the dock closed as `openMode` does.
+    fn open_clipboard(&self) {
         self.st.borrow_mut().close = true;
         std::thread::spawn(|| {
-            let _ = crate::app::route(0, "settings", "open", &[]);
+            crate::app::command("clipboard");
         });
     }
     /// B0067: the notification summary the dock shows under the tiles: the newest two history entries,
@@ -874,7 +916,9 @@ impl ControlCenter {
                 self.begin(source, "notifications.clear", json!({"scope": "history"}));
             }
             // The QML gear: open the Settings window, closing the dock as `openSettings` does.
-            "open" if source == "settings" => self.open_settings(),
+            // `open:settings[:page]` (the gear, Wallpaper) and `open:clipboard`.
+            "open" if source == "settings" => self.open_settings(rest),
+            "open" if source == "clipboard" => self.open_clipboard(),
             "set" => {
                 if let Ok(percent) = rest.parse::<f64>()
                     && percent.is_finite()
@@ -899,12 +943,19 @@ impl ControlCenter {
     fn saved(&self) -> Option<Vec<String>> {
         let (data, _) = self.stored()?;
         let tiles = data["data"]["tiles"].as_array()?;
-        Some(
-            tiles
-                .iter()
-                .filter_map(|id| id.as_str().map(str::to_owned))
-                .collect(),
-        )
+        let saved: Vec<String> = tiles
+            .iter()
+            .filter_map(|id| id.as_str().map(str::to_owned))
+            .collect();
+        // QML `NacreControlPreferences`: before defaults revision 2 a stored copy of an earlier default set (the
+        // registry's nine tiles, or those plus the microphone and keyboard sliders) is the unedited default, so the
+        // shown set is the current default (B0091).
+        let revision = data["data"]["defaultsRevision"].as_u64().unwrap_or(0);
+        let plain = |ids: &[&str]| saved.iter().map(String::as_str).eq(ids.iter().copied());
+        if revision < 2 && (PREVIOUS_DEFAULTS.iter().any(|ids| plain(ids))) {
+            return None;
+        }
+        Some(saved)
     }
     fn writable(&self) -> bool {
         self.can(SET)

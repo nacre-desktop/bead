@@ -36,27 +36,35 @@ return function(ui, tokens)
                 fill=ui.alpha(checked and "onPrimaryContainer" or "onSurfaceVariant",opacity)}}
         return kit.Button(out)
     end
+    -- QML NacreControlSlider: a 6 px rounded track, a filled part up to the value and an 8x16 handle, all inset 6 px.
+    -- Without `on_change` (or with `enabled=false`) the same drawing shows at 35 % and takes no input.
     function kit.Slider(p)
         local lo,hi=p.min or 0,p.max or 100
         local step=p.step or (hi-lo)/20
         assert(hi>lo and step>0 and math.ceil((hi-lo)/step)<=256,"invalid slider range/step")
         local current=math.clamp(value(p.value,lo),lo,hi)
         local width=p.width or 240
+        local inset,height=6,30
+        local avail=width-2*inset
         local fraction=(current-lo)/(hi-lo)
+        local live=p.enabled~=false and p.on_change~=nil
+        local opacity=live and 1 or .35
         local children={}
-        local count=math.ceil((hi-lo)/step)
-        for i=0,count do
-            local n=math.min(hi,lo+i*step)
-            children[i+1]=ui.Button{drag=true,id="value-"..i,grow=1,shrink=0,height=28,padding=0,radius=2,
-                fill=ui.alpha("surface",0),aria_label=(p.label or "Value").." "..n,
-                on_activate=ui.action(p.on_change,p.change_arg and p.change_arg(n) or n),
-                ui.Box{id="hit",width="100%",height="100%",fill=ui.alpha("surface",0)}}
+        if live then
+            local count=math.ceil((hi-lo)/step)
+            for i=0,count do
+                local n=math.min(hi,lo+i*step)
+                children[i+1]=ui.Button{drag=true,id="value-"..i,grow=1,shrink=0,height=height,padding=0,radius=2,
+                    fill=ui.alpha("surface",0),aria_label=(p.label or "Value").." "..n,
+                    on_activate=ui.action(p.on_change,p.change_arg and p.change_arg(n) or n),
+                    ui.Box{id="hit",width="100%",height="100%",fill=ui.alpha("surface",0)}}
+            end
         end
-        return ui.Box{id=p.id,width=width,height=28,position=p.position,left=p.left,top=p.top,
-            ui.Box{id="track",position="absolute",top=11,width="100%",height=6,radius=3,fill="surfaceContainerHigh"},
-            ui.Box{id="level",position="absolute",top=11,width=(fraction*100).."%",height=6,radius=3,fill="primary"},
-            ui.Box{id="thumb",position="absolute",left=fraction*(width-20),top=4,width=20,height=20,radius=10,fill="primary"},
-            ui.Row(props(children,{id="hits",width="100%",height=28,gap=0}))}
+        return ui.Box{id=p.id,width=width,height=height,position=p.position,left=p.left,top=p.top,
+            ui.Box{id="track",position="absolute",left=inset,top=12,width=avail,height=6,radius=3,fill="surfaceContainerHighest"},
+            ui.Box{id="level",position="absolute",left=inset,top=12,width=fraction*avail,height=6,radius=3,fill=ui.alpha("primary",opacity)},
+            ui.Box{id="thumb",position="absolute",left=inset+fraction*(avail-8),top=7,width=8,height=16,radius=3,fill=ui.alpha("primary",opacity)},
+            live and ui.Row(props(children,{id="hits",width="100%",height=height,gap=0})) or nil}
     end
     function kit.Tile(p)
         return ui.Row{id=p.id,gap=tokens.spacing.sm,fill="surfaceContainer",radius=tokens.radii.medium,
@@ -70,58 +78,66 @@ return function(ui, tokens)
         if p.available==false then return "onSurfaceVariant" end
         return p.on and "onPrimaryContainer" or "onSurface"
     end
-    local function glyph(id,name,color)
-        return ui.Text{id=id,text=name,family="Material Symbols Rounded",font_size=glyph_size,width=glyph_size+2,height=24,shrink=0,color=color}
+    local function glyph(id,name,color,size)
+        size=size or glyph_size
+        return ui.Text{id=id,text=name,family="Material Symbols Rounded",font_size=size,width=size+2,height=24,shrink=0,color=color}
     end
+    -- Geometry of the QML NacreControlTile: icon at 14, text from 44, 8 px right margin (24 more for a navigation
+    -- chevron that sits 12 from the edge), 3 px between label and detail, a 1 px outline, radius 24 (20 stacked).
+    local tile_glyph=(tokens.icons.large-1)*4/3
     local function tile(p,kind)
         local color,armed=ink(p),p.available~=false
         local pad=tokens.spacing.lg
-        local side=kind=="link" and glyph_size+pad or p.on_detail and 40 or 0
         local main_w=p.width-(p.on_detail and 40 or 0)
+        local caption=tokens.text.caption*4/3
+        local small=(tokens.text.caption-1)*4/3
+        local radius=p.stacked and tokens.radii.large or tokens.spacing.xxl
         local body
         if p.stacked then
-            body=ui.Column{id="body",width=main_w,height=p.height,gap=tokens.spacing.xs,align="center",justify="center",
-                glyph("icon",p.icon,color),
-                ui.Text{id="label",text=p.label,width=main_w-2*tokens.spacing.xs,height=18,font_size=tokens.text.caption*4/3,text_align="center",color=color}}
+            body=ui.Column{id="body",width=main_w,height=p.height,padding_top=9,gap=tokens.spacing.xs,align="center",
+                ui.Text{id="icon",text=p.icon,family="Material Symbols Rounded",font_size=tile_glyph,width=main_w,height=24,text_align="center",color=color},
+                ui.Text{id="label",text=p.label,width=main_w-2*tokens.spacing.xs,height=18,font_size=small,font_weight=500,text_align="center",color=color}}
         else
-            local text_w=main_w-pad-glyph_size-2-tokens.spacing.md-(kind=="link" and side or tokens.spacing.sm)
-            local labels={ui.Text{id="label",text=p.label,width=text_w,height=20,font_size=tokens.text.caption*4/3,color=color}}
+            local text_x=44
+            local text_w=main_w-text_x-tokens.spacing.sm-(kind=="link" and tile_glyph+tokens.spacing.sm or 0)
+            local label_size=tokens.text.caption*4/3
+            local labels={ui.Text{id="label",text=p.label,width=text_w,height=18,font_size=label_size,font_weight=500,color=color}}
             if p.detail and p.detail~="" then
-                labels[2]=ui.Text{id="detail",text=p.detail,width=text_w,height=18,font_size=tokens.text.caption*4/3,
+                -- network and Bluetooth names may take a second line, as in QML; the height follows the estimated wrap
+                local lines=p.detail_lines and (#p.detail*small*.55>text_w and 2 or 1) or 1
+                labels[2]=ui.Text{id="detail",text=p.detail,width=text_w,height=lines*16,font_size=small,
                     color=armed and p.on and "onPrimaryContainer" or "onSurfaceVariant"}
             end
-            body=ui.Row{id="body",width=main_w,height=p.height,padding_left=pad,gap=tokens.spacing.md,align="center",
-                glyph("icon",p.icon,color),ui.Column(props(labels,{id="labels",width=text_w,gap=tokens.spacing.hairline})),
-                kind=="link" and glyph("chevron","chevron_right",color) or nil}
+            local children={glyph("icon",p.icon,color,tile_glyph),ui.Column(props(labels,{id="labels",width=text_w,gap=3}))}
+            if kind=="link" then
+                children[3]=ui.Text{id="chevron",position="absolute",left=main_w-12-tile_glyph,top=(p.height-24)/2,
+                    text="chevron_right",family="Material Symbols Rounded",font_size=tile_glyph,width=tile_glyph+2,height=24,color=color}
+            end
+            body=ui.Row{id="body",width=main_w,height=p.height,padding_left=pad,gap=text_x-pad-tile_glyph-2,align="center",table.unpack(children)}
         end
-        local kids={kit.Button{id="main",width=main_w,height=p.height,padding=0,radius=tokens.radii.large,fill="transparent",
+        local kids={kit.Button{id="main",width=main_w,height=p.height,padding=0,radius=radius,fill="transparent",
             hover_fill=ui.alpha("onSurface",.08),aria_label=p.aria_label or p.label,on_activate=armed and p.on_activate or nil,body}}
         if p.on_detail then
-            kids[2]=kit.Button{id="detail-open",width=40,height=p.height,padding=0,radius=tokens.radii.large,fill="transparent",
+            kids[2]=kit.Button{id="detail-open",width=40,height=p.height,padding=0,radius=radius,fill="transparent",
                 hover_fill=ui.alpha("onSurface",.08),aria_label=p.detail_label or p.label,on_activate=p.on_detail,
                 ui.Row{id="chevron-row",width=40,height=p.height,align="center",justify="center",glyph("chevron","chevron_right",color)}}
         end
-        return ui.Row(props(kids,{id=p.id,width=p.width,height=p.height,radius=tokens.radii.large,align="center",
-            position=p.position,left=p.left,top=p.top,
+        return ui.Row(props(kids,{id=p.id,width=p.width,height=p.height,radius=radius,align="center",
+            position=p.position,left=p.left,top=p.top,border_width=1,border_color=ui.alpha("outline",armed and .12 or .06),
             fill=armed and (p.on and "primaryContainer" or "surfaceContainer") or ui.alpha("surfaceContainer",.4)}))
     end
     function kit.ToggleTile(p) return tile(p,"toggle") end
-    function kit.LinkTile(p) return tile(props(p,{on=false}),"link") end
+    function kit.LinkTile(p) return tile(props(p,{on=false,detail_lines=true}),"link") end
     function kit.ButtonTile(p) return tile(props(p,{on=false,stacked=true}),"button") end
-    -- Level control: icon button (mute), label, value text and a stepped slider; read-only
-    -- (a meter) when no `on_change` action is given.
+    -- Level control: icon button (mute), caption (`caption`, else `label`), value text and a stepped slider; the
+    -- slider is drawn dimmed and takes no input when no `on_change` action is given.
     function kit.SliderTile(p)
         local color,armed=ink({available=p.available}),p.available~=false
         local pad=tokens.spacing.lg
         local detail_width=p.on_detail and tokens.spacing.huge or 0
         local inner=p.width-pad*2-40-tokens.spacing.sm-detail_width-(p.on_detail and tokens.spacing.sm or 0)
-        local control
-        if armed and p.on_change then
-            control=kit.Slider{id="level",width=inner,value=p.value,min=0,max=100,step=p.step or 5,label=p.label,
-                on_change=p.on_change,change_arg=p.change_arg}
-        else
-            control=kit.LevelMeter{id="level",width=inner,value=(p.value or 0)/100}
-        end
+        local control=kit.Slider{id="level",width=inner,value=p.value,min=0,max=100,step=p.step or 5,label=p.label,
+            enabled=armed,on_change=p.on_change,change_arg=p.change_arg}
         return ui.Row{id=p.id,width=p.width,height=p.height,padding_left=pad,padding_right=pad,gap=tokens.spacing.sm,align="center",
             radius=tokens.radii.large,fill=armed and "surfaceContainer" or ui.alpha("surfaceContainer",.4),
             kit.Button{id="toggle",width=40,height=40,padding=0,radius=tokens.radii.full,fill="transparent",hover_fill=ui.alpha("onSurface",.08),
@@ -129,7 +145,7 @@ return function(ui, tokens)
                 ui.Row{id="icon-row",width=40,height=40,align="center",justify="center",glyph("icon",p.icon,color)}},
             ui.Column{id="level-column",width=inner,gap=2,
                 ui.Row{id="level-head",width=inner,height=20,align="center",
-                    ui.Text{id="label",text=p.label,width=inner-56,height=20,font_size=tokens.text.caption*4/3,color=color},
+                    ui.Text{id="label",text=p.caption or p.label,width=inner-56,height=20,font_size=tokens.text.caption*4/3,color=color},
                     ui.Text{id="value",text=p.detail or "",width=56,height=20,shrink=0,text_align="right",font_size=tokens.text.caption*4/3,color="onSurfaceVariant"}},
                 control},
             if p.on_detail then kit.IconButton{id="detail",text="chevron_right",width=detail_width,height=40,
@@ -152,7 +168,8 @@ return function(ui, tokens)
         local out,total={},0
         for i,row in ipairs(rows) do
             local spec=p.sizes[row.size]
-            local cell=(p.width-p.gap*(spec.per_row-1))/spec.per_row
+            -- a short last row shares the whole width (QML `Layout.fillWidth`)
+            local cell=(p.width-p.gap*(#row.items-1))/#row.items
             local kids={}
             for j,t in ipairs(row.items) do kids[j]=t.build(cell,spec.height) end
             out[i]=ui.Row(props(kids,{id="row-"..i,width=p.width,height=spec.height,gap=p.gap}))

@@ -116,6 +116,57 @@ fn source<'a>(out: &'a BTreeMap<String, Value>, id: &str) -> &'a Json {
         .unwrap_or_else(|| panic!("no source {id}"))
 }
 
+fn with_store(data: Json) -> BTreeMap<String, Value> {
+    let topics = TOPICS
+        .iter()
+        .map(|name| {
+            (
+                *name,
+                Arc::new(FakeSource::new(topic_data(name)).unwrap()) as Arc<dyn Source>,
+            )
+        })
+        .collect();
+    let saved = Arc::new(
+        FakeSource::new(
+            json!({"store": STORE, "rev": 1, "exists": true, "data": data, "dirty": false}),
+        )
+        .unwrap(),
+    );
+    ControlCenter::new(None, topics, Some(saved), views()).project(&Stores::default())
+}
+
+#[test]
+fn an_earlier_default_set_is_the_unedited_default_until_revision_two() {
+    // The Nacre registry default (and QML's earlier slider set) must not hide the current default tiles (B0091).
+    let nine = json!([
+        "volume",
+        "brightness",
+        "network",
+        "bluetooth",
+        "battery",
+        "night",
+        "dnd",
+        "awake",
+        "appearance"
+    ]);
+    assert_eq!(
+        with_store(json!({"tiles": nine}))["cc.saved_known"],
+        Value::Bool(false)
+    );
+    assert_eq!(
+        with_store(json!({"version": 2, "tiles": nine}))["cc.saved_known"],
+        Value::Bool(false)
+    );
+    let revised = with_store(json!({"version": 2, "defaultsRevision": 2, "tiles": nine}));
+    assert_eq!(
+        revised["cc.saved_known"],
+        Value::Bool(true),
+        "a revision-2 store is the user's own choice"
+    );
+    let edited = with_store(json!({"tiles": ["volume", "network"]}));
+    assert_eq!(edited["cc.saved"], ids(vec!["volume", "network"]));
+}
+
 #[test]
 fn sources_read_the_published_topics_and_hide_what_is_missing() {
     let out = offline().project(&Stores::default());
@@ -1204,22 +1255,23 @@ fn tiles_dispatch_host_actions_and_the_detail_page_opens_in_place() -> bead_test
             .unwrap_or_else(|| panic!("no node {part}"));
         (node.action.clone(), node.action_arg.clone())
     };
+    // As in QML, the Wi-Fi tile opens its page (the switch lives there); a toggle tile still toggles.
     assert_eq!(
         action(&h, "tile-network.main"),
-        (
-            Some("cc.do".into()),
-            Some(Value::Text("toggle:network.wifi".into()))
-        )
+        (Some("detail".into()), Some(Value::Text("network".into())))
     );
     assert_eq!(
-        action(&h, "tile-network.detail-open"),
-        (Some("detail".into()), Some(Value::Text("network".into())))
+        action(&h, "tile-dnd.main"),
+        (
+            Some("cc.do".into()),
+            Some(Value::Text("toggle:notifications.dnd".into()))
+        )
     );
     assert_eq!(
         action(&h, "tile-clipboard.main"),
         (
-            Some("view.open".into()),
-            Some(Value::Text("dashboard-clipboard".into()))
+            Some("cc.do".into()),
+            Some(Value::Text("open:clipboard".into()))
         )
     );
     // The level slider sends percent steps for its own source.
