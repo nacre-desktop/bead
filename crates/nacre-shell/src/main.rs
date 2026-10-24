@@ -1231,11 +1231,15 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
     }
     v.push(Primitive::Image {
         blur: 0.,
+        fit: bead::render::ImageFit::Fill,
+        clip_polygon: None,
         rect: Rect::new(28., 422., 48., 48.),
         path: assets.join("sample.svg"),
     });
     v.push(Primitive::Image {
         blur: 0.,
+        fit: bead::render::ImageFit::Fill,
+        clip_polygon: None,
         rect: Rect::new(96., 422., 48., 48.),
         path: assets.join("sample.png"),
     });
@@ -1261,6 +1265,8 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
         println!("ICON folder resolved=true");
         v.push(Primitive::Image {
             blur: 0.,
+            fit: bead::render::ImageFit::Fill,
+            clip_polygon: None,
             rect: Rect::new(62., 490., 48., 48.),
             path,
         });

@@ -17,8 +17,8 @@
    ],
    "qml": "NacreShellIpc.qml",
    "bead": "done",
-   "spec": "B0026",
-   "note": "Second press closes it (QML openMode toggle)."
+   "spec": "B0026, B0100",
+   "note": "Second press closes it (QML openMode toggle). >wallpaper opens the visual wallpaper picker (B0100)."
   },
   {
    "id": "nacre.menu",
@@ -69,8 +69,8 @@
    ],
    "qml": "NacreShellIpc.qml",
    "bead": "partial",
-   "spec": "B0026, B0077",
-   "note": "apps/wallpaper/clipboard map to menu routes; overview/palette/keys open Bead's own extras surfaces (B0077); `legacy` is refused."
+   "spec": "B0026, B0077, B0100",
+   "note": "apps/clipboard map to menu routes; wallpaper opens the visual picker (B0100); overview/palette/keys open Bead extras surfaces (B0077); legacy is refused."
   },
   {
    "id": "nacre.hide",
@@ -407,7 +407,7 @@
    "command": "wallpaper",
    "kind": "ui",
    "route": "nacre.launcher",
-   "note": "Without arguments only; with arguments it is the palette publisher."
+   "note": "Without arguments opens the visual wallpaper picker via nacre.launcher >wallpaper (B0100); with arguments it is the palette publisher."
   },
   {
    "command": "dolphin",

@@ -95,6 +95,20 @@ STATES = {
                          [('release',), ('ui', 'nacre', 'close')], 0),
     'launcher-typed': ([('ui', 'nacre', 'launcher', 'fi')], [('ui', 'nacre', 'close')], 0),
     'launcher-wallpapers': ([('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 0),
+    # B0100: the same library and picker preferences, in each isolated HOME.
+    'wallpaper-carousel': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
+    'wallpaper-hover': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 2), ('pointer', 960, 1020)], [('ui', 'nacre', 'close')], 0),
+    'wallpaper-pressed': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 2), ('press', 960, 1020)], [('release',), ('ui', 'nacre', 'close')], 0),
+    'wallpaper-search': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 2), ('type', 'generated-1')], [('ui', 'nacre', 'close')], 0),
+    'wallpaper-spotlight': ([('wallpaper-pref', 'static', 'spotlight'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
+    'wallpaper-hexagons': ([('wallpaper-pref', 'static', 'hexagons'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
+    'wallpaper-dynamic-spotlight': ([('wallpaper-pref', 'dynamic', 'spotlight'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
+    'wallpaper-dynamic-hexagons': ([('wallpaper-pref', 'dynamic', 'hexagons'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
+    'wallpaper-empty': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 2), ('type', 'zzzz-no-matches')], [('ui', 'nacre', 'close')], 0),
+    'wallpaper-video-activated': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
+    'wallpaper-dynamic': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
+    'wallpaper-activated': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('key', 'Right'), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
+    'wallpaper-settled': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('ui', 'nacre', 'close'), ('sleep', 7)], [], 0),
     'menu-power': ([('ui', 'nacre', 'menu', 'power', '')], [('ui', 'nacre', 'close')], 0),
     'dashboard-0': ([('ui', 'drawers', 'toggle', 'dashboard'), ('ui', 'nacre', 'tab', '0')], [('ui', 'nacre', 'close')], 1.4),
     # B0067: the same open, measured after one open/close (the view is built and warm), to tell a cold first frame from the motion
@@ -241,6 +255,13 @@ for _bar_cycle in range(1, 4):
     # Identical forced opens in control/candidate; title hover intentionally differs before the fix.
     STATES[f'bar-memory-{_bar_cycle}'] = ([('ui', 'drawers', 'toggle', 'dashboard')],
                                         [('ui', 'nacre', 'close'), ('sleep', 1.5)], 0)
+# Preference helper work belongs before the animation trigger, so frame sequences
+# measure the panel opening rather than waiting for a preferences write.
+for _picker_state, (_opens, _closes, _seconds) in list(STATES.items()):
+    if _picker_state.startswith('wallpaper-') and _opens and _opens[0][0] == 'wallpaper-pref':
+        STATE_PREPARE[_picker_state] = [_opens[0]]
+        STATES[_picker_state] = (_opens[1:], _closes, _seconds)
+
 # Where each transition happens, in logical pixels ("x,y wxh"): a grim region is much faster than the whole output, which
 # is what gives a usable frame rate for the animation timing.
 REGIONS = {
@@ -451,7 +472,7 @@ class Arm:
         if any(name.startswith('sidebar') for name in a.states):
             self.install_chat_fixture()
         record = Path(a.presentation).expanduser() if a.presentation else None
-        if record and record.is_file():  # read-only copy of the owner's record: same wallpaper and palette on both arms
+        if record and record.is_file() and not a.wallpaper_fixture:  # read-only copy of the owner's record: same wallpaper and palette on both arms
             shutil.copyfile(record, self.root / 'state/nacre/presentation.json')
             (self.root / 'state/nacre/presentation.json').chmod(0o600)
         if a.wallpapers:  # generated gradients: the library both arms list in the Colors app
@@ -467,6 +488,18 @@ class Arm:
                         pixels[x, y] = ((x * 255 // width + index * 70) % 256, (y * 255 // height * (index + 1)) % 256,
                                         ((x + y) * 255 // (width + height) + index * 40) % 256)
                 image.save(folder / f'generated-{index + 1}.png')
+        if a.wallpaper_videos:
+            folder = home / 'Pictures/Wallpapers/Dynamic'
+            folder.mkdir(parents=True, exist_ok=True)
+            for index in range(a.wallpaper_videos):
+                self.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                          f'testsrc2=size=640x360:rate=12:duration=2', '-an', '-c:v', 'libx264',
+                          '-threads', '1', '-pix_fmt', 'yuv420p', '-y', str(folder / f'motion-{index + 1}.mp4')], timeout=30)
+        if a.wallpaper_fixture:
+            helper = str(Path(a.bead_bin).resolve() / 'nacre-helper')
+            self.run([helper, 'wallpaper-media', 'select', str(home / 'Pictures/Wallpapers/generated-1.png')], timeout=45)
+            if not (self.root / 'state/nacre/presentation.json').is_file():
+                raise RuntimeError('fixture wallpaper did not produce a private presentation')
         # No audio server here: stand-ins make the daemon see the fixed machine of spikes/fake_system.py (2 sinks, 1 source,
         # 45 %); the files hold the default levels the `level` step changes.
         fake = self.root / 'fakeaudio'
@@ -900,6 +933,21 @@ os.execv(real, [real, *args])
                     self.dispatch(*step[1:])
                 except Exception as error:
                     self.errors.append(f'{" ".join(step[1:])}: {error}')
+            elif kind == 'key':
+                self.run(['wtype', '-k', step[1]])
+                time.sleep(0.3)
+            elif kind == 'wallpaper-pref':
+                helper = str(Path(self.args.bead_bin).resolve() / 'nacre-helper')
+                result = subprocess.run([helper, 'wallpaper-media', 'preferences'], input=json.dumps({'kind': step[1], 'layout': step[2]}),
+                                        env=self.env, capture_output=True, text=True, timeout=30)
+                result.check_returncode()
+                # Prepare identical fixture media before measuring the UI transition.
+                catalogue = self.call('wallpaper.catalogue', {}, timeout=30)
+                if self.args.wallpapers or self.args.wallpaper_videos:
+                    kinds = [row['kind'] for row in catalogue['entries']]
+                    if kinds.count('image') != self.args.wallpapers or kinds.count('video') != self.args.wallpaper_videos:
+                        raise RuntimeError('wallpaper fixture catalogue does not contain the requested images/videos')
+                time.sleep(1)
             elif kind == 'notify':
                 self.notify(step[1], step[2])
             elif kind == 'sleep':
@@ -1104,6 +1152,13 @@ os.execv(real, [real, *args])
                     info['ui_state'] = state
                     if not isinstance(state, dict) or state.get('launcher') is not True:
                         raise RuntimeError('launcher capture is not an open launcher')
+                if name in ('wallpaper-activated', 'wallpaper-video-activated'):
+                    catalogue = self.call('wallpaper.catalogue', {}, timeout=30)
+                    active = [Path(row['id']).name for row in catalogue['entries'] if row['active']]
+                    info['active_wallpaper'] = active
+                    expected = 'motion-1.mp4' if name == 'wallpaper-video-activated' else 'generated-10.png'
+                    if active != [expected]:
+                        raise RuntimeError('keyboard selection did not activate ' + expected + ': ' + repr(active))
                 # Capture the short dwell cue before /proc sampling can outlast it.
                 early_hover = name == 'bar-title-hover'
                 if early_hover:
@@ -1166,7 +1221,7 @@ os.execv(real, [real, *args])
             info['errors'] = self.errors
             results[name] = info
             log(f'{self.name}: {name} {"ERRORS " + "; ".join(self.errors) if self.errors else "ok"}')
-            if (name in STATE_SETTLE or name in ('control-hover', 'control-pressed', 'lip-hover-right')) and self.errors:
+            if (name.startswith('wallpaper-') or name in STATE_SETTLE or name in ('control-hover', 'control-pressed', 'lip-hover-right')) and self.errors:
                 raise RuntimeError(f'{name} failed: {"; ".join(self.errors)}')
         (self.out / 'drive.json').write_text(json.dumps(results, indent=1))
         try:  # B0095: which methods the private daemon offered (a missing control explains a dimmed button)
@@ -1409,6 +1464,8 @@ def main():
     parser.add_argument('--size', default='2880x1800')
     parser.add_argument('--scale', type=float, default=1.5)
     parser.add_argument('--wallpapers', type=int, default=0, help='generate N gradient wallpapers into the private HOME (Colors app library)')
+    parser.add_argument('--wallpaper-videos', type=int, default=0, help='B0100: generate N short video wallpapers in each private library')
+    parser.add_argument('--wallpaper-fixture', action='store_true', help='B0100: derive the matching private presentation from the first generated wallpaper')
     parser.add_argument('--presentation', default='~/.local/state/nacre/presentation.json',
                         help='record copied read-only into both private states (wallpaper + palette); empty for none')
     parser.add_argument('--cpu', action='store_true', help='Bead on the CPU renderer')
@@ -1432,6 +1489,8 @@ def main():
     if args.presentation:
         args.presentation = str(Path(args.presentation).expanduser().resolve())
     args.size = tuple(int(v) for v in args.size.split('x'))
+    if args.wallpaper_fixture and args.wallpapers < 1:
+        parser.error('--wallpaper-fixture needs at least one generated wallpaper')
     args.fake_nm = args.fake_nm or args.fake_wifi
     args.states = list(STATES) if args.states == 'all' else args.states.split(',')
     unknown = [s for s in args.states if s not in STATES]
@@ -1479,11 +1538,11 @@ def main():
                             'NACRE_QS_CONFIG', 'DBUS_SESSION_BUS_ADDRESS']:
                     env.pop(key, None)
                 command = ['dbus-run-session', '--', sys.executable, __file__, '--run-arm', arm, '--private', private]
-                for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'settle', 'closed_settle', 'boot_settle',
+                for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'wallpaper_videos', 'settle', 'closed_settle', 'boot_settle',
                              'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
-                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else []) + (['--fake-wifi'] if args.fake_wifi else [])
+                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--wallpaper-fixture'] if args.wallpaper_fixture else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else []) + (['--fake-wifi'] if args.fake_wifi else [])
                 log(f'arm {arm} starting')
                 child = subprocess.Popen(command, env=env, start_new_session=True)
                 try:

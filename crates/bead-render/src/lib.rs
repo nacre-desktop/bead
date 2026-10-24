@@ -135,6 +135,10 @@ pub enum Primitive {
     Image {
         #[serde(default)]
         blur: f32,
+        #[serde(default)]
+        fit: ImageFit,
+        #[serde(default)]
+        clip_polygon: Option<Vec<[f32; 2]>>,
         rect: Rect,
         path: std::path::PathBuf,
     },
@@ -221,6 +225,13 @@ mod arc_tests {
         assert!(arc_points(rect, f32::NAN, 0., 90.).is_none());
     }
 }
+#[derive(Clone, Copy, Debug, Default, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageFit {
+    #[default]
+    Fill,
+    Cover,
+}
 #[derive(Clone, Copy, Debug, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextAlign {
@@ -233,7 +244,14 @@ pub fn primitive_bytes(p: &Primitive) -> usize {
     std::mem::size_of::<Primitive>()
         + match p {
             Primitive::Text { text, family, .. } => text.capacity() + family.capacity(),
-            Primitive::Image { path, .. } => path.as_os_str().len(),
+            Primitive::Image {
+                path, clip_polygon, ..
+            } => {
+                path.as_os_str().len()
+                    + clip_polygon.as_ref().map_or(0, |points| {
+                        points.capacity() * std::mem::size_of::<[f32; 2]>()
+                    })
+            }
             _ => 0,
         }
 }
@@ -825,8 +843,19 @@ fn key(p: &Primitive, scale: f32) -> String {
             "t:{scale}:{}:{}:{family}:{weight}:{size}:{color:?}:{align:?}:{text}",
             rect.w, rect.h
         ),
-        Primitive::Image { rect, path, blur } => {
-            format!("i:{blur}:{scale}:{}:{}:{}", rect.w, rect.h, path.display())
+        Primitive::Image {
+            rect,
+            path,
+            blur,
+            clip_polygon,
+            fit,
+        } => {
+            format!(
+                "i:{blur}:{clip_polygon:?}:{fit:?}:{scale}:{}:{}:{}",
+                rect.w,
+                rect.h,
+                path.display()
+            )
         }
         Primitive::Shadow { rect, radius, blur } => {
             format!("s:{scale}:{}:{}:{radius}:{blur}", rect.w, rect.h)
@@ -839,6 +868,29 @@ fn dimensions(rect: Rect, scale: f32) -> (u32, u32) {
         (rect.w * scale).ceil().max(1.) as u32,
         (rect.h * scale).ceil().max(1.) as u32,
     )
+}
+fn apply_polygon_clip(pix: &mut Pixmap, points: &[[f32; 2]]) -> Result<()> {
+    let mut path = tiny_skia::PathBuilder::new();
+    for (index, [x, y]) in points.iter().enumerate() {
+        let point = (x * pix.width() as f32, y * pix.height() as f32);
+        if index == 0 {
+            path.move_to(point.0, point.1);
+        } else {
+            path.line_to(point.0, point.1);
+        }
+    }
+    path.close();
+    let path = path.finish().ok_or("invalid image clip polygon")?;
+    let mut mask =
+        tiny_skia::Mask::new(pix.width(), pix.height()).ok_or("image clip allocation")?;
+    mask.fill_path(
+        &path,
+        tiny_skia::FillRule::EvenOdd,
+        true,
+        tiny_skia::Transform::identity(),
+    );
+    pix.apply_mask(&mask);
+    Ok(())
 }
 fn rounded(rect: Rect, r: f32) -> Option<tiny_skia::Path> {
     // SVG path parsing is supplied by tiny-skia; no custom rasterizer or shaper.
@@ -976,14 +1028,21 @@ impl Renderer for CpuRenderer {
                     );
                     pix
                 }
-                Primitive::Image { rect, path, blur } => {
+                Primitive::Image {
+                    rect,
+                    path,
+                    blur,
+                    clip_polygon,
+                    fit,
+                } => {
                     let pix = load_image(
                         path,
                         *rect,
                         scale,
                         scene.asset_data.get(path).map(|data| data.as_ref()),
+                        *fit,
                     )?;
-                    if *blur > 0. {
+                    let mut pix = if *blur > 0. {
                         let size = tiny_skia::IntSize::from_wh(pix.width(), pix.height())
                             .ok_or("invalid blur dimensions")?;
                         let image = image::RgbaImage::from_raw(
@@ -997,7 +1056,11 @@ impl Renderer for CpuRenderer {
                             .ok_or("invalid blurred pixels")?
                     } else {
                         pix
+                    };
+                    if let Some(points) = clip_polygon {
+                        apply_polygon_clip(&mut pix, points)?;
                     }
+                    pix
                 }
                 Primitive::Shadow { rect, radius, blur } => {
                     shadow_pixmap(*rect, *radius, *blur, scale)?
@@ -1380,9 +1443,22 @@ mod borrowed_svg_tests {
 }
 /// Validate an immutable asset snapshot with the same decoder used for drawing.
 pub fn validate_asset(path: &Path, bytes: &[u8]) -> Result<()> {
-    load_image(path, Rect::new(0., 0., 4., 4.), 1., Some(bytes)).map(|_| ())
+    load_image(
+        path,
+        Rect::new(0., 0., 4., 4.),
+        1.,
+        Some(bytes),
+        ImageFit::Fill,
+    )
+    .map(|_| ())
 }
-fn load_image(path: &Path, rect: Rect, scale: f32, snapshot: Option<&[u8]>) -> Result<Pixmap> {
+fn load_image(
+    path: &Path,
+    rect: Rect,
+    scale: f32,
+    snapshot: Option<&[u8]>,
+    fit: ImageFit,
+) -> Result<Pixmap> {
     let file;
     let bytes = if let Some(snapshot) = snapshot {
         snapshot
@@ -1394,9 +1470,12 @@ fn load_image(path: &Path, rect: Rect, scale: f32, snapshot: Option<&[u8]>) -> R
     if path.extension().is_some_and(|e| e == "svg") {
         return svg_pixmap(bytes, w, h);
     }
-    let raw = image::load_from_memory(bytes)?
-        .resize_exact(w, h, image::imageops::FilterType::Lanczos3)
-        .to_rgba8();
+    let decoded = image::load_from_memory(bytes)?;
+    let raw = match fit {
+        ImageFit::Fill => decoded.resize_exact(w, h, image::imageops::FilterType::Lanczos3),
+        ImageFit::Cover => decoded.resize_to_fill(w, h, image::imageops::FilterType::Lanczos3),
+    }
+    .to_rgba8();
     let mut pix = Pixmap::new(w, h).ok_or("image allocation")?;
     for (dst, src) in pix
         .data_mut()
@@ -1636,6 +1715,27 @@ fn boundary_x(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn polygon_image_mask_clears_pixels_outside_hexagon() {
+        let mut image = Pixmap::new(20, 20).unwrap();
+        image.fill(tiny_skia::Color::WHITE);
+        apply_polygon_clip(
+            &mut image,
+            &[
+                [0.25, 0.],
+                [0.75, 0.],
+                [1., 0.5],
+                [0.75, 1.],
+                [0.25, 1.],
+                [0., 0.5],
+            ],
+        )
+        .unwrap();
+        let pixel = |x: usize, y: usize| image.pixels()[y * 20 + x].alpha();
+        assert_eq!(pixel(10, 10), 255);
+        assert_eq!(pixel(0, 0), 0);
+        assert_eq!(pixel(19, 0), 0);
+    }
     #[test]
     fn wrapped_text_lines_caret_and_vertical_moves() {
         let scene = font_pool_scene();
@@ -2105,6 +2205,8 @@ mod tests {
                         },
                         Primitive::Image {
                             blur: 0.,
+                            fit: crate::ImageFit::Fill,
+                            clip_polygon: None,
                             rect: Rect::new(14., 8., 15., 15.),
                             path: Path::new(env!("CARGO_MANIFEST_DIR"))
                                 .join("../../shell/sample.png"),

@@ -4,6 +4,7 @@ local kit = require("bead.kit")
 local T = require("./tokens")
 local VirtualList = require("../kit/virtual-list")
 local kind = ui.resolve_for_check(ui.bind("extras.kind")) or "overview"
+if kind == "wallpaper" then return require("./wallpaper/main") end
 local overview = kind == "overview"
 local shortcuts = kind == "keybindings"
 local screen_w = ui.resolve_for_check(ui.bind("bead.viewport.width")) or T.panel.overview_width

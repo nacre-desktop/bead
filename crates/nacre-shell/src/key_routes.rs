@@ -23,6 +23,8 @@ pub struct Launch {
     pub route: Option<String>,
     /// QML `openMode` closes an already-open identical request; `openMenu` does not.
     pub toggle: bool,
+    /// Native shell surface requested instead of the launcher companion.
+    pub target_view: Option<String>,
 }
 impl Launch {
     pub fn model(&self) -> BTreeMap<String, Value> {
@@ -96,14 +98,22 @@ pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
             query: query.into(),
             route: route.map(Into::into),
             toggle,
+            target_view: None,
         })
     };
     Some(match call.method.as_str() {
         "launcher" => {
             let query = arg(0).unwrap_or_default();
             match query.strip_prefix(">wallpaper") {
-                Some(rest) => launch(rest.trim(), Some("style.wallpapers"), true),
-                None => launch(query, None, true),
+                Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => {
+                    Ok(Launch {
+                        query: rest.trim().into(),
+                        route: None,
+                        toggle: true,
+                        target_view: Some("wallpaper".into()),
+                    })
+                }
+                _ => launch(query, None, true),
             }
         }
         "menu" => menu_route(arg(0).unwrap_or_default())
@@ -112,7 +122,13 @@ pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
         "mode" => match arg(0).unwrap_or_default() {
             "apps" => launch("", None, true),
             "legacy" => Err("legacy launcher mode is not implemented"),
-            name @ ("wallpaper" | "clipboard") => launch("", resolve(name), true),
+            "wallpaper" => Ok(Launch {
+                query: String::new(),
+                route: None,
+                toggle: true,
+                target_view: Some("wallpaper".into()),
+            }),
+            "clipboard" => launch("", resolve("clipboard"), true),
             _ => Err("unknown launcher mode"),
         },
         _ => return None,
@@ -229,9 +245,16 @@ mod tests {
         assert_eq!((l.query.as_str(), l.route, l.toggle), ("", None, true));
         let l = routed("launcher", &[">wallpaper "]);
         assert_eq!(
-            (l.query.as_str(), l.route.as_deref(), l.toggle),
-            ("", Some("style.wallpapers"), true)
+            (
+                l.query.as_str(),
+                l.route.as_deref(),
+                l.toggle,
+                l.target_view.as_deref()
+            ),
+            ("", None, true, Some("wallpaper"))
         );
+        assert_eq!(routed("launcher", &[">wallpaper forest"]).query, "forest");
+        assert_eq!(routed("launcher", &[">wallpaperXYZ"]).target_view, None);
         let l = routed("clipboard", &[]);
         assert_eq!(l.route.as_deref(), Some("actions.clipboard"));
         for (route, id) in [
@@ -243,12 +266,14 @@ mod tests {
             let l = routed("menu", &[route, ""]);
             assert_eq!((l.route.as_deref(), l.toggle), (Some(id), false));
         }
-        for (mode, id) in [
-            ("clipboard", "actions.clipboard"),
-            ("wallpaper", "style.wallpapers"),
-        ] {
-            assert_eq!(routed("mode", &[mode]).route.as_deref(), Some(id), "{mode}");
-        }
+        assert_eq!(
+            routed("mode", &["clipboard"]).route.as_deref(),
+            Some("actions.clipboard")
+        );
+        assert_eq!(
+            routed("mode", &["wallpaper"]).target_view.as_deref(),
+            Some("wallpaper")
+        );
         for mode in ["overview", "palette", "keys"] {
             assert!(launcher(&call("mode", &[mode])).is_none());
         }

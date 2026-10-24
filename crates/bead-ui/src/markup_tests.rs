@@ -36,6 +36,26 @@ fn session(f: &Fixture) -> Session {
     session
 }
 
+#[test]
+fn normalized_clip_polygon_masks_image_and_button_hit_region() {
+    let f = fixture();
+    fs::create_dir_all(f.0.join("ui/assets")).unwrap();
+    fs::write(f.0.join("ui/assets/hex.svg"), r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#fff"/></svg>"##).unwrap();
+    fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")
+local hex={{0.25,0},{0.75,0},{1,0.5},{0.75,1},{0.25,1},{0,0.5}}
+return ui.Panel{id="panel",width=120,height=120,ui.Button{id="hex",width=100,height=100,clip_polygon=hex,on_activate=ui.action("select","hex"),
+ ui.Image{id="image",path="ui/assets/hex.svg",width=100,height=100,image_fit="cover",clip_polygon=hex}}}"#).unwrap();
+    let s = session(&f);
+    let node = s
+        .current_nodes
+        .iter()
+        .find(|n| n.id.ends_with("hex"))
+        .unwrap();
+    assert!(node.contains(50., 50.));
+    assert!(!node.contains(1., 1.));
+    assert!(s.current.primitives.iter().any(|p| matches!(p,Primitive::Image{fit:bead_render::ImageFit::Cover,clip_polygon:Some(points),..} if points.len()==6)));
+}
+
 fn deferred_fixture() -> (Fixture, Session) {
     let f = Fixture::new();
     fs::create_dir_all(f.0.join("ui")).unwrap();

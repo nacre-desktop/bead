@@ -76,7 +76,7 @@ pub fn tooltip_values(snapshot: &Snapshot, id: &str) -> BTreeMap<String, Value> 
         ("bead.desktop.tray.tooltip".into(), Value::Text(text)),
     ])
 }
-fn read_icon_file(path: &std::path::Path, limit: u64) -> std::io::Result<Vec<u8>> {
+pub(crate) fn read_icon_file(path: &std::path::Path, limit: u64) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     use std::os::unix::fs::OpenOptionsExt;
     let file = std::fs::OpenOptions::new()
@@ -447,6 +447,8 @@ mod tests {
         };
         scene.primitives.push(bead::render::Primitive::Image {
             blur: 0.,
+            fit: bead::render::ImageFit::Fill,
+            clip_polygon: None,
             path: "@icon:tray:fixture".into(),
             rect: bead::render::Rect::new(0., 0., 24., 24.),
         });
@@ -469,6 +471,8 @@ mod tests {
         std::fs::write(nested.join("fixture.png"), b"broken PNG").unwrap();
         scene.primitives[0] = bead::render::Primitive::Image {
             blur: 0.,
+            fit: bead::render::ImageFit::Fill,
+            clip_polygon: None,
             path: "@icon:tray:fixture".into(),
             rect: bead::render::Rect::new(0., 0., 24., 24.),
         };
@@ -487,6 +491,8 @@ mod tests {
         missing.icon_name = "bead-nonexistent-icon-7832".into();
         scene.primitives[0] = bead::render::Primitive::Image {
             blur: 0.,
+            fit: bead::render::ImageFit::Fill,
+            clip_polygon: None,
             path: "@icon:tray:fixture".into(),
             rect: bead::render::Rect::new(0., 0., 24., 24.),
         };

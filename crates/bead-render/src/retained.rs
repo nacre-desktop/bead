@@ -190,7 +190,18 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                 size.to_bits().hash(&mut h);
                 color.hash(&mut h);
             }
-            Primitive::Image { path, .. } => path.hash(&mut h),
+            Primitive::Image {
+                path,
+                clip_polygon,
+                fit,
+                ..
+            } => {
+                (path, fit).hash(&mut h);
+                clip_polygon.is_some().hash(&mut h);
+                for coordinate in clip_polygon.iter().flatten().flatten() {
+                    coordinate.to_bits().hash(&mut h);
+                }
+            }
             Primitive::Shadow { radius, blur, .. } => {
                 radius.to_bits().hash(&mut h);
                 blur.to_bits().hash(&mut h);
@@ -302,6 +313,8 @@ mod tests {
         let path = std::path::PathBuf::from("tray.png");
         scene.primitives.push(crate::Primitive::Image {
             blur: 0.,
+            fit: crate::ImageFit::Fill,
+            clip_polygon: None,
             path: path.clone(),
             rect: crate::Rect::new(0., 0., 10., 10.),
         });

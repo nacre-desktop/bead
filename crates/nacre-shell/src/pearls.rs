@@ -542,6 +542,8 @@ fn asset(scene: &mut Scene, name: &str, rect: Rect, svg: String) {
         .insert(path.clone(), Arc::from(svg.into_bytes()));
     scene.primitives.push(Primitive::Image {
         blur: 0.,
+        fit: bead::render::ImageFit::Fill,
+        clip_polygon: None,
         rect,
         path,
     });

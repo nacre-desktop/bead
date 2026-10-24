@@ -114,12 +114,41 @@ pub struct Node {
     #[serde(skip)]
     pub clip: Option<Rect>,
     #[serde(default)]
+    pub hit_polygon: Option<Vec<[f32; 2]>>,
+    #[serde(default)]
     pub label: String,
 }
 fn default_true() -> bool {
     true
 }
 impl Node {
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        self.contains_in(rect(&self.draw), x, y)
+    }
+    pub fn contains_in(&self, r: Rect, x: f32, y: f32) -> bool {
+        let inside_rect = |r: Rect| x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
+        if !inside_rect(r) || self.clip.is_some_and(|clip| !inside_rect(clip)) {
+            return false;
+        }
+        let Some(points) = &self.hit_polygon else {
+            return true;
+        };
+        if points.len() < 3 {
+            return false;
+        }
+        let (px, py) = ((x - r.x) / r.w, (y - r.y) / r.h);
+        let mut inside = false;
+        let mut previous = points.len() - 1;
+        for current in 0..points.len() {
+            let [xi, yi] = points[current];
+            let [xj, yj] = points[previous];
+            if (yi > py) != (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi {
+                inside = !inside;
+            }
+            previous = current;
+        }
+        inside
+    }
     fn diagnostic(&self, message: impl ToString) -> Diagnostic {
         let (path, line, column) =
             self.source

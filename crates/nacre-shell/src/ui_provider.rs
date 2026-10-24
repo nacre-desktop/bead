@@ -104,6 +104,10 @@ fn plan(params: Value) -> source::Result<(Act, bool)> {
             Act::Shell(shell_call("bead.panel", "open", &["session"])),
             false,
         ),
+        ("route", Some("wallpaper")) => (
+            Act::Shell(shell_call("nacre", "mode", &["wallpaper"])),
+            true,
+        ),
         ("route", Some(route)) => {
             let call = shell_call("nacre", "menu", &[route, ""]);
             match crate::key_routes::launcher(&call) {
@@ -339,10 +343,10 @@ mod tests {
             plan(row("power", json!("lock"))).unwrap(),
             (Act::Lock, false)
         ));
-        // The key route resolves aliases (wallpaper -> style.wallpapers) when it runs.
+        // QML treats the wallpaper route row as the visual picker, not a menu navigation.
         let (act, keep) = plan(row("route", json!("wallpaper"))).unwrap();
         assert!(
-            matches!(act, Act::Shell(ref c) if c.method == "menu" && c.args == [json!("wallpaper"), json!("")])
+            matches!(act, Act::Shell(ref c) if c.method == "mode" && c.args == [json!("wallpaper")])
                 && keep
         );
         for bad in [

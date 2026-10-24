@@ -566,6 +566,8 @@ fn scene(slots: &[(&str, f32, f32)]) -> bead::render::Scene {
             .iter()
             .map(|(name, w, h)| bead::render::Primitive::Image {
                 blur: 0.,
+                fit: bead::render::ImageFit::Fill,
+                clip_polygon: None,
                 rect: bead::render::Rect::new(0., 0., *w, *h),
                 path: format!("@icon:colors-{name}").into(),
             })

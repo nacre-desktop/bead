@@ -41,6 +41,10 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
     let listener = UnixListener::bind(&socket).unwrap();
     std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
     let (tx, calls) = mpsc::unbounded_channel();
+    let mut offered_topics = BTreeMap::from([("compositor".into(), 1), ("shortcuts".into(), 1)]);
+    for topic in &requested_topics {
+        offered_topics.insert(topic.clone(), 1);
+    }
     tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let (read, mut writer) = stream.into_split();
@@ -56,6 +60,9 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
             "shortcuts.refresh",
             "menu.query",
             "menu.activate",
+            "wallpaper.catalogue",
+            "wallpaper.activate",
+            "settings.set",
         ] {
             methods.insert(
                 name.into(),
@@ -74,7 +81,7 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                 proto: 1,
                 min: 1,
                 boot: "extras-boot".into(),
-                topics: BTreeMap::from([("compositor".into(), 1), ("shortcuts".into(), 1)]),
+                topics: offered_topics,
                 methods,
                 frame_ms: None,
             },
@@ -85,10 +92,21 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
             match msg {
                 Message::Sub { topics } => {
                     for topic in topics {
-                        let data = if topic == "compositor" {
-                            fixture()
-                        } else {
-                            json!({"health":{"available":true,"stale":false},"items":{"order":["k1"],"items":{"k1":{"key":"Super+K","description":"Shortcuts"}}}})
+                        let data = match topic.as_str() {
+                            "compositor" => fixture(),
+                            "wallpaper.active" => {
+                                json!({"available":true,"stale":false,"revision":17,
+                                "current":{"revision":17,"palette_revision":17,"path":"/fixture/current.jpg",
+                                    "file_identity":{"device":"1","inode":"2","size":4,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
+                                    "presentation":"crop","palette":{"mode":"dark","colours":{"background":"#102030","onSurface":"#f0f0f0","primary":"#22aa88"}}},
+                                "outputs":{}})
+                            }
+                            "settings.store.wallpaper-picker" => {
+                                json!({"store":"wallpaper-picker","rev":3,"data":{"kind":"static","layout":"carousel"}})
+                            }
+                            _ => {
+                                json!({"health":{"available":true,"stale":false},"items":{"order":["k1"],"items":{"k1":{"key":"Super+K","description":"Shortcuts"}}}})
+                            }
                         };
                         if framing::write(
                             &mut writer,
@@ -137,6 +155,17 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                         json!({"query":p["query"],"mode":p["mode"],"route":p["route"],"catalog_rev":7,"order":order,"items":items})
                     } else if m == "menu.activate" {
                         json!({"keep_open":true,"view":{"route":"actions.windows","query":"edited"}})
+                    } else if m == "wallpaper.catalogue" {
+                        json!({"entries":[
+                            {"id":"/fixture/current.jpg","kind":"image","title":"Current","thumbnail":"","preview":"","active":true},
+                            {"id":"/fixture/next.jpg","kind":"image","title":"Next","thumbnail":"","preview":"","active":false},
+                            {"id":"/fixture/next.mp4","kind":"video","title":"Moving","thumbnail":"","preview":"","active":false}
+                        ]})
+                    } else if m == "wallpaper.activate" {
+                        let revision = p["revision"].as_u64().unwrap_or(17) + 1;
+                        json!({"revision":revision,"palette_revision":revision,"path":p["id"],
+                            "file_identity":{"device":"1","inode":"3","size":4,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
+                            "presentation":"crop","palette":{"mode":"dark","colours":{"background":"#102030","onSurface":"#f0f0f0","primary":"#22aa88"}}})
                     } else {
                         json!({"changed":true})
                     };
@@ -304,10 +333,321 @@ async fn palette_activates_a_typed_row_with_its_own_ticket() {
         )
     );
 }
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activate() {
+    let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let stores = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.query".into(), Value::Text(String::new())),
+            ("extras.kind".into(), Value::Text("wallpaper".into())),
+            (
+                "extras.wallpaper.kind".into(),
+                Value::Text("dynamic".into()),
+            ),
+        ]))
+        .unwrap();
+    let wake: CallWake = Arc::new(|| {});
+    let first = wallpaper.project(&stores, Some(wake.clone()));
+    assert_eq!(first["extras.wallpaper.loading"], Value::Bool(true));
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        ("wallpaper.catalogue".into(), json!({}))
+    );
+    let mut rows = Value::list(Vec::new());
+    for _ in 0..200 {
+        let model = wallpaper.project(&stores, Some(wake.clone()));
+        rows = model["extras.rows"].clone();
+        if matches!(&rows,Value::List(entries) if entries.len()==2) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(
+        matches!(&rows,Value::List(entries) if entries.len()==3 && entries[2]["id"]=="/fixture/next.mp4")
+    );
+    wallpaper.act("wallpaper:activate:/fixture/next.mp4", &stores, wake);
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        (
+            "wallpaper.activate".into(),
+            json!({"revision":17,"id":"/fixture/next.mp4"})
+        )
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
+    use bead::wayland::{SceneSource, UiEvent};
+    let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let colors = bead::render::Palette::read(&root.join("palette.json")).unwrap();
+    let cold = crate::sound::fallback(colors.get("surface").unwrap());
+    let session = bead::ui::Session::new(
+        root.clone(),
+        "extras/main.luau".into(),
+        root.join("palette.json"),
+        colors,
+        cold,
+    );
+    let mut runtime = crate::reload::Runtime::panel_session(session, true)
+        .with_extras(extras)
+        .unwrap();
+    runtime.services(Box::new(|_| {}));
+    runtime
+        .stage(UiEvent::Reload)
+        .unwrap()
+        .expect("wallpaper picker loads");
+    runtime.commit();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        ("wallpaper.catalogue".into(), json!({}))
+    );
+    let mut loaded = false;
+    for _ in 0..200 {
+        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        runtime.commit();
+        loaded = matches!(runtime.session.stores.get("extras.rows"),Some(Value::List(rows)) if rows.len()==3);
+        if loaded {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(
+        loaded,
+        "the real picker must receive the asynchronous catalogue"
+    );
+
+    runtime
+        .stage(UiEvent::Key {
+            text: "Next".into(),
+            backspace: false,
+        })
+        .unwrap();
+    runtime.commit();
+    assert_eq!(
+        runtime.session.stores.get("extras.query"),
+        Some(&Value::Text("Next".into()))
+    );
+    runtime
+        .stage(UiEvent::Command {
+            command: "enter".into(),
+            shift: false,
+        })
+        .unwrap();
+    runtime.commit();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        (
+            "wallpaper.activate".into(),
+            json!({"revision":17,"id":"/fixture/next.jpg"})
+        )
+    );
+
+    for _ in 0..4 {
+        runtime
+            .stage(UiEvent::Key {
+                text: String::new(),
+                backspace: true,
+            })
+            .unwrap();
+        runtime.commit();
+    }
+    assert_eq!(
+        runtime.session.stores.get("extras.query"),
+        Some(&Value::Text(String::new()))
+    );
+    let navigation = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.action.as_deref() == Some("extras.next"))
+        .expect("picker exposes an actionable next button");
+    let rect = bead::ui::rect(&navigation.draw);
+    runtime
+        .stage(UiEvent::Click {
+            x: rect.x + rect.w / 2.,
+            y: rect.y + rect.h / 2.,
+        })
+        .unwrap();
+    runtime.commit();
+    runtime.stage(UiEvent::Release).unwrap();
+    runtime.commit();
+    assert_eq!(
+        runtime.session.stores.get("extras.wallpaper.selection_id"),
+        Some(&Value::Text("/fixture/current.jpg".into()))
+    );
+    let mut navigation_call = None;
+    for _ in 0..200 {
+        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        runtime.commit();
+        if let Ok(call) = lab.calls.try_recv() {
+            navigation_call = Some(call);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(
+        navigation_call,
+        Some((
+            "wallpaper.activate".into(),
+            json!({"revision":18,"id":"/fixture/current.jpg"})
+        ))
+    );
+    let card = runtime.session.view_nodes().iter().find(|node|
+        matches!(&node.action_arg, Some(Value::Text(argument)) if argument.starts_with("wallpaper:select:")))
+        .expect("a visible wallpaper card");
+    let card = bead::ui::rect(&card.draw);
+    runtime
+        .stage(UiEvent::Scroll {
+            x: card.x + card.w / 2.,
+            y: card.y + card.h / 2.,
+            delta: 15.,
+        })
+        .unwrap();
+    runtime.commit();
+    let mut wheel_call = None;
+    for _ in 0..200 {
+        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        runtime.commit();
+        if let Ok(call) = lab.calls.try_recv() {
+            wheel_call = Some(call);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(
+        wheel_call,
+        Some((
+            "wallpaper.activate".into(),
+            json!({"revision":19,"id":"/fixture/next.jpg"})
+        )),
+        "positive Wayland wheel distance moves to the next wallpaper"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close() {
+    use bead::render::{ImageFit, Primitive, Rect, Scene};
+    let lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let thumbnail = lab.dir.join("thumbnail.png");
+    let unadvertised = lab.dir.join("unadvertised.png");
+    let oversized = lab.dir.join("oversized.png");
+    image::RgbaImage::from_pixel(8, 6, image::Rgba([12, 120, 200, 255]))
+        .save(&thumbnail)
+        .unwrap();
+    image::RgbaImage::from_pixel(8, 6, image::Rgba([200, 60, 30, 255]))
+        .save(&unadvertised)
+        .unwrap();
+    image::RgbaImage::from_pixel(1601, 1, image::Rgba([20, 30, 40, 255]))
+        .save(&oversized)
+        .unwrap();
+    extras.state.borrow_mut().catalogue_result = vec![
+        json!({
+            "id":"/fixture/advertised.jpg","kind":"image","title":"Advertised",
+            "thumbnail":thumbnail.to_string_lossy(),"preview":"","active":false
+        }),
+        json!({
+            "id":"/fixture/oversized.jpg","kind":"image","title":"Oversized",
+            "thumbnail":oversized.to_string_lossy(),"preview":"","active":false
+        }),
+    ];
+
+    let logical = |path: &std::path::Path| {
+        std::path::PathBuf::from(format!("@icon:wallpaper:{}", path.display()))
+    };
+    let mut scene = Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: Vec::new(),
+        width: 32.,
+        slide: None,
+        primitives: vec![
+            Primitive::Image {
+                blur: 0.,
+                fit: ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(0., 0., 8., 6.),
+                path: logical(&thumbnail),
+            },
+            Primitive::Image {
+                blur: 0.,
+                fit: ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(10., 0., 8., 6.),
+                path: logical(&unadvertised),
+            },
+            Primitive::Image {
+                blur: 0.,
+                fit: ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(20., 0., 8., 6.),
+                path: logical(&oversized),
+            },
+        ],
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 32., 8.),
+    };
+    extras.attach_images(&mut scene);
+    assert!(scene.asset_data.contains_key(&thumbnail));
+    assert!(extras.image_bytes() > 0 && extras.image_bytes() <= 16 * bead::core::cache::MIB);
+    let bead::render::Primitive::Image { path: loaded, .. } = &scene.primitives[0] else {
+        panic!("image primitive")
+    };
+    assert_eq!(loaded, &thumbnail);
+    let bead::render::Primitive::Image {
+        path: unresolved, ..
+    } = &scene.primitives[1]
+    else {
+        panic!("image primitive")
+    };
+    assert_eq!(unresolved, &logical(&unadvertised));
+    let bead::render::Primitive::Image {
+        path: too_large, ..
+    } = &scene.primitives[2]
+    else {
+        panic!("image primitive")
+    };
+    assert_eq!(too_large, &logical(&oversized));
+
+    let closed = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(false)),
+            ("extras.query".into(), Value::Text(String::new())),
+            ("extras.wallpaper.kind".into(), Value::Text("static".into())),
+        ]))
+        .unwrap();
+    extras.project(&closed, None);
+    assert_eq!(
+        extras.image_bytes(),
+        0,
+        "closing the picker releases encoded thumbnail bytes"
+    );
+}
 #[test]
 fn extras_goldens() -> bead_test::Result<()> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
-    for kind in Kind::ALL {
+    for kind in [Kind::Overview, Kind::Palette, Kind::Keybindings] {
         for scale in [1., 1.5] {
             let (windows, workspaces) = compositor_rows(&fixture());
             let rows = if kind == Kind::Keybindings {
@@ -362,6 +702,157 @@ fn extras_goldens() -> bead_test::Result<()> {
             )?;
         }
     }
+    Ok(())
+}
+#[test]
+fn wallpaper_picker_goldens() -> bead_test::Result<()> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let palette = root.join("palette.json");
+    let thumbnail = root.join("sample.png").to_string_lossy().into_owned();
+    for (kind, layout) in [
+        ("static", "carousel"),
+        ("dynamic", "carousel"),
+        ("static", "spotlight"),
+        ("dynamic", "spotlight"),
+        ("static", "hexagons"),
+        ("dynamic", "hexagons"),
+    ] {
+        for scale in [1., 1.5] {
+            let rows=Value::list((0..12).map(|index| json!({
+                "id":format!("/fixture/wallpaper-{index:02}"),
+                "kind":if index<10 {"image"} else {"video"},
+                "title":format!("Fixture wallpaper {index:02}"),
+                "thumbnail":thumbnail.clone(),"preview":thumbnail.clone(),"active":kind=="static" && index==5
+            })).collect());
+            let stores = BTreeMap::from([
+                ("panel.open".into(), Value::Bool(true)),
+                ("extras.kind".into(), Value::Text("wallpaper".into())),
+                ("extras.available".into(), Value::Bool(true)),
+                ("extras.message".into(), Value::Text(String::new())),
+                ("extras.query".into(), Value::Text(String::new())),
+                ("extras.rows".into(), rows),
+                ("extras.wallpaper.kind".into(), Value::Text(kind.into())),
+                ("extras.wallpaper.layout".into(), Value::Text(layout.into())),
+                ("extras.wallpaper.loading".into(), Value::Bool(false)),
+                (
+                    "extras.wallpaper.selection_id".into(),
+                    Value::Text(String::new()),
+                ),
+                ("extras.viewport.width".into(), Value::Number(1216.)),
+                ("extras.viewport.height".into(), Value::Number(936.)),
+            ]);
+            let mut harness = bead_test::Harness::load_with_icons(
+                &root,
+                std::path::Path::new("extras/main.luau"),
+                &palette,
+                stores,
+                bead_test::Config {
+                    width: 1280,
+                    height: 1000,
+                    scale,
+                },
+                BTreeMap::from([(format!("wallpaper:{thumbnail}"), root.join("sample.png"))]),
+            )?;
+            assert!(harness.scene().primitives.iter().any(|primitive|
+                matches!(primitive, bead::render::Primitive::Text { text, .. } if text == "Static")),
+                "picker controls must render before approving a golden");
+            assert!(harness.scene().primitives.iter().any(|primitive|
+                matches!(primitive, bead::render::Primitive::Image { path, .. } if path.file_name().is_some_and(|name| name == "sample.png"))),
+                "populated picker must render wallpaper thumbnails");
+            let frame = harness.render()?;
+            let path = root.join(format!(
+                "tests/goldens/wallpaper-picker-{layout}-{kind}-{scale}.png"
+            ));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&path)?;
+            }
+            frame.compare(
+                &path,
+                Default::default(),
+                &std::env::temp_dir()
+                    .join(format!("wallpaper-picker-{layout}-{kind}-{scale}-diff")),
+            )?;
+        }
+    }
+    Ok(())
+}
+#[test]
+fn wallpaper_picker_uses_active_middle_then_visible_query_and_pointer_selection()
+-> bead_test::Result<()> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let palette = bead::render::Palette::read(&root.join("palette.json"))?;
+    let fallback = crate::sound::fallback(palette.get("surface")?);
+    let mut session = bead::ui::Session::new(
+        root.clone(),
+        "extras/main.luau".into(),
+        root.join("palette.json"),
+        palette,
+        fallback,
+    );
+    let initial = session.reload()?;
+    session.check_sources()?;
+    session.commit(initial);
+    let rows = Value::list(vec![
+        json!({"id":"/wallpapers/first.jpg","kind":"image","title":"First","thumbnail":"","preview":"","active":false}),
+        json!({"id":"/wallpapers/current.jpg","kind":"image","title":"Current middle","thumbnail":"","preview":"","active":true}),
+        json!({"id":"/wallpapers/garden.jpg","kind":"image","title":"Garden path","thumbnail":"","preview":"","active":false}),
+        json!({"id":"/wallpapers/last.jpg","kind":"image","title":"Last","thumbnail":"","preview":"","active":false}),
+    ]);
+    let view = session
+        .update(BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.kind".into(), Value::Text("wallpaper".into())),
+            ("extras.available".into(), Value::Bool(true)),
+            ("extras.message".into(), Value::Text(String::new())),
+            ("extras.rows".into(), rows),
+            ("extras.wallpaper.kind".into(), Value::Text("static".into())),
+            (
+                "extras.wallpaper.layout".into(),
+                Value::Text("carousel".into()),
+            ),
+            (
+                "extras.wallpaper.selection_id".into(),
+                Value::Text(String::new()),
+            ),
+            ("extras.viewport.width".into(), Value::Number(1280.)),
+            ("extras.viewport.height".into(), Value::Number(900.)),
+        ]))?
+        .expect("wallpaper view update");
+    session.commit(view);
+    let chosen = session.action_values("extras.choose", Value::Bool(true))?;
+    assert_eq!(
+        chosen["extras.request"],
+        Value::Text("wallpaper:activate:/wallpapers/current.jpg".into())
+    );
+    let query = session
+        .update(BTreeMap::from([(
+            "extras.query".into(),
+            Value::Text("garden".into()),
+        )]))?
+        .expect("search update");
+    session.commit(query);
+    let chosen = session.action_values("extras.choose", Value::Bool(true))?;
+    assert_eq!(
+        chosen["extras.request"],
+        Value::Text("wallpaper:activate:/wallpapers/garden.jpg".into())
+    );
+    let query = session
+        .update(BTreeMap::from([(
+            "extras.query".into(),
+            Value::Text(String::new()),
+        )]))?
+        .expect("clear search");
+    session.commit(query);
+    let select =
+        session.action_values("extras.select", Value::Text("/wallpapers/last.jpg".into()))?;
+    let selected = session.update(select)?.expect("pointer selection update");
+    session.commit(selected);
+    let chosen = session.action_values("extras.choose", Value::Bool(true))?;
+    assert_eq!(
+        chosen["extras.request"],
+        Value::Text("wallpaper:activate:/wallpapers/last.jpg".into()),
+        "pointer selection controls the next keyboard activation"
+    );
     Ok(())
 }
 
@@ -546,6 +1037,7 @@ async fn shared_bar_compositor_and_nullable_menu_fields_load_real_views() {
             Kind::Overview => "Editor",
             Kind::Palette => "Open Settings",
             Kind::Keybindings => "Super+K",
+            Kind::Wallpaper => unreachable!("wallpaper uses the catalogue fixture"),
         };
         assert!(
             runtime

@@ -140,6 +140,8 @@ pub const PROPERTIES: &[&str] = &[
     "sweep_angle",
     "stroke_width",
     "round_caps",
+    "image_fit",
+    "clip_polygon",
     "text_align",
     "position",
     "left",
@@ -202,6 +204,8 @@ pub struct ViewSpec {
     pub sweep_angle: f32,
     pub stroke_width: f32,
     pub round_caps: bool,
+    pub image_fit: bead_render::ImageFit,
+    pub clip_polygon: Option<Vec<[f32; 2]>>,
     pub drag: bool,
     pub font_size: f32,
     pub font_weight: u16,
@@ -230,6 +234,34 @@ fn number(
             .map(|n| n as f32)
             .ok_or_else(|| source.error(format!("{name} must be a finite number within20000"))),
     }
+}
+fn polygon(value: Option<&Json>, source: &Source) -> Result<Option<Vec<[f32; 2]>>, Diagnostic> {
+    let Some(value) = value else { return Ok(None) };
+    let points = value
+        .as_array()
+        .ok_or_else(|| source.error("clip_polygon must be an array"))?;
+    if !(3..=32).contains(&points.len()) {
+        return Err(source.error("clip_polygon needs 3..32 points"));
+    }
+    let mut result = Vec::with_capacity(points.len());
+    for point in points {
+        let pair = point
+            .as_array()
+            .filter(|pair| pair.len() == 2)
+            .ok_or_else(|| source.error("clip_polygon point needs x,y"))?;
+        let x = pair[0]
+            .as_f64()
+            .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+            .ok_or_else(|| source.error("clip_polygon coordinates must be 0..1"))?
+            as f32;
+        let y = pair[1]
+            .as_f64()
+            .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+            .ok_or_else(|| source.error("clip_polygon coordinates must be 0..1"))?
+            as f32;
+        result.push([x, y]);
+    }
+    Ok(Some(result))
 }
 fn text(
     p: &Map<String, Json>,
@@ -277,7 +309,11 @@ fn dimension<T: FromLength + FromPercent + TaffyAuto>(
             .ok_or_else(|| source.error(format!("invalid percentage {name}"))),
         Some(v) => v
             .as_f64()
-            .filter(|n| n.is_finite() && *n >= 0. && *n <= 20000.)
+            .filter(|n| {
+                n.is_finite()
+                    && n.abs() <= 20000.
+                    && (*n >= 0. || matches!(name, "left" | "right" | "top" | "bottom"))
+            })
             .map(|n| length(n as f32))
             .ok_or_else(|| source.error(format!("{name} needs pixels, percentage, fill or auto"))),
     }
@@ -658,6 +694,12 @@ impl ViewSpec {
                 sweep_angle,
                 stroke_width,
                 round_caps: boolean(p, "round_caps", true, source)?,
+                image_fit: match text(p, "image_fit", "fill", source)?.as_str() {
+                    "fill" => bead_render::ImageFit::Fill,
+                    "cover" => bead_render::ImageFit::Cover,
+                    _ => return Err(source.error("image_fit must be fill or cover")),
+                },
+                clip_polygon: polygon(p.get("clip_polygon"), source)?,
                 radius: number(
                     p,
                     "radius",
@@ -1029,6 +1071,8 @@ pub fn layout(
             };
             emit(Primitive::Image {
                 blur: view.blur,
+                fit: view.image_fit,
+                clip_polygon: view.clip_polygon.clone(),
                 rect: r,
                 path,
             });
@@ -1086,6 +1130,7 @@ pub fn layout(
                 masked: view.masked && view.input.is_some(),
                 drag: view.drag,
                 clip,
+                hit_polygon: view.clip_polygon.clone(),
                 label: if !view.aria_label.is_empty() {
                     view.aria_label.clone()
                 } else if view.masked && view.input.is_some() {

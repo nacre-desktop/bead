@@ -1782,6 +1782,8 @@ fn weather_photo_placeholder_is_swapped_for_the_held_bytes() {
             rect: bead::render::Rect::new(0., 0., 10., 10.),
             path: PathBuf::from("@icon:weather-photo"),
             blur: 0.,
+            fit: bead::render::ImageFit::Fill,
+            clip_polygon: None,
         }],
         offset: (0., 0.),
         bounds: bead::render::Rect::new(0., 0., 100., 100.),

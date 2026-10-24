@@ -1823,6 +1823,9 @@ impl Runtime {
             if let Some(colors) = &self.colors {
                 colors.attach_images(scene);
             }
+            if let Some(extras) = &self.extras {
+                extras.attach_images(scene);
+            }
             if let Some(welcome) = &self.welcome {
                 welcome.attach_images(scene);
             }
@@ -2354,13 +2357,56 @@ impl SceneSource for Runtime {
             }
             let action = match &event {
                 UiEvent::Command { command, .. } => match command.as_str() {
+                    "left"
+                        if self
+                            .extras
+                            .as_ref()
+                            .is_some_and(|e| e.kind == crate::extras::Kind::Wallpaper) =>
+                    {
+                        Some("extras.prev")
+                    }
+                    "right"
+                        if self
+                            .extras
+                            .as_ref()
+                            .is_some_and(|e| e.kind == crate::extras::Kind::Wallpaper) =>
+                    {
+                        Some("extras.next")
+                    }
                     "up" => Some("extras.prev"),
                     "down" => Some("extras.next"),
                     "enter" if self.session.focused_action().is_none() => Some("extras.choose"),
                     _ => None,
                 },
+                UiEvent::Scroll { delta, .. } | UiEvent::HorizontalScroll { delta, .. }
+                    if self
+                        .extras
+                        .as_ref()
+                        .is_some_and(|e| e.kind == crate::extras::Kind::Wallpaper)
+                        && self.session.stores.get("extras.wallpaper.layout")
+                            != Some(&bead::core::Value::Text("hexagons".into())) =>
+                {
+                    Some(if *delta > 0. {
+                        "extras.next"
+                    } else {
+                        "extras.prev"
+                    })
+                }
                 _ => None,
             };
+            if self
+                .extras
+                .as_ref()
+                .is_some_and(|e| e.kind == crate::extras::Kind::Wallpaper)
+                && matches!(&event, UiEvent::Command { command, .. } if command == "escape")
+            {
+                let wakeup = self
+                    .wakeup
+                    .clone()
+                    .ok_or("wallpaper picker close event unavailable")?;
+                wakeup(UiEvent::CompanionVisibility(false));
+                return Ok(None);
+            }
             if let Some(action) = action {
                 let mut values = self
                     .session
@@ -2794,15 +2840,29 @@ impl SceneSource for Runtime {
                 .wakeup
                 .clone()
                 .ok_or("extras event channel unavailable")?;
+            let mut changes = BTreeMap::new();
+            let service_request = if let Some(id) = request.strip_prefix("wallpaper:select:") {
+                changes.extend(
+                    self.session
+                        .action_values("extras.select", bead::core::Value::Text(id.into()))?,
+                );
+                format!("wallpaper:activate:{id}")
+            } else {
+                request.clone()
+            };
             extras.act(
-                request,
+                &service_request,
                 &self.session.stores,
                 std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new()))),
             );
+            changes.insert(
+                "extras.request".into(),
+                bead::core::Value::Text(String::new()),
+            );
             let scene = if matches!(&event, UiEvent::Release) {
-                self.session.release()?
+                self.session.update(changes)?.or(self.session.release()?)
             } else {
-                self.session.update(BTreeMap::new())?
+                self.session.update(changes)?
             };
             return self.finish_scene(scene, false);
         }
@@ -3135,7 +3195,7 @@ impl SceneSource for Runtime {
         if reload {
             self.fonts.clear();
         }
-        let scene = match event {
+        let mut scene = match event {
             UiEvent::WallpaperPalette(values) => {
                 self.session
                     .set_runtime_palette(bead::render::Palette(std::sync::Arc::new(
@@ -3436,26 +3496,44 @@ impl SceneSource for Runtime {
                                             .panel_view
                                             .as_deref()
                                             .unwrap_or("launcher")
-                                            == "launcher";
+                                            == launch.target_view.as_deref().unwrap_or("launcher");
                                     if launch.toggle
                                         && showing
-                                        && self.last_launch.as_ref() == Some(&launch)
+                                        && (launch.target_view.is_some()
+                                            || self.last_launch.as_ref() == Some(&launch))
                                     {
                                         self.last_launch = None;
                                         wakeup(UiEvent::CompanionVisibility(false));
                                     } else {
-                                        let values = launch.model();
-                                        *self
-                                            .launcher_memory
-                                            .as_ref()
-                                            .ok_or("launcher view state unavailable")?
-                                            .lock()
-                                            .map_err(|_| "launcher view state unavailable")? =
-                                            values.clone();
                                         self.last_launch = Some(launch);
                                         wakeup(UiEvent::ShellHidden(Some(false)));
-                                        wakeup(UiEvent::CompanionVisibility(true));
-                                        wakeup(UiEvent::CompanionModel(values));
+                                        if let Some(view) = self
+                                            .last_launch
+                                            .as_ref()
+                                            .and_then(|l| l.target_view.clone())
+                                        {
+                                            wakeup(UiEvent::CompanionSelect {
+                                                view,
+                                                output: call.output.clone(),
+                                                toggle: false,
+                                                center: None,
+                                            });
+                                        } else {
+                                            let values = self
+                                                .last_launch
+                                                .as_ref()
+                                                .expect("launch stored")
+                                                .model();
+                                            *self
+                                                .launcher_memory
+                                                .as_ref()
+                                                .ok_or("launcher view state unavailable")?
+                                                .lock()
+                                                .map_err(|_| "launcher view state unavailable")? =
+                                                values.clone();
+                                            wakeup(UiEvent::CompanionVisibility(true));
+                                            wakeup(UiEvent::CompanionModel(values));
+                                        }
                                     }
                                     bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
                                 }
@@ -3548,8 +3626,11 @@ impl SceneSource for Runtime {
                                 },
                             );
                             let dashboard_page = crate::dashboard::Page::from_view(active_view);
-                            let launcher_open =
-                                request.context.panel_open && active_view == "launcher";
+                            let wallpaper_picker_open =
+                                request.context.panel_open && active_view == "wallpaper";
+                            let launcher_open = request.context.panel_open
+                                && active_view == "launcher"
+                                || wallpaper_picker_open;
                             let edge_menu = if request.context.panel_open
                                 && active_view != "launcher"
                                 && dashboard_page.is_none()
@@ -3560,7 +3641,7 @@ impl SceneSource for Runtime {
                             };
                             let core_views = self.session.stores.get("bar.popouts")
                                 == Some(&bead::core::Value::Bool(true));
-                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":request.context.panel_open && dashboard_page.is_some(),"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":dashboard_page.map(|page| page.tab()).unwrap_or(0),"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":request.context.hidden,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar","network-status","bluetooth-status","battery-status","dashboard"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
+                            let state = serde_json::json!({"active":snapshot.as_ref().and_then(|s|s.workspaces.iter().find(|w|w.focused||w.active)).map(|w|w.index).unwrap_or(0),"workspaces":snapshot.as_ref().map(|s|s.workspaces.len()).unwrap_or(0),"dashboard":request.context.panel_open && dashboard_page.is_some(),"edgeMenu":edge_menu,"clickEdgeMenus":false,"tab":dashboard_page.map(|page| page.tab()).unwrap_or(0),"launcher":launcher_open,"session":false,"osd":false,"controlSection":"home","feedback":false,"hidden":request.context.hidden,"left":false,"leftPinned":false,"query":view_text("launcher.search.text"),"launcherMode":if wallpaper_picker_open {"wallpaper"}else if self.launcher_trigger {view_text("launcher.mode")}else{"apps"},"launcherRoute":if wallpaper_picker_open {"picker"}else if self.launcher_trigger {view_text("launcher.route")}else{"home"},"reveal":false,"notificationsSuppressed":false,"bead":{"protocol":1,"available":if request.context.panel_configured {if core_views {vec!["bar","launcher","sound-output","calendar","network-status","bluetooth-status","battery-status","dashboard"]}else if self.launcher_trigger {vec!["bar","launcher"]}else{vec!["bar","sound-output"]}}else{vec!["bar"]},"panelOpen":request.context.panel_open}});
                             #[cfg(all(feature = "trace", target_os = "linux", target_env = "gnu"))]
                             let state = {
                                 let mut state = state;
@@ -3984,6 +4065,31 @@ impl SceneSource for Runtime {
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
             UiEvent::Key { text, backspace } => self.session.key(&text, backspace)?,
         };
+        // Lua actions can request an edge call (including pointer navigation buttons).
+        // Drain that request after the action commits, just as keyboard navigation does.
+        if let Some(extras) = &self.extras
+            && let Some(bead::core::Value::Text(request)) =
+                self.session.stores.get("extras.request")
+            && !request.is_empty()
+        {
+            let request = request.clone();
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("extras event channel unavailable")?;
+            extras.act(
+                &request,
+                &self.session.stores,
+                std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new()))),
+            );
+            scene = self
+                .session
+                .update(BTreeMap::from([(
+                    "extras.request".into(),
+                    bead::core::Value::Text(String::new()),
+                )]))?
+                .or(scene);
+        }
         self.finish_scene(scene, reload)
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -3992,6 +4098,9 @@ impl SceneSource for Runtime {
     }
     fn resource_counts(&self) -> String {
         let mut counts = self.session.resource_counts();
+        if let Some(extras) = &self.extras {
+            counts.push_str(&format!(" extras_images_bytes={}", extras.image_bytes()));
+        }
         if bead::core::profile::enabled() && self.launcher.is_some() {
             use bead::core::Value;
             let stores = &self.session.stores;

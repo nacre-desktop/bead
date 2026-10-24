@@ -148,11 +148,17 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
         }
         Primitive::Image {
             blur,
+            fit,
+            clip_polygon,
             rect: r,
             path,
         } => {
             rect(r, hash);
-            (blur.to_bits(), path).hash(hash);
+            (blur.to_bits(), fit, path).hash(hash);
+            clip_polygon.is_some().hash(hash);
+            for coordinate in clip_polygon.iter().flatten().flatten() {
+                coordinate.to_bits().hash(hash);
+            }
         }
         Primitive::Shadow {
             rect: r,
@@ -2116,6 +2122,8 @@ mod tests {
             primitives: vec![
                 Primitive::Image {
                     blur: 0.,
+                    fit: crate::ImageFit::Fill,
+                    clip_polygon: None,
                     rect: Rect::new(2., 2., 8., 8.),
                     path: "proof.png".into(),
                 },

@@ -3,15 +3,10 @@
 use super::*;
 pub(super) fn deferred_matches(nodes: &[Node], pending: &super::session::DeferredAction) -> bool {
     let (x, y) = pending.pointer;
-    let inside =
-        |rect: Rect| x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
     nodes
         .iter()
         .rev()
-        .find(|node| {
-            let rect = rect(&node.draw);
-            node.focusable && inside(rect) && node.clip.is_none_or(inside)
-        })
+        .find(|node| node.focusable && node.contains(x, y))
         .is_some_and(|node| {
             node.activate_on_release
                 && node.id == pending.id
@@ -69,10 +64,7 @@ impl Session {
             return generation.hit(&self.stores, x, y);
         }
         self.current_nodes.iter().rev().find(|node| {
-            let r = rect(&node.draw);
-            let inside = |r: Rect| x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
-            inside(r)
-                && node.clip.is_none_or(inside)
+            node.contains(x, y)
                 && if scroll {
                     node.scroll_store.is_some()
                 } else {

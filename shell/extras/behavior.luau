@@ -3,7 +3,33 @@ local function body_height(s)
   return s["extras.body_height"] or 424
 end
 
+local function wallpaper_item_matches(item,s)
+  local wanted = (s["extras.wallpaper.kind"] or "static") == "dynamic" and "video" or "image"
+  if item.kind~=wanted then return false end
+  local text=(tostring(item.title or "").." "..tostring(item.id or "")):lower()
+  for word in tostring(s["extras.query"] or ""):lower():gmatch("%S+") do if not text:find(word,1,true) then return false end end
+  return true
+end
+
 local function normalized_selection(s)
+  if s["extras.kind"] == "wallpaper" then
+    local selected_id=s["extras.wallpaper.selection_id"] or ""
+    local visible=0
+    for _,item in ipairs(s["extras.rows"] or {}) do
+      if wallpaper_item_matches(item,s) then
+        visible=visible+1
+        if selected_id~="" and item.id==selected_id then return visible end
+      end
+    end
+    visible=0
+    for _,item in ipairs(s["extras.rows"] or {}) do
+      if wallpaper_item_matches(item,s) then
+        visible=visible+1
+        if item.active==true then return visible end
+      end
+    end
+    return 1
+  end
   if s["extras.selection_query"] ~= (s["extras.query"] or "") then
     return 1
   end
@@ -20,6 +46,8 @@ local function filtered(s)
       include = ((tostring(source_item.title or "").." "..tostring(source_item.app_id or "")):lower()):find(query,1,true) ~= nil
     elseif kind == "keybindings" then
       include = ((tostring(source_item.key or "").." "..tostring(source_item.description or "")):lower()):find(query,1,true) ~= nil
+    elseif kind == "wallpaper" then
+      include = wallpaper_item_matches(source_item,s)
     end
     -- Palette rows arrive already filtered and ordered by menu.query. Luau must not
     -- change the engine's query semantics, ranking, or result order.
@@ -75,7 +103,7 @@ local function step(s, delta)
   local kind = s["extras.kind"]
   local query = s["extras.query"] or ""
   if s["extras.selection_query"] ~= query then
-    s["extras.selection"] = 1
+    s["extras.selection"] = kind == "wallpaper" and normalized_selection(s) or 1
     s["extras.selection_query"] = query
     s["extras.scroll"] = 0
   end
@@ -88,8 +116,13 @@ local function step(s, delta)
     return
   end
   local count = #filtered(s)
-  local index = count == 0 and 1 or math.clamp(normalized_selection(s)+delta,1,count)
+  local index = count == 0 and 1 or (kind == "wallpaper" and ((normalized_selection(s)-1+delta)%count)+1 or math.clamp(normalized_selection(s)+delta,1,count))
   s["extras.selection"] = index
+  if kind == "wallpaper" then
+    local item=filtered(s)[index]
+    s["extras.wallpaper.selection_id"]=item and item.id or ""
+    if item then s["extras.request"]="wallpaper:activate:"..tostring(item.id) end
+  end
   if kind == "palette" and count > 0 then
     local pitch = s["extras.palette_row_pitch"] or 64
     local top = (index-1)*pitch
@@ -105,13 +138,64 @@ local function choose(s)
   if kind == "keybindings" then return end
   local query = s["extras.query"] or ""
   if s["extras.selection_query"] ~= query then
-    s["extras.selection"] = 1
+    s["extras.selection"] = kind == "wallpaper" and normalized_selection(s) or 1
     s["extras.selection_query"] = query
   end
   local item = filtered(s)[normalized_selection(s)]
   if not item or item.disabled == true then return end
+  if kind == "wallpaper" then s["extras.wallpaper.selection_id"]=item.id end
   if kind == "overview" then s["extras.request"] = "focus:"..tostring(item.id)
+  elseif kind == "wallpaper" then s["extras.request"] = "wallpaper:activate:"..tostring(item.id)
   elseif kind == "palette" then s["extras.request"] = "activate:"..tostring(item.id) end
+end
+
+local function wallpaper_visible(s)
+  local rows=filtered(s)
+  local count=#rows
+  if count==0 then return {} end
+  local selected=math.clamp(normalized_selection(s),1,count)
+  local layout=s["extras.wallpaper.layout"] or "carousel"
+  local viewport_width=s["extras.viewport.width"] or s["bead.viewport.width"] or 1440
+  local width=layout=="carousel" and math.max(320,math.min(1360,viewport_width-96)) or viewport_width
+  local limit=2
+  if layout=="carousel" then
+    local candidate=math.min(count,math.max(1,math.floor(((math.max(0,width-48)/266-1)/2)+.5)*2+1))
+    local slots=candidate>1 and candidate%2==0 and candidate-1 or candidate
+    limit=math.max(2,math.ceil(slots/2)+1)
+  elseif layout=="spotlight" then
+    limit=math.max(1,math.min(2,math.ceil((count-1)/2))+1)
+  else
+    local height=math.max(0,(s["extras.viewport.height"] or s["bead.viewport.height"] or 900)-122-56)
+    local area_width=width-48
+    local columns=math.max(3,math.min(7,math.floor(area_width/230)))
+    local card_width=math.min(340,(area_width-30)/(1+(columns-1)*.76))
+    local card_h=card_width*.87
+    local pitch=card_h+12
+    local scroll=s["extras.scroll"] or 0
+    local first=math.max(0,math.floor(scroll/pitch)-1)*columns+1
+    local last=math.min(count,math.ceil((scroll+height)/pitch+1)*columns)
+    local out={}
+    for index=first,last do
+      local item=rows[index]
+      item.hex_x=(area_width-(card_width+(columns-1)*card_width*.76))/2+((index-1)%columns)*card_width*.76
+      item.hex_y=(index-1)//columns*pitch+((index-1)%columns%2)*card_h*.5
+      out[#out+1]=item
+    end
+    return out
+  end
+  local out={}
+  for index,item in ipairs(rows) do
+    local offset=((index-selected+count/2)%count)-count/2
+    if math.abs(offset)<=limit then
+      item.carousel_offset=offset
+      item.spotlight_distance=math.abs(offset)
+      out[#out+1]=item
+    end
+  end
+  if layout=="spotlight" then
+    table.sort(out,function(a,b) return math.abs(a.carousel_offset)>math.abs(b.carousel_offset) end)
+  end
+  return out
 end
 
 local exports = {
@@ -120,6 +204,12 @@ local exports = {
     ["extras.workspaces"] = {}, ["extras.rows"] = {}, ["extras.available"] = true,
     ["extras.per_output"] = false, ["extras.workspace_count"] = 7,
     ["extras.message"] = "", ["extras.query"] = "", ["extras.scroll"] = 0,
+    ["extras.wallpaper.kind"] = "static", ["extras.wallpaper.layout"] = "carousel",
+    ["extras.wallpaper.revision"] = 0,
+    ["extras.wallpaper.loading"] = false,
+    ["extras.wallpaper.selection_id"] = "",
+    ["extras.wallpaper.carousel_scroll"] = 0,
+    ["extras.viewport.width"] = 1440, ["extras.viewport.height"] = 900,
     ["extras.body_height"] = 424, ["extras.palette_row_pitch"] = 64,
     ["extras.palette_row_height"] = 58, ["extras.scroll_step"] = 47,
     ["extras.shortcuts_row_gap"] = 5,
@@ -128,6 +218,19 @@ local exports = {
   },
   computed = {
     ["extras.filtered"] = filtered,
+    ["extras.wallpaper.visible"] = wallpaper_visible,
+    ["extras.wallpaper.backdrop"] = function(s)
+      for _, item in ipairs(filtered(s)) do
+        if item.selected then
+          local path=item.preview and item.preview~="" and item.preview or item.thumbnail or ""
+          return path~="" and "wallpaper:"..path or ""
+        end
+      end
+      return ""
+    end,
+    ["extras.wallpaper.backdrop_visible"] = function(s)
+      return (s["extras.wallpaper.backdrop"] or "") ~= ""
+    end,
     ["extras.groups"] = groups,
     ["extras.empty"] = function(s)
       return s["extras.kind"] == "keybindings" and s["extras.available"] ~= false and #filtered(s) == 0
@@ -136,6 +239,10 @@ local exports = {
       if s["extras.available"] == false then
         if s["extras.message"] ~= "" then return s["extras.message"] end
         return "Unavailable"
+      end
+      if s["extras.kind"] == "wallpaper" then
+        if s["extras.wallpaper.loading"] == true then return "Loading wallpapers…" end
+        if #filtered(s) == 0 then return #(s["extras.rows"] or {}) == 0 and "No wallpapers available" or "No matching wallpapers" end
       end
       if s["extras.kind"] == "keybindings" then return "No matching shortcuts" end
       return "No matching items"
@@ -149,10 +256,10 @@ local exports = {
       return s["extras.message"] ~= "" or s["extras.available"] == false
     end,
     ["extras.title"] = function(s)
-      return ({overview="Windows", palette="Commands", keybindings="Keyboard shortcuts"})[s["extras.kind"]] or "Extras"
+      return ({overview="Windows", palette="Commands", keybindings="Keyboard shortcuts", wallpaper="Wallpapers"})[s["extras.kind"]] or "Extras"
     end,
     ["extras.placeholder"] = function(s)
-      return ({overview="Search windows or applications", palette="Actions, apps, windows, or brain: something", keybindings="Search a shortcut or action"})[s["extras.kind"]] or "Search"
+      return ({overview="Search windows or applications", palette="Actions, apps, windows, or brain: something", keybindings="Search a shortcut or action", wallpaper="Search wallpapers"})[s["extras.kind"]] or "Search"
     end,
   },
   actions = {
@@ -162,8 +269,8 @@ local exports = {
     ["extras.close"] = function(s) s["panel.open"] = false end,
     ["extras.select"] = function(s, id)
       local query = s["extras.query"] or ""
-      if s["extras.selection_query"] ~= query then s["extras.selection"] = 1 end
       s["extras.selection_query"] = query
+      if s["extras.kind"] == "wallpaper" then s["extras.wallpaper.selection_id"] = id end
       for index, item in ipairs(filtered(s)) do
         if item.id == id then s["extras.selection"] = index; return end
       end

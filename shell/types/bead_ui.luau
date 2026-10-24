@@ -66,6 +66,8 @@ export type Props = {
     sweep_angle:any?,
     stroke_width:any?,
     round_caps:any?,
+    image_fit:any?,
+    clip_polygon:any?,
     text_align:any?,
     position:any?,
     left:any?,

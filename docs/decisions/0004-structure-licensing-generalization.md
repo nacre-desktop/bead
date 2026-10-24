@@ -85,6 +85,7 @@ After Bead's core switch on Nacre, plan support for:
   `SceneSource::wakeup_at` expires it without idle polling; Session scopes pointer focus, range capture and keyboard steps.
   `Session::with_local_feedback` lets hosts stage presentation-only input without service projection; model wakes keep it.
   `Desktop::queue_volume` admits levels without blocking UI input; snapshots confirm the result. Neither names a shell, transport or service.
+- B0100: `clip_polygon` supplies a normalized 3–32 point image mask and matching pointer hit region; `image_fit="cover"` preserves aspect while cropping, and signed edge insets position clipped content; polygon vertices and gallery layout remain in Luau.
 
 - B0102: `ui.Arc` paints a bounded, signed-angle stroke directly on CPU/GL; shell markup supplies progress, geometry, colour and caps.
 

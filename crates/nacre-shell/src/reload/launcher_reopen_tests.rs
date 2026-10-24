@@ -7,6 +7,7 @@ fn explicit_launcher_query_resets_route_selection_and_scroll() {
         query: "mail".into(),
         route: None,
         toggle: true,
+        target_view: None,
     }
     .model();
     assert_eq!(

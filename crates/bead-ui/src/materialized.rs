@@ -167,6 +167,9 @@ impl Cached {
                         + n.preview_key.capacity()
                         + std::mem::size_of::<String>()
                         + 2 * std::mem::size_of::<f32>()
+                        + n.hit_polygon.as_ref().map_or(0, |points| {
+                            points.capacity() * std::mem::size_of::<[f32; 2]>()
+                        })
                         + bead_render::primitive_bytes(&n.draw)
                         + 256
                         + n.bind

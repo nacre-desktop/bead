@@ -788,10 +788,7 @@ impl Generation {
             {
                 r.y += value as f32;
             }
-            x >= r.x
-                && y >= r.y
-                && x < r.x + r.w
-                && y < r.y + r.h
+            node.contains_in(r, x, y)
                 && (node.action.is_some() || node.input.is_some() || node.scroll.is_some())
         })
     }
