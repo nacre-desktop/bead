@@ -33,7 +33,7 @@ local function media(layout)
             state=="playing" and ui.tr("bead.dashboard.pause") or ui.tr("bead.dashboard.media-play"),op("player.play_pause","dashboard.can_toggle")),
         transport("next","skip_next",ui.tr("bead.dashboard.media-next"),op("player.next","dashboard.can_next"))}
     return ui.Box{id="media",position="absolute",left=layout.calendar+layout.host+32,top=0,
-        width=layout.media,height=layout.summary,radius=layout.cardRadius,fill="surfaceContainerLow",
+        width=layout.media,height=layout.summary,radius=layout.cardRadius,fill="surfaceContainer",
         ui.Box{id="album-container",position="absolute",left=(layout.media-layout.artContainer)/2,top=8,
             width=layout.artContainer,height=layout.artContainer,fill="transparent",artwork,
             ui.Arc{id="progress-track",position="absolute",left=(layout.artContainer-artSize-12)/2,
@@ -93,7 +93,7 @@ return function()
     local hostRowsHeight=#hostRows*hostRowHeight+(#hostRows-1)*hostRowGap
     local hostCard=ui.Row{id="host",width=l.host,height=l.hostBody,padding_left=18,padding_right=14,gap=16,
         radius=l.cardRadius,fill="transparent",align="center",
-        ui.Row{id="distro-mark",width=l.logoSize,height=l.logoSize,radius=l.logoSize/2,fill="surfaceContainer",
+        ui.Row{id="distro-mark",width=l.logoSize,height=l.logoSize,radius=l.logoSize/2,fill="surface",
             align="center",justify="center",ui.Image{path="dashboard/today/assets/nacre-logo.themed.svg",
                 width=l.logoSize*l.logoContent,height=l.logoSize*l.logoContent,shrink=0,aria_label="Nacre"}},
         ui.Column{id="host-rows",width=l.hostInfo,height=hostRowsHeight,gap=hostRowGap,table.unpack(hostRows)},
@@ -112,15 +112,15 @@ return function()
                 sweep_angle=math.max(0,math.min(1,fraction))*360,
                 stroke_width=4,color="primary",round_caps=true},
             ui.Text{id="reading",position="absolute",left=0,top=(diameter-24)/2,width=w,height=24,
-                text=metric.value,font_size=14*4/3,text_align="center",color="onSurface"},
+                text=metric.value,font_size=14*4/3,text_align="center",color="primary"},
             ui.Text{id="label",position="absolute",left=0,top=diameter+8,width=w,height=20,
                 text=metric.label,font_size=10*4/3,text_align="center",color="onSurfaceVariant"}}
     end
     local summary=ui.Box{id="summary",position="absolute",left=0,top=l.hero+l.gap,width=l.width,height=l.summary,
         ui.Box{id="month",position="absolute",left=0,top=0,width=l.calendar,height=l.summary,
-            radius=l.cardRadius,fill="surfaceContainerLow",calendarReady and calendar(l.calendar,l.summary) or ui.Text{id="unavailable",
+            radius=l.cardRadius,fill="surfaceContainer",calendarReady and calendar(l.calendar,l.summary) or ui.Text{id="unavailable",
                 text=ui.tr("bead.panel.calendar-unavailable"),width=l.calendar-24,height=40,font_size=14,color="onSurfaceVariant"}},
-        ui.Column{id="host-and-gauges",position="absolute",left=l.calendar+l.summaryGap,top=0,width=l.host,height=l.summary,gap=l.hostGap,radius=l.cardRadius,fill="surfaceContainerLow",
+        ui.Column{id="host-and-gauges",position="absolute",left=l.calendar+l.summaryGap,top=0,width=l.host,height=l.summary,gap=l.hostGap,radius=l.cardRadius,fill="surfaceContainer",
             hostCard,ui.Row{id="gauges",width=l.host,height=l.metrics,gap=0,fill="transparent",table.unpack(gaugeRow)}},
         media(l),
     }
