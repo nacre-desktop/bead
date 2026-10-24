@@ -45,11 +45,32 @@ Keep and Revert calls, `busy` message; read-only without the methods or with `ca
 
 ## Look-and-feel parity (item 5)
 
-PARITY-PLACEHOLDER
+Desktop (nested niri 2880x1800 at 1.5, one `winit` output, no applies: the pending state is a journal file in the private config, the
+rollback unit cannot be armed there because the private bus has no systemd), QML at Nacre `a1b9bcb6` against this branch's release build,
+same helper, default (GL) renderer, gallery `~/nacre-lead/b0089/g3/index.html`. Pairs in `0089-evidence/`
+(`{qml,bead}-settings-displays{,-keep}.png`). rmse 7.87 % (idle), 8.01 % (Keep). No arm errors. Swap used 12 MiB before the arms.
+Same structure and wording in both: "Connected devices" card, "Displays" part and sentence, per-output title and 20 s note, Scale,
+Resolution and refresh rate, "Keep this display change?" with Keep and Revert.
+
+Known gaps (listed, not fixed):
+1. QML's Scale and Resolution are drop-down selects; the kit has none, so Bead draws chips (modes above 8 in a filtered list).
+2. Keep part: Bead shows it first with a countdown; QML last, no countdown, and dims the other controls while pending.
+3. QML groups digits in the title (2,880×1,800); Bead's i18n has no locale number format.
+4. QML's caption "Changes save automatically" (controller message), the header's current-page label and the "..." page menu are not in Bead (shell-wide).
+5. A long part description is one clipped line in Bead (the Mirror sentence is cut at the card edge on a 960 px window).
+6. Sidebar differences are shell-wide (B0063 list).
+Not compared: more than one output, a real change/Keep/Revert round trip and the rollback timer on a compositor (no real output may be changed; covered by the
+Nacre N0063 fake-niri/fake-systemd daemon tests), Hyprland.
 
 ## CI
 
-CI-PLACEHOLDER
+Arch-equivalent for Bead is the Ubuntu 24.04 container of `ci.yml` on prod (all steps of the job: fmt, clippy -D warnings, boundary, workspace
+tests with 517+ in nacre-shell incl. 6 new Displays tests, memory policy, features, facade/Luau analyze, spikes, packaging, smoke, services, tray,
+cargo-deny) passed at the rebased head (`FULL_CI_PASS`). Nacre side: the whole `desktop` job (N0063 spec) passed twice (1065 tests).
+Moving the pin also needed the `menu-palette` transcript in `tests/protocol-v1` (Nacre's `menu_transcripts()` grew); main already carried
+the same pin bump from B0092, so the pin is the later Nacre `a1b9bcb6` (contains N0063 and that).
+Found on the way and fixed: a dim `ChipsRow` passed no action name and raised a Luau error live (goldens enable every row, so they missed it);
+`displays_page_draws_while_every_row_is_off` now covers it. Not fixed (out of scope): `kit.ApplyBar` buttons collapse (see `settings-kit-1`).
 
 ## Temporary duplicates
 
