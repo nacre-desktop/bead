@@ -26,6 +26,27 @@ matrix = load('preview_matrix', ROOT / 'spikes/bar-matrix.py')
 clocks = load('preview_clocks', ROOT / 'spikes/process-clock.py')
 
 
+# `nacrectl call --timeout 2000` can legitimately take connect 2 s + handshake 5 s + call 2 s; the
+# subprocess limit must exceed that, or a slow host crashes the preview with a bare TimeoutExpired (B0088).
+CALL_PROCESS_LIMIT = 12
+CALL_DEADLINE = 60
+
+
+def private_call(nacrectl, env, method, params):
+    """One private-daemon call; every failure is a RuntimeError the callers retry until their deadline."""
+    started = time.monotonic()
+    try:
+        reply = subprocess.run([nacrectl, 'call', '--timeout', '2000', method, json.dumps(params)],
+                               env=env, capture_output=True, text=True, timeout=CALL_PROCESS_LIMIT)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('private daemon call %s did not finish in %ds (slow or overloaded host)'
+                           % (method, CALL_PROCESS_LIMIT)) from None
+    if reply.returncode:
+        raise RuntimeError('private daemon call failed: %s after %.1fs: %s'
+                           % (method, time.monotonic() - started, reply.stderr.strip()[:200]))
+    return json.loads(reply.stdout)
+
+
 def display_alive(path):
     """False once the nested compositor's Wayland socket is gone or refuses connections (the compositor exited,
     for instance Alt+Shift+Q). A zombie child keeps no listener, so this is what the preview watches."""
@@ -85,22 +106,20 @@ def sample_full(env, raw, compositor, stop):
                                   start_new_session=True)
 
         def call(method, params):
-            reply = subprocess.run([os.environ['BEAD_PREVIEW_NACRECTL'], 'call', '--timeout', '2000', method,
-                                    json.dumps(params)], env=private, capture_output=True, text=True, timeout=4)
-            if reply.returncode:
-                raise RuntimeError('private daemon call failed: ' + method)
-            return json.loads(reply.stdout)
+            return private_call(os.environ['BEAD_PREVIEW_NACRECTL'], private, method, params)
 
         def wait_call(method, params):
-            deadline = time.monotonic() + 20
+            deadline = time.monotonic() + CALL_DEADLINE
+            last = ''
             while time.monotonic() < deadline:
                 if daemon.poll() is not None:
                     raise RuntimeError('private daemon exited; inspect preview log')
                 try:
                     return call(method, params)
-                except RuntimeError:
+                except RuntimeError as error:
+                    last = str(error)
                     time.sleep(.1)
-            raise RuntimeError('private daemon deadline: ' + method)
+            raise RuntimeError('private daemon deadline: %s (%ds; last error: %s)' % (method, CALL_DEADLINE, last))
 
         def notify(summary, body, expire=8000):
             subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications',
@@ -226,22 +245,20 @@ def sample(env, raw, compositor, stop):
                                   start_new_session=True)
 
         def call(method, params):
-            reply = subprocess.run([str(root / 'bin/nacrectl'), 'call', '--timeout', '2000', method,
-                                    json.dumps(params)], env=private, capture_output=True, text=True, timeout=4)
-            if reply.returncode:
-                raise RuntimeError('private daemon call failed: ' + method)
-            return json.loads(reply.stdout)
+            return private_call(str(root / 'bin/nacrectl'), private, method, params)
 
         def wait_call(method, params):
-            deadline = time.monotonic() + 15
+            deadline = time.monotonic() + CALL_DEADLINE
+            last = ''
             while time.monotonic() < deadline:
                 if daemon.poll() is not None:
                     raise RuntimeError('private daemon exited; inspect preview log')
                 try:
                     return call(method, params)
-                except RuntimeError:
+                except RuntimeError as error:
+                    last = str(error)
                     time.sleep(.05)
-            raise RuntimeError('private daemon/UI registration deadline: ' + method)
+            raise RuntimeError('private daemon/UI registration deadline: %s (%ds; last error: %s)' % (method, CALL_DEADLINE, last))
 
         wait_call('daemon.status', {})
         output_args=['--output','bead-bench'] if compositor=='hyprland' and os.environ.get('BEAD_PREVIEW_SMOKE')=='1' else []
