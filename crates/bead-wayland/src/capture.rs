@@ -307,10 +307,9 @@ impl App {
             }
             c.timer = self
                 .loop_handle
-                .insert_source(
-                    calloop::timer::Timer::from_duration(TICK),
-                    |_, _, app| app.capture_tick(),
-                )
+                .insert_source(calloop::timer::Timer::from_duration(TICK), |_, _, app| {
+                    app.capture_tick()
+                })
                 .ok();
         } else if !active && c.timer.is_some() {
             if let Some(token) = c.timer.take() {
@@ -414,9 +413,9 @@ impl Capturer {
             // Only windows with a ready session compete for the single frame slot.
             let lives = &self.lives;
             CaptureHub::next_due(&s, now, &|key| {
-                lives
-                    .iter()
-                    .any(|l| l.key == key && l.size.is_some() && l.format.is_some() && !l.constrained)
+                lives.iter().any(|l| {
+                    l.key == key && l.size.is_some() && l.format.is_some() && !l.constrained
+                })
             })
         };
         let Some((window, bound)) = candidate else {
@@ -434,13 +433,12 @@ impl Capturer {
         }
         let pool = match &mut self.pool {
             Some(p) => p,
-            None => match smithay_client_toolkit::shm::slot::SlotPool::new(
-                (w * h * 4) as usize,
-                shm,
-            ) {
-                Ok(p) => self.pool.insert(p),
-                Err(_) => return,
-            },
+            None => {
+                match smithay_client_toolkit::shm::slot::SlotPool::new((w * h * 4) as usize, shm) {
+                    Ok(p) => self.pool.insert(p),
+                    Err(_) => return,
+                }
+            }
         };
         let Ok((buffer, _)) = pool.create_buffer(w as i32, h as i32, (w * 4) as i32, format) else {
             return;
@@ -464,7 +462,12 @@ impl Capturer {
             return;
         };
         f.frame.destroy();
-        let Some(key) = self.lives.iter().find(|l| l.id == live).map(|l| l.key.clone()) else {
+        let Some(key) = self
+            .lives
+            .iter()
+            .find(|l| l.id == live)
+            .map(|l| l.key.clone())
+        else {
             return;
         };
         if !ok {
@@ -543,10 +546,16 @@ fn thumbnail(
     );
     let mut out = vec![0u8; (dw * dh * 4) as usize];
     for y in 0..dh {
-        let (y0, y1) = (y * sh / dh, ((y + 1) * sh / dh).max(y * sh / dh + 1).min(sh));
+        let (y0, y1) = (
+            y * sh / dh,
+            ((y + 1) * sh / dh).max(y * sh / dh + 1).min(sh),
+        );
         let ystep = ((y1 - y0) / 3).max(1);
         for x in 0..dw {
-            let (x0, x1) = (x * sw / dw, ((x + 1) * sw / dw).max(x * sw / dw + 1).min(sw));
+            let (x0, x1) = (
+                x * sw / dw,
+                ((x + 1) * sw / dw).max(x * sw / dw + 1).min(sw),
+            );
             let xstep = ((x1 - x0) / 3).max(1);
             let (mut acc, mut n) = ([0u32; 3], 0u32);
             let mut sy = y0;
@@ -825,14 +834,18 @@ mod tests {
         let due = CaptureHub::next_due(&s, t0 + Duration::from_millis(900), &|_| true).unwrap();
         assert_eq!(due.0.key, "a", "a is the most overdue");
         assert_eq!(due.1, (320, 200));
-        let only_b = CaptureHub::next_due(&s, t0 + Duration::from_millis(900), &|k| k == "b").unwrap();
-        assert_eq!(only_b.0.key, "b", "unready windows do not take the frame slot");
+        let only_b =
+            CaptureHub::next_due(&s, t0 + Duration::from_millis(900), &|k| k == "b").unwrap();
+        assert_eq!(
+            only_b.0.key, "b",
+            "unready windows do not take the frame slot"
+        );
     }
     #[test]
     fn thumbnails_fit_the_bound_keep_aspect_and_swap_channels() {
         let (w, h) = (640u32, 400u32);
         let mut px = vec![0u8; (w * h * 4) as usize];
-        for p in px.chunks_exact_mut(4) {
+        for p in px.as_chunks_mut::<4>().0 {
             p.copy_from_slice(&[10, 20, 30, 255]); // B, G, R, A in Argb8888
         }
         let (tw, th, out) = thumbnail(&px, (w, h), wl_shm::Format::Argb8888, (160, 160)).unwrap();
@@ -856,6 +869,9 @@ mod tests {
             )
         };
         assert_eq!(m("foot", "one"), Some(1));
-        assert_eq!((m("foot", "two"), m("foot", "none"), m("kitty", "one")), (None, None, None));
+        assert_eq!(
+            (m("foot", "two"), m("foot", "none"), m("kitty", "one")),
+            (None, None, None)
+        );
     }
 }

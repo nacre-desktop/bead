@@ -715,8 +715,15 @@ async fn previews_lease_only_while_open_and_with_the_setting_and_attach_the_newe
     }
     assert_eq!(hub.lease_count(), 0, "closed: nothing leased");
     let model = extras.project(&with_open(true), Some(wake.clone()));
-    assert_eq!(hub.lease_count(), 1, "open: one lease for the listed windows");
-    assert!(rows(&model)[0].get("preview").is_none(), "no frame yet: icon fallback");
+    assert_eq!(
+        hub.lease_count(),
+        1,
+        "open: one lease for the listed windows"
+    );
+    assert!(
+        rows(&model)[0].get("preview").is_none(),
+        "no frame yet: icon fallback"
+    );
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("w1-1.png");
     std::fs::write(&path, b"x").unwrap();
@@ -731,9 +738,15 @@ async fn previews_lease_only_while_open_and_with_the_setting_and_attach_the_newe
     let model = extras.project(&with_open(true), Some(wake));
     let row = &rows(&model)[0];
     assert_eq!(row["preview"], path.to_string_lossy().as_ref());
-    assert_eq!((row["preview_width"].clone(), row["preview_height"].clone()), (160.into(), 100.into()));
+    assert_eq!(
+        (row["preview_width"].clone(), row["preview_height"].clone()),
+        (160.into(), 100.into())
+    );
     assert_eq!(hub.lease_count(), 1, "re-projecting reuses the lease");
     extras.project(&with_open(false), None);
     assert_eq!(hub.lease_count(), 0, "closing releases the lease");
-    assert!(hub.preview("win1").is_none() && !path.exists(), "thumbnails go with it");
+    assert!(
+        hub.preview("win1").is_none() && !path.exists(),
+        "thumbnails go with it"
+    );
 }

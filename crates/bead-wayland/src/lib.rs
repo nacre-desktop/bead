@@ -3,7 +3,10 @@
 mod accessibility;
 mod background;
 mod capture;
-pub use capture::{CaptureHub, Lease as CaptureLease, Preview as CapturePreview, Wake as CaptureWake, Window as CaptureWindow};
+pub use capture::{
+    CaptureHub, Lease as CaptureLease, Preview as CapturePreview, Wake as CaptureWake,
+    Window as CaptureWindow,
+};
 mod clipboard;
 mod decorations;
 mod edges;
