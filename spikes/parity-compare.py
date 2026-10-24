@@ -398,14 +398,14 @@ class Arm:
         self.env['PIPEWIRE_REMOTE'] = 'pipewire-0'
         self.spawn(['pipewire'], 'pipewire')
         wait_until(lambda: self._try(lambda: self.run(['pw-metadata', '-n', 'default'])), 20, 'the private PipeWire')
-        for key, name in (('default.audio.sink', fake_system.SINKS[0][1]), ('default.audio.source', fake_system.SOURCES[0][1])):
-            self.run(['pw-metadata', '-n', 'default', '0', key, json.dumps({'name': name}), 'Spa:String:JSON'])
+        for key, value in fake_system.default_metadata():
+            self.run(['pw-metadata', '-n', 'default', '0', key, value, 'Spa:String:JSON'])
         nodes = {o['info']['props'].get('node.name'): o['id'] for o in json.loads(self.run(['pw-dump']).stdout)
                  if o.get('type') == 'PipeWire:Interface:Node'}
         cubed = fake_system.DEFAULT_LEVEL ** 3
         for name in [n for _, n, _ in fake_system.SINKS + fake_system.SOURCES]:
             channels = '[ %s ]' % ' '.join([f'{cubed:.6f}'] * (1 if 'microphone' in name else 2))
-            self.run(['pw-cli', 'set-param', str(nodes[name]), 'Props', '{ mute: false, channelVolumes: %s }' % channels])
+            self.run(['pw-cli', 's', str(nodes[name]), 'Props', '{ mute: false, channelVolumes: %s }' % channels])
 
     @staticmethod
     def _try(function):

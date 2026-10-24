@@ -80,6 +80,13 @@ class PipeWireDropIn(unittest.TestCase):
         self.assertEqual(conf.count("media.class = Audio/Sink"), 2)
         self.assertEqual(conf.count("media.class = Audio/Source/Virtual"), 1)
         self.assertTrue(conf.startswith("context.objects = [") and conf.endswith("]\n"))
+        self.assertIn("factory = metadata", conf)  # the "default" metadata Quickshell reads defaults from
+        self.assertIn("metadata.name = default", conf)
+
+    def test_default_sink_and_source_are_listed_nodes(self):
+        defaults = dict(fake.default_metadata())
+        self.assertEqual(json.loads(defaults["default.audio.sink"]), {"name": "fixture-speakers"})
+        self.assertEqual(json.loads(defaults["default.audio.source"]), {"name": "fixture-microphone"})
 
 
 class FixedMachine(unittest.TestCase):

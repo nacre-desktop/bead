@@ -40,12 +40,20 @@ def entries(kind, level):
 
 
 def pipewire_conf():
-    """A pipewire.conf.d drop-in with the same nodes as null sinks and a null source (for Quickshell, which reads PipeWire)."""
+    """A pipewire.conf.d drop-in with the same nodes as null sinks and a null source, and the default metadata (for Quickshell, which reads PipeWire)."""
     def node(name, description, media_class, position):
         return (f'  {{ factory = adapter\n    args = {{ factory.name = support.null-audio-sink node.name = "{name}" '
                 f'node.description = "{description}" media.class = {media_class} object.linger = true audio.position = [ {position} ] }} }}\n')
     nodes = [node(n, d, 'Audio/Sink', 'FL FR') for _, n, d in SINKS] + [node(n, d, 'Audio/Source/Virtual', 'MONO') for _, n, d in SOURCES]
-    return 'context.objects = [\n' + ''.join(nodes) + ']\n'
+    # The "default" metadata object (a session manager's job) is where Quickshell reads the default sink and source;
+    # the harness fills it with `pw-metadata` (see default_metadata).
+    default = '  { factory = metadata\n    args = { metadata.name = default } }\n'
+    return 'context.objects = [\n' + ''.join(nodes) + default + ']\n'
+
+
+def default_metadata():
+    """(key, value) pairs for `pw-metadata -n default 0 KEY VALUE Spa:String:JSON`."""
+    return [('default.audio.sink', json.dumps({'name': SINKS[0][1]})), ('default.audio.source', json.dumps({'name': SOURCES[0][1]}))]
 
 
 def level_of(directory, kind):

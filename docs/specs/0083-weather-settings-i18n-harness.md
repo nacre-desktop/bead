@@ -20,7 +20,7 @@ consent (N0057: "adding a Settings UI control is outside this unit"), so Bead ad
   by `Registry::depends_on` in `settings.rs`. A string parent counts as set when it has non-blank text, a boolean
   parent when it is `true`. Nothing in the engine knows the weather ids.
 - Wording: the label names what is sent (the IP address) and where (ipinfo.io). The new strings are Bead-owned
-  `bead.settings.weather-ip.*` ids (Bead's `shell/i18n` is the authoring source); the registry entry is a Bead
+  `bead.settings.weather-ip-label` and `-description` ids (Bead's `shell/i18n` is the authoring source); the registry entry is a Bead
   addition to the Nacre registry copy, so QML's registry has no such row. Known gap: the city field's existing
   description ("City or coordinates used for forecasts.") is QML's; the daemon geocodes city names, so the word
   "coordinates" may overpromise. It is left as QML words it, and flagged for Nacre.

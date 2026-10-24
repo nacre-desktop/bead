@@ -2845,8 +2845,8 @@
       "page": "date-time-language",
       "section": "date-time-language.locale",
       "key": "weatherIpLookup",
-      "labelId": "bead.settings.weather-ip.label",
-      "descriptionId": "bead.settings.weather-ip.description",
+      "labelId": "bead.settings.weather-ip-label",
+      "descriptionId": "bead.settings.weather-ip-description",
       "type": "boolean",
       "store": {
         "id": "desktop",
