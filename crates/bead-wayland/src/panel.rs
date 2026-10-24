@@ -702,6 +702,19 @@ impl App {
         }
     }
     pub(super) fn release_panel(&mut self) {
+        // Trace probes are weak: observing retirement must not extend raster lifetime.
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        let retired_images = self.options.trace_state.then(|| {
+            self.companion
+                .as_ref()
+                .into_iter()
+                .flat_map(|(scene, _, _)| scene.prepared.values())
+                .flat_map(|frame| &frame.items)
+                .filter(|item| matches!(item.primitive, bead_render::Primitive::Image { .. }))
+                .filter_map(|item| item.raster.as_ref())
+                .map(|raster| std::sync::Arc::downgrade(&raster.pixels))
+                .collect::<Vec<_>>()
+        });
         if self.pearl.is_none()
             && let Some(output) = self.panel_output.clone()
         {
@@ -767,6 +780,18 @@ impl App {
                             libc::malloc_trim(0);
                         }
                         println!("PANEL_IDLE_TRIM scheduled_delay_ms=100");
+                        if let Some(images) = &retired_images {
+                            let retained_bytes: usize = images
+                                .iter()
+                                .filter_map(std::sync::Weak::upgrade)
+                                .map(|pixels| pixels.data().len())
+                                .sum();
+                            println!(
+                                "PANEL_IMAGE_RELEASE image_rasters={} image_bytes={retained_bytes}",
+                                images.len()
+                            );
+                            assert_eq!(retained_bytes, 0, "closed panel retained image pixels");
+                        }
                     }
                     TimeoutAction::Drop
                 },

@@ -35,6 +35,48 @@ pub fn configure() {
 #[cfg(all(test, feature = "trace", target_os = "linux", target_env = "gnu"))]
 mod tests {
     #[test]
+    fn weather_hero_image_bytes_return_to_zero_after_close() -> bead_test::Result<()> {
+        use bead::render::{Primitive, Renderer, tree::TreeCpuRenderer};
+        use std::{collections::BTreeMap, path::Path, sync::Arc};
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+        let panel = bead_test::Harness::load(
+            &root,
+            Path::new("dashboard/weather/main.luau"),
+            &root.join("palette.json"),
+            BTreeMap::from([
+                ("dashboard.weather.code".into(), bead::core::Value::Number(3.)),
+                ("dashboard.weather.day".into(), bead::core::Value::Bool(true)),
+            ]),
+            Default::default(),
+        )?;
+        let mut renderer = TreeCpuRenderer::default();
+        renderer.prepare(panel.scene(), 1.5)?;
+        let frame = renderer.prepared_frame().ok_or("unprepared Weather frame")?;
+        let images: Vec<_> = frame.items.iter()
+            .filter(|item| matches!(item.primitive, Primitive::Image { .. }))
+            .filter_map(|item| item.raster.as_ref())
+            .map(|raster| {
+                // Existing SVG decoding is display-sized, including fractional output scale.
+                assert_eq!((raster.pixels.width(), raster.pixels.height()), (846, 447));
+                Arc::downgrade(&raster.pixels)
+            }).collect();
+        let live_bytes = || images.iter().filter_map(std::sync::Weak::upgrade)
+            .map(|pixels| pixels.data().len()).sum::<usize>();
+        assert_eq!(images.len(), 2, "both hero layers must have decoded pixels");
+        assert_eq!(live_bytes(), 2 * 846 * 447 * 4);
+        // release_panel drops the source/scene and the companion renderer; prepared
+        // frames share the pixels, so neither cache eviction nor hiding is enough.
+        drop(panel);
+        drop(renderer);
+        assert!(live_bytes() > 0, "the held presented frame must own its images");
+        drop(frame);
+        assert_eq!(live_bytes(), 0, "image bytes retained after panel retirement");
+        println!("MEMORY_POLICY_WEATHER_IMAGE_RELEASE open_bytes=3025296 closed_bytes=0");
+        Ok(())
+    }
+
+    #[test]
     fn large_transients_return_their_mapping_after_repeated_release() {
         // Isolate the process-wide policy and accounting from parallel tests.
         let status = std::process::Command::new(std::env::current_exe().unwrap())
