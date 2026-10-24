@@ -1,0 +1,26 @@
+Source: 6c65d8c (product candidate; urgent fix ac194d7 included)
+Environment: remote ghcr.io/archlinux/archlinux:latest, Rust 1.99.0
+Container limits: 12 CPUs / 24 GiB; nice 10; Cargo -j2
+Command: docker exec b0102-ci nice -n 10 bash /w/in/full-ci.sh
+Exit: 0
+
+Formatting: PASS
+Clippy workspace/all-targets, warnings denied: PASS
+HEADLESS_SERVICE_BOUNDARY_OK default+all-features
+Workspace tests: PASS (nacre-shell: 553 passed, 0 failed, 1 ignored)
+Trace memory-policy tests: PASS
+Renderer configurations (no-default and all-features): PASS
+Facade/minimal and shell UI check: PASS
+LUAU_ANALYZE_OK 141 modules; actual source mirror, generated Rust SDK
+Capture-window / engine trace / arm / reference / preview / fake-system suites: PASS
+Packaging staging and launcher: PASS
+Motion wallpaper renderer smoke: PASS (all checks true)
+Private service owner lifecycle: PASS
+Private SNI/DBusMenu lifecycle: 3 passed
+Workspace and every independent bead-* license/dependency graph: PASS
+CI_ALL_OK
+
+Dashboard-focused suite: 57 passed, 0 failed
+Eight affected goldens regenerated at 1x/1.5x and visually inspected.
+Paired desktop capture: NOT RUN, shared capture slot remained occupied.
+RMSE / relative unreclaimable memory: NOT MEASURED; candidate remains unpublished.

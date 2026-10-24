@@ -35,6 +35,25 @@ physical-wheel/integration limits are in
 [B0098](specs/0098-sidebar-settings-owner.md). No live change or laptop acceptance claim.
 
 
+## 2026-10-24 — B0103 control input (blocked candidate)
+
+The candidate coalesces queued pointer positions, previews slider values locally,
+limits host writes, and separates pointer styling from keyboard focus. Remote
+Arch CI passes. The private capture lease remained unavailable for over 90 minutes;
+CPU/GL presentation, matched QML, first-key and memory gates are all unmeasured.
+[B0103](specs/0103-control-latency.md) records the candidate and remaining proofs.
+No integration, live test or performance acceptance.
+## 2026-10-24 — B0102 dashboard reload fixed; Today candidate pending captures
+
+The bar-only `status.hovered` update no longer breaks dashboard pointer entry;
+`ac194d7` is published with coverage for all 13 pages through the real runtime.
+The Today wallpaper/host/media summary candidate passes full remote Arch CI,
+including poster reuse and release checks. Required private paired captures were
+blocked by an occupied capture slot; RMSE and relative memory remain unmeasured.
+The Today candidate is unpublished and is not accepted parity. See
+[B0102](specs/0102-dashboard-owner.md) for scope and remaining gaps.
+
+
 ## 2026-10-24 — B0096 owner bar parity (review candidate)
 
 Status values now share icon hit areas and centered line boxes; the default tray
