@@ -1,0 +1,71 @@
+{
+ "before": {
+  "popout-audio": {
+   "frame": 6.257,
+   "panel": 10.337
+  },
+  "control-audio": {
+   "frame": 6.229,
+   "panel": 10.447
+  },
+  "popout-audio-muted": {
+   "frame": 6.12,
+   "panel": 9.978
+  },
+  "control-audio-muted": {
+   "frame": 6.088,
+   "panel": 10.08
+  },
+  "popout-network-wifi": {
+   "frame": 9.653,
+   "panel": 18.471
+  },
+  "control-network-wifi": {
+   "frame": 5.01,
+   "panel": 7.054
+  },
+  "popout-network-scanned": {
+   "frame": 9.71,
+   "panel": 18.6
+  },
+  "control-network-scanned": {
+   "frame": 5.257,
+   "panel": 7.795
+  }
+ },
+ "after": {
+  "popout-audio": {
+   "frame": 4.83,
+   "panel": 6.192
+  },
+  "control-audio": {
+   "frame": 4.559,
+   "panel": 5.574
+  },
+  "popout-audio-muted": {
+   "frame": 4.632,
+   "panel": 5.497
+  },
+  "control-audio-muted": {
+   "frame": 4.366,
+   "panel": 4.861
+  },
+  "popout-network-wifi": {
+   "frame": 7.451,
+   "panel": 13.338
+  },
+  "control-network-wifi": {
+   "frame": 4.556,
+   "panel": 5.567
+  },
+  "popout-network-scanned": {
+   "frame": 7.45,
+   "panel": 13.334
+  },
+  "control-network-scanned": {
+   "frame": 4.772,
+   "panel": 6.301
+  }
+ },
+ "note": "frame = whole 2880x1800 frame, panel = x 1900-2880 y 80-1300; QML | Bead, private nested niri 2880x1800 at 1.5, CPU renderer, desktop; before = origin/main 8b62f83 binary and shell, after = this branch"
+}
