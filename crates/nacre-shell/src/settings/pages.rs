@@ -130,10 +130,10 @@ fn entities(node: &Json) -> impl Iterator<Item = (&str, &Json)> {
         .filter_map(Json::as_str)
         .filter_map(move |id| node["items"].get(id).map(|item| (id, item)))
 }
-fn healthy(topic: &Json) -> bool {
+pub(super) fn healthy(topic: &Json) -> bool {
     topic["health"]["available"] == true
 }
-fn short(text: &str, chars: usize) -> String {
+pub(super) fn short(text: &str, chars: usize) -> String {
     let clean: String = text
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
@@ -149,14 +149,14 @@ fn info(id: &str, label: &str, value: &str, description: &str) -> Json {
     json!({"id": id, "kind": "info", "label": label, "value": value, "description": description,
         "enabled": true, "own": true})
 }
-fn opt(arg: String, label: &str, selected: bool, enabled: bool) -> Json {
+pub(super) fn opt(arg: String, label: &str, selected: bool, enabled: bool) -> Json {
     json!({"id": arg, "label": label, "selected": selected, "enabled": enabled})
 }
-fn actions(id: &str, label: &str, description: &str, options: Vec<Json>, enabled: bool) -> Json {
+pub(super) fn actions(id: &str, label: &str, description: &str, options: Vec<Json>, enabled: bool) -> Json {
     json!({"id": id, "kind": "actions", "label": label, "description": description,
         "options": options, "enabled": enabled, "own": true})
 }
-fn help(id: &str, label: &str) -> Json {
+pub(super) fn help(id: &str, label: &str) -> Json {
     json!({"id": id, "kind": "help", "label": label})
 }
 fn requires(id: &str, label: &str) -> Json {
@@ -1293,6 +1293,7 @@ impl Settings {
                         state.message = match e.code.as_str() {
                             "stale_revision" => "bead.settings.changed-elsewhere",
                             "permission_denied" => "bead.settings.permission-denied",
+                            "busy" => "bead.settings.displays-busy",
                             _ if state.pending_write => "bead.settings.save-failed",
                             _ => "bead.settings.action-failed",
                         }
@@ -1474,6 +1475,8 @@ impl Settings {
                         .map(|(m, p)| (m.to_owned(), p));
                 }
             }
+            "disp-primary" | "disp-arrange" | "disp-scale" | "disp-mode" | "disp-keep"
+            | "disp-revert" => self.display_op(op, a, b, wake),
             "refresh-caps" => self.call("capabilities.refresh", json!({}), wake, ""),
             "layout" => self.toggle_layout(a, wake),
             "layout-reset" => self.set_layouts("", wake),

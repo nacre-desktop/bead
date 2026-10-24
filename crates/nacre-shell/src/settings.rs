@@ -5,6 +5,7 @@
 //! A new page or widget is registry data or Luau, never Rust: this file only knows
 //! value types (boolean, number, enum, string, array). Nothing is resident until the
 //! window opens, and the registry, store leases and subscriptions go with it.
+mod displays;
 mod pages;
 use crate::i18n::tr;
 use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
@@ -215,6 +216,9 @@ struct State {
     joining: String,
     secret: String,
     reveal: bool,
+    /// The Displays page: the chosen primary output and its countdown wake (B0089).
+    display_primary: String,
+    display_ticker: Option<displays::Ticker>,
 }
 type Wake = Arc<dyn Fn() + Send + Sync>;
 type Opened = BTreeMap<String, (Arc<dyn Source>, Option<Subscription>)>;
@@ -580,6 +584,12 @@ impl Settings {
         sections.sort_by_key(|s| Registry::order(s));
         for section in &sections {
             let sid = section["id"].as_str().unwrap_or("");
+            // B0089: the Displays page is several cards (QML `NacreDisplaysPage`), not one section.
+            if sid == "displays.devices" {
+                items.extend(self.display_sections(state));
+                topics.push("displays".into());
+                continue;
+            }
             let mut body = Vec::new();
             for setting in registry
                 .array(&registry.settings, "settings")
@@ -758,6 +768,7 @@ impl Settings {
         } else {
             self.page_items(&page, &self.state.borrow()).0
         };
+        self.display_tick(&page);
         let editable = self.registry.editable(&page);
         let readable = wanted
             .iter()

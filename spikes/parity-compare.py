@@ -48,6 +48,7 @@ import fake_system  # noqa: E402
 #   ('only', 'qml'|'bead', step)    a step for one arm (the shells' preview/trigger routes differ)
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
 #   ('pointer', x, y) / ('press', x, y) / ('release',)   B0067: a virtual pointer on the private parent compositor (logical px; needs --pointer-tool)
+#   ('journal', 'on'|'off')         B0089: write/remove the controller's display-pending journal (a pending change; nothing is applied)
 #   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
 # Logical pointer targets (2880x1800 at 1.5), per arm. Bluetooth is available
 # in both arms through the private BlueZ fixture.
@@ -162,6 +163,11 @@ STATES = {
     [('app_close', 'settings')], 0),
     'settings-bluetooth': ([('only', 'qml', ('qml_settings', 'bluetooth')), ('only', 'bead', ('shell', 'nacre', 'settings', 'bluetooth')), ('sleep', 2.0)],
     [('app_close', 'settings')], 0),
+    # B0089: the Displays page, idle and with a display change awaiting Keep (a journal file only; no output is touched)
+    'settings-displays': ([('only', 'qml', ('qml_settings', 'displays')), ('only', 'bead', ('shell', 'nacre', 'settings', 'displays')), ('sleep', 2.5)],
+    [('app_close', 'settings')], 0),
+    'settings-displays-keep': ([('journal', 'on'), ('only', 'qml', ('qml_settings', 'displays')), ('only', 'bead', ('shell', 'nacre', 'settings', 'displays')), ('sleep', 2.5)],
+    [('app_close', 'settings'), ('journal', 'off')], 0),
     'settings-appearance': ([('only', 'qml', ('qml_settings', 'appearance')), ('only', 'bead', ('shell', 'nacre', 'settings', 'appearance')), ('sleep', 2.0)],
     [('app_close', 'settings')], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
@@ -725,6 +731,15 @@ os.execv(real, [real, *args])
                 self.pointer(x, y, 'press' if kind == 'press-target' else None)
             elif kind == 'release':
                 self.release_pointer()
+            elif kind == 'journal':
+                # The controller's pending-change journal, as left by a half-finished change: both shells then show
+                # "Keep this display change?". Its monitors are the current ones and nothing is ever applied.
+                journal = self.root / 'config' / 'nacre' / 'display-pending-niri.json'
+                if step[1] == 'on':
+                    journal.parent.mkdir(parents=True, exist_ok=True)
+                    journal.write_text(json.dumps({'token': 'parity', 'previous': [], 'monitors': []}))
+                else:
+                    journal.unlink(missing_ok=True)
             elif kind == 'bluez':
                 self.run(['gdbus', 'call', '--session', '--dest', 'org.bead.FakeBluez', '--object-path', '/ctl',
                           '--method', 'org.bead.FakeBluez.Set', step[1], step[2]], check=False)

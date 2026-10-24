@@ -21,7 +21,8 @@
   "addons",
   "sound",
   "network",
-  "bluetooth"
+  "bluetooth",
+  "displays"
  ],
  "orderedLists": [
   "panels/dashboard/pages.editor.pages",

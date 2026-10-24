@@ -63,6 +63,10 @@ function row(item)
         node=kit.ChoiceRow{id="actions",label=item.label,description=item.description,enabled=on,options=item.options,on_change="settings.do"}
     elseif k=="device" then
         return kit.DeviceRow{id="device",title=item.title,detail=item.detail,icon=item.icon,enabled=on,buttons=item.buttons,slider=item.slider,on_action="settings.do"}
+    elseif k=="keep" then
+        -- B0089: a display change awaiting Keep; the text carries the countdown.
+        return kit.ApplyBar{id="keep",text=item.text,apply_label=item.keep_label,discard_label=item.revert_label,
+            on_apply=act("do:disp-keep"),on_discard=act("do:disp-revert")}
     elseif k=="picker" then
         return kit.PickerList{id="picker",label=item.label,placeholder=item.placeholder,enabled=on,items=item.items,empty=item.empty,more=item.more,
             field=ui.bind("settings.pick.text"),on_pick="settings.do"}
