@@ -93,7 +93,12 @@ fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOpt
         watch: client.map(|client| {
             Arc::new(move |send: Box<dyn Fn(NativePearlMotion) + Send + Sync>| {
                 use bead::core::source::Source;
-                let topic = client.lease_topic("compositor").ok()?;
+                // Notices already requests this topic permanently. Reuse that
+                // subscription; a permanent topic deliberately cannot be leased.
+                let topic: Box<dyn Source> = match client.topic("compositor") {
+                    Ok(topic) => Box::new(topic),
+                    Err(_) => Box::new(client.lease_topic("compositor").ok()?),
+                };
                 let previous = std::sync::Mutex::new(std::collections::BTreeMap::new());
                 let subscription = topic
                     .subscribe(Arc::new(move |snapshot| {

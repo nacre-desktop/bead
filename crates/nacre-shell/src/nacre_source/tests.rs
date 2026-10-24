@@ -1573,6 +1573,26 @@ async fn page_leases_share_the_protocol_subscription_cap_and_reuse_released_slot
     assert!(client.0.shared.leases.wanted().is_empty());
     client.stop().await.unwrap();
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn pearl_motion_watch_reuses_notices_topic_or_releases_its_own_lease() {
+    for permanent in [false, true] {
+        let lab = Lab::new();
+        let topics = if permanent {
+            vec!["compositor".into()]
+        } else {
+            vec![]
+        };
+        let client = Client::start(Config::new(lab.socket(), topics)).unwrap();
+        let options = crate::pearls::options(None, Some(client.clone()));
+        let watch = options.native.unwrap().watch.unwrap();
+        let guard = watch(Box::new(|_| {})).expect("motion watch must start with notices too");
+        assert_eq!(client.0.shared.leases.wanted().is_empty(), permanent);
+        drop(guard);
+        assert!(client.0.shared.leases.wanted().is_empty());
+        client.stop().await.unwrap();
+    }
+}
 #[tokio::test(flavor = "current_thread")]
 async fn permissions_and_peer_identity_are_required() {
     let lab = Lab::new();
