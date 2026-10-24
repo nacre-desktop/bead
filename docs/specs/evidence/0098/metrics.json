@@ -1,0 +1,482 @@
+{
+  "backend": "CPU tiny-skia",
+  "output_pixels": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "rmse_percent": {
+    "sidebar": {
+      "after": 3.462,
+      "before": 4.144
+    },
+    "sidebar-conversation": {
+      "after": 4.165,
+      "before": 4.899
+    },
+    "sidebar-pinned": {
+      "after": 4.736
+    },
+    "sidebar-hover": {
+      "after": 4.72
+    },
+    "sidebar-pressed": {
+      "after": 4.712
+    },
+    "settings": {
+      "after": 7.366,
+      "before": 19.61
+    },
+    "settings-scroll": {
+      "after": 7.649,
+      "before": 19.673
+    }
+  },
+  "memory_mib": {
+    "open": {
+      "states": {
+        "sidebar": {
+          "control": {
+            "unreclaimable": 20.799,
+            "anon": 20.113,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.4,
+            "PSS_information": 46.199
+          },
+          "candidate": {
+            "unreclaimable": 20.686,
+            "anon": 19.992,
+            "shmem": 0.693,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.412,
+            "PSS_information": 46.098
+          },
+          "delta": -0.113
+        },
+        "sidebar-conversation": {
+          "control": {
+            "unreclaimable": 20.799,
+            "anon": 20.113,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.444,
+            "PSS_information": 46.243
+          },
+          "candidate": {
+            "unreclaimable": 20.898,
+            "anon": 20.199,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.758,
+            "PSS_information": 46.656
+          },
+          "delta": 0.099
+        },
+        "settings": {
+          "control": {
+            "unreclaimable": 20.92,
+            "anon": 20.234,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.42,
+            "PSS_information": 46.34
+          },
+          "candidate": {
+            "unreclaimable": 21.34,
+            "anon": 20.641,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.796,
+            "PSS_information": 47.136
+          },
+          "delta": 0.42
+        },
+        "settings-scroll": {
+          "control": {
+            "unreclaimable": 20.83,
+            "anon": 20.145,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.65,
+            "PSS_information": 46.48
+          },
+          "candidate": {
+            "unreclaimable": 21.402,
+            "anon": 20.703,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.859,
+            "PSS_information": 47.262
+          },
+          "delta": 0.572
+        }
+      },
+      "median_delta": 0.26
+    },
+    "closed": {
+      "states": {
+        "sidebar": {
+          "control": {
+            "unreclaimable": 20.799,
+            "anon": 20.113,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.749,
+            "PSS_information": 67.548
+          },
+          "candidate": {
+            "unreclaimable": 20.887,
+            "anon": 20.188,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 47.36,
+            "PSS_information": 68.247
+          },
+          "delta": 0.088
+        },
+        "sidebar-conversation": {
+          "control": {
+            "unreclaimable": 20.799,
+            "anon": 20.113,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.742,
+            "PSS_information": 67.541
+          },
+          "candidate": {
+            "unreclaimable": 20.902,
+            "anon": 20.203,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 47.358,
+            "PSS_information": 68.261
+          },
+          "delta": 0.103
+        },
+        "settings": {
+          "control": {
+            "unreclaimable": 20.818,
+            "anon": 20.133,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.772,
+            "PSS_information": 67.591
+          },
+          "candidate": {
+            "unreclaimable": 21.254,
+            "anon": 20.555,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 47.38,
+            "PSS_information": 68.634
+          },
+          "delta": 0.436
+        },
+        "settings-scroll": {
+          "control": {
+            "unreclaimable": 20.861,
+            "anon": 20.176,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.795,
+            "PSS_information": 67.656
+          },
+          "candidate": {
+            "unreclaimable": 21.441,
+            "anon": 20.742,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 47.379,
+            "PSS_information": 68.82
+          },
+          "delta": 0.58
+        }
+      },
+      "median_delta": 0.27
+    }
+  },
+  "scroll": {
+    "qml": {
+      "before": 0,
+      "pixel": {
+        "input": 10,
+        "path": "direct",
+        "before": 0,
+        "after": 30,
+        "moved": 30
+      },
+      "wheel": {
+        "input": 1,
+        "path": "direct",
+        "before": 30,
+        "after": 75,
+        "moved": 45
+      }
+    },
+    "bead": {
+      "before": 0.0,
+      "pixel": {
+        "input": 10,
+        "path": "direct",
+        "before": 0.0,
+        "after": 30.0,
+        "moved": 30.0
+      },
+      "wheel": {
+        "input": 1,
+        "path": "direct",
+        "before": 30.0,
+        "after": 385.0,
+        "moved": 355.0
+      }
+    },
+    "control": {
+      "before": 0.0,
+      "pixel": {
+        "input": 10,
+        "path": "direct",
+        "before": 0.0,
+        "after": 10.0,
+        "moved": 10.0
+      },
+      "wheel": {
+        "input": 1,
+        "path": "direct",
+        "before": 10.0,
+        "after": 25.0,
+        "moved": 15.0
+      }
+    }
+  },
+  "qml_state_errors": {
+    "sidebar": [],
+    "sidebar-conversation": [],
+    "sidebar-pinned": [],
+    "sidebar-hover": [],
+    "sidebar-pressed": [],
+    "settings": [],
+    "settings-scroll": []
+  },
+  "qml_pinned": true,
+  "bead_state_errors": {
+    "sidebar": [],
+    "sidebar-conversation": [],
+    "sidebar-pinned": [],
+    "sidebar-hover": [],
+    "sidebar-pressed": [],
+    "settings": [],
+    "settings-scroll": []
+  },
+  "bead_pinned": true,
+  "apps": {
+    "sidebar": {
+      "open": {
+        "chat": {
+          "unreclaimable": 31.646,
+          "anon": 23.648,
+          "shmem": 7.998,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.436,
+          "PSS_information": 55.082
+        }
+      },
+      "closed": {}
+    },
+    "sidebar-conversation": {
+      "open": {
+        "chat": {
+          "unreclaimable": 28.666,
+          "anon": 20.668,
+          "shmem": 7.998,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.811,
+          "PSS_information": 52.477
+        }
+      },
+      "closed": {}
+    },
+    "sidebar-pinned": {
+      "open": {
+        "chat": {
+          "unreclaimable": 27.85,
+          "anon": 20.977,
+          "shmem": 6.873,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.701,
+          "PSS_information": 51.551
+        }
+      },
+      "closed": {}
+    },
+    "sidebar-hover": {
+      "open": {
+        "chat": {
+          "unreclaimable": 28.814,
+          "anon": 20.941,
+          "shmem": 7.873,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.735,
+          "PSS_information": 52.55
+        }
+      },
+      "closed": {}
+    },
+    "sidebar-pressed": {
+      "open": {
+        "chat": {
+          "unreclaimable": 28.834,
+          "anon": 20.961,
+          "shmem": 7.873,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.616,
+          "PSS_information": 52.45
+        }
+      },
+      "closed": {}
+    },
+    "settings": {
+      "open": {
+        "settings": {
+          "unreclaimable": 26.23,
+          "anon": 18.676,
+          "shmem": 7.555,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.505,
+          "PSS_information": 49.735
+        }
+      },
+      "closed": {}
+    },
+    "settings-scroll": {
+      "open": {
+        "settings": {
+          "unreclaimable": 26.539,
+          "anon": 18.984,
+          "shmem": 7.555,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.591,
+          "PSS_information": 50.13
+        }
+      },
+      "closed": {}
+    }
+  },
+  "control_apps": {
+    "sidebar": {
+      "open": {
+        "chat": {
+          "unreclaimable": 28.104,
+          "anon": 20.168,
+          "shmem": 7.936,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.59,
+          "PSS_information": 51.693
+        }
+      },
+      "closed": {}
+    },
+    "sidebar-conversation": {
+      "open": {
+        "chat": {
+          "unreclaimable": 30.037,
+          "anon": 23.695,
+          "shmem": 6.342,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.695,
+          "PSS_information": 53.732
+        }
+      },
+      "closed": {}
+    },
+    "settings": {
+      "open": {
+        "settings": {
+          "unreclaimable": 23.688,
+          "anon": 18.414,
+          "shmem": 5.273,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.638,
+          "PSS_information": 47.325
+        }
+      },
+      "closed": {}
+    },
+    "settings-scroll": {
+      "open": {
+        "settings": {
+          "unreclaimable": 23.668,
+          "anon": 18.395,
+          "shmem": 5.273,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.332,
+          "PSS_information": 47.0
+        }
+      },
+      "closed": {}
+    }
+  },
+  "settings_window_size": [
+    1100,
+    800
+  ],
+  "animation_samples_ms": {
+    "qml": [
+      88,
+      189,
+      289,
+      389,
+      489,
+      690
+    ],
+    "bead": [
+      88,
+      188,
+      288,
+      389,
+      489,
+      689
+    ]
+  },
+  "validation_status": "reference_only_final_capture_blocked",
+  "reference_builds": {
+    "control_commit": "8e0c487",
+    "candidate_product_commit": "e830672",
+    "control_binary_sha256": "ff3c059c4e6718e5bb66b2cf691202cd17f0fd6ccb0ff62e045a7233771f3ee5",
+    "candidate_binary_sha256": "221c0caae13c1145bc756e4db0084eb36f7d014ac39b54f6da923643f76c7ee1"
+  },
+  "uncaptured_final_builds": {
+    "control_commit": "ac194d7",
+    "candidate_product_commit": "33bbc50",
+    "capture_harness_commit": "411f9d9",
+    "control_binary_sha256": "0944505938433cdda2cea7ec37a3b8e1410e3eae7d76fa6abad1a7bf4261af10",
+    "candidate_binary_sha256": "67f12798d7912a81f53c5720abd469a4c0192893bf6e290665694e94a0b5d9c9"
+  }
+}

@@ -8,6 +8,15 @@ Arch CI passes. The private capture lease remained unavailable for over 90 minut
 CPU/GL presentation, matched QML, first-key and memory gates are all unmeasured.
 [B0103](specs/0103-control-latency.md) records the candidate and remaining proofs.
 No integration, live test or performance acceptance.
+## 2026-10-24 — B0098 sidebar and Settings (blocked at final capture)
+
+Code and harness pass full remote Arch CI on `411f9d9`; the product binary is
+`33bbc50`. Reference pairs verify Pin/outside/unpin and 1100×800 Settings sizing.
+The final focus fixes, angle-only wheel proof and balanced memory sweep await
+the shared desktop lease (36-minute wait); the queued job was cancelled and own
+remote resources removed. Commits remain unpublished. [B0098](specs/0098-sidebar-settings-owner.md)
+labels the earlier evidence and remaining parity gaps. No live change.
+
 
 ## 2026-10-24 — B0096 owner bar parity (review candidate)
 

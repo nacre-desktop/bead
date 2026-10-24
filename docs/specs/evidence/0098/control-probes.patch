@@ -1,0 +1,28 @@
+--- a/crates/bead-wayland/src/window.rs
++++ b/crates/bead-wayland/src/window.rs
+@@ -150,6 +150,14 @@
+         let call = &request.call;
+         if call.target != "bead.window" {
+             return false;
++        }
++        if call.method == "state" && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
++            let reply = bead_services::ipc::Reply::ok(call.id, serde_json::json!({
++                "size": self.window.as_ref().map(|w| w.size),
++                "stores": self.window.as_ref().and_then(|w| serde_json::from_str::<serde_json::Value>(&w.source.state_summary()).ok())
++            }));
++            let _ = request.reply.send(reply);
++            return true;
+         }
+         let result = match call.method.as_str() {
+             "open" => self.open_window(&call.args),
+--- a/crates/nacre-shell/src/reload.rs
++++ b/crates/nacre-shell/src/reload.rs
+@@ -3881,7 +3881,7 @@
+         counts
+     }
+     fn state_summary(&self) -> String {
+-        if !self.trace {
++        if !self.trace && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_none() {
+             return String::new();
+         }
+         self.session.state_summary()
