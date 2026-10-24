@@ -35,8 +35,11 @@ mod tests {
             let path = entry.path();
             if path.is_dir() {
                 sources(&path, out);
-            } else if path.extension().is_some_and(|e| e == "luau" || e == "rs")
-                && !path.ends_with("i18n.rs")
+            } else if (path.extension().is_some_and(|e| e == "luau" || e == "rs")
+                && !path.ends_with("i18n.rs"))
+                // The Settings registry names its label ids in JSON (B0083).
+                || (path.extension().is_some_and(|e| e == "json")
+                    && path.parent().is_some_and(|p| p.ends_with("settings/registry")))
             {
                 out.push(path);
             }

@@ -1143,6 +1143,8 @@ impl Status {
                     "audio.streams".into(),
                     Value::list(Vec::<serde_json::Value>::new()),
                 ),
+                ("audio.level".into(), Value::Number(0.0)),
+                ("audio.level_available".into(), Value::Bool(false)),
                 ("status.active".into(), Value::Bool(false)),
             ])
         });

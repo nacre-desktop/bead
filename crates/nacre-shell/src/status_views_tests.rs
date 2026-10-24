@@ -1035,6 +1035,20 @@ fn battery_legacy_preview_remains_unchanged() -> Result<()> {
     Ok(())
 }
 
+/// A view declares its stores from the first projection (the daemon's topic starts unavailable), so a later
+/// live projection must not bring a key the first one lacked ("unknown state audio.level").
+#[test]
+fn audio_projection_keys_do_not_change_when_the_topic_becomes_available() -> Result<()> {
+    let mut down = core_audio();
+    down["health"]["available"] = serde_json::json!(false);
+    let before = Status::core_audio(Arc::new(FakeSource::new(down)?)).project();
+    let live = Status::core_audio(Arc::new(FakeSource::new(core_audio())?)).project();
+    assert_eq!(live["status.ready"], Value::Bool(true));
+    let missing: Vec<_> = live.keys().filter(|k| !before.contains_key(*k)).collect();
+    assert!(missing.is_empty(), "keys first seen when live: {missing:?}");
+    Ok(())
+}
+
 #[test]
 fn audio_core_uses_only_explicit_default_output() -> Result<()> {
     let mut state = core_audio();

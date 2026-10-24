@@ -89,7 +89,7 @@ class Root(Node):
     def GetDisplayDevice(self):
         return dbus.ObjectPath(DISPLAY)
 
-    @dbus.service.method(UPOWER, in_signature='s', out_signature='s')
+    @dbus.service.method(UPOWER, out_signature='s')
     def GetCriticalAction(self):
         return 'HybridSleep'
 
