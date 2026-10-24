@@ -23,6 +23,8 @@ smithay-client-toolkit = { version = "=0.21.1", default-features = false, featur
 wayland-client = { version = "=0.31.15", features = ["system"] }
 wayland-protocols = { version = "=0.32.13", features = ["client"] }
 calloop = "=0.14.5"
+glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"] }
+raw-window-handle = "=0.6.2"
 
 freedesktop-icons = "0.4"
 

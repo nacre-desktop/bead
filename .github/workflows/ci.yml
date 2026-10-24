@@ -89,7 +89,7 @@ jobs:
       - name: Motion wallpaper renderer smoke
         run: |
           cargo build -p nacre-shell --bin bead-wallpaper-video --locked -j2
-          python3 spikes/wallpaper-video-smoke.py --engine target/debug/bead-wallpaper-video
+          python3 spikes/wallpaper-video-smoke.py --engine target/debug/bead-wallpaper-video --expect-presentation shm
       - name: Private service owner lifecycle
         run: python3 spikes/services-check.py
       - name: Private SNI and DBusMenu lifecycle

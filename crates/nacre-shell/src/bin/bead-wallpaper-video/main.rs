@@ -3,10 +3,12 @@
 //! separate process on purpose (the shell UI never links or decodes video); a crash here
 //! only removes this process's surfaces, so the static wallpaper underneath stays visible.
 //!
-//! One libmpv decoder serves every output. Frames are rendered by mpv's software render
-//! API straight into shared-memory buffers of per-output layer surfaces (layer `bottom`, no
-//! input). Hardware decoding uses copy-back (`auto-copy`) and falls back to software on its
-//! own. Protocol: `bead_wallpaper::protocol` JSON lines on stdin/stdout.
+//! One libmpv decoder serves every output, on per-output layer surfaces (layer `bottom`, no
+//! input). With a GPU the decoder's dmabuf frames are drawn by mpv's OpenGL render API into
+//! an EGL window surface (no CPU pixel work); without one, mpv's software render API fills
+//! shared-memory buffers from a copy-back decoder. Either falls back to software decoding on
+//! its own. Protocol: `bead_wallpaper::protocol` JSON lines on stdin/stdout.
+mod gl;
 mod mpv;
 
 use bead_wallpaper::protocol::{self, Command, Decoder, Event, Source};
@@ -43,7 +45,7 @@ use std::{
     time::{Duration, Instant},
 };
 use wayland_client::{
-    Connection, Dispatch, QueueHandle, delegate_noop,
+    Connection, Dispatch, Proxy, QueueHandle, delegate_noop,
     globals::registry_queue_init,
     protocol::{wl_callback, wl_output, wl_shm, wl_surface},
 };
@@ -68,12 +70,39 @@ fn emit(event: &Event) {
     let _ = out.flush();
 }
 
+/// Report the decoder in use, once per player, after its first frame (it is unknown earlier).
+fn report_hwdec(player: &mpv::Player, reported: &mut bool) {
+    if !*reported && let Some(mode) = player.hwdec() {
+        *reported = true;
+        emit(&Event::Hwdec { mode });
+    }
+}
+
+/// Size and scale a surface for its next frame and ask for its frame callback.
+fn place(
+    viewport: Option<&WpViewport>,
+    logical: (i32, i32),
+    scale: i32,
+    surface: &wl_surface::WlSurface,
+    qh: &QueueHandle<Engine>,
+) {
+    if let Some(viewport) = viewport {
+        viewport.set_destination(logical.0.max(1), logical.1.max(1));
+        surface.set_buffer_scale(1);
+    } else {
+        surface.set_buffer_scale(scale.max(1));
+    }
+    surface.frame(qh, Frame(surface.clone()));
+}
+
 struct Out {
     output: wl_output::WlOutput,
     name: String,
     layer: LayerSurface,
     viewport: Option<WpViewport>,
     pool: SlotPool,
+    /// EGL window surface when frames are presented through the GPU path.
+    egl: Option<gl::Window>,
     buffers: Vec<Buffer>,
     /// Index of the buffer last attached.
     current: Option<usize>,
@@ -88,7 +117,22 @@ struct Out {
     first_frame: bool,
 }
 
+/// Which presentation path the renderer uses. `Untried` waits for a configured output.
+enum GlPath {
+    Untried,
+    Ready(Box<gl::Gl>),
+    Off,
+}
+
+enum GlStatus {
+    Ready,
+    Wait,
+    Off,
+}
+
 struct Engine {
+    conn: Connection,
+    gl: GlPath,
     registry: RegistryState,
     output_state: OutputState,
     compositor: CompositorState,
@@ -100,6 +144,11 @@ struct Engine {
     signal: LoopSignal,
     wake: Arc<calloop::ping::Ping>,
     hwdec: &'static str,
+    /// `--render=shm` never tries EGL.
+    shm_only: bool,
+    vaapi_device: Option<String>,
+    /// The decoder in use is reported once per player, after its first rendered frame.
+    hwdec_reported: bool,
     outs: Vec<Out>,
     source: Option<Source>,
     decoder: Decoder,
@@ -118,7 +167,7 @@ impl Engine {
         match command {
             Command::Quit => self.signal.stop(),
             Command::Source { source } => {
-                self.player = None;
+                self.drop_player();
                 self.resume_s = 0.0;
                 self.failed = false;
                 self.starved = false;
@@ -155,9 +204,8 @@ impl Engine {
     fn reconcile(&mut self) {
         let wanted = self.source.is_some() && self.decoder != Decoder::Release && !self.failed;
         if !wanted {
-            if let Some(player) = self.player.take() {
-                self.resume_s = player.position().unwrap_or(self.resume_s);
-                drop(player);
+            if self.player.is_some() {
+                self.resume_s = self.drop_player().unwrap_or(self.resume_s);
                 self.compact();
             }
             return;
@@ -170,17 +218,112 @@ impl Engine {
         }
     }
 
+    /// Free the decoder (with its GL context current when it renders through EGL) and
+    /// return where it was.
+    fn drop_player(&mut self) -> Option<f64> {
+        let player = self.player.take()?;
+        if player.is_gl() {
+            self.bind_any();
+        }
+        player.position()
+    }
+
+    /// Make the EGL context current on any output window (libmpv needs it to render or free).
+    fn bind_any(&mut self) -> bool {
+        let Self { gl, outs, .. } = self;
+        let GlPath::Ready(gl) = gl else { return false };
+        outs.iter_mut().any(|out| {
+            let size = out.pixels;
+            out.egl.as_mut().is_some_and(|window| gl.bind(window, size))
+        })
+    }
+
+    /// Bring up EGL on the first configured output, once. Any failure (no GPU, software GL,
+    /// no libEGL) turns the GPU path off for good and shared memory takes over.
+    fn ensure_gl(&mut self) -> GlStatus {
+        match self.gl {
+            GlPath::Ready(_) => return GlStatus::Ready,
+            GlPath::Off => return GlStatus::Off,
+            GlPath::Untried => {}
+        }
+        if self.shm_only || !gl::render_node_present() {
+            if !self.shm_only {
+                eprintln!("bead-wallpaper-video: shared-memory presentation (no GPU render node)");
+            }
+            self.gl = GlPath::Off;
+            return GlStatus::Off;
+        }
+        let Some(out) = self
+            .outs
+            .iter_mut()
+            .find(|o| o.configured && o.pixels.0 > 0 && o.pixels.1 > 0)
+        else {
+            return GlStatus::Wait;
+        };
+        let surface = out.layer.wl_surface().id().as_ptr().cast();
+        let display = self.conn.backend().display_ptr().cast();
+        // SAFETY: both are live libwayland proxies owned by this process's connection.
+        match unsafe { gl::Gl::new(display, surface, out.pixels) } {
+            Ok((gl, window)) => {
+                out.egl = Some(window);
+                self.gl = GlPath::Ready(Box::new(gl));
+                GlStatus::Ready
+            }
+            Err(error) => {
+                eprintln!("bead-wallpaper-video: shared-memory presentation ({error})");
+                self.disable_gl();
+                GlStatus::Off
+            }
+        }
+    }
+
+    fn disable_gl(&mut self) {
+        for out in &mut self.outs {
+            out.egl = None;
+            out.stale = true;
+        }
+        self.gl = GlPath::Off;
+    }
+
     fn start_player(&mut self) {
         let Some(Source::Video { path, fit, looped }) = self.source.clone() else {
             return;
         };
-        let result = mpv::Player::new(self.hwdec, self.wake.clone()).and_then(|player| {
+        let use_gl = match self.ensure_gl() {
+            GlStatus::Wait => return,
+            GlStatus::Ready => self.bind_any(),
+            GlStatus::Off => false,
+        };
+        let init = match (&self.gl, use_gl) {
+            (GlPath::Ready(gl), true) => Some(mpv::GlInit {
+                get_proc_address: gl::get_proc_address,
+                ctx: gl.proc_context(),
+                wl_display: gl.wl_display(),
+            }),
+            _ => None,
+        };
+        let result = mpv::Player::new(
+            self.hwdec,
+            self.vaapi_device.as_deref(),
+            init.as_ref(),
+            self.wake.clone(),
+        )
+        .and_then(|player| {
             player
                 .load(&path, fit, looped, self.resume_s)
                 .map(|()| player)
         });
         match result {
-            Ok(player) => self.player = Some(player),
+            Ok(player) => {
+                self.hwdec_reported = false;
+                self.player = Some(player);
+            }
+            Err(message) if use_gl => {
+                // The GPU path could not start; try again through shared memory.
+                eprintln!("bead-wallpaper-video: shared-memory presentation ({message})");
+                self.disable_gl();
+                self.start_player();
+            }
             Err(message) => {
                 self.failed = true;
                 emit(&Event::Error { message });
@@ -194,16 +337,12 @@ impl Engine {
         let mut failure = None;
         for notice in player.notices() {
             match notice {
-                mpv::Notice::Loaded => {
-                    if let Some(mode) = player.hwdec() {
-                        emit(&Event::Hwdec { mode });
-                    }
-                }
+                mpv::Notice::Loaded => {}
                 mpv::Notice::Failed(message) => failure = Some(message),
             }
         }
         if let Some(message) = failure {
-            self.player = None;
+            self.drop_player();
             self.failed = true;
             emit(&Event::Error { message });
             return;
@@ -230,6 +369,9 @@ impl Engine {
             player,
             outs,
             render,
+            hwdec_reported,
+            gl,
+            qh,
             ..
         } = self;
         let (Some(player), Some(out)) = (player.as_ref(), outs.get_mut(index)) else {
@@ -242,49 +384,66 @@ impl Engine {
         if width == 0 || height == 0 {
             return false;
         }
-        let stride = (width as usize * 4).next_multiple_of(64);
-        let mut chosen = None;
-        for (i, buffer) in out.buffers.iter_mut().enumerate() {
-            if buffer.canvas(&mut out.pool).is_some() {
-                chosen = Some(i);
-                break;
-            }
-        }
-        if chosen.is_none() && out.buffers.len() < MAX_BUFFERS {
-            match out.pool.create_buffer(
-                width as i32,
-                height as i32,
-                stride as i32,
-                wl_shm::Format::Xrgb8888,
-            ) {
-                Ok((buffer, _)) => {
-                    out.buffers.push(buffer);
-                    chosen = Some(out.buffers.len() - 1);
-                }
-                Err(_) => return false,
-            }
-        }
-        let Some(i) = chosen else { return false };
-        let Some(canvas) = out.buffers[i].canvas(&mut out.pool) else {
-            return false;
-        };
-        if !player.render(width, height, stride, canvas) {
-            return false;
-        }
         let surface = out.layer.wl_surface().clone();
-        if let Some(viewport) = &out.viewport {
-            viewport.set_destination(out.logical.0.max(1), out.logical.1.max(1));
-            surface.set_buffer_scale(1);
+        if let (true, GlPath::Ready(gl)) = (player.is_gl(), &*gl) {
+            if out.egl.is_none() {
+                // SAFETY: the surface proxy and display belong to this live connection.
+                match unsafe { gl.window(surface.id().as_ptr().cast(), out.pixels) } {
+                    Ok(window) => out.egl = Some(window),
+                    Err(_) => return false,
+                }
+            }
+            let Some(window) = out.egl.as_mut() else {
+                return false;
+            };
+            if !gl.bind(window, (width, height)) || !player.render_gl(width, height) {
+                return false;
+            }
+            report_hwdec(player, hwdec_reported);
+            // The swap attaches the new dmabuf and commits these requests with it.
+            place(out.viewport.as_ref(), out.logical, out.scale, &surface, qh);
+            if !gl.swap(window) {
+                return false;
+            }
         } else {
-            surface.set_buffer_scale(out.scale.max(1));
+            let stride = (width as usize * 4).next_multiple_of(64);
+            let mut chosen = None;
+            for (i, buffer) in out.buffers.iter_mut().enumerate() {
+                if buffer.canvas(&mut out.pool).is_some() {
+                    chosen = Some(i);
+                    break;
+                }
+            }
+            if chosen.is_none() && out.buffers.len() < MAX_BUFFERS {
+                match out.pool.create_buffer(
+                    width as i32,
+                    height as i32,
+                    stride as i32,
+                    wl_shm::Format::Xrgb8888,
+                ) {
+                    Ok((buffer, _)) => {
+                        out.buffers.push(buffer);
+                        chosen = Some(out.buffers.len() - 1);
+                    }
+                    Err(_) => return false,
+                }
+            }
+            let Some(i) = chosen else { return false };
+            let Some(canvas) = out.buffers[i].canvas(&mut out.pool) else {
+                return false;
+            };
+            if !player.render(width, height, stride, canvas) {
+                return false;
+            }
+            report_hwdec(player, hwdec_reported);
+            place(out.viewport.as_ref(), out.logical, out.scale, &surface, qh);
+            if out.buffers[i].attach_to(&surface).is_err() {
+                return false;
+            }
+            surface.damage_buffer(0, 0, width as i32, height as i32);
+            out.layer.commit();
+            out.current = Some(i);
         }
-        if out.buffers[i].attach_to(&surface).is_err() {
-            return false;
-        }
-        surface.damage_buffer(0, 0, width as i32, height as i32);
-        surface.frame(&self.qh, Frame(surface.clone()));
-        out.layer.commit();
-        out.current = Some(i);
         out.shown = true;
         out.stale = false;
         out.pending = Some(Instant::now());
@@ -368,6 +527,7 @@ impl Engine {
 
     fn unmap_all(&mut self) {
         for out in &mut self.outs {
+            out.egl = None;
             let surface = out.layer.wl_surface();
             surface.attach(None, 0, 0);
             out.layer.commit();
@@ -449,6 +609,7 @@ impl Engine {
             layer,
             viewport,
             pool,
+            egl: None,
             buffers: Vec::new(),
             current: None,
             pixels: (0, 0),
@@ -616,6 +777,8 @@ impl LayerShellHandler for Engine {
         out.logical = logical;
         out.pixels = pixels;
         out.configured = true;
+        // A start that was waiting for a first output to put EGL on can go ahead now.
+        self.reconcile();
         self.draw(index);
     }
 }
@@ -628,7 +791,11 @@ impl ProvidesRegistryState for Engine {
 }
 smithay_client_toolkit::delegate_dispatch2!(Engine);
 
-fn run(hwdec: &'static str) -> Result<(), Box<dyn std::error::Error>> {
+fn run(
+    hwdec: &'static str,
+    vaapi_device: Option<String>,
+    shm_only: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let conn = Connection::connect_to_env()?;
     let (globals, queue) = registry_queue_init(&conn)?;
     let qh = queue.handle();
@@ -665,6 +832,9 @@ fn run(hwdec: &'static str) -> Result<(), Box<dyn std::error::Error>> {
             let _ = sender.send(Command::Quit);
         })?;
     let mut engine = Engine {
+        conn: conn.clone(),
+        gl: GlPath::Untried,
+        shm_only,
         registry: RegistryState::new(&globals),
         output_state: OutputState::new(&globals, &qh),
         compositor: CompositorState::bind(&globals, &qh)?,
@@ -676,6 +846,8 @@ fn run(hwdec: &'static str) -> Result<(), Box<dyn std::error::Error>> {
         signal: event_loop.get_signal(),
         wake: Arc::new(ping),
         hwdec,
+        vaapi_device,
+        hwdec_reported: false,
         outs: Vec::new(),
         source: None,
         decoder: Decoder::Release,
@@ -690,6 +862,9 @@ fn run(hwdec: &'static str) -> Result<(), Box<dyn std::error::Error>> {
         pid: std::process::id(),
     });
     event_loop.run(None, &mut engine, |_| {})?;
+    // libmpv frees its GL objects with the EGL context current, so it goes first.
+    engine.drop_player();
+    engine.disable_gl();
     Ok(())
 }
 
@@ -701,31 +876,98 @@ fn main() {
         libc::mallopt(-3, 256 * 1024); // M_MMAP_THRESHOLD (also disables the dynamic raise)
         libc::mallopt(-8, 2); // M_ARENA_MAX
     }
-    let mut hwdec = "vaapi-copy";
-    for arg in std::env::args().skip(1) {
-        match arg.as_str() {
-            "--hwdec=no" => hwdec = "no",
-            // VA-API copy-back is the default; `auto` lets mpv pick any copy-back API.
-            "--hwdec=vaapi" => hwdec = "vaapi-copy",
-            "--hwdec=auto" => hwdec = "auto-copy",
-            "--check" => {
-                // Whether this host can play at all (libmpv present); for diagnostics.
-                match mpv::available() {
-                    Ok(()) => return,
-                    Err(error) => {
-                        eprintln!("{error}");
-                        std::process::exit(1);
-                    }
-                }
-            }
-            _ => {
-                eprintln!("usage: bead-wallpaper-video [--hwdec=vaapi|auto|no] [--check]");
-                std::process::exit(2);
-            }
+    let options = match parse_args(std::env::args().skip(1)) {
+        Ok(options) => options,
+        Err(usage) => {
+            eprintln!("{usage}");
+            std::process::exit(2);
         }
+    };
+    if options.check {
+        // Whether this host can play at all (libmpv present); for diagnostics.
+        if let Err(error) = mpv::available() {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
     }
-    if let Err(error) = run(hwdec) {
+    if let Err(error) = run(options.hwdec, options.vaapi_device, options.shm_only) {
         eprintln!("bead-wallpaper-video: {error}");
         std::process::exit(1);
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Options {
+    hwdec: &'static str,
+    /// `--render=shm`: never try the EGL/GPU path.
+    shm_only: bool,
+    vaapi_device: Option<String>,
+    check: bool,
+}
+
+const USAGE: &str = "usage: bead-wallpaper-video [--hwdec=vaapi|auto|no] [--render=auto|shm] [--vaapi-device=/dev/dri/renderD128] [--check]";
+
+fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Options, &'static str> {
+    let mut options = Options {
+        // VA-API is the default; `auto` lets mpv pick any API.
+        hwdec: "vaapi",
+        shm_only: false,
+        vaapi_device: None,
+        check: false,
+    };
+    for arg in args {
+        match arg.as_str() {
+            "--hwdec=no" => options.hwdec = "no",
+            "--hwdec=vaapi" => options.hwdec = "vaapi",
+            "--hwdec=auto" => options.hwdec = "auto",
+            "--render=shm" => options.shm_only = true,
+            "--render=auto" => options.shm_only = false,
+            "--check" => options.check = true,
+            device if device.starts_with("--vaapi-device=/") => {
+                options.vaapi_device = Some(device["--vaapi-device=".len()..].to_string());
+            }
+            _ => return Err(USAGE),
+        }
+    }
+    Ok(options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Result<Options, &'static str> {
+        parse_args(args.iter().map(|a| a.to_string()))
+    }
+
+    #[test]
+    fn defaults_are_vaapi_with_the_gpu_path_allowed() {
+        let options = parse(&[]).unwrap();
+        assert_eq!(options.hwdec, "vaapi");
+        assert!(!options.shm_only && options.vaapi_device.is_none() && !options.check);
+    }
+
+    #[test]
+    fn render_and_decoder_flags() {
+        let options = parse(&["--render=shm", "--hwdec=auto"]).unwrap();
+        assert!(options.shm_only);
+        assert_eq!(options.hwdec, "auto");
+        assert!(!parse(&["--render=shm", "--render=auto"]).unwrap().shm_only);
+        assert_eq!(parse(&["--hwdec=no"]).unwrap().hwdec, "no");
+        assert_eq!(
+            parse(&["--vaapi-device=/dev/dri/renderD129"])
+                .unwrap()
+                .vaapi_device
+                .as_deref(),
+            Some("/dev/dri/renderD129")
+        );
+    }
+
+    #[test]
+    fn unknown_or_relative_arguments_are_refused() {
+        assert!(parse(&["--hwdec=cuda"]).is_err());
+        assert!(parse(&["--vaapi-device=renderD129"]).is_err());
+        assert!(parse(&["--render=gl"]).is_err());
     }
 }

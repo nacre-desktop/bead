@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Minimal libmpv binding, loaded with dlopen so the build needs no libmpv and a missing
-//! library only disables motion wallpapers. Software render API: frames are scaled and
-//! converted by mpv straight into a caller-supplied (shared-memory) buffer.
+//! library only disables motion wallpapers. Two render APIs: the OpenGL one draws the
+//! (hardware-decoded, dmabuf-imported) frame into the caller's current EGL surface; the
+//! software one scales and converts into a caller-supplied (shared-memory) buffer.
 #![allow(non_camel_case_types, clippy::missing_safety_doc)]
 use bead_wallpaper::protocol::Fit;
 use std::{
@@ -32,12 +33,36 @@ const EVENT_END_FILE: c_int = 7;
 const EVENT_FILE_LOADED: c_int = 8;
 const END_FILE_ERROR: c_int = 4;
 const PARAM_API_TYPE: c_int = 1;
+const PARAM_OPENGL_INIT: c_int = 2;
+const PARAM_OPENGL_FBO: c_int = 3;
+const PARAM_FLIP_Y: c_int = 4;
+const PARAM_WL_DISPLAY: c_int = 9;
 const PARAM_SKIP_RENDERING: c_int = 13;
 const PARAM_SW_SIZE: c_int = 17;
 const PARAM_SW_FORMAT: c_int = 18;
 const PARAM_SW_STRIDE: c_int = 19;
 const PARAM_SW_POINTER: c_int = 20;
 const UPDATE_FRAME: u64 = 1;
+
+#[repr(C)]
+struct OpenglInit {
+    get_proc_address: unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void,
+    ctx: *mut c_void,
+}
+#[repr(C)]
+struct OpenglFbo {
+    fbo: c_int,
+    w: c_int,
+    h: c_int,
+    internal_format: c_int,
+}
+/// What the OpenGL render API needs from the caller; the EGL context must be current
+/// whenever a `Player` made with it renders or is dropped.
+pub struct GlInit {
+    pub get_proc_address: unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void,
+    pub ctx: *mut c_void,
+    pub wl_display: *mut c_void,
+}
 
 type Callback = unsafe extern "C" fn(*mut c_void);
 #[derive(Clone, Copy)]
@@ -130,11 +155,23 @@ pub enum Notice {
     Failed(String),
 }
 
+/// The mpv `hwdec` value for a requested decoder: dmabuf-sharing modes with the GL renderer,
+/// copy-back modes (decoded frames read back into system memory) with the software renderer.
+fn hwdec_value(requested: &str, gl: bool) -> &str {
+    match (requested, gl) {
+        ("vaapi", false) => "vaapi-copy",
+        ("auto", false) => "auto-copy",
+        ("auto", true) => "auto-safe",
+        (other, _) => other,
+    }
+}
+
 /// One decoder instance. Dropping it frees every mpv resource.
 pub struct Player {
     api: Api,
     handle: *mut c_void,
     context: *mut c_void,
+    gl: bool,
     // Keeps the wakeup target alive for the callbacks registered above.
     _wake: Arc<calloop::ping::Ping>,
 }
@@ -143,9 +180,16 @@ unsafe extern "C" fn wake(data: *mut c_void) {
     unsafe { &*(data as *const calloop::ping::Ping) }.ping();
 }
 impl Player {
-    /// `hwdec` is an mpv `hwdec` value; copy-back modes (`vaapi-copy`, `auto-copy`) render into
-    /// shared memory, `no` decodes in software. A hardware mode that fails falls back to software.
-    pub fn new(hwdec: &str, wake_up: Arc<calloop::ping::Ping>) -> Result<Self, String> {
+    /// `hwdec` is `vaapi`, `auto` or `no`. With `gl` the decoder hands frames to the GL
+    /// renderer as dmabufs (zero copy); without it a copy-back mode renders into shared
+    /// memory. A hardware mode that fails falls back to software decoding on its own.
+    pub fn new(
+        hwdec: &str,
+        vaapi_device: Option<&str>,
+        gl: Option<&GlInit>,
+        wake_up: Arc<calloop::ping::Ping>,
+    ) -> Result<Self, String> {
+        let hwdec = hwdec_value(hwdec, gl.is_some());
         let api = load()?;
         // SAFETY: documented libmpv call sequence; every pointer comes from libmpv.
         unsafe {
@@ -158,6 +202,7 @@ impl Player {
                 api,
                 handle,
                 context: std::ptr::null_mut(),
+                gl: gl.is_some(),
                 _wake: wake_up,
             };
             // No user configuration, scripts, network helpers or playlist indirection.
@@ -190,22 +235,43 @@ impl Player {
                 // Unknown options in older libmpv versions are ignored on purpose.
                 player.option(name, value);
             }
+            // Diagnostics only: a verbose libmpv log (hwdec selection, fallbacks) in a file.
+            if let Ok(path) = std::env::var("BEAD_WALLPAPER_MPV_LOG") {
+                player.option("log-file", &path);
+                player.option("msg-level", "all=v");
+            }
+            if let Some(device) = vaapi_device {
+                player.option("vaapi-device", device);
+            }
             if (api.initialize)(handle) < 0 {
                 return Err("mpv_initialize failed".into());
             }
-            let mut params = [
-                RenderParam {
-                    kind: PARAM_API_TYPE,
-                    data: c"sw".as_ptr() as *mut c_void,
-                },
-                RenderParam {
-                    kind: 0,
-                    data: std::ptr::null_mut(),
-                },
-            ];
+            let mut init = gl.map(|gl| OpenglInit {
+                get_proc_address: gl.get_proc_address,
+                ctx: gl.ctx,
+            });
+            let mut params = vec![RenderParam {
+                kind: PARAM_API_TYPE,
+                data: if gl.is_some() { c"opengl" } else { c"sw" }.as_ptr() as *mut c_void,
+            }];
+            if let (Some(init), Some(gl)) = (init.as_mut(), gl) {
+                params.push(RenderParam {
+                    kind: PARAM_OPENGL_INIT,
+                    data: (init as *mut OpenglInit).cast(),
+                });
+                // Lets the VA-API/dmabuf interop find the compositor's GPU.
+                params.push(RenderParam {
+                    kind: PARAM_WL_DISPLAY,
+                    data: gl.wl_display,
+                });
+            }
+            params.push(RenderParam {
+                kind: 0,
+                data: std::ptr::null_mut(),
+            });
             let mut context = std::ptr::null_mut();
             if (api.render_create)(&mut context, handle, params.as_mut_ptr()) < 0 {
-                return Err("software render context unavailable".into());
+                return Err("render context unavailable".into());
             }
             player.context = context;
             let data = Arc::as_ptr(&player._wake) as *mut c_void;
@@ -311,6 +377,35 @@ impl Player {
         // SAFETY: valid render context.
         unsafe { (self.api.render_update)(self.context) & UPDATE_FRAME != 0 }
     }
+    pub fn is_gl(&self) -> bool {
+        self.gl
+    }
+    /// Render the current frame into the current EGL surface (`width` x `height` pixels).
+    pub fn render_gl(&self, width: u32, height: u32) -> bool {
+        let mut fbo = OpenglFbo {
+            fbo: 0,
+            w: width as c_int,
+            h: height as c_int,
+            internal_format: 0,
+        };
+        let mut flip: c_int = 1;
+        let mut params = [
+            RenderParam {
+                kind: PARAM_OPENGL_FBO,
+                data: (&mut fbo as *mut OpenglFbo).cast(),
+            },
+            RenderParam {
+                kind: PARAM_FLIP_Y,
+                data: (&mut flip as *mut c_int).cast(),
+            },
+            RenderParam {
+                kind: 0,
+                data: std::ptr::null_mut(),
+            },
+        ];
+        // SAFETY: valid GL render context with its EGL context current; params outlive the call.
+        unsafe { (self.api.render)(self.context, params.as_mut_ptr()) >= 0 }
+    }
     /// Render the current frame into `pixels` (bgr0, `stride` bytes per row).
     pub fn render(&self, width: u32, height: u32, stride: usize, pixels: &mut [u8]) -> bool {
         if pixels.len() < stride * height as usize || stride < width as usize * 4 {
@@ -375,5 +470,20 @@ impl Drop for Player {
             // Hand the decoder's freed heap back to the system.
             libc::malloc_trim(0);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hwdec_value;
+
+    #[test]
+    fn gpu_renderer_shares_frames_and_the_shm_renderer_copies_back() {
+        assert_eq!(hwdec_value("vaapi", true), "vaapi");
+        assert_eq!(hwdec_value("vaapi", false), "vaapi-copy");
+        assert_eq!(hwdec_value("auto", true), "auto-safe");
+        assert_eq!(hwdec_value("auto", false), "auto-copy");
+        assert_eq!(hwdec_value("no", true), "no");
+        assert_eq!(hwdec_value("no", false), "no");
     }
 }

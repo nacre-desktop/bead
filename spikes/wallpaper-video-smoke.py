@@ -13,6 +13,8 @@ from PIL import Image
 ap = argparse.ArgumentParser()
 ap.add_argument("--engine", default="target/debug/bead-wallpaper-video")
 ap.add_argument("--hwdec", default="no")
+ap.add_argument("--engine-arg", action="append", default=[], help="extra renderer argument, e.g. --render=shm")
+ap.add_argument("--expect-presentation", choices=("shm", "egl"), help="fail unless the renderer reports this path")
 ap.add_argument("--keep", action="store_true")
 ap.add_argument("--allow-skip", action="store_true", help="exit 0 when a tool is missing")
 ap.add_argument("--perf", action="store_true", help="1920x1080 output, 1080p30 clip, 3 release/resume cycles")
@@ -129,7 +131,9 @@ try:
         env["SWAYSOCK"] = str(sock)
         outputs = json.loads(subprocess.run(["swaymsg", "-t", "get_outputs", "-r"], env=env, capture_output=True, text=True).stdout or "[]")
         output = outputs[0]["name"] if outputs else output
-    proc = subprocess.Popen([engine, f"--hwdec={args.hwdec}"], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    err_path = root / "renderer.err"
+    proc = subprocess.Popen([engine, f"--hwdec={args.hwdec}"] + args.engine_arg, env=env, stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=err_path.open("w"))
     procs.append(proc)
     events = read_events(proc, "ready", 10)
     check("ready", any(e.get("event") == "ready" for e in events))
@@ -150,6 +154,12 @@ try:
     events = read_events(proc, "first-frame")
     result["hwdec"] = next((e["mode"] for e in events if e.get("event") == "hwdec"), None)
     time.sleep(1.0)
+    # Which presentation path the renderer picked: EGL (GPU) or shared memory. A headless
+    # pixman sway has no GPU, so the fallback must take over without any intervention.
+    log = err_path.read_text()
+    result["presentation"] = "shm" if "shared-memory presentation" in log else "egl" if "EGL presentation" in log else "shm-forced-or-unknown"
+    if args.expect_presentation:
+        check("presentation_" + args.expect_presentation, result["presentation"].startswith(args.expect_presentation))
     result["playing_cpu_pct"] = measure(pid, 3)
     result["playing_pss_kib"] = pss_kib(pid)
     first = shot("play1")
