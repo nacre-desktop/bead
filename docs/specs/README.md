@@ -12,6 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
+| 0 | [B0075 First-key regression](0075-first-key-regression.md) | Review — standalone first key 7.259 ms; five-pair memory/opening median gates and full Arch CI pass | Terminal animation pose, fresh SHM repair and shared raster work; Home-bar first key remains 10.017 ms in its distinct lane. |
 | 0 | [B0076 Docked device detail pages](0076-docked-detail-pages.md) | Review — shared Luau bodies, dock navigation, hidden unsupported tiles and catalog defaults | Full Arch CI, fake-daemon actions/retirement, goldens and private QML/Bead pairs; residual typography/provider gaps in spec. |
 | 0 | [B0077 Overview, command palette and keybindings](0077-overview-palette-keybindings.md) | Review — independent lazy Luau surfaces; capture/move and exact palette content contracts remain | Scoped compositor/shortcuts data, menu engine activation, fake daemon and lifecycle tests; paired private evidence in spec. |
 | 0 | [B0074 Dashboard first-reveal delay](0074-dashboard-reveal-delay.md) | Review — median 10% within −4/+5 ms of QML cold/warm; memory +0.262 MiB closed; full Arch CI | Admission clock and content-sized SVGs. Inherited first-key CPU gate remains; 90% image proxy ~25 ms later. |

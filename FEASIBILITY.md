@@ -1,5 +1,21 @@
 # Feasibility
 
+## 2026-10-24 — B0075 first-key repair
+
+An adjacent-commit bisect identifies cold opening motion, not Home routing.
+The final pose now renders on time; stale SHM slots can borrow fresher pixels.
+Shared immutable rasters and bounded repairs cut work without changing the UI.
+Specified window median gates and full Arch CI pass; Home-bar typing remains a separate gap.
+
+| CPU, five private pairs | Main | Candidate / paired Δ | Gate |
+| --- | ---: | ---: | --- |
+| First key, ms | 17.953 | 7.259 | ≤8 pass |
+| Later a / BackSpace, ms | 6.631 / 7.878 | 6.379 / 7.505 | ≤8 pass |
+| Opening paired Δ, ms | — | +0.066 | ≤+2 pass |
+| Idle / closed total Δ, MiB | — | +0.054 / −0.067 / −0.278 | ≤+0.5 pass |
+
+[Method, memory splits and limits](docs/specs/0075-first-key-regression.md).
+
 ## 2026-10-24 — B0074 dashboard admission and reveal preparation
 
 Starting the reveal clock at admission removes worker/configure time from its start.

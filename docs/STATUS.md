@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-24 — B0075 first-key recovery (review)
+
+Cold opening motion left a terminal pose and old SHM repairs for the next input.
+Five current-main CPU pairs now measure first key 7.259 vs 17.953 ms; later
+`a`/BackSpace medians are 6.379/7.505 ms. Paired idle/closed memory deltas
++0.054/−0.067/−0.278 MiB and opening +0.066 ms pass; full remote Arch CI passes.
+The separate Home-bar first key remains 10.017 ms. Scope, spreads and failed
+prototypes are explicit in [B0075](specs/0075-first-key-regression.md). No live switch.
+
 ## 2026-10-24 — B0077 extras surfaces (review candidate)
 
 Overview, Commands and Keyboard shortcuts now have independent lazy Luau surfaces,
