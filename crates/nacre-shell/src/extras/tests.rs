@@ -127,7 +127,12 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                             .as_array()
                             .unwrap()
                             .iter()
-                            .map(|id| (id.as_str().unwrap().to_owned(), all[id.as_str().unwrap()].clone()))
+                            .map(|id| {
+                                (
+                                    id.as_str().unwrap().to_owned(),
+                                    all[id.as_str().unwrap()].clone(),
+                                )
+                            })
                             .collect();
                         json!({"query":p["query"],"mode":p["mode"],"route":p["route"],"catalog_rev":7,"order":order,"items":items})
                     } else if m == "menu.activate" {
