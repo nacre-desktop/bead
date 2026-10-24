@@ -268,6 +268,19 @@ impl FrontEnd for LuauFrontEnd {
                     crate::layout::PROPERTIES.iter().map(|name| (*name, true)),
                 )?;
                 sdk.set(
+                    "preview_value",
+                    scope.create_function(|_, (key, value): (String, f64)| {
+                        if resolve("bead.preview.key").map_err(mlua::Error::external)?
+                            == Value::Text(key)
+                            && let Value::Number(preview) =
+                                resolve("bead.preview.value").map_err(mlua::Error::external)?
+                        {
+                            return Ok(preview);
+                        }
+                        Ok(value)
+                    })?,
+                )?;
+                sdk.set(
                     "resolve_for_check",
                     scope.create_function(|lua, value: mlua::Value| {
                         if let mlua::Value::Table(table) = &value

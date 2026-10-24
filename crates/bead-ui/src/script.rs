@@ -161,7 +161,9 @@ impl Script {
     pub fn action(&self, name: &str, stores: &Stores, arg: Value) -> Result<Stores, Diagnostic> {
         // Failed actions cannot mutate even lexical state in the current script VM.
         let candidate = Self::load(&self.source, &self.path)?;
-        candidate.execute_action(name, stores, arg)
+        let result = candidate.execute_action(name, stores, arg);
+        bead_core::profile::mark("luau_handler_ready");
+        result
     }
     fn execute_action(
         &self,

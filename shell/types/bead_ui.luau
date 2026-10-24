@@ -32,6 +32,9 @@ export type Props = {
     activate_on_release:any?,
     focus_on_pointer:any?,
     focus_ring:any?,
+    preview_key:any?,
+    preview_value:any?,
+    preview_inset:any?,
     edge_hover:any?,
     scroll:any?,
     fill:any?,
@@ -86,6 +89,7 @@ export type SDK = {
     component:(string,any,any)->any,
     memo:(string,any,any)->Node,
     resolve_for_check:(any)->any,
+    preview_value:(string,number)->number,
     model_count:(any)->number,
     tr:(string,any?)->string,
 }

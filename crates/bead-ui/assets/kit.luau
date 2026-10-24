@@ -73,7 +73,10 @@ return function(ui, tokens)
         local lo,hi=p.min or 0,p.max or 100
         local step=p.step or (hi-lo)/20
         assert(hi>lo and step>0 and math.ceil((hi-lo)/step)<=256,"invalid slider range/step")
-        local current=math.clamp(value(p.value,lo),lo,hi)
+        local first=p.change_arg and p.change_arg(lo) or lo
+        local last=p.change_arg and p.change_arg(hi) or hi
+        local key=(p.id or "").."|"..(p.on_change or "").."|"..typeof(first)..":"..tostring(first).."|"..typeof(last)..":"..tostring(last)
+        local current=math.clamp(ui.preview_value(key,value(p.value,lo)),lo,hi)
         local width=p.width or 240
         local inset,height=6,30
         local avail=width-2*inset
@@ -85,7 +88,7 @@ return function(ui, tokens)
             local count=math.ceil((hi-lo)/step)
             for i=0,count do
                 local n=math.min(hi,lo+i*step)
-                children[i+1]=ui.Button{drag=true,id="value-"..i,grow=1,shrink=0,height=height,padding=0,radius=2,
+                children[i+1]=ui.Button{drag=true,preview_key=key,preview_value=n,preview_inset=inset+4,id="value-"..i,grow=1,shrink=0,height=height,padding=0,radius=2,
                     fill=ui.alpha("surface",0),aria_label=(p.label or "Value").." "..n,
                     on_activate=ui.action(p.on_change,p.change_arg and p.change_arg(n) or n),
                     ui.Box{id="hit",width="100%",height="100%",fill=ui.alpha("surface",0)}}

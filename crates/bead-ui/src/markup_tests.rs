@@ -885,7 +885,11 @@ fn framework_kit_shared_scale_edges_and_independent_tile_actions() {
                 .2,
             Value::Number(75.)
         );
-        assert!(session.drag_action(-1., -1.).is_none());
+        assert_eq!(
+            session.drag_action(-1., -1.).unwrap().2,
+            Value::Number(0.),
+            "a held range clamps outside its row"
+        );
         let scene = session.step_range(true).unwrap().unwrap();
         session.commit(scene);
         assert_eq!(session.stores.get("volume"), Some(&Value::Number(70.)));
@@ -1689,4 +1693,207 @@ return ui.Panel{id="panel",width=400,height=240,table.unpack(nodes)}
     let error = s.reload().err().expect("oversized memo must fail");
     assert!(error.message.contains("exceeds 8 MiB"), "{error:?}");
     assert_eq!(s.state_summary(), before);
+}
+
+#[test]
+fn pointer_preview_precedes_service_echo_and_keyboard_focus_restores_ring() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+local shown=ui.preview_value("volume",ui.resolve_for_check(ui.bind("scroll")))
+return ui.Row{id="row",width=200,height=40,
+ ui.Button{id="target",width=100,text=tostring(shown),preview_key="volume",preview_value=75,
+  on_activate=ui.action("select","a")}}
+"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let candidate = s
+        .pointer_focus_id("row.target", true, None)
+        .unwrap()
+        .unwrap();
+    s.commit(candidate);
+    assert_eq!(
+        s.stores.get("bead.focus_visible"),
+        Some(&Value::Bool(false))
+    );
+    assert!(
+        s.current
+            .primitives
+            .iter()
+            .any(|p| matches!(p, Primitive::Text { text, .. } if text == "75"))
+    );
+    // An older topic echo cannot pull the knob back before the latest request settles.
+    let candidate = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(30.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(candidate);
+    assert!(
+        s.current
+            .primitives
+            .iter()
+            .any(|p| matches!(p, Primitive::Text { text, .. } if text == "75"))
+    );
+    let _ = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(42.))]))
+        .unwrap();
+    let candidate = s.release().unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(s.stores.get("scroll"), Some(&Value::Number(42.)));
+    s.preview_deadline = Some(std::time::Instant::now());
+    let candidate = s.update_model(BTreeMap::new()).unwrap().unwrap();
+    s.commit(candidate);
+    assert!(
+        s.current
+            .primitives
+            .iter()
+            .any(|p| matches!(p, Primitive::Text { text, .. } if text == "42"))
+    );
+    let candidate = s.focus_id("row.target").unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(s.stores.get("bead.focus_visible"), Some(&Value::Bool(true)));
+    let pointer = s.pointer_input();
+    let candidate = s.focus_id("row.target").unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(
+        s.stores.get("bead.focus_visible"),
+        Some(&Value::Bool(false))
+    );
+    drop(pointer);
+    let candidate = s.focus_id("row.target").unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(s.stores.get("bead.focus_visible"), Some(&Value::Bool(true)));
+}
+
+#[test]
+fn stationary_hover_does_not_reproject_services() {
+    let f = fixture();
+    let mut s = session(&f);
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = calls.clone();
+    s.set_projector(Box::new(move |_| {
+        count.set(count.get() + 1);
+        Ok(BTreeMap::new())
+    }));
+    let scene = s.hover(20., 20.).unwrap().unwrap();
+    s.commit(scene);
+    calls.set(0);
+    assert!(s.hover(21., 20.).unwrap().is_none());
+    assert_eq!(calls.get(), 0);
+}
+
+#[test]
+fn kit_slider_feedback_is_continuous_and_scoped_to_its_instance() {
+    let f = fixture();
+    fs::write(
+        f.0.join("palette.json"),
+        include_str!("../../../shell/palette.json"),
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+local kit=require("bead.kit")
+return ui.Column{id="ranges",width=400,height=80,
+ ui.Row{id="row",width=400,height=40,
+  kit.Slider{id="a",value=0,width=200,on_change="select"},
+  kit.Slider{id="b",value=0,width=200,on_change="select"}},
+ ui.Button{id="deferred",width=100,height=40,text="Hold",focus_on_pointer=false,activate_on_release=true,on_activate=ui.action("select","hold")}}
+"#,
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        "return {stores={},actions={select=function(_)end},computed={}}",
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let node = s
+        .current_nodes
+        .iter()
+        .find(|n| n.id.ends_with("a.hits.value-5"))
+        .unwrap();
+    let id = node.id.clone();
+    let r = rect(&node.draw);
+    let x = r.x + r.w / 2.;
+    let candidate = s.pointer_focus_id(&id, true, Some(x)).unwrap().unwrap();
+    s.commit(candidate);
+    let thumb = |suffix: &str| {
+        let layer = s
+            .current
+            .layers
+            .iter()
+            .find(|layer| layer.id.ends_with(suffix))
+            .unwrap();
+        rect(&s.current.primitives[layer.own.start]).x + 4.
+    };
+    assert!(
+        (thumb("a.thumb") - x).abs() <= 0.501,
+        "thumb={} pointer={x} preview={:?}; layout rounds to whole logical pixels",
+        thumb("a.thumb"),
+        s.stores.get("bead.preview.value")
+    );
+    assert!(
+        (thumb("b.thumb") - 210.).abs() < 0.001,
+        "a peer with the same action must keep its own value"
+    );
+    assert!(
+        s.drag_action(1000., -100.)
+            .unwrap()
+            .0
+            .ends_with("a.hits.value-20")
+    );
+    let candidate = s.drag(1000., -100.).unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(
+        s.stores.get("bead.preview.value"),
+        Some(&Value::Number(100.))
+    );
+    let candidate = s.drag(-1000., -100.).unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(s.stores.get("bead.preview.value"), Some(&Value::Number(0.)));
+    let candidate = s.drag(x, -100.).unwrap().unwrap();
+    s.commit(candidate);
+    let candidate = s.release().unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(
+        s.stores.get("bead.preview.value"),
+        Some(&Value::Number(25.)),
+        "release settles to its declared action step before the topic echo"
+    );
+    assert!(
+        s.drag_action(x, 15.).is_none(),
+        "a released range has no grab"
+    );
+    let first = s
+        .current_nodes
+        .iter()
+        .find(|node| node.id.ends_with("a.hits.value-0"))
+        .unwrap()
+        .id
+        .clone();
+    let candidate = s.focus_id(&first).unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(
+        s.stores.get("bead.preview.value"),
+        Some(&Value::Number(25.)),
+        "Tab focus alone must not change a level"
+    );
+    let next = s.range_action(false).unwrap().0;
+    let candidate = s.range_step_id(&next).unwrap().unwrap();
+    s.commit(candidate);
+    assert_eq!(
+        s.stores.get("bead.preview.value"),
+        Some(&Value::Number(5.)),
+        "keyboard activation gets immediate discrete feedback"
+    );
+    assert_eq!(s.stores.get("bead.focus_visible"), Some(&Value::Bool(true)));
+    let candidate = s.click(50., 60.).unwrap().unwrap();
+    s.commit(candidate);
+    assert!(
+        s.drag_action(x, 15.).is_none(),
+        "a deferred button press must not inherit a slider's old focus"
+    );
 }

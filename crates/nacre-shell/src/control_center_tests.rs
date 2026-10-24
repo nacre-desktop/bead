@@ -775,8 +775,15 @@ async fn tiles_call_only_published_methods_with_the_current_state() {
     control.act("");
     settle(&control, &Stores::default()).await;
     assert!(lab.calls.try_recv().is_err());
-    // A target equal to the shown level sends nothing; a far one is one absolute call.
+    // Absolute targets must be sent even if a possibly stale topic already matches.
     control.act("set:audio.output:50");
+    assert_eq!(
+        call(&mut lab).await,
+        (
+            "audio.set_volume".into(),
+            json!({"target":"sink","value":0.125})
+        )
+    );
     settle(&control, &Stores::default()).await;
     assert!(lab.calls.try_recv().is_err());
     control.act("set:audio.output:100");
@@ -860,9 +867,13 @@ async fn every_n0046_tile_calls_its_method_with_absolute_values() {
         assert_eq!(call(&mut lab).await, (method.into(), params), "{arg}");
         assert!(!control.take_close(), "{arg} needs no closed panel");
     }
-    // The same keyboard step, an unknown profile and an unknown source send nothing.
+    // An absolute keyboard level is sent; unknown profiles and sources send nothing.
     settle(&control, &Stores::default()).await;
     control.act("set:keyboard.backlight:33");
+    assert_eq!(
+        call(&mut lab).await,
+        ("keyboard_light.set".into(), json!({"level":1}))
+    );
     control.act("choose:power.profile:turbo");
     control.act("press:vpn.state");
     settle(&control, &Stores::default()).await;
@@ -2394,4 +2405,38 @@ async fn nacre_vpn_transcript_drives_the_tile_the_rows_and_the_calls() {
         call(&mut lab).await,
         ("vpn.disconnect".into(), json!({"connection": "vpn-1"}))
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn returning_to_origin_survives_a_reply_before_the_topic_echo() {
+    for after_reply in [false, true] {
+        let mut lab = lab(&["audio.set_volume"]).await;
+        let control = control_for(&lab).await;
+        // The daemon acknowledges calls but keeps its original 50% snapshot.
+        control.act("set:audio.output:100");
+        assert_eq!(
+            call(&mut lab).await,
+            (
+                "audio.set_volume".into(),
+                json!({"target":"sink","value":1.0})
+            )
+        );
+        if after_reply {
+            settle(&control, &Stores::default()).await;
+        }
+        control.act("set:audio.output:50");
+        settle(&control, &Stores::default()).await;
+        assert_eq!(
+            call(&mut lab).await,
+            (
+                "audio.set_volume".into(),
+                json!({"target":"sink","value":0.125})
+            )
+        );
+        settle(&control, &Stores::default()).await;
+        assert!(
+            lab.calls.try_recv().is_err(),
+            "a settled final target must not loop"
+        );
+    }
 }

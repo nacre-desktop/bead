@@ -14,9 +14,21 @@ pub(super) struct Pending {
     pub(super) nodes: Vec<Node>,
 }
 pub type Projector = Box<dyn Fn(&Stores) -> Result<BTreeMap<String, Value>, Diagnostic>>;
+/// Scope host-intercepted pointer actions so programmatic focus uses pointer styling.
+pub struct PointerInput {
+    state: std::rc::Rc<std::cell::Cell<bool>>,
+    previous: bool,
+}
+impl Drop for PointerInput {
+    fn drop(&mut self) {
+        self.state.set(self.previous);
+    }
+}
 /// The state owner survives every view/script replacement.
 pub struct Session {
     projector: Option<Projector>,
+    pointer_input: std::rc::Rc<std::cell::Cell<bool>>,
+    pub(super) preview_deadline: Option<std::time::Instant>,
     coalesce_projection: bool,
     recovery_path: Option<PathBuf>,
     recovered: Option<bead_core::recovery::Restored>,
@@ -43,6 +55,7 @@ pub struct Session {
     pub(super) restore: Option<BTreeMap<String, Value>>,
     pub(super) deferred_action: Option<DeferredAction>,
     pub(super) deferred_gesture: bool,
+    pub(super) range_grab: Option<String>,
 }
 pub(super) struct DeferredAction {
     pub(super) id: String,
@@ -51,6 +64,13 @@ pub(super) struct DeferredAction {
     pub(super) pointer: (f32, f32),
 }
 impl Session {
+    /// Keep the returned guard alive while routing an intercepted pointer action.
+    pub fn pointer_input(&self) -> PointerInput {
+        PointerInput {
+            previous: self.pointer_input.replace(true),
+            state: self.pointer_input.clone(),
+        }
+    }
     pub fn set_projector(&mut self, projector: Projector) {
         self.projector = Some(projector);
     }
@@ -68,6 +88,8 @@ impl Session {
     ) -> Self {
         Self {
             projector: None,
+            pointer_input: Default::default(),
+            preview_deadline: None,
             coalesce_projection: false,
             recovery_path: None,
             recovered: None,
@@ -97,6 +119,7 @@ impl Session {
             restore: None,
             deferred_action: None,
             deferred_gesture: false,
+            range_grab: None,
         }
     }
     pub fn restore_on_start(&mut self, values: BTreeMap<String, Value>) {
@@ -402,11 +425,51 @@ impl Session {
         }
         scene
     }
+    /// Deadline for expiring unacknowledged transient control feedback.
+    pub fn preview_deadline(&self) -> Option<std::time::Instant> {
+        if self.stores.get("bead.pressed") == Some(&Value::Bool(true)) {
+            None
+        } else {
+            self.preview_deadline
+        }
+    }
+    pub(super) fn preview_changes(&mut self, key: String, value: f32) -> BTreeMap<String, Value> {
+        if key.is_empty() {
+            return BTreeMap::new();
+        }
+        self.preview_deadline =
+            Some(std::time::Instant::now() + std::time::Duration::from_millis(750));
+        BTreeMap::from([
+            ("bead.preview.key".into(), Value::Text(key)),
+            ("bead.preview.value".into(), Value::Number(f64::from(value))),
+        ])
+    }
     pub(super) fn stage_state(&mut self, stores: Stores) -> Result<Option<Scene>, Diagnostic> {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
         let mut stores = stores;
+        if self.pointer_input.get() && stores.get("bead.focus_visible").is_some() {
+            stores
+                .commit(BTreeMap::from([(
+                    "bead.focus_visible".into(),
+                    Value::Bool(false),
+                )]))
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
+        if stores.get("bead.pressed") != Some(&Value::Bool(true))
+            && self
+                .preview_deadline
+                .is_some_and(|deadline| std::time::Instant::now() >= deadline)
+        {
+            self.preview_deadline = None;
+            stores
+                .commit(BTreeMap::from([(
+                    "bead.preview.key".into(),
+                    Value::Text(String::new()),
+                )]))
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
         if let Some(projector) = &self.projector {
             stores
                 .commit(projector(&stores)?)
@@ -508,6 +571,9 @@ impl Session {
         // An empty/unused model delta may be a wakeup for external data. Read
         // its projector before deciding there is no view change.
         if self.projector.is_none()
+            && self
+                .preview_deadline()
+                .is_none_or(|deadline| std::time::Instant::now() < deadline)
             && self.pending.is_none()
             && let Some(generation) = &self.generation
             && !generation.model_affects_view(changes.iter().filter_map(|(id, value)| {

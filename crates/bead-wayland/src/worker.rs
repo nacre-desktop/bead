@@ -97,6 +97,25 @@ enum Job {
     Ack(u64, Result<(), String>),
     Stop,
 }
+// Pointer positions are replaceable only within the same gesture. Every other
+// job is an ordering barrier (especially press, release and model updates).
+fn enqueue(queue: &mut VecDeque<Job>, job: Job) {
+    let replace = matches!(
+        (queue.back(), &job),
+        (
+            Some(Job::Stage(UiEvent::Hover { .. }, _)),
+            Job::Stage(UiEvent::Hover { .. }, _)
+        ) | (
+            Some(Job::Stage(UiEvent::Drag { .. }, _)),
+            Job::Stage(UiEvent::Drag { .. }, _)
+        )
+    );
+    if replace {
+        queue.pop_back();
+    }
+    queue.push_back(job);
+}
+
 pub struct Source {
     factory: Option<Factory>,
     sender: Option<mpsc::Sender<Job>>,
@@ -199,11 +218,26 @@ impl SceneSource for Source {
                 let mut token = 0;
                 let mut idle = false;
                 let mut needs_trim = false;
+                let mut active_scales = vec![1.];
                 'actor: loop {
+                    for job in receiver.try_iter() {
+                        enqueue(&mut queue, job);
+                    }
                     let job = if let Some(job) = queue.pop_front() {
                         job
                     } else {
-                        if idle && needs_trim {
+                        if let Some(deadline) = source.wakeup_at() {
+                            match receiver.recv_timeout(
+                                deadline.saturating_duration_since(std::time::Instant::now()),
+                            ) {
+                                Ok(job) => job,
+                                Err(mpsc::RecvTimeoutError::Timeout) => Job::Stage(
+                                    UiEvent::Model(Default::default()),
+                                    active_scales.clone(),
+                                ),
+                                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                            }
+                        } else if idle && needs_trim {
                             match receiver.recv_timeout(std::time::Duration::from_millis(250)) {
                                 Ok(job) => job,
                                 Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -251,6 +285,25 @@ impl SceneSource for Source {
                         }
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) => {
+                            active_scales.clone_from(&scales);
+                            match &event {
+                                UiEvent::Hover { x, y } => {
+                                    bead_core::profile::position("worker_hover", *x, *y)
+                                }
+                                UiEvent::Drag { x, y } => {
+                                    bead_core::profile::position("worker_drag", *x, *y)
+                                }
+                                UiEvent::Click { x, y } => {
+                                    bead_core::profile::position("worker_click", *x, *y)
+                                }
+                                _ => {}
+                            }
+                            bead_core::profile::mark(match &event {
+                                UiEvent::Hover { .. } => "worker_hover",
+                                UiEvent::Drag { .. } => "worker_drag",
+                                UiEvent::Click { .. } => "worker_click",
+                                _ => "worker_input",
+                            });
                             let reload = matches!(event, UiEvent::Reload);
                             // Detaching or docking gives the panel another look: once it
                             // is accepted, the rasters only the old look used can go.
@@ -369,7 +422,7 @@ impl SceneSource for Source {
                                         }
                                         break;
                                     }
-                                    Ok(job) => queue.push_back(job),
+                                    Ok(job) => enqueue(&mut queue, job),
                                 }
                             }
                         }
@@ -557,6 +610,48 @@ mod tests {
         fn error_scene(&mut self, _: String) -> Scene {
             scene()
         }
+    }
+    #[test]
+    fn pointer_queue_keeps_latest_position_and_gesture_barriers() {
+        let mut queue = VecDeque::new();
+        for x in 0..100 {
+            enqueue(
+                &mut queue,
+                Job::Stage(UiEvent::Hover { x: x as f32, y: 1. }, vec![1.5]),
+            );
+        }
+        enqueue(
+            &mut queue,
+            Job::Stage(UiEvent::Click { x: 99., y: 1. }, vec![1.5]),
+        );
+        for x in 100..200 {
+            enqueue(
+                &mut queue,
+                Job::Stage(UiEvent::Drag { x: x as f32, y: 1. }, vec![1.5]),
+            );
+        }
+        enqueue(&mut queue, Job::Stage(UiEvent::Release, vec![1.5]));
+        enqueue(
+            &mut queue,
+            Job::Stage(UiEvent::Hover { x: 200., y: 1. }, vec![1.5]),
+        );
+        assert_eq!(queue.len(), 5);
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::Hover { x: 99., .. }, _))
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::Click { .. }, _))
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::Drag { x: 199., .. }, _))
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::Release, _))
+        ));
     }
     #[test]
     fn worker_requires_gpu_ack_before_store_commit_and_supplies_prebaked_pixels() {

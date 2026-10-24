@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include "wlr-vp.h"
@@ -22,6 +23,7 @@ static struct zwlr_virtual_pointer_manager_v1 *manager;
 static struct wl_seat *seat;
 
 static void global(void *data, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version) {
+    (void)version;
     (void)data;
     if (!strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name))
         manager = wl_registry_bind(registry, name, &zwlr_virtual_pointer_manager_v1_interface, 1);
@@ -32,7 +34,7 @@ static void global_remove(void *data, struct wl_registry *registry, uint32_t nam
 static const struct wl_registry_listener listener = {global, global_remove};
 
 int main(int argc, char **argv) {
-    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click]\n", argv[0]); return 2; }
+    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|drag X2 Y2 MS]\n", argv[0]); return 2; }
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "no wayland display\n"); return 1; }
     struct wl_registry *registry = wl_display_get_registry(display);
@@ -53,7 +55,29 @@ int main(int argc, char **argv) {
         zwlr_virtual_pointer_v1_button(pointer, 1, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
         zwlr_virtual_pointer_v1_frame(pointer);
         wl_display_roundtrip(display);
-        if (!strcmp(argv[5], "click")) {
+        if (!strcmp(argv[5], "drag")) {
+            if (argc != 9) { fprintf(stderr, "drag requires X2 Y2 MS\n"); return 2; }
+            unsigned end_x = (unsigned)atoi(argv[6]), end_y = (unsigned)atoi(argv[7]);
+            unsigned ms = (unsigned)atoi(argv[8]);
+            if (!ms || ms > 10000) { fprintf(stderr, "drag duration must be 1..10000 ms\n"); return 2; }
+            // 250 Hz input deliberately exceeds the display rate to expose queues.
+            unsigned steps = ms / 4 + 1;
+            for (unsigned i = 1; i <= steps; i++) {
+                usleep(ms * 1000 / steps);
+                unsigned px = (unsigned)((double)x + ((double)end_x - x) * i / steps);
+                unsigned py = (unsigned)((double)y + ((double)end_y - y) * i / steps);
+                struct timespec now;
+                clock_gettime(CLOCK_MONOTONIC, &now);
+                fprintf(stdout, "POINTER_SENT monotonic_ns=%llu x=%u y=%u\n",
+                        (unsigned long long)now.tv_sec * 1000000000ULL + now.tv_nsec, px, py);
+                zwlr_virtual_pointer_v1_motion_absolute(pointer, i, px, py, w, h);
+                zwlr_virtual_pointer_v1_frame(pointer);
+                wl_display_roundtrip(display);
+            }
+            zwlr_virtual_pointer_v1_button(pointer, steps + 1, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+            zwlr_virtual_pointer_v1_frame(pointer);
+            wl_display_roundtrip(display);
+        } else if (!strcmp(argv[5], "click")) {
             usleep(60000);
             zwlr_virtual_pointer_v1_button(pointer, 2, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
             zwlr_virtual_pointer_v1_frame(pointer);

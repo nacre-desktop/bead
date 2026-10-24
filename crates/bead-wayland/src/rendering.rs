@@ -788,6 +788,9 @@ impl App {
                     );
                 }
                 let swap_started = Instant::now();
+                if s.companion {
+                    bead_core::profile::mark("panel_commit");
+                }
                 transport.present(surface, &regions)?;
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.swap_ms.push(swap_started.elapsed().as_secs_f64() * 1000.);

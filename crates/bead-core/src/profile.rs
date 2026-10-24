@@ -65,3 +65,14 @@ pub fn mark(stage: &'static str) {
         );
     }
 }
+
+/// Opt-in numeric pointer positions associate coalesced input with rendered updates.
+pub fn position(stage: &'static str, x: f32, y: f32) {
+    if enabled() {
+        println!(
+            "UI_POINTER stage={stage} x={x:.3} y={y:.3} monotonic_ns={} thread={:?}",
+            monotonic_ns(),
+            std::thread::current().id()
+        );
+    }
+}

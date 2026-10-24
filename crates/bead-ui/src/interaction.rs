@@ -83,10 +83,15 @@ impl Session {
     /// Pointer press: the hit control's action sees `bead.pressed` false (a new gesture);
     /// every drag step that follows sees it true until [`Session::release`].
     pub fn click(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
-        self.click_at(x, y, true)
+        self.click_at(x, y, true, true)
     }
     pub fn release(&mut self) -> Result<Option<Scene>, Diagnostic> {
         let deferred = self.deferred_valid();
+        self.range_grab = None;
+        if self.preview_deadline.is_some() {
+            self.preview_deadline =
+                Some(std::time::Instant::now() + std::time::Duration::from_millis(750));
+        }
         self.deferred_action = None;
         self.deferred_gesture = false;
         if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) && deferred.is_none() {
@@ -95,7 +100,37 @@ impl Session {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let mut stores = self.stores.clone();
+        // A host may flush the last deferred range action in this same input
+        // transaction. Preserve its candidate values when releasing the gesture.
+        let mut stores = self
+            .pending
+            .as_ref()
+            .filter(|pending| pending.generation.is_none())
+            .map_or_else(|| self.stores.clone(), |pending| pending.stores.clone());
+        // Settle a continuous drag to the action's declared step on release,
+        // rather than snapping later when the authoritative echo catches up.
+        let released_value = stores.get("bead.focused").and_then(|focused| {
+            let Value::Text(id) = focused else {
+                return None;
+            };
+            self.current_nodes
+                .iter()
+                .find(|node| {
+                    &node.id == id
+                        && !node.preview_key.is_empty()
+                        && stores.get("bead.preview.key")
+                            == Some(&Value::Text(node.preview_key.clone()))
+                })
+                .map(|node| node.preview_value)
+        });
+        if let Some(value) = released_value {
+            stores
+                .commit(BTreeMap::from([(
+                    "bead.preview.value".into(),
+                    Value::Number(f64::from(value)),
+                )]))
+                .map_err(|e| generation.script.error(e))?;
+        }
         if stores.get("bead.pressed").is_some() {
             stores
                 .commit(BTreeMap::from([(
@@ -119,8 +154,21 @@ impl Session {
         }
         self.stage_state(stores)
     }
-    fn click_at(&mut self, x: f32, y: f32, press: bool) -> Result<Option<Scene>, Diagnostic> {
+    fn click_at(
+        &mut self,
+        x: f32,
+        y: f32,
+        press: bool,
+        continuous: bool,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        let preview = self
+            .hit(x, y, false)
+            .map(|node| self.preview_position(node, continuous.then_some(x)));
+        let changes = preview.map_or_else(BTreeMap::new, |(key, value)| {
+            self.preview_changes(key, value)
+        });
         if press {
+            self.capture_pointer(x, y);
             self.deferred_action = None;
             self.deferred_gesture = false;
         }
@@ -150,6 +198,17 @@ impl Session {
                 )
             });
         let mut stores = self.stores.clone();
+        if (press || !continuous) && self.stores.get("bead.focus_visible").is_some() {
+            stores
+                .commit(BTreeMap::from([(
+                    "bead.focus_visible".into(),
+                    Value::Bool(!continuous),
+                )]))
+                .map_err(|e| generation.script.error(e))?;
+        }
+        stores
+            .commit(changes)
+            .map_err(|e| generation.script.error(e))?;
         // A press can arrive before its preceding hover frame was committed.
         if press
             && self.stores.get("bead.hovered").is_some()
@@ -236,25 +295,23 @@ impl Session {
                 Value::Bool(false),
             )]));
         }
-        let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
+        let Some(current) = self.drag_node() else {
             return Ok(None);
         };
-        let Some(current) = self
-            .current_nodes
-            .iter()
-            .find(|n| &n.id == focused && n.drag)
-        else {
+        let range = !current.preview_key.is_empty();
+        let Some(target) = self.drag_target(current, x, y) else {
             return Ok(None);
         };
-        let group = current.id.rsplit_once('.').map(|(parent, _)| parent);
-        if self
-            .hit(x, y, false)
-            .is_some_and(|n| n.drag && n.id.rsplit_once('.').map(|(parent, _)| parent) == group)
-        {
-            self.click_at(x, y, false)
-        } else {
-            Ok(None)
+        if !range {
+            return self.click_at(x, y, false, true);
         }
+        let r = rect(&target.draw);
+        let px = if x >= r.x && x < r.x + r.w {
+            x
+        } else {
+            r.x + r.w / 2.
+        };
+        self.click_at(px, r.y + r.h / 2., false, true)
     }
     pub fn step_range(&mut self, back: bool) -> Result<Option<Scene>, Diagnostic> {
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
@@ -286,7 +343,7 @@ impl Session {
             (index + 1).min(peers.len() - 1)
         };
         let r = rect(&peers[next].draw);
-        self.click_at(r.x + r.w / 2., r.y + r.h / 2., false)
+        self.click_at(r.x + r.w / 2., r.y + r.h / 2., false, false)
     }
     pub fn focused_range(&self) -> bool {
         matches!(self.stores.get("bead.focused"),Some(Value::Text(id)) if self.current_nodes.iter().any(|n|n.drag && &n.id==id))
@@ -306,9 +363,17 @@ impl Session {
         let id = self
             .hit(x, y, false)
             .map_or(String::new(), |node| node.id.clone());
-        let mut changes = BTreeMap::from([("bead.hovered".into(), Value::Text(id))]);
+        let mut changes: BTreeMap<String, Value> =
+            BTreeMap::from([("bead.hovered".into(), Value::Text(id))]);
         if canceled {
             changes.insert("bead.pressed".into(), Value::Bool(false));
+        }
+        if !canceled
+            && changes
+                .iter()
+                .all(|(id, value)| self.stores.get(id) == Some(value))
+        {
+            return Ok(None);
         }
         self.update(changes)
     }
@@ -345,6 +410,61 @@ impl Session {
         self.focus_id(&ids[next])
     }
     pub fn focus_id(&mut self, id: &str) -> Result<Option<Scene>, Diagnostic> {
+        self.focus_with_visibility(id, true, false, None, false)
+    }
+    /// Pointer focus retains keyboard routing without painting a keyboard focus ring.
+    fn preview_position(&self, node: &Node, x: Option<f32>) -> (String, f32) {
+        let mut value = node.preview_value;
+        if !node.preview_key.is_empty()
+            && let Some(x) = x
+        {
+            let peers = self
+                .current_nodes
+                .iter()
+                .filter(|peer| peer.preview_key == node.preview_key);
+            let mut left = f32::INFINITY;
+            let mut right = f32::NEG_INFINITY;
+            let mut low = f32::INFINITY;
+            let mut high = f32::NEG_INFINITY;
+            for peer in peers {
+                let r = rect(&peer.draw);
+                left = left.min(r.x);
+                right = right.max(r.x + r.w);
+                low = low.min(peer.preview_value);
+                high = high.max(peer.preview_value);
+            }
+            let span = right - left - 2. * node.preview_inset;
+            if span > 0. && high > low {
+                value = low + ((x - left - node.preview_inset) / span).clamp(0., 1.) * (high - low);
+            }
+        }
+        (node.preview_key.clone(), value)
+    }
+    pub fn has_preview(&self, id: &str) -> bool {
+        self.current_nodes
+            .iter()
+            .any(|node| node.id == id && !node.preview_key.is_empty())
+    }
+    pub fn pointer_focus_id(
+        &mut self,
+        id: &str,
+        press: bool,
+        x: Option<f32>,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        self.focus_with_visibility(id, false, press, x, true)
+    }
+    /// Focus a keyboard-activated range step without waiting for its service echo.
+    pub fn range_step_id(&mut self, id: &str) -> Result<Option<Scene>, Diagnostic> {
+        self.focus_with_visibility(id, true, false, None, true)
+    }
+    fn focus_with_visibility(
+        &mut self,
+        id: &str,
+        visible: bool,
+        press: bool,
+        x: Option<f32>,
+        preview: bool,
+    ) -> Result<Option<Scene>, Diagnostic> {
         if !self
             .current_nodes
             .iter()
@@ -357,10 +477,21 @@ impl Session {
                 "focus target is not visible/focusable",
             ));
         }
-        self.update(BTreeMap::from([(
-            "bead.focused".into(),
-            Value::Text(id.into()),
-        )]))
+        let mut changes = BTreeMap::from([("bead.focused".into(), Value::Text(id.into()))]);
+        if preview && let Some(node) = self.current_nodes.iter().find(|node| node.id == id) {
+            let (key, value) = self.preview_position(node, x);
+            if press {
+                self.range_grab = (!key.is_empty() && node.drag).then(|| key.clone());
+            }
+            if press && !key.is_empty() {
+                changes.insert("bead.pressed".into(), Value::Bool(true));
+            }
+            changes.extend(self.preview_changes(key, value));
+        }
+        if self.stores.get("bead.focus_visible").is_some() {
+            changes.insert("bead.focus_visible".into(), Value::Bool(visible));
+        }
+        self.update(changes)
     }
     pub fn action_at(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
         let node = self.hit(x, y, false)?;
@@ -421,23 +552,70 @@ impl Session {
         let r = rect(&peers[next].draw);
         self.action_at(r.x + r.w / 2., r.y + r.h / 2.)
     }
-    pub fn drag_action(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
+    /// Record the numeric control owning a press before a host intercepts its action.
+    pub fn capture_pointer(&mut self, x: f32, y: f32) {
+        self.range_grab = self
+            .hit(x, y, false)
+            .filter(|node| node.drag && !node.preview_key.is_empty())
+            .map(|node| node.preview_key.clone());
+    }
+    fn drag_node(&self) -> Option<&Node> {
+        if let Some(group) = &self.range_grab {
+            return self
+                .current_nodes
+                .iter()
+                .find(|node| node.drag && &node.preview_key == group);
+        }
         let Value::Text(focused) = self.stores.get("bead.focused")? else {
             return None;
         };
-        let current = self
-            .current_nodes
+        self.current_nodes
             .iter()
-            .find(|n| &n.id == focused && n.drag)?;
-        let hit = self.hit(x, y, false)?;
-        if hit.drag
-            && hit.id.rsplit_once('.').map(|(p, _)| p)
-                == current.id.rsplit_once('.').map(|(p, _)| p)
+            .find(|node| &node.id == focused && node.drag)
+    }
+    fn drag_target(&self, current: &Node, x: f32, y: f32) -> Option<&Node> {
+        let group = current.id.rsplit_once('.').map(|(parent, _)| parent);
+        if !current.preview_key.is_empty()
+            && self.range_grab.as_deref() != Some(current.preview_key.as_str())
         {
-            self.action_at(x, y)
-        } else {
-            None
+            return None;
         }
+        let peer = |node: &Node| {
+            node.drag
+                && if current.preview_key.is_empty() {
+                    node.id.rsplit_once('.').map(|(parent, _)| parent) == group
+                } else {
+                    node.preview_key == current.preview_key
+                }
+        };
+        self.hit(x, y, false).filter(|node| peer(node)).or_else(|| {
+            if current.preview_key.is_empty() {
+                return None;
+            }
+            // Numeric ranges retain their gesture outside the row and clamp at its ends.
+            self.current_nodes
+                .iter()
+                .filter(|node| peer(node) && node.preview_key == current.preview_key)
+                .min_by(|a, b| {
+                    let distance = |node: &Node| {
+                        let r = rect(&node.draw);
+                        (x - r.x - r.w / 2.).abs()
+                    };
+                    distance(a).total_cmp(&distance(b))
+                })
+        })
+    }
+    pub fn drag_action(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
+        if self.deferred_gesture {
+            return None;
+        }
+        let current = self.drag_node()?;
+        let hit = self.drag_target(current, x, y)?;
+        Some((
+            hit.id.clone(),
+            hit.action.clone()?,
+            hit.action_arg.clone().unwrap_or(Value::Bool(true)),
+        ))
     }
     pub fn activate_focused(&mut self) -> Result<Option<Scene>, Diagnostic> {
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {

@@ -63,6 +63,8 @@ pub struct Runtime {
     control_subscription: Vec<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
+    slider_sent: Option<std::time::Instant>,
+    slider_pending: Option<UiEvent>,
     launcher_memory: Option<crate::launcher::Memory>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
@@ -335,6 +337,8 @@ impl Runtime {
             control_subscription: Vec::new(),
             dashboard: None,
             dashboard_subscription: Vec::new(),
+            slider_sent: None,
+            slider_pending: None,
             launcher_memory: None,
             connection_status: None,
             connection_subscription: None,
@@ -1565,7 +1569,9 @@ impl Runtime {
                 let bead::core::Value::Number(value) = arg else {
                     return Err("volume requires a number".into());
                 };
-                Action::Volume((value / 100.).clamp(0., 1.))
+                return desktop
+                    .queue_volume((value / 100.).clamp(0., 1.))
+                    .map_err(|e| e.into());
             }
             "services.audio" => {
                 if let Some(delta) = delta {
@@ -1866,7 +1872,36 @@ impl Runtime {
         Ok(scene)
     }
 }
+impl Runtime {
+    fn pointer_feedback(
+        &mut self,
+        id: &str,
+        event: &UiEvent,
+    ) -> Result<Option<Scene>, bead::ui::Diagnostic> {
+        match event {
+            UiEvent::Click { x, .. } => self.session.pointer_focus_id(id, true, Some(*x)),
+            UiEvent::Drag { x, .. } => self.session.pointer_focus_id(id, false, Some(*x)),
+            UiEvent::Command { command, .. } if command == "left" || command == "right" => {
+                self.session.range_step_id(id)
+            }
+            _ => self.session.focus_id(id),
+        }
+    }
+}
+
 impl SceneSource for Runtime {
+    fn wakeup_at(&self) -> Option<std::time::Instant> {
+        let send = self
+            .slider_pending
+            .as_ref()
+            .and(self.slider_sent)
+            .map(|sent| sent + std::time::Duration::from_millis(34));
+        [send, self.session.preview_deadline()]
+            .into_iter()
+            .flatten()
+            .min()
+    }
+
     fn panel_center(&mut self, center: Option<f32>) {
         if let Some(chrome) = &mut self.chrome {
             chrome.center = center;
@@ -2215,6 +2250,26 @@ impl SceneSource for Runtime {
         self.session.watch(wakeup)
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        if let UiEvent::Click { x, y } = &event {
+            self.session.capture_pointer(*x, *y);
+        }
+        let _pointer_input = matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
+            .then(|| self.session.pointer_input());
+        // Finish the old gesture before release can retire its final target. A final flush is exempt from the continuous-drag cap.
+        if matches!(&event, UiEvent::Release)
+            && let Some(pending) = self.slider_pending.take()
+        {
+            self.slider_sent = None;
+            let _ = self.stage(pending)?;
+        }
+        if matches!(&event, UiEvent::Model(values) if values.is_empty())
+            && self
+                .slider_sent
+                .is_some_and(|sent| sent.elapsed() >= std::time::Duration::from_millis(34))
+            && let Some(pending) = self.slider_pending.take()
+        {
+            event = pending;
+        }
         // A pearl's border lights up under the pointer; re-decorate only when that flips.
         if self.detached
             && let UiEvent::Hover { x, .. } = &event
@@ -2343,6 +2398,21 @@ impl SceneSource for Runtime {
             UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
             _ => None,
         };
+        if matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
+            && let Some((id, _, _)) = &host_action
+            && self.session.has_preview(id)
+        {
+            if self
+                .slider_sent
+                .is_some_and(|sent| sent.elapsed() < std::time::Duration::from_millis(34))
+            {
+                let scene = self.pointer_feedback(id, &event)?;
+                self.slider_pending = Some(event);
+                return self.finish_scene(scene, false);
+            }
+            self.slider_pending = None;
+            self.slider_sent = Some(std::time::Instant::now());
+        }
         if let Some((_, name, _)) = &mut host_action
             && name == "services.tray"
             && matches!(&event, UiEvent::SecondaryClick { .. })
@@ -2549,7 +2619,7 @@ impl SceneSource for Runtime {
             (&self.control, &host_action)
             && name == "cc.do"
             && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
         {
             self.actions.authorize(name)?;
             control.act(arg);
@@ -2562,7 +2632,7 @@ impl SceneSource for Runtime {
                 return self.finish_scene(scene, false);
             }
             // A level step keeps the focus so the drag continues over the next step.
-            let scene = match self.session.focus_id(id) {
+            let scene = match self.pointer_feedback(id, &event) {
                 Ok(scene) => scene,
                 Err(_) => self.session.update(BTreeMap::new())?,
             };
@@ -2590,7 +2660,7 @@ impl SceneSource for Runtime {
             (&self.settings, &host_action)
             && name == "settings.do"
             && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
         {
             self.actions.authorize(name)?;
             let wakeup = self
@@ -2620,7 +2690,7 @@ impl SceneSource for Runtime {
             // A slider step keeps the focus so the drag continues over the next step.
             let scene = match arg
                 .starts_with("do:vol|")
-                .then(|| self.session.focus_id(id))
+                .then(|| self.pointer_feedback(id, &event))
             {
                 Some(Ok(scene)) => scene,
                 _ => self.session.update(changes)?,
@@ -2631,13 +2701,13 @@ impl SceneSource for Runtime {
             (&self.colors, &host_action)
             && name == "colors.do"
             && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
         {
             self.actions.authorize(name)?;
             let changes = colors.act(arg, &self.session.stores);
             // A slider step keeps the focus so the drag continues over the next step.
             let level = arg.starts_with("brightness:") || arg.starts_with("saturation:");
-            let scene = match level.then(|| self.session.focus_id(id)) {
+            let scene = match level.then(|| self.pointer_feedback(id, &event)) {
                 Some(Ok(scene)) => scene,
                 _ => self.session.update(changes)?,
             };
@@ -2954,6 +3024,12 @@ impl SceneSource for Runtime {
                     route.method()
                 );
             }
+            if self.session.has_preview(id)
+                && matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
+            {
+                let scene = self.pointer_feedback(id, &event)?;
+                return self.finish_scene(scene, false);
+            }
             return Ok(None);
         }
         if let Some((id, name, arg)) = host_action.as_ref()
@@ -2986,6 +3062,12 @@ impl SceneSource for Runtime {
                 } else {
                     result?;
                 }
+            }
+            if self.session.has_preview(id)
+                && matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
+            {
+                let scene = self.pointer_feedback(id, &event)?;
+                return self.finish_scene(scene, false);
             }
             if !self.bar {
                 self.pending_focus = Some(id.clone());

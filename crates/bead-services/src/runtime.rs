@@ -128,6 +128,12 @@ pub struct Desktop {
     sender: mpsc::Sender<Command>,
     workers: Mutex<Vec<JoinHandle<()>>>,
 }
+fn validate_volume(volume: f64) -> Result<(), String> {
+    if !volume.is_finite() || !(0.0..=1.5).contains(&volume) {
+        return Err("volume must be finite and in 0..1.5".into());
+    }
+    Ok(())
+}
 impl Desktop {
     pub fn start() -> Arc<Self> {
         Self::start_config(Config::default())
@@ -190,9 +196,7 @@ impl Desktop {
         let (sender, receiver) = std::sync::mpsc::channel();
         match action {
             Action::Volume(volume) => {
-                if !volume.is_finite() || !(0.0..=1.5).contains(&volume) {
-                    return Err("volume must be finite and in 0..1.5".into());
-                }
+                validate_volume(volume)?;
                 self.audio(super::audio::Command::Volume(volume, sender))?;
             }
             Action::Mute(mute) => self.audio(super::audio::Command::Mute(mute, sender))?,
@@ -204,6 +208,13 @@ impl Desktop {
         receiver
             .recv_timeout(std::time::Duration::from_secs(3))
             .map_err(|e| e.to_string())?
+    }
+    /// Enqueue an absolute level without waiting for the audio worker. Admission
+    /// succeeds here; subscriptions report the resulting authoritative state.
+    pub fn queue_volume(&self, volume: f64) -> Result<(), String> {
+        validate_volume(volume)?;
+        let (reply, _receiver) = std::sync::mpsc::channel();
+        self.audio(super::audio::Command::Volume(volume, reply))
     }
     fn audio(&self, command: super::audio::Command) -> Result<(), String> {
         self.shared
@@ -273,5 +284,28 @@ pub(crate) fn block_worker_signals() {
         libc::sigaddset(&mut mask, libc::SIGINT);
         libc::sigaddset(&mut mask, libc::SIGTERM);
         libc::pthread_sigmask(libc::SIG_BLOCK, &mask, std::ptr::null_mut());
+    }
+}
+
+#[cfg(test)]
+mod volume_queue_tests {
+    use super::*;
+    #[test]
+    fn queued_volume_does_not_wait_for_a_worker_reply_and_rejects_invalid_levels() {
+        let desktop = Desktop::start_config(Config {
+            audio: false,
+            bus: false,
+        });
+        let (sender, _receiver) = pipewire::channel::channel();
+        *desktop.shared.audio_sender.lock().unwrap() = Some(sender);
+        let start = std::time::Instant::now();
+        desktop.queue_volume(0.6).unwrap();
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(1),
+            "must not wait for the three-second synchronous timeout"
+        );
+        for bad in [f64::NAN, f64::INFINITY, -0.1, 1.6] {
+            assert!(desktop.queue_volume(bad).is_err());
+        }
     }
 }

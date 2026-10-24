@@ -821,6 +821,12 @@ impl PointerHandler for App {
 }
 impl App {
     fn pointer_event(&mut self, event: &PointerEvent) {
+        bead_core::profile::position(
+            "pointer_received",
+            event.position.0 as f32,
+            event.position.1 as f32,
+        );
+        bead_core::profile::mark("pointer_received");
         if self.window_surface() == Some(&event.surface) {
             self.window_pointer(event);
             return;

@@ -78,6 +78,10 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0103: `preview_key`/`preview_value` and `ui.preview_value` supply transient numeric control feedback;
+  `SceneSource::wakeup_at` expires it without idle polling; Session scopes pointer focus, range capture and keyboard steps.
+  `Desktop::queue_volume` admits levels without blocking UI input; snapshots confirm the result. Neither names a shell, transport or service.
+
 - B0096: `edge_hover` lets an interactive region opt into edge hover; `ui.tint` composes palette/RGBA colours;
   SVG `@base|overlay|amount@` tokens blend palette/literal colours. Artwork and shell behavior stay in the bundle.
 

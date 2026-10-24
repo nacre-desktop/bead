@@ -72,6 +72,13 @@ pub struct Node {
     pub focus_on_pointer: bool,
     #[serde(default = "default_true")]
     pub focus_ring: bool,
+    /// Transient numeric feedback, independent of an asynchronous action result.
+    #[serde(default)]
+    pub preview_key: String,
+    #[serde(default)]
+    pub preview_inset: f32,
+    #[serde(default)]
+    pub preview_value: f32,
     /// Allow this interactive region to participate in configured edge hover.
     #[serde(default)]
     pub edge_hover: bool,

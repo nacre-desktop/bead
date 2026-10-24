@@ -343,6 +343,11 @@ pub struct InputRegion {
     pub prepare_center: Option<f32>,
 }
 pub trait SceneSource {
+    /// Optional local-state deadline. Workers wake a source without polling idle views.
+    fn wakeup_at(&self) -> Option<std::time::Instant> {
+        None
+    }
+
     /// Whether configured edge hover may start over this region.
     fn allows_edge_hover(&self, x: f32, y: f32) -> bool {
         self.pointer_cursor(x, y) == "default"

@@ -982,7 +982,8 @@ impl ControlCenter {
             }
         }
     }
-    /// The call a slider target means: `(method, params)`, or `None` when it already holds.
+    /// Absolute slider call. A topic can lag a completed write, so its current
+    /// value cannot safely suppress a new user target.
     fn set_call(
         &self,
         source: &str,
@@ -991,9 +992,6 @@ impl ControlCenter {
     ) -> Option<(&'static str, Json)> {
         match source {
             "audio.output" | "audio.input" => {
-                if (percent - reading.value).abs() < 0.5 {
-                    return None;
-                }
                 let target = if source == "audio.output" {
                     "sink"
                 } else {
@@ -1004,29 +1002,21 @@ impl ControlCenter {
                     json!({"target": target, "value": linear(percent)}),
                 ))
             }
-            source if source.starts_with(STREAM) => {
-                if (percent - reading.value).abs() < 0.5 {
-                    return None;
-                }
-                Some((
-                    "audio.set_volume",
-                    json!({"target": "stream", "node": reading.node, "value": linear(percent)}),
-                ))
-            }
+            source if source.starts_with(STREAM) => Some((
+                "audio.set_volume",
+                json!({"target": "stream", "node": reading.node, "value": linear(percent)}),
+            )),
             "brightness.level" => {
                 let percent = percent.round();
-                (percent != reading.value).then(|| {
-                    (
-                        "brightness.set",
-                        json!({"output": reading.node, "percent": percent as u8}),
-                    )
-                })
+                Some((
+                    "brightness.set",
+                    json!({"output": reading.node, "percent": percent as u8}),
+                ))
             }
             "keyboard.backlight" => {
                 let max = self.controls()?["keyboard"]["max"].as_f64()?.max(1.);
                 let level = (percent / 100. * max).round();
-                (level != (reading.value / 100. * max).round())
-                    .then(|| ("keyboard_light.set", json!({"level": level as u8})))
+                Some(("keyboard_light.set", json!({"level": level as u8})))
             }
             _ => None,
         }

@@ -1,5 +1,19 @@
 # Feasibility
 
+## 2026-10-24 — B0103 control input candidate, blocked
+
+Queued pointer work and topic-backed slider drawing are code-level latency causes.
+The candidate coalesces motion and draws local feedback while rate-limiting writes.
+Remote Arch CI passes; the private capture lease remained unavailable for over 90 minutes.
+No performance or memory verdict is possible without those captures.
+
+| Required private measurement | Control | Candidate |
+| --- | --- | --- |
+| CPU / native GL hover and drag → present | unmeasured | unmeasured |
+| Launcher first-key CPU / idle unreclaimable delta | unmeasured | unmeasured |
+
+[Candidate, reconciliation risk and remaining proofs](docs/specs/0103-control-latency.md).
+
 ## 2026-10-24 — B0080 populated Home first key
 
 Home still opens first; a ready search reply replaces superseded work before raster.

@@ -20,6 +20,7 @@ pub fn luau() -> String {
         ("component", "(string,any,any)->any"),
         ("memo", "(string,any,any)->Node"),
         ("resolve_for_check", "(any)->any"),
+        ("preview_value", "(string,number)->number"),
         ("model_count", "(any)->number"),
         ("tr", "(string,any?)->string"),
     ] {

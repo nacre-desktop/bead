@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-24 — B0103 control input (blocked candidate)
+
+The candidate coalesces queued pointer positions, previews slider values locally,
+limits host writes, and separates pointer styling from keyboard focus. Remote
+Arch CI passes. The private capture lease remained unavailable for over 90 minutes;
+CPU/GL presentation, matched QML, first-key and memory gates are all unmeasured.
+[B0103](specs/0103-control-latency.md) records the candidate and remaining proofs.
+No integration, live test or performance acceptance.
+
 ## 2026-10-24 — B0096 owner bar parity (review candidate)
 
 Status values now share icon hit areas and centered line boxes; the default tray

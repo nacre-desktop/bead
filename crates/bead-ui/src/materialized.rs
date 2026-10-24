@@ -71,7 +71,11 @@ impl Cached {
             viewport,
             palette: Palette(palette.0.clone()),
             values: BTreeMap::new(),
-            structural: BTreeSet::from(["bead.focused".into(), "bead.hovered".into()]),
+            structural: BTreeSet::from([
+                "bead.focused".into(),
+                "bead.hovered".into(),
+                "bead.focus_visible".into(),
+            ]),
             text: vec![],
         };
         fn walk(
@@ -160,6 +164,9 @@ impl Cached {
                 .map(|n| {
                     n.id.capacity()
                         + n.label.capacity()
+                        + n.preview_key.capacity()
+                        + std::mem::size_of::<String>()
+                        + 2 * std::mem::size_of::<f32>()
                         + bead_render::primitive_bytes(&n.draw)
                         + 256
                         + n.bind

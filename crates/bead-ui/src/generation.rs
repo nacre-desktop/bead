@@ -451,6 +451,9 @@ impl Generation {
         for (id, value) in [
             ("bead.focused", Value::Text(String::new())),
             ("bead.hovered", Value::Text(String::new())),
+            ("bead.focus_visible", Value::Bool(true)),
+            ("bead.preview.key", Value::Text(String::new())),
+            ("bead.preview.value", Value::Number(0.)),
             // True from a pointer press until its release, as seen by the press's own action.
             ("bead.pressed", Value::Bool(false)),
         ] {
@@ -573,6 +576,7 @@ impl Generation {
                 .ok_or_else(|| Diagnostic::new(entry, 1, 1, "missing markup frontend"))?
                 .build(entry, &resolve)?;
             drop(markup_profile);
+            bead_core::profile::mark("luau_view_ready");
             if let Some(cached) = &*self.materialized.borrow()
                 && let Some(result) = cached.patch(&raw, &resolve, palette, viewport)?
             {
@@ -615,7 +619,8 @@ impl Generation {
                     *path = full;
                 }
             }
-            if let Some(Value::Text(focused)) = stores.get("bead.focused")
+            if stores.get("bead.focus_visible") != Some(&Value::Bool(false))
+                && let Some(Value::Text(focused)) = stores.get("bead.focused")
                 && let Some(node) = result
                     .nodes
                     .iter()
