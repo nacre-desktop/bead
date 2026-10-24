@@ -1,0 +1,4 @@
+{"t":"sub","topics":["dashboard.weather_photo"]}
+{"t":"snap","topic":"dashboard.weather_photo","seq":0,"data":{"enabled":false,"ready":false,"status":"disabled","location":null,"asset":null}}
+{"t":"snap","topic":"dashboard.weather_photo","seq":1,"data":{"enabled":true,"ready":true,"status":"ready","location":{"city":"Harbour","latitude":60.0,"longitude":5.0},"asset":{"path":"/private/cache/nacre/daemon-weather-photo/city.image","checked":1800000000.0,"author":"Fixture artist","license":"CC BY-SA 4.0","source":"https://commons.wikimedia.org/wiki/File:Harbour.jpg"}}}
+{"t":"unsub","topics":["dashboard.weather_photo"]}

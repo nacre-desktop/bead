@@ -1,4 +1,4 @@
 {"t":"snap","topic":"battery","seq":0,"data":{"health":{"available":false,"stale":false}}}
-{"t":"patch","topic":"battery","base":0,"seq":1,"data":{"health":{"available":true,"stale":false},"percentage":62.5,"charging":false}}
-{"t":"patch","topic":"battery","base":1,"seq":2,"data":{"percentage":63.0,"charging":true}}
-{"t":"patch","topic":"battery","base":2,"seq":3,"data":{"health":{"available":false,"stale":true},"percentage":null,"charging":null}}
+{"t":"patch","topic":"battery","base":0,"seq":1,"data":{"health":{"available":true,"stale":false},"percentage":62.5,"charging":false,"state":2,"time_to_empty_seconds":7200,"on_battery":true}}
+{"t":"patch","topic":"battery","base":1,"seq":2,"data":{"percentage":63.0,"charging":true,"state":1,"time_to_empty_seconds":null,"time_to_full_seconds":1800,"on_battery":false}}
+{"t":"patch","topic":"battery","base":2,"seq":3,"data":{"health":{"available":false,"stale":true},"percentage":null,"charging":null,"state":null,"time_to_empty_seconds":null,"time_to_full_seconds":null,"on_battery":null}}

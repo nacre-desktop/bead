@@ -130,6 +130,15 @@ fn compatibility_history_and_service_state_remain_independent() {
     );
     assert!(battery[3].get("percentage").is_none());
     assert!(battery[3].get("charging").is_none());
+    // N0059: the estimate members follow the same merge-patch rules; null removes, absent keeps.
+    assert_eq!(battery[1]["time_to_empty_seconds"], 7200);
+    assert_eq!(battery[1]["on_battery"], true);
+    assert!(battery[2].get("time_to_empty_seconds").is_none());
+    assert_eq!(battery[2]["time_to_full_seconds"], 1800);
+    assert_eq!(battery[2]["on_battery"], false);
+    for member in ["state", "time_to_full_seconds", "on_battery"] {
+        assert!(battery[3].get(member).is_none(), "{member}");
+    }
     let network = replay(
         "network-primary",
         include_str!("../../tests/protocol-v1/core-compat-network-primary.jsonl"),
@@ -148,4 +157,52 @@ fn compatibility_history_and_service_state_remain_independent() {
         policy.len() + history.len() + battery.len() + network.len() + tray.len(),
         19
     );
+}
+
+/// N0059/N0056: the producers' own transcripts decode to the consumer's types and the control
+/// centre reads them without any adaptation.
+#[test]
+fn n0059_and_n0056_transcripts_are_what_the_consumers_read() {
+    use nacre_protocol::weather_photo::{State, Status};
+    let snaps = |text: &str| {
+        text.lines()
+            .filter_map(|line| match framing::decode(line.as_bytes()).unwrap() {
+                Message::Snap { topic, data, .. } => Some((topic, data)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let (topic, audio) = snaps(include_str!("../../tests/protocol-v1/core-audio.jsonl")).remove(0);
+    let typed: CoreSnapshot =
+        serde_json::from_value(serde_json::json!({"topic": topic, "data": audio.clone()})).unwrap();
+    assert!(typed.valid());
+    assert_eq!(audio["default_output"], "output-1");
+    let (topic, power) = snaps(include_str!(
+        "../../tests/protocol-v1/core-power-profiles.jsonl"
+    ))
+    .remove(0);
+    let typed: CoreSnapshot =
+        serde_json::from_value(serde_json::json!({"topic": topic, "data": power.clone()})).unwrap();
+    assert!(typed.valid());
+    assert_eq!(power["degraded"], "thermal");
+    assert_eq!(power["holds"][0]["application_id"], "org.example.fixture");
+    let photo = snaps(include_str!("../../tests/protocol-v1/weather-photo.jsonl"));
+    let states: Vec<State> = photo
+        .into_iter()
+        .map(|(_, data)| serde_json::from_value(data).unwrap())
+        .collect();
+    assert_eq!(
+        (
+            states[0].status.clone(),
+            states[0].enabled,
+            states[0].asset.is_none()
+        ),
+        (Status::Disabled, false, true)
+    );
+    let asset = states[1].asset.as_ref().unwrap();
+    assert_eq!(
+        (states[1].ready, asset.checked, asset.license.as_str()),
+        (true, 1_800_000_000.0, "CC BY-SA 4.0")
+    );
+    assert_eq!(states[1].location.as_ref().unwrap().city, "Harbour");
 }

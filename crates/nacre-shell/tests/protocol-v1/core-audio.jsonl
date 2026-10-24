@@ -1,0 +1,12 @@
+{"t":"snap","topic":"audio","seq":0,"data":{"health":{"available":true,"stale":false},"default_output":"output-1","default_input":"input-1","nodes":{"items":{"output-1":{"name":"Speakers","kind":"output","volume":0.5,"muted":false,"ready":true},"input-1":{"name":"Microphone","kind":"input","volume":0.5,"muted":true,"ready":true},"stream-1":{"name":"Fixture playback","kind":"playback","volume":0.5,"muted":false,"ready":true,"target":"output-1"}},"order":["output-1","input-1","stream-1"]}}}
+{"t":"call","id":0,"m":"audio.set_default","p":{"node":"output-1"},"timeout":10000}
+{"t":"ret","id":0,"ok":{"changed":false}}
+{"t":"call","id":1,"m":"audio.set_default","p":{"node":"input-1"},"timeout":10000}
+{"t":"ret","id":1,"ok":{"changed":false}}
+{"t":"call","id":2,"m":"audio.set_volume","p":{"node":"output-1","volume":0.75},"timeout":10000}
+{"t":"ret","id":2,"ok":{"changed":true}}
+{"t":"call","id":3,"m":"audio.set_mute","p":{"node":"input-1","muted":true},"timeout":10000}
+{"t":"ret","id":3,"ok":{"changed":false}}
+{"t":"call","id":4,"m":"audio.route","p":{"stream":"stream-1","target":"output-1"},"timeout":10000}
+{"t":"ret","id":4,"ok":{"changed":false}}
+{"t":"patch","topic":"audio","base":0,"seq":1,"data":{"health":{"available":false,"stale":true,"error":{"code":"unavailable","message":"Service unavailable","retry":true}}}}

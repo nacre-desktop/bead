@@ -1,0 +1,4 @@
+{"t":"snap","topic":"power.profiles","seq":0,"data":{"health":{"available":true,"stale":false},"active":"balanced","degraded":"thermal","holds":[{"profile":"balanced","reason":"Fixture hold","application_id":"org.example.fixture"}],"profiles":{"items":{"balanced":{"name":"Balanced","available":true},"performance":{"name":"Performance","available":false,"reason":"Unavailable on this device"},"power-saver":{"name":"Power saver","available":true}},"order":["balanced","performance","power-saver"]}}}
+{"t":"call","id":0,"m":"power.set_profile","p":{"profile":"power-saver"},"timeout":10000}
+{"t":"ret","id":0,"ok":{"changed":true}}
+{"t":"patch","topic":"power.profiles","base":0,"seq":1,"data":{"health":{"available":false,"stale":true,"error":{"code":"unavailable","message":"Service unavailable","retry":true}}}}
