@@ -105,7 +105,7 @@ STATES = {
     'wallpaper-dynamic-spotlight': ([('wallpaper-pref', 'dynamic', 'spotlight'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
     'wallpaper-dynamic-hexagons': ([('wallpaper-pref', 'dynamic', 'hexagons'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
     'wallpaper-empty': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 2), ('type', 'zzzz-no-matches')], [('ui', 'nacre', 'close')], 0),
-    'wallpaper-video-activated': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
+    'wallpaper-video-activated': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper motion-1'), ('sleep', 3), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
     'wallpaper-dynamic': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
     'wallpaper-activated': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('key', 'Right'), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
     'wallpaper-settled': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('ui', 'nacre', 'close'), ('sleep', 7)], [], 0),
@@ -1238,6 +1238,7 @@ os.execv(real, [real, *args])
                         pass
             info['errors'] = self.errors
             results[name] = info
+            (self.out / 'drive.json').write_text(json.dumps(results, indent=1))
             log(f'{self.name}: {name} {"ERRORS " + "; ".join(self.errors) if self.errors else "ok"}')
             if (name.startswith('wallpaper-') or name in STATE_SETTLE or name in ('control-hover', 'control-pressed', 'lip-hover-right')) and self.errors:
                 raise RuntimeError(f'{name} failed: {"; ".join(self.errors)}')
