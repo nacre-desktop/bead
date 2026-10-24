@@ -78,7 +78,7 @@ class PipeWireDropIn(unittest.TestCase):
         for name in ("fixture-speakers", "fixture-headphones", "fixture-microphone"):
             self.assertIn(f'node.name = "{name}"', conf)
         self.assertEqual(conf.count("media.class = Audio/Sink"), 2)
-        self.assertEqual(conf.count("media.class = Audio/Source/Virtual"), 1)
+        self.assertEqual(conf.count("media.class = Audio/Source"), 1)
         self.assertTrue(conf.startswith("context.objects = [") and conf.endswith("]\n"))
         self.assertIn("factory = metadata", conf)  # the "default" metadata Quickshell reads defaults from
         self.assertIn("metadata.name = default", conf)

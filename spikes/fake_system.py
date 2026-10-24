@@ -44,7 +44,7 @@ def pipewire_conf():
     def node(name, description, media_class, position):
         return (f'  {{ factory = adapter\n    args = {{ factory.name = support.null-audio-sink node.name = "{name}" '
                 f'node.description = "{description}" media.class = {media_class} object.linger = true audio.position = [ {position} ] }} }}\n')
-    nodes = [node(n, d, 'Audio/Sink', 'FL FR') for _, n, d in SINKS] + [node(n, d, 'Audio/Source/Virtual', 'MONO') for _, n, d in SOURCES]
+    nodes = [node(n, d, 'Audio/Sink', 'FL FR') for _, n, d in SINKS] + [node(n, d, 'Audio/Source', 'MONO') for _, n, d in SOURCES]
     # The "default" metadata object (a session manager's job) is where Quickshell reads the default sink and source;
     # the harness fills it with `pw-metadata` (see default_metadata).
     default = '  { factory = metadata\n    args = { metadata.name = default } }\n'
