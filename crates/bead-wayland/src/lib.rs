@@ -2,6 +2,8 @@
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
 mod accessibility;
 mod background;
+mod capture;
+pub use capture::{CaptureHub, Lease as CaptureLease, Preview as CapturePreview, Wake as CaptureWake, Window as CaptureWindow};
 mod clipboard;
 mod decorations;
 mod edges;
@@ -502,6 +504,9 @@ pub struct Options {
     /// Optional product-owned wallpaper consumer; the framework owns passive surfaces.
     pub wallpaper: Option<std::sync::Arc<dyn WallpaperProvider>>,
     pub control: Option<std::sync::Arc<dyn ShellControl>>,
+    /// B0090: leased per-window capture; the hub reports `supported()` once the compositor's
+    /// image-copy-capture and foreign-toplevel globals are bound.
+    pub capture: Option<std::sync::Arc<CaptureHub>>,
     /// Live presentation palette for a process without a wallpaper consumer (an app process):
     /// its window or panel wears the palette at start and follows every change.
     pub palette_feed: Option<std::sync::Arc<dyn PaletteFeed>>,
@@ -556,6 +561,7 @@ impl Default for Options {
             trace_state: false,
             wallpaper: None,
             control: None,
+            capture: None,
             palette_feed: None,
             window: None,
             pearls: None,

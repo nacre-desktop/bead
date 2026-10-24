@@ -687,3 +687,53 @@ fn long_shortcut_lists_materialize_only_the_viewport() -> bead_test::Result<()> 
     );
     Ok(())
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn previews_lease_only_while_open_and_with_the_setting_and_attach_the_newest_thumbnail() {
+    use bead::wayland::{CaptureHub, CapturePreview};
+    let lab = lab().await;
+    let dir = lab.dir.join("capture");
+    let hub = CaptureHub::test_hub(dir.clone());
+    let extras = Extras::new(Kind::Overview, lab.client.clone())
+        .unwrap()
+        .with_capture(hub.clone());
+    let with_open = |open: bool| {
+        Stores::default()
+            .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(open))]))
+            .unwrap()
+    };
+    let wake: CallWake = Arc::new(|| {});
+    let rows = |model: &BTreeMap<String, Value>| match &model["extras.windows"] {
+        Value::List(rows) => rows.clone(),
+        other => panic!("{other:?}"),
+    };
+    for _ in 0..200 {
+        if extras.project(&with_open(false), None)["extras.available"] == Value::Bool(true) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(hub.lease_count(), 0, "closed: nothing leased");
+    let model = extras.project(&with_open(true), Some(wake.clone()));
+    assert_eq!(hub.lease_count(), 1, "open: one lease for the listed windows");
+    assert!(rows(&model)[0].get("preview").is_none(), "no frame yet: icon fallback");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("w1-1.png");
+    std::fs::write(&path, b"x").unwrap();
+    hub.publish_for_test(
+        "win1",
+        CapturePreview {
+            path: path.clone(),
+            width: 160,
+            height: 100,
+        },
+    );
+    let model = extras.project(&with_open(true), Some(wake));
+    let row = &rows(&model)[0];
+    assert_eq!(row["preview"], path.to_string_lossy().as_ref());
+    assert_eq!((row["preview_width"].clone(), row["preview_height"].clone()), (160.into(), 100.into()));
+    assert_eq!(hub.lease_count(), 1, "re-projecting reuses the lease");
+    extras.project(&with_open(false), None);
+    assert_eq!(hub.lease_count(), 0, "closing releases the lease");
+    assert!(hub.preview("win1").is_none() && !path.exists(), "thumbnails go with it");
+}

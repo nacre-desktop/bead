@@ -40,6 +40,22 @@ local function row(item, selected)
 
 end
 
+local function preview_content(item)
+  if item.preview and (item.preview_width or 0) > 0 and (item.preview_height or 0) > 0 then
+    -- Live capture (B0090): contain-fit inside the preview box, centred.
+    local inset = T.overview.preview_inset
+    local bw, bh = item.tile_width-inset*2, item.preview_height-inset*2
+    local fit = math.min(bw/item.preview_width, bh/item.preview_height)
+    local w, h = item.preview_width*fit, item.preview_height*fit
+    return ui.Image{id="window-preview",position="absolute",left=(item.tile_width-w)/2,top=(item.preview_height-h)/2,
+      width=w,height=h,path=item.preview}
+  end
+  return ui.Text{position="absolute",left=(item.tile_width-T.overview.icon_size)/2,top=(item.preview_height-T.overview.icon_size)/2,
+    text=item.icon or "apps",family="Material Symbols Rounded",font_size=T.overview.icon_size,color="onSurfaceVariant",
+    width=T.overview.icon_size,height=T.overview.icon_size,
+    aria_label=item.title or "Window"}
+end
+
 local function window_tile(item)
   local selected = item.selected == true
   return ui.Button{id="window-"..tostring(item.id),width=item.tile_width,height=item.tile_height,
@@ -48,10 +64,7 @@ local function window_tile(item)
     activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do","focus:"..tostring(item.id)),aria_label=item.title or item.app_id or "Window",
     ui.Box{id="preview",position="absolute",left=0,top=0,width=item.tile_width,height=item.preview_height,
       radius=T.overview.thumbnail_radius,fill=selected and "secondaryContainer" or "surfaceContainerHigh",
-      ui.Text{position="absolute",left=(item.tile_width-T.overview.icon_size)/2,top=(item.preview_height-T.overview.icon_size)/2,
-        text=item.icon or "apps",family="Material Symbols Rounded",font_size=T.overview.icon_size,color="onSurfaceVariant",
-        width=T.overview.icon_size,height=T.overview.icon_size,
-        aria_label=item.title or "Window"}},
+      preview_content(item)},
     ui.Text{id="window-title",position="absolute",left=0,top=item.tile_height-T.overview.caption_height,
       width=item.tile_width,height=T.overview.caption_height,text=item.title or item.app_id or "Window",
       font_size=T.overview.title_font,color="onSurface",text_align="left"}}

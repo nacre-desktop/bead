@@ -748,6 +748,15 @@ fn start(
             );
         }
         if let Some(client) = &_ui_provider {
+            let capture = options.capture.get_or_insert_with(|| {
+                bead::wayland::CaptureHub::new(
+                    std::path::PathBuf::from(
+                        std::env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()),
+                    )
+                    .join(format!("bead-capture-{}", std::process::id())),
+                )
+            });
+            let capture = Some(capture.clone());
             for kind in extras::Kind::ALL {
                 views.insert(
                     kind.name().into(),
@@ -757,6 +766,7 @@ fn start(
                         palette.clone(),
                         colors.clone(),
                         panel_trace,
+                        capture.clone(),
                     )?,
                 );
             }

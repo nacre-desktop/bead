@@ -58,7 +58,19 @@ pub struct Extras {
     topic: Option<Arc<dyn Source>>,
     state: RefCell<State>,
     glyphs: crate::workspace_rows::Rows,
+    previews: Option<Previews>,
 }
+/// B0090 live previews: the leased capture exists only while the view is open and the
+/// Nacre setting `livePreviews` is on; dropping `Extras` (or closing) releases it.
+struct Previews {
+    hub: Arc<bead::wayland::CaptureHub>,
+    settings: Option<crate::nacre_source::Topic>,
+    lease: RefCell<Option<bead::wayland::CaptureLease>>,
+}
+/// QML asks for a frame every 350 ms while the launcher is visible.
+const PREVIEW_INTERVAL: Duration = Duration::from_millis(350);
+/// Largest thumbnail kept per window, device pixels (the Luau tile fits within its box).
+const PREVIEW_BOUND: (u32, u32) = (480, 320);
 impl Extras {
     pub fn new(kind: Kind, client: Client) -> bead::core::source::Result<Self> {
         let topic = kind
@@ -76,7 +88,59 @@ impl Extras {
             topic,
             state: Default::default(),
             glyphs: Default::default(),
+            previews: None,
         })
+    }
+    /// Offer live window previews through `hub` (used only when the compositor supports it).
+    pub fn with_capture(mut self, hub: Arc<bead::wayland::CaptureHub>) -> Self {
+        if self.kind == Kind::Overview {
+            self.previews = Some(Previews {
+                hub,
+                settings: self.client.topic(crate::prefs::DESKTOP).ok(),
+                lease: RefCell::new(None),
+            });
+        }
+        self
+    }
+    /// Lease captures for the listed windows while open with `livePreviews` on; add each
+    /// window's newest thumbnail (`preview`, `preview_width`, `preview_height`).
+    fn attach_previews(&self, windows: &mut [Json], open: bool, wake: Option<CallWake>) {
+        let Some(p) = &self.previews else { return };
+        let on = p.settings.as_ref().is_none_or(|t| {
+            let snapshot = t.snapshot();
+            snapshot.data["data"]["livePreviews"] != false
+        });
+        let mut lease = p.lease.borrow_mut();
+        if !(open && on && p.hub.supported()) {
+            *lease = None;
+            return;
+        }
+        let list: Vec<_> = windows
+            .iter()
+            .map(|w| bead::wayland::CaptureWindow {
+                key: w["id"].as_str().unwrap_or_default().into(),
+                app_id: w["app_id"].as_str().unwrap_or_default().into(),
+                title: w["title"].as_str().unwrap_or_default().into(),
+            })
+            .collect();
+        match &*lease {
+            Some(l) => l.set_windows(list),
+            None => {
+                *lease = Some(p.hub.lease(
+                    list,
+                    PREVIEW_INTERVAL,
+                    PREVIEW_BOUND,
+                    wake.unwrap_or_else(|| Arc::new(|| {})),
+                ))
+            }
+        }
+        for w in windows {
+            if let Some(preview) = w["id"].as_str().and_then(|id| p.hub.preview(id)) {
+                w["preview"] = preview.path.to_string_lossy().into_owned().into();
+                w["preview_width"] = preview.width.into();
+                w["preview_height"] = preview.height.into();
+            }
+        }
     }
     pub fn subscribe(&self, wake: CallWake) -> bead::core::source::Result<Vec<Subscription>> {
         let w = wake.clone();
@@ -135,6 +199,8 @@ impl Extras {
                             .app_glyph(window["app_id"].as_str().unwrap_or_default())
                             .into();
                     }
+                    let open = matches!(stores.get("panel.open"), Some(Value::Bool(true)));
+                    self.attach_previews(&mut windows, open, wake.clone());
                 } else {
                     rows = ordered(&data["items"]["items"], &data["items"]["order"])
                         .map(|(id, row)| json!({"id":id,"key":row["key"].as_str().unwrap_or_default(),"description":row["description"].as_str().unwrap_or_default()})).collect();
@@ -370,6 +436,7 @@ pub fn panel(
     palette: std::path::PathBuf,
     colors: bead::render::Palette,
     trace: bool,
+    capture: Option<Arc<bead::wayland::CaptureHub>>,
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
     let mut cold = crate::sound::fallback(colors.get("surface")?);
     if let Some(motion) = &mut cold.motion {
@@ -399,7 +466,13 @@ pub fn panel(
                     crate::placement::Attachment::SceneEdge(bead::core::Edge::Bottom),
                     &colors,
                 )
-                .and_then(|runtime| runtime.with_extras(Extras::new(kind, client.clone())?))
+                .and_then(|runtime| {
+                    let extras = Extras::new(kind, client.clone())?;
+                    runtime.with_extras(match &capture {
+                        Some(hub) => extras.with_capture(hub.clone()),
+                        None => extras,
+                    })
+                })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|error| error.to_string())
         }),

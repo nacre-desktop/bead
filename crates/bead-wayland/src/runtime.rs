@@ -7,6 +7,7 @@ pub(super) struct App {
     pub(super) subcompositor: Option<wl_subcompositor::WlSubcompositor>,
     pub(super) background: smithay_client_toolkit::background_effect::BackgroundEffectState,
     pub(super) clipboard: clipboard::Clipboard,
+    pub(super) capture: Option<capture::Capturer>,
     pub(super) last_input_serial: u32,
     pub(super) event_sender: Option<calloop::channel::Sender<UiEvent>>,
     pub(super) dismiss: Option<panel::Dismiss>,
@@ -186,6 +187,10 @@ pub fn run_runtime(
         subcompositor: globals.bind(&qh, 1..=1, ()).ok(),
         background,
         clipboard: clipboard::Clipboard::new(&globals, &qh),
+        capture: options
+            .capture
+            .clone()
+            .map(|hub| capture::Capturer::new(hub, &globals, &qh)),
         last_input_serial: 0,
         event_sender: None,
         dismiss: None,
@@ -285,6 +290,9 @@ pub fn run_runtime(
         pending_pearls: Vec::new(),
     };
     app.load_pearls();
+    if let Some(hub) = app.options.capture.clone() {
+        app.capture_init(&hub);
+    }
     if app.options.interactive {
         for seat in app.seat.seats() {
             app.clipboard.seat(&seat, &qh);

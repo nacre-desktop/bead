@@ -20,7 +20,7 @@ return {
     workspace_title_width = 296, workspace_title_height = 24, workspace_title_radius = 0,
     workspace_title_font = 16, workspace_icon_font = 18.667, workspace_icon_width = 20,
     title_icon_gap = 8, tile_left = 10, tile_top = 43, tile_area_width = 300, thumbnail_height = 160,
-    thumbnail_radius = 8, icon_size = 35, single_tile_width = 295, multi_tile_width = 145,
+    thumbnail_radius = 8, preview_inset = 4, icon_size = 35, single_tile_width = 295, multi_tile_width = 145,
     two_window_cell_height = 160, multi_window_cell_height = 80, tile_cell_inset = 4,
     tile_padding = 0, title_height = 22, title_gap = 0, title_font = 12, caption_height=16,
     window_columns = 2, window_gap_x = 0, window_gap_y = 0,
