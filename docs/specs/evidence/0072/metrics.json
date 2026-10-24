@@ -1,7 +1,10 @@
 {
   "reference": "Nacre 2748720",
   "control": "Bead 86c8d9a",
-  "backend": "CPU tiny-skia",
+  "backend": {
+    "bead": "CPU tiny-skia",
+    "qml": "Qt Quick default backend; DRM allocations present"
+  },
   "size": [
     2880,
     1800

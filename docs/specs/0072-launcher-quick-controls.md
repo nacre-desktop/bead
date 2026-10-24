@@ -46,8 +46,10 @@ Private proof tools were staged beside the binaries. Container-only additions:
 `wlr-randr`, `swaybg`, `wlr-protocols`, and Nacre helper build dependencies
 `cmake`, `gtk3`, `librsvg`, `lcms2`, `libraqm`, `libjpeg-turbo`.
 
-The private nested QML/Bead arms use the same presentation/settings, CPU rendering,
+The private nested QML/Bead arms use the same presentation/settings and
 2880×1800 at 1.5, with a verified 2880×1800 parent for pointer coordinates.
+Bead uses CPU tiny-skia; QML uses its default Qt Quick backend and has DRM
+allocations. The memory comparison below uses matched Bead CPU builds.
 [Paired evidence](evidence/0072/launcher.jpg) is QML left, Bead right; adjacent
 files cover idle, hover, and held press. The capture uses current-main's virtual
 pointer helper. Unknown update counts and unsupported controls stay honest.
@@ -90,7 +92,8 @@ Relative memory passes every phase (≤+0.5 MiB). The median final-close pair's
 +0.044 MiB is +0.039 anonymous, +0.005 file-backed, zero frame-buffer change.
 Maximum paired anonymous increase in any phase is +0.547 MiB (initial bar),
 below the 1 MiB stop line. Independent category/arm medians need not add up.
-CPU clients have no DRM allocations; process SwapPss and host swap-in are zero
+The matched Bead CPU clients have no DRM allocations. Process SwapPss and host
+swap-in are zero
 in all twenty accepted headline arms and both accepted parity arms. One final
 parity arm was discarded after one host swap-in page; a stable-host replacement
 passed without resetting swap. Absolute laptop acceptance remains with the lead.
