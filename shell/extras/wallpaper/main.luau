@@ -3,27 +3,38 @@
 local ui=require("bead.ui")
 local kit=require("bead.kit")
 local T=require("../tokens")
-local viewport_w=ui.resolve_for_check(ui.bind("extras.viewport.width")) or T.panel.default_screen_height
-local viewport_h=ui.resolve_for_check(ui.bind("extras.viewport.height")) or T.panel.default_screen_height
+local viewport_w=ui.resolve_for_check(ui.bind("extras.viewport.width")) or T.wallpaper.viewport_fallback_width
+local viewport_h=ui.resolve_for_check(ui.bind("extras.viewport.height")) or T.wallpaper.viewport_fallback_height
 local layout=ui.resolve_for_check(ui.bind("extras.wallpaper.layout")) or "carousel"
 local kind=ui.resolve_for_check(ui.bind("extras.wallpaper.kind")) or "static"
 local carousel=layout=="carousel"
-local width=carousel and math.max(320,math.min(T.wallpaper.carousel_width,viewport_w-96)) or viewport_w
+local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or viewport_w
 local height=carousel and T.wallpaper.carousel_height or viewport_h
-local visible=ui.resolve_for_check(ui.bind("extras.wallpaper.visible")) or {}
 local rows=ui.resolve_for_check(ui.bind("extras.filtered")) or {}
 local count=#rows
 local selected
 for _,item in ipairs(rows) do if item.selected then selected=item; break end end
+local function circular_rows(limit)
+  local visible={}
+  local selection=selected and selected.selection_index or 1
+  for index,item in ipairs(rows) do
+    local offset=((index-selection+count/2)%count)-count/2
+    if math.abs(offset)<=limit then
+      item.carousel_offset=offset
+      visible[#visible+1]=item
+    end
+  end
+  return visible
+end
 local toolbar_y=carousel and T.wallpaper.carousel_top or T.wallpaper.fullscreen_top
 local toolbar_h=T.wallpaper.toolbar_height
 local query_y=toolbar_y+toolbar_h+T.wallpaper.toolbar_gap
 local search_h=T.wallpaper.search_height
 local body_y=layout=="spotlight" and query_y+search_h+T.wallpaper.spotlight_top_gap
   or layout=="hexagons" and query_y+search_h+T.wallpaper.hex_top_gap
-  or query_y+search_h+10
+  or query_y+search_h+T.wallpaper.carousel_content_gap
 local body_h=math.max(0,height-body_y-(layout=="spotlight" and T.wallpaper.spotlight_body_clearance or T.wallpaper.fullscreen_nav_clearance))
-local body_w=width-48
+local body_w=width-T.wallpaper.content_inset*2
 -- A normalized polygon approximates the QML rounded image clip within a pixel.
 local function rounded_clip(w,h)
   local r=math.min(T.wallpaper.image_radius,w/2,h/2)
@@ -53,7 +64,7 @@ local function nav_button(id,label,glyph,action)
     radius=T.panel.close_radius,fill="surfaceContainerHigh",hover_fill="surfaceContainerHigh",
     activate_on_release=true,on_activate=count>0 and ui.action(action) or nil,
     ui.Row{width=T.wallpaper.nav_width,height=T.wallpaper.nav_height,align="center",justify="center",
-      ui.Text{text=glyph,width=20,height=23,family="Material Symbols Rounded",font_size=16,color="onSurface"}}}
+      ui.Text{text=glyph,width=T.wallpaper.nav_icon_width,height=T.wallpaper.nav_icon_height,family="Material Symbols Rounded",font_size=T.wallpaper.nav_icon_font,color="onSurface"}}}
 end
 
 local function card(item, card_w, card_h, x, y, selected_card, clip)
@@ -67,20 +78,20 @@ local function card(item, card_w, card_h, x, y, selected_card, clip)
       icon="wallpaper:"..path,image_fit="cover",clip_polygon=hex and hex_clip or rounded_clip(card_w-image_inset*2,image_h),aria_label=item.title or "Wallpaper"}
   else
     kids[#kids+1]=ui.Text{id="missing-thumbnail",position="absolute",left=0,top=0,width=card_w,height=image_h,
-      text=item.kind=="video" and "movie" or "image",family="Material Symbols Rounded",font_size=36,
+      text=item.kind=="video" and "movie" or "image",family="Material Symbols Rounded",font_size=T.wallpaper.thumbnail_fallback_icon,
       color="onSurfaceVariant",text_align="center"}
   end
   if clip==hex_clip then
     kids[#kids+1]=ui.Image{id="hex-outline",position="absolute",left=0,top=0,width=card_w,height=card_h,
       path=selected_card and "extras/wallpaper/assets/hex-selected.themed.svg" or "extras/wallpaper/assets/hex-idle.themed.svg"}
-    kids[#kids+1]=ui.Text{id="hex-title",position="absolute",left=card_w*.25,top=card_h-30,
-      width=card_w*.5,height=20,text=item.title or "",font_size=T.palette.description_font,
+    kids[#kids+1]=ui.Text{id="hex-title",position="absolute",left=card_w*T.wallpaper.hex_caption_left_fraction,top=card_h-T.wallpaper.hex_caption_bottom,
+      width=card_w*T.wallpaper.hex_caption_width_fraction,height=T.wallpaper.hex_caption_height,text=item.title or "",font_size=T.palette.description_font,
       text_align="center",color=T.wallpaper.photo_ink}
   end
   return ui.Button{id="wallpaper-"..tostring(item.selection_index),position="absolute",left=x,top=y,
     width=card_w,height=card_h,padding=0,radius=T.wallpaper.card_radius,
     fill=hex and "transparent" or "surfaceContainer",
-    border_width=hex and 0 or selected_card and 2 or 0,border_color=selected_card and "primary" or "outlineVariant",
+    border_width=hex and 0 or selected_card and T.wallpaper.selected_border_width or 0,border_color=selected_card and "primary" or "outlineVariant",
     hover_fill=hex and "transparent" or "surfaceContainer",clip_polygon=hex and hex_clip or nil,activate_on_release=true,
     focus_on_pointer=false,on_activate=ui.action("extras.do","wallpaper:select:"..tostring(item.id)),
     aria_label=(item.title or "Wallpaper")..(item.active and ", current" or ""),
@@ -90,49 +101,56 @@ end
 
 local body
 if layout=="carousel" then
-  local available=math.max(0,width-48)
-  local candidate=math.min(count,math.max(1,math.floor(((available/266-1)/2)+.5)*2+1))
+  local available=math.max(0,width-T.wallpaper.content_inset*2)
+  local candidate=math.min(count,math.max(1,math.floor(((available/T.wallpaper.carousel_slot_estimate-1)/2)+.5)*2+1))
   local slots=candidate>1 and candidate%2==0 and candidate-1 or candidate
-  local card_w=math.min(280,(available-math.max(0,slots-1)*16)/math.max(1,slots))
-  local card_h=math.max(0,math.min(height-body_y-T.wallpaper.carousel_body_clearance,card_w*.66))
+  local card_w=math.min(T.wallpaper.carousel_card_max_width,(available-math.max(0,slots-1)*T.wallpaper.card_gap)/math.max(1,slots))
+  local card_h=math.max(0,math.min(height-body_y-T.wallpaper.carousel_body_clearance,card_w*T.wallpaper.carousel_card_height_ratio))
   local strip_w=slots*card_w+math.max(0,slots-1)*T.wallpaper.card_gap
   local children={}
-  for _,item in ipairs(visible) do
+  for _,item in ipairs(circular_rows(math.max(2,math.ceil(slots/2)+1))) do
     local x=(strip_w-card_w)/2+(item.carousel_offset or 0)*(card_w+T.wallpaper.card_gap)
     children[#children+1]=card(item,card_w,card_h,x,0,item.selected,nil)
   end
   body=ui.Scroll{id="carousel-strip",position="absolute",left=(width-strip_w)/2,top=body_y,width=strip_w,height=card_h,
     scroll=ui.bind("extras.wallpaper.carousel_scroll"),ui.Box{width=strip_w,height=card_h,shrink=0,table.unpack(children)}}
 elseif layout=="spotlight" then
-  local hero_width=math.min(body_w*(count>1 and .5 or .8),1000,body_h*16/9)
-  local side_width=hero_width*.62
+  local hero_width=math.min(body_w*(count>1 and T.wallpaper.spotlight_multiple_fraction or T.wallpaper.spotlight_single_fraction),T.wallpaper.spotlight_max,body_h*T.wallpaper.spotlight_aspect_ratio)
+  local side_width=hero_width*T.wallpaper.spotlight_side_fraction
   local area={}
+  local side_slots=math.max(0,math.min(T.wallpaper.spotlight_max_side_slots,math.ceil((count-1)/2)))
+  local visible=circular_rows(side_slots+1)
   table.sort(visible,function(a,b) return math.abs(a.carousel_offset or 0)>math.abs(b.carousel_offset or 0) end)
-  local side_slots=math.max(0,math.min(2,math.ceil((count-1)/2)))
   for _,item in ipairs(visible) do
     local offset=item.carousel_offset or 0
     local distance=math.abs(offset)
     local weight=math.max(0,1-distance)
-    local card_w=side_width*math.max(.7,1-math.max(0,distance-1)*.15)+(hero_width-side_width)*weight
-    local card_h=card_w*9/16
-    local center_distance=hero_width*.54
-    local x=24+body_w/2+math.sign(offset)*(math.min(1,distance)*center_distance+math.max(0,distance-1)*hero_width*.2)-card_w/2
+    local card_w=side_width*math.max(T.wallpaper.spotlight_side_min_scale,1-math.max(0,distance-1)*T.wallpaper.spotlight_side_falloff)+(hero_width-side_width)*weight
+    local card_h=card_w*T.wallpaper.spotlight_card_height_ratio
+    local center_distance=hero_width*T.wallpaper.spotlight_center_offset
+    local x=T.wallpaper.content_inset+body_w/2+math.sign(offset)*(math.min(1,distance)*center_distance+math.max(0,distance-1)*hero_width*T.wallpaper.spotlight_travel_offset)-card_w/2
     local y=body_y+(body_h-card_h)/2
     if distance<side_slots+1 then area[#area+1]=card(item,card_w,card_h,x,y,item.selected,nil) end
   end
   body=ui.Box{id="spotlight-strip",position="absolute",left=0,top=0,width=width,height=height,table.unpack(area)}
 else
-  local area_w=width-48
-  local columns=math.max(3,math.min(7,math.floor(area_w/230)))
-  local tile_w=math.min(340,(area_w-30)/(1+(columns-1)*.76))
-  local tile_h=tile_w*.87
-  local pitch=tile_h+12
-  local extent=count>0 and math.ceil(count/columns)*pitch+tile_h*.5 or 0
+  local area_w=width-T.wallpaper.content_inset*2
+  local columns=math.max(T.wallpaper.hex_min_columns,math.min(T.wallpaper.hex_max_columns,math.floor(area_w/T.wallpaper.hex_column_width)))
+  local tile_w=math.min(T.wallpaper.hex_max_tile_width,(area_w-T.wallpaper.hex_side_padding)/(1+(columns-1)*T.wallpaper.hex_column_overlap))
+  local tile_h=tile_w*T.wallpaper.hex_tile_height_ratio
+  local pitch=tile_h+T.wallpaper.hex_gap
+  local extent=count>0 and math.ceil(count/columns)*pitch+tile_h*T.wallpaper.hex_extent_tail or 0
   local tiles={}
-  for _,item in ipairs(visible) do
-    tiles[#tiles+1]=card(item,tile_w,tile_h,item.hex_x or 0,item.hex_y or 0,item.selected,hex_clip)
+  local scroll=ui.resolve_for_check(ui.bind("extras.scroll")) or 0
+  local first=math.max(0,math.floor(scroll/pitch)-1)*columns+1
+  local last=math.min(count,math.ceil((scroll+body_h)/pitch+1)*columns)
+  for index=first,last do
+    local item=rows[index]
+    local x=(area_w-(tile_w+(columns-1)*tile_w*T.wallpaper.hex_column_overlap))/2+((index-1)%columns)*tile_w*T.wallpaper.hex_column_overlap
+    local y=(index-1)//columns*pitch+((index-1)%columns%2)*tile_h*T.wallpaper.hex_extent_tail
+    tiles[#tiles+1]=card(item,tile_w,tile_h,x,y,item.selected,hex_clip)
   end
-  body=ui.Scroll{id="hexagon-scroll",position="absolute",left=24,top=body_y,width=area_w,height=body_h,
+  body=ui.Scroll{id="hexagon-scroll",position="absolute",left=T.wallpaper.content_inset,top=body_y,width=area_w,height=body_h,
     scroll=ui.bind("extras.scroll"),ui.Box{id="hexagon-extent",width=area_w,height=extent,shrink=0,table.unpack(tiles)}}
 end
 
@@ -141,24 +159,24 @@ local controls=ui.Row{id="wallpaper-controls",position="absolute",left=0,top=too
   ui.Row{id="media",height=toolbar_h,gap=T.wallpaper.toolbar_gap,shrink=0,
     button("static","Static",kind=="static","wallpaper:kind:static"),
     button("dynamic","Dynamic",kind=="dynamic","wallpaper:kind:dynamic")},
-  ui.Box{id="media-divider",width=1,height=24,shrink=0,fill="outline"},
+  ui.Box{id="media-divider",width=T.wallpaper.divider_width,height=T.wallpaper.divider_height,shrink=0,fill="outline"},
   ui.Row{id="layouts",height=toolbar_h,gap=T.wallpaper.toolbar_gap,shrink=0,
     button("carousel","Carousel",layout=="carousel","wallpaper:layout:carousel"),
     button("spotlight","Spotlight",layout=="spotlight","wallpaper:layout:spotlight"),
     button("hexagons","Hexagons",layout=="hexagons","wallpaper:layout:hexagons")},
-  ui.Box{id="layout-divider",width=1,height=24,shrink=0,fill="outline"},
+  ui.Box{id="layout-divider",width=T.wallpaper.divider_width,height=T.wallpaper.divider_height,shrink=0,fill="outline"},
   kit.Button{id="add",aria_label="Add wallpapers unavailable",width=T.wallpaper.add_width,height=toolbar_h,padding=0,
     radius=T.panel.close_radius,fill=ui.alpha("surfaceContainerHigh",.4),
     ui.Row{width=T.wallpaper.add_width,height=toolbar_h,align="center",justify="center",gap=4,
-      ui.Text{text="add",width=16,height=23,family="Material Symbols Rounded",font_size=16,color=ui.alpha("onSurface",.4)},
-      ui.Text{text="Add",width=23,height=19,font_size=T.palette.description_font,color=ui.alpha("onSurface",.4)}}}}
+      ui.Text{text="add",width=T.wallpaper.add_icon_width,height=T.wallpaper.add_icon_height,family="Material Symbols Rounded",font_size=T.wallpaper.add_icon_font,color=ui.alpha("onSurface",.4)},
+      ui.Text{text="Add",width=T.wallpaper.add_label_width,height=T.wallpaper.add_label_height,font_size=T.palette.description_font,color=ui.alpha("onSurface",.4)}}}}
 
 local nav_title=selected and selected.title or ""
 local nav=ui.Row{id="wallpaper-navigation",position="absolute",left=0,
   top=height-(layout=="spotlight" and T.wallpaper.spotlight_nav_y or T.wallpaper.nav_bottom+T.wallpaper.nav_height),
-  width=width,height=T.wallpaper.nav_height,gap=14,align="center",justify="center",
+  width=width,height=T.wallpaper.nav_height,gap=T.wallpaper.nav_gap,align="center",justify="center",
   nav_button("previous","Previous wallpaper","chevron_left","extras.prev"),
-  ui.Text{id="selected-title",width=math.min(420,width-300),height=21,text=nav_title,
+  ui.Text{id="selected-title",width=math.min(T.wallpaper.nav_title_max_width,width-T.wallpaper.nav_title_reserved_width),height=T.wallpaper.nav_title_height,text=nav_title,
     font_size=T.wallpaper.nav_font,text_align="center",color=carousel and "onSurface" or T.wallpaper.photo_ink},
   nav_button("next","Next wallpaper","chevron_right","extras.next")}
 
@@ -166,18 +184,18 @@ local backdrop=not carousel and ui.Image{id="gallery-backdrop",position="absolut
   visible=ui.bind("extras.wallpaper.backdrop_visible"),icon=ui.bind("extras.wallpaper.backdrop"),image_fit="cover",aria_label="Selected wallpaper preview"} or nil
 local scrim=not carousel and ui.Box{id="gallery-scrim",position="absolute",left=0,top=0,width=width,height=height,
   fill=ui.alpha("shadow",T.wallpaper.scrim_alpha)} or nil
-local search_w=math.max(T.wallpaper.search_min_width,math.min(T.wallpaper.search_max_width,width-48))
+local search_w=math.max(T.wallpaper.search_min_width,math.min(T.wallpaper.search_max_width,width-T.wallpaper.content_inset*2))
 
 local children={
   kit.TextInput{id="search",position="absolute",left=(width-search_w)/2,top=query_y,width=search_w,height=search_h,
-    focus_ring=false,text=ui.bind("extras.query"),placeholder="Search wallpapers",padding_left=12,padding_right=12,
-    padding_top=8,padding_bottom=8,radius=T.panel.search_radius,font_size=kit.tokens.text.body*4/3,
+    focus_ring=false,text=ui.bind("extras.query"),placeholder="Search wallpapers",padding_left=T.wallpaper.search_padding,padding_right=T.wallpaper.search_padding,
+    padding_top=T.wallpaper.search_vertical,padding_bottom=T.wallpaper.search_vertical,radius=T.panel.search_radius,font_size=kit.tokens.text.body*4/3,
     fill="surfaceContainerHigh"},
   controls,body,nav,
-  ui.Text{id="empty",position="absolute",left=24,top=height/2-12,width=width-48,height=24,
+  ui.Text{id="empty",position="absolute",left=T.wallpaper.content_inset,top=height/2-T.wallpaper.empty_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.empty_height,
     text=ui.bind("extras.empty_message"),visible=#rows==0 and not ui.resolve_for_check(ui.bind("extras.status_visible")),font_size=T.panel.empty_font,
     text_align="center",color=carousel and "onSurface" or T.wallpaper.photo_ink},
-  ui.Text{id="status",position="absolute",left=24,top=body_y+body_h/2+14,width=width-48,height=24,
+  ui.Text{id="status",position="absolute",left=T.wallpaper.content_inset,top=body_y+body_h/2+T.wallpaper.status_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.status_height,
     text=ui.bind("extras.status_message"),visible=ui.bind("extras.status_visible"),font_size=T.panel.empty_font,
     text_align="center",color="onSurfaceVariant"}}
 if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end

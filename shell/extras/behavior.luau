@@ -149,55 +149,6 @@ local function choose(s)
   elseif kind == "palette" then s["extras.request"] = "activate:"..tostring(item.id) end
 end
 
-local function wallpaper_visible(s)
-  local rows=filtered(s)
-  local count=#rows
-  if count==0 then return {} end
-  local selected=math.clamp(normalized_selection(s),1,count)
-  local layout=s["extras.wallpaper.layout"] or "carousel"
-  local viewport_width=s["extras.viewport.width"] or s["bead.viewport.width"] or 1440
-  local width=layout=="carousel" and math.max(320,math.min(1360,viewport_width-96)) or viewport_width
-  local limit=2
-  if layout=="carousel" then
-    local candidate=math.min(count,math.max(1,math.floor(((math.max(0,width-48)/266-1)/2)+.5)*2+1))
-    local slots=candidate>1 and candidate%2==0 and candidate-1 or candidate
-    limit=math.max(2,math.ceil(slots/2)+1)
-  elseif layout=="spotlight" then
-    limit=math.max(1,math.min(2,math.ceil((count-1)/2))+1)
-  else
-    local height=math.max(0,(s["extras.viewport.height"] or s["bead.viewport.height"] or 900)-122-56)
-    local area_width=width-48
-    local columns=math.max(3,math.min(7,math.floor(area_width/230)))
-    local card_width=math.min(340,(area_width-30)/(1+(columns-1)*.76))
-    local card_h=card_width*.87
-    local pitch=card_h+12
-    local scroll=s["extras.scroll"] or 0
-    local first=math.max(0,math.floor(scroll/pitch)-1)*columns+1
-    local last=math.min(count,math.ceil((scroll+height)/pitch+1)*columns)
-    local out={}
-    for index=first,last do
-      local item=rows[index]
-      item.hex_x=(area_width-(card_width+(columns-1)*card_width*.76))/2+((index-1)%columns)*card_width*.76
-      item.hex_y=(index-1)//columns*pitch+((index-1)%columns%2)*card_h*.5
-      out[#out+1]=item
-    end
-    return out
-  end
-  local out={}
-  for index,item in ipairs(rows) do
-    local offset=((index-selected+count/2)%count)-count/2
-    if math.abs(offset)<=limit then
-      item.carousel_offset=offset
-      item.spotlight_distance=math.abs(offset)
-      out[#out+1]=item
-    end
-  end
-  if layout=="spotlight" then
-    table.sort(out,function(a,b) return math.abs(a.carousel_offset)>math.abs(b.carousel_offset) end)
-  end
-  return out
-end
-
 local exports = {
   stores = {
     ["panel.open"] = false, ["extras.kind"] = "overview", ["extras.windows"] = {},
@@ -218,7 +169,6 @@ local exports = {
   },
   computed = {
     ["extras.filtered"] = filtered,
-    ["extras.wallpaper.visible"] = wallpaper_visible,
     ["extras.wallpaper.backdrop"] = function(s)
       for _, item in ipairs(filtered(s)) do
         if item.selected then

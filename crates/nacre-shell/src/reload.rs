@@ -2860,7 +2860,8 @@ impl SceneSource for Runtime {
                 bead::core::Value::Text(String::new()),
             );
             let scene = if matches!(&event, UiEvent::Release) {
-                self.session.update(changes)?.or(self.session.release()?)
+                let updated = self.session.update(changes)?;
+                self.session.release()?.or(updated)
             } else {
                 self.session.update(changes)?
             };
