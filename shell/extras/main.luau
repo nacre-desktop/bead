@@ -78,7 +78,7 @@ local function workspace_card(group)
       ui.Row{width="fill",height=T.overview.workspace_title_height,gap=T.overview.title_icon_gap,align="center",
         ui.Text{text="workspaces",family="Material Symbols Rounded",font_size=T.overview.workspace_icon_font,
           color="primary",width=T.overview.workspace_icon_width,height=T.overview.workspace_title_height},
-        ui.Text{text=tostring(ws.index).." · "..((ws.name and ws.name~="") and ws.name or "Workspace"),
+        ui.Text{text=tostring(ws.index).." · "..((ws.name and ws.name~="" and ws.name~=tostring(ws.index)) and ws.name or "Workspace"),
           height=T.overview.workspace_title_height,font_size=T.overview.workspace_title_font,color="primary"}}},
     ui.Scroll{id="window-grid-extent",position="absolute",left=T.overview.tile_left,top=T.overview.tile_top,
       scroll=ui.bind("extras.window_scroll."..tostring(math.clamp(ws.index,1,64))),width=T.overview.tile_area_width,height=T.overview.thumbnail_height,

@@ -2188,14 +2188,7 @@ impl SceneSource for Runtime {
                 UiEvent::Command { command, .. } => match command.as_str() {
                     "up" => Some("extras.prev"),
                     "down" => Some("extras.next"),
-                    "enter"
-                        if !self
-                            .session
-                            .focused_action()
-                            .is_some_and(|(_, name, _)| name == "extras.do") =>
-                    {
-                        Some("extras.choose")
-                    }
+                    "enter" if self.session.focused_action().is_none() => Some("extras.choose"),
                     _ => None,
                 },
                 _ => None,

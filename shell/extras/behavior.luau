@@ -65,7 +65,8 @@ local function groups(s)
   end)
   for _, ws in ipairs(workspaces) do
     local group = by_id[ws.id]
-    if group then result[#result+1] = group end
+    if group and (s["extras.per_output"] == true or (ws.index > 0 and
+      (ws.index <= (s["extras.workspace_count"] or 7) or #group.windows > 0))) then result[#result+1] = group end
   end
   return result
 end

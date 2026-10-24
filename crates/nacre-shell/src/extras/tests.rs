@@ -446,6 +446,35 @@ async fn shared_bar_compositor_and_nullable_menu_fields_load_real_views() {
             "{} must render its topic/engine rows",
             kind.name()
         );
+        if kind == Kind::Keybindings {
+            let close = runtime
+                .session
+                .view_nodes()
+                .iter()
+                .find(|node| node.label == "Close" && node.action.is_some())
+                .unwrap()
+                .id
+                .clone();
+            runtime
+                .stage(UiEvent::Model(BTreeMap::from([(
+                    "bead.focused".into(),
+                    Value::Text(close),
+                )])))
+                .unwrap();
+            runtime.commit();
+            runtime
+                .stage(UiEvent::Command {
+                    command: "enter".into(),
+                    shift: false,
+                })
+                .unwrap();
+            runtime.commit();
+            assert_eq!(
+                runtime.session.stores.get("panel.open"),
+                Some(&Value::Bool(false)),
+                "Enter activates the focused Close button"
+            );
+        }
         if kind == Kind::Overview {
             let node = runtime
                 .session
