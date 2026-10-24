@@ -108,7 +108,21 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                 Message::Call { id, m, p, .. } => {
                     let _ = tx.send((m.clone(), p.clone()));
                     let ok = if m == "menu.query" {
-                        json!({"query":p["query"],"mode":"apps","route":p["route"],"catalog_rev":7,"order":["action"],"items":{"action":{"name":"Open Settings","kind":"action","activation":"opaque-ticket","disabled":false}}})
+                        // Order is deliberately not alphabetical: `order` alone is authoritative (N0058).
+                        let q = p["query"].as_str().unwrap_or_default();
+                        let order = if q.is_empty() {
+                            json!(["action", "action-b"])
+                        } else if q.trim_start_matches('>').trim().starts_with("brain:") {
+                            json!(["brain"])
+                        } else {
+                            json!(["action", "window", "app"])
+                        };
+                        json!({"query":p["query"],"mode":p["mode"],"route":p["route"],"catalog_rev":7,"order":order,"items":{
+                            "action":{"name":"Open Settings","kind":"action","activation":"opaque-ticket","disabled":false},
+                            "action-b":{"name":"Calculator","kind":"action","activation":"ticket-b","disabled":false},
+                            "window":{"name":"Term","kind":"window","description":"Window · workspace 1","icon":"window","activation":"ticket-w","disabled":false},
+                            "app":{"name":"Zed","kind":"app","description":"Application","icon":"apps","activation":"ticket-a","disabled":false},
+                            "brain":{"name":"Search brain for x","kind":"action","description":"Open the brain drawer","icon":"neurology","activation":"ticket-br","disabled":false}}})
                     } else if m == "menu.activate" {
                         json!({"keep_open":true,"view":{"route":"actions.windows","query":"edited"}})
                     } else {
@@ -201,7 +215,7 @@ async fn palette_uses_opaque_engine_activation_and_rejects_obsolete_query() {
         lab.calls.recv().await.unwrap(),
         (
             "menu.query".into(),
-            json!({"query":"","mode":"apps","route":"actions"})
+            json!({"query":"","mode":"palette","route":"palette"})
         )
     );
     palette.act("activate:action", &stores("changed"), Arc::new(|| {}));
@@ -212,6 +226,59 @@ async fn palette_uses_opaque_engine_activation_and_rejects_obsolete_query() {
         (
             "menu.activate".into(),
             json!({"id":"action","activation":"opaque-ticket","catalog_rev":7})
+        )
+    );
+}
+fn names(model: &BTreeMap<String, Value>) -> Vec<String> {
+    match &model["extras.rows"] {
+        Value::List(rows) => rows
+            .iter()
+            .map(|r| r["name"].as_str().unwrap_or_default().to_owned())
+            .collect(),
+        _ => panic!("rows missing"),
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn palette_mode_keeps_the_daemon_order_for_empty_typed_and_prefixed_queries() {
+    let mut lab = lab().await;
+    let palette = Extras::new(Kind::Palette, lab.client.clone()).unwrap();
+    let model = ready(&palette, &stores("")).await;
+    assert_eq!(names(&model), ["Open Settings", "Calculator"]);
+    for (query, expected) in [
+        (
+            "set",
+            vec!["Open Settings", "Term", "Zed"],
+        ),
+        ("> set", vec!["Open Settings", "Term", "Zed"]),
+        ("brain: x", vec!["Search brain for x"]),
+        (">brain:x", vec!["Search brain for x"]),
+    ] {
+        let model = ready(&palette, &stores(query)).await;
+        assert_eq!(names(&model), expected, "query {query:?}");
+        let call = loop {
+            let call = lab.calls.recv().await.unwrap();
+            if call.1["query"] == query {
+                break call;
+            }
+        };
+        assert_eq!(call.0, "menu.query");
+        assert_eq!(call.1["mode"], "palette");
+        assert_eq!(call.1["route"], "palette");
+    }
+}
+#[tokio::test(flavor = "current_thread")]
+async fn palette_activates_a_typed_row_with_its_own_ticket() {
+    let mut lab = lab().await;
+    let palette = Extras::new(Kind::Palette, lab.client.clone()).unwrap();
+    let typed = stores("set");
+    ready(&palette, &typed).await;
+    while lab.calls.try_recv().is_ok() {}
+    palette.act("activate:window", &typed, Arc::new(|| {}));
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "menu.activate".into(),
+            json!({"id":"window","activation":"ticket-w","catalog_rev":7})
         )
     );
 }
@@ -227,9 +294,18 @@ fn extras_goldens() -> bead_test::Result<()> {
                     json!({"id":"k2","key":"Super + Tab","description":"Windows"}),
                 ]
             } else {
-                vec![
-                    json!({"id":"settings","name":"Settings","description":"Open Settings","icon":"preferences-system"}),
+                // The first rows QML's empty palette shows (DesktopActions order, N0058).
+                [
+                    ("wallpaper", "Open wallpaper picker", "wallpaper"),
+                    ("calculator", "Calculator", "calculate"),
+                    ("colors", "Open Nacre Colors", "palette"),
+                    ("settings", "Open Nacre Settings", "settings"),
+                    ("ai", "Open Nacre AI", "smart_toy"),
+                    ("brain", "Open Nacre Brain", "neurology"),
+                    ("files", "Open files…", "folder_open"),
                 ]
+                .map(|(id, name, icon)| json!({"id":id,"name":name,"description":"Action","icon":icon,"kind":"action"}))
+                .to_vec()
             };
             let mut h = bead_test::Harness::load_with_icons(
                 &root,

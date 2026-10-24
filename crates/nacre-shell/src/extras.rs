@@ -32,6 +32,9 @@ impl Kind {
         }
     }
 }
+/// N0058: the daemon owns palette content, order and matching; Bead only displays `order`.
+const PALETTE_MODE: &str = "palette";
+const PALETTE_ROUTE: &str = "palette";
 struct Query {
     text: String,
     route: String,
@@ -149,14 +152,7 @@ impl Extras {
             _ => "",
         };
         if self.kind == Kind::Palette {
-            let route = state.route.clone().unwrap_or_else(|| {
-                if text.trim().is_empty() {
-                    "actions"
-                } else {
-                    ""
-                }
-                .into()
-            });
+            let route = state.route.clone().unwrap_or_else(|| PALETTE_ROUTE.into());
             let wanted = boot
                 .as_ref()
                 .map(|boot| (text.to_owned(), route.clone(), boot.clone()));
@@ -171,7 +167,7 @@ impl Extras {
                     state.query = self
                         .begin(
                             "menu.query",
-                            json!({"query":text,"mode":"apps","route":route}),
+                            json!({"query":text,"mode":PALETTE_MODE,"route":route}),
                             wake.clone(),
                         )
                         .map(|ticket| Query {

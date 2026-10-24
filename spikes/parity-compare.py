@@ -44,6 +44,7 @@ import fake_system  # noqa: E402
 #   ('app_close', name)             close Settings (an app window in both shells)
 #   ('qml_settings', page)          QML only: `quickshell ipc call settingsApp open PAGE` (Bead: ('shell', 'nacre', 'settings', PAGE))
 #   ('qml_app', app, method, *args) QML only: `quickshell ipc call APP METHOD ARGS` (Bead arm: a ('ui', APP, METHOD, ARGS) step)
+#   ('type', text)                  B0092: wtype into the focused panel of the nested session (same keystrokes for both arms)
 #   ('only', 'qml'|'bead', step)    a step for one arm (the shells' preview/trigger routes differ)
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
 #   ('pointer', x, y) / ('press', x, y) / ('release',)   B0067: a virtual pointer on the private parent compositor (logical px; needs --pointer-tool)
@@ -75,6 +76,8 @@ STATES = {
     'idle': ([], [], 0),
     'overview': ([('ui', 'nacre', 'mode', 'overview')], [('ui', 'nacre', 'close')], 1.0),
     'palette': ([('ui', 'nacre', 'mode', 'palette')], [('ui', 'nacre', 'close')], 1.0),
+    'palette-typed': ([('ui', 'nacre', 'mode', 'palette'), ('sleep', 1.0), ('type', 'set')], [('ui', 'nacre', 'close')], 0),
+    'palette-brain': ([('ui', 'nacre', 'mode', 'palette'), ('sleep', 1.0), ('type', '> brain: hello')], [('ui', 'nacre', 'close')], 0),
     'keybindings': ([('ui', 'nacre', 'mode', 'keys')], [('ui', 'nacre', 'close')], 1.0),
     'launcher': ([('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
     'launcher-hover': ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.4), ('pointer', *PTR['launcher-quick'])],
@@ -679,6 +682,9 @@ os.execv(real, [real, *args])
                 self.notify(step[1], step[2])
             elif kind == 'sleep':
                 time.sleep(step[1])
+            elif kind == 'type':
+                self.run(['wtype', '-s', '40', step[1]], check=False)
+                time.sleep(0.8)
             elif kind == 'shell':
                 try:
                     self.socket_call(self.runtime / 'bead-command.sock', step[1], step[2], list(step[3:]))
