@@ -36,6 +36,7 @@ import time
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fake_system  # noqa: E402
+import capture_safety  # noqa: E402
 
 # state name -> (steps that open it, steps that close it, sequence seconds).  Steps are tuples:
 #   ('ui', target, method, *args)   daemon ui.dispatch, identical for both shells
@@ -1505,6 +1506,9 @@ def main():
     parser.add_argument('--baseline', help='an earlier results.json: adds a before value to the gallery')
     parser.add_argument('--title', default='')
     parser.add_argument('--gallery-only', action='store_true', help='rebuild index.html/results.json from existing captures')
+    parser.add_argument('--capture-guard-child', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--capture-guard-ready-file', type=Path, help=argparse.SUPPRESS)
+    parser.add_argument('--capture-guard-release-file', type=Path, help=argparse.SUPPRESS)
     parser.add_argument('--run-arm', help=argparse.SUPPRESS)
     parser.add_argument('--private', help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -1522,6 +1526,15 @@ def main():
     if args.run_arm:
         return run_arm(args)
     if not args.gallery_only:
+        capture_safety.require_wayland_info()
+        if args.capture_guard_child:
+            if not args.capture_guard_ready_file or not args.capture_guard_release_file:
+                parser.error('capture guard child requires its parent readiness gate')
+            capture_safety.wait_for_release(args.capture_guard_ready_file, args.capture_guard_release_file)
+        else:
+            return capture_safety.run_guarded(
+                [sys.executable, __file__, *sys.argv[1:]],
+                report_path=args.out / 'capture-safety.json', env=os.environ.copy())
         if os.getpriority(os.PRIO_PROCESS, 0) < 10:
             os.setpriority(os.PRIO_PROCESS, 0, 10)
         for tool in ['labwc', 'niri', 'grim', 'dbus-run-session', 'gdbus'] + (['quickshell'] if 'qml' in args.arms else []):
