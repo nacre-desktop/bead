@@ -18,19 +18,24 @@ The changed three-pair cohort passes; allocator variance and launcher timing gap
 Relative memory gates and full remote CI pass; absolute laptop memory is unmeasured.
 [Source conditions, component breakdown, failure and residual parity gaps](docs/specs/0097-panel-anchors-owner.md).
 
-## 2026-10-24 — B0103 control input candidate, blocked
+## 2026-10-25 — B0103 integrated control feedback
 
-Queued pointer work and topic-backed slider drawing are code-level latency causes.
-The candidate coalesces motion and draws local feedback while rate-limiting writes.
-Remote Arch CI passes; the private capture lease remained unavailable for over 90 minutes.
-No performance or memory verdict is possible without those captures.
+Sliders preview locally; queued motion coalesces and host writes keep their latest target.
+Remote full CI and private CPU/native-GL captures pass; drag presentation improves substantially.
+All four absolute 24.67 ms hover/drag gates still fail in the nested chain; physical laptop timing is unmeasured.
+Six Home pairs pass the 8 ms first-key and +0.5 MiB median memory gates; the +2.496 MiB closed outlier is retained.
+Allocator follow-up shows stable live heap/cache sizes with varying anonymous mapping residency.
 
-| Required private measurement | Control | Candidate |
-| --- | --- | --- |
-| CPU / native GL hover and drag → present | unmeasured | unmeasured |
-| Launcher first-key CPU / idle unreclaimable delta | unmeasured | unmeasured |
+| Private measurement | Control | Final |
+| --- | ---: | ---: |
+| CPU hover p50/p99, ms | 32.20/32.45 | 32.29/32.48 |
+| CPU drag p50/p99, ms | 782.63/1225.09 | 66.30/70.46 |
+| GL hover p50/p99, ms | 32.12/32.34 | 32.30/32.50 |
+| GL drag p50/p99, ms | 935.15/1454.08 | 66.26/78.37 |
+| Home first-key median, ms | 6.802 | 7.101 |
+| Home idle/open/closed paired Δ, MiB | reference | +0.037/+0.203/−0.014 |
 
-[Candidate, reconciliation risk and remaining proofs](docs/specs/0103-control-latency.md).
+[Stages, memory decomposition, source hashes and appearance gaps](docs/specs/0103-control-latency.md).
 
 ## 2026-10-24 — B0080 populated Home first key
 

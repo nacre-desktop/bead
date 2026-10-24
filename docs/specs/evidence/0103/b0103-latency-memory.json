@@ -1,0 +1,1003 @@
+{
+  "schema": "bead-b0103-public-latency-v1",
+  "provenance": {
+    "control_revision": "ac194d7",
+    "candidate_revision": "7ac5ef97b79dac6f7ff6a0852a5be5663df7fad5",
+    "matched_probes": "shared frozen control view 60c82df",
+    "method": "Matched private/nested capture arms; source timestamps and local host/path details omitted.",
+    "shared_frozen_control_view": "60c82df",
+    "pointer_helper_sha256": "95dbbf57af6a9548bda0acafd4bb38a868baaa747c03fcfb660bf63de45b442d"
+  },
+  "arms": {
+    "original-cpu": {
+      "latency": {
+        "hover": {
+          "accepted_samples": 50,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 50,
+              "p50_ms": 0.73524,
+              "p99_ms": 1.0298329999999993
+            },
+            "commit_to_present": {
+              "n": 50,
+              "p50_ms": 22.217945,
+              "p99_ms": 22.7839881
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 50,
+              "p50_ms": 32.1979885,
+              "p99_ms": 32.45407421
+            },
+            "injected_to_received": {
+              "n": 50,
+              "p50_ms": 0.611035,
+              "p99_ms": 0.6776427
+            },
+            "layout_to_paint": {
+              "n": 50,
+              "p50_ms": 0.26115,
+              "p99_ms": 0.26585209000000004
+            },
+            "paint_to_commit": {
+              "n": 50,
+              "p50_ms": 0.4853395,
+              "p99_ms": 0.54862061
+            },
+            "panel_commit_to_present": {
+              "n": 50,
+              "p50_ms": 21.471791,
+              "p99_ms": 21.875988810000003
+            },
+            "received_to_worker": {
+              "n": 50,
+              "p50_ms": 0.03366,
+              "p99_ms": 0.0481821
+            },
+            "total": {
+              "n": 50,
+              "p50_ms": 31.594239,
+              "p99_ms": 31.85140931
+            },
+            "view_to_layout": {
+              "n": 50,
+              "p50_ms": 1.402679,
+              "p99_ms": 1.4614848
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 50,
+              "p50_ms": 7.1986405,
+              "p99_ms": 7.6164071
+            }
+          }
+        },
+        "drag": {
+          "accepted_samples": 11,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 11,
+              "p50_ms": 1.119899,
+              "p99_ms": 12.240877900000005
+            },
+            "commit_to_present": {
+              "n": 11,
+              "p50_ms": 1.862458,
+              "p99_ms": 43.378990900000005
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 11,
+              "p50_ms": 782.631741,
+              "p99_ms": 1225.0895433
+            },
+            "injected_to_received": {
+              "n": 11,
+              "p50_ms": 30.251768,
+              "p99_ms": 31.783872
+            },
+            "layout_to_paint": {
+              "n": 11,
+              "p50_ms": 0.27662,
+              "p99_ms": 27.14586200000001
+            },
+            "paint_to_commit": {
+              "n": 11,
+              "p50_ms": 216.742538,
+              "p99_ms": 333.58527590000006
+            },
+            "panel_commit_to_present": {
+              "n": 11,
+              "p50_ms": 0.658169,
+              "p99_ms": 31.526134
+            },
+            "received_to_worker": {
+              "n": 11,
+              "p50_ms": 459.161488,
+              "p99_ms": 828.7680756
+            },
+            "total": {
+              "n": 11,
+              "p50_ms": 752.235192,
+              "p99_ms": 1196.0883325000002
+            },
+            "view_to_layout": {
+              "n": 11,
+              "p50_ms": 1.257469,
+              "p99_ms": 1.526961
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 11,
+              "p50_ms": 30.675308,
+              "p99_ms": 114.77950180000002
+            }
+          }
+        }
+      },
+      "coverage": {
+        "drag": {
+          "coordinate_matched_receives": 272,
+          "coordinate_matched_worker_events": 271,
+          "newer_inputs_waiting_before_worker_total": 635,
+          "older_inputs_coalesced_total": 39,
+          "tool_inputs": 302,
+          "unmatched_tool_inputs": 30,
+          "unmatched_worker_events": 0,
+          "worker_events": 271
+        },
+        "hover": {
+          "coordinate_matched_receives": 50,
+          "coordinate_matched_worker_events": 50,
+          "newer_inputs_waiting_before_worker_total": 0,
+          "older_inputs_coalesced_total": 0,
+          "tool_inputs": 100,
+          "unmatched_tool_inputs": 50,
+          "unmatched_worker_events": 66,
+          "worker_events": 116
+        }
+      },
+      "post_preview_reconciliation": {
+        "n": 0,
+        "visible_jump_n": 0,
+        "returned_to_origin_n": 0,
+        "events": []
+      },
+      "surface_compose": {
+        "correlation_rule": "last INPUT_PROFILE stage=compose line after exact UI_COMMIT update and before its first panel_commit marker; panel marker verified against sample commit_to_panel_commit delta",
+        "wall_ms": {
+          "n": 61,
+          "p50": 0.7234,
+          "p99": 1.2381
+        },
+        "cpu_ms": {
+          "n": 61,
+          "p50": 0.7207,
+          "p99": 1.2304
+        },
+        "unmatched_sample_count": 0,
+        "ambiguous_multiple_compose_count": 0,
+        "unmatched_examples": [],
+        "multiple_compose_examples": []
+      },
+      "memory": {
+        "idle": {
+          "n": 5,
+          "pss_mib": 41.0078,
+          "anon_mib": 21.1406,
+          "file_mib": 19.1816,
+          "shmem_mib": 0.6855,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 21.8262
+        },
+        "closed_idle": {
+          "n": 5,
+          "pss_mib": 45.3154,
+          "anon_mib": 26.3555,
+          "file_mib": 18.2744,
+          "shmem_mib": 0.6855,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 27.041
+        }
+      },
+      "surface_compose_by_input_kind": {
+        "hover": {
+          "wall_ms": {
+            "n": 50,
+            "p50": 0.6941,
+            "p99": 0.9892
+          },
+          "cpu_ms": {
+            "n": 50,
+            "p50": 0.6902,
+            "p99": 0.9854
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        },
+        "drag": {
+          "wall_ms": {
+            "n": 11,
+            "p50": 1.0722,
+            "p99": 1.2764
+          },
+          "cpu_ms": {
+            "n": 11,
+            "p50": 1.0666,
+            "p99": 1.2732
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        }
+      }
+    },
+    "feedback-cpu": {
+      "latency": {
+        "hover": {
+          "accepted_samples": 50,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 50,
+              "p50_ms": 0.8528344999999999,
+              "p99_ms": 1.2695385899999991
+            },
+            "commit_to_present": {
+              "n": 50,
+              "p50_ms": 28.95784,
+              "p99_ms": 29.35769999
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 50,
+              "p50_ms": 32.2897925,
+              "p99_ms": 32.48117491
+            },
+            "injected_to_received": {
+              "n": 50,
+              "p50_ms": 0.624375,
+              "p99_ms": 0.68118619
+            },
+            "layout_to_paint": {
+              "n": 50,
+              "p50_ms": 0.31445500000000004,
+              "p99_ms": 0.3916785999999999
+            },
+            "paint_to_commit": {
+              "n": 50,
+              "p50_ms": 0.6063695,
+              "p99_ms": 0.8270139099999998
+            },
+            "panel_commit_to_present": {
+              "n": 50,
+              "p50_ms": 28.139865,
+              "p99_ms": 28.54989539
+            },
+            "received_to_worker": {
+              "n": 50,
+              "p50_ms": 0.033530000000000004,
+              "p99_ms": 0.05278809999999999
+            },
+            "total": {
+              "n": 50,
+              "p50_ms": 31.631437,
+              "p99_ms": 31.88183031
+            },
+            "view_to_layout": {
+              "n": 50,
+              "p50_ms": 1.6471635,
+              "p99_ms": 1.8041448999999998
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 50,
+              "p50_ms": 0.064125,
+              "p99_ms": 0.07184939
+            }
+          }
+        },
+        "drag": {
+          "accepted_samples": 36,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 36,
+              "p50_ms": 7.292395,
+              "p99_ms": 10.920454
+            },
+            "commit_to_present": {
+              "n": 36,
+              "p50_ms": 38.431193,
+              "p99_ms": 42.219104
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 36,
+              "p50_ms": 66.2997835,
+              "p99_ms": 70.45681385
+            },
+            "injected_to_received": {
+              "n": 36,
+              "p50_ms": 18.3219815,
+              "p99_ms": 27.699680749999988
+            },
+            "layout_to_paint": {
+              "n": 36,
+              "p50_ms": 0.23448999999999998,
+              "p99_ms": 0.27156549999999996
+            },
+            "paint_to_commit": {
+              "n": 36,
+              "p50_ms": 0.418825,
+              "p99_ms": 2.8675751999999948
+            },
+            "panel_commit_to_present": {
+              "n": 36,
+              "p50_ms": 31.226492999999998,
+              "p99_ms": 31.50317835
+            },
+            "received_to_worker": {
+              "n": 36,
+              "p50_ms": 4.7937965,
+              "p99_ms": 9.097697999999998
+            },
+            "total": {
+              "n": 36,
+              "p50_ms": 47.983286500000006,
+              "p99_ms": 48.0410775
+            },
+            "view_to_layout": {
+              "n": 35,
+              "p50_ms": 1.368969,
+              "p99_ms": 1.6379909999999993
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 36,
+              "p50_ms": 2.825928,
+              "p99_ms": 3.74808885
+            }
+          }
+        }
+      },
+      "coverage": {
+        "drag": {
+          "coordinate_matched_receives": 273,
+          "coordinate_matched_worker_events": 127,
+          "newer_inputs_waiting_before_worker_total": 10,
+          "older_inputs_coalesced_total": 224,
+          "tool_inputs": 302,
+          "unmatched_tool_inputs": 29,
+          "unmatched_worker_events": 0,
+          "worker_events": 127
+        },
+        "hover": {
+          "coordinate_matched_receives": 50,
+          "coordinate_matched_worker_events": 50,
+          "newer_inputs_waiting_before_worker_total": 0,
+          "older_inputs_coalesced_total": 0,
+          "tool_inputs": 100,
+          "unmatched_tool_inputs": 50,
+          "unmatched_worker_events": 66,
+          "worker_events": 116
+        }
+      },
+      "post_preview_reconciliation": {
+        "n": 1,
+        "visible_jump_n": 0,
+        "returned_to_origin_n": 0,
+        "events": [
+          {
+            "kind": "preview_expired",
+            "visible_jump": false,
+            "returned_to_origin": false,
+            "input_to_presentation_ms": 789.772683,
+            "injected_to_presentation_ms": 809.16726
+          }
+        ]
+      },
+      "surface_compose": {
+        "correlation_rule": "last INPUT_PROFILE stage=compose line after exact UI_COMMIT update and before its first panel_commit marker; panel marker verified against sample commit_to_panel_commit delta",
+        "wall_ms": {
+          "n": 86,
+          "p50": 0.775,
+          "p99": 1.3806
+        },
+        "cpu_ms": {
+          "n": 86,
+          "p50": 0.7645,
+          "p99": 1.3756
+        },
+        "unmatched_sample_count": 0,
+        "ambiguous_multiple_compose_count": 0,
+        "unmatched_examples": [],
+        "multiple_compose_examples": []
+      },
+      "memory": {
+        "idle": {
+          "n": 5,
+          "pss_mib": 40.6494,
+          "anon_mib": 20.7617,
+          "file_mib": 19.1943,
+          "shmem_mib": 0.6934,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 21.4551
+        },
+        "closed_idle": {
+          "n": 5,
+          "pss_mib": 41.4229,
+          "anon_mib": 22.5469,
+          "file_mib": 18.1826,
+          "shmem_mib": 0.6934,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 23.2402
+        }
+      },
+      "surface_compose_by_input_kind": {
+        "hover": {
+          "wall_ms": {
+            "n": 50,
+            "p50": 0.8022,
+            "p99": 1.2052
+          },
+          "cpu_ms": {
+            "n": 50,
+            "p50": 0.7984,
+            "p99": 1.1969
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        },
+        "drag": {
+          "wall_ms": {
+            "n": 36,
+            "p50": 0.6115,
+            "p99": 1.345
+          },
+          "cpu_ms": {
+            "n": 36,
+            "p50": 0.6028,
+            "p99": 1.3378
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        }
+      }
+    },
+    "original-gl": {
+      "latency": {
+        "hover": {
+          "accepted_samples": 50,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 50,
+              "p50_ms": 0.7102695,
+              "p99_ms": 1.2400620999999985
+            },
+            "commit_to_present": {
+              "n": 50,
+              "p50_ms": 21.1480305,
+              "p99_ms": 23.4096584
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 50,
+              "p50_ms": 32.1151675,
+              "p99_ms": 32.34054689
+            },
+            "injected_to_received": {
+              "n": 50,
+              "p50_ms": 0.296395,
+              "p99_ms": 0.6060655
+            },
+            "layout_to_paint": {
+              "n": 50,
+              "p50_ms": 0.236645,
+              "p99_ms": 0.2734351
+            },
+            "paint_to_commit": {
+              "n": 50,
+              "p50_ms": 0.405485,
+              "p99_ms": 0.5295491
+            },
+            "panel_commit_to_present": {
+              "n": 50,
+              "p50_ms": 20.468131,
+              "p99_ms": 22.7679895
+            },
+            "received_to_worker": {
+              "n": 50,
+              "p50_ms": 0.0211,
+              "p99_ms": 0.0443781
+            },
+            "total": {
+              "n": 50,
+              "p50_ms": 31.8188685,
+              "p99_ms": 32.0382509
+            },
+            "view_to_layout": {
+              "n": 50,
+              "p50_ms": 1.2310195,
+              "p99_ms": 1.40511031
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 50,
+              "p50_ms": 8.744934,
+              "p99_ms": 9.53627471
+            }
+          }
+        },
+        "drag": {
+          "accepted_samples": 12,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 12,
+              "p50_ms": 1.03281,
+              "p99_ms": 1.4883256
+            },
+            "commit_to_present": {
+              "n": 12,
+              "p50_ms": 1.9236985,
+              "p99_ms": 29.371335220000002
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 12,
+              "p50_ms": 935.1499664999999,
+              "p99_ms": 1454.0805603100002
+            },
+            "injected_to_received": {
+              "n": 12,
+              "p50_ms": 28.0868205,
+              "p99_ms": 31.73614101
+            },
+            "layout_to_paint": {
+              "n": 12,
+              "p50_ms": 0.2464,
+              "p99_ms": 0.3956757
+            },
+            "paint_to_commit": {
+              "n": 12,
+              "p50_ms": 252.3922885,
+              "p99_ms": 342.93722615
+            },
+            "panel_commit_to_present": {
+              "n": 12,
+              "p50_ms": 0.604889,
+              "p99_ms": 28.13757071
+            },
+            "received_to_worker": {
+              "n": 12,
+              "p50_ms": 613.665061,
+              "p99_ms": 1065.88132015
+            },
+            "total": {
+              "n": 12,
+              "p50_ms": 904.174303,
+              "p99_ms": 1425.15244472
+            },
+            "view_to_layout": {
+              "n": 12,
+              "p50_ms": 1.325164,
+              "p99_ms": 1.7887112000000003
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 12,
+              "p50_ms": 23.7375735,
+              "p99_ms": 130.24449746
+            }
+          }
+        }
+      },
+      "coverage": {
+        "drag": {
+          "coordinate_matched_receives": 273,
+          "coordinate_matched_worker_events": 271,
+          "newer_inputs_waiting_before_worker_total": 815,
+          "older_inputs_coalesced_total": 20,
+          "tool_inputs": 302,
+          "unmatched_tool_inputs": 29,
+          "unmatched_worker_events": 0,
+          "worker_events": 271
+        },
+        "hover": {
+          "coordinate_matched_receives": 50,
+          "coordinate_matched_worker_events": 50,
+          "newer_inputs_waiting_before_worker_total": 0,
+          "older_inputs_coalesced_total": 0,
+          "tool_inputs": 100,
+          "unmatched_tool_inputs": 50,
+          "unmatched_worker_events": 66,
+          "worker_events": 116
+        }
+      },
+      "post_preview_reconciliation": {
+        "n": 0,
+        "visible_jump_n": 0,
+        "returned_to_origin_n": 0,
+        "events": []
+      },
+      "surface_compose": {
+        "correlation_rule": "last INPUT_PROFILE stage=compose line after exact UI_COMMIT update and before its first panel_commit marker; panel marker verified against sample commit_to_panel_commit delta",
+        "wall_ms": {
+          "n": 62,
+          "p50": 0.685,
+          "p99": 1.326
+        },
+        "cpu_ms": {
+          "n": 62,
+          "p50": 0.6806,
+          "p99": 1.1851
+        },
+        "unmatched_sample_count": 0,
+        "ambiguous_multiple_compose_count": 0,
+        "unmatched_examples": [],
+        "multiple_compose_examples": []
+      },
+      "memory": {
+        "idle": {
+          "n": 5,
+          "pss_mib": 41.1221,
+          "anon_mib": 21.1094,
+          "file_mib": 19.3271,
+          "shmem_mib": 0.6855,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 21.7949
+        },
+        "closed_idle": {
+          "n": 5,
+          "pss_mib": 86.1562,
+          "anon_mib": 41.0273,
+          "file_mib": 44.4355,
+          "shmem_mib": 0.6934,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 41.7207
+        }
+      },
+      "surface_compose_by_input_kind": {
+        "hover": {
+          "wall_ms": {
+            "n": 50,
+            "p50": 0.6721,
+            "p99": 0.8046
+          },
+          "cpu_ms": {
+            "n": 50,
+            "p50": 0.6687,
+            "p99": 0.7972
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        },
+        "drag": {
+          "wall_ms": {
+            "n": 12,
+            "p50": 0.991,
+            "p99": 1.4448
+          },
+          "cpu_ms": {
+            "n": 12,
+            "p50": 0.9771,
+            "p99": 1.2089
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        }
+      }
+    },
+    "feedback-gl": {
+      "latency": {
+        "hover": {
+          "accepted_samples": 50,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 50,
+              "p50_ms": 0.8916595,
+              "p99_ms": 1.3113080999999989
+            },
+            "commit_to_present": {
+              "n": 50,
+              "p50_ms": 28.658815,
+              "p99_ms": 29.0456792
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 50,
+              "p50_ms": 32.2981325,
+              "p99_ms": 32.5049482
+            },
+            "injected_to_received": {
+              "n": 50,
+              "p50_ms": 0.635,
+              "p99_ms": 0.707343
+            },
+            "layout_to_paint": {
+              "n": 50,
+              "p50_ms": 0.3485695,
+              "p99_ms": 0.4389071899999999
+            },
+            "paint_to_commit": {
+              "n": 50,
+              "p50_ms": 0.5999445,
+              "p99_ms": 0.9124359
+            },
+            "panel_commit_to_present": {
+              "n": 50,
+              "p50_ms": 27.8343305,
+              "p99_ms": 28.24744089
+            },
+            "received_to_worker": {
+              "n": 50,
+              "p50_ms": 0.035250000000000004,
+              "p99_ms": 0.09671349999999979
+            },
+            "total": {
+              "n": 50,
+              "p50_ms": 31.657318,
+              "p99_ms": 31.8655038
+            },
+            "view_to_layout": {
+              "n": 50,
+              "p50_ms": 1.834149,
+              "p99_ms": 2.1189617099999993
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 50,
+              "p50_ms": 0.11445,
+              "p99_ms": 0.1497057
+            }
+          }
+        },
+        "drag": {
+          "accepted_samples": 36,
+          "stages": {
+            "commit_to_panel_commit": {
+              "n": 36,
+              "p50_ms": 7.689825,
+              "p99_ms": 10.27308935
+            },
+            "commit_to_present": {
+              "n": 36,
+              "p50_ms": 38.822338,
+              "p99_ms": 41.4624425
+            },
+            "handler_to_view": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "injected_to_present": {
+              "n": 36,
+              "p50_ms": 66.257583,
+              "p99_ms": 78.37365014999997
+            },
+            "injected_to_received": {
+              "n": 36,
+              "p50_ms": 18.254962,
+              "p99_ms": 22.416448499999998
+            },
+            "layout_to_paint": {
+              "n": 36,
+              "p50_ms": 0.23549949999999997,
+              "p99_ms": 0.2661785
+            },
+            "paint_to_commit": {
+              "n": 36,
+              "p50_ms": 0.4356645,
+              "p99_ms": 4.131170399999994
+            },
+            "panel_commit_to_present": {
+              "n": 36,
+              "p50_ms": 31.187693,
+              "p99_ms": 31.542588000000002
+            },
+            "received_to_worker": {
+              "n": 36,
+              "p50_ms": 4.640492,
+              "p99_ms": 16.573513599999988
+            },
+            "total": {
+              "n": 36,
+              "p50_ms": 47.991256,
+              "p99_ms": 58.40785334999998
+            },
+            "view_to_layout": {
+              "n": 36,
+              "p50_ms": 1.352039,
+              "p99_ms": 1.52972835
+            },
+            "worker_to_handler": {
+              "n": 0,
+              "p50_ms": null,
+              "p99_ms": null
+            },
+            "worker_to_view": {
+              "n": 36,
+              "p50_ms": 2.759538,
+              "p99_ms": 4.0728855
+            }
+          }
+        }
+      },
+      "coverage": {
+        "drag": {
+          "coordinate_matched_receives": 273,
+          "coordinate_matched_worker_events": 126,
+          "newer_inputs_waiting_before_worker_total": 14,
+          "older_inputs_coalesced_total": 220,
+          "tool_inputs": 302,
+          "unmatched_tool_inputs": 29,
+          "unmatched_worker_events": 0,
+          "worker_events": 126
+        },
+        "hover": {
+          "coordinate_matched_receives": 50,
+          "coordinate_matched_worker_events": 50,
+          "newer_inputs_waiting_before_worker_total": 0,
+          "older_inputs_coalesced_total": 0,
+          "tool_inputs": 100,
+          "unmatched_tool_inputs": 50,
+          "unmatched_worker_events": 66,
+          "worker_events": 116
+        }
+      },
+      "post_preview_reconciliation": {
+        "n": 1,
+        "visible_jump_n": 0,
+        "returned_to_origin_n": 0,
+        "events": [
+          {
+            "kind": "preview_expired",
+            "visible_jump": false,
+            "returned_to_origin": false,
+            "input_to_presentation_ms": 788.214317,
+            "injected_to_presentation_ms": 807.412574
+          }
+        ]
+      },
+      "surface_compose": {
+        "correlation_rule": "last INPUT_PROFILE stage=compose line after exact UI_COMMIT update and before its first panel_commit marker; panel marker verified against sample commit_to_panel_commit delta",
+        "wall_ms": {
+          "n": 86,
+          "p50": 0.7868,
+          "p99": 1.2159
+        },
+        "cpu_ms": {
+          "n": 86,
+          "p50": 0.7767,
+          "p99": 1.2126
+        },
+        "unmatched_sample_count": 0,
+        "ambiguous_multiple_compose_count": 0,
+        "unmatched_examples": [],
+        "multiple_compose_examples": []
+      },
+      "memory": {
+        "idle": {
+          "n": 5,
+          "pss_mib": 41.1475,
+          "anon_mib": 21.1016,
+          "file_mib": 19.3525,
+          "shmem_mib": 0.6934,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 21.7949
+        },
+        "closed_idle": {
+          "n": 5,
+          "pss_mib": 81.7666,
+          "anon_mib": 36.4922,
+          "file_mib": 44.5732,
+          "shmem_mib": 0.7012,
+          "drm_mib": 0.0,
+          "swap_pss_mib": 0.0,
+          "unreclaimable_mib": 37.1934
+        }
+      },
+      "surface_compose_by_input_kind": {
+        "hover": {
+          "wall_ms": {
+            "n": 50,
+            "p50": 0.8144,
+            "p99": 0.9294
+          },
+          "cpu_ms": {
+            "n": 50,
+            "p50": 0.8119,
+            "p99": 0.9268
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        },
+        "drag": {
+          "wall_ms": {
+            "n": 36,
+            "p50": 0.7127,
+            "p99": 1.4021
+          },
+          "cpu_ms": {
+            "n": 36,
+            "p50": 0.7068,
+            "p99": 1.3981
+          },
+          "unmatched_sample_count": 0,
+          "ambiguous_multiple_compose_count": 0,
+          "correlation_rule": "last compose profile after exact update commit, before its first matching panel-commit marker"
+        }
+      }
+    }
+  },
+  "memory_units": "MiB (binary; source KiB divided by 1024)",
+  "memory_phases": "Five-sample median for idle and closed_idle; PSS decomposition is informational, unreclaimable is anon + shmem + DRM + SwapPss."
+}

@@ -12,6 +12,17 @@ initial +1.496 MiB closed-memory failure remains recorded. Full remote CI and
 goldens pass on the integrated source. [B0097](specs/0097-panel-anchors-owner.md)
 records measured-source boundaries and residual launcher timing/body/calendar
 corner gaps. No live change or absolute laptop-cap claim.
+## 2026-10-25 — B0103 integrated; nested latency targets remain open
+
+Local slider feedback, motion coalescing, bounded host writes and keyboard-only focus styling
+are integrated at 417ac32/7ac5ef9; measurement tooling is 60c82df. Full remote Arch CI passes.
+Private CPU/GL drag p99 falls from 1225/1454 ms to 70/78 ms, while hover remains about 32 ms.
+All four absolute 24.67 ms latency gates fail; measured surface commit→present dominates.
+Six populated Home pairs give first-key CPU 6.802→7.101 ms and median idle/open/closed
+unreclaimable deltas +0.037/+0.203/−0.014 MiB. The +2.496 MiB closed outlier was not repeated
+in three allocator follow-up pairs; live heap/cache sizes stay close, with anonymous residency spread.
+[Evidence and explicit QML gaps](specs/0103-control-latency.md) include paired screenshots and stages.
+No live test, installation or physical laptop timing/cap acceptance is claimed.
 
 ## 2026-10-24 — B0098 sidebar and Settings (review candidate)
 
@@ -22,16 +33,6 @@ wheel easing while keeping non-content gestures raw. Matched evidence, memory,
 full remote Arch CI, an unresolved transient memory sample and explicit
 physical-wheel/integration limits are in
 [B0098](specs/0098-sidebar-settings-owner.md). No live change or laptop acceptance claim.
-
-
-## 2026-10-24 — B0103 control input (blocked candidate)
-
-The candidate coalesces queued pointer positions, previews slider values locally,
-limits host writes, and separates pointer styling from keyboard focus. Remote
-Arch CI passes. The private capture lease remained unavailable for over 90 minutes;
-CPU/GL presentation, matched QML, first-key and memory gates are all unmeasured.
-[B0103](specs/0103-control-latency.md) records the candidate and remaining proofs.
-No integration, live test or performance acceptance.
 
 
 ## 2026-10-24 — B0096 owner bar parity (review candidate)
