@@ -143,7 +143,7 @@ return kit.Panel{id="extras",edge="top",open=ui.bind("panel.open"),width=width,h
   ui.Text{id="empty-message",position="absolute",left=T.panel.horizontal_inset,
     top=T.panel.empty_top+body_height/2-T.panel.empty_height/2,width=body_width,height=T.panel.empty_height,
     text=ui.bind("extras.empty_message"),visible=shortcuts and ui.bind("extras.empty") or false,font_size=T.panel.empty_font,
-    text_align="center",color="onSurfaceVariant"},
+    text_align="center",color="onSurface"},
   ui.Text{id="status-message",position="absolute",left=T.panel.horizontal_inset,
     top=T.panel.empty_top+body_height/2-T.panel.empty_height/2,width=body_width,height=T.panel.empty_height,
     text=ui.bind("extras.status_message"),visible=ui.bind("extras.status_visible"),font_size=T.panel.empty_font,

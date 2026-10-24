@@ -364,6 +364,18 @@ async fn keyboard_search_and_focus_use_the_actual_luau_view() {
             .unwrap(),
         ("window.focus".into(), json!({"window":"win1"}))
     );
+    runtime
+        .stage(UiEvent::Model(BTreeMap::from([(
+            "panel.open".into(),
+            Value::Bool(true),
+        )])))
+        .unwrap();
+    runtime.commit();
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&Value::Bool(true)),
+        "a quick reopen must supersede the earlier close request"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

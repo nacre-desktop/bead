@@ -11,7 +11,7 @@ return {
     search_height = 44, search_padding = 15, search_vertical=8, search_radius = 22, search_font = 16,
     radius = 12, border = 1, duration = .3,
     refresh_size = 30, close_width = 97, close_height = 34, close_font=16, close_radius=9999, close_icon=20, close_gap=8, close_label_width=40, close_content_height=24,
-    empty_top = 122, empty_height = 24, empty_font = 19.556,
+    empty_top = 122, empty_height = 24, empty_font = 16,
   },
   overview = {
     min_columns = 1, max_columns = 3, workspace_width = 320, workspace_height = 215,

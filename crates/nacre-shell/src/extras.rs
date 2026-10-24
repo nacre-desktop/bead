@@ -242,7 +242,7 @@ impl Extras {
         if let Some(query) = next_query {
             values.insert("extras.query".into(), Value::Text(query));
         }
-        if state.close {
+        if std::mem::take(&mut state.close) {
             values.insert("panel.open".into(), Value::Bool(false));
         }
         values
