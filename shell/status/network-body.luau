@@ -136,11 +136,13 @@ local function pill(id,label,glyph,action,armed)
             glyph and ui.Text{id="glyph",text=glyph,family="Material Symbols Rounded",width=T.icons.small*4/3,height=T.icons.small*4/3*LINE,font_size=T.icons.small*4/3,color=ink,shrink=0} or nil,
             ui.Text{id="label",text=label,width=math.ceil(text_width(label,CAPTION)*1.4),height=CAPTION*LINE,font_size=CAPTION,color=ink,shrink=0}}}
 end
+local link_count=0
 local function link_card(item)
+    link_count=link_count+1
     local ink=item.active and "onPrimaryContainer" or "onSurface"
     local glyph=item.strength>75 and "signal_wifi_4_bar" or item.strength>45 and "network_wifi_3_bar" or "network_wifi_1_bar"
     local act=item.active and ui.action("network.disconnect",item.id) or ui.action("network.connect",item.id)
-    return ui.Row{id="link",width=content,height=ROWH,shrink=0,radius=T.radii.medium,padding_left=T.spacing.md,padding_right=6,gap=5,align="center",
+    return ui.Row{id="link"..link_count,width=content,height=ROWH,shrink=0,radius=T.radii.medium,padding_left=T.spacing.md,padding_right=6,gap=5,align="center",
         fill=item.active and "primaryContainer" or "surfaceContainer",
         ui.Text{id="link-icon",text=glyph,family="Material Symbols Rounded",width=25,height=ICON*LINE,font_size=ICON,color=ink,shrink=0},
         ui.Text{id="link-name",text=item.label,height=NAME*LINE,width=content-12-6-25-10-pill_width(item.action),font_size=NAME,color=ink,shrink=0},
