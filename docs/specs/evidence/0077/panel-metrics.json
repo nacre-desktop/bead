@@ -1,0 +1,164 @@
+{
+  "overview": {
+    "panel_rmse": 3.652,
+    "frame_rmse": 25.606,
+    "rects": {
+      "qml": [
+        675,
+        582,
+        2205,
+        1785
+      ],
+      "bead": [
+        675,
+        75,
+        2205,
+        1278
+      ]
+    }
+  },
+  "palette": {
+    "panel_rmse": 8.832,
+    "frame_rmse": 29.112,
+    "rects": {
+      "qml": [
+        795,
+        942,
+        2085,
+        1785
+      ],
+      "bead": [
+        795,
+        75,
+        2085,
+        918
+      ]
+    }
+  },
+  "keybindings": {
+    "panel_rmse": 5.058,
+    "frame_rmse": 30.109,
+    "rects": {
+      "qml": [
+        795,
+        942,
+        2085,
+        1785
+      ],
+      "bead": [
+        795,
+        75,
+        2085,
+        918
+      ]
+    }
+  },
+  "overview-hover": {
+    "panel_rmse": 3.652,
+    "frame_rmse": 25.607,
+    "rects": {
+      "qml": [
+        675,
+        582,
+        2205,
+        1785
+      ],
+      "bead": [
+        675,
+        75,
+        2205,
+        1278
+      ]
+    }
+  },
+  "overview-pressed": {
+    "panel_rmse": 3.164,
+    "frame_rmse": 25.64,
+    "rects": {
+      "qml": [
+        675,
+        582,
+        2205,
+        1785
+      ],
+      "bead": [
+        675,
+        75,
+        2205,
+        1278
+      ]
+    }
+  },
+  "palette-hover": {
+    "panel_rmse": 8.8,
+    "frame_rmse": 29.112,
+    "rects": {
+      "qml": [
+        795,
+        942,
+        2085,
+        1785
+      ],
+      "bead": [
+        795,
+        75,
+        2085,
+        918
+      ]
+    }
+  },
+  "palette-pressed": {
+    "panel_rmse": 9.808,
+    "frame_rmse": 29.758,
+    "rects": {
+      "qml": [
+        795,
+        942,
+        2085,
+        1785
+      ],
+      "bead": [
+        795,
+        75,
+        2085,
+        918
+      ]
+    }
+  },
+  "keybindings-hover": {
+    "panel_rmse": 5.004,
+    "frame_rmse": 30.108,
+    "rects": {
+      "qml": [
+        795,
+        942,
+        2085,
+        1785
+      ],
+      "bead": [
+        795,
+        75,
+        2085,
+        918
+      ]
+    }
+  },
+  "keybindings-pressed": {
+    "panel_rmse": 4.422,
+    "frame_rmse": 30.18,
+    "rects": {
+      "qml": [
+        795,
+        942,
+        2085,
+        1785
+      ],
+      "bead": [
+        795,
+        75,
+        2085,
+        918
+      ]
+    }
+  }
+}

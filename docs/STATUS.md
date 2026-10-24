@@ -8,7 +8,9 @@ workspace and focuses through N0040; shortcuts use N0051; the palette uses opaqu
 menu-engine activation. Closed workers release their subscriptions and payloads.
 Capture handles, semantic window moves and an engine route matching QML Palette
 content/order remain explicit asks in [B0077](specs/0077-overview-palette-keybindings.md).
-Remote checks and private QML/Bead evidence are recorded there; no live install.
+Full remote Arch CI and all native error/swap gates passed. Aligned-panel RMSE:
+Overview 3.652%, Commands 8.832%, shortcuts 5.058%; full-frame values and paired
+images are in the spec. Exact palette content parity remains blocked; no live install.
 
 ## 2026-10-24 — B0076 docked device details (review)
 

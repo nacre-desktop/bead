@@ -168,7 +168,7 @@ feature checks; no local build, test, nested session or capture.
 The complete `.github/workflows/ci.yml` job was replayed in a remote Arch
 container: fmt, clippy with warnings denied, workspace tests, trace memory-policy
 tests, renderer feature configurations, facade example, actual Luau SDK/schema
-analysis (131 modules), Python spike/packaging suites, motion-wallpaper smoke,
+analysis (135 modules), Python spike/packaging suites, motion-wallpaper smoke,
 private service/SNI lifecycles and cargo-deny including independent framework
 crate graphs. All passed. Commands include:
 
@@ -205,15 +205,17 @@ private gallery. Pairs and machine-readable results are in
 
 | Open view | Aligned panel RMSE | Whole-frame RMSE |
 | --- | ---: | ---: |
-| Overview | pending | pending |
-| Commands | pending | pending |
-| Keyboard shortcuts | pending | pending |
+| Overview | 3.652% | 25.606% |
+| Commands | 8.832% | 29.112% |
+| Keyboard shortcuts | 5.058% | 30.109% |
 
 RMSE is percent of full-scale RGB. Panel crops use the known body rectangles
 recorded in `panel-metrics.json`; they align QML's bottom attachment with Bead's
 owner-requested top attachment. Whole-frame values retain that placement
 difference, the bar and the independently ported Settings window behind the
-overview. These are measurements, not a claim of complete visual parity.
+overview. These are measurements, not a claim of complete visual parity. Open, hover and
+pressed crops are paired under `panels/qml` and `panels/bead`; placement and idle
+context is retained under `full`.
 Lifecycle traces prove scoped ownership; no new relative PSS/DRM acceptance
 measurement is claimed for this unit.
 
