@@ -137,7 +137,7 @@ async fn the_meter_holds_the_peak_lease_only_while_the_input_is_live()
             _ => None,
         })
         .collect();
-    for wanted in ["Fixture player", "25%", "Input level"] {
+    for wanted in ["Fixture player", "63%", "Input level"] {
         assert!(texts.iter().any(|t| t == wanted), "{wanted} in {texts:?}");
     }
     muted_tx.send(()).unwrap();

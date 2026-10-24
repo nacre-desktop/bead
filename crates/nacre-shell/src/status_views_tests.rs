@@ -1311,9 +1311,10 @@ fn network_popout_height_follows_rows_and_message() -> Result<()> {
                 _ => None,
             })
             .expect("panel is drawn");
+        // B0095: the list is laid out as QML's (three groups, scrolling beyond 210 px); the body holds the header and the list.
         assert!(
-            f64::from(panel.h) >= expected + 42.,
-            "{count} rows, message {message}: body includes rows, wrapped notes and form footer"
+            f64::from(panel.h) >= 2. * 15. + 34. + 10. + 100.,
+            "{count} rows, message {message}: body includes the header, the groups and the form footer"
         );
         for node in h.session.view_nodes() {
             let rect = bead::render::tree::rect(&node.draw);
