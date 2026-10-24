@@ -1,0 +1,527 @@
+{
+ "summary": {
+  "renderer": "cpu (tiny-skia), no daemon, nested niri in headless labwc",
+  "pairs": 5,
+  "idle": {
+   "unreclaimable": {
+    "control": 5.97,
+    "candidate": 5.62,
+    "delta": -0.34
+   },
+   "pss": {
+    "control": 11.42,
+    "candidate": 27.36,
+    "delta": 15.94
+   },
+   "clean_file": {
+    "control": 5.48,
+    "candidate": 21.74,
+    "delta": 16.26
+   },
+   "anon": {
+    "control": 5.76,
+    "candidate": 5.42,
+    "delta": -0.34
+   },
+   "gate": "PASS"
+  },
+  "launcher_open": {
+   "unreclaimable": {
+    "control": 14.14,
+    "candidate": 14.14,
+    "delta": 0.0
+   },
+   "pss": {
+    "control": 31.18,
+    "candidate": 36.26,
+    "delta": 5.08
+   },
+   "clean_file": {
+    "control": 18.03,
+    "candidate": 22.15,
+    "delta": 4.12
+   },
+   "anon": {
+    "control": 10.95,
+    "candidate": 10.76,
+    "delta": -0.19
+   },
+   "gate": "PASS",
+   "open_ms": {
+    "control": {
+     "median": 11.78,
+     "all": [
+      11.9,
+      11.7,
+      11.7,
+      12.0,
+      11.8
+     ]
+    },
+    "candidate": {
+     "median": 11.8,
+     "all": [
+      11.9,
+      11.6,
+      12.0,
+      11.8,
+      11.8
+     ]
+    }
+   }
+  },
+  "launcher_closed": {
+   "unreclaimable": {
+    "control": 6.79,
+    "candidate": 6.09,
+    "delta": -0.7
+   },
+   "pss": {
+    "control": 9.34,
+    "candidate": 26.93,
+    "delta": 17.59
+   },
+   "clean_file": {
+    "control": 2.64,
+    "candidate": 20.84,
+    "delta": 18.2
+   },
+   "anon": {
+    "control": 6.59,
+    "candidate": 5.88,
+    "delta": -0.7
+   },
+   "gate": "PASS"
+  },
+  "dashboard_open": {
+   "unreclaimable": {
+    "control": 14.46,
+    "candidate": 13.99,
+    "delta": -0.47
+   },
+   "pss": {
+    "control": 33.28,
+    "candidate": 36.46,
+    "delta": 3.17
+   },
+   "clean_file": {
+    "control": 18.69,
+    "candidate": 22.47,
+    "delta": 3.77
+   },
+   "anon": {
+    "control": 11.31,
+    "candidate": 10.84,
+    "delta": -0.47
+   },
+   "gate": "PASS",
+   "open_ms": {
+    "control": {
+     "median": 15.68,
+     "all": [
+      15.7,
+      16.1,
+      15.8,
+      15.1,
+      15.1
+     ]
+    },
+    "candidate": {
+     "median": 15.16,
+     "all": [
+      14.9,
+      15.0,
+      15.2,
+      15.6,
+      15.7
+     ]
+    }
+   }
+  },
+  "dashboard_closed": {
+   "unreclaimable": {
+    "control": 6.99,
+    "candidate": 6.43,
+    "delta": -0.56
+   },
+   "pss": {
+    "control": 11.51,
+    "candidate": 27.98,
+    "delta": 16.47
+   },
+   "clean_file": {
+    "control": 4.5,
+    "candidate": 21.54,
+    "delta": 17.04
+   },
+   "anon": {
+    "control": 6.79,
+    "candidate": 6.23,
+    "delta": -0.56
+   },
+   "gate": "PASS"
+  }
+ },
+ "runs": [
+  {
+   "label": "control",
+   "binary": "ctl-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.853515625,
+    "pss": 11.5986328125,
+    "clean_file": 5.7451171875,
+    "anon": 5.6484375
+   },
+   "launcher_open_ms": 11.869795,
+   "launcher_open": {
+    "unreclaimable": 14.251953125,
+    "pss": 31.1806640625,
+    "clean_file": 18.05078125,
+    "anon": 11.06640625
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.681640625,
+    "pss": 9.3369140625,
+    "clean_file": 2.6552734375,
+    "anon": 6.4765625
+   },
+   "dashboard_open_ms": 15.675832,
+   "dashboard_open": {
+    "unreclaimable": 14.35546875,
+    "pss": 32.0322265625,
+    "clean_file": 17.6767578125,
+    "anon": 11.20703125
+   },
+   "dashboard_closed": {
+    "unreclaimable": 6.994140625,
+    "pss": 11.68359375,
+    "clean_file": 4.705078125,
+    "anon": 6.7890625
+   }
+  },
+  {
+   "label": "candidate",
+   "binary": "cand-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.642578125,
+    "pss": 27.443359375,
+    "clean_file": 21.80078125,
+    "anon": 5.4375
+   },
+   "launcher_open_ms": 11.932285,
+   "launcher_open": {
+    "unreclaimable": 14.107421875,
+    "pss": 36.408203125,
+    "clean_file": 22.337890625,
+    "anon": 10.7265625
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.103515625,
+    "pss": 27.15625,
+    "clean_file": 21.052734375,
+    "anon": 5.8984375
+   },
+   "dashboard_open_ms": 14.915602,
+   "dashboard_open": {
+    "unreclaimable": 14.0,
+    "pss": 36.4921875,
+    "clean_file": 22.4921875,
+    "anon": 10.8515625
+   },
+   "dashboard_closed": {
+    "unreclaimable": 6.404296875,
+    "pss": 27.978515625,
+    "clean_file": 21.57421875,
+    "anon": 6.19921875
+   }
+  },
+  {
+   "label": "candidate",
+   "binary": "cand-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.623046875,
+    "pss": 27.3623046875,
+    "clean_file": 21.7392578125,
+    "anon": 5.41796875
+   },
+   "launcher_open_ms": 11.635742,
+   "launcher_open": {
+    "unreclaimable": 14.142578125,
+    "pss": 36.2568359375,
+    "clean_file": 22.15234375,
+    "anon": 10.76171875
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.087890625,
+    "pss": 26.927734375,
+    "clean_file": 20.83984375,
+    "anon": 5.8828125
+   },
+   "dashboard_open_ms": 15.0244,
+   "dashboard_open": {
+    "unreclaimable": 13.98828125,
+    "pss": 36.4560546875,
+    "clean_file": 22.4677734375,
+    "anon": 10.83984375
+   },
+   "dashboard_closed": {
+    "unreclaimable": 9.830078125,
+    "pss": 31.3720703125,
+    "clean_file": 21.5419921875,
+    "anon": 9.625
+   }
+  },
+  {
+   "label": "control",
+   "binary": "ctl-nacre-shell",
+   "idle": {
+    "unreclaimable": 6.021484375,
+    "pss": 11.396484375,
+    "clean_file": 5.375,
+    "anon": 5.81640625
+   },
+   "launcher_open_ms": 11.711514,
+   "launcher_open": {
+    "unreclaimable": 13.478515625,
+    "pss": 31.4736328125,
+    "clean_file": 17.9951171875,
+    "anon": 10.1015625
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.900390625,
+    "pss": 9.23046875,
+    "clean_file": 2.330078125,
+    "anon": 6.6953125
+   },
+   "dashboard_open_ms": 16.08574,
+   "dashboard_open": {
+    "unreclaimable": 14.58984375,
+    "pss": 33.283203125,
+    "clean_file": 18.693359375,
+    "anon": 11.44140625
+   },
+   "dashboard_closed": {
+    "unreclaimable": 7.201171875,
+    "pss": 11.515625,
+    "clean_file": 4.314453125,
+    "anon": 6.99609375
+   }
+  },
+  {
+   "label": "control",
+   "binary": "ctl-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.966796875,
+    "pss": 11.19140625,
+    "clean_file": 5.416015625,
+    "anon": 5.76171875
+   },
+   "launcher_open_ms": 11.744273,
+   "launcher_open": {
+    "unreclaimable": 14.140625,
+    "pss": 30.939453125,
+    "clean_file": 17.916015625,
+    "anon": 10.953125
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.466796875,
+    "pss": 8.8701171875,
+    "clean_file": 2.4033203125,
+    "anon": 6.26171875
+   },
+   "dashboard_open_ms": 15.811582,
+   "dashboard_open": {
+    "unreclaimable": 14.08984375,
+    "pss": 31.6396484375,
+    "clean_file": 17.5498046875,
+    "anon": 10.94140625
+   },
+   "dashboard_closed": {
+    "unreclaimable": 6.888671875,
+    "pss": 11.4169921875,
+    "clean_file": 4.5283203125,
+    "anon": 6.68359375
+   }
+  },
+  {
+   "label": "candidate",
+   "binary": "cand-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.783203125,
+    "pss": 27.5703125,
+    "clean_file": 21.787109375,
+    "anon": 5.578125
+   },
+   "launcher_open_ms": 11.970794,
+   "launcher_open": {
+    "unreclaimable": 14.193359375,
+    "pss": 36.48046875,
+    "clean_file": 22.3232421875,
+    "anon": 10.8125
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.251953125,
+    "pss": 27.2626953125,
+    "clean_file": 21.0107421875,
+    "anon": 6.046875
+   },
+   "dashboard_open_ms": 15.157531,
+   "dashboard_open": {
+    "unreclaimable": 14.13671875,
+    "pss": 36.611328125,
+    "clean_file": 22.474609375,
+    "anon": 10.98828125
+   },
+   "dashboard_closed": {
+    "unreclaimable": 9.806640625,
+    "pss": 31.34375,
+    "clean_file": 21.537109375,
+    "anon": 9.6015625
+   }
+  },
+  {
+   "label": "candidate",
+   "binary": "cand-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.572265625,
+    "pss": 27.125,
+    "clean_file": 21.552734375,
+    "anon": 5.3671875
+   },
+   "launcher_open_ms": 11.797173,
+   "launcher_open": {
+    "unreclaimable": 13.984375,
+    "pss": 36.013671875,
+    "clean_file": 22.0654296875,
+    "anon": 10.60546875
+   },
+   "launcher_closed": {
+    "unreclaimable": 5.951171875,
+    "pss": 26.705078125,
+    "clean_file": 20.75390625,
+    "anon": 5.74609375
+   },
+   "dashboard_open_ms": 15.571932,
+   "dashboard_open": {
+    "unreclaimable": 13.90625,
+    "pss": 36.0419921875,
+    "clean_file": 22.1357421875,
+    "anon": 10.7578125
+   },
+   "dashboard_closed": {
+    "unreclaimable": 6.388671875,
+    "pss": 27.6494140625,
+    "clean_file": 21.2607421875,
+    "anon": 6.18359375
+   }
+  },
+  {
+   "label": "control",
+   "binary": "ctl-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.935546875,
+    "pss": 11.41796875,
+    "clean_file": 5.482421875,
+    "anon": 5.73046875
+   },
+   "launcher_open_ms": 11.982143,
+   "launcher_open": {
+    "unreclaimable": 13.431640625,
+    "pss": 30.6376953125,
+    "clean_file": 18.02734375,
+    "anon": 10.05078125
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.791015625,
+    "pss": 11.2705078125,
+    "clean_file": 4.4794921875,
+    "anon": 6.5859375
+   },
+   "dashboard_open_ms": 15.145982,
+   "dashboard_open": {
+    "unreclaimable": 14.45703125,
+    "pss": 33.6171875,
+    "clean_file": 19.16015625,
+    "anon": 11.30859375
+   },
+   "dashboard_closed": {
+    "unreclaimable": 7.134765625,
+    "pss": 11.5126953125,
+    "clean_file": 4.4794921875,
+    "anon": 6.9296875
+   }
+  },
+  {
+   "label": "control",
+   "binary": "ctl-nacre-shell",
+   "idle": {
+    "unreclaimable": 6.373046875,
+    "pss": 12.064453125,
+    "clean_file": 5.69140625,
+    "anon": 6.16796875
+   },
+   "launcher_open_ms": 11.780063,
+   "launcher_open": {
+    "unreclaimable": 14.712890625,
+    "pss": 32.927734375,
+    "clean_file": 18.2275390625,
+    "anon": 11.33203125
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.884765625,
+    "pss": 9.5263671875,
+    "clean_file": 2.6416015625,
+    "anon": 6.6796875
+   },
+   "dashboard_open_ms": 15.106172,
+   "dashboard_open": {
+    "unreclaimable": 14.48828125,
+    "pss": 33.4853515625,
+    "clean_file": 18.9970703125,
+    "anon": 11.33984375
+   },
+   "dashboard_closed": {
+    "unreclaimable": 6.822265625,
+    "pss": 11.3291015625,
+    "clean_file": 4.4990234375,
+    "anon": 6.6171875
+   }
+  },
+  {
+   "label": "candidate",
+   "binary": "cand-nacre-shell",
+   "idle": {
+    "unreclaimable": 5.560546875,
+    "pss": 27.2197265625,
+    "clean_file": 21.6591796875,
+    "anon": 5.35546875
+   },
+   "launcher_open_ms": 11.784693,
+   "launcher_open": {
+    "unreclaimable": 14.142578125,
+    "pss": 36.17578125,
+    "clean_file": 22.0693359375,
+    "anon": 10.76171875
+   },
+   "launcher_closed": {
+    "unreclaimable": 6.056640625,
+    "pss": 26.8603515625,
+    "clean_file": 20.8193359375,
+    "anon": 5.8515625
+   },
+   "dashboard_open_ms": 15.709791,
+   "dashboard_open": {
+    "unreclaimable": 13.91796875,
+    "pss": 36.3447265625,
+    "clean_file": 22.4267578125,
+    "anon": 10.76953125
+   },
+   "dashboard_closed": {
+    "unreclaimable": 6.431640625,
+    "pss": 27.9443359375,
+    "clean_file": 21.5126953125,
+    "anon": 6.2265625
+   }
+  }
+ ]
+}

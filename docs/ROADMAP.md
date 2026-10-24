@@ -159,6 +159,11 @@ QML remains daily driver until a separately accepted switch. Order:
    system-bus device reads are
    read-only, not live UI testing or a write/installation permission.
 
+Owner memory policy amended 2026-10-24 (B0081): the gated number is unreclaimable
+memory (anon + shmem + DRM + SwapPss), absolute laptop cap about 10 MiB, stop line 9.5;
+PSS and clean file-backed pages are reported as information only. The 2026-10-17 text
+below reads with "PSS+DRM+SwapPss ≤25MiB / 24.5MiB" replaced by that sum.
+
 Owner memory policy (2026-10-17) replaces the per-feature0.5MiB allowance.
 All UI closes must fit ownbar+5MiB; settled UI PSS+DRM+SwapPss must stay≤25MiB.
 Explain every increase by file-backed, anonymous and frame-buffer residency.

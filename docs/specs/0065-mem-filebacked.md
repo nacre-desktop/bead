@@ -1,6 +1,6 @@
 # B0065 - Always-on shell: file-backed memory back under the laptop target
 
-Status: **Review** (Claude worker, branch `task/b0065-mem-filebacked-20261023`). Follows the 2026-10-23 rehearsal of `56b9499`, which read
+Status: **Superseded by [B0081](0081-memory-gate-unreclaimable.md)** (the `code_pages` release described here was removed; its result stays as history). Was: **Review** (Claude worker, branch `task/b0065-mem-filebacked-20261023`). Follows the 2026-10-23 rehearsal of `56b9499`, which read
 +1.9 MiB (never-opened) and +3.2 MiB (opened) over the frozen control `b01dfcca`, mostly file-backed, with 26.8-27.9 MiB absolute on the desktop.
 Harness: `spikes/b0065-smaps.py` (`dump`, `diff`, `memory`), desktop nested niri in headless labwc, CPU renderer (tiny-skia), no daemon link,
 launcher without a fixture, `nacre-shell --bar --core-views` only, PSS in MiB, 3 alternating pairs, medians of 7 samples after a 20 s settle.

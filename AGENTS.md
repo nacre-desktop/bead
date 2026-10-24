@@ -64,6 +64,14 @@
   The migration agent owns nacre-daemon / nacre-protocol; coordinate additive needs.
   No live desktop permission carries over. Local commands nice10, Cargo-j2.
 
+- **Owner memory rule, amended 2026-10-24 (B0081):** the gated number is
+  UNRECLAIMABLE memory = anon + shmem/SHM + DRM + SwapPss of the always-on
+  shell; absolute laptop cap about 10 MiB (stop line 9.5), relative deltas
+  vs a same-host control <= +0.5 MiB median per phase. Clean file-backed
+  pages (program text, rodata, fonts) are reclaimable page cache: PSS and the
+  clean-file share are reported as information, never gated. Wherever the
+  older text below says "PSS+DRM+SwapPss", "25MiB" or "24.5MiB", read it as
+  this unreclaimable sum with 10 / 9.5 MiB.
 - Owner memory rule (2026-10-17), replacing the per-feature allowance:
   every UI close stays within its own bar+5MiB; settled UI PSS+DRM+SwapPss
   stays at or below25MiB on both compositors. Explain every settled increase

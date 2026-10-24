@@ -168,6 +168,6 @@ Quickshell alternative under BSD-3-Clause. Evaluate its ideas at the right
 time, not now: animation on a separate render thread for smoothness during Luau
 stalls (including the current launcher smoothness work if it fits), language
 server/editor integration, and plugins with declared user-approved
-permissions. Protect Bead's differentiators: about 25 MiB total UI memory,
+permissions. Protect Bead's differentiators: about 10 MiB of unreclaimable UI memory (anon + shmem + DRM + SwapPss; B0081, formerly "about 25 MiB PSS"),
 services outside views for crash safety, state-preserving live reload, and a
 real flagship desktop.

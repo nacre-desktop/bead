@@ -29,7 +29,7 @@ sidebar). It shares code (kit, theme, fonts, renderer, Luau), never memory with 
 - Single instance is the socket bind. The app ends when its window or panel closes; a crash never reaches the shell.
 - An app has its own daemon connection with a client role. It registers nothing, so the daemon still sees exactly
   one UI provider.
-- Reports: an app's memory and CPU are listed per app and not charged to the always-on 25 MiB budget; the shell's
+- Reports: an app's memory and CPU are listed per app and not charged to the always-on unreclaimable-memory budget (about 10 MiB, B0081); the shell's
   own gate is relative to a control with the same binary left idle.
 
 ## Consequences

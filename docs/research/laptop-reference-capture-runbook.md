@@ -11,7 +11,7 @@ The measured PID is exactly one process: the **always-on shell**,
 candidate). On current main that one process contains the bar, the desktop frame
 (edge art, lips, reserved edges), the lazily opened launcher, dashboard, popouts and
 status panels, the notices/OSD overlay slot (no surface and no state while idle) and
-the single UI-provider link. These belong to the 25 MiB always-on target.
+the single UI-provider link. These belong to the always-on memory target (unreclaimable memory, about 10 MiB; B0081).
 
 Everything started with `nacre-shell --app NAME` is a **separate, short-lived
 process** and is outside the target: Settings, the AI sidebar, Colors and Welcome
@@ -100,8 +100,9 @@ BEAD_OWNER_SIGNAL=1 nice -n 10 python3 spikes/laptop-reference-capture.py --wind
 ```
 
 The i915 DRM total includes `drm-total-*` where reported and falls
-back to `drm-resident-*`/legacy fdinfo regions; the absolute total is exactly
-PSS + per-client DRM + SwapPss. The summary also records `wallpaper_shm` as
+back to `drm-resident-*`/legacy fdinfo regions; the absolute total (B0081, replacing PSS + DRM + SwapPss) is exactly
+`Pss_Anon + Pss_Shmem + SwapPss + per-client DRM`, the memory the kernel cannot drop. PSS, its
+clean file-backed share (`Pss_File`) and the PSS + DRM + SwapPss total stay in `summary.json` as information columns. The summary also records `wallpaper_shm` as
 inactive (0 MiB) only when no `WALLPAPER_SURFACE_COMMITTED` marker appears in
 the measured UI logs; the private nested `spikes/niri.kdl` does not configure a
 wallpaper surface. If Bead commits one, the summary marks its size unknown and
@@ -138,9 +139,10 @@ forbidden; absent or unsupported fdinfo produces **INCOMPLETE**, never zero DRM
 or an absolute PASS. Field semantics follow the [Linux DRM client usage
 stats](https://docs.kernel.org/next/gpu/drm-usage-stats.html) documentation.
 
-The summary reports absolute candidate PSS + DRM + SwapPss, per-phase candidate
-minus control medians and pair deltas, anonymous/file/shared deltas, close rails,
-and the 25 MiB ceiling. A settled candidate sample at 24.5 MiB stops the run;
+The summary reports absolute candidate unreclaimable memory (anon + shmem + SwapPss + DRM),
+per-phase candidate minus control medians and pair deltas, PSS and clean-file medians (information),
+anonymous/file/shared deltas, close rails, and the 10 MiB ceiling. A settled candidate sample at
+9.5 MiB stops the run;
 unexplained anonymous growth above 1 MiB stops the verdict. Ctrl-C stops only
 the task-owned capture scope and preserves partial evidence as invalid. Raw
 evidence and `summary.json` stay in the private output directory; a partial run

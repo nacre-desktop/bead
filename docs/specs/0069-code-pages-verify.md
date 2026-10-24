@@ -1,6 +1,6 @@
 # B0069 - Verify the B0065 code-page release: what it changes, what it costs
 
-Status: **Review** (Claude worker, branch `task/b0069-codepages-verify-20261023`). No product code changed. Question from the lead: B0065's
+Status: **Superseded by [B0081](0081-memory-gate-unreclaimable.md)** (the `code_pages` release described here was removed; its result stays as history). Was: **Review** (Claude worker, branch `task/b0069-codepages-verify-20261023`). No product code changed. Question from the lead: B0065's
 `code_pages::release()` (`madvise(MADV_DONTNEED)` on clean file mappings every 3 s while closed-idle) took PSS from about 24 to 10-12 MiB, but clean
 file pages stay in the page cache and are reclaimable anyway, so is it a counting change, and does it cost latency?
 
@@ -162,5 +162,4 @@ No product code changed, so the full remote CI job was not re-run (`spikes/b0069
 Builds: dev-2 container `b0069-ci` (cp/nocp), `b0069-size`, `b0069-size2` (profile variants), all removed afterwards. Desktop runs under the heavy lock, swap used 0 B
 before and after every batch (`free -h` logs kept under `~/nacre-lead/b0069/*.free-*.txt`, removed with the directory).
 
-Temporary duplicates: none in the product. The harness `spikes/b0069-codepages.py` stays while `code_pages` exists; delete it 14 days after the code-page decision is
-final or the module is removed.
+Temporary duplicates: none. B0081 removed `code_pages` and deleted the harness `spikes/b0069-codepages.py` (its raw summaries stay under `evidence/0069`).
