@@ -1,32 +1,17 @@
-# B0083 — Weather location consent in Settings, i18n sync, parity-harness fakes
+# B0083 — Weather location hint in Settings, i18n sync, parity-harness fakes
 
 Status: **Review**. Three independent parts; no product visual changes beyond one new Settings row.
 
-## 1. Settings: weather location and IP-lookup consent
+## 1. Settings: weather location
 
-Nacre N0057 (`c6dc627b`) lets the daemon look up the city from the IP address (ipinfo.io) only when the desktop
-setting `weatherIpLookup` is explicitly `true` **and** `weatherLocation` is empty. QML has no control for the
-consent (N0057: "adding a Settings UI control is outside this unit"), so Bead adds it.
-
-- Page: **Date, time and language**, section "Locale", the page where QML shows `weatherLocation` and
-  `weatherFahrenheit` (units). The city field (`date-time-language.locale.weatherLocation`) and the units switch
-  already existed; the weather-photo switch lives on the Weather sub-page of the Dashboard page (`weatherPhotos`,
-  store `dashboard-extras`) and is unchanged.
-- New row `date-time-language.locale.weatherIpLookup`, a switch on the `desktop` store, default off:
-  label "Find location automatically (sends your IP address to ipinfo.io)", description "Used only while no weather
-  location is set above. Off by default." Written with `settings.set` like every other row (`{store, key, value, rev}`).
-- It is dimmed while a city is set (`weatherLocation` non-blank), matching the daemon rule; the stored value is kept.
-  This uses a new general registry condition, `enabledWhenEmpty: <setting id>` (the inverse of `dependsOn`), read
-  by `Registry::depends_on` in `settings.rs`. A string parent counts as set when it has non-blank text, a boolean
-  parent when it is `true`. Nothing in the engine knows the weather ids.
-- Wording: the label names what is sent (the IP address) and where (ipinfo.io). The new strings are Bead-owned
-  `bead.settings.weather-ip-label` and `-description` ids (Bead's `shell/i18n` is the authoring source); the registry entry is a Bead
-  addition to the Nacre registry copy, so QML's registry has no such row. Known gap: the city field's existing
-  description ("City or coordinates used for forecasts.") is QML's; the daemon geocodes city names, so the word
-  "coordinates" may overpromise. It is left as QML words it, and flagged for Nacre.
-- Tests: `settings_pages_tests::ip_lookup_consent_is_a_switch_that_waits_for_an_empty_city` (fake daemon): default
-  off and enabled with no city, exact `settings.set` call (`weatherIpLookup` true, fenced by `rev`), dimmed with a
-  city, whitespace is not a city. The Date, time and language golden is refreshed.
+Owner decision 2026-10-24: IP-based weather location is being removed from Nacre entirely (a separate Nacre unit),
+so Bead adds **no** consent switch. Settings keeps the city field (`date-time-language.locale.weatherLocation`, store
+`desktop`, written with `settings.set`), the Fahrenheit units switch on the same page, and the weather-photo switch on
+the Dashboard Weather sub-page (`weatherPhotos`, unchanged). Under the city field the description is now
+"Set a city to show weather." (`bead.settings.weather-city-hint`, referenced from the Bead registry copy; QML's text
+"City or coordinates used for forecasts." is replaced, and nothing mentions automatic location).
+Test: `settings_pages_tests::weather_location_is_a_city_field_with_a_hint_and_no_automatic_lookup`. The Date, time and
+language golden is refreshed.
 
 ## 2. i18n sync
 
@@ -104,8 +89,8 @@ centered above the label (QML: taller, icon centered). Battery popout: same text
 and wrapping of "Performance", same card width, but Bead's profile buttons are dimmed with a left icon and its text
 block sits 4 px higher.
 
-Settings, Date, time and language: Bead has the new IP-lookup row (QML has none by design); both show Language,
-Fahrenheit and Weather location. QML shows the Date and time controls from `timedatectl` (unavailable in the private
+Settings, Date, time and language: both show Language, Fahrenheit and Weather location; Bead's hint reads
+"Set a city to show weather." where QML says "City or coordinates used for forecasts." QML shows the Date and time controls from `timedatectl` (unavailable in the private
 session), Bead says "Time settings are not available on this system."
 
 These are listed for follow-up units; none is a harness defect.

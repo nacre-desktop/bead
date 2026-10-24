@@ -386,22 +386,13 @@ impl Settings {
         if fits { value } else { default }
     }
     fn depends_on(&self, setting: &Json) -> bool {
-        let on = match setting["dependsOn"]
+        match setting["dependsOn"]
             .as_str()
             .and_then(|id| self.registry.setting(id))
         {
             Some(parent) => self.current(parent) == json!(true),
             None => true,
-        };
-        // `enabledWhenEmpty` (B0083): the inverse, e.g. automatic location only while no city is set.
-        let off = setting["enabledWhenEmpty"]
-            .as_str()
-            .and_then(|id| self.registry.setting(id))
-            .is_some_and(|parent| match self.current(parent) {
-                Json::String(text) => !text.trim().is_empty(),
-                other => other == json!(true),
-            });
-        on && !off
+        }
     }
     /// Re-read the `capabilities` flags from the followed topic.
     fn refresh_caps(&self) {
