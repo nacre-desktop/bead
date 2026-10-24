@@ -1,5 +1,18 @@
 # Status
 
+## 2026-10-25 — B0097 panel anchors and motion (review candidate)
+
+Launcher/control contours reveal from the bottom/right frame; status routes keep
+invoking-icon centres and six hover previews use QML sizing/content/intent delays.
+Private 2880×1800 scale-1.5 pairs and 25 ms motion strips pass their capture gates;
+bar/lip/private-key drawer consistency is 0.000% ROI RMSE. Three CPU typing pairs
+pass at 5.750 ms first-key median and +0.117/+0.070/+0.219 MiB idle/open/closed
+unreclaimable deltas after removing unnecessary per-shadow asset copies; the
+initial +1.496 MiB closed-memory failure remains recorded. Full remote CI and
+goldens pass on the integrated source. [B0097](specs/0097-panel-anchors-owner.md)
+records measured-source boundaries and residual launcher timing/body/calendar
+corner gaps. No live change or absolute laptop-cap claim.
+
 ## 2026-10-24 — B0098 sidebar and Settings (review candidate)
 
 The sidebar now uses QML-shaped controls, Pin and an active external-panel lip.
@@ -30,6 +43,7 @@ open/closed unreclaimable median deltas −0.314/+0.375 MiB (CPU bar/native-GL
 dashboard), within the relative gate. [B0096](specs/0096-bar-parity-owner.md) records
 paired 2× crops, RMSE and remaining compositor hover-cue/font/updates-popout gaps.
 No live desktop change or laptop-cap claim.
+
 
 ## 2026-10-24 — B0080 populated Home first key (review)
 

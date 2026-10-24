@@ -134,6 +134,17 @@ pub enum Primitive {
         blur: f32,
     },
 }
+impl Primitive {
+    fn translated(&self, x: f32, y: f32) -> Self {
+        let mut primitive = self.clone();
+        let (Self::Rounded { rect, .. }
+        | Self::Text { rect, .. }
+        | Self::Image { rect, .. }
+        | Self::Shadow { rect, .. }) = &mut primitive;
+        *rect = rect.translated(x, y);
+        primitive
+    }
+}
 #[derive(Clone, Copy, Debug, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextAlign {
@@ -177,6 +188,7 @@ pub struct Motion {
     /// Explicit easing overrides the legacy spring/ease-out selection.
     pub curve: Option<bead_core::animation::Curve>,
     pub edge: bead_core::Edge,
+    /// Slide extent; with `reveal`, only content slides behind the growing body's clip.
     pub slide_distance: Option<f32>,
     /// The scene fades in with the slide (default); false keeps it opaque while it moves (the panel grows out of its edge).
     pub fade: bool,
@@ -226,10 +238,22 @@ pub struct Scene {
     pub bounds: Rect,
 }
 impl Scene {
+    /// Content can slide behind a stationary reveal contour without moving the edge join.
+    fn content_offset(&self, index: usize) -> (f32, f32) {
+        self.motion
+            .as_ref()
+            .filter(|m| m.reveal && !m.parts.iter().any(|(i, _)| *i == index))
+            .and_then(|m| {
+                m.slide_distance
+                    .map(|distance| m.edge.closed_offset(distance, distance, m.progress))
+            })
+            .unwrap_or((0., 0.))
+    }
     /// The clip for a primitive: its own (scroll viewport) intersected with the reveal window. The body parts
     /// (shadow and fill) are not clipped: `reveal` reshapes them instead.
     pub fn clip_at(&self, index: usize) -> Option<Rect> {
-        let own = self.clips.get(&index).copied();
+        let (dx, dy) = self.content_offset(index);
+        let own = self.clips.get(&index).map(|clip| clip.translated(dx, dy));
         let window = match &self.motion {
             Some(m) if m.parts.iter().any(|(i, _)| *i == index) => None,
             _ => self.reveal_window(),
@@ -983,6 +1007,14 @@ impl Renderer for CpuRenderer {
             d.h as f32 / scale,
         );
         for (index, p) in scene.primitives.iter().enumerate() {
+            let (dx, dy) = scene.content_offset(index);
+            let shifted;
+            let p = if dx != 0. || dy != 0. {
+                shifted = p.translated(dx, dy);
+                &shifted
+            } else {
+                p
+            };
             let clipped = scene.clip_at(index).map(|clip| {
                 clip.translated(scene.offset.0, scene.offset.1)
                     .pixels(scale, width, height)
@@ -1585,6 +1617,86 @@ mod tests {
         };
         assert_eq!(*rect, body);
         assert!(scene.clip_at(2).is_none());
+    }
+    #[test]
+    fn sliding_reveal_keeps_content_rasters_and_clips_at_the_join() -> Result<()> {
+        let mut scene = font_pool_scene();
+        scene.bounds = Rect::new(0., 0., 164., 264.);
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(32., 32., 100., 200.),
+                radius: 12.,
+                fill: [10, 20, 30, 255],
+                border: None,
+            },
+            Primitive::Text {
+                rect: Rect::new(40., 40., 40., 20.),
+                text: "Retained".into(),
+                family: "IBM Plex Sans".into(),
+                size: 13.,
+                weight: 400,
+                align: None,
+                color: [200, 0, 0, 255],
+            },
+        ];
+        scene.clips.insert(1, Rect::new(40., 40., 40., 20.));
+        scene.motion = Some(Motion {
+            id: "slide-reveal".into(),
+            open: true,
+            duration: 0.3,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Bottom,
+            slide_distance: Some(200.),
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+        });
+        let original = serde_json::to_vec(&scene.primitives)?;
+        let mut cache = tree::TreeCache::default();
+        cache.prepare(&scene, 1.5)?;
+        let prepared = cache.frame.clone().unwrap();
+        for progress in [0.25, 0.75, 0.5, 1.] {
+            scene.reveal(progress);
+            let (dx, dy) = scene.content_offset(1);
+            assert_eq!((dx, dy), (0., 200. * (1. - progress)));
+            assert_eq!(scene.content_offset(0), (0., 0.), "body stays joined");
+            let mut direct = tree::TreeCache::default();
+            direct.prepare(&scene, 1.5)?;
+            scene.prepared.insert(1.5_f32.to_bits(), prepared.clone());
+            cache.prepare(&scene, 1.5)?;
+            let from_worker = cache.frame.as_ref().unwrap();
+            let direct = direct.frame.as_ref().unwrap();
+            assert_eq!(
+                serde_json::to_vec(&from_worker.items[1].primitive)?,
+                serde_json::to_vec(&direct.items[1].primitive)?
+            );
+            assert_eq!(from_worker.items[1].clip, direct.items[1].clip);
+            assert!(
+                std::sync::Arc::ptr_eq(
+                    from_worker.items[1].raster.as_ref().unwrap(),
+                    prepared.items[1].raster.as_ref().unwrap(),
+                ),
+                "motion must reuse the worker's glyph raster"
+            );
+            assert_eq!(tree::rect(&from_worker.items[1].primitive).y, 40. + dy);
+            if progress < 1. {
+                // A frame already baked at this pose must not apply the content slide twice.
+                scene.prepared.insert(1.5_f32.to_bits(), direct.clone());
+                cache.prepare(&scene, 1.5)?;
+                let rebaked = cache.frame.as_ref().unwrap();
+                assert_eq!(
+                    tree::rect(&rebaked.items[1].primitive),
+                    tree::rect(&direct.items[1].primitive)
+                );
+                assert_eq!(rebaked.items[1].clip, direct.items[1].clip);
+            }
+            scene.prepared.clear();
+        }
+        assert_eq!(serde_json::to_vec(&scene.primitives)?, original);
+        Ok(())
     }
     fn font_pool_scene() -> Scene {
         let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

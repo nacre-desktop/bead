@@ -135,6 +135,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
             end},
         },
         ui.Row{id="system-pill",height=34,gap=1,shrink=0,padding_left=6,padding_right=6,align="center",fill="surfaceContainer",radius=17,
+            on_activate=popouts and ui.action("view.open","control") or nil,
             -- Optional item: unavailable and zero counts occupy no space.
             updates_on and updates_n>0 and kit.Button{id="updates",direction="row",padding=0,fill="transparent",hover_fill="surfaceContainerHigh",on_activate=popouts and ui.action("view.open","dashboard-system") or nil,height=30,gap=4,shrink=0,padding_left=3,padding_right=3,align="center",
                 glyph("package","package_2","primary"),
@@ -158,7 +159,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
                 centered_text{id="battery-value",text=ui.bind("bead.desktop.battery.value"),width=ui.bind("bar.battery.detail.width"),font_size=t.detail_font,color="secondary"},
             },
             (popouts and kit.StatusIcon or ui.Row){id="notifications",direction="row",height=t.status_height,gap=t.item_gap,padding=0,padding_left=t.item_padding,padding_right=t.item_padding,fill="transparent",hover_fill="surfaceContainerHigh",align="center",justify="center",
-                aria_label=ui.tr("bead.bar.open-notifications"),on_activate=popouts and ui.action("view.open","control") or nil,
+                aria_label=ui.tr("bead.bar.open-notifications"),on_activate=popouts and ui.action("status.pill.open","notifications") or nil,
                 glyph("glyph","notifications"),
                 centered_text{id="notifications-count",text=ui.bind("bar.notifications.text"),width=ui.bind("bar.notifications.detail.width"),font_size=t.detail_font,color="secondary"},
             },

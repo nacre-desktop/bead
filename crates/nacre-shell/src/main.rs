@@ -730,10 +730,14 @@ fn start(
             desktop_owner.clone(),
             panel_trace,
         )?;
+        let mut calendar_peek = calendar.clone();
+        calendar_peek.keyboard_focus = false;
+        calendar_peek.engages_decorations = false;
         let mut views = std::collections::BTreeMap::from([
             ("launcher".into(), launcher),
             ("sound".into(), core_sound.ok_or("sound view missing")?),
             ("calendar".into(), calendar),
+            ("peek-calendar".into(), calendar_peek),
         ]);
         if tray_preview {
             views.insert(
@@ -862,6 +866,15 @@ fn start(
             )?);
         }
         if let Some(client) = &_ui_provider {
+            views.insert(
+                "notifications".into(),
+                popouts::notification_history(
+                    client.clone(),
+                    palette.clone(),
+                    colors.clone(),
+                    panel_trace,
+                )?,
+            );
             let names = views.keys().cloned().collect();
             views.insert(
                 "control".into(),
@@ -870,6 +883,15 @@ fn start(
                     palette.clone(),
                     colors.clone(),
                     names,
+                    panel_trace,
+                )?,
+            );
+            views.insert(
+                "peek-notifications".into(),
+                popouts::notification_peek(
+                    client.clone(),
+                    palette.clone(),
+                    colors.clone(),
                     panel_trace,
                 )?,
             );

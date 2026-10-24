@@ -224,17 +224,17 @@ impl Runtime {
                 }
             })
             .or_else(|| {
-                self.status_pill
-                    .peek()
-                    .map(|kind| format!("peek-{}", if kind == "sound" { "audio" } else { kind }))
+                self.status_pill.peek().map(|kind| match kind {
+                    "sound" => "peek-audio".to_owned(),
+                    _ => format!("peek-{kind}"),
+                })
             });
         if desired == self.status_pill_route {
             return Ok(());
         }
         if let Some(view) = desired {
-            let center = view
-                .strip_prefix("peek-")
-                .and_then(|item| self.status_icon_center(item));
+            let item = view.strip_prefix("peek-").unwrap_or(&view);
+            let center = self.status_icon_center(if item == "sound" { "audio" } else { item });
             self.wakeup
                 .as_ref()
                 .ok_or("status panel event channel unavailable")?(
@@ -259,14 +259,16 @@ impl Runtime {
         self.session
             .view_nodes()
             .iter()
-            .find(|node| {
-                node.action.as_deref() == Some("status.pill.open")
-                    && node.action_arg == Some(bead::core::Value::Text(arg.into()))
+            .filter(|node| {
+                (node.action.as_deref() == Some("status.pill.open")
+                    && node.action_arg == Some(bead::core::Value::Text(arg.into())))
+                    || (item == "calendar"
+                        && node.id.rsplit('.').next() == Some("clock")
+                        && node.action.as_deref() == Some("view.open"))
             })
-            .map(|node| {
-                let rect = bead::ui::rect(&node.draw);
-                rect.x + rect.w / 2.
-            })
+            .map(|node| bead::ui::rect(&node.draw))
+            .reduce(|bounds, rect| bounds.union(rect))
+            .map(|rect| rect.x + rect.w / 2.)
     }
 
     #[cfg(test)]
@@ -1390,12 +1392,11 @@ impl Runtime {
         Ok(self)
     }
     fn popout_center(&self, id: &str, view: &str) -> Option<f32> {
-        // Sound remains a side panel. Top-bar popouts center on their own
-        // invoking control, including keyboard activation.
+        // Top-bar popouts center on their invoking control, including keyboard activation.
         ((self.bar
             && matches!(
                 view,
-                "calendar" | "network" | "bluetooth" | "battery" | "tray"
+                "calendar" | "network" | "bluetooth" | "battery" | "sound" | "tray"
             ))
             || (self.bar && view.starts_with("peek-")))
         .then(|| {
@@ -1447,6 +1448,11 @@ impl Runtime {
         mut self,
         service: std::sync::Arc<dyn crate::notifications::Notices>,
     ) -> Result<Self, Box<dyn Error>> {
+        // The notice driver can publish before the bar's first markup load.
+        self.session.stores = self.session.stores.reconcile(&BTreeMap::from([(
+            "bar.notifications.count".into(),
+            bead::core::Value::Number(0.),
+        )]))?;
         self.actions
             .register("notifications.feedback", "notifications")?;
         self.actions.grant("notifications");
@@ -2187,11 +2193,11 @@ impl SceneSource for Runtime {
                     ) {
                         if let Some(bead::core::Value::Text(view)) = &node.action_arg {
                             if node.action.as_deref() == Some("status.pill.open") {
-                                let peek = format!(
-                                    "peek-{}",
-                                    if view == "sound" { "audio" } else { view }
-                                );
-                                self.popout_center(&node.id, &peek)
+                                self.status_icon_center(if view == "sound" {
+                                    "audio"
+                                } else {
+                                    view
+                                })
                             } else {
                                 self.popout_center(&node.id, view)
                             }
@@ -3672,13 +3678,15 @@ impl SceneSource for Runtime {
             } => self.session.accessibility_action(target, &action, value)?,
             UiEvent::Hover { x, y } => {
                 let before = self.status_pill.clone();
-                let pill_item = self.session.action_at(x, y).and_then(|(_, name, arg)| {
+                let pill_item = self.session.action_at(x, y).and_then(|(id, name, arg)| {
                     if name == "status.pill.open" {
                         if let bead::core::Value::Text(view) = arg {
                             Some(view)
                         } else {
                             None
                         }
+                    } else if name == "view.open" {
+                        (id.rsplit('.').next() == Some("clock")).then(|| "calendar".into())
                     } else {
                         None
                     }

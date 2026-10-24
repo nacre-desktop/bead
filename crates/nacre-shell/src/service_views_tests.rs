@@ -285,6 +285,7 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
     };
     let calendar = center("Open calendar")?;
     let audio = center("Open sound panel")?;
+    let notifications = center("Open notifications")?;
     let clock = h
         .session
         .view_nodes()
@@ -340,6 +341,15 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
                 && r.prepare_panel
                 && r.prepare_center == Some(audio.0))
     );
+    let notification_anchor = regions
+        .iter()
+        .find(|r| r.prepare_view.as_deref() == Some("peek-notifications"))
+        .and_then(|r| r.prepare_center)
+        .ok_or("notification hover anchor missing")?;
+    assert_eq!(
+        notification_anchor, notifications.0,
+        "anchor uses the combined icon/count hit area, as in QML"
+    );
     events.lock().unwrap().clear();
     runtime.stage(UiEvent::Click {
         x: calendar.0,
@@ -362,6 +372,16 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
         1,
         "scroll must not open or toggle a popout"
     );
+    events.lock().unwrap().clear();
+    runtime.stage(UiEvent::Click {
+        x: notifications.0,
+        y: notifications.1,
+    })?;
+    let received = events.lock().unwrap();
+    assert!(matches!(received.as_slice(),
+        [UiEvent::CompanionSelect { view, toggle:false, center:Some(center), .. }]
+            if view == "notifications" && *center == notification_anchor));
+    drop(received);
     host.stop();
     Ok(())
 }
@@ -398,7 +418,7 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
         for (suffix, action) in [
             ("updates.count", "view.open"),
             ("battery.battery-value", "status.pill.open"),
-            ("notifications.notifications-count", "view.open"),
+            ("notifications.notifications-count", "status.pill.open"),
         ] {
             let layer = h
                 .scene()
@@ -517,16 +537,16 @@ fn status_pill_click_routes_switch_escape_and_reopen() -> Result<()> {
         y: network.1,
     })?;
     assert!(matches!(events.lock().unwrap().as_slice(),
-        [UiEvent::CompanionSelect { view, toggle:false, center:None, .. }]
-            if view == "network"));
+        [UiEvent::CompanionSelect { view, toggle:false, center:Some(center), .. }]
+            if view == "network" && *center == network.0));
     events.lock().unwrap().clear();
     runtime.stage(UiEvent::Click {
         x: bluetooth.0,
         y: bluetooth.1,
     })?;
     assert!(matches!(events.lock().unwrap().as_slice(),
-        [UiEvent::CompanionSelect { view, toggle:false, center:None, .. }]
-            if view == "bluetooth"));
+        [UiEvent::CompanionSelect { view, toggle:false, center:Some(center), .. }]
+            if view == "bluetooth" && *center == bluetooth.0));
     events.lock().unwrap().clear();
     runtime.stage(UiEvent::Command {
         command: "escape".into(),

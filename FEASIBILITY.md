@@ -1,5 +1,23 @@
 # Feasibility
 
+## 2026-10-25 — B0097 joined panel reveals and status anchors
+
+Launcher/control frame joins and invoking-icon status placement are implemented.
+Private matched CPU captures show much closer popouts and hover cards.
+The first closed-memory cohort failed at +1.496 MiB; unused shadow asset copies were removed.
+The changed three-pair cohort passes; allocator variance and launcher timing gaps remain.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| First-key CPU median, three fixture pairs | 5.733 ms | 5.750 ms |
+| Full-resolution closed UI unreclaimable | 25.076 MiB | 24.986 MiB |
+| Six popout ROI RMSE, median | 29.663% | 6.575% |
+| Six hover ROI RMSE, median | 22.550% | 6.482% |
+| Right-lip ROI RMSE | 37.828% | 7.859% |
+
+Relative memory gates and full remote CI pass; absolute laptop memory is unmeasured.
+[Source conditions, component breakdown, failure and residual parity gaps](docs/specs/0097-panel-anchors-owner.md).
+
 ## 2026-10-24 — B0103 control input candidate, blocked
 
 Queued pointer work and topic-backed slider drawing are code-level latency causes.

@@ -297,6 +297,7 @@
   "bead.launcher.search-placeholder": "Search everything…",
   "bead.launcher.service-unavailable": "Launcher service unavailable",
   "bead.notifications.collapse": "Collapse notification",
+  "bead.notifications.count": "{count} notifications",
   "bead.notifications.dismiss": "Dismiss notification",
   "bead.notifications.expand": "Expand notification",
   "bead.notifications.time-now": "now",
@@ -363,6 +364,10 @@
   "bead.panel.bluetooth-devices-detail": {
     "one": "{count} connected device",
     "other": "{count} connected devices"
+  },
+  "bead.panel.bluetooth-peek-more": {
+    "one": "{count} more device",
+    "other": "{count} more devices"
   },
   "bead.panel.bluetooth-disconnect": "Disconnect",
   "bead.panel.bluetooth-is-off": "Bluetooth is off",
@@ -570,6 +575,10 @@
   "bead.panel.session-shutdown": "Power off",
   "bead.panel.session-unavailable": "Session control unavailable",
   "bead.panel.signal-strength": "Signal strength {percent}%",
+  "bead.panel.peek-ethernet": "Ethernet",
+  "bead.panel.peek-no-wifi": "No Wi-Fi adapter",
+  "bead.panel.peek-signal": "Signal {percent}%",
+  "bead.panel.peek-wired": "Connected by cable",
   "bead.panel.sound-close": "Close sound output",
   "bead.panel.sound-hint": "Drag or use arrow keys to adjust volume",
   "bead.panel.sound-mute": "Toggle output mute",

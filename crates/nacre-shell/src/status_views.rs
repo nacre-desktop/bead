@@ -626,16 +626,56 @@ impl Status {
             }
             _ => {}
         }
-        BTreeMap::from([
+        let mut values = BTreeMap::from([
             ("status.ready".into(), Value::Bool(ready)),
             ("status.active".into(), Value::Bool(active)),
             ("status.heading".into(), Value::Text(self.kind.title())),
             ("status.icon".into(), Value::Text(self.kind.icon().into())),
             ("status.primary".into(), Value::Text(line(&primary, 32))),
             ("status.kind".into(), Value::Text(self.kind.name().into())),
-            ("status.secondary".into(), Value::Text(secondary)),
+            ("status.secondary".into(), Value::Text(secondary.clone())),
             ("status.detail".into(), Value::Text(line(&detail, 48))),
-        ])
+        ]);
+        let peek_summary = match self.kind {
+            Kind::Network
+                if ready
+                    && data["connected"].as_bool() == Some(false)
+                    && data["wireless_enabled"].as_bool() == Some(false) =>
+            {
+                tr("bead.common.off", &[])
+            }
+            _ => primary.clone(),
+        };
+        let peek_detail = match self.kind {
+            Kind::Network
+                if ready
+                    && data["connected"].as_bool() == Some(true)
+                    && data["wireless_enabled"].as_bool() == Some(true)
+                    && data["strength"]
+                        .as_u64()
+                        .is_some_and(|strength| strength <= 100) =>
+            {
+                tr(
+                    "bead.panel.peek-signal",
+                    &[("percent", &data["strength"].as_u64().unwrap().to_string())],
+                )
+            }
+            Kind::Battery => secondary.clone(),
+            _ => String::new(),
+        };
+        let devices = if matches!(self.kind, Kind::Bluetooth) {
+            data["connected_devices"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .map(|name| (name.to_owned(), None))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        insert_peek(&mut values, self.kind, &peek_summary, &peek_detail, devices);
+        values
     }
 
     fn project_core_network(&self) -> BTreeMap<String, Value> {
@@ -1023,7 +1063,14 @@ impl Status {
         );
         display.insert("status.icon".into(), Value::Text("bluetooth".into()));
         display.insert("status.kind".into(), Value::Text("bluetooth".into()));
-        display
+        let secondary = display
+            .get("status.secondary")
+            .and_then(|value| match value {
+                Value::Text(text) => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        core_bluetooth_values(display, false, &secondary)
     }
 
     fn project_core_bluetooth_control(&self) -> BTreeMap<String, Value> {
@@ -1162,7 +1209,14 @@ impl Status {
         );
         display.insert("status.icon".into(), Value::Text("battery_full".into()));
         display.insert("status.kind".into(), Value::Text("battery".into()));
-        display
+        let secondary = display
+            .get("status.secondary")
+            .and_then(|value| match value {
+                Value::Text(text) => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        core_battery_values(display, false, &secondary)
     }
 
     fn project_core_audio(&self) -> BTreeMap<String, Value> {
@@ -1252,7 +1306,14 @@ impl Status {
         );
         display.insert("status.icon".into(), Value::Text("volume_up".into()));
         display.insert("status.kind".into(), Value::Text("audio".into()));
-        display
+        let health = display
+            .get("status.health")
+            .and_then(|value| match value {
+                Value::Text(text) => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        core_audio_values(display, false, &health)
     }
 }
 
@@ -1563,6 +1624,16 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
 
 fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
     let primary = state.primary_connection.as_ref();
+    let wired_connected = state
+        .devices
+        .items
+        .values()
+        .any(|device| matches!(device.kind.as_str(), "ethernet" | "wired") && device.connected);
+    let wifi_available = state
+        .devices
+        .items
+        .values()
+        .any(|device| matches!(device.kind.as_str(), "wifi" | "wireless"));
     let connection = primary.and_then(|id| state.connections.items.get(id));
     let matching_ap = primary.and_then(|id| {
         state
@@ -1572,6 +1643,18 @@ fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
             .filter_map(|ap_id| state.access_points.items.get(ap_id))
             .find(|ap| ap.active && ap.connection.as_ref() == Some(id))
     });
+    let peek_ap = if wired_connected || !wifi_available || !state.wireless_enabled {
+        None
+    } else {
+        matching_ap.or_else(|| {
+            state
+                .access_points
+                .order
+                .iter()
+                .filter_map(|id| state.access_points.items.get(id))
+                .find(|ap| ap.active)
+        })
+    };
     let connection_name = connection
         .map(|connection| connection.name.as_str())
         .filter(|name| !name.is_empty())
@@ -1594,12 +1677,46 @@ fn core_network_display(state: &NetworkState) -> BTreeMap<String, Value> {
             )
         })
         .unwrap_or_else(|| tr("bead.panel.connection-controls-unavailable", &[]));
+    let peek_title = if wired_connected {
+        tr("bead.panel.peek-ethernet", &[])
+    } else {
+        tr("bead.panel.wifi", &[])
+    };
+    let peek_summary = if wired_connected {
+        tr("bead.panel.peek-wired", &[])
+    } else if !wifi_available {
+        tr("bead.panel.peek-no-wifi", &[])
+    } else if !state.wireless_enabled {
+        tr("bead.common.off", &[])
+    } else if let Some(name) = peek_ap
+        .map(|ap| ap.name.as_str())
+        .filter(|name| !name.is_empty())
+    {
+        name.to_owned()
+    } else {
+        tr("bead.common.not-connected", &[])
+    };
     BTreeMap::from([
         (
             "status.primary".into(),
             Value::Text(line(&primary_text, 32)),
         ),
         ("status.detail".into(), Value::Text(line(&detail, 48))),
+        (
+            "status.peek.detail".into(),
+            Value::Text(
+                peek_ap
+                    .map(|ap| {
+                        tr(
+                            "bead.panel.peek-signal",
+                            &[("percent", &ap.strength.to_string())],
+                        )
+                    })
+                    .unwrap_or_default(),
+            ),
+        ),
+        ("status.peek.summary".into(), Value::Text(peek_summary)),
+        ("status.peek.title".into(), Value::Text(peek_title)),
         (
             "status.active".into(),
             Value::Bool(primary.is_some() || state.wireless_enabled),
@@ -1621,6 +1738,72 @@ fn core_network_values(
     display.insert("status.kind".into(), Value::Text("network".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
     display
+        .entry("status.peek.title".into())
+        .or_insert_with(|| Value::Text(tr("bead.panel.wifi", &[])));
+    let summary = display["status.primary"].clone();
+    display
+        .entry("status.peek.summary".into())
+        .or_insert(summary);
+    display
+        .entry("status.peek.detail".into())
+        .or_insert_with(|| Value::Text(String::new()));
+    display.insert("status.peek.devices".into(), Value::list(Vec::new()));
+    display
+}
+fn insert_peek(
+    values: &mut BTreeMap<String, Value>,
+    kind: Kind,
+    summary: &str,
+    detail: &str,
+    mut devices: Vec<(String, Option<u8>)>,
+) {
+    let title = match kind {
+        Kind::Network => tr("bead.panel.wifi", &[]),
+        Kind::Bluetooth => tr("bead.panel.bluetooth", &[]),
+        Kind::Battery => tr("bead.panel.battery-title", &[]),
+        Kind::Audio => tr("bead.panel.control-sound", &[]),
+    };
+    let bluetooth_off =
+        matches!(kind, Kind::Bluetooth) && values.get("status.active") == Some(&Value::Bool(false));
+    if bluetooth_off {
+        devices.clear();
+    }
+    values.insert("status.peek.title".into(), Value::Text(title));
+    let summary = if matches!(kind, Kind::Bluetooth)
+        && values.get("status.ready") != Some(&Value::Bool(false))
+    {
+        if bluetooth_off {
+            tr("bead.common.off", &[])
+        } else if !devices.is_empty() {
+            tr_n(
+                "bead.panel.bluetooth-devices-detail",
+                devices.len() as u64,
+                &[],
+            )
+        } else {
+            tr("bead.panel.bluetooth-none", &[])
+        }
+    } else {
+        summary.into()
+    };
+    values.insert("status.peek.summary".into(), Value::Text(summary));
+    values.insert("status.peek.detail".into(), Value::Text(detail.into()));
+    values.insert(
+        "status.peek.devices".into(),
+        Value::list(
+            devices
+                .into_iter()
+                .enumerate()
+                .map(|(i, (name, battery))| {
+                    serde_json::json!({
+                        "id": format!("connected-{i}"),
+                        "name": line(&name, 80),
+                        "battery": battery.map(|percent| format!("{percent}%")).unwrap_or_default()
+                    })
+                })
+                .collect(),
+        ),
+    );
 }
 fn core_bluetooth_display(state: &BluetoothState) -> BTreeMap<String, Value> {
     let powered = state.adapters.items.values().any(|adapter| adapter.powered);
@@ -1649,6 +1832,17 @@ fn core_bluetooth_display(state: &BluetoothState) -> BTreeMap<String, Value> {
     } else {
         tr("bead.panel.bluetooth-none", &[])
     };
+    let summary = if !powered {
+        tr("bead.panel.bluetooth-off", &[])
+    } else if connected.is_empty() {
+        tr("bead.panel.bluetooth-none", &[])
+    } else {
+        tr_n(
+            "bead.panel.bluetooth-devices-connected",
+            connected.len() as u64,
+            &[],
+        )
+    };
     let detail = if connected.is_empty() {
         tr("bead.panel.connection-controls-unavailable", &[])
     } else {
@@ -1658,11 +1852,32 @@ fn core_bluetooth_display(state: &BluetoothState) -> BTreeMap<String, Value> {
             &[],
         )
     };
-    BTreeMap::from([
+    let devices = connected
+        .iter()
+        .map(|device| {
+            let name = if device.name.is_empty() {
+                tr("bead.panel.bluetooth-device-unnamed", &[])
+            } else {
+                device.name.clone()
+            };
+            (name, device.battery)
+        })
+        .collect::<Vec<_>>();
+    let mut display = BTreeMap::from([
         ("status.primary".into(), Value::Text(line(&primary, 32))),
         ("status.detail".into(), Value::Text(line(&detail, 48))),
         ("status.active".into(), Value::Bool(powered)),
-    ])
+        ("status.peek.summary".into(), Value::Text(summary.clone())),
+        ("status.peek.detail".into(), Value::Text(String::new())),
+    ]);
+    insert_peek(&mut display, Kind::Bluetooth, &summary, "", devices);
+    if state.adapters.items.is_empty() {
+        display.insert(
+            "status.peek.summary".into(),
+            Value::Text(tr("bead.panel.bluetooth-no-adapter", &[])),
+        );
+    }
+    display
 }
 fn core_bluetooth_values(
     mut display: BTreeMap<String, Value>,
@@ -1677,6 +1892,21 @@ fn core_bluetooth_values(
     display.insert("status.icon".into(), Value::Text("bluetooth".into()));
     display.insert("status.kind".into(), Value::Text("bluetooth".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
+    display.insert(
+        "status.peek.title".into(),
+        Value::Text(tr("bead.panel.bluetooth", &[])),
+    );
+    let summary = display
+        .get("status.peek.summary")
+        .cloned()
+        .unwrap_or_else(|| display["status.primary"].clone());
+    display.insert("status.peek.summary".into(), summary);
+    display
+        .entry("status.peek.detail".into())
+        .or_insert_with(|| Value::Text(String::new()));
+    display
+        .entry("status.peek.devices".into())
+        .or_insert_with(|| Value::list(Vec::new()));
     display
 }
 /// The QML battery estimate: time to empty on battery, time to full on mains, else the plain state.
@@ -1754,6 +1984,16 @@ fn core_battery_values(
     display.insert("status.icon".into(), Value::Text("battery_full".into()));
     display.insert("status.kind".into(), Value::Text("battery".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
+    display.insert(
+        "status.peek.title".into(),
+        Value::Text(tr("bead.panel.battery-title", &[])),
+    );
+    display.insert(
+        "status.peek.summary".into(),
+        display["status.primary"].clone(),
+    );
+    display.insert("status.peek.detail".into(), Value::Text(secondary.into()));
+    display.insert("status.peek.devices".into(), Value::list(Vec::new()));
     display
 }
 fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
@@ -1841,6 +2081,35 @@ fn core_audio_values(
     );
     display.insert("status.icon".into(), Value::Text("volume_up".into()));
     display.insert("status.kind".into(), Value::Text("audio".into()));
+    let muted = display.get("status.mute").and_then(|value| match value {
+        Value::Text(text) => Some(text.clone()),
+        _ => None,
+    });
+    let summary = if muted.as_deref() == Some(tr("bead.panel.audio-muted", &[]).as_str()) {
+        tr("bead.panel.audio-muted", &[])
+    } else {
+        display
+            .get("status.primary")
+            .and_then(|value| match value {
+                Value::Text(text) => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default()
+    };
+    let detail = display
+        .get("status.device")
+        .and_then(|value| match value {
+            Value::Text(text) => Some(text.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    display.insert(
+        "status.peek.title".into(),
+        Value::Text(tr("bead.panel.control-sound", &[])),
+    );
+    display.insert("status.peek.summary".into(), Value::Text(summary));
+    display.insert("status.peek.detail".into(), Value::Text(detail));
+    display.insert("status.peek.devices".into(), Value::list(Vec::new()));
     display
 }
 fn muted_text(muted: bool) -> String {

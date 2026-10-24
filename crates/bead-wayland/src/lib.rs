@@ -650,6 +650,8 @@ struct Surface {
     viewport: Option<WpViewport>,
     geometry: (i32, i32),
     offset: (f32, f32),
+    /// The renderer-only slide applied to reveal content; UI hit boxes remain in layout coordinates.
+    input_content_offset: (f32, f32),
     format: PixelFormat,
     previous: Option<Rect>,
     visual_damage: bead_render::damage::FrameDamage,

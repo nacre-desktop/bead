@@ -1595,6 +1595,7 @@ impl App {
                 viewport,
                 geometry: (0, 0),
                 offset: (0., 0.),
+                input_content_offset: (0., 0.),
                 format: PixelFormat::Bgra,
                 previous: None,
                 visual_damage: Default::default(),

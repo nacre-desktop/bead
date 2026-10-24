@@ -220,6 +220,13 @@ impl Dispatch<WpPresentation, ()> for App {
         }
     }
 }
+fn layout_input_point(visual_point: (f32, f32), content_offset: (f32, f32)) -> (f32, f32) {
+    (
+        visual_point.0 - content_offset.0,
+        visual_point.1 - content_offset.1,
+    )
+}
+
 impl App {
     fn record_first_frame(&mut self, surface: &wl_surface::WlSurface, revision: u64, epoch: u64) {
         let Some(index) = self
@@ -871,6 +878,7 @@ impl App {
         let panel = surface.companion;
         let surface_size = (surface.width, surface.height);
         let offset = surface.offset;
+        let input_content_offset = surface.input_content_offset;
         let configured = surface.configured;
         let surface_output_name = surface.output_name.clone();
         let hovered_output = self.output.info(&surface.output).and_then(|i| i.name);
@@ -900,7 +908,8 @@ impl App {
                 None
             } else {
                 source.and_then(|r| {
-                    r.input_regions().into_iter().find(|r| {
+                    // Match UI hit testing: a child action wins over its clickable parent.
+                    r.input_regions().into_iter().rev().find(|r| {
                         r.prepare_panel
                             && event.position.0 >= f64::from(r.rect.x)
                             && event.position.1 >= f64::from(r.rect.y)
@@ -949,8 +958,8 @@ impl App {
             self.close_panel();
             return;
         }
-        let x = event.position.0 as f32 - offset.0;
-        let y = event.position.1 as f32 - offset.1;
+        let visual_x = event.position.0 as f32 - offset.0;
+        let visual_y = event.position.1 as f32 - offset.1;
         if !configured {
             return;
         }
@@ -959,12 +968,22 @@ impl App {
             && self
                 .panel_runtime
                 .as_ref()
-                .is_some_and(|r| r.dismiss_at(x, y))
+                .is_some_and(|r| r.dismiss_at(visual_x, visual_y))
         {
             self.close_panel();
-            self.view_event(true, UiEvent::Click { x, y });
+            self.view_event(
+                true,
+                UiEvent::Click {
+                    x: visual_x,
+                    y: visual_y,
+                },
+            );
             return;
         }
+        // Rendered reveal content moves while Session hit regions stay at their
+        // layout positions. Map pointer events back to that layout; keep the
+        // fixed contour's dismiss handling above in visual surface coordinates.
+        let (x, y) = layout_input_point((visual_x, visual_y), input_content_offset);
         if let PointerEventKind::Enter { serial, .. } = event.kind {
             self.cursor_enter_serial = serial;
         }
@@ -1025,6 +1044,28 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod input_coordinate_tests {
+    use super::*;
+
+    #[test]
+    fn pointer_events_follow_revealed_sliding_content() {
+        let surface_offset = (32., 32.);
+        let content_offset = bead_core::Edge::Bottom.closed_offset(590., 590., 0.25);
+        let layout_point = (420., 180.);
+        let compositor_point = (
+            layout_point.0 + surface_offset.0 + content_offset.0,
+            layout_point.1 + surface_offset.1 + content_offset.1,
+        );
+        let visual_point = (
+            compositor_point.0 - surface_offset.0,
+            compositor_point.1 - surface_offset.1,
+        );
+        let point = layout_input_point(visual_point, content_offset);
+        assert_eq!(point, layout_point);
     }
 }
 impl KeyboardHandler for App {

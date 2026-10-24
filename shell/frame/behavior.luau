@@ -10,7 +10,7 @@ return {stores={
     ["frame.lips"]={
         {id="dashboard",edge="top",length=208,opens="dashboard-today"},
         {id="assistant",edge="left",length=144,opens="assistant"},
-        {id="controls",edge="right",length=144,opens="sound"},
+        {id="controls",edge="right",length=144,opens="control"},
     },
     ["frame.lips.blocked_by"]={{id="launcher"},{id="session"}},
 }}

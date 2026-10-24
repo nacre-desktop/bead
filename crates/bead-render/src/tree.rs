@@ -293,7 +293,7 @@ impl TreeCache {
         else {
             return Ok(None);
         };
-        let Some(window) = scene.reveal_window() else {
+        let Some(_window) = scene.reveal_window() else {
             return Ok(None);
         };
         if frame.items.len() != scene.primitives.len() {
@@ -308,7 +308,11 @@ impl TreeCache {
                         opacity: 1.,
                         motion: None,
                         resource_revision: scene.resource_revision,
-                        asset_data: scene.asset_data.clone(),
+                        asset_data: if matches!(&shaped, Primitive::Image { .. }) {
+                            scene.asset_data.clone()
+                        } else {
+                            Default::default()
+                        },
                         clips: Default::default(),
                         layers: Vec::new(),
                         prepared: Default::default(),
@@ -350,7 +354,9 @@ impl TreeCache {
                 }
                 item.primitive = shaped;
             } else {
-                item.clip = Some(item.clip.map_or(window, |own| own.intersect(window)));
+                let (dx, dy) = scene.content_offset(index);
+                item.primitive = scene.primitives[index].translated(dx, dy);
+                item.clip = scene.clip_at(index);
             }
         }
         let mut key = std::collections::hash_map::DefaultHasher::new();
@@ -588,7 +594,10 @@ impl TreeCache {
             };
             items.push(Item {
                 id,
-                primitive: primitive.clone(),
+                primitive: {
+                    let (dx, dy) = scene.content_offset(index);
+                    primitive.translated(dx, dy)
+                },
                 clip,
                 raster,
             });

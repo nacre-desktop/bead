@@ -635,6 +635,18 @@ impl App {
                 }
             }
             s.offset = scene.offset;
+            s.input_content_offset = scene
+                .motion
+                .as_ref()
+                .filter(|motion| motion.reveal)
+                .and_then(|motion| {
+                    motion.slide_distance.map(|distance| {
+                        motion
+                            .edge
+                            .closed_offset(distance, distance, motion.progress)
+                    })
+                })
+                .unwrap_or((0., 0.));
             renderer.presentation_motion(opaque_motion);
             {
                 let _prepare = bead_core::profile::Span::new("present_prepare");

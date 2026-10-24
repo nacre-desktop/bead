@@ -27,6 +27,10 @@ pub fn calendar(
     if let Some(motion) = &mut fallback.motion {
         motion.id = "popout".into();
         motion.edge = bead::core::Edge::Top;
+        motion.duration = 0.23;
+        motion.curve = Some(bead::core::animation::Curve::EaseInOut);
+        motion.fade = false;
+        motion.reveal = true;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
@@ -114,6 +118,8 @@ pub(crate) fn core_sound_with_root(
         motion.curve = Some(bead::core::animation::Curve::EaseInOut);
         motion.edge = bead::core::Edge::Top;
         motion.duration = 0.23;
+        motion.fade = false;
+        motion.reveal = true;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
@@ -279,7 +285,8 @@ fn status_at_root_mode(
     let (root, initialize) = fixture;
     let fill = colors.get("surface")?;
     let (panel_width, panel_height) = if peek {
-        (190., 72.)
+        // QML's 280 px content sits in a 15 px inset on every side.
+        (310., 110.)
     } else if matches!(kind, crate::status_views::Kind::Network) && client.is_some() {
         // QML's 352 px body sits in a 15 px inset inside the framed popup.
         (382., crate::status_views::NETWORK_BASE_HEIGHT as f32)
@@ -295,11 +302,7 @@ fn status_at_root_mode(
     };
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = panel_width;
-    fallback.bounds = if peek {
-        Rect::new(-24., -24., 238., 112.)
-    } else {
-        Rect::new(-32., -32., panel_width + 64., panel_height + 64.)
-    };
+    fallback.bounds = Rect::new(-32., -32., panel_width + 64., panel_height + 64.);
     fallback.primitives = vec![Primitive::Rounded {
         rect: Rect::new(0., 0., panel_width, panel_height),
         radius,
@@ -311,6 +314,8 @@ fn status_at_root_mode(
         motion.curve = Some(bead::core::animation::Curve::EaseInOut);
         motion.edge = bead::core::Edge::Top;
         motion.duration = 0.23;
+        motion.fade = false;
+        motion.reveal = true;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
@@ -511,6 +516,9 @@ pub fn control_center(
         motion.id = "control".into();
         motion.edge = bead::core::Edge::Right;
         motion.duration = 0.28;
+        motion.slide_distance = Some(width);
+        motion.fade = false;
+        motion.reveal = true;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
@@ -559,6 +567,107 @@ pub fn control_center(
                 .with_frame(crate::placement::Attachment::ControlCenter, &colors)
                 .and_then(|runtime| runtime.with_control_center(control))
                 .and_then(|runtime| runtime.with_docked_details(client.clone()))
+                .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
+                .map_err(|e| e.to_string())
+        }),
+    })
+}
+
+/// Compact notification hover peek. It uses the same ControlCenter source and
+/// notification projection as the full drawer, with only its notification topic leased.
+pub fn notification_peek(
+    client: crate::nacre_source::Client,
+    palette: PathBuf,
+    colors: Palette,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    notification_panel(client, palette, colors, trace, true)
+}
+
+pub fn notification_history(
+    client: crate::nacre_source::Client,
+    palette: PathBuf,
+    colors: Palette,
+    trace: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    notification_panel(client, palette, colors, trace, false)
+}
+
+fn notification_panel(
+    client: crate::nacre_source::Client,
+    palette: PathBuf,
+    colors: Palette,
+    trace: bool,
+    peek: bool,
+) -> Result<PanelSpec, Box<dyn std::error::Error>> {
+    let fill = colors.get("surface")?;
+    let (width, height) = if peek { (310., 74.) } else { (410., 110.) };
+    let mut fallback = crate::sound::fallback(fill);
+    fallback.width = width;
+    fallback.bounds = Rect::new(-32., -32., width + 64., height + 64.);
+    fallback.primitives = vec![Primitive::Rounded {
+        rect: Rect::new(0., 0., width, height),
+        radius: 12.,
+        fill,
+        border: None,
+    }];
+    if let Some(motion) = &mut fallback.motion {
+        motion.id = "notification-peek".into();
+        motion.edge = bead::core::Edge::Top;
+        motion.duration = 0.23;
+        motion.curve = Some(bead::core::animation::Curve::EaseInOut);
+        motion.fade = false;
+        motion.reveal = true;
+    }
+    let cold = fallback.clone();
+    Ok(PanelSpec {
+        position: Some(
+            crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+        ),
+        engages_decorations: !peek,
+        passive: false,
+        keyboard_focus: !peek,
+        initial_open: false,
+        fallback,
+        renderer: RendererKind::Cpu,
+        factory: Arc::new(move |open| {
+            let topics = ["notifications", "controls"]
+                .iter()
+                .filter(|name| !peek || **name == "notifications")
+                .filter_map(|name| {
+                    client.lease_topic(name).ok().map(|topic| {
+                        (
+                            *name,
+                            Arc::new(topic) as Arc<dyn bead::core::source::Source>,
+                        )
+                    })
+                })
+                .collect();
+            let control = crate::control_center::ControlCenter::new(
+                Some(client.clone()),
+                topics,
+                None,
+                Vec::new(),
+            );
+            let session = bead::ui::Session::new(
+                PathBuf::from("shell"),
+                if peek {
+                    "control/peek.luau"
+                } else {
+                    "control/main.luau"
+                }
+                .into(),
+                palette.clone(),
+                colors.clone(),
+                cold.clone(),
+            );
+            crate::reload::Runtime::panel_session(session, open)
+                .with_trace(trace)
+                .with_view_edge("top")?
+                .with_control_center(control)
+                .and_then(|runtime| {
+                    runtime.with_frame(crate::placement::Attachment::Popout, &colors)
+                })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),

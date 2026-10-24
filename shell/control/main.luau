@@ -6,13 +6,14 @@ local kit=require("bead.kit")
 local reg=require("./tiles")
 local T=kit.tokens
 local function get(name) return ui.resolve_for_check(ui.bind(name)) end
-local W,PAD,GAP=reg.layout.width,T.spacing.xl,T.spacing.sm
+local popup=get("view.edge")=="top"
+local W,PAD,GAP=popup and 410 or reg.layout.width,popup and 15 or T.spacing.xl,popup and 12 or T.spacing.sm
 local INNER=W-2*PAD
 local BODY,CAPTION=T.text.body*4/3,T.text.caption*4/3
 local HEAD=T.spacing.huge
 -- QML NacreControlSurface: content starts 14 px down, the status row is 32 tall with 3 px between its parts, a
 -- page header 36 tall, and the page 18 px under the status row (14 under a header). Tool buttons are 32 px circles.
-local TOP,HEADER,STATUS_GAP,HEADER_GAP=T.spacing.lg,T.spacing.huge+T.spacing.xs,3,5
+local TOP,HEADER,STATUS_GAP,HEADER_GAP=popup and 15 or T.spacing.lg,T.spacing.huge+T.spacing.xs,3,5
 local ROW=T.spacing.huge+T.spacing.md
 local page=get("cc.page")
 local src,views={},{}
@@ -144,7 +145,8 @@ local function notice_card(n)
 end
 local function notices_empty()
     local text=get("cc.notice_ready") and ui.tr("bead.panel.control-notices-empty") or ui.tr("bead.panel.control-notices-loading")
-    return {ui.Text{id="notices-empty",text=text,width=INNER,height=CAPTION*2,font_size=CAPTION,color="onSurfaceVariant"},CAPTION*2}
+    local height=popup and 22 or CAPTION*2
+    return {ui.Text{id="notices-empty",text=text,width=INNER,height=height,font_size=popup and BODY or CAPTION,color="onSurfaceVariant"},height}
 end
 -- QML `ActionButton` (compact): a 34 px pill, 12 pt glyph and a caption-size label, `primary` while selected, dimmed to 40 %
 -- while it cannot act. The label's width is an estimate (the layout cannot measure text).
@@ -336,16 +338,17 @@ local function detail()
     return stack("detail",items)
 end
 local body,content
-if page=="edit" then body,content=edit()
+if popup then body,content=stack("history",notices(nil,false),GAP)
+elseif page=="edit" then body,content=edit()
 elseif page=="catalog" then body,content=catalog()
 elseif page=="detail" then body,content=detail()
 else body,content=home() end
 local max=get("cc.max_height")
 -- B0067: the dock is as tall as the framed viewport (the QML sidebar keeps the full frame height); long pages scroll.
-local height=max
+local height=popup and math.min(max,content+TOP+PAD) or max
 local inner=body
 if content+TOP+PAD>max then
     inner=ui.Scroll{id="scroll",scroll=ui.bind("cc.scroll"),width=INNER,height=height-TOP-PAD,body}
 end
-return kit.Panel{id="control-center",edge=get("view.edge"),open=ui.bind("panel.open"),duration=0.28,width=W,height=height,padding=PAD,padding_top=TOP,
+return kit.Panel{id="control-center",edge=get("view.edge"),open=ui.bind("panel.open"),duration=popup and .23 or .28,transition=popup and "ease-in-out" or "ease",fade=false,reveal=true,slide_distance=not popup and W or nil,width=W,height=height,padding=PAD,padding_top=TOP,
     gap=GAP,radius=T.radii.medium,fill="surface",inner}

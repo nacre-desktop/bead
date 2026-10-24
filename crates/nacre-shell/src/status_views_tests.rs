@@ -314,7 +314,7 @@ fn clicked_status_factories_use_top_popout_geometry_and_peeks_stay_small() -> Re
 
     let peek =
         crate::popouts::status_peek(Kind::Battery, palette, colors, owner, None, 16., false)?;
-    assert_eq!(peek.fallback.width, 190.);
+    assert_eq!(peek.fallback.width, 310.);
     assert!(matches!(
         peek.fallback.motion.as_ref().map(|motion| motion.edge),
         Some(bead::core::Edge::Top)
@@ -328,6 +328,211 @@ fn clicked_status_factories_use_top_popout_geometry_and_peeks_stay_small() -> Re
         !peek.keyboard_focus,
         "hover previews do not claim keyboard focus"
     );
+    Ok(())
+}
+
+#[test]
+fn status_peek_projects_qml_summary_detail_and_connected_devices() -> Result<()> {
+    crate::i18n::init();
+    let network = Status::new(Kind::Network, Arc::new(FakeSource::new(data())?)).project();
+    assert_eq!(text_value(&network, "status.peek.detail"), "Signal 86%");
+
+    let mut wifi_off = data();
+    wifi_off["network"]["connected"] = serde_json::json!(false);
+    wifi_off["network"]["wireless_enabled"] = serde_json::json!(false);
+    let off = Status::new(Kind::Network, Arc::new(FakeSource::new(wifi_off.clone())?)).project();
+    assert_eq!(text_value(&off, "status.peek.title"), "Wi-Fi");
+    assert_eq!(text_value(&off, "status.peek.summary"), "Off");
+    assert_eq!(text_value(&off, "status.peek.detail"), "");
+    wifi_off["network"]["available"] = serde_json::json!(false);
+    let unavailable = Status::new(Kind::Network, Arc::new(FakeSource::new(wifi_off)?)).project();
+    assert_eq!(
+        unavailable["status.peek.summary"],
+        unavailable["status.primary"]
+    );
+    assert_eq!(text_value(&unavailable, "status.peek.detail"), "");
+
+    let source = Arc::new(FakeSource::new(data())?);
+    let values = Status::new(Kind::Bluetooth, source).project();
+    assert_eq!(text_value(&values, "status.peek.title"), "Bluetooth");
+    assert_eq!(
+        text_value(&values, "status.peek.summary"),
+        "2 connected devices"
+    );
+    assert_eq!(text_value(&values, "status.peek.detail"), "");
+    let Value::List(devices) = &values["status.peek.devices"] else {
+        panic!("peek devices must be a list")
+    };
+    assert_eq!(devices.len(), 2);
+    assert_eq!(devices[0]["name"], "Fixture headphones");
+    assert_eq!(devices[1]["name"], "Fixture keyboard");
+
+    let mut many = data();
+    many["bluetooth"]["connected_devices"] = serde_json::json!([
+        "Device 1", "Device 2", "Device 3", "Device 4", "Device 5", "Device 6"
+    ]);
+    let values = Status::new(Kind::Bluetooth, Arc::new(FakeSource::new(many)?)).project();
+    let Value::List(devices) = &values["status.peek.devices"] else {
+        panic!("peek devices must be a list")
+    };
+    assert_eq!(
+        devices.len(),
+        6,
+        "the projection retains all connected devices"
+    );
+    assert_eq!(devices[5]["name"], "Device 6");
+
+    let mut powered_off = data();
+    powered_off["bluetooth"]["powered"] = serde_json::json!(false);
+    let values = Status::new(Kind::Bluetooth, Arc::new(FakeSource::new(powered_off)?)).project();
+    assert_eq!(text_value(&values, "status.primary"), "Bluetooth off");
+    assert_eq!(text_value(&values, "status.peek.summary"), "Off");
+    let Value::List(devices) = &values["status.peek.devices"] else {
+        panic!("peek devices must be a list")
+    };
+    assert!(
+        devices.is_empty(),
+        "powered-off peeks hide stale device rows"
+    );
+    Ok(())
+}
+
+#[test]
+fn battery_peek_rebuilds_when_profile_source_arrives_after_initial_markup() -> Result<()> {
+    crate::i18n::init();
+    fn scene_texts(h: &Harness) -> Vec<String> {
+        h.scene()
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                bead::render::Primitive::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+    let mut battery = core_battery();
+    battery["percentage"] = serde_json::json!(63.0);
+    battery["time_to_full_seconds"] = serde_json::json!(7800);
+    let status = Status::core_battery(Arc::new(FakeSource::new(battery)?));
+    let mut initial = status.project();
+    initial.insert("status.peek.detail".into(), Value::Text(String::new()));
+    initial.insert("cc.src".into(), Value::list(Vec::new()));
+    let mut harness = Harness::load(
+        &root(),
+        Path::new("status/peek.luau"),
+        &root().join("palette.json"),
+        initial,
+        Config {
+            width: 310,
+            height: 120,
+            scale: 1.,
+        },
+    )?;
+    assert!(
+        !scene_texts(&harness)
+            .iter()
+            .any(|text| text.contains("until full"))
+    );
+
+    harness.update(BTreeMap::from([(
+        "status.peek.detail".into(),
+        Value::Text("2h 10m until full".into()),
+    )]))?;
+    assert!(
+        scene_texts(&harness)
+            .iter()
+            .any(|text| text == "2h 10m until full")
+    );
+
+    harness.update(BTreeMap::from([(
+        "cc.src".into(),
+        Value::list(vec![serde_json::json!({
+            "id": "power.profile",
+            "available": true,
+            "status": "Balanced"
+        })]),
+    )]))?;
+    assert!(
+        scene_texts(&harness)
+            .iter()
+            .any(|text| text == "2h 10m until full · Balanced")
+    );
+    Ok(())
+}
+
+#[test]
+fn core_bluetooth_peek_distinguishes_missing_adapter_from_power_off() -> Result<()> {
+    let mut state = core_bluetooth();
+    state["adapters"]["items"] = serde_json::json!({});
+    state["adapters"]["order"] = serde_json::json!([]);
+    state["devices"]["items"] = serde_json::json!({});
+    state["devices"]["order"] = serde_json::json!([]);
+    let values = Status::core_bluetooth(Arc::new(FakeSource::new(state)?)).project();
+    assert_eq!(
+        text_value(&values, "status.peek.summary"),
+        "No Bluetooth adapter"
+    );
+    assert_eq!(text_value(&values, "status.primary"), "Bluetooth off");
+    Ok(())
+}
+
+#[test]
+fn status_peek_luau_limits_rows_and_localizes_the_overflow() -> Result<()> {
+    crate::i18n::init();
+    let devices = (1..=6)
+        .map(|index| {
+            serde_json::json!({
+                "id": format!("device-{index}"),
+                "name": format!("Device {index}"),
+                "battery": ""
+            })
+        })
+        .collect();
+    let initial = BTreeMap::from([
+        ("panel.open".into(), Value::Bool(true)),
+        ("status.ready".into(), Value::Bool(true)),
+        ("status.active".into(), Value::Bool(true)),
+        ("status.kind".into(), Value::Text("bluetooth".into())),
+        ("status.heading".into(), Value::Text("Bluetooth".into())),
+        (
+            "status.primary".into(),
+            Value::Text("6 connected devices".into()),
+        ),
+        ("status.peek.title".into(), Value::Text("Bluetooth".into())),
+        (
+            "status.peek.summary".into(),
+            Value::Text("6 connected devices".into()),
+        ),
+        ("status.peek.detail".into(), Value::Text(String::new())),
+        ("status.peek.devices".into(), Value::list(devices)),
+    ]);
+    let h = Harness::load(
+        &root(),
+        Path::new("status/peek.luau"),
+        &root().join("palette.json"),
+        initial,
+        Config {
+            width: 380,
+            height: 300,
+            scale: 1.,
+        },
+    )?;
+    let texts = h
+        .scene()
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    for index in 1..=4 {
+        let expected = format!("Device {index}");
+        assert!(texts.contains(&expected.as_str()));
+    }
+    assert!(!texts.contains(&"Device 5"));
+    assert!(!texts.contains(&"Device 6"));
+    assert!(texts.contains(&"2 more devices"));
     Ok(())
 }
 #[test]
@@ -518,6 +723,73 @@ fn network_core_primary_is_explicit_not_map_order() -> Result<()> {
     let values = Status::core_network(Arc::new(FakeSource::new(no_primary)?)).project();
     assert_eq!(text_value(&values, "status.primary"), "Not connected");
     assert_eq!(values["status.ready"], Value::Bool(true));
+    Ok(())
+}
+
+#[test]
+fn core_network_peek_uses_active_ap_when_primary_is_missing() -> Result<()> {
+    let mut state = core_network();
+    state.as_object_mut().unwrap().remove("primary_connection");
+    let values = Status::core_network(Arc::new(FakeSource::new(state)?)).project();
+
+    // The full status projection remains tied to primary_connection, while the
+    // hover preview follows the AP that is still reported active.
+    assert_eq!(text_value(&values, "status.primary"), "Not connected");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Connection controls unavailable"
+    );
+    assert_eq!(text_value(&values, "status.peek.summary"), "Home Wi-Fi");
+    assert_eq!(text_value(&values, "status.peek.detail"), "Signal 86%");
+    Ok(())
+}
+
+#[test]
+fn core_network_peek_prioritizes_wired_unavailable_and_radio_off_states() -> Result<()> {
+    let mut wired = core_network();
+    wired["devices"]["items"]["eth0"] = serde_json::json!(
+        {"name":"Ethernet","kind":"ethernet","connected":true}
+    );
+    wired["devices"]["order"] = serde_json::json!(["wifi0", "eth0"]);
+    wired["primary_connection"] = serde_json::json!("wired");
+    let values = Status::core_network(Arc::new(FakeSource::new(wired)?)).project();
+    assert_eq!(text_value(&values, "status.peek.title"), "Ethernet");
+    assert_eq!(
+        text_value(&values, "status.peek.summary"),
+        "Connected by cable"
+    );
+    assert_eq!(text_value(&values, "status.peek.detail"), "");
+    assert_eq!(text_value(&values, "status.primary"), "Ethernet");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Connection controls unavailable"
+    );
+
+    let mut unavailable = core_network();
+    unavailable["devices"]["items"] = serde_json::json!({});
+    unavailable["devices"]["order"] = serde_json::json!([]);
+    unavailable["access_points"]["items"] = serde_json::json!({});
+    unavailable["access_points"]["order"] = serde_json::json!([]);
+    let values = Status::core_network(Arc::new(FakeSource::new(unavailable)?)).project();
+    assert_eq!(text_value(&values, "status.peek.title"), "Wi-Fi");
+    assert_eq!(
+        text_value(&values, "status.peek.summary"),
+        "No Wi-Fi adapter"
+    );
+    assert_eq!(text_value(&values, "status.peek.detail"), "");
+
+    let mut off = core_network();
+    off["wireless_enabled"] = serde_json::json!(false);
+    off.as_object_mut().unwrap().remove("primary_connection");
+    let values = Status::core_network(Arc::new(FakeSource::new(off)?)).project();
+    assert_eq!(text_value(&values, "status.peek.title"), "Wi-Fi");
+    assert_eq!(text_value(&values, "status.peek.summary"), "Off");
+    assert_eq!(text_value(&values, "status.peek.detail"), "");
+    assert_eq!(text_value(&values, "status.primary"), "Not connected");
+    assert_eq!(
+        text_value(&values, "status.detail"),
+        "Connection controls unavailable"
+    );
     Ok(())
 }
 
@@ -1135,6 +1407,7 @@ fn audio_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
 
 #[test]
 fn audio_legacy_preview_remains_unchanged() -> Result<()> {
+    crate::i18n::init();
     let initial = BTreeMap::from([
         ("panel.open".into(), Value::Bool(true)),
         (

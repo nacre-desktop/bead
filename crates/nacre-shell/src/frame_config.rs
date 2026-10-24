@@ -105,6 +105,7 @@ mod tests {
         assert_eq!(config.lips[0].length, 208.);
         assert_eq!(config.lips[1].edge, Edge::Left);
         assert_eq!(config.lips[2].edge, Edge::Right);
+        assert_eq!(config.lips[2].opens, "control");
         assert!(config.lips[1..].iter().all(|l| l.length == 144.));
         assert_eq!(config.blocked_by, ["launcher", "session"]);
     }
