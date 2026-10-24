@@ -12,7 +12,7 @@ use bead::core::{
     Stores, Value,
     source::{Source, Subscription},
 };
-use nacre_protocol::core_services::BatteryState;
+use nacre_protocol::{control_center::stream_id, core_services::BatteryState};
 use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -67,6 +67,10 @@ const PREVIOUS_DEFAULTS: [&[&str]; 2] = [
         "appearance",
     ],
 ];
+/// Source ids of application streams start with this; the rest is the `audio` topic node id.
+const STREAM: &str = "stream:";
+/// The most application rows the sound views list.
+const MAX_STREAMS: usize = 12;
 /// The QML shell waited this long after closing its panel before an interactive tool started.
 const CLOSE_DELAY: Duration = Duration::from_millis(320);
 
@@ -230,6 +234,37 @@ fn level(node: &Json) -> Option<(f64, bool)> {
         .and_then(|r| r["muted"].as_bool())
         .or_else(|| ready.then(|| node["muted"].as_bool()).flatten());
     Some((volume, muted.unwrap_or(false)))
+}
+/// `(linear 0..1, muted)` of an application stream: QML wrote the stream slider's linear value.
+fn stream_level(node: &Json) -> Option<(f64, bool)> {
+    let ready = node["ready"] == true;
+    let readback = node.get("readback");
+    let volume = readback
+        .and_then(|r| r["linear_volume"].as_f64())
+        .or_else(|| ready.then(|| node["volume"].as_f64()).flatten())?;
+    let muted = readback
+        .and_then(|r| r["muted"].as_bool())
+        .or_else(|| ready.then(|| node["muted"].as_bool()).flatten());
+    Some((volume, muted.unwrap_or(false)))
+}
+/// Whether the icon theme has this application icon (QML shows its `apps` glyph otherwise).
+fn themed_icon(name: &str) -> bool {
+    thread_local! {
+        static KNOWN: RefCell<BTreeMap<String, bool>> = const { RefCell::new(BTreeMap::new()) };
+    }
+    KNOWN.with(|known| {
+        let mut known = known.borrow_mut();
+        if known.len() > 256 {
+            known.clear();
+        }
+        *known.entry(name.to_owned()).or_insert_with(|| {
+            !name.contains('/')
+                && freedesktop_icons::lookup(name)
+                    .with_size(32)
+                    .find()
+                    .is_some()
+        })
+    })
 }
 fn audio_reading(data: &Json, default: &str) -> Option<Reading> {
     if !healthy(data) {
@@ -590,7 +625,20 @@ impl ControlCenter {
             "screenshot.capture" | "color-picker.pick" | "wallpaper.next" => self
                 .can(ACTIONS.iter().find(|(id, _)| *id == source)?.1)
                 .then(Reading::default),
-            _ => None,
+            // B0086: an application stream, `stream:<audio topic id>`; its level is linear.
+            _ => {
+                let id = source.strip_prefix(STREAM)?;
+                let data = self.data("audio").filter(|data| healthy(data))?;
+                let (linear, muted) = stream_level(data["nodes"]["items"].get(id)?)?;
+                let percent = (linear * 100.).round().clamp(0., 100.);
+                Some(Reading {
+                    on: muted,
+                    value: percent,
+                    status: format!("{percent}%"),
+                    node: Some(id.to_owned()),
+                    ..Default::default()
+                })
+            }
         }
     }
     fn controls(&self) -> Option<Arc<Json>> {
@@ -613,6 +661,11 @@ impl ControlCenter {
             "notifications.dnd" => (self.can("notifications.set_dnd"), false, false),
             "brightness.level" => (false, self.can("brightness.set"), false),
             "keyboard.backlight" => (false, self.can("keyboard_light.set"), false),
+            source if source.starts_with(STREAM) => (
+                self.can("audio.set_mute"),
+                self.can("audio.set_volume"),
+                false,
+            ),
             "airplane.mode" => (self.can("airplane.set"), false, false),
             "night-light.state" => (self.can("night_light.set") && !reading.locked, false, false),
             "stay-awake.state" => (self.can("stay_awake.set"), false, false),
@@ -634,6 +687,36 @@ impl ControlCenter {
             _ => (false, false, ACTIONS.iter().any(|(id, _)| *id == source)),
         };
         Verbs { toggle, set, press }
+    }
+    /// B0086: the application streams of the sound popout and the Audio page, in daemon order.
+    pub(crate) fn audio_streams(&self) -> Vec<Json> {
+        let Some(data) = self.data("audio").filter(|data| healthy(data)) else {
+            return Vec::new();
+        };
+        let order = data["nodes"]["order"].as_array();
+        order
+            .into_iter()
+            .flatten()
+            .filter_map(|id| {
+                let id = id.as_str()?;
+                let node = &data["nodes"]["items"][id];
+                if !matches!(node["kind"].as_str(), Some("playback" | "capture")) {
+                    return None;
+                }
+                let (linear, muted) = stream_level(node)?;
+                let percent = (linear * 100.).round().clamp(0., 100.);
+                let name = node["name"].as_str().filter(|name| !name.is_empty());
+                let icon = node["icon"].as_str().filter(|icon| themed_icon(icon));
+                Some(json!({
+                    "id": id,
+                    "label": name.map_or_else(|| tr("bead.panel.audio-application", &[]), |name| crate::status_views::line(name, 40)),
+                    "icon": icon.unwrap_or(""),
+                    "value": percent, "status": format!("{percent}%"), "muted": muted,
+                    "enabled": node["ready"] == true && self.can("audio.set_volume"),
+                }))
+            })
+            .take(MAX_STREAMS)
+            .collect()
     }
     pub(crate) fn audio_devices(&self) -> Vec<Json> {
         let Some(data) = self.data("audio").filter(|data| healthy(data)) else {
@@ -749,6 +832,12 @@ impl ControlCenter {
             "appearance.mode" => reading.node.and_then(|mode| {
                 let next = MODES[(MODES.iter().position(|m| *m == mode)? + 1) % MODES.len()];
                 Some(("appearance.set_mode", json!({"mode": next})))
+            }),
+            source if source.starts_with(STREAM) => reading.node.map(|node| {
+                (
+                    "audio.set_mute",
+                    json!({"target": "stream", "node": node, "muted": !on}),
+                )
             }),
             "recorder.state" if on => Some(("recorder.stop", json!({}))),
             "recorder.state" => {
@@ -908,6 +997,15 @@ impl ControlCenter {
                     json!({"target": target, "value": linear(percent)}),
                 ))
             }
+            source if source.starts_with(STREAM) => {
+                if (percent - reading.value).abs() < 0.5 {
+                    return None;
+                }
+                Some((
+                    "audio.set_volume",
+                    json!({"target": "stream", "node": reading.node, "value": (percent / 100.).clamp(0., 1.)}),
+                ))
+            }
             "brightness.level" => {
                 let percent = percent.round();
                 (percent != reading.value).then(|| {
@@ -1016,6 +1114,24 @@ impl ControlCenter {
             parts.next().unwrap_or(""),
             parts.next().unwrap_or(""),
         );
+        // Stream ids hold a colon: `toggle:stream:<id>` and `set:stream:<id>:<percent>`.
+        if source == "stream" {
+            let key = format!("{STREAM}{rest}");
+            match verb {
+                "toggle" => self.toggle(&key),
+                "set" => {
+                    if let Some((id, percent)) = rest.rsplit_once(':')
+                        && stream_id(id).is_some()
+                        && let Ok(percent) = percent.parse::<f64>()
+                        && percent.is_finite()
+                    {
+                        self.level(&format!("{STREAM}{id}"), percent.clamp(0., 100.));
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
         match verb {
             "toggle" => self.toggle(source),
             "press" => self.press(source),

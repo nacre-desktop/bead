@@ -646,6 +646,15 @@ impl Runtime {
             ("network.can_hidden".into(), bead::core::Value::Bool(false)),
             ("network.can_forget".into(), bead::core::Value::Bool(false)),
             ("network.saved".into(), bead::core::Value::list(Vec::new())),
+            (
+                "network.scan_enabled".into(),
+                bead::core::Value::Bool(false),
+            ),
+            ("network.scanning".into(), bead::core::Value::Bool(false)),
+            (
+                "network.scan_label".into(),
+                bead::core::Value::Text(String::new()),
+            ),
         ]))?;
         for action in [
             "network.open",
@@ -653,6 +662,7 @@ impl Runtime {
             "network.join",
             "network.forget_ask",
             "network.forget",
+            "network.scan",
         ] {
             runtime.actions.register(action, "network.control")?;
         }
@@ -975,7 +985,10 @@ impl Runtime {
             "battery".into(),
             self.status.take().ok_or("battery adapter missing")?,
         );
-        self = self.with_core_audio_status(std::sync::Arc::new(client.lease_topic("audio")?))?;
+        self = self.with_core_audio_status(
+            std::sync::Arc::new(client.lease_topic("audio")?),
+            Some(client.clone()),
+        )?;
         self.dock_status.insert(
             "audio".into(),
             self.status.take().ok_or("audio adapter missing")?,
@@ -1004,6 +1017,15 @@ impl Runtime {
                     "cc.audio_devices".into(),
                     bead::core::Value::list(control.audio_devices()),
                 );
+                values.insert(
+                    "cc.streams".into(),
+                    bead::core::Value::list(control.audio_streams()),
+                );
+            } else {
+                // Only the audio page needs the microphone meter (and its capture).
+                for status in pages.values() {
+                    status.park();
+                }
             }
             Ok(values)
         }));
@@ -1068,6 +1090,10 @@ impl Runtime {
                 "cc.audio_devices".into(),
                 bead::core::Value::list(projector.audio_devices()),
             );
+            values.insert(
+                "cc.streams".into(),
+                bead::core::Value::list(projector.audio_streams()),
+            );
             Ok(values)
         }));
         self.actions.register("cc.do", "cc.control")?;
@@ -1081,11 +1107,16 @@ impl Runtime {
     ) -> Result<Self, Box<dyn Error>> {
         self.with_status_projector(crate::status_views::Status::core_battery(source))
     }
+    /// `peak` is the daemon client that leases the microphone meter while the view is shown.
     pub fn with_core_audio_status(
         mut self,
         source: std::sync::Arc<dyn bead::core::source::Source>,
+        peak: Option<crate::nacre_source::Client>,
     ) -> Result<Self, Box<dyn Error>> {
-        let status = crate::status_views::Status::core_audio(source);
+        let mut status = crate::status_views::Status::core_audio(source);
+        if let Some(client) = peak {
+            status = status.with_audio_peak(client);
+        }
         self.session.stores = self.session.stores.reconcile(&status.project())?;
         self.with_status_projector(status)
     }
@@ -2393,7 +2424,7 @@ impl SceneSource for Runtime {
             return self.finish_scene(scene, false);
         }
         if let Some((_, name, _)) = &host_action
-            && name == "network.toggle_wifi"
+            && matches!(name.as_str(), "network.toggle_wifi" | "network.scan")
             && (matches!(&event, UiEvent::Click { .. })
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
@@ -2406,7 +2437,11 @@ impl SceneSource for Runtime {
                 wakeup(UiEvent::Model(BTreeMap::new()));
             });
             if let Some(status) = self.active_status() {
-                status.wifi_action(callback);
+                if name == "network.scan" {
+                    status.network_scan(callback);
+                } else {
+                    status.wifi_action(callback);
+                }
             }
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
@@ -4073,6 +4108,8 @@ pub fn private_service_proof() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+mod audio_runtime_tests;
 #[cfg(test)]
 mod bar_routes_runtime_tests;
 #[cfg(test)]

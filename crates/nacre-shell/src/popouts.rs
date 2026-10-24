@@ -144,7 +144,7 @@ pub(crate) fn core_sound_with_root(
                 .with_panel_geometry(382., 286., 0.23)
                 .map_err(|error| error.to_string())?
                 .with_frame(crate::placement::Attachment::Popout, &colors)
-                .and_then(|runtime| runtime.with_core_audio_status(source.clone()))
+                .and_then(|runtime| runtime.with_core_audio_status(source.clone(), client.clone()))
                 .and_then(|runtime| {
                     runtime.with_status_controls(client.clone(), vec![("audio", source)])
                 })
@@ -401,7 +401,7 @@ fn status_at_root_mode(
                                 vec![("power.profiles", profiles)],
                             )
                     }
-                    Some("audio") => runtime.with_core_audio_status(source),
+                    Some("audio") => runtime.with_core_audio_status(source, client.clone()),
                     _ => runtime.with_status(kind, source),
                 })
                 .map(|mut runtime| {

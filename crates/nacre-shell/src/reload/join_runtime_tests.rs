@@ -42,7 +42,12 @@ fn topic(auth_error: bool, with_old: bool) -> serde_json::Value {
 }
 fn welcome() -> Message {
     let mut all = nacre_protocol::core_methods();
-    for name in ["network.connect", "network.disconnect", "network.forget"] {
+    for name in [
+        "network.connect",
+        "network.disconnect",
+        "network.forget",
+        "network.scan",
+    ] {
         all.insert(
             name.into(),
             nacre_protocol::Method {
@@ -528,5 +533,64 @@ async fn secret_stays_out_of_traces_summaries_and_saved_state()
     runtime.commit();
     assert_eq!(text(&runtime, "network.secret"), "");
     assert_eq!(text(&runtime, "network.view"), "list");
+    finish(runtime, script, client, lab).await
+}
+
+// B0086 (N0061): Scan networks is enabled with Wi-Fi on; the call in flight is the progress.
+#[tokio::test(flavor = "current_thread")]
+async fn scan_networks_is_progress_until_the_daemon_replies()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (calls_tx, mut calls_rx) = mpsc::channel(4);
+    let (ret_tx, ret_rx) = tokio::sync::oneshot::channel::<()>();
+    let (lab, client, mut runtime, script) = setup(move |mut reader, mut writer| {
+        tokio::spawn(async move {
+            let Message::Call { id, m, p, .. } = next(&mut reader).await else {
+                panic!("scan call expected")
+            };
+            calls_tx.send((m, p)).await.unwrap();
+            ret_rx.await.unwrap();
+            framing::write(
+                &mut writer,
+                &Message::Ret {
+                    id,
+                    reply: ok(true),
+                },
+            )
+            .await
+            .unwrap();
+            assert!(matches!(next(&mut reader).await, Message::Unsub { .. }));
+        })
+    })
+    .await?;
+    assert!(can(&runtime, "network.scan_enabled"));
+    assert_eq!(text(&runtime, "network.scan_label"), "Scan networks");
+    runtime
+        .status
+        .as_ref()
+        .unwrap()
+        .network_scan(Arc::new(|| {}));
+    let (method, params) = calls_rx.recv().await.unwrap();
+    assert_eq!(method, "network.scan");
+    assert_eq!(params, serde_json::json!({"device":"wifi0"}));
+    until(&mut runtime, |r| {
+        can(r, "network.scanning")
+            && !can(r, "network.scan_enabled")
+            && text(r, "network.scan_label") == "Scanning…"
+    })
+    .await;
+    // Asking again while it runs sends nothing.
+    runtime
+        .status
+        .as_ref()
+        .unwrap()
+        .network_scan(Arc::new(|| {}));
+    tokio::task::yield_now().await;
+    assert!(calls_rx.try_recv().is_err());
+    ret_tx.send(()).unwrap();
+    until(&mut runtime, |r| {
+        !can(r, "network.scanning") && can(r, "network.scan_enabled")
+    })
+    .await;
+    assert_eq!(text(&runtime, "network.link_message"), "");
     finish(runtime, script, client, lab).await
 }

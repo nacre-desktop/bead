@@ -1734,6 +1734,89 @@ async fn audio_from_the_daemon_is_live_choosable_and_addressed_by_node_name() {
     assert!((params["value"].as_f64().unwrap() - 0.125).abs() < 1e-9);
 }
 
+// B0086 (N0061): application streams are listed from the `audio` topic and addressed by their id.
+#[tokio::test(flavor = "current_thread")]
+async fn application_streams_list_with_linear_levels_and_call_the_stream_target() {
+    let mut data = busy_audio();
+    for (id, node) in [
+        (
+            "sink-input:7",
+            json!({"name": "Fixture player", "kind": "playback", "volume": 0.25, "muted": false,
+            "ready": true, "icon": "no-such-theme-icon-b0086"}),
+        ),
+        (
+            "source-output:3",
+            json!({"name": "", "kind": "capture", "volume": 1.0, "muted": true, "ready": true}),
+        ),
+        (
+            "sink-input:9",
+            json!({"name": "Not ready", "kind": "playback", "volume": 0.0, "muted": false, "ready": false}),
+        ),
+    ] {
+        data["nodes"]["order"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(id));
+        data["nodes"]["items"][id] = node;
+    }
+    let mut lab = lab_topics(&AUDIO_CALLS, &[("audio", data)]).await;
+    let control = control_with(&lab, 3).await;
+    settle(&control, &Stores::default()).await;
+    let rows = control.audio_streams();
+    // Devices are not streams; a stream that is not ready has no level to show.
+    assert_eq!(
+        rows.iter()
+            .map(|r| r["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["sink-input:7", "source-output:3"]
+    );
+    assert_eq!(rows[0]["label"], "Fixture player");
+    assert_eq!(
+        rows[0]["icon"], "",
+        "an icon the theme lacks falls back to the apps glyph"
+    );
+    assert_eq!(
+        (rows[0]["value"].clone(), rows[0]["status"].clone()),
+        (json!(25.), json!("25%"))
+    );
+    assert_eq!(rows[0]["enabled"], true);
+    assert_eq!(
+        (rows[1]["muted"].clone(), rows[1]["label"].clone()),
+        (json!(true), json!("Application"))
+    );
+    // Mute and volume name the stream target; the slider is linear (QML wrote the stream's own volume).
+    control.act("toggle:stream:sink-input:7");
+    assert_eq!(
+        call(&mut lab).await,
+        (
+            "audio.set_mute".into(),
+            json!({"target": "stream", "node": "sink-input:7", "muted": true})
+        )
+    );
+    settle(&control, &Stores::default()).await;
+    control.act("set:stream:source-output:3:40");
+    let (method, params) = call(&mut lab).await;
+    assert_eq!(method, "audio.set_volume");
+    assert_eq!(
+        (&params["target"], &params["node"]),
+        (&json!("stream"), &json!("source-output:3"))
+    );
+    assert!((params["value"].as_f64().unwrap() - 0.4).abs() < 1e-9);
+    settle(&control, &Stores::default()).await;
+    // Unknown or malformed stream ids send nothing.
+    for arg in [
+        "toggle:stream:sink-input:99",
+        "toggle:stream:sink:7",
+        "set:stream:sink-input:7;x:50",
+        "set:stream:sink-input:7:nan",
+        "toggle:stream:alsa_output.fake",
+    ] {
+        control.act(arg);
+    }
+    settle(&control, &Stores::default()).await;
+    assert!(lab.calls.try_recv().is_err());
+}
+
 #[test]
 fn audio_that_is_not_ready_or_unavailable_has_no_tiles() {
     let sources = |audio: Json| {

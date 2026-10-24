@@ -23,8 +23,7 @@ use tokio::{
 
 mod connection;
 mod leases;
-#[cfg(test)]
-use leases::LeasedTopic;
+pub(crate) use leases::LeasedTopic;
 
 type Action = Arc<dyn Fn(String, Value) -> source::Reply<'static> + Send + Sync>;
 type Event = Arc<dyn Fn(&Message) + Send + Sync>;

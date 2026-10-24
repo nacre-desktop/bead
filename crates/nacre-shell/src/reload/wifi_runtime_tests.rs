@@ -577,7 +577,7 @@ fn switch_rect(scene: &bead::render::Scene) -> bead::render::Rect {
         .expect("controlled template renders the switch geometry")
 }
 
-fn isolate_runtime(runtime: &mut Runtime, recovery: &Path) {
+pub(super) fn isolate_runtime(runtime: &mut Runtime, recovery: &Path) {
     runtime.state_file = None;
     runtime.session.restore_on_start(BTreeMap::new());
     runtime.session.enable_recovery(recovery.into());

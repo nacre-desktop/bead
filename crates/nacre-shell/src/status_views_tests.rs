@@ -1225,10 +1225,6 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
             "audio.input_device".into(),
             Value::Text("Microphone unavailable".into()),
         ),
-        (
-            "audio.streams".into(),
-            Value::list(Vec::<serde_json::Value>::new()),
-        ),
     ]);
     let h = Harness::load(
         &root(),
@@ -1673,5 +1669,85 @@ fn battery_popout_shows_the_degradation_reason_until_a_message_replaces_it() -> 
     };
     assert!(line("")?);
     assert!(!line("Request failed")?);
+    Ok(())
+}
+
+/// B0086 goldens: the sound popout with application cards and a live microphone meter, and the
+/// network popout with Scan networks enabled.
+#[test]
+fn sound_streams_and_network_scan_have_goldens_at_both_scales() -> Result<()> {
+    let _ = crate::i18n::tr("bead.panel.audio-input-level", &[]);
+    let streams = Value::list(vec![
+        serde_json::json!({"id":"sink-input:7","label":"Fixture player","icon":"","value":65.0,"status":"65%","muted":false,"enabled":true}),
+        serde_json::json!({"id":"source-output:3","label":"Fixture recorder","icon":"","value":30.0,"status":"30%","muted":true,"enabled":true}),
+    ]);
+    let sound = BTreeMap::from([
+        ("panel.open".into(), Value::Bool(true)),
+        ("view.duration".into(), Value::Number(0.23)),
+        ("status.device".into(), Value::Text("Speakers".into())),
+        (
+            "audio.input_device".into(),
+            Value::Text("Microphone".into()),
+        ),
+        ("cc.streams".into(), streams),
+        ("audio.peak".into(), Value::Number(0.6)),
+        ("audio.peak_on".into(), Value::Bool(true)),
+    ]);
+    let mut scan = with_flow_stores(BTreeMap::from([
+        ("view.edge".into(), Value::Text("top".into())),
+        ("panel.open".into(), Value::Bool(true)),
+        ("status.ready".into(), Value::Bool(true)),
+        ("status.active".into(), Value::Bool(true)),
+        ("status.heading".into(), Value::Text("Network".into())),
+        ("status.icon".into(), Value::Text("wifi".into())),
+        ("status.primary".into(), Value::Text("Home".into())),
+        ("status.secondary".into(), Value::Text("Wi-Fi on".into())),
+        ("status.detail".into(), Value::Text(String::new())),
+        ("network.wifi_checked".into(), Value::Bool(true)),
+        ("network.wifi_enabled".into(), Value::Bool(true)),
+        ("network.wifi_busy".into(), Value::Bool(false)),
+        ("network.wifi_message".into(), Value::Text(String::new())),
+        ("network.rows".into(), Value::list(Vec::new())),
+        ("network.height".into(), Value::Number(262.)),
+        ("network.link_visible".into(), Value::Bool(false)),
+        ("network.link_message".into(), Value::Text(String::new())),
+    ]));
+    scan.extend([
+        ("network.scan_enabled".into(), Value::Bool(true)),
+        (
+            "network.scan_label".into(),
+            Value::Text("Scan networks".into()),
+        ),
+    ]);
+    for (name, file, stores, width, height) in [
+        ("sound-streams", "sound/core.luau", sound, 420u32, 640u32),
+        ("network-scan", "status/network.luau", scan, 380, 400),
+    ] {
+        for scale in [1., 1.5] {
+            let mut h = Harness::load(
+                &root(),
+                Path::new(file),
+                &root().join("palette.json"),
+                stores.clone(),
+                Config {
+                    width,
+                    height,
+                    scale,
+                },
+            )?;
+            let frame = h.render()?;
+            let golden = root()
+                .join("tests/goldens")
+                .join(format!("{name}-{scale}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                Default::default(),
+                &std::env::temp_dir().join(format!("bead-{name}-{scale}-diff")),
+            )?;
+        }
+    }
     Ok(())
 }

@@ -13,6 +13,7 @@ use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 mod devices;
 mod join;
 mod pairing;
+mod scan;
 pub(crate) use join::SECRET_STORE;
 use join::{Page, Prompt, Reprompt};
 pub(crate) use pairing::SECRET_STORE as BLUETOOTH_SECRET_STORE;
@@ -71,11 +72,28 @@ pub struct Status {
     last_good: RefCell<Option<BTreeMap<String, Value>>>,
     wifi_control: Option<RefCell<WifiControl>>,
     bluetooth_control: Option<RefCell<BluetoothControl>>,
+    /// The microphone meter's lease (audio view only), see [`Peak`].
+    peak: Option<Peak>,
+}
+type Wake = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
+/// B0086: the `audio.peak` lease (N0061). The daemon captures the microphone for as long as it
+/// is held, so it exists only while the audio view is shown and the default input is live.
+struct Peak {
+    client: crate::nacre_source::Client,
+    notify: RefCell<Option<Wake>>,
+    held: RefCell<Option<Held>>,
+}
+struct Held {
+    topic: crate::nacre_source::LeasedTopic,
+    /// Absent until the view has given its wake-up (`Status::subscribe`).
+    wake: Option<source::Subscription>,
 }
 struct WifiControl {
     client: crate::nacre_source::Client,
     pending: Option<(String, crate::nacre_source::CallTicket)>,
     link: Option<LinkOp>,
+    /// `network.scan` in flight (B0086): the reply arrives when the scan has finished.
+    scan: Option<crate::nacre_source::CallTicket>,
     link_message: Option<String>,
     message: Option<String>,
     last_boot: Option<String>,
@@ -157,6 +175,7 @@ impl Status {
             last_good: RefCell::new(None),
             wifi_control: None,
             bluetooth_control: None,
+            peak: None,
         }
     }
     pub fn core_network(source: Arc<dyn Source>) -> Self {
@@ -167,6 +186,7 @@ impl Status {
             last_good: RefCell::new(None),
             wifi_control: None,
             bluetooth_control: None,
+            peak: None,
         }
     }
     pub fn core_network_control(
@@ -182,6 +202,7 @@ impl Status {
                 client,
                 pending: None,
                 link: None,
+                scan: None,
                 link_message: None,
                 message: None,
                 last_boot: None,
@@ -193,6 +214,7 @@ impl Status {
                 confirm_timeout: join::CONFIRM_TIMEOUT,
             })),
             bluetooth_control: None,
+            peak: None,
         }
     }
     pub fn core_bluetooth(source: Arc<dyn Source>) -> Self {
@@ -203,6 +225,7 @@ impl Status {
             last_good: RefCell::new(None),
             wifi_control: None,
             bluetooth_control: None,
+            peak: None,
         }
     }
     pub fn core_bluetooth_control(
@@ -227,6 +250,7 @@ impl Status {
                 scan_owned: None,
                 link: None,
             })),
+            peak: None,
         }
     }
     pub fn core_battery(source: Arc<dyn Source>) -> Self {
@@ -237,6 +261,60 @@ impl Status {
             last_good: RefCell::new(None),
             wifi_control: None,
             bluetooth_control: None,
+            peak: None,
+        }
+    }
+    /// The audio view with the microphone meter: `client` leases `audio.peak` while it is shown.
+    pub fn with_audio_peak(mut self, client: crate::nacre_source::Client) -> Self {
+        self.peak = Some(Peak {
+            client,
+            notify: RefCell::new(None),
+            held: RefCell::new(None),
+        });
+        self
+    }
+    /// Release the meter's capture (the view is hidden, or the microphone is not live).
+    pub fn park(&self) {
+        if let Some(peak) = &self.peak {
+            peak.held.borrow_mut().take();
+        }
+    }
+    /// Hold the `audio.peak` lease while `live`; returns the latest level, 0..1.
+    fn peak_level(&self, live: bool) -> f64 {
+        let Some(peak) = &self.peak else {
+            return 0.;
+        };
+        if !live {
+            self.park();
+            return 0.;
+        }
+        let mut held = peak.held.borrow_mut();
+        if held.is_none()
+            && let Ok(topic) = peak.client.lease_topic("audio.peak")
+        {
+            *held = Some(Held { topic, wake: None });
+        }
+        let Some(held) = held.as_mut() else {
+            return 0.;
+        };
+        if held.wake.is_none()
+            && let Some(notify) = peak.notify.borrow().clone()
+        {
+            held.wake = held
+                .topic
+                .subscribe(Arc::new(move |_| {
+                    notify(bead::wayland::UiEvent::Model(BTreeMap::new()))
+                }))
+                .ok();
+        }
+        let snapshot = held.topic.snapshot();
+        if snapshot.connected && snapshot.data["health"]["available"] == true {
+            snapshot.data["level"]
+                .as_f64()
+                .filter(|level| level.is_finite())
+                .map_or(0., |level| level.clamp(0., 1.))
+        } else {
+            0.
         }
     }
     pub fn core_audio(source: Arc<dyn Source>) -> Self {
@@ -247,12 +325,16 @@ impl Status {
             last_good: RefCell::new(None),
             wifi_control: None,
             bluetooth_control: None,
+            peak: None,
         }
     }
     pub fn subscribe(
         &self,
         notify: Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>,
     ) -> source::Result<source::Subscription> {
+        if let Some(peak) = &self.peak {
+            *peak.notify.borrow_mut() = Some(notify.clone());
+        }
         self.source.subscribe(Arc::new(move |_| {
             notify(bead::wayland::UiEvent::Model(BTreeMap::new()))
         }))
@@ -636,6 +718,7 @@ impl Status {
         {
             control.message = None;
             control.link_message = None;
+            control.scan = None;
             control.reset_flow();
         }
         if let Some(boot) = candidate.topic_boot.as_ref() {
@@ -822,6 +905,10 @@ impl Status {
             candidate.state.as_ref().filter(|_| candidate.fresh),
             &client,
         );
+        let scan = scan::project(
+            &mut control,
+            candidate.state.as_ref().filter(|_| candidate.fresh),
+        );
         let link_message = if link_busy {
             ""
         } else {
@@ -866,6 +953,7 @@ impl Status {
             ("network.link_message".into(), Value::Text(link_message)),
         ]);
         base.extend(forms);
+        base.extend(scan);
         base
     }
 
@@ -1096,28 +1184,22 @@ impl Status {
                     }
                 })
                 .unwrap_or_else(|| tr("bead.panel.audio-input-unavailable", &[]));
-            let streams = state
-                .nodes
-                .order
-                .iter()
-                .filter_map(|id| state.nodes.items.get(id).map(|node| (id, node)))
-                .filter(|(_, node)| {
-                    matches!(&node.kind, &AudioKind::Playback | &AudioKind::Capture)
-                })
-                .map(|(id, node)| {
-                    serde_json::json!({
-                        "id": id.0.clone(),
-                        "label": if node.name.trim().is_empty() {
-                            tr("bead.panel.audio-application", &[])
-                        } else {
-                            line(&node.name, 40)
-                        },
-                    })
-                })
-                .collect::<Vec<_>>();
+            let live = state
+                .default_input
+                .as_ref()
+                .and_then(|id| state.nodes.items.get(id))
+                .is_some_and(|node| {
+                    node.ready
+                        && !node
+                            .readback
+                            .as_ref()
+                            .and_then(|reading| reading.muted)
+                            .unwrap_or(node.muted)
+                });
             display.insert("audio.input_device".into(), Value::Text(input));
-            display.insert("audio.streams".into(), Value::list(streams));
+            display.insert("audio.peak_on".into(), Value::Bool(live));
             *self.last_good.borrow_mut() = Some(display.clone());
+            display.insert("audio.peak".into(), Value::Number(self.peak_level(live)));
             return core_audio_values(display, true, &tr("bead.panel.audio-available", &[]));
         }
         let cached = self.last_good.borrow().clone();
@@ -1139,15 +1221,13 @@ impl Status {
                     "audio.input_device".into(),
                     Value::Text(tr("bead.panel.audio-input-unavailable", &[])),
                 ),
-                (
-                    "audio.streams".into(),
-                    Value::list(Vec::<serde_json::Value>::new()),
-                ),
                 ("audio.level".into(), Value::Number(0.0)),
                 ("audio.level_available".into(), Value::Bool(false)),
                 ("status.active".into(), Value::Bool(false)),
             ])
         });
+        display.insert("audio.peak_on".into(), Value::Bool(false));
+        display.insert("audio.peak".into(), Value::Number(self.peak_level(false)));
         display.insert("status.ready".into(), Value::Bool(false));
         display.insert(
             "status.health".into(),
@@ -1741,7 +1821,7 @@ fn audio_percent(perceptual: f64) -> Option<String> {
     let percent = perceptual * 100.0;
     percent.is_finite().then(|| format!("{percent:.0}%"))
 }
-fn line(text: &str, max: usize) -> String {
+pub(crate) fn line(text: &str, max: usize) -> String {
     let mut chars = text.chars().map(|c| if c.is_control() { ' ' } else { c });
     let mut out: String = chars.by_ref().take(max).collect();
     if chars.next().is_some() {

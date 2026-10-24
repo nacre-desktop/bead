@@ -57,9 +57,11 @@ for key,value in pairs({
     ["view.width"]=0,["view.height"]=0,["view.duration"]=0,
     ["network.health_message"]="",["network.secret"]="",["network.hidden_ssid"]="",["network.hidden_security"]="wpa_psk",["network.reveal"]=false,
     ["bluetooth.secret"]="",["bluetooth.reveal"]=false,["battery.level"]=0,
-    ["status.primary"]="",["status.secondary"]="",["status.detail"]="",["cc.audio_devices"]={},
+    ["status.primary"]="",["status.secondary"]="",["status.detail"]="",["cc.audio_devices"]={},["cc.streams"]={},
+    ["audio.peak"]=0,["audio.peak_on"]=false,
+    ["network.scan_enabled"]=false,["network.scanning"]=false,["network.scan_label"]="",
 }) do behavior.stores[key]=value end
-for _,name in ipairs({"network.toggle_wifi","network.connect","network.disconnect","network.open","network.cancel",
+for _,name in ipairs({"network.toggle_wifi","network.scan","network.connect","network.disconnect","network.open","network.cancel",
     "network.join","network.forget_ask","network.forget","bluetooth.toggle_power","bluetooth.pair","bluetooth.scan",
     "bluetooth.link","bluetooth.pair_respond","bluetooth.pair_cancel","bluetooth.pair_retry"}) do
     behavior.actions[name]=function(_) end

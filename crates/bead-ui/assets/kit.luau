@@ -312,8 +312,8 @@ return function(ui, tokens)
     function kit.Tooltip(p) return kit.Popover(props(p,{width=180,padding=tokens.spacing.sm})) end
     function kit.LevelMeter(p)
         local level=math.clamp(value(p.value,0),0,1)
-        return ui.Box{id=p.id,width=p.width or 160,height=p.height or 8,radius=tokens.radii.full,fill="surfaceContainerHigh",
-            ui.Box{id="level",width=(level*100).."%",height="100%",radius=tokens.radii.full,fill="primary"}}
+        return ui.Box{id=p.id,width=p.width or 160,height=p.height or 8,radius=tokens.radii.full,fill=p.track or "surfaceContainerHigh",aria_label=p.label,
+            ui.Box{id="level",width=(level*100).."%",height="100%",radius=tokens.radii.full,fill=p.ink or "primary"}}
     end
     -- Form kit (B0045). Generic rows over plain data; callers pass labels, values and
     -- ready-made actions, so no product or setting id lives here. Sizes and colours are tokens.

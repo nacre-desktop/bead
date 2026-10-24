@@ -25,6 +25,7 @@ local rows=get("network.rows")
 local can_hidden=get("network.can_hidden")
 local can_forget=get("network.can_forget")
 local can_more=can_hidden or can_forget
+local scan_on=get("network.scan_enabled")
 local adapter_text=not checked and (not enabled and ui.tr("bead.panel.network-no-adapter") or ui.tr("bead.panel.wifi-off")) or get("network.wifi_message")
 local adapter_note=kit.Paragraph{id="wifi-message",text=adapter_text,width=width-padding*2,font_size=BODY,color="onSurfaceVariant"}
 local health_text=get("network.health_message")
@@ -127,10 +128,11 @@ return panel(embedded,{id="status-popout",edge=get("view.edge"),
     ui.Row{id="wifi-row",width=width-padding*2,height=36,align="center",gap=T.spacing.md,
         ui.Text{id="wifi-label",visible=not embedded,text=ui.tr("bead.panel.wifi"),height=28,width=width-padding*2-T.spacing.xxl*2-T.spacing.md*2-T.spacing.huge*4,font_size=(T.text.body+1)*4/3,
             color=enabled and "onSurface" or "onSurfaceVariant"},
-        kit.Button{id="scan",width=T.spacing.huge*4,height=34,padding=0,radius=T.radii.full,fill=ui.alpha("surfaceContainerHigh",.4),
+        kit.Button{id="scan",width=T.spacing.huge*4,height=34,padding=0,radius=T.radii.full,fill=ui.alpha("surfaceContainerHigh",scan_on and 1 or .4),
+            aria_label=ui.bind("network.scan_label"),on_activate=scan_on and ui.action("network.scan") or nil,
             ui.Row{width=T.spacing.huge*4,height=34,gap=T.spacing.xs,align="center",justify="center",
-                ui.Text{text="refresh",family="Material Symbols Rounded",width=16,height=24,font_size=T.icons.small*4/3,color=ui.alpha("onSurface",.4)},
-                ui.Text{text=ui.tr("bead.panel.network-scan"),height=24,font_size=CAPTION,color=ui.alpha("onSurface",.4)}}},
+                ui.Text{text="refresh",family="Material Symbols Rounded",width=16,height=24,font_size=T.icons.small*4/3,color=ui.alpha("onSurface",scan_on and 1 or .4)},
+                ui.Text{text=ui.tr("bead.panel.network-scan"),height=24,font_size=CAPTION,color=ui.alpha("onSurface",scan_on and 1 or .4)}}},
         ui.Box{id="heading-space",visible=embedded,grow=1,height=1},
         kit.Switch{id="wifi-radio",checked=ui.bind("network.wifi_checked"),aria_label=ui.tr("bead.panel.wifi-radio"),
             on_activate=enabled and ui.action("network.toggle_wifi") or nil},
