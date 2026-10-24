@@ -25,22 +25,16 @@ def read_json(path):
 
 
 def summarize(root, compositors=COMPOSITORS, report_path=None, residency_path=None,
-              allow_27_compositors=(), relative_compositors=()):
+              relative_compositors=()):
     root = pathlib.Path(root)
     residency = load_residency(residency_path)
-    allow_27_compositors = set(allow_27_compositors)
     relative_compositors = set(relative_compositors)
-    assert allow_27_compositors <= set(compositors), \
-        "27 MiB allowance can only be granted to a compositor included in this summary"
     assert relative_compositors <= set(compositors), \
         "relative policy can only be selected for a compositor included in this summary"
-    assert not (allow_27_compositors & relative_compositors), \
-        "a compositor cannot use both the relative and absolute allowance policies"
     report_path = pathlib.Path(report_path or root / "batch-median-summary.json")
     report = {"complete": False, "compositors": list(compositors), "phases": {},
-              "allow_27_compositors": sorted(allow_27_compositors),
               "relative_compositors": sorted(relative_compositors),
-              "one_time_27_mib_report_used": False, "failures": []}
+              "failures": []}
     for compositor in compositors:
         if compositor not in COMPOSITORS:
             report["failures"].append(f"unknown compositor: {compositor}")
@@ -57,12 +51,9 @@ def summarize(root, compositors=COMPOSITORS, report_path=None, residency_path=No
                 control = [read_json(path) for path in control_paths]
                 candidate = [read_json(path) for path in candidate_paths]
                 decision = residency.summarize_batch_phase(
-                    control, candidate, relative_host=compositor in relative_compositors,
-                    allow_27_report=compositor in allow_27_compositors)
+                    control, candidate, relative_host=compositor in relative_compositors)
                 decision["control_raw"] = [str(path.relative_to(root)) for path in control_paths]
                 decision["candidate_raw"] = [str(path.relative_to(root)) for path in candidate_paths]
-                if decision["verdict"] == "PASS-one-time-27MiB-file-backed-report":
-                    report["one_time_27_mib_report_used"] = True
                 report["phases"][key] = decision
             except Exception as error:
                 report["phases"][key] = {"verdict": "STOP/report", "error": str(error),
@@ -86,14 +77,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=pathlib.Path, help="private root containing A1..A5/B1..B5")
     parser.add_argument("--compositors", nargs="+", choices=COMPOSITORS, default=COMPOSITORS)
-    parser.add_argument("--allow-27-compositor", nargs="*", choices=COMPOSITORS, default=(),
-                        help="apply the spec-agent-granted one-time allowance to all phases for these comparators")
     parser.add_argument("--relative-compositor", nargs="*", choices=COMPOSITORS, default=(),
                         help="use the same-host candidate-minus-control median gate for these comparators")
     parser.add_argument("--report", type=pathlib.Path)
     args = parser.parse_args()
     report = summarize(args.root, args.compositors, args.report,
-                       allow_27_compositors=args.allow_27_compositor,
                        relative_compositors=args.relative_compositor)
     print(json.dumps({"complete": report["complete"], "pass": report["pass"],
                       "phases": len(report["phases"]), "failures": report["failures"]}, sort_keys=True))

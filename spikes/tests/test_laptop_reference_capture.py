@@ -26,10 +26,11 @@ launcher_proof = load("launcher_proof_for_laptop_capture", ROOT / "spikes/launch
 
 def sample(total, anon=5.0, drm=None):
     drm = None if drm is False else ({"i915@0000:00:02.0/system": total - 20.0} if drm is None else drm)
-    return {"memory": {"pss_mib": 20.0, "swap_pss_mib": 0.0,
+    pss = anon + 14.0 + 1.0
+    return {"memory": {"pss_mib": pss, "swap_pss_mib": 0.0,
                         "pss_anon_mib": anon, "pss_file_mib": 14.0,
                         "pss_shmem_mib": 1.0},
-            "drm_mib": drm, "pss_plus_drm_mib": total, "seconds": 60.0}
+            "drm_mib": drm, "pss_plus_drm_mib": pss + sum((drm or {}).values()), "seconds": 60.0}
 
 
 class LaptopReferenceCaptureTests(unittest.TestCase):
@@ -167,7 +168,7 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             self.assertEqual(candidate_env["BEAD_DASHBOARD_FIXTURES"],
                              str(ROOT / "shell/tests/fixtures/dashboard"))
 
-    def make_batch(self, root, drm=True):
+    def make_batch(self, root, drm=True, candidate_anon=5.0):
         for compositor in ("niri",):
             for side in ("A", "B"):
                 for pair in range(1, 4):
@@ -190,7 +191,8 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
                         "runtime_has_no_group_or_other_access": True,
                         "wayland_socket_inside_private_runtime": True}))
                     value = 22.0 if side == "A" else 22.2
-                    row = sample(value, drm={"i915@0000:00:02.0/system": value - 20.0} if drm else False)
+                    row = sample(value, anon=candidate_anon if side == "B" else 5.0,
+                                 drm={"i915@0000:00:02.0/system": value - 20.0} if drm else False)
                     backend = {"requested": "production", "main_bar": "cpu",
                                "measured_process": "always-on-shell",
                                "opened_panel": "cpu", "gpu_libraries": [],
@@ -215,6 +217,33 @@ class LaptopReferenceCaptureTests(unittest.TestCase):
             for delta in phase["pairwise_total_deltas_mib"]:
                 self.assertAlmostEqual(delta, 0.2)
             self.assertTrue(all(item["pass"] for item in phase["close_checks"]))
+
+    def test_headline_is_unreclaimable_and_pss_is_information_only(self):
+        # PSS 20 MiB + DRM 2 MiB would have been 22; the gated number is anon 5 + shmem 1 + swap 0 + DRM 2 = 8.
+        self.assertAlmostEqual(capture.unreclaimable_mib(sample(22.0, drm={"gpu/system": 2.0})), 8.0)
+        with tempfile.TemporaryDirectory(prefix="bead-laptop-unreclaimable-") as temp:
+            root = pathlib.Path(temp)
+            self.make_batch(root)
+            phase = capture.summarize(root, ["niri"], rehearsal=False)["relative_deltas_mib"]["niri/never"]
+            self.assertAlmostEqual(phase["candidate_median_mib"], 8.2)
+            self.assertAlmostEqual(phase["candidate_pss_total_median_mib"], 22.2)
+            self.assertAlmostEqual(phase["candidate_clean_file_median_mib"], 14.0)
+            self.assertEqual(phase["verdict"], "PASS")
+
+    def test_unreclaimable_gate_and_stop_line(self):
+        self.assertEqual((capture.UNRECLAIMABLE_GATE_MIB, capture.UNRECLAIMABLE_STOP_MIB), (10.0, 9.5))
+        with tempfile.TemporaryDirectory(prefix="bead-laptop-over-gate-") as temp:
+            root = pathlib.Path(temp)
+            self.make_batch(root, candidate_anon=7.0)  # 7 + 1 + 2.2 = 10.2 MiB
+            report = capture.summarize(root, ["niri"], rehearsal=False)
+            self.assertEqual(report["absolute_verdict"], "INCOMPLETE / STOP")
+            self.assertIn("exceeds 10 MiB unreclaimable gate", report["failures"][0])
+        with tempfile.TemporaryDirectory(prefix="bead-laptop-stop-line-") as temp:
+            root = pathlib.Path(temp)
+            self.make_batch(root, candidate_anon=6.5)  # 9.7 MiB: under the gate, over the 9.5 stop line
+            report = capture.summarize(root, ["niri"], rehearsal=False)
+            self.assertEqual(report["absolute_verdict"], "INCOMPLETE / STOP")
+            self.assertIn("9.5 MiB stop line", report["failures"][0])
 
     def test_unknown_drm_never_passes_reference_absolute_gate(self):
         with tempfile.TemporaryDirectory(prefix="bead-laptop-drm-unknown-") as temp:

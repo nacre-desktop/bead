@@ -475,29 +475,6 @@ pub fn run_runtime(
             },
         )?;
     }
-    // Closed-idle reclamation of clean code and read-only data pages (see `code_pages`). The
-    // loop already wakes every second, so this adds no wakeups; open surfaces keep their pages.
-    loop_
-        .handle()
-        .insert_source(Timer::from_duration(Duration::from_secs(3)), |_, _, app| {
-            if app.window.is_none()
-                && app.overlay.is_none()
-                && app.panel_runtime.is_none()
-                && !app.panel_target
-            {
-                let started = Instant::now();
-                let bytes = code_pages::release();
-                static FIRST: std::sync::Once = std::sync::Once::new();
-                FIRST.call_once(|| {
-                    println!(
-                        "CODE_PAGES_RELEASED mapped_kib={} us={}",
-                        bytes / 1024,
-                        started.elapsed().as_micros()
-                    );
-                });
-            }
-            TimeoutAction::ToDuration(Duration::from_secs(3))
-        })?;
     let watchdog = bead_core::recovery::Watchdog::start(Duration::from_secs(6))?;
     // Five seconds stalled plus one dispatch interval of grace: sleeping is not
     // charged as a stall. No high-frequency heartbeat while idle.

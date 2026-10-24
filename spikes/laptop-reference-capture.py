@@ -31,6 +31,19 @@ MIB = 1024 * 1024
 GIB = 1024**3
 SWAP_LIMIT = 64 * MIB
 ARM_SECONDS = 60 + 65 + 85 + 105 + 95
+# Absolute laptop gate (owner 2026-10-24, B0081): UNRECLAIMABLE memory = anon + shmem + SwapPss + DRM, in MiB.
+# Clean file-backed pages (program text, rodata, fonts) stay in the page cache and are reclaimable, so PSS and
+# the clean-file share are reported as information columns, never gated.
+UNRECLAIMABLE_GATE_MIB = 10.0
+UNRECLAIMABLE_STOP_MIB = 9.5  # per-sample stop line: gate minus 0.5 MiB, as the old 25 / 24.5 pair
+
+
+def unreclaimable_mib(row: dict) -> float:
+    memory = row["memory"]
+    return (memory["pss_anon_mib"] + memory["pss_shmem_mib"] + memory["swap_pss_mib"]
+            + sum((row.get("drm_mib") or {}).values()))
+
+
 FROZEN_CONTROL_SHA256 = "b01dfccaac148b984a6e1089f7a54d41bced473455b3d41890d15ec074a8038b"
 FROZEN_FIXTURE_GIT_TREE = "51dbf56ff49bf55656d7f04257f532dde73ece47"
 
@@ -226,7 +239,7 @@ def validate_arm(raw_root: pathlib.Path, compositor: str, label: str) -> tuple[b
                    for row in panel_rows)):
         return False, "actual renderer backend is unknown for one or more measured samples"
     # The measured PID must be the always-on shell (bar + frame + lazy panels/overlays), never an
-    # `--app` process (Settings, sidebar, Colors, Welcome), whose memory is outside the 25 MiB target.
+    # `--app` process (Settings, sidebar, Colors, Welcome), whose memory is outside the unreclaimable-memory target.
     if any(not isinstance(row, dict) or row.get("measured_process") != "always-on-shell"
            for row in main_rows + panel_rows):
         return False, "measured process is not the always-on shell"
@@ -328,6 +341,8 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
                             memory["pss_mib"] + sum(row["drm_mib"].values()) - row["pss_plus_drm_mib"]) > 0.01:
                         raise RuntimeError("PSS plus DRM does not add up to the captured total")
                 def amount(row: dict) -> float:
+                    return unreclaimable_mib(row)
+                def pss_total(row: dict) -> float:
                     return row["memory"]["pss_mib"] + row["memory"]["swap_pss_mib"] + sum((row.get("drm_mib") or {}).values())
                 def median(rows: list[dict], field: str) -> float:
                     return statistics.median(row["memory"][field] for row in rows)
@@ -348,6 +363,10 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
                     "candidate_median_mib": candidate_total, "candidate_minus_control_mib": total_delta,
                     "control_pss_median_mib": control_pss, "candidate_pss_median_mib": candidate_pss,
                     "pss_delta_mib": candidate_pss - control_pss,
+                    "control_pss_total_median_mib": statistics.median(pss_total(row) for row in control),
+                    "candidate_pss_total_median_mib": statistics.median(pss_total(row) for row in candidate),
+                    "control_clean_file_median_mib": median(control, "pss_file_mib"),
+                    "candidate_clean_file_median_mib": median(candidate, "pss_file_mib"),
                     "control_drm_median_mib": control_drm, "candidate_drm_median_mib": candidate_drm,
                     "anonymous_delta_mib": anon_delta, "file_delta_mib": file_delta,
                     "shmem_delta_mib": shmem_delta,
@@ -357,8 +376,9 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
                     "drm_attribution": "unknown" if drm_unknown else "measured",
                     "gpu_paths": sorted({key.split("/", 1)[0] for row in all_rows
                                           for key in (row.get("drm_mib") or {})}),
-                    "measurement_basis": "PSS + SwapPss only; DRM unknown" if drm_unknown else "PSS + per-client DRM + SwapPss",
-                    "absolute_total_definition": "PSS + per-client DRM fdinfo + SwapPss",
+                    "measurement_basis": "unreclaimable (anon + shmem + SwapPss), DRM unknown" if drm_unknown else "unreclaimable (anon + shmem + SwapPss + per-client DRM)",
+                    "absolute_total_definition": "Pss_Anon + Pss_Shmem + SwapPss + per-client DRM fdinfo",
+                    "information_columns": "pss_mib, pss_file_mib (clean file-backed), pss_total (PSS + DRM + SwapPss)",
                 }
                 gate_failures = []
                 if not rehearsal:
@@ -368,10 +388,10 @@ def summarize(raw_root: pathlib.Path, compositors: list[str], rehearsal: bool) -
                         gate_failures.append("SwapPss was nonzero")
                     if drm_unknown:
                         gate_failures.append("DRM fdinfo unavailable; absolute reference gate cannot pass")
-                    if candidate_total > 25:
-                        gate_failures.append(f"candidate median {candidate_total:.3f} MiB exceeds 25 MiB absolute gate")
-                    if not drm_unknown and any(amount(row) >= 24.5 for row in candidate):
-                        gate_failures.append("candidate arm reached the 24.5 MiB stop line")
+                    if candidate_total > UNRECLAIMABLE_GATE_MIB:
+                        gate_failures.append(f"candidate median {candidate_total:.3f} MiB exceeds {UNRECLAIMABLE_GATE_MIB:g} MiB unreclaimable gate")
+                    if not drm_unknown and any(amount(row) >= UNRECLAIMABLE_STOP_MIB for row in candidate):
+                        gate_failures.append(f"candidate arm reached the {UNRECLAIMABLE_STOP_MIB:g} MiB stop line")
                     if anon_delta > 1:
                         gate_failures.append(f"candidate anonymous growth {anon_delta:.3f} MiB exceeds 1 MiB")
                     phase_report["verdict"] = "STOP" if gate_failures else "PASS"

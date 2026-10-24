@@ -3,7 +3,6 @@
 mod accessibility;
 mod background;
 mod clipboard;
-mod code_pages;
 mod decorations;
 mod edges;
 mod hidden;

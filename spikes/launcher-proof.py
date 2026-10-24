@@ -60,12 +60,17 @@ def renderer_evidence(pid, log, requested, panel_active=False):
     argv=[arg for arg in argv if arg]
     return classify_renderer(argv,maps,log.read_text(errors='replace'),requested,panel_active)
 
+def unreclaimable(row):
+    """B0081 headline: anon + shmem + SwapPss + DRM (PSS and clean file-backed are information only)."""
+    m=row['memory']
+    return m['pss_anon_mib']+m['pss_shmem_mib']+m['swap_pss_mib']+sum((row.get('drm_mib') or {}).values())
+
 SEPARATE_PROCESS_FLAGS = ('--app', '--ui', '--audio-panel', '--notification-bus', '--backend-probe')
 
 def measured_process_kind(argv):
     """The memory gate measures the always-on shell only: `nacre-shell --bar --core-views ...`
     (bar, frame, lazy panels, notices/OSD overlay). Settings, sidebar, Colors and Welcome run as
-    separate `--app` processes and are not part of the 25 MiB target; any other argv is refused."""
+    separate `--app` processes and are not part of the unreclaimable-memory target; any other argv is refused."""
     exe = pathlib.Path(argv[0]).name if argv else ''
     if exe != 'nacre-shell' or '--bar' not in argv[1:] or '--core-views' not in argv[1:]:
         return 'not-always-on-shell'
@@ -260,8 +265,8 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             if os.environ.get('BEAD_REFERENCE_ABSOLUTE_GATE')=='1':
                 if bar.get('drm_mib') is None:
                     raise RuntimeError('reference baseline lacks DRM fdinfo; absolute laptop verdict is unavailable')
-                if bar['pss_plus_drm_mib']+bar['memory']['swap_pss_mib']>=24.5:
-                    raise RuntimeError('reference baseline reached the 24.5 MiB stop line')
+                if unreclaimable(bar)>=9.5:
+                    raise RuntimeError('reference baseline reached the 9.5 MiB unreclaimable stop line')
             result['bar']=bar
             assert bar['memory']['swap_pss_mib']==0,'nonzero UI SwapPss in bar baseline'
             if observe:bar['external']=observe()
@@ -491,7 +496,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 result['settled_closed']=sample
                 (raw/'settled-closed.json').write_text(json.dumps(sample,indent=2)+'\n')
                 budget(sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib'],bar['pss_plus_drm_mib']+5,'settled UI exceeds bar+5 MiB')
-                budget(sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib'],25,'settled UI exceeds owner25MiB ceiling')
+                budget(unreclaimable(sample),10,'settled UI exceeds the 10 MiB unreclaimable ceiling')
                 baseline=bar['pss_plus_drm_mib']+bar['memory']['swap_pss_mib']+bar['external']['pss_plus_drm_swap_mib']
                 total=sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']+sample['external']['pss_plus_drm_swap_mib']
                 budget(total,baseline+5,'settled UI + daemon/workers exceeds matched bar group+5 MiB')

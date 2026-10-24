@@ -295,21 +295,25 @@ class CaptureWindowTests(unittest.TestCase):
             popen.assert_not_called()
 
     def test_close_swap_and_memory_rails_still_fail(self):
-        bar = {"pss_plus_drm_mib": 20, "memory": {"swap_pss_mib": 0}}
+        def row(unreclaimable, swap=0):
+            return {"drm_mib": None, "memory": {"swap_pss_mib": swap, "pss_anon_mib": unreclaimable - swap - 1.0,
+                                                  "pss_shmem_mib": 1.0, "pss_mib": 20.0, "pss_file_mib": 12.0}}
+        total = residency.unreclaimable_total
+        bar = row(6)
         external = {"processes": [{"memory": {"swap_pss_mib": 0}}]}
-        total = lambda row: row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
-        good = {"pss_plus_drm_mib": 24, "memory": {"swap_pss_mib": 0}}
+        good = row(8)
         residency.assert_capture_rails(good, bar, external, total)
         with self.assertRaisesRegex(AssertionError, "UI swap"):
-            residency.assert_capture_rails({**good, "memory": {"swap_pss_mib": 1}}, bar, external, total)
+            residency.assert_capture_rails({**good, "memory": {**good["memory"], "swap_pss_mib": 1}}, bar, external, total)
         daemon_swap = {"processes": [{"memory": {"swap_pss_mib": 1}}]}
         with self.assertRaisesRegex(AssertionError, "daemon swap"):
             residency.assert_capture_rails(good, bar, daemon_swap, total)
         with self.assertRaisesRegex(AssertionError, r"bar\+5"):
-            residency.assert_capture_rails({**good, "pss_plus_drm_mib": 26}, bar, external, total)
-        near_ceiling_bar = {"pss_plus_drm_mib": 22, "memory": {"swap_pss_mib": 0}}
+            residency.assert_capture_rails(row(11.5), row(6), external, total)
         with self.assertRaisesRegex(AssertionError, "hard ceiling"):
-            residency.assert_capture_rails({**good, "pss_plus_drm_mib": 26}, near_ceiling_bar, external, total)
+            residency.assert_capture_rails(row(10.5), row(9), external, total)
+        # High PSS from clean file-backed pages is information only: 20 MiB of PSS passes.
+        self.assertEqual(total(good), 8.0)
 
     def test_batch_median_mode_is_explicit_and_legacy_remains_strict(self):
         self.assertIsNone(residency.acceptance_config({}))
@@ -330,163 +334,115 @@ class CaptureWindowTests(unittest.TestCase):
         self.assertFalse(residency.acceptance_config({**env, "BEAD_DASHBOARD_BATCH_MEDIANS": "0"})["batch_medians"])
         self.assertEqual(residency.acceptance_config({**env, "BEAD_DASHBOARD_BATCH_MEDIANS": "0"})["warmup_seconds"], 600)
 
-    def test_batch_median_gates_attribution_and_ignores_one_high_arm(self):
-        def row(total, anon=5.0, file=8.0, shmem=1.0, drm=None):
-            pss = anon + file + shmem
-            if drm is None:
-                drm = total - pss
-            return {"pss_plus_drm_mib": total, "drm_mib": {"buffer": drm},
-                    "memory": {"pss_mib": pss, "swap_pss_mib": 0.0,
-                               "pss_anon_mib": anon, "pss_file_mib": file,
-                               "pss_shmem_mib": shmem}}
-        control = [row(24.0) for _ in range(5)]
-        candidate = [row(24.9), row(25.0, file=9.0),
-                     row(25.0, file=9.0), row(25.0, file=9.0), row(27.5, file=11.5)]
-        summary = residency.summarize_batch_phase(control, candidate, allow_27_report=True)
-        self.assertEqual(summary["candidate_total_median_mib"], 25.0)
-        self.assertEqual(summary["total_delta_median_mib"], 1.0)
-        self.assertEqual(summary["category_delta_medians_mib"]["pss_file_mib"], 1.0)
-        self.assertEqual(summary["category_medians_mib"]["control"]["pss_file_mib"], 8.0)
-        self.assertEqual(summary["verdict"], "PASS-one-time-27MiB-file-backed-report")
-        self.assertEqual(summary["candidate_range_mib"], [24.9, 27.5])
+    def test_batch_median_gates_unreclaimable_and_ignores_one_high_arm(self):
+        def row(unreclaimable, anon=5.0, file=14.0, shmem=1.0):
+            drm = unreclaimable - anon - shmem
+            return {"pss_plus_drm_mib": anon + file + shmem + drm, "drm_mib": {"buffer": drm},
+                    "memory": {"pss_mib": anon + file + shmem, "swap_pss_mib": 0.0,
+                               "pss_anon_mib": anon, "pss_file_mib": file, "pss_shmem_mib": shmem}}
+        control = [row(8.0) for _ in range(5)]
+        candidate = [row(8.2), row(8.3), row(8.3), row(8.3), row(12.0)]
+        summary = residency.summarize_batch_phase(control, candidate)
+        self.assertEqual(summary["verdict"], "PASS")
+        self.assertAlmostEqual(summary["candidate_total_median_mib"], 8.3)
+        self.assertAlmostEqual(summary["total_delta_median_mib"], 0.3)
+        self.assertEqual(summary["candidate_range_mib"], [8.2, 12.0])
         self.assertEqual(summary["drm_attribution"], "measured")
-        self.assertEqual(residency.summarize_batch_phase(control, [row(24.5, file=8.5) for _ in range(5)])["verdict"], "PASS")
+        # PSS is reported next to it but never gated: 14 MiB of clean file pages do not matter.
+        self.assertEqual(summary["candidate_pss_median_mib"], 20.0)
+        self.assertEqual(summary["category_medians_mib"]["control"]["pss_file_mib"], 14.0)
+        self.assertEqual(residency.summarize_batch_phase(
+            control, [row(8.0, file=30.0) for _ in range(5)])["verdict"], "PASS")
+        # The 10 MiB gate is inclusive.
+        self.assertEqual(residency.summarize_batch_phase(control, [row(10.0) for _ in range(5)])["verdict"], "PASS")
+        with self.assertRaisesRegex(AssertionError, "10 MiB unreclaimable"):
+            residency.summarize_batch_phase(control, [row(10.0001) for _ in range(5)])
         with self.assertRaisesRegex(AssertionError, "anonymous growth"):
-            residency.summarize_batch_phase(control, [row(25.1, anon=6.1, file=8.0) for _ in range(5)])
-        with self.assertRaisesRegex(AssertionError, "file-backed PSS within 0.05"):
-            residency.summarize_batch_phase(control, [row(25.0, file=8.0) for _ in range(5)],
-                                            allow_27_report=True)
-        # The 0.05 MiB unexplained remainder boundary is inclusive.
-        boundary_control = [row(24.0) for _ in range(5)]
-        boundary_candidate = [row(25.0, file=8.95) for _ in range(5)]
-        boundary = residency.summarize_batch_phase(boundary_control, boundary_candidate, allow_27_report=True)
-        self.assertAlmostEqual(boundary["unexplained_increase_median_mib"], 0.05)
-        self.assertEqual(boundary["verdict"], "PASS-one-time-27MiB-file-backed-report")
-        over_boundary = [row(25.0, file=8.949) for _ in range(5)]
-        with self.assertRaisesRegex(AssertionError, "within 0.05"):
-            residency.summarize_batch_phase(boundary_control, over_boundary, allow_27_report=True)
-        # The 26.5 MiB candidate ceiling is inclusive; above it always stops.
-        at_ceiling = [row(26.5, anon=5.0, file=20.5) for _ in range(5)]
-        self.assertEqual(residency.summarize_batch_phase(control, at_ceiling, allow_27_report=True)["verdict"],
-                         "PASS-one-time-27MiB-file-backed-report")
-        with self.assertRaisesRegex(AssertionError, "26.5 MiB"):
-            residency.summarize_batch_phase(control, [row(26.5001, anon=5.0, file=20.5001) for _ in range(5)],
-                                            allow_27_report=True)
-        with self.assertRaisesRegex(AssertionError, "below 1 MiB"):
-            residency.summarize_batch_phase(control, [row(25.0, anon=6.0, file=8.0) for _ in range(5)],
-                                            allow_27_report=True)
-        with self.assertRaisesRegex(AssertionError, "one-time allowance"):
-            residency.summarize_batch_phase(control, candidate, allow_27_report=False)
+            residency.summarize_batch_phase(control, [row(8.0, anon=6.1) for _ in range(5)])
         with self.assertRaisesRegex(AssertionError, "exactly five"):
             residency.summarize_batch_phase(control[:4], candidate[:4])
 
     def test_batch_median_keeps_missing_drm_unknown_and_rejects_bad_values(self):
         base = {"pss_plus_drm_mib": 24.0, "drm_mib": None,
-                "memory": {"pss_mib": 24.0, "swap_pss_mib": 0.0, "pss_anon_mib": 8.0,
-                           "pss_file_mib": 12.0, "pss_shmem_mib": 4.0}}
+                "memory": {"pss_mib": 24.0, "swap_pss_mib": 0.0, "pss_anon_mib": 6.0,
+                           "pss_file_mib": 17.0, "pss_shmem_mib": 1.0}}
         summary = residency.summarize_batch_phase([base.copy() for _ in range(5)], [base.copy() for _ in range(5)])
         self.assertEqual(summary["drm_attribution"], "unknown")
         self.assertIsNone(summary["control_drm_median_mib"])
-        higher = {**base, "pss_plus_drm_mib": 25.0,
-                  "memory": {**base["memory"], "pss_mib": 25.0, "pss_file_mib": 13.0}}
-        summary = residency.summarize_batch_phase([base.copy() for _ in range(5)], [higher.copy() for _ in range(5)],
-                                                  allow_27_report=True)
-        self.assertEqual(summary["verdict"], "PASS-one-time-27MiB-file-backed-report")
-        self.assertEqual(summary["drm_attribution"], "unknown")
-        self.assertIsNone(summary["candidate_drm_median_mib"])
-        self.assertEqual(summary["unexplained_increase_median_mib"], 0.0)
+        self.assertEqual(summary["candidate_total_median_mib"], 7.0)
+        self.assertEqual(summary["verdict"], "PASS")
+        self.assertIn("DRM unknown", summary["total_metric_basis"])
         bad = {**base, "memory": {**base["memory"], "pss_file_mib": float("nan")}}
         with self.assertRaisesRegex(AssertionError, "invalid or negative"):
             residency.summarize_batch_phase([base.copy() for _ in range(5)], [bad.copy() for _ in range(5)])
 
     def test_relative_host_gate_uses_control_delta_and_preserves_unknown_drm(self):
-        def row(total, anon=5.0, shmem=1.0, drm=None):
-            file = total - anon - shmem
-            return {"pss_plus_drm_mib": total, "drm_mib": drm,
-                    "memory": {"pss_mib": total, "swap_pss_mib": 0.0,
-                               "pss_anon_mib": anon, "pss_file_mib": file,
-                               "pss_shmem_mib": shmem}}
+        def row(anon, shmem=1.0, file=17.0):
+            return {"pss_plus_drm_mib": anon + shmem + file, "drm_mib": None,
+                    "memory": {"pss_mib": anon + shmem + file, "swap_pss_mib": 0.0,
+                               "pss_anon_mib": anon, "pss_file_mib": file, "pss_shmem_mib": shmem}}
 
-        control = [row(26.5) for _ in range(5)]
-        at_limit = [row(27.0) for _ in range(5)]
-        summary = residency.summarize_batch_phase(control, at_limit, relative_host=True)
-        self.assertEqual(summary["candidate_total_median_mib"], 27.0)
+        control = [row(6.0) for _ in range(5)]  # 7.0 MiB unreclaimable
+        summary = residency.summarize_batch_phase(control, [row(6.5) for _ in range(5)], relative_host=True)
+        self.assertEqual(summary["candidate_total_median_mib"], 7.5)
         self.assertEqual(summary["total_delta_median_mib"], 0.5)
         self.assertEqual(summary["verdict"], "PASS-relative-control")
         self.assertEqual(summary["drm_attribution"], "unknown")
         self.assertIsNone(summary["control_drm_median_mib"])
-        self.assertEqual(summary["total_metric_basis"], "PSS only; DRM unknown and excluded")
-
-        below_limit = [row(26.99) for _ in range(5)]
-        self.assertEqual(residency.summarize_batch_phase(control, below_limit, relative_host=True)["verdict"],
-                         "PASS-relative-control")
-        decreased = [row(26.0) for _ in range(5)]
-        self.assertEqual(residency.summarize_batch_phase(control, decreased, relative_host=True)["verdict"],
-                         "PASS-relative-control")
-        over_limit = [row(27.0001) for _ in range(5)]
+        self.assertIn("DRM unknown", summary["total_metric_basis"])
+        # More clean file-backed PSS (the old trick gone) is not a regression.
+        self.assertEqual(residency.summarize_batch_phase(control, [row(6.0, file=30.0) for _ in range(5)],
+                                                         relative_host=True)["verdict"], "PASS-relative-control")
+        self.assertEqual(residency.summarize_batch_phase(control, [row(5.0) for _ in range(5)],
+                                                         relative_host=True)["verdict"], "PASS-relative-control")
         with self.assertRaisesRegex(AssertionError, "relative limit"):
-            residency.summarize_batch_phase(control, over_limit, relative_host=True)
+            residency.summarize_batch_phase(control, [row(6.5001) for _ in range(5)], relative_host=True)
 
-        anon_at_limit = [row(26.5, anon=6.0) for _ in range(5)]
-        self.assertEqual(residency.summarize_batch_phase(control, anon_at_limit, relative_host=True)["verdict"],
-                         "PASS-relative-control")
-        anon_over = [row(26.5, anon=6.0001) for _ in range(5)]
-        with self.assertRaisesRegex(AssertionError, "anonymous growth"):
-            residency.summarize_batch_phase(control, anon_over, relative_host=True)
-
-    def test_batch_summary_collects_all_phases_and_uses_27_mib_once(self):
+    def test_batch_summary_collects_all_phases_on_unreclaimable(self):
         import tempfile
-        def row(total, file):
-            anon, shmem = 5.0, 1.0
-            pss = anon + file + shmem
-            return {"pss_plus_drm_mib": total, "drm_mib": {"buffer": total - pss},
-                    "memory": {"pss_mib": pss, "swap_pss_mib": 0.0, "pss_anon_mib": anon,
+        def row(anon, file):
+            shmem = 1.0
+            return {"pss_plus_drm_mib": anon + file + shmem, "drm_mib": None,
+                    "memory": {"pss_mib": anon + file + shmem, "swap_pss_mib": 0.0, "pss_anon_mib": anon,
                                "pss_file_mib": file, "pss_shmem_mib": shmem}}
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             for compositor in batch_summary.COMPOSITORS:
                 for pair in range(1, 6):
-                    for arm, total, file in (("A", 24.0, 8.0), ("B", 24.5, 8.5)):
+                    for arm, base_anon, file in (("A", 5.0, 18.0), ("B", 5.2, 19.0)):
                         for phase in batch_summary.PHASES:
-                            value, file_value = total, file
-                            if compositor == "hyprland" and phase == "never-opened" and arm == "B":
-                                value, file_value = 25.0, 9.0
-                            if compositor == "hyprland" and phase == "opened-once" and arm == "B":
-                                value, file_value = 25.2, 9.2
-                            if compositor == "niri" and phase == "opened-once" and arm == "B":
-                                value, file_value = 26.0, 10.0
+                            anon = base_anon
+                            if compositor == "niri" and phase == "opened-once":
+                                anon = 9.5  # 10.5 MiB unreclaimable in both arms: over the gate
                             folder = root / f"{arm}{pair}" / compositor
                             folder.mkdir(parents=True, exist_ok=True)
-                            (folder / f"{phase}.json").write_text(json.dumps(row(value, file_value)))
+                            (folder / f"{phase}.json").write_text(json.dumps(row(anon, file)))
             output = root / "summary.json"
-            report = batch_summary.summarize(root, report_path=output,
-                                             allow_27_compositors=("hyprland",))
+            report = batch_summary.summarize(root, report_path=output)
             self.assertTrue(report["complete"])
             self.assertFalse(report["pass"])
-            self.assertTrue(report["one_time_27_mib_report_used"])
             self.assertEqual(len(report["phases"]), 8)
-            self.assertEqual(report["phases"]["hyprland/opened-once"]["verdict"],
-                             "PASS-one-time-27MiB-file-backed-report")
-            self.assertIn("one-time allowance", report["phases"]["niri/opened-once"]["error"])
+            self.assertEqual(report["phases"]["hyprland/opened-once"]["verdict"], "PASS")
+            self.assertIn("10 MiB unreclaimable", report["phases"]["niri/opened-once"]["error"])
             self.assertTrue(output.is_file())
             self.assertEqual(json.loads(output.read_text())["phases"], report["phases"])
 
     def test_batch_summary_selects_relative_policy_only_for_desktop_compositor(self):
         import tempfile
-        def row(total):
-            anon, shmem = 5.0, 1.0
-            return {"pss_plus_drm_mib": total, "drm_mib": None,
-                    "memory": {"pss_mib": total, "swap_pss_mib": 0.0, "pss_anon_mib": anon,
-                               "pss_file_mib": total - anon - shmem, "pss_shmem_mib": shmem}}
+        def row(anon):
+            shmem, file = 1.0, 18.0
+            return {"pss_plus_drm_mib": anon + shmem + file, "drm_mib": None,
+                    "memory": {"pss_mib": anon + shmem + file, "swap_pss_mib": 0.0, "pss_anon_mib": anon,
+                               "pss_file_mib": file, "pss_shmem_mib": shmem}}
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             for compositor in batch_summary.COMPOSITORS:
                 for pair in range(1, 6):
-                    for arm, total in (("A", 26.0), ("B", 26.5)):
+                    for arm, anon in (("A", 10.0), ("B", 10.4)):
                         folder = root / f"{arm}{pair}" / compositor
                         folder.mkdir(parents=True, exist_ok=True)
                         for phase in batch_summary.PHASES:
-                            (folder / f"{phase}.json").write_text(json.dumps(row(total)))
+                            (folder / f"{phase}.json").write_text(json.dumps(row(anon)))
             report = batch_summary.summarize(root, relative_compositors=("hyprland",),
                                              report_path=root / "relative-summary.json")
         self.assertTrue(report["complete"])
@@ -494,22 +450,22 @@ class CaptureWindowTests(unittest.TestCase):
                             for phase in batch_summary.PHASES))
         self.assertTrue(all(report["phases"][f"hyprland/{phase}"]["drm_attribution"] == "unknown"
                             for phase in batch_summary.PHASES))
-        self.assertTrue(all("one-time allowance" in report["phases"][f"niri/{phase}"]["error"]
+        self.assertTrue(all("10 MiB unreclaimable" in report["phases"][f"niri/{phase}"]["error"]
                             for phase in batch_summary.PHASES))
 
     def test_batch_arm_rail_allows_median_evaluation_but_preserves_quiet_and_close_cap(self):
-        total = lambda row: row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
-        bar = {"pss_plus_drm_mib": 24, "memory": {"swap_pss_mib": 0, "pss_anon_mib": 5}}
-        row = {"pss_plus_drm_mib": 26, "memory": {"swap_pss_mib": 0, "pss_anon_mib": 5.5,
-                "pss_file_mib": 15, "pss_shmem_mib": 1}}
+        total = residency.unreclaimable_total
+        def row(anon, file=15.0):
+            return {"drm_mib": None, "memory": {"swap_pss_mib": 0, "pss_anon_mib": anon, "pss_file_mib": file,
+                                                  "pss_shmem_mib": 1, "pss_mib": anon + file + 1}}
         external = {"processes": [{"memory": {"swap_pss_mib": 0}}]}
-        residency.assert_capture_rails(row, bar, external, total, batch_medians=True)
-        close_bar = {"pss_plus_drm_mib": 20, "memory": {"swap_pss_mib": 0, "pss_anon_mib": 5}}
+        residency.assert_capture_rails(row(6.5), row(5), external, total, batch_medians=True)
         with self.assertRaisesRegex(AssertionError, r"bar\+5"):
-            residency.assert_capture_rails(row, close_bar, external, total, batch_medians=True, close=True)
+            residency.assert_capture_rails(row(12), row(5), external, total, batch_medians=True, close=True)
         with self.assertRaisesRegex(AssertionError, "UI swap"):
-            residency.assert_capture_rails({**row, "memory": {**row["memory"], "swap_pss_mib": 1}},
-                                            bar, external, total, batch_medians=True)
+            bad = row(6.5)
+            residency.assert_capture_rails({**bad, "memory": {**bad["memory"], "swap_pss_mib": 1}},
+                                            row(5), external, total, batch_medians=True)
 
 
 class CaptureSafetyTests(unittest.TestCase):

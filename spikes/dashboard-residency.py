@@ -14,10 +14,18 @@ ACCEPTANCE_PHASE_BUDGETS = {
 ACCEPTANCE_PAGES = ["today", "weather", "media", "system"]
 MEDIAN_BATCH_ENV = "BEAD_DASHBOARD_BATCH_MEDIANS"
 OPENED_ONCE_ONLY_ENV = "BEAD_DASHBOARD_OPENED_ONCE_ONLY"
-MEDIAN_BATCH_ARM_LIMIT_MIB = 26.5
 MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB = 1
-MEDIAN_BATCH_FILE_EXPLANATION_TOLERANCE_MIB = 0.05
+# B0081 (owner 2026-10-24): every total here is UNRECLAIMABLE memory (anon + shmem + SwapPss + DRM). Absolute
+# reference-host cap 10 MiB, per-sample stop line 9.5. PSS and clean file-backed stay in the rows as information.
+UNRECLAIMABLE_GATE_MIB = 10.0
+UNRECLAIMABLE_STOP_MIB = 9.5
 MEDIAN_BATCH_RELATIVE_GROWTH_LIMIT_MIB = 0.5
+
+
+def unreclaimable_total(row, include_drm=True):
+    memory = row["memory"]
+    drm = sum((row.get("drm_mib") or {}).values()) if include_drm else 0.0
+    return memory["pss_anon_mib"] + memory["pss_shmem_mib"] + memory["swap_pss_mib"] + drm
 
 
 def acceptance_config(environ):
@@ -89,19 +97,19 @@ def assert_capture_rails(row, bar, external, total, batch_medians=False, close=F
     if os.environ.get("BEAD_REFERENCE_ABSOLUTE_GATE") == "1":
         assert row.get("drm_mib") is not None, "reference-host absolute gate requires measured DRM; unknown is not zero"
         if not close:
-            assert total(row) < 24.5, "settled reference UI reached the 24.5 MiB stop line"
+            assert total(row) < UNRECLAIMABLE_STOP_MIB, "settled reference UI reached the 9.5 MiB unreclaimable stop line"
     if not batch_medians or close:
         assert total(row) <= total(bar) + 5, "closed exceeds own bar+5 MiB"
     if batch_medians:
         memory = row["memory"]
-        # Required category fields make a 25–27 MiB result auditable later.
+        # Required category fields keep PSS and clean file-backed auditable as information.
         assert all(key in memory for key in ("pss_anon_mib", "pss_file_mib", "pss_shmem_mib")), \
             "batch arm lacks PSS category attribution"
     else:
-        assert total(row) <= 25, "diagnostic exceeds current hard ceiling"
+        assert total(row) <= UNRECLAIMABLE_GATE_MIB, "diagnostic exceeds current hard ceiling"
 
 
-def summarize_batch_phase(control_rows, candidate_rows, relative_host=False, allow_27_report=False):
+def summarize_batch_phase(control_rows, candidate_rows, relative_host=False):
     """Apply the reference-host absolute gate or an explicitly selected relative gate."""
     import statistics
     assert len(control_rows) == 5 and len(candidate_rows) == 5, \
@@ -131,8 +139,7 @@ def summarize_batch_phase(control_rows, candidate_rows, relative_host=False, all
     def total(row):
         # If any DRM endpoint is unmeasured, compare measured PSS only and keep
         # the missing graphics residency explicitly unknown.
-        measured_total = row["memory"]["pss_mib"] if drm_unknown else row["pss_plus_drm_mib"]
-        return measured_total + row["memory"]["swap_pss_mib"]
+        return unreclaimable_total(row, include_drm=not drm_unknown)
     def median(rows, value):
         return statistics.median(value(row) for row in rows)
     categories = ("pss_anon_mib", "pss_file_mib", "pss_shmem_mib")
@@ -146,13 +153,12 @@ def summarize_batch_phase(control_rows, candidate_rows, relative_host=False, all
     anonymous_delta = deltas["pss_anon_mib"]
     assert anonymous_delta <= MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB, \
         "unexplained candidate-control anonymous growth exceeds 1 MiB"
-    file_delta = deltas["pss_file_mib"]
     total_delta = candidate_total - control_total
-    unexplained_increase = max(0.0, total_delta - file_delta)
     result = {"n_per_side": 5, "control_total_median_mib": control_total,
               "candidate_total_median_mib": candidate_total,
               "total_delta_median_mib": total_delta,
-              "unexplained_increase_median_mib": unexplained_increase,
+              "control_pss_median_mib": median(control_rows, lambda r: r["memory"]["pss_mib"]),
+              "candidate_pss_median_mib": median(candidate_rows, lambda r: r["memory"]["pss_mib"]),
               "category_medians_mib": category_medians,
               "category_delta_medians_mib": deltas,
               "control_range_mib": [min(total(r) for r in control_rows), max(total(r) for r in control_rows)],
@@ -162,23 +168,17 @@ def summarize_batch_phase(control_rows, candidate_rows, relative_host=False, all
               "candidate_drm_median_mib": None if any(r.get("drm_mib") is None for r in candidate_rows)
                   else median(candidate_rows, lambda r: sum(r["drm_mib"].values())),
               "drm_attribution": "unknown" if drm_unknown else "measured",
-              "total_metric_basis": "PSS only; DRM unknown and excluded" if drm_unknown
-                  else "PSS plus measured DRM"}
+              "total_metric_basis": "unreclaimable (anon + shmem + SwapPss); DRM unknown and excluded" if drm_unknown
+                  else "unreclaimable (anon + shmem + SwapPss + measured DRM)"}
     if relative_host:
         assert total_delta <= MEDIAN_BATCH_RELATIVE_GROWTH_LIMIT_MIB, \
             "candidate-control median growth exceeds the +0.5 MiB relative limit"
         result["verdict"] = "PASS-relative-control"
         result["relative_growth_limit_mib"] = MEDIAN_BATCH_RELATIVE_GROWTH_LIMIT_MIB
-    elif candidate_total < 25:
+    elif candidate_total <= UNRECLAIMABLE_GATE_MIB:
         result["verdict"] = "PASS"
-    elif candidate_total <= MEDIAN_BATCH_ARM_LIMIT_MIB and allow_27_report:
-        assert anonymous_delta < MEDIAN_BATCH_ANON_GROWTH_LIMIT_MIB, \
-            "25–26.5 MiB allowance requires anonymous growth below 1 MiB"
-        assert unexplained_increase <= MEDIAN_BATCH_FILE_EXPLANATION_TOLERANCE_MIB + 1e-9, \
-            "25–26.5 MiB increase is not explained by file-backed PSS within 0.05 MiB"
-        result["verdict"] = "PASS-one-time-27MiB-file-backed-report"
     else:
-        raise AssertionError("batch median exceeds the 26.5 MiB stop ceiling or the one-time allowance is unavailable")
+        raise AssertionError("batch median exceeds the 10 MiB unreclaimable gate")
     return result
 
 
@@ -216,7 +216,7 @@ def finish_phase_window(label, began, budget, capture, acceptance, monotonic, sl
 def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed, observe, enabled, baseline_timing=None, keeper_check=None, backend_probe=None):
     acceptance = acceptance_config(os.environ)
     def total(row):
-        return row["pss_plus_drm_mib"] + row["memory"]["swap_pss_mib"]
+        return unreclaimable_total(row)
 
     pages = os.environ.get("BEAD_DASHBOARD_PAGES", "today,weather,media,system").split(",")
     assert pages and len(set(pages)) == len(pages) and all(p in ["today", "weather", "media", "system"] for p in pages)
@@ -279,7 +279,7 @@ def sample(client, raw, bar, matrix, call, state_wait, log, presented, committed
         )
         row.update(timing)
         if not (acceptance and acceptance["batch_medians"]):
-            assert total(row) < 24.5, "settled reaches owner stop line"
+            assert total(row) < UNRECLAIMABLE_STOP_MIB, "settled reaches owner stop line"
         (raw / "dashboard-residency-progress.json").write_text(json.dumps(samples, indent=2) + "\n")
         print("DASHBOARD_RESIDENCY", label, total(row), flush=True)
         return row

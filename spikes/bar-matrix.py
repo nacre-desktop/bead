@@ -42,7 +42,7 @@ def idle(pid,seconds):
     memory=measure.memory(pid);drm=measure.drm_memory(pid)
     if os.environ.get('BEAD_REQUIRE_DRM')=='1' and drm is None:
         raise RuntimeError('required per-client DRM fdinfo accounting is unavailable; absolute laptop memory result would be incomplete')
-    return {'memory':memory,'drm_mib':drm,'pss_plus_drm_mib':memory['pss_mib']+sum((drm or {}).values()),'cpu_ticks':cpu,'seconds':elapsed,'cpu_one_core_percent':100*cpu/os.sysconf('SC_CLK_TCK')/elapsed,'fds':len(list(pathlib.Path(f'/proc/{pid}/fd').iterdir())),'threads':len(list(pathlib.Path(f'/proc/{pid}/task').iterdir()))}
+    return {'memory':memory,'drm_mib':drm,'pss_plus_drm_mib':memory['pss_mib']+sum((drm or {}).values()),'unreclaimable_mib':memory['pss_anon_mib']+memory['pss_shmem_mib']+memory['swap_pss_mib']+sum((drm or {}).values()),'cpu_ticks':cpu,'seconds':elapsed,'cpu_one_core_percent':100*cpu/os.sysconf('SC_CLK_TCK')/elapsed,'fds':len(list(pathlib.Path(f'/proc/{pid}/fd').iterdir())),'threads':len(list(pathlib.Path(f'/proc/{pid}/task').iterdir()))}
 
 def sample(env,raw,compositor,stop):
     env={**env,'DBUS_SYSTEM_BUS_ADDRESS':env['DBUS_SESSION_BUS_ADDRESS'],'PIPEWIRE_REMOTE':'bead-private-pw','BEAD_PRIVATE_SERVICES_TEST':'1'}
