@@ -1658,6 +1658,34 @@ async fn displays_page_is_read_only_without_the_methods_or_the_compositor_flag()
     assert!(rows.iter().all(|r| r["kind"] != "actions"));
 }
 
+/// The window draws the page while every row is off (no daemon, or a change pending): the kit builds
+/// each chip's action, so a dim row must still name one. A runtime error shows as a failed pose.
+#[test]
+fn displays_page_draws_while_every_row_is_off() {
+    use super::settings_tests::harness;
+    let mut fixed: BTreeMap<String, Arc<dyn Source>> = BTreeMap::new();
+    for (topic, data) in topics_for_goldens() {
+        fixed.insert(
+            topic.into(),
+            Arc::new(bead_test::source::FakeSource::new(data).unwrap()),
+        );
+    }
+    let settings = Settings::new(None, &root()).unwrap().with_sources(fixed);
+    let at = stores("displays");
+    settings.project(&at);
+    let rows = items(&settings.project(&at));
+    assert!(
+        row(&rows, "displays.out.DP-1.scale")["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| o["enabled"] == false),
+        "no daemon: every chip is off"
+    );
+    let mut h = harness(settings.project(&at), 960, 640, 1.);
+    h.pose((0., 0.), 1.).unwrap();
+}
+
 // ---- goldens ----------------------------------------------------------------------------------------
 
 /// The enabled look a connected daemon gives: every row and button of the projected page enabled.

@@ -58,7 +58,13 @@ function row(item)
         return kit.InfoRow{id="info",label=item.label,description=item.description,value=item.value}
     elseif k=="actions" then
         if #item.options>3 or item.chips then
-            return kit.ChipsRow{id="chips",label=item.label,description=item.description,enabled=on,items=item.options,per_row=item.per_row,on_change=on and "settings.do" or nil}
+            -- A row that is off offers dim chips (the kit builds every chip's action, so the name stays set).
+            local chips=item.options
+            if not on then
+                chips={}
+                for i,o in ipairs(item.options) do chips[i]={id=o.id,label=o.label,selected=o.selected,enabled=false} end
+            end
+            return kit.ChipsRow{id="chips",label=item.label,description=item.description,enabled=on,items=chips,per_row=item.per_row,on_change="settings.do"}
         end
         node=kit.ChoiceRow{id="actions",label=item.label,description=item.description,enabled=on,options=item.options,on_change="settings.do"}
     elseif k=="device" then
