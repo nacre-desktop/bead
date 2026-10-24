@@ -245,10 +245,7 @@ async fn palette_mode_keeps_the_daemon_order_for_empty_typed_and_prefixed_querie
     let model = ready(&palette, &stores("")).await;
     assert_eq!(names(&model), ["Open Settings", "Calculator"]);
     for (query, expected) in [
-        (
-            "set",
-            vec!["Open Settings", "Term", "Zed"],
-        ),
+        ("set", vec!["Open Settings", "Term", "Zed"]),
         ("> set", vec!["Open Settings", "Term", "Zed"]),
         ("brain: x", vec!["Search brain for x"]),
         (">brain:x", vec!["Search brain for x"]),
