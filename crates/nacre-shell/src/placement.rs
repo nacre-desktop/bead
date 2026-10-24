@@ -477,15 +477,17 @@ impl Chrome {
                 && matches!(attachment, Attachment::Attached(Edge::Left | Edge::Right)));
         let body = body(scene);
         let output = (self.output.0 as f32, self.output.1 as f32);
+        let panel = frame.panel(attachment, output, (body.w, body.h), self.center);
         let top_inset = if matches!(
             attachment,
             Attachment::Popout | Attachment::ControlCenter | Attachment::Attached(Edge::Top)
-        ) {
+        ) || (matches!(attachment, Attachment::Attached(_))
+            && panel.y <= frame.top)
+        {
             2.
         } else {
             32.
         };
-        let panel = frame.panel(attachment, output, (body.w, body.h), self.center);
         let mut rectangles = frame.material(output);
         rectangles.push(panel);
         let svg = self.svg(
@@ -741,6 +743,50 @@ mod tests {
                 .unwrap();
             assert_eq!(token_scene.asset_data, fixed_scene.asset_data);
         }
+    }
+    #[test]
+    fn fullscreen_bottom_chrome_only_overlaps_the_frame_header_by_two_pixels() {
+        use bead::render::Primitive;
+
+        let colors = colors();
+        let mut scene = crate::sound::fallback(colors.get("surface").unwrap());
+        let body = Rect::new(0., 0., 1900., 1140.);
+        scene.width = body.w;
+        scene.bounds = Rect::new(-32., -32., body.w + 64., body.h + 64.);
+        if let Some(Primitive::Rounded { rect, .. }) = scene
+            .primitives
+            .iter_mut()
+            .find(|primitive| matches!(primitive, Primitive::Rounded { rect, .. } if rect.w > 0.))
+        {
+            *rect = body;
+        }
+
+        Chrome::new(Attachment::Attached(Edge::Bottom), &colors)
+            .unwrap()
+            .decorate_with(Frame::DEFAULT, &mut scene)
+            .unwrap();
+
+        let artwork = scene
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Image { rect, path, .. }
+                    if path.to_string_lossy().starts_with("@joined-frame-") =>
+                {
+                    Some((*rect, path))
+                }
+                _ => None,
+            });
+        let (rect, path) = artwork.expect("joined chrome artwork");
+        assert!(path.to_string_lossy().starts_with("@joined-frame-2-"));
+        assert_eq!(rect.y, body.y - 2.);
+        let panel = Frame::DEFAULT.panel(
+            Attachment::Attached(Edge::Bottom),
+            (1920., 1200.),
+            (body.w, body.h),
+            None,
+        );
+        assert_eq!(panel.y + rect.y, Frame::DEFAULT.top - 2.);
     }
     #[test]
     fn revealing_joined_art_rebakes_the_growing_contour_without_moving_content() {

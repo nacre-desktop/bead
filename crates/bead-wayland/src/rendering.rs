@@ -547,9 +547,17 @@ impl App {
                 scene.width = s.width as f32;
             }
             if panel {
-                if scene.motion.as_ref().is_none_or(|m| {
-                    m.edge == bead_core::Edge::Top || m.edge == bead_core::Edge::Bottom
-                }) {
+                if self
+                    .options
+                    .panel_spec
+                    .as_ref()
+                    .is_none_or(|spec| spec.position.is_none())
+                    && scene.motion.as_ref().is_none_or(|m| {
+                        m.edge == bead_core::Edge::Top || m.edge == bead_core::Edge::Bottom
+                    })
+                {
+                    // Custom positioners already align the body through the padded
+                    // surface origin, even when the compositor clips that surface.
                     scene.offset.0 = ((s.width as f32 - scene.width) / 2.).max(0.);
                 }
                 if let Some(slide) = scene.slide {
