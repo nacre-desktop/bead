@@ -71,6 +71,17 @@ class PactlStandIn(unittest.TestCase):
         self.assertEqual(run("--format=json", "list", "cards"), (0, ""))
 
 
+class PipeWireDropIn(unittest.TestCase):
+    def test_the_qml_arms_pipewire_has_the_same_three_nodes(self):
+        conf = fake.pipewire_conf()
+        self.assertEqual(conf.count("support.null-audio-sink"), 3)
+        for name in ("fixture-speakers", "fixture-headphones", "fixture-microphone"):
+            self.assertIn(f'node.name = "{name}"', conf)
+        self.assertEqual(conf.count("media.class = Audio/Sink"), 2)
+        self.assertEqual(conf.count("media.class = Audio/Source/Virtual"), 1)
+        self.assertTrue(conf.startswith("context.objects = [") and conf.endswith("]\n"))
+
+
 class FixedMachine(unittest.TestCase):
     def test_battery_is_63_percent_discharging_with_2h10m_left(self):
         battery = fake.BATTERY

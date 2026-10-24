@@ -379,6 +379,8 @@ class Arm:
         wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.bluez', '--object-path', '/',
                                                        '--method', 'org.freedesktop.DBus.ObjectManager.GetManagedObjects'])),
                    20, 'the fake org.bluez')
+        if self.name == 'qml':
+            self.start_pipewire()
         command = [str(Path(a.bead_bin).resolve() / 'nacre-helper'), 'daemon']
         if self.name == 'bead':
             command.append('--notifications=daemon')
@@ -386,6 +388,24 @@ class Arm:
             self.env['NACRE_DAEMON_CLIENT'] = '1'
         self.daemon = self.spawn(command, 'daemon')
         wait_until(lambda: self._try(lambda: self.call('daemon.status', {})), 30, 'the private daemon')
+
+    def start_pipewire(self):
+        """QML reads audio through PipeWire, not pactl: its arm gets a private server with the same nodes (spikes/fake_system.py),
+        the same default sink/source and the same level (PipeWire stores volume cubed, as pactl's percentage does)."""
+        conf = self.root / 'config/pipewire/pipewire.conf.d'
+        conf.mkdir(parents=True, exist_ok=True)
+        (conf / '10-fixture.conf').write_text(fake_system.pipewire_conf())
+        self.env['PIPEWIRE_REMOTE'] = 'pipewire-0'
+        self.spawn(['pipewire'], 'pipewire')
+        wait_until(lambda: self._try(lambda: self.run(['pw-metadata', '-n', 'default'])), 20, 'the private PipeWire')
+        for key, name in (('default.audio.sink', fake_system.SINKS[0][1]), ('default.audio.source', fake_system.SOURCES[0][1])):
+            self.run(['pw-metadata', '-n', 'default', '0', key, json.dumps({'name': name}), 'Spa:String:JSON'])
+        nodes = {o['info']['props'].get('node.name'): o['id'] for o in json.loads(self.run(['pw-dump']).stdout)
+                 if o.get('type') == 'PipeWire:Interface:Node'}
+        cubed = fake_system.DEFAULT_LEVEL ** 3
+        for name in [n for _, n, _ in fake_system.SINKS + fake_system.SOURCES]:
+            channels = '[ %s ]' % ' '.join([f'{cubed:.6f}'] * (1 if 'microphone' in name else 2))
+            self.run(['pw-cli', 'set-param', str(nodes[name]), 'Props', '{ mute: false, channelVolumes: %s }' % channels])
 
     @staticmethod
     def _try(function):

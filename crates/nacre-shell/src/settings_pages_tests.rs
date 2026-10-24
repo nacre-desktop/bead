@@ -285,7 +285,10 @@ async fn ip_lookup_consent_is_a_switch_that_waits_for_an_empty_city() {
     assert_eq!(consent["checked"], false);
     assert_eq!(consent["enabled"], true);
     let label = consent["label"].as_str().unwrap();
-    assert!(label.contains("IP address") && label.contains("ipinfo.io"), "{label}");
+    assert!(
+        label.contains("IP address") && label.contains("ipinfo.io"),
+        "{label}"
+    );
     assert_eq!(
         row(&rows, "date-time-language.locale.weatherLocation")["kind"],
         "text"
