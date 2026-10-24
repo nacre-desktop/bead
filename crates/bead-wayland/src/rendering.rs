@@ -400,6 +400,10 @@ impl App {
                     }),
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
+                // A callback can arrive after the motion expires. Keep it armed
+                // until we have drawn the terminal pose, rather than making the
+                // next input finish the motion and invalidate the whole surface.
+                s.redraw |= active;
                 scene.opacity = motion.opacity(progress);
                 // A revealing panel stays put and is clipped instead (Scene::reveal_window).
                 let (dx, dy) = if motion.reveal {
@@ -890,22 +894,41 @@ impl App {
                     track_repair(&mut b.pending, *region);
                 }
             }
-            let Some(slot) = s
-                .buffers
-                .iter()
-                .position(|b| !b.buffer.slot().has_active_buffers())
-            else {
+            // Animation history needs the fresher-pixel policy. Ordinary surfaces
+            // keep the cheap first-free path (and the existing unpainted adoption).
+            let plan = if scene.motion.is_some() {
+                repair_plan(
+                    s.buffers.iter().map(|b| {
+                        (
+                            !b.buffer.slot().has_active_buffers(),
+                            b.painted,
+                            b.pending.as_slice(),
+                        )
+                    }),
+                    w as u64 * h as u64,
+                )
+            } else {
+                s.buffers
+                    .iter()
+                    .position(|b| !b.buffer.slot().has_active_buffers())
+                    .map(|slot| {
+                        let adopt = (!s.buffers[slot].painted)
+                            .then(|| s.buffers.iter().position(|b| b.painted))
+                            .flatten();
+                        (slot, adopt)
+                    })
+            };
+            let Some((slot, adopt)) = plan else {
                 // The compositor still holds every buffer (a slow release right after a
                 // resize): try again shortly rather than ending the whole shell.
                 s.redraw = true;
                 busy = true;
                 return Ok(());
             };
-            // A spare buffer left unpainted by pool compaction would otherwise be
-            // repainted in full on the next edit. Adopt a painted buffer's pixels and
-            // its pending repairs instead: copying is far cheaper than rasterising.
-            if !s.buffers[slot].painted
-                && let Some(from) = s.buffers.iter().position(|b| b.painted)
+            // An older painted slot can still owe an entire animation repaint.
+            // Copy fresher pixels and their matching repairs together, just as
+            // for an unpainted spare left by pool compaction.
+            if let Some(from) = adopt
                 // The source is still held by the compositor, so canvas() refuses it;
                 // reading it is sound, only writing is not.
                 && let (source, len) = {
@@ -1153,11 +1176,75 @@ fn track_repair(pending: &mut Vec<Damage>, mut region: Damage) {
     }
 }
 
+/// Prefer current pixels over an older animation frame or an unpainted slot.
+/// Rebase stale pixels only when the saved repair exceeds a quarter of a frame;
+/// smaller edits do not justify a full-buffer copy. Held sources are read-only.
+#[inline(never)]
+fn repair_plan<'a>(
+    buffers: impl Iterator<Item = (bool, bool, &'a [Damage])> + Clone,
+    frame_pixels: u64,
+) -> Option<(usize, Option<usize>)> {
+    let pixels = |pending: &[Damage]| {
+        pending
+            .iter()
+            .map(|d| u64::from(d.w) * u64::from(d.h))
+            .sum::<u64>()
+    };
+    let (slot, (_, painted, pending)) = buffers
+        .clone()
+        .enumerate()
+        .filter(|(_, (available, _, _))| *available)
+        .min_by_key(|(_, (_, painted, pending))| (!*painted, pixels(pending)))?;
+    let adopt = buffers
+        .enumerate()
+        .filter(|(_, (_, painted, _))| *painted)
+        .min_by_key(|(_, (_, _, pending))| pixels(pending))
+        .filter(|(from, (_, _, source))| {
+            *from != slot && (!painted || pixels(pending) > pixels(source) + frame_pixels / 4)
+        })
+        .map(|(from, _)| from);
+    Some((slot, adopt))
+}
+
 #[cfg(test)]
 mod repair_tests {
     use super::*;
     use bead_render::{Primitive, Rect, Renderer, Scene, tree::TreeCpuRenderer};
     use std::collections::BTreeMap;
+
+    #[test]
+    fn settled_pixels_win_over_animation_debt_but_held_slots_are_never_written() {
+        let animation = [Damage::full(1746, 981)];
+        let edit = [Damage::full(200, 40)];
+        let empty = [];
+        let slots = [
+            (true, true, animation.as_slice()),
+            (true, true, edit.as_slice()),
+            (true, false, empty.as_slice()),
+        ];
+        let area = 1746 * 981;
+        assert_eq!(repair_plan(slots.into_iter(), area), Some((1, None)));
+        let mut held = slots;
+        held[1].0 = false;
+        assert_eq!(repair_plan(held.into_iter(), area), Some((0, Some(1))));
+        held[0].0 = false;
+        assert_eq!(repair_plan(held.into_iter(), area), Some((2, Some(1))));
+        held[2].0 = false;
+        assert_eq!(repair_plan(held.into_iter(), area), None);
+        let narrow = [Damage::full(100, 40)];
+        assert_eq!(
+            repair_plan(
+                [
+                    (true, true, edit.as_slice()),
+                    (false, true, narrow.as_slice())
+                ]
+                .into_iter(),
+                area,
+            ),
+            Some((0, None)),
+            "small repair differences must not cause a full-buffer copy"
+        );
+    }
 
     #[test]
     fn repair_history_is_bounded_and_preserves_every_dirty_rectangle() {
@@ -1216,6 +1303,7 @@ mod repair_tests {
                         (
                             vec![0; (width * height * 4) as usize],
                             vec![Damage::full(width, height)],
+                            false,
                         )
                     })
                     .collect();
@@ -1246,7 +1334,7 @@ mod repair_tests {
                             fill(Rect::new(74., 54., 16., 10.), [29, frame * 11, 217, 255]),
                         ],
                     };
-                    for (_, pending) in &mut buffers {
+                    for (_, pending, _) in &mut buffers {
                         track_repair(
                             pending,
                             Rect::new(2., 2., 20., 14.).pixels(scale, width, height),
@@ -1257,7 +1345,28 @@ mod repair_tests {
                         );
                     }
                     renderer.prepare(&scene, scale).unwrap();
-                    let (bytes, pending) = &mut buffers[usize::from(frame) % 3];
+                    let frame_index = usize::from(frame);
+                    let (slot, adopt) = repair_plan(
+                        buffers
+                            .iter()
+                            .enumerate()
+                            .map(|(index, (_, pending, painted))| {
+                                let available = if frame_index % 4 == 0 {
+                                    index == frame_index % 3
+                                } else {
+                                    index != (frame_index + 1) % 3
+                                };
+                                (available, *painted, pending.as_slice())
+                            }),
+                        u64::from(width) * u64::from(height),
+                    )
+                    .unwrap();
+                    let adopted = adopt.map(|from| (from, buffers[from].clone()));
+                    if let Some((_, (bytes, pending, _))) = &adopted {
+                        buffers[slot].0.copy_from_slice(bytes);
+                        buffers[slot].1 = pending.clone();
+                    }
+                    let (bytes, pending, painted) = &mut buffers[slot];
                     for damage in pending.iter().copied() {
                         renderer
                             .draw(
@@ -1274,6 +1383,7 @@ mod repair_tests {
                             .unwrap();
                     }
                     pending.clear();
+                    *painted = true;
                     let mut expected = vec![0; bytes.len()];
                     let mut reference = TreeCpuRenderer::default();
                     reference.prepare(&scene, scale).unwrap();
@@ -1294,6 +1404,9 @@ mod repair_tests {
                         *bytes == expected,
                         "stale buffer at frame{frame},scale{scale},format{format:?}"
                     );
+                    if let Some((from, before)) = adopted {
+                        assert_eq!(buffers[from], before, "adoption wrote to its source");
+                    }
                 }
             }
         }

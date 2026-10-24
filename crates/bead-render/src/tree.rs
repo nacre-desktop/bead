@@ -406,6 +406,8 @@ impl TreeCache {
         let mut keys = Vec::with_capacity(scene.primitives.len());
         let mut asset_keys = BTreeMap::new();
         let mut frame_hash = std::collections::hash_map::DefaultHasher::new();
+        let mut raster_scene = None;
+        let mut fresh_rasters: BTreeMap<u64, (Arc<Pixmap>, (u32, u32))> = BTreeMap::new();
         serde_json::to_vec(&scene.bounds)?.hash(&mut frame_hash);
         for (index, primitive) in scene.primitives.iter().enumerate() {
             let kind = match primitive {
@@ -443,25 +445,45 @@ impl TreeCache {
                     .is_none_or(|entry| entry.raster.key != key)
                 {
                     let started = std::time::Instant::now();
-                    let mut content = scene.clone();
-                    content.primitives = vec![local(primitive)];
-                    content.clips.clear();
-                    content.layers.clear();
-                    content.prepared.clear();
-                    content.offset = (0., 0.);
-                    content.opacity = 1.;
-                    self.raster.prepare(&content, scale)?;
-                    let pixels = self
-                        .raster
-                        .textures
-                        .remove(&crate::key(&content.primitives[0], scale))
-                        .ok_or("missing prepared raster")?;
-                    let (pixels, origin) = if kind == "text" {
-                        trim_text(pixels)?
+                    let existing = fresh_rasters.get(&key).cloned();
+                    let reused = existing.is_some();
+                    let (pixels, origin) = if let Some(raster) = existing {
+                        raster
                     } else {
-                        (pixels, (0, 0))
+                        // A cache miss bakes one primitive, not the rest of its
+                        // scene. Reuse its immutable context across missing rasters.
+                        let content = raster_scene.get_or_insert_with(|| Scene {
+                            opacity: 1.,
+                            motion: scene.motion.clone(),
+                            resource_revision: scene.resource_revision,
+                            asset_data: scene.asset_data.clone(),
+                            clips: Default::default(),
+                            layers: Vec::new(),
+                            prepared: Default::default(),
+                            font_files: scene.font_files.clone(),
+                            width: scene.width,
+                            slide: scene.slide,
+                            primitives: Vec::with_capacity(1),
+                            offset: (0., 0.),
+                            bounds: scene.bounds,
+                        });
+                        content.primitives.clear();
+                        content.primitives.push(local(primitive));
+                        self.raster.prepare(content, scale)?;
+                        let pixels = self
+                            .raster
+                            .textures
+                            .remove(&crate::key(&content.primitives[0], scale))
+                            .ok_or("missing prepared raster")?;
+                        let (pixels, origin) = if kind == "text" {
+                            trim_text(pixels)?
+                        } else {
+                            (pixels, (0, 0))
+                        };
+                        let raster = (Arc::new(pixels), origin);
+                        fresh_rasters.insert(key, raster.clone());
+                        raster
                     };
-                    let pixels = Arc::new(pixels);
                     // Prefer the last ordered paint slot: a replacement row can
                     // have a new state ID while most of its raster is unchanged.
                     // The presenter uses this delta only when its exact previous
@@ -471,6 +493,11 @@ impl TreeCache {
                         .as_ref()
                         .filter(|frame| frame.scale == scale)
                         .and_then(|frame| frame.items.get(index))
+                        .filter(|item| {
+                            let before = rect(&item.primitive);
+                            let after = rect(primitive);
+                            before.x == after.x && before.y == after.y
+                        })
                         .and_then(|item| item.raster.as_deref())
                         .or_else(|| self.entries.get(&slot).map(|old| old.raster.as_ref()));
                     let base_key = previous.map(|old| old.key);
@@ -478,6 +505,8 @@ impl TreeCache {
                         || Damage::full(pixels.width(), pixels.height()),
                         |old| pixel_difference(&old.pixels, &pixels),
                     );
+                    // Retain the same conservative per-entry byte cap even when
+                    // identical nodes in this prepare share immutable pixels.
                     let bytes = pixels.data().len() + id.capacity() + 192;
                     let budget = self.raster_budget.get_or_insert_with(|| {
                         bead_core::cache::Budget::new(
@@ -518,12 +547,14 @@ impl TreeCache {
                             touched: self.serial,
                         },
                     );
-                    self.builds += 1;
-                    println!(
-                        "PROFILE stage=layer_bake id={id} total_ms={:.3} builds={}",
-                        started.elapsed().as_secs_f64() * 1000.,
-                        self.builds
-                    );
+                    if !reused {
+                        self.builds += 1;
+                        println!(
+                            "PROFILE stage=layer_bake id={id} total_ms={:.3} builds={}",
+                            started.elapsed().as_secs_f64() * 1000.,
+                            self.builds
+                        );
+                    }
                 }
                 let entry = self.entries.get_mut(&slot).ok_or("layer cache missing")?;
                 entry.touched = self.serial;
@@ -533,6 +564,11 @@ impl TreeCache {
                     .as_ref()
                     .filter(|frame| frame.scale == scale)
                     .and_then(|frame| frame.items.get(index))
+                    .filter(|item| {
+                        let before = rect(&item.primitive);
+                        let after = rect(primitive);
+                        before.x == after.x && before.y == after.y
+                    })
                     .and_then(|item| item.raster.as_ref());
                 Some(
                     if let Some(previous) = previous
@@ -925,6 +961,26 @@ fn paint_with_scratch(
                 continue;
             }
             clip = overlap;
+        }
+        if let Some(raster) = &item.raster {
+            let r = rect(&item.primitive);
+            let x = ((r.x + offset.0) * scale).round() as i64 + i64::from(raster.origin.0);
+            let y = ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1);
+            let left = i64::from(clip.x).max(x);
+            let top = i64::from(clip.y).max(y);
+            let right = i64::from(clip.x + clip.w).min(x + i64::from(raster.pixels.width()));
+            let bottom = i64::from(clip.y + clip.h).min(y + i64::from(raster.pixels.height()));
+            if right <= left || bottom <= top {
+                continue;
+            }
+            // Raster texels outside their ink bounds are transparent. Exclude
+            // them before mask setup, including rasters outside this repair.
+            clip = Damage {
+                x: left as u32,
+                y: top as u32,
+                w: (right - left) as u32,
+                h: (bottom - top) as u32,
+            };
         }
         // Interior coverage excludes every antialiased corner and stroke.
         // Only fully opaque interior pixels can bypass the masked blend pipeline.
@@ -1737,6 +1793,82 @@ mod tests {
         assert_eq!(display.raster_budget.as_ref().unwrap().used(), 0);
         assert_eq!(display.node_budget.as_ref().unwrap().used(), 0);
     }
+    #[test]
+    fn duplicate_text_shares_immutable_pixels_and_keeps_its_own_delta() {
+        let mut view = scene();
+        view.layers.clear();
+        view.font_files = vec![
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        let text = Primitive::Text {
+            rect: Rect::new(0., 0., 64., 24.),
+            text: "same".into(),
+            family: "IBM Plex Sans".into(),
+            size: 14.,
+            color: [255, 255, 255, 255],
+            weight: 400,
+            align: None,
+        };
+        let mut other = text.clone();
+        if let Primitive::Text { rect, .. } = &mut other {
+            rect.x = 80.;
+        }
+        view.primitives = vec![text, other];
+        let mut cache = TreeCache::default();
+        cache.prepare(&view, 1.).unwrap();
+        let before = cache.frame.as_ref().unwrap().clone();
+        let first = before.items[0].raster.as_ref().unwrap();
+        let second = before.items[1].raster.as_ref().unwrap();
+        assert_eq!(cache.builds, 1);
+        assert!(!Arc::ptr_eq(first, second));
+        assert!(Arc::ptr_eq(&first.pixels, &second.pixels));
+        let original = first.pixels.data().to_vec();
+        if let Primitive::Text { text, .. } = &mut view.primitives[0] {
+            *text = "other".into();
+        }
+        cache.prepare(&view, 1.).unwrap();
+        let after = cache.frame.as_ref().unwrap();
+        assert_eq!(cache.builds, 2);
+        assert_eq!(first.pixels.data(), original);
+        assert!(Arc::ptr_eq(
+            &after.items[1].raster.as_ref().unwrap().pixels,
+            &second.pixels
+        ));
+        assert_eq!(
+            after.items[0].raster.as_ref().unwrap().base_key,
+            Some(first.key)
+        );
+        assert_eq!(after.items[1].raster.as_ref().unwrap().base_key, None);
+    }
+
+    #[test]
+    fn a_moved_paint_slot_does_not_compare_unusable_pixels() {
+        let before = scene();
+        let mut after = before.clone();
+        after.layers[0].id = "moved-row".into();
+        after.layers[0].bounds.x += 8.;
+        if let Primitive::Image { rect, .. } = &mut after.primitives[0] {
+            rect.x += 8.;
+        }
+        let mut image =
+            Pixmap::decode_png(&before.asset_data[std::path::Path::new("proof.png")]).unwrap();
+        image.pixels_mut()[0] =
+            tiny_skia::PremultipliedColorU8::from_rgba(200, 10, 20, 255).unwrap();
+        after
+            .asset_data
+            .insert("proof.png".into(), Arc::from(image.encode_png().unwrap()));
+        let mut cache = TreeCache::default();
+        cache.prepare(&before, 1.).unwrap();
+        cache.prepare(&after, 1.).unwrap();
+        let raster = cache.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap();
+        assert_eq!(raster.base_key, None);
+        assert_eq!(raster.changed, Damage::full(8, 8));
+    }
+
     #[test]
     fn replacement_raster_delta_uses_previous_paint_slot_and_repairs_exactly() {
         for scale in [1., 1.5] {
