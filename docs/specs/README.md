@@ -12,6 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
+| 0 | [B0082 Consume N0059/N0056/N0057 producers](0082-consume-daemon-producers.md) | Review — pin `c6dc627b`; audio, battery and power profiles live in the control centre (profile ids, unsupported state, battery estimate, degradation reason), daemon weather photo with Commons credit, N0057 weather fields verified | Full Arch CI; fake-daemon tests and goldens pass; QML pairs for the control centre and Weather page are not compared (desktop busy, harness lacks fake audio/power). `bead.*` keys need `tools/i18n-sync.py --write`. |
 | 0 | [B0075 First-key regression](0075-first-key-regression.md) | Review — standalone first key 7.259 ms; five-pair memory/opening median gates and full Arch CI pass | Terminal animation pose, fresh SHM repair and shared raster work; Home-bar first key remains 10.017 ms in its distinct lane. |
 | 0 | [B0079 Extras placement and motion](0079-extras-placement.md) | Review — QML bottom attachment, token-controlled reveal and shared window glyphs | Full Arch CI and final private nested pairs after B0075; whole-frame RMSE 7.803/4.369/2.851%; remaining gaps in spec. |
 | 0 | [B0080 Populated Home first key](0080-home-first-key.md) | Review — Home 7.598 ms, standalone 6.508 ms; five-pair opening/memory gates and full Arch CI pass | Bounded markup reuse, ready-projection coalescing and partial SHM repair; fixture/nested only, no live switch. |
