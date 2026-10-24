@@ -1,6 +1,7 @@
 # B0100 — Wallpaper picker
 
-Status: implementation and remote verification in progress. N0070 supplies the missing catalogue.
+Status: implementation committed; private desktop verification blocked by another session's
+capture lock. N0070 supplies the missing catalogue. Bead remains unpublished pending evidence.
 
 ## QML reference
 
@@ -65,8 +66,21 @@ Remote workspace/all-target clippy with warnings denied and 13 wallpaper tests p
 They cover real keyboard input, pointer navigation, revision-fenced calls, stable filtered
 selection, cache bounds/close release and static/dynamic layouts at 1×/1.5×.
 The protocol pin is Nacre `bdc7c2ff` (N0070); both wallpaper transcripts are mirrored.
-Full CI on this pin and paired captures at 2880×1800, scale 1.5 are pending.
+Full remote Arch CI passes at `9920e2a` after the final theme-token pass and rebase
+onto B0102. This includes the video renderer smoke (12/12 checks),
+private service and tray lifecycles, Luau/generated schemas and independent license graphs.
+Paired captures at 2880×1800, scale 1.5 are pending. The capture wrapper blocked on
+the required desktop lock for over 42 minutes while an unrelated idle session held it.
+No capture arm ran; RMSE, reveal timings and five-pair relative memory are unavailable.
+Only our waiting capture process was stopped; the unrelated lock holder was untouched.
+The prepared fixture is ten images plus two short videos, covering every layout/media
+kind, hover/pressed, search/empty and image/video activation; memory uses five alternating
+same-host CPU control/candidate pairs at idle and after close+idle. This is not acceptance evidence.
 Evidence belongs in `evidence/0100/`; missing measurements are not zeros.
+
+Product-source delta against the rebased control is 1018 added / 65 removed lines,
+excluding tests, generated schemas, documentation and the capture harness. N0070 adds
+599 / removes 32 Rust product lines. No duplicated legacy implementation remains.
 
 ## Known gaps
 

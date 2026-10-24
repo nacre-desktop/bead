@@ -76,6 +76,22 @@ Allocator follow-up shows stable live heap/cache sizes with varying anonymous ma
 
 [Stages, memory decomposition, source hashes and appearance gaps](docs/specs/0103-control-latency.md).
 
+## 2026-10-24 — B0100 wallpaper picker verification
+
+The missing catalogue is now an additive Nacre contract; Bead keeps layout in Luau.
+Only an open picker owns its bounded images and service leases.
+Full remote Arch CI passes at `9920e2a`, including the final theme/rebase pass.
+Private desktop captures are blocked by another session's lock; parity is unverified.
+
+| Check | Result |
+| --- | --- |
+| Picker golden combinations | 3 layouts × 2 media kinds × 2 scales |
+| Encoded image cache budget | 16 MiB, open panel only |
+| Paired QML RMSE | unavailable |
+| Relative unreclaimable memory, CPU | unavailable |
+
+[Scope, contracts and explicit gaps](docs/specs/0100-wallpaper-picker.md).
+
 ## 2026-10-24 — B0080 populated Home first key
 
 Home still opens first; a ready search reply replaces superseded work before raster.

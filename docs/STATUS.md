@@ -90,6 +90,26 @@ The relative memory gate fails: Today open +7.551 MiB; closed Media/Weather/Syst
 Media/Weather/System and visual-polish gaps. No live change or laptop-cap claim.
 
 
+## 2026-10-24 — B0103 control input (blocked candidate)
+
+The candidate coalesces queued pointer positions, previews slider values locally,
+limits host writes, and separates pointer styling from keyboard focus. Remote
+Arch CI passes. The private capture lease remained unavailable for over 90 minutes;
+CPU/GL presentation, matched QML, first-key and memory gates are all unmeasured.
+[B0103](specs/0103-control-latency.md) records the candidate and remaining proofs.
+No integration, live test or performance acceptance.
+## 2026-10-24 — B0100 wallpaper picker (verification blocked)
+
+Super+W now targets a lazy Luau picker with carousel, spotlight and hexagon
+layouts, search and revision-fenced wallpaper selection. N0070 publishes the
+catalogue contract; images and leases release on close. Full remote Arch CI passes
+at `9920e2a`, including the final theme tokens and rebase onto B0102.
+Required private desktop parity and relative memory evidence have not run:
+another session holds the capture lock. [B0100](specs/0100-wallpaper-picker.md)
+records poster-only dynamic previews and remaining motion/import gaps.
+This is an unpublished review candidate, with no live desktop change.
+
+
 ## 2026-10-24 — B0096 owner bar parity (review candidate)
 
 Status values now share icon hit areas and centered line boxes; the default tray
