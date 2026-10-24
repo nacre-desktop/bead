@@ -541,6 +541,10 @@ impl App {
             s.decorations = None;
             s.callbacks.invalidate();
             s.buffers.clear();
+            // Idle-pool timers belong to the old wl_surface identity. They cannot
+            // compact this replacement surface or clear its pending flag.
+            s.shm_trim_pending = false;
+            s.heap_trimmed_ui_serial = u64::MAX;
             s.previous = None;
             s.visual_damage = Default::default();
             s.presented_generation = None;
@@ -838,42 +842,6 @@ impl App {
         self.swap_group(&mut g);
         drop(g);
         self.pearl = None;
-        let qh = self.qh.clone();
-        for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
-            if let Some(background) = surface.background.take() {
-                background.destroy();
-            }
-            surface.background_size = None;
-            surface.decorations = None;
-            surface.native = None;
-            surface.native_configure_size = None;
-            if let Some(fractional) = surface.fractional.take() {
-                fractional.destroy();
-            }
-            if let Some(viewport) = surface.viewport.take() {
-                viewport.destroy();
-            }
-            surface.fractional = if self.viewporter.is_some() {
-                self.fractional.as_ref().map(|manager| {
-                    manager.get_fractional_scale(
-                        surface.layer.wl_surface(),
-                        &qh,
-                        surface.layer.wl_surface().clone(),
-                    )
-                })
-            } else {
-                None
-            };
-            surface.viewport = if surface.fractional.is_some() {
-                self.viewporter
-                    .as_ref()
-                    .map(|manager| manager.get_viewport(surface.layer.wl_surface(), &qh, ()))
-            } else {
-                None
-            };
-            surface.configured = true;
-            surface.redraw = true;
-        }
         let spec = self
             .options
             .panel_spec
@@ -883,7 +851,13 @@ impl App {
         self.panel_center = None;
         drop(self.dismiss.take());
         let moved = self.panel_output.as_ref() != Some(&target);
-        if moved || spec.keyboard_focus {
+        // Native EGL/wgpu resources must retire before their xdg role. A fresh
+        // layer surface also receives fresh idle timers and fractional state.
+        let native = self
+            .surfaces
+            .iter()
+            .any(|s| s.companion && s.native.is_some());
+        if moved || spec.keyboard_focus || native {
             self.surfaces.retain(|s| !s.companion);
             self.panel_output = Some(target.clone());
             if spec.keyboard_focus {
