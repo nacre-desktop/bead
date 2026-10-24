@@ -2841,6 +2841,30 @@
       "advanced": false
     },
     {
+      "id": "date-time-language.locale.weatherIpLookup",
+      "page": "date-time-language",
+      "section": "date-time-language.locale",
+      "key": "weatherIpLookup",
+      "labelId": "bead.settings.weather-ip.label",
+      "descriptionId": "bead.settings.weather-ip.description",
+      "type": "boolean",
+      "store": {
+        "id": "desktop",
+        "key": [
+          "weatherIpLookup"
+        ]
+      },
+      "default": false,
+      "apply": "instant",
+      "synonyms": [
+        "ipinfo",
+        "automatic location",
+        "privacy"
+      ],
+      "advanced": false,
+      "enabledWhenEmpty": "date-time-language.locale.weatherLocation"
+    },
+    {
       "id": "panels/dashboard/weather.editor.weatherPhotos",
       "page": "panels/dashboard/weather",
       "section": "panels/dashboard/weather.editor",

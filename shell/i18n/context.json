@@ -680,6 +680,8 @@
   "bead.settings.trust": "Settings window, Bluetooth page: button that lets a device connect on its own.",
   "bead.settings.unavailable-now": "Settings window: shown when settings cannot be changed because the daemon is unreachable.",
   "bead.settings.untrust": "Settings window, Bluetooth page: button that stops a device connecting on its own.",
+  "bead.settings.weather-ip.description": "Settings window, Date, time and language page: description of the automatic weather location switch.",
+  "bead.settings.weather-ip.label": "Settings window, Date, time and language page: switch label; states plainly that the IP address is sent to ipinfo.io.",
   "bead.settings.wifi": "Settings window, Network page: label of the Wi-Fi switch.",
   "bead.settings.workflow-description": "Settings window, Workflows page: explains the personal workflow setup.",
   "bead.settings.workflow-save": "Settings window, Workflows page: button that saves the setup for the preset.",

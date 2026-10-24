@@ -262,6 +262,82 @@ fn caps(flags: Json) -> Json {
     json!({"health": health(), "flags": flags})
 }
 
+// ---- weather location consent (B0083) --------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+async fn ip_lookup_consent_is_a_switch_that_waits_for_an_empty_city() {
+    let at = stores("date-time-language");
+    let id = "date-time-language.locale.weatherIpLookup";
+    // No city: the switch is off by default (consent is explicit) and writable.
+    let mut l = lab(
+        vec![("settings.store.desktop", store("desktop", 7, json!({})))],
+        &["settings.set"],
+    )
+    .await;
+    let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
+    let model = until(&settings, &at, |m| {
+        m["settings.writable"] == Value::Bool(true) && items(m).iter().any(|r| r["id"] == id)
+    })
+    .await;
+    let rows = items(&model);
+    let consent = row(&rows, id);
+    assert_eq!(consent["kind"], "toggle");
+    assert_eq!(consent["checked"], false);
+    assert_eq!(consent["enabled"], true);
+    let label = consent["label"].as_str().unwrap();
+    assert!(label.contains("IP address") && label.contains("ipinfo.io"), "{label}");
+    assert_eq!(
+        row(&rows, "date-time-language.locale.weatherLocation")["kind"],
+        "text"
+    );
+    settings.act(&format!("set:{id}"), "", wake());
+    assert_eq!(
+        l.call().await,
+        (
+            "settings.set".into(),
+            json!({"store":"desktop","key":["weatherIpLookup"],"value":true,"rev":7})
+        )
+    );
+    // A city overrides the lookup, so the switch is dimmed (its value is kept).
+    let l2 = lab(
+        vec![(
+            "settings.store.desktop",
+            store(
+                "desktop",
+                8,
+                json!({"weatherLocation": "Oslo", "weatherIpLookup": true}),
+            ),
+        )],
+        &["settings.set"],
+    )
+    .await;
+    let settings = Settings::new(Some(l2.client.clone()), &root()).unwrap();
+    let model = until(&settings, &at, |m| {
+        items(m)
+            .iter()
+            .any(|r| r["id"] == id && r["checked"] == true)
+    })
+    .await;
+    let rows = items(&model);
+    assert_eq!(row(&rows, id)["enabled"], false);
+    assert_eq!(
+        row(&rows, "date-time-language.locale.weatherLocation")["enabled"],
+        true
+    );
+    // Whitespace alone is not a city.
+    let l3 = lab(
+        vec![(
+            "settings.store.desktop",
+            store("desktop", 9, json!({"weatherLocation": "  "})),
+        )],
+        &["settings.set"],
+    )
+    .await;
+    let settings = Settings::new(Some(l3.client.clone()), &root()).unwrap();
+    let model = until(&settings, &at, |m| items(m).iter().any(|r| r["id"] == id)).await;
+    assert_eq!(row(&items(&model), id)["enabled"], true);
+}
+
 // ---- capabilities ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]

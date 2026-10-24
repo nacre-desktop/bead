@@ -33,6 +33,8 @@ import tempfile
 import time
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import fake_system  # noqa: E402
 
 # state name -> (steps that open it, steps that close it, sequence seconds).  Steps are tuples:
 #   ('ui', target, method, *args)   daemon ui.dispatch, identical for both shells
@@ -353,19 +355,25 @@ class Arm:
                         pixels[x, y] = ((x * 255 // width + index * 70) % 256, (y * 255 // height * (index + 1)) % 256,
                                         ((x + y) * 255 // (width + height) + index * 40) % 256)
                 image.save(folder / f'generated-{index + 1}.png')
-        # No audio server here: stand-ins make the daemon's osd service see a sink and a source whose level we set.
+        # No audio server here: stand-ins make the daemon see the fixed machine of spikes/fake_system.py (2 sinks, 1 source,
+        # 45 %); the files hold the default levels the `level` step changes.
         fake = self.root / 'fakeaudio'
         fake.mkdir()
         (fake / 'events').write_text('')
-        (fake / 'sink').write_text('0.30\n')
-        (fake / 'source').write_text('0.30\n')
-        (fake / 'pactl').write_text(f'#!/bin/sh\n[ "$1" = subscribe ] && exec tail -n 0 -F {fake}/events\nexit 0\n')
+        (fake / 'sink').write_text(f'{fake_system.DEFAULT_LEVEL}\n')
+        (fake / 'source').write_text(f'{fake_system.DEFAULT_LEVEL}\n')
+        (fake / 'pactl').write_text(f'#!/bin/sh\nFAKE_AUDIO_DIR={fake} exec {sys.executable} {HERE / "fake_system.py"} "$@"\n')
         (fake / 'wpctl').write_text(
             f'#!/bin/sh\ncase "$1" in\nget-volume) case "$2" in *SOURCE*) n=source;; *) n=sink;; esac; echo "Volume: $(cat {fake}/$n)";;\n'
-            'inspect) case "$2" in *SOURCE*) echo "  node.name = \\"fake-source\\"";; *) echo "  node.name = \\"fake-sink\\"";; esac;;\nesac\n')
+            'inspect) case "$2" in *SOURCE*) echo "  node.name = \\"fixture-microphone\\"";; *) echo "  node.name = \\"fixture-speakers\\"";; esac;;\nesac\n')
         for name in ['pactl', 'wpctl']:
             (fake / name).chmod(0o755)
         self.env['PATH'] = f'{fake}:' + self.env['PATH']
+        # The fixed battery and power profiles (UPower, power-profiles-daemon) on the same private bus.
+        self.spawn([sys.executable, str(HERE / 'fake-power.py')], 'fake-power')
+        wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.UPower', '--object-path',
+                                                       '/org/freedesktop/UPower', '--method', 'org.freedesktop.UPower.GetDisplayDevice'])),
+                   20, 'the fake UPower')
         # A fake org.bluez on the private bus (the "system" bus of both shells): the same adapter and devices on both arms.
         self.spawn([sys.executable, str(HERE / 'fake-bluez.py')], 'fake-bluez')
         wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.bluez', '--object-path', '/',
