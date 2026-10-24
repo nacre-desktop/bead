@@ -16,6 +16,7 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
         "presentation":"crop","palette":{"mode":"dark","colours":{"background":"#000000","onSurface":"#ffffff","primary":"#112233"}}}),
     )?;
     pair.file_identity = WallpaperFileIdentity::from_metadata(&std::fs::metadata(&image_path)?);
+    pair.presentation = nacre_protocol::wallpaper::Presentation::Fit;
     let wallpaper = Arc::new(FakeSource::new(
         json!({"available":true,"stale":false,"revision":1,
         "current":pair,"outputs":{"fixture":pair}}),
@@ -49,6 +50,19 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
     )?;
     let values = dashboard.project_with_stores(&h.session.stores);
     assert_eq!(values["dashboard.wallpaper"], Value::Bool(true));
+    let held = dashboard.poster.borrow();
+    let poster = held.as_ref().unwrap();
+    assert_eq!(
+        poster.0.presentation,
+        nacre_protocol::wallpaper::Presentation::Fit
+    );
+    let pixels = image::load_from_memory(poster.3.as_ref().unwrap())?.to_rgba8();
+    assert_eq!(
+        pixels.get_pixel(0, 0).0,
+        [80, 130, 180, 255],
+        "the hero crops a square poster instead of inheriting desktop fit letterboxing"
+    );
+    drop(held);
     let Value::List(host) = &values["dashboard.host"] else {
         panic!("host rows")
     };

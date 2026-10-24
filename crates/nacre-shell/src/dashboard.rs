@@ -1194,7 +1194,11 @@ impl Dashboard {
                 .as_ref()
                 .is_none_or(|(old, ow, oh, _)| old != &pair || *ow != w || *oh != h)
             {
-                let bytes = crate::wallpaper::decode_pair(pair.clone(), w, h)
+                // The hero is an aspect-cropped photo card in QML, independently
+                // of the desktop wallpaper's fit/fill preference.
+                let mut request = pair.clone();
+                request.presentation = nacre_protocol::wallpaper::Presentation::Crop;
+                let bytes = crate::wallpaper::decode_pair(request, w, h)
                     .ok()
                     .and_then(|decoded| image::RgbaImage::from_raw(w, h, decoded.rgba))
                     .and_then(|image| crate::player_art::encode(&image));
