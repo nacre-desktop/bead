@@ -125,9 +125,10 @@ fn notifications_page_and_search_use_the_same_registry_data() {
     assert!(found.iter().all(|r| r["kind"] == "link"));
     let none = settings.project(&stores("appearance", "zzzzqqq"));
     assert_eq!(none["settings.empty"], Value::Bool(true));
-    // Pages Bead cannot edit yet are shown read-only, never writable.
+    // Every registry page is editable now (Displays since B0089); without a daemon none is writable.
     let displays = settings.project(&stores("displays", ""));
-    assert_eq!(displays["settings.readonly"], Value::Bool(true));
+    assert_eq!(displays["settings.readonly"], Value::Bool(false));
+    assert_eq!(displays["settings.writable"], Value::Bool(false));
 }
 
 const DESKTOP: &str = "settings.store.desktop";

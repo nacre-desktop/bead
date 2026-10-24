@@ -57,16 +57,12 @@ function row(item)
     elseif k=="info" then
         return kit.InfoRow{id="info",label=item.label,description=item.description,value=item.value}
     elseif k=="actions" then
-        if #item.options>3 then
-            return kit.ChipsRow{id="chips",label=item.label,description=item.description,enabled=on,items=item.options,on_change=on and "settings.do" or nil}
+        if #item.options>3 or item.chips then
+            return kit.ChipsRow{id="chips",label=item.label,description=item.description,enabled=on,items=item.options,per_row=item.per_row,on_change=on and "settings.do" or nil}
         end
         node=kit.ChoiceRow{id="actions",label=item.label,description=item.description,enabled=on,options=item.options,on_change="settings.do"}
     elseif k=="device" then
         return kit.DeviceRow{id="device",title=item.title,detail=item.detail,icon=item.icon,enabled=on,buttons=item.buttons,slider=item.slider,on_action="settings.do"}
-    elseif k=="keep" then
-        -- B0089: a display change awaiting Keep; the text carries the countdown.
-        return kit.ApplyBar{id="keep",text=item.text,apply_label=item.keep_label,discard_label=item.revert_label,
-            on_apply=act("do:disp-keep"),on_discard=act("do:disp-revert")}
     elseif k=="picker" then
         return kit.PickerList{id="picker",label=item.label,placeholder=item.placeholder,enabled=on,items=item.items,empty=item.empty,more=item.more,
             field=ui.bind("settings.pick.text"),on_pick="settings.do"}

@@ -152,7 +152,13 @@ fn info(id: &str, label: &str, value: &str, description: &str) -> Json {
 pub(super) fn opt(arg: String, label: &str, selected: bool, enabled: bool) -> Json {
     json!({"id": arg, "label": label, "selected": selected, "enabled": enabled})
 }
-pub(super) fn actions(id: &str, label: &str, description: &str, options: Vec<Json>, enabled: bool) -> Json {
+pub(super) fn actions(
+    id: &str,
+    label: &str,
+    description: &str,
+    options: Vec<Json>,
+    enabled: bool,
+) -> Json {
     json!({"id": id, "kind": "actions", "label": label, "description": description,
         "options": options, "enabled": enabled, "own": true})
 }

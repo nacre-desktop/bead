@@ -1331,9 +1331,13 @@ fn display_output(name: &str, x: i64, scale: f64, modes: Vec<String>, current: &
         "refresh_hz": 60.0, "mode": current, "modes": modes, "scale": scale, "x": x, "y": 0, "transform": 0})
 }
 fn few_modes() -> Vec<String> {
-    ["1920x1080@60.000Hz", "1920x1080@144.000Hz", "1280x720@60.000Hz"]
-        .map(String::from)
-        .to_vec()
+    [
+        "1920x1080@60.000Hz",
+        "1920x1080@144.000Hz",
+        "1280x720@60.000Hz",
+    ]
+    .map(String::from)
+    .to_vec()
 }
 fn many_modes() -> Vec<String> {
     (0..12)
@@ -1365,25 +1369,45 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
     let at = stores("displays");
     let model = until(&settings, &at, |m| {
-        nested_items(m).iter().any(|r| r["id"] == "section:displays.out.DP-1")
+        nested_items(m)
+            .iter()
+            .any(|r| r["id"] == "section:displays.out.DP-1")
     })
     .await;
     let cards = nested_items(&model);
     let ids: Vec<&str> = cards.iter().map(|c| c["id"].as_str().unwrap()).collect();
     assert_eq!(
         ids,
-        ["section:displays", "section:displays.out.DP-1", "section:displays.out.HDMI-A-1"],
+        [
+            "section:displays",
+            "section:displays.out.DP-1",
+            "section:displays.out.HDMI-A-1"
+        ],
         "no Keep card while nothing is pending"
     );
     let rows = items(&model);
     // Card 1: title, the niri mirroring sentence, primary chips and the two arrangements (no Mirror).
     assert_eq!(cards[0]["label"], "Displays");
-    assert!(cards[0]["description"].as_str().unwrap().contains("mirroring is unavailable"));
-    assert_eq!(option_args(row(&rows, "displays.primary")), ["do:disp-primary|DP-1", "do:disp-primary|HDMI-A-1"]);
-    assert_eq!(row(&rows, "displays.primary")["options"][0]["selected"], true);
+    assert!(
+        cards[0]["description"]
+            .as_str()
+            .unwrap()
+            .contains("mirroring is unavailable")
+    );
+    assert_eq!(
+        option_args(row(&rows, "displays.primary")),
+        ["do:disp-primary|DP-1", "do:disp-primary|HDMI-A-1"]
+    );
+    assert_eq!(
+        row(&rows, "displays.primary")["options"][0]["selected"],
+        true
+    );
     assert_eq!(
         option_args(row(&rows, "displays.arrange")),
-        ["do:disp-arrange|extend-right", "do:disp-arrange|extend-left"]
+        [
+            "do:disp-arrange|extend-right",
+            "do:disp-arrange|extend-left"
+        ]
     );
     // One card per output: QML's title, the 20 s note, the scale chips and the mode choices.
     assert_eq!(cards[1]["label"], "DP-1 · 1920×1080 · 60 Hz");
@@ -1393,36 +1417,73 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
     );
     let scale = row(&rows, "displays.out.DP-1.scale");
     assert_eq!(scale["label"], "Scale");
-    let labels: Vec<&str> = scale["options"].as_array().unwrap().iter().map(|o| o["label"].as_str().unwrap()).collect();
-    assert_eq!(labels, ["100%", "125%", "150%", "175%", "200%", "250%", "300%"]);
+    let labels: Vec<&str> = scale["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        labels,
+        ["100%", "125%", "150%", "175%", "200%", "250%", "300%"]
+    );
     assert_eq!(scale["options"][0]["selected"], true);
-    assert_eq!(row(&rows, "displays.out.HDMI-A-1.scale")["options"][1]["selected"], true, "125 %");
+    assert_eq!(
+        row(&rows, "displays.out.HDMI-A-1.scale")["options"][1]["selected"],
+        true,
+        "125 %"
+    );
     let mode = row(&rows, "displays.out.DP-1.mode");
     assert_eq!(mode["kind"], "actions", "few modes are chips");
     assert_eq!(mode["options"][0]["selected"], true);
     assert_eq!(mode["options"][1]["id"], "do:disp-mode|DP-1|1");
     let long = row(&rows, "displays.out.HDMI-A-1.mode");
-    assert_eq!((long["kind"].clone(), long["items"].as_array().unwrap().len()), (json!("picker"), 8));
+    assert_eq!(
+        (
+            long["kind"].clone(),
+            long["items"].as_array().unwrap().len()
+        ),
+        (json!("picker"), 8)
+    );
     assert_eq!(long["more"], "4 more, type to filter");
     // The filter field narrows the long list by the typed words.
     let filtered = stores("displays")
-        .reconcile(&BTreeMap::from([("settings.pick.text".into(), Value::Text("1920x1080".into()))]))
+        .reconcile(&BTreeMap::from([(
+            "settings.pick.text".into(),
+            Value::Text("1920x1080".into()),
+        )]))
         .unwrap();
     settings.project(&filtered);
     let rows = items(&settings.project(&filtered));
-    assert_eq!(row(&rows, "displays.out.HDMI-A-1.mode")["items"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        row(&rows, "displays.out.HDMI-A-1.mode")["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     // A compositor that can mirror offers it.
     drop(settings);
-    let l = lab(vec![("displays", displays_topic(true, None))], &DISPLAY_METHODS).await;
+    let l = lab(
+        vec![("displays", displays_topic(true, None))],
+        &DISPLAY_METHODS,
+    )
+    .await;
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
     let rows = items(&until(&settings, &at, has("displays.arrange")).await);
-    assert_eq!(option_args(row(&rows, "displays.arrange")).last().unwrap(), "do:disp-arrange|mirror");
+    assert_eq!(
+        option_args(row(&rows, "displays.arrange")).last().unwrap(),
+        "do:disp-arrange|mirror"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn displays_page_sends_the_exact_contract_calls_and_nothing_unpublished() {
     let mut l = lab(
-        vec![("displays", displays_topic(false, None)), ("settings.store.desktop", desktop())],
+        vec![
+            ("displays", displays_topic(false, None)),
+            ("settings.store.desktop", desktop()),
+        ],
         &DISPLAY_METHODS,
     )
     .await;
@@ -1431,11 +1492,20 @@ async fn displays_page_sends_the_exact_contract_calls_and_nothing_unpublished() 
     until(&settings, &at, has("displays.arrange")).await;
     // The primary is local state; the arrangement goes out with it (QML `layout`).
     settings.act("do:disp-arrange|extend-left", "", wake());
-    assert_eq!(l.call().await, ("display.apply".into(), json!({"output": "DP-1", "arrangement": "extend-left"})));
+    assert_eq!(
+        l.call().await,
+        (
+            "display.apply".into(),
+            json!({"output": "DP-1", "arrangement": "extend-left"})
+        )
+    );
     settle_calls(&settings, &at).await;
     settings.act("do:disp-primary|HDMI-A-1", "", wake());
     settings.act("do:disp-arrange|extend-right", "", wake());
-    assert_eq!(l.call().await.1, json!({"output": "HDMI-A-1", "arrangement": "extend-right"}));
+    assert_eq!(
+        l.call().await.1,
+        json!({"output": "HDMI-A-1", "arrangement": "extend-right"})
+    );
     settle_calls(&settings, &at).await;
     // Scale keeps the mode; a mode keeps the output's scale (QML `edit`).
     settings.act("do:disp-scale|DP-1|1.5", "", wake());
@@ -1475,23 +1545,47 @@ async fn displays_page_counts_down_and_keeps_or_reverts_a_pending_change() {
         .as_millis() as u64
         + 14_500;
     let mut l = lab(
-        vec![("displays", displays_topic(false, Some(deadline))), ("settings.store.desktop", desktop())],
+        vec![
+            ("displays", displays_topic(false, Some(deadline))),
+            ("settings.store.desktop", desktop()),
+        ],
         &DISPLAY_METHODS,
     )
     .await;
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
     let at = stores("displays");
-    let model = until(&settings, &at, has("displays.keep.bar")).await;
+    let model = until(&settings, &at, has("displays.keep.buttons")).await;
     let rows = items(&model);
-    let keep = row(&rows, "displays.keep.bar");
-    assert_eq!(keep["kind"], "keep");
-    assert_eq!((keep["keep_label"].clone(), keep["revert_label"].clone()), (json!("Keep"), json!("Revert")));
-    let text = keep["text"].as_str().unwrap();
-    assert!(text == "Reverting in 15 s" || text == "Reverting in 14 s", "{text}");
-    assert_eq!(nested_items(&model).last().unwrap()["label"], "Keep this display change?");
+    let keep = row(&rows, "displays.keep.buttons");
+    assert_eq!(option_args(keep), ["do:disp-keep", "do:disp-revert"]);
+    assert_eq!(
+        (
+            keep["options"][0]["label"].clone(),
+            keep["options"][1]["label"].clone()
+        ),
+        (json!("Keep"), json!("Revert"))
+    );
+    let text = nested_items(&model)[0]["description"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        text == "Reverting in 15 s" || text == "Reverting in 14 s",
+        "{text}"
+    );
+    assert_eq!(
+        nested_items(&model)[0]["label"],
+        "Keep this display change?",
+        "the question comes first, where a 20 s countdown is seen"
+    );
     // While pending every change control is off (QML `blocked`) and nothing new is sent.
-    assert!(rows.iter().filter(|r| r["id"].as_str().is_some_and(|i| i.starts_with("displays.out.") || i == "displays.arrange"))
-        .all(|r| r["enabled"] == false));
+    assert!(
+        rows.iter()
+            .filter(|r| r["id"]
+                .as_str()
+                .is_some_and(|i| i.starts_with("displays.out.") || i == "displays.arrange"))
+            .all(|r| r["enabled"] == false)
+    );
     settings.act("do:disp-scale|DP-1|2", "", wake());
     settings.act("do:disp-arrange|extend-left", "", wake());
     assert!(l.quiet());
@@ -1502,11 +1596,21 @@ async fn displays_page_counts_down_and_keeps_or_reverts_a_pending_change() {
     assert_eq!(l.call().await, ("display.revert".into(), json!({})));
     // A refusal says why: the daemon's `busy` is the QML sentence.
     settle_calls(&settings, &at).await;
-    l.fail.lock().unwrap().insert("display.confirm".into(), ErrorCode::Busy);
+    l.fail
+        .lock()
+        .unwrap()
+        .insert("display.confirm".into(), ErrorCode::Busy);
     settings.act("do:disp-keep", "", wake());
     l.call().await;
-    let model = until(&settings, &at, |m| m["settings.message"] == Value::Text("Keep or revert the current display change first.".into())).await;
-    assert_eq!(model["settings.message"], Value::Text("Keep or revert the current display change first.".into()));
+    let model = until(&settings, &at, |m| {
+        m["settings.message"]
+            == Value::Text("Keep or revert the current display change first.".into())
+    })
+    .await;
+    assert_eq!(
+        model["settings.message"],
+        Value::Text("Keep or revert the current display change first.".into())
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1516,7 +1620,13 @@ async fn displays_page_is_read_only_without_the_methods_or_the_compositor_flag()
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
     let at = stores("displays");
     let rows = items(&until(&settings, &at, has("displays.arrange")).await);
-    assert!(row(&rows, "displays.out.DP-1.scale")["options"].as_array().unwrap().iter().all(|o| o["enabled"] == false));
+    assert!(
+        row(&rows, "displays.out.DP-1.scale")["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| o["enabled"] == false)
+    );
     settings.act("do:disp-scale|DP-1|2", "", wake());
     assert!(l.quiet());
     drop(settings);
@@ -1526,9 +1636,20 @@ async fn displays_page_is_read_only_without_the_methods_or_the_compositor_flag()
     let l = lab(vec![("displays", topic)], &DISPLAY_METHODS).await;
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
     let model = until(&settings, &at, has("displays.arrange")).await;
-    assert!(nested_items(&model)[0]["description"].as_str().unwrap().starts_with("Display transactions are unavailable"));
+    assert!(
+        nested_items(&model)[0]["description"]
+            .as_str()
+            .unwrap()
+            .starts_with("Display transactions are unavailable")
+    );
     let rows = items(&model);
-    assert!(row(&rows, "displays.out.DP-1.scale")["options"].as_array().unwrap().iter().all(|o| o["enabled"] == false));
+    assert!(
+        row(&rows, "displays.out.DP-1.scale")["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| o["enabled"] == false)
+    );
     drop(settings);
     // No topic at all: one line, no controls.
     let l = lab(vec![], &DISPLAY_METHODS).await;
@@ -1558,8 +1679,8 @@ fn enable_all(rows: &mut Json) {
 fn normalize_countdown(rows: &mut Json) {
     match rows {
         Json::Object(map) => {
-            if map.get("kind") == Some(&json!("keep")) {
-                map.insert("text".into(), json!("Reverting in 14 s"));
+            if map.get("id") == Some(&json!("section:displays.keep")) {
+                map.insert("description".into(), json!("Reverting in 14 s"));
             }
             map.values_mut().for_each(normalize_countdown);
         }
@@ -1637,7 +1758,8 @@ fn topics_for_goldens() -> Vec<(&'static str, Json)> {
             "scales": [1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0],
             "outputs": [display_output("DP-1", 0, 1.0, few_modes(), "1920x1080@60.000Hz"),
                         display_output("HDMI-A-1", 1920, 1.25, many_modes(), "640x360@60.000Hz")]}),
-        ),        (
+        ),
+        (
             "battery",
             json!({"health": health(), "percentage": 78.0, "charging": false}),
         ),

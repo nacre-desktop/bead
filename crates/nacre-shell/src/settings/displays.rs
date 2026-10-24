@@ -3,7 +3,8 @@
 //! `display.confirm`, `display.revert`). Same shape as QML's `NacreDisplaysPage`: a "Displays"
 //! card (primary chips, Extend right/left, Mirror), one card per output (Scale, Resolution and
 //! refresh rate) and, while a change is pending, "Keep this display change?" with Keep and
-//! Revert. The one addition is the countdown the contract's `pending.deadline_ms` allows.
+//! Revert. Two additions: the countdown the contract's `pending.deadline_ms` allows, and the Keep
+//! card first (QML put it last, below the fold on a small window, where a 20 s question is missed).
 //!
 //! Nothing here positions anything: it emits generic rows (`actions`, `picker`, `keep`) that
 //! `shell/settings/main.luau` maps to kit components. Output names, scales and modes in a click
@@ -84,23 +85,26 @@ impl Settings {
         };
         let mut rows = Vec::new();
         if display.outputs.len() > 1 {
-            rows.push(actions(
-                "displays.primary",
-                "",
-                "",
-                display
-                    .outputs
-                    .iter()
-                    .map(|o| {
-                        opt(
-                            format!("do:disp-primary|{}", o.name),
-                            &short(&o.name, 40),
-                            primary.as_deref() == Some(o.name.as_str()),
-                            splittable(&o.name),
-                        )
-                    })
-                    .collect(),
-                true,
+            rows.push(chips(
+                actions(
+                    "displays.primary",
+                    "",
+                    "",
+                    display
+                        .outputs
+                        .iter()
+                        .map(|o| {
+                            opt(
+                                format!("do:disp-primary|{}", o.name),
+                                &short(&o.name, 40),
+                                primary.as_deref() == Some(o.name.as_str()),
+                                splittable(&o.name),
+                            )
+                        })
+                        .collect(),
+                    true,
+                ),
+                4,
             ));
             let can = !blocked && primary.as_deref().is_some_and(splittable);
             let mut arrange = vec![
@@ -110,17 +114,25 @@ impl Settings {
             if display.can_mirror {
                 arrange.push(("mirror", "bead.settings.displays-mirror"));
             }
-            rows.push(actions(
-                "displays.arrange",
-                "",
-                "",
-                arrange
-                    .into_iter()
-                    .map(|(how, label)| {
-                        opt(format!("do:disp-arrange|{how}"), &tr(label, &[]), false, can)
-                    })
-                    .collect(),
-                can,
+            rows.push(chips(
+                actions(
+                    "displays.arrange",
+                    "",
+                    "",
+                    arrange
+                        .into_iter()
+                        .map(|(how, label)| {
+                            opt(
+                                format!("do:disp-arrange|{how}"),
+                                &tr(label, &[]),
+                                false,
+                                can,
+                            )
+                        })
+                        .collect(),
+                    can,
+                ),
+                4,
             ));
         }
         let mut cards = vec![card("displays", &title, &tr(description, &[]), rows)];
@@ -129,15 +141,31 @@ impl Settings {
         }
         if let Some(pending) = display.pending {
             let seconds = pending.deadline_ms.saturating_sub(now_ms()).div_ceil(1000);
-            cards.push(card(
-                "displays.keep",
-                &tr("bead.settings.displays-keep-title", &[]),
-                "",
-                vec![json!({"id": "displays.keep.bar", "kind": "keep", "enabled": true, "own": true,
-                    "text": tr("bead.settings.displays-countdown", &[("seconds", &seconds.to_string())]),
-                    "keep_label": tr("bead.settings.displays-keep", &[]),
-                    "revert_label": tr("bead.settings.displays-revert", &[])})],
-            ));
+            let keep = |arg: &str, label: &str| opt(arg.into(), &tr(label, &[]), false, true);
+            cards.insert(
+                0,
+                card(
+                    "displays.keep",
+                    &tr("bead.settings.displays-keep-title", &[]),
+                    &tr(
+                        "bead.settings.displays-countdown",
+                        &[("seconds", &seconds.to_string())],
+                    ),
+                    vec![chips(
+                        actions(
+                            "displays.keep.buttons",
+                            "",
+                            "",
+                            vec![
+                                keep("do:disp-keep", "bead.settings.displays-keep"),
+                                keep("do:disp-revert", "bead.settings.displays-revert"),
+                            ],
+                            true,
+                        ),
+                        4,
+                    )],
+                ),
+            );
         }
         cards
     }
@@ -164,7 +192,10 @@ impl Settings {
         );
         let note = tr(
             "bead.settings.displays-revert-note",
-            &[("seconds", &nacre_protocol::displays::CONFIRM_SECONDS.to_string())],
+            &[(
+                "seconds",
+                &nacre_protocol::displays::CONFIRM_SECONDS.to_string(),
+            )],
         );
         let mut rows = vec![actions(
             &format!("{id}.scale"),
@@ -194,20 +225,23 @@ impl Settings {
                 )
             };
             if output.modes.len() <= MODE_CHIPS {
-                rows.push(actions(
-                    &format!("{id}.mode"),
-                    &label,
-                    "",
-                    output
-                        .modes
-                        .iter()
-                        .enumerate()
-                        .map(|(i, m)| {
-                            let (arg, text, selected) = option(i, m);
-                            opt(arg, &text, selected, can)
-                        })
-                        .collect(),
-                    can,
+                rows.push(chips(
+                    actions(
+                        &format!("{id}.mode"),
+                        &label,
+                        "",
+                        output
+                            .modes
+                            .iter()
+                            .enumerate()
+                            .map(|(i, m)| {
+                                let (arg, text, selected) = option(i, m);
+                                opt(arg, &text, selected, can)
+                            })
+                            .collect(),
+                        can,
+                    ),
+                    3,
                 ));
             } else {
                 // QML searches above 8 entries: the same filter field the other pickers use.
@@ -282,7 +316,8 @@ impl Settings {
                 }
             }
             "disp-mode" if !self.display_blocked(&display) => {
-                let mode = output(a).and_then(|o| Some((o, o.modes.get(b.parse::<usize>().ok()?)?)));
+                let mode =
+                    output(a).and_then(|o| Some((o, o.modes.get(b.parse::<usize>().ok()?)?)));
                 if let Some((target, mode)) = mode {
                     self.call(
                         "display.apply",
@@ -314,7 +349,11 @@ impl Settings {
             state.display_ticker = None;
             return;
         }
-        let Some(wake) = self.wake.borrow().clone().filter(|_| state.display_ticker.is_none())
+        let Some(wake) = self
+            .wake
+            .borrow()
+            .clone()
+            .filter(|_| state.display_ticker.is_none())
         else {
             return;
         };
@@ -335,6 +374,12 @@ impl Settings {
     }
 }
 
+/// Draw an `actions` row as left-aligned wrapping chips, `per_row` to a line (QML's buttons flow).
+fn chips(mut row: Json, per_row: u64) -> Json {
+    row["chips"] = true.into();
+    row["per_row"] = per_row.into();
+    row
+}
 /// One raised card: what `main.luau` draws for a `section` row.
 fn card(id: &str, label: &str, description: &str, rows: Vec<Json>) -> Json {
     json!({"id": format!("section:{id}"), "kind": "section", "label": label,

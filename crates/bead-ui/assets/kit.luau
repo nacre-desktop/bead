@@ -422,8 +422,10 @@ return function(ui, tokens)
     function kit.ChipsRow(p)
         local per_row=p.per_row or 4
         local lines=math.max(1,math.ceil(#p.items/per_row))
-        return ui.Column{id=p.id,width="fill",shrink=0,gap=sp.xs,padding=sp.sm,height=sp.sm*2+36+lines*38,
-            ui.Text{id="label",text=p.label,height=20,font_size=tx.body*4/3,color=p.enabled~=false and "onSurface" or "onSurfaceVariant"},
+        -- A row without label (and description) is just its chips.
+        local titled=(p.label or "")~=""
+        return ui.Column{id=p.id,width="fill",shrink=0,gap=sp.xs,padding=sp.sm,height=sp.sm*2+(titled and 36 or 0)+lines*38,
+            ui.Text{id="label",text=p.label,visible=titled,height=20,font_size=tx.body*4/3,color=p.enabled~=false and "onSurface" or "onSurfaceVariant"},
             ui.Text{id="description",text=p.description or "",visible=(p.description or "")~="",height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"},
             kit.ChipRow{id="chips",items=p.items,per_row=per_row,on_change=p.on_change}}
     end
