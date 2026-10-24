@@ -1,5 +1,22 @@
 # Feasibility
 
+## 2026-10-24 — B0080 populated Home first key
+
+Home still opens first; a ready search reply replaces superseded work before raster.
+Bounded generation-owned markup fragments reuse Sidebar, Quick and prefix hints.
+Partial buffer adoption and on-use page advice reduce cold repair work.
+Five matched private CPU pairs and full Arch CI pass; real-engine typing remains unmeasured.
+
+| Five-pair medians, CPU backend | Main | Candidate / paired Δ | Gate |
+| --- | ---: | ---: | --- |
+| Home first key, ms | 15.161 | 7.598 | ≤8 pass |
+| Standalone first key, ms | 9.437 | 6.508 | ≤8 pass |
+| Later Home / standalone, ms | 13.682 / 7.610 | 6.811 / 7.031 | ≤8 pass |
+| Opening paired Δ, ms | — | −0.683 | ≤+2 pass |
+| Idle / open / closed total Δ, MiB | — | −0.165 / +0.039 / −0.316 | ≤+0.5 pass |
+
+[Stages, residency, pixel pairs and limits](docs/specs/0080-home-first-key.md).
+
 ## 2026-10-24 — B0075 first-key repair
 
 An adjacent-commit bisect identifies cold opening motion, not Home routing.

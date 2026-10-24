@@ -74,7 +74,7 @@ into runtime, transactions, rendering and protocol dispatch. Public API exports
 are retained.
 
 `ui.memo(key, inputs, render)` caches a pure markup subtree within its generation.
-Use a unique key per definition and pass every non-store input explicitly; store
+Use a unique key per definition and pass every non-store input as JSON data; store
 reads inside `render(inputs)` are tracked automatically. Bindings, layout, actions
 and Repeat scopes still receive normal validation. The payload/index limits are
 128/32 KiB, with 8 MiB per-build memo work and expanded-output limits (nested

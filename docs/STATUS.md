@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-24 — B0080 populated Home first key (review)
+
+Five matched CPU pairs now measure Home → completed search at 7.598 ms
+(control 15.161); standalone is 6.508 ms and later keys stay below 8 ms.
+Opening improves by 0.683 ms; settled idle/open/closed memory deltas are
+−0.165/+0.039/−0.316 MiB. Full remote Arch CI passes. Projection coalescing,
+bounded pure-markup reuse and partial SHM adoption preserve settled pixels.
+[B0080](specs/0080-home-first-key.md) records stage costs, paired images and
+fixture/nested limits; no live switch or real-engine/laptop claim.
+
 ## 2026-10-24 — B0079 extras placement and reveal (review)
 
 Windows, Commands and Keyboard shortcuts now use QML’s centered bottom

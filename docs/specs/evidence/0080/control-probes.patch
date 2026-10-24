@@ -1,0 +1,93 @@
+diff --git a/crates/bead-render/src/lib.rs b/crates/bead-render/src/lib.rs
+index 738f48a..2a6ed43 100644
+--- a/crates/bead-render/src/lib.rs
++++ b/crates/bead-render/src/lib.rs
+@@ -819,8 +819,10 @@ impl Renderer for CpuRenderer {
+                             TextAlign::Right => cosmic_text::Align::Right,
+                         }),
+                     );
+-                    let _profile = bead_core::profile::Span::new("shape");
++                    let profile = bead_core::profile::Span::new("shape");
+                     buf.shape_until_scroll(fonts, false);
++                    drop(profile);
++                    let _raster_profile = bead_core::profile::Span::new("raster");
+                     for run in buf.layout_runs() {
+                         for glyph in run.glyphs {
+                             if let Some(face) = fonts.db().face(glyph.font_id) {
+diff --git a/crates/bead-wayland/src/rendering.rs b/crates/bead-wayland/src/rendering.rs
+index 33b3262..4d043c9 100644
+--- a/crates/bead-wayland/src/rendering.rs
++++ b/crates/bead-wayland/src/rendering.rs
+@@ -836,6 +836,7 @@ impl App {
+                 // An explicitly permitted automatic fallback uses the same retained Scene.
+                 renderer.prepare(scene, scale)?;
+             }
++            let repair_profile = bead_core::profile::Span::new("repair_setup");
+             let format = if cfg!(target_endian = "little")
+                 && !self.options.force_argb
+                 && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
+@@ -962,6 +963,7 @@ impl App {
+                 std::slice::from_ref(&bounding)
+             };
+             let start = Instant::now();
++            drop(repair_profile);
+             let compose_profile = bead_core::profile::Span::new("compose");
+             let canvas = b
+                 .buffer
+@@ -995,6 +997,7 @@ impl App {
+             if self.started.elapsed().as_secs_f64() > 2. {
+                 s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
+             }
++            let _commit_profile = bead_core::profile::Span::new("commit");
+             for region in &regions {
+                 s.layer.wl_surface().damage_buffer(
+                     region.x as i32,
+diff --git a/crates/nacre-shell/src/launcher.rs b/crates/nacre-shell/src/launcher.rs
+index e051dcb..37d6301 100644
+--- a/crates/nacre-shell/src/launcher.rs
++++ b/crates/nacre-shell/src/launcher.rs
+@@ -358,9 +358,14 @@ impl Fixture {
+         for reply in queries.values() {
+             rows(reply.clone())?;
+         }
++        let favorites = data
++            .get("preferences")
++            .map(parse_favorites)
++            .transpose()?
++            .unwrap_or_default();
+         Ok(Self {
+             publisher: source::Publisher::new("menu-fixture".into(), data)?,
+-            favorites: Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new())),
++            favorites: Arc::new(std::sync::Mutex::new(favorites)),
+         })
+     }
+ }
+diff --git a/crates/nacre-shell/src/reload.rs b/crates/nacre-shell/src/reload.rs
+index 9856ba0..854a779 100644
+--- a/crates/nacre-shell/src/reload.rs
++++ b/crates/nacre-shell/src/reload.rs
+@@ -3705,6 +3705,24 @@ impl SceneSource for Runtime {
+     }
+     fn resource_counts(&self) -> String {
+         let mut counts = self.session.resource_counts();
++        if bead::core::profile::enabled() && self.launcher.is_some() {
++            use bead::core::Value;
++            let stores = &self.session.stores;
++            let pending = stores.get("launcher.pending") == Some(&Value::Bool(true));
++            let home = matches!(stores.get("launcher.engine_route"), Some(Value::Text(route)) if route.split('.').next() == Some("home"))
++                && matches!(stores.get("launcher.search.text"), Some(Value::Text(query)) if query.trim().is_empty());
++            let number = |name| match stores.get(name) {
++                Some(Value::Number(n)) => *n as usize,
++                _ => 0,
++            };
++            let favorites = match stores.get("launcher.apps") {
++                Some(Value::List(rows)) => {
++                    rows.iter().filter(|row| row["favorite"] == true).count()
++                }
++                _ => 0,
++            };
++            counts.push_str(&format!(" menu_pending={pending} menu_home={home} menu_count={} menu_total={} menu_favorites={favorites}", number("launcher.result_count"), number("launcher.total_count")));
++        }
+         if std::env::var_os("BEAD_SERVICE_DIAGNOSTICS").is_some() {
+             if let Some(desktop) = &self.desktop {
+                 let (tasks, retained) = desktop.bus_task_counts();
