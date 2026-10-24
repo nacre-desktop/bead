@@ -1038,6 +1038,11 @@ return function(p) count+=1; return ui.Button{id="tile",text=p.item.name..count}
 fn arc_constructor_builds_thematic_signed_stroke_and_rejects_out_of_range_angles() {
     let f = fixture();
     fs::write(
+        f.0.join("palette.json"),
+        r#"{"formatVersion":1,"colours":{"surface":"101010","secondary":"4499cc"}}"#,
+    )
+    .unwrap();
+    fs::write(
         f.0.join("ui/main.luau"),
         r#"local ui=require("bead.ui")
 return ui.Box{id="root",width=120,height=120,
