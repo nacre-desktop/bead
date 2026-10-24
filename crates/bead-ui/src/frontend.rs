@@ -305,7 +305,9 @@ impl FrontEnd for LuauFrontEnd {
                                 let mut raw: RawNode = lua.from_value(result?)?;
                                 let mut remaining = 8 * bead_core::cache::MIB;
                                 expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
-                                let bytes = crate::layout::raw_bytes(&raw)
+                                // Include the Fragment/Rc header as well as owned data.
+                                let bytes = 128
+                                    + crate::layout::raw_bytes(&raw)
                                     + observed
                                         .iter()
                                         .map(|(k, v)| {
