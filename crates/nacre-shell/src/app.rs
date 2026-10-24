@@ -49,6 +49,9 @@ static HOST: OnceLock<Host> = OnceLock::new();
 /// The presentation palette the shell last committed (B0056): an app starts with it, so it wears the wallpaper's colours
 /// and not the bundle's static ones.
 static LIVE: std::sync::Mutex<Option<BTreeMap<String, [u8; 4]>>> = std::sync::Mutex::new(None);
+pub fn configured() -> bool {
+    HOST.get().is_some()
+}
 pub fn set_live_palette(palette: &BTreeMap<String, [u8; 4]>) {
     *LIVE.lock().unwrap_or_else(|p| p.into_inner()) = Some(palette.clone());
 }
@@ -264,7 +267,10 @@ fn describe_panel(app: &str, socket: &Path, child: &mut std::process::Child) {
         let size = state["size"]
             .as_array()
             .and_then(|s| Some((s.first()?.as_f64()?, s.get(1)?.as_f64()?)));
-        if let (Some(true), Some((w, h))) = (state["target_open"].as_bool(), size) {
+        if let (Some(true), Some((w, h))) = (state["target_open"].as_bool(), size)
+            && w > 64.
+            && h > 64.
+        {
             placement::set_external(
                 app,
                 Some(placement::External {

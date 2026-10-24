@@ -2638,14 +2638,23 @@ impl SceneSource for Runtime {
             };
             return self.finish_scene(scene, false);
         }
-        if let (Some(chat), Some((_, name, bead::core::Value::Text(arg)))) =
+        if let (Some(chat), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.chat, &host_action)
             && name == "chat.do"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, shift: false } if command == "enter"))
         {
             self.actions.authorize(name)?;
-            let outcome = chat.act(arg, &self.session.stores);
+            let mut outcome = chat.act(arg, &self.session.stores);
+            if matches!(&event, UiEvent::Release) {
+                self.session.release()?;
+                outcome
+                    .stores
+                    .insert("bead.pressed".into(), bead::core::Value::Bool(false));
+                outcome
+                    .stores
+                    .insert("bead.focused".into(), bead::core::Value::Text(id.clone()));
+            }
             if let Some(copied) = outcome.copy {
                 self.wakeup
                     .as_ref()
@@ -3638,7 +3647,14 @@ impl SceneSource for Runtime {
                         chrome.set_engaged(false);
                     }
                 }
-                self.session.relayout()?
+                if self.session.stores.get("view.detached").is_some() {
+                    self.session.update(BTreeMap::from([(
+                        "view.detached".into(),
+                        bead::core::Value::Bool(detached),
+                    )]))?
+                } else {
+                    self.session.relayout()?
+                }
             }
             UiEvent::PearlGuide(_) => return Err("guide event reached script".into()),
             UiEvent::Accessibility {
@@ -3972,10 +3988,22 @@ impl SceneSource for Runtime {
         counts
     }
     fn state_summary(&self) -> String {
-        if !self.trace {
+        if !self.trace && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_none() {
             return String::new();
         }
         self.session.state_summary()
+    }
+    fn scroll_regions(&self) -> Vec<bead::render::Rect> {
+        self.session.scroll_regions()
+    }
+    fn wheel_step(&self) -> f64 {
+        match self.session.stores.get("bead.scroll.wheel_step") {
+            Some(bead::core::Value::Number(step)) if step.is_finite() && *step > 0. => *step,
+            _ => 600.,
+        }
+    }
+    fn outside_dismiss(&self) -> bool {
+        self.session.stores.get("chat.pinned") != Some(&bead::core::Value::Bool(true))
     }
     fn focused_dismiss(&self) -> bool {
         self.session.stores.get("panel.open").is_some()

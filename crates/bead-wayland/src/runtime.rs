@@ -4,6 +4,7 @@ use super::*;
 const MAX_WALLPAPER_RGBA_BYTES: usize = 64 * 1024 * 1024;
 const MAX_WALLPAPER_DIMENSION: u32 = 16_384;
 pub(super) struct App {
+    pub(super) scrolls: scroll::State,
     pub(super) subcompositor: Option<wl_subcompositor::WlSubcompositor>,
     pub(super) background: smithay_client_toolkit::background_effect::BackgroundEffectState,
     pub(super) clipboard: clipboard::Clipboard,
@@ -184,6 +185,7 @@ pub fn run_runtime(
         background.ext_background_effect_manager_v1().is_ok()
     );
     let mut app = App {
+        scrolls: Default::default(),
         subcompositor: globals.bind(&qh, 1..=1, ()).ok(),
         background,
         clipboard: clipboard::Clipboard::new(&globals, &qh),

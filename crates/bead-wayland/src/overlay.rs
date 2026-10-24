@@ -41,6 +41,12 @@ pub(super) struct Overlay {
     timer: bool,
 }
 impl Overlay {
+    pub(super) fn scroll_regions(&self) -> Vec<Rect> {
+        self.source.scroll_regions()
+    }
+    pub(super) fn wheel_step(&self) -> f64 {
+        self.source.wheel_step()
+    }
     pub(super) fn epoch(&self) -> u64 {
         self.epoch
     }
@@ -636,18 +642,10 @@ impl App {
                 horizontal,
                 ..
             } => {
-                if horizontal.absolute != 0. {
-                    self.overlay_ui(UiEvent::HorizontalScroll {
-                        x,
-                        y,
-                        delta: horizontal.absolute,
-                    });
-                }
-                (vertical.absolute != 0.).then_some(UiEvent::Scroll {
-                    x,
-                    y,
-                    delta: vertical.absolute,
-                })
+                let target = crate::scroll::Target::Overlay(o.epoch);
+                self.axis_scroll(target.clone(), false, (x, y), vertical);
+                self.axis_scroll(target, true, (x, y), horizontal);
+                None
             }
             _ => None,
         };

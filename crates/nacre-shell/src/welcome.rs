@@ -313,6 +313,7 @@ pub fn window_spec(
         app_id: "nacre-welcome".into(),
         title: crate::i18n::tr("bead.welcome.title", &[]),
         size: (1020, 760),
+        size_for_output: None,
         min_size: (720, 540),
         fallback,
         factory: Arc::new(move |_| {

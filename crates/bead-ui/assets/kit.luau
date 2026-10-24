@@ -268,7 +268,7 @@ return function(ui, tokens)
     -- text boxes (plain, Markdown blocks, code) and per-message buttons. `cells` is the
     -- windowed model, `extent` the full height, `on_action` the action fired by buttons.
     function kit.Transcript(p)
-        local out=props(p,{},{cells=true,extent=true,on_action=true})
+        local out=props(p,{},{cells=true,extent=true,on_action=true,action_radius=true,action_release=true})
         out[1]=ui.Box{id="extent",width=p.width,height=math.max(value(p.extent,1),1),shrink=0,
             ui.Repeat{id="cells",model=p.cells,key="id",render=function(item)
                 if item.k=="fill" then
@@ -279,7 +279,7 @@ return function(ui, tokens)
                 end
                 local pad=math.floor((item.h-item.s*1.4)/2)
                 return kit.Button{id="button",position="absolute",left=item.x,top=item.y,width=item.w,height=item.h,padding=0,padding_top=pad,
-                    radius=tokens.radii.small,fill="surfaceContainerHigh",aria_label=item.t,on_activate=ui.action(p.on_action,item.a),
+                    radius=p.action_radius or tokens.radii.small,activate_on_release=p.action_release,fill="surfaceContainerHigh",aria_label=item.t,on_activate=ui.action(p.on_action,item.a),
                     ui.Text{id="label",text=item.t,width=item.w,height=item.h-pad,font_size=item.s,text_align="center",color="onSurface"}}
             end}}
         return ui.Scroll(out)
@@ -313,6 +313,39 @@ return function(ui, tokens)
     end
     -- Row button that asks again in place: while `confirming` it shows `confirm_label` in the error
     -- colour with the same glyph and runs `on_confirm`; otherwise `label` runs `on_activate`.
+    -- Rounded text/icon action; label_width is the measured advance supplied by the host.
+    function kit.PillButton(p)
+        local compact=p.compact==true
+        local label=p.label or ""
+        local size=(compact and tokens.text.caption or tokens.text.body)*4/3
+        local icon=(compact and tokens.icons.small or tokens.icons.medium)*4/3
+        local alpha=p.on_activate and 1 or .4
+        local ink=ui.alpha(p.selected and "onPrimary" or "onSurface",alpha)
+        -- Fractional-scale shaping can round the painted advance up by a pixel.
+        local label_width=label~="" and math.ceil(p.label_width or #label*size*.55)+tokens.spacing.hairline or 0
+        local children={}
+        if p.glyph and p.glyph~="" then
+            table.insert(children,ui.Text{id="icon",text=p.glyph,family="Material Symbols Rounded",font_size=icon,width=icon,height=24,color=ink})
+        end
+        if p.label and p.label~="" then
+            table.insert(children,ui.Text{id="label",text=p.label,font_size=size,width=label_width,height=24,color=ink})
+        end
+        local padding=compact and tokens.spacing.xl or tokens.spacing.huge
+        local text_width=label_width
+        local has_icon=p.glyph and p.glyph~=""
+        local extra=compact and (icon+tokens.spacing.xs+tokens.spacing.hairline) or (icon+tokens.spacing.xs+tokens.spacing.hairline/2)
+        local width=padding+text_width+(has_icon and extra or 0)
+        local base=p.selected and "primary" or "surfaceContainerHigh"
+        local pressed=value(ui.bind("bead.pressed"),false)
+        local out=props(p,{width=width,height=math.max(34,size+tokens.spacing.md),padding=0,radius=tokens.radii.full,activate_on_release=true,
+            fill=ui.alpha(base,alpha),hover_fill=p.on_activate and ui.tint(base,"onSurface",pressed and .12 or .08) or ui.alpha(base,alpha),aria_label=p.label},
+            {label=true,label_width=true,glyph=true,compact=true,selected=true})
+        local gap=label~="" and has_icon and (compact and tokens.spacing.xs or tokens.spacing.sm) or 0
+        local inset=math.max(0,(out.width-text_width-(has_icon and icon or 0)-gap)/2)
+        out[1]=ui.Row{id="content",width=out.width,height=out.height,align="center",justify="center",padding_left=inset,
+            padding_right=inset,gap=gap,table.unpack(children)}
+        return kit.Button(out)
+    end
     function kit.ConfirmButton(p)
         local confirming=value(p.confirming,false)
         local label=confirming and p.confirm_label or p.label

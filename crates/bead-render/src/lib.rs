@@ -1345,6 +1345,15 @@ fn wrapped<R>(
     buffer.shape_until_scroll(fonts, false);
     Ok(use_buffer(fonts, &mut buffer))
 }
+/// Unwrapped advance of the widest line, using the same shaper as painting.
+pub fn text_width(scene: &Scene, text: &str, family: &str, size: f32) -> Result<f32> {
+    wrapped(scene, text, family, size, 20_000., |_, buffer| {
+        buffer
+            .layout_runs()
+            .map(|run| run.line_w)
+            .fold(0_f32, f32::max)
+    })
+}
 /// Number of drawn lines (at least one), counting wraps and explicit newlines.
 pub fn text_lines(scene: &Scene, text: &str, family: &str, size: f32, width: f32) -> Result<usize> {
     wrapped(scene, text, family, size, width, |_, buffer| {

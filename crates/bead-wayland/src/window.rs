@@ -21,6 +21,8 @@ pub type WindowModel = Arc<
         + Sync,
 >;
 
+pub type WindowSizing = Arc<dyn Fn((u32, u32)) -> (u32, u32) + Send + Sync>;
+
 #[derive(Clone)]
 pub struct WindowSpec {
     pub app_id: String,
@@ -28,6 +30,8 @@ pub struct WindowSpec {
     /// Initial logical size when the compositor does not suggest one.
     pub size: (u32, u32),
     pub min_size: (u32, u32),
+    /// Optional product sizing policy, evaluated against the selected logical output.
+    pub size_for_output: Option<WindowSizing>,
     pub fallback: Scene,
     pub factory: WindowFactory,
     pub model: WindowModel,
@@ -43,6 +47,7 @@ pub(super) struct Win {
     buffers: Vec<Buffer>,
     geometry: (i32, i32),
     size: (u32, u32),
+    preferred_size: (u32, u32),
     scale120: u32,
     fractional: Option<WpFractionalScaleV1>,
     viewport: Option<WpViewport>,
@@ -54,6 +59,12 @@ pub(super) struct Win {
     drawn: u64,
 }
 impl Win {
+    pub(super) fn scroll_regions(&self) -> Vec<Rect> {
+        self.source.scroll_regions()
+    }
+    pub(super) fn wheel_step(&self) -> f64 {
+        self.source.wheel_step()
+    }
     pub(super) fn epoch(&self) -> u64 {
         self.epoch
     }
@@ -111,7 +122,7 @@ impl WindowHandler for App {
             return;
         };
         let spec = self.options.window.as_ref();
-        let fallback = spec.map_or((800, 600), |s| s.size);
+        let fallback = win.preferred_size;
         let min = spec.map_or((1, 1), |s| s.min_size);
         let width = configure
             .new_size
@@ -150,6 +161,17 @@ impl App {
         let call = &request.call;
         if call.target != "bead.window" {
             return false;
+        }
+        if call.method == "state" && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
+            let reply = bead_services::ipc::Reply::ok(
+                call.id,
+                serde_json::json!({
+                    "size": self.window.as_ref().map(|w| w.size),
+                    "stores": self.window.as_ref().and_then(|w| serde_json::from_str::<serde_json::Value>(&w.source.state_summary()).ok())
+                }),
+            );
+            let _ = request.reply.send(reply);
+            return true;
         }
         let result = match call.method.as_str() {
             "open" => self.open_window(&call.args),
@@ -225,7 +247,23 @@ impl App {
                 let _ = sender.send(UiEvent::Window(epoch, Box::new(event)));
             }))
             .map_err(|e| e.to_string())?;
-        source.viewport(spec.size.0, spec.size.1);
+        let output_size = self
+            .output
+            .outputs()
+            .filter_map(|o| self.output.info(&o))
+            .filter(|info| {
+                self.options
+                    .output
+                    .as_ref()
+                    .is_none_or(|name| info.name.as_ref() == Some(name))
+            })
+            .find_map(|info| info.logical_size)
+            .map(|(w, h)| (w.max(1) as u32, h.max(1) as u32));
+        let size = match (&spec.size_for_output, output_size) {
+            (Some(policy), Some(output)) => policy(output),
+            _ => spec.size,
+        };
+        source.viewport(size.0, size.1);
         let renderer = bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?;
         self.window = Some(Win {
             window,
@@ -236,7 +274,8 @@ impl App {
             pool: None,
             buffers: Vec::new(),
             geometry: (0, 0),
-            size: spec.size,
+            size,
+            preferred_size: size,
             scale120: 120,
             fractional,
             viewport,
@@ -565,18 +604,10 @@ impl App {
                 horizontal,
                 ..
             } => {
-                if horizontal.absolute != 0. {
-                    self.window_ui(UiEvent::HorizontalScroll {
-                        x,
-                        y,
-                        delta: horizontal.absolute,
-                    });
-                }
-                (vertical.absolute != 0.).then_some(UiEvent::Scroll {
-                    x,
-                    y,
-                    delta: vertical.absolute,
-                })
+                let target = crate::scroll::Target::Window(win.epoch);
+                self.axis_scroll(target.clone(), false, (x, y), vertical);
+                self.axis_scroll(target, true, (x, y), horizontal);
+                None
             }
             _ => None,
         };

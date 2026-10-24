@@ -241,7 +241,11 @@ impl App {
         let layer = self.layers.create_layer_surface(
             &self.qh,
             surface,
-            Layer::Top,
+            if geometry.input {
+                Layer::Overlay
+            } else {
+                Layer::Top
+            },
             Some(&self.edge_namespace()),
             Some(output),
         );
@@ -325,6 +329,13 @@ impl App {
     }
     /// The lip's panel is open on this output.
     fn lip_active(&self, output: &wl_output::WlOutput, lip: &Lip) -> bool {
+        if let Some(open) =
+            self.options.control.as_ref().and_then(|control| {
+                control.external_panel_open(&lip.opens, &self.output_id(output))
+            })
+        {
+            return open;
+        }
         self.panel_target
             && self.panel_name.as_deref() == Some(lip.opens.as_str())
             && self.panel_output.as_ref() == Some(output)
@@ -517,6 +528,13 @@ impl App {
             self.redraw_lip(&k);
             return;
         }
+        if let Some(control) = &self.options.control
+            && control.external_panel_open(&lip.opens, &output).is_some()
+        {
+            control.external_panel_request(&lip.opens, &output, false);
+            self.redraw_lip(&k);
+            return;
+        }
         self.edge.hover_opened = Some(k.clone());
         if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(&output), true, None) {
             eprintln!("EDGE_OPEN_ERROR {error}");
@@ -566,7 +584,11 @@ impl App {
         if !self.lip_allowed(lip) {
             return;
         }
-        if self.lip_active(wl_output, lip) {
+        if let Some(control) = &self.options.control
+            && control.external_panel_open(&lip.opens, output).is_some()
+        {
+            control.external_panel_request(&lip.opens, output, true);
+        } else if self.lip_active(wl_output, lip) {
             self.close_panel();
         } else if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(output), true, None)
         {

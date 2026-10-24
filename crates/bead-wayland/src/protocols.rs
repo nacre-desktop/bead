@@ -844,7 +844,13 @@ impl App {
                 if self.options.trace_state {
                     println!("DISMISS_INPUT press=true");
                 }
-                self.close_panel();
+                if self
+                    .panel_runtime
+                    .as_ref()
+                    .is_none_or(|r| r.outside_dismiss())
+                {
+                    self.close_panel();
+                }
             }
             return;
         }
@@ -930,6 +936,10 @@ impl App {
         // layer, even outside its bounds. Treat that path like the backdrop.
         if panel
             && matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+            && self
+                .panel_runtime
+                .as_ref()
+                .is_none_or(|r| r.outside_dismiss())
             && (event.position.0 < 0.
                 || event.position.1 < 0.
                 || event.position.0 >= surface_size.0 as f64
@@ -1009,26 +1019,9 @@ impl App {
                 horizontal,
                 ..
             } => {
-                if vertical.absolute != 0. {
-                    self.view_event(
-                        panel,
-                        UiEvent::Scroll {
-                            x,
-                            y,
-                            delta: vertical.absolute,
-                        },
-                    );
-                }
-                if horizontal.absolute != 0. {
-                    self.view_event(
-                        panel,
-                        UiEvent::HorizontalScroll {
-                            x,
-                            y,
-                            delta: horizontal.absolute,
-                        },
-                    );
-                }
+                let target = self.scroll_target(panel);
+                self.axis_scroll(target.clone(), false, (x, y), vertical);
+                self.axis_scroll(target, true, (x, y), horizontal);
             }
             _ => {}
         }

@@ -1,8 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Stores below are projected by `chat.rs`; the view only reads them.
 return {stores={
-    ["panel.open"]=true,["view.edge"]="left",
-    ["chat.section"]="chat",["chat.height"]=650,["chat.edge"]=16,["chat.button"]=36,["chat.tabs"]=62,["chat.top"]=116,["chat.inner"]=438,
+    ["panel.open"]=true,["view.detached"]=false,["view.edge"]="left",
+    ["chat.labels"]={},["chat.section"]="chat",["chat.pinned"]=false,["chat.height"]=650,["chat.edge"]=16,["chat.button"]=36,["chat.tabs"]=62,["chat.top"]=116,["chat.inner"]=438,
     ["chat.draft"]="",["chat.placeholder"]="",
     ["chat.scroll"]=0,["chat.extent"]=0,["chat.cells"]={},["chat.empty"]=true,
     ["chat.transcript_top"]=189,["chat.transcript_height"]=300,

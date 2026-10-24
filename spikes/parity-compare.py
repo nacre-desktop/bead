@@ -23,6 +23,7 @@ import html
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import signal
@@ -150,6 +151,7 @@ STATES = {
                      [('ui', 'nacre', 'close')], 0),
     'session': ([('ui', 'nacre', 'session')],
                 [('ui', 'nacre', 'close')], 1.0),
+    'settings-scroll': ([('ui', 'nacre', 'settings'), ('sleep', 1.5), ('scroll-proof',)], [('app_close', 'settings')], 0),
     'settings': ([('ui', 'nacre', 'settings'), ('sleep', 1.5)], [('app_close', 'settings')], 0),
     # B0064: the Colors app, the Welcome colours page and the app-theming targets (generated wallpapers, see --wallpapers)
     'colors-app': ([('only', 'qml', ('qml_app', 'colorsApp', 'open', '')), ('only', 'bead', ('shell', 'colorsApp', 'open')), ('sleep', 6.0)],
@@ -192,6 +194,10 @@ STATES = {
     [('app_close', 'settings'), ('journal', 'off')], 0),
     'settings-appearance': ([('only', 'qml', ('qml_settings', 'appearance')), ('only', 'bead', ('shell', 'nacre', 'settings', 'appearance')), ('sleep', 2.0)],
     [('app_close', 'settings')], 0),
+    'sidebar-hover': ([('ui', 'nacre', 'left'), ('sleep', 0.8), ('pointer', 80, 342)], [('release',), ('ui', 'nacre', 'left')], 0),
+    'sidebar-pressed': ([('ui', 'nacre', 'left'), ('sleep', 0.8), ('press', 80, 342)], [('release',), ('ui', 'nacre', 'left')], 0),
+    'sidebar-conversation': ([('ui', 'nacre', 'left'), ('chat-seed',), ('sleep', 1.0)], [('ui', 'nacre', 'left')], 0),
+    'sidebar-pinned': ([('ui', 'nacre', 'left'), ('chat-seed',), ('pin',), ('click', 1600, 600), ('sleep', 0.3)], [('ui', 'nacre', 'left')], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
     # B0093: the selector prompt (`nacre-menu pick|input`), the same request through the same helper in both shells
     'menu-pick': ([('prompt', 'pick'), ('sleep', 0.2)], [('prompt_end',)], 1.0),
@@ -362,7 +368,9 @@ class Arm:
                 raise RuntimeError('private parent output does not match pointer coordinates')
             (self.out / 'parent-geometry.json').write_text(json.dumps(outputs))
         niri_config = self.root / 'niri.kdl'
-        config_text = NIRI_CONFIG
+        # Use the shipped floating app rules in both private arms, including Bead app IDs.
+        rules = Path(a.nacre).resolve() / 'niri/window-rules.kdl'
+        config_text = NIRI_CONFIG + ('include ' + json.dumps(str(rules)) + '\n' if rules.is_file() else '')
         if getattr(a, "shortcut_fixture", False):
             # Real private bindings, read by BOTH desktop-extras keys and shortcuts.refresh.
             # Their actions are harmless even if a key is accidentally sent during capture.
@@ -405,6 +413,24 @@ class Arm:
             raise RuntimeError(f'daemon call failed: {method} {reply.stderr.strip()[:200]}')
         return json.loads(reply.stdout) if reply.stdout.strip() else None
 
+    def install_chat_fixture(self):
+        # Reuse Nacre's synthetic provider, without copying a production helper or making network calls.
+        source = (Path(self.args.nacre) / 'crates/nacre-helper/tests/sidebar_chat.rs').read_text()
+        fake = re.search(r'const FAKE_CODEX: &str = r##"(.*?)"##;', source, re.S).group(1)
+        folder = self.root / 'home/.local/bin'
+        folder.mkdir(parents=True, exist_ok=True)
+        for name, body in {'codex': fake, 'nacre-ai': '#!/bin/sh\nexit 0\n', 'nacre-ai-chat': '#!/bin/sh\nexit 0\n'}.items():
+            path = folder / name
+            path.write_text(body)
+            path.chmod(0o700)
+        config = self.root / 'config/nacre/ai'
+        config.mkdir(parents=True, exist_ok=True)
+        (config / 'settings.json').write_text('{"default_assistant":"codex","version":1}')
+        (config.parent / 'profile.json').write_text('{"version":1,"workspaceCount":6,"components":["configs","shell","ai"]}')
+        for name in ('PROVIDER_LOG', 'TURN_STATE', 'PROVIDER_COUNT'):
+            self.env['FAKE_' + name] = str(self.root / name.lower())
+        self.env['FAKE_SCENARIO'] = 'workspace'
+
     def start_daemon(self):
         a = self.args
         home = self.root / 'home'
@@ -420,8 +446,10 @@ class Arm:
                         NACRE_DAEMON_SOCKET=str(self.endpoint), NACRE_COMPOSITOR='niri', NACRE_NIRI_HOVER_STREAM='0',
                         NACRE_HELPER_TOOLS=str(Path(a.nacre).resolve() / 'nacre/shell-tools'),
                         DBUS_SYSTEM_BUS_ADDRESS=self.env['DBUS_SESSION_BUS_ADDRESS'],
-                        PIPEWIRE_REMOTE='bead-private-unavailable', PULSE_SERVER='unix:' + str(self.root / 'no-pulse'),
+                        BEAD_PRIVATE_INPUT_PROOF='1', PIPEWIRE_REMOTE='bead-private-unavailable', PULSE_SERVER='unix:' + str(self.root / 'no-pulse'),
                         GIO_USE_VFS='local', GVFS_DISABLE_FUSE='1', QT_NO_XDG_DESKTOP_PORTAL='1', GTK_USE_PORTAL='0')
+        if any(name.startswith('sidebar') for name in a.states):
+            self.install_chat_fixture()
         record = Path(a.presentation).expanduser() if a.presentation else None
         if record and record.is_file():  # read-only copy of the owner's record: same wallpaper and palette on both arms
             shutil.copyfile(record, self.root / 'state/nacre/presentation.json')
@@ -563,11 +591,33 @@ class Arm:
             (base / 'bin').mkdir()
             (base / 'bin/qs').symlink_to(shutil.which('quickshell'))
             local_bin = Path(self.env['HOME']) / '.local/bin'
-            local_bin.mkdir(parents=True)
+            local_bin.mkdir(parents=True, exist_ok=True)
             for name in ['nacrectl', 'nacre-menu']:
                 (local_bin / name).symlink_to(Path(a.bead_bin).resolve() / 'nacre-helper')
             self.env['PATH'] = f'{local_bin}:{base / "bin"}:' + self.env['PATH']
-            command = ['quickshell', '--path', str(nacre_shell / 'shell.qml')]
+            self.qml_entry = nacre_shell / 'shell.qml'
+            if 'settings-scroll' in a.states:
+                probe = self.root / 'qml-probe'
+                probe.mkdir()
+                for entry in nacre_shell.iterdir():
+                    if entry.name != 'shell.qml':
+                        (probe / entry.name).symlink_to(entry)
+                handler = r'''IpcHandler {
+                    target: "b0098Probe"
+                    function position(): string {
+                        function find(item) {
+                            if (!item) return null;
+                            if (item.objectName === "registryScroll") return item;
+                            for (const child of item.children || []) { const value = find(child); if (value) return value; }
+                            return null;
+                        }
+                        const scroll = find(NacreSettingsApp.window?.view);
+                        return JSON.stringify({position: scroll?.contentY, extent: scroll?.contentHeight, height: scroll?.height});
+                    }
+                }'''
+                self.qml_entry = probe / 'shell.qml'
+                self.qml_entry.write_text('import Quickshell.Io\n' + (nacre_shell / 'shell.qml').read_text().replace('ShellRoot {', 'ShellRoot {\n' + handler, 1))
+            command = ['quickshell', '--path', str(self.qml_entry)]
             self.shell = self.spawn(command, 'shell', cwd=nacre_shell)
         else:
             root = self.root / 'bead'
@@ -654,11 +704,17 @@ os.execv(real, [real, *args])
             client.settimeout(3)
             client.connect(str(path))
             client.sendall(request.encode())
-            client.recv(4096)
+            data = b''
+            while b'\n' not in data:
+                part = client.recv(65536)
+                if not part:
+                    break
+                data += part
+            return json.loads(data)
 
     def app_close(self, name):
         if self.name == 'qml':
-            self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
+            self.run(['quickshell', 'ipc', '--path', str(getattr(self, 'qml_entry', Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml')),
                       'call', name + 'App', 'close'], check=False)
         else:  # the app process listens on app-NAME.sock beside the shell's command socket
             try:
@@ -763,7 +819,7 @@ os.execv(real, [real, *args])
 
     def pointer(self, x, y, mode=None, settle=None):
         """B0067: hover or press at a logical position through spikes/virtual-pointer.c (wlr-virtual-pointer on the private
-        parent labwc; the nested niri receives it as a normal pointer). `press` holds the button until release_pointer."""
+        nested niri; older compositors fall back to the private parent labwc). `press` holds the button until release_pointer."""
         tool = self.args.pointer_tool
         if not tool or not Path(tool).is_file():
             self.errors.append('no --pointer-tool: pointer states are skipped')
@@ -773,14 +829,46 @@ os.execv(real, [real, *args])
         width, height = self.args.size
         scale = self.geometry['scale']
         command = [tool, str(round(x * scale)), str(round(y * scale)), str(width), str(height)] + ([mode] if mode else [])
-        env = dict(self.env, WAYLAND_DISPLAY=self.env['BEAD_PARENT'])
         if mode in ('press', 'hover'):
-            self.held = subprocess.Popen(command, env=env, start_new_session=True)
+            self.held = subprocess.Popen(command, env=self.env, start_new_session=True)
             self.procs.append(self.held)
             time.sleep(settle if settle is not None else 0.04 if mode == 'press' else 0.4)
+            if self.held.poll() not in (None, 0):
+                self.held = subprocess.Popen(command, env=dict(self.env, WAYLAND_DISPLAY=self.env['BEAD_PARENT']), start_new_session=True)
+                self.procs.append(self.held)
+                time.sleep(settle if settle is not None else 0.04 if mode == 'press' else 0.4)
         else:
-            subprocess.run(command, env=env, timeout=10, check=False)
+            result = subprocess.run(command, env=self.env, timeout=10, check=False)
+            if result.returncode:
+                subprocess.run(command, env=dict(self.env, WAYLAND_DISPLAY=self.env['BEAD_PARENT']), timeout=10, check=False)
             time.sleep(0.3)
+
+    def scroll_proof(self):
+        def position():
+            if self.name == 'qml':
+                reply = self.run(['quickshell', 'ipc', '--path', str(self.qml_entry), 'call', 'b0098Probe', 'position'])
+                return json.loads(reply.stdout)['position']
+            reply = self.socket_call(self.runtime / 'app-settings.sock', 'bead.window', 'state', [])
+            return reply['result']['stores']['settings.scroll']
+        self.pointer(1100, 600)
+        before = position()
+        measurements = {'before': before}
+        for kind, delta in [('pixel', 10), ('wheel', 1)]:
+            self.release_pointer()
+            scale = self.geometry['scale']
+            command = [self.args.pointer_tool, str(round(1100*scale)), str(round(600*scale)),
+                       str(self.args.size[0]), str(self.args.size[1]), kind, str(delta)]
+            # Prefer the nested compositor itself; winit may turn parent wheel notches into pixels.
+            result = self.run(command, env=self.env, check=False)
+            path = 'direct'
+            if result.returncode:
+                self.run(command, env=dict(self.env, WAYLAND_DISPLAY=self.env['BEAD_PARENT']))
+                path = 'parent-pixel-proxy'
+            time.sleep(.4)
+            after = position()
+            measurements[kind] = {'input': delta, 'path': path, 'before': before, 'after': after, 'moved': after-before}
+            before = after
+        (self.out / 'scroll.json').write_text(json.dumps(measurements, indent=2) + '\n')
 
     def release_pointer(self):
         held, self.held = getattr(self, 'held', None), None
@@ -841,11 +929,23 @@ os.execv(real, [real, *args])
                 self.prompt_start(step[1])
             elif kind == 'prompt_end':
                 self.prompt_end()
+            elif kind == 'scroll-proof':
+                self.scroll_proof()
+            elif kind == 'pin':
+                if self.name == 'qml':
+                    self.dispatch('drawers', 'toggle', 'leftPinned')
+                else:
+                    self.pointer(438, 248, 'click')
+            elif kind == 'chat-seed':
+                self.call('ai.chat.open', {'channel': ''})
+                self.call('ai.chat.send', {'channel': '', 'text': 'Why does the release build fail on CI?', 'attachments': []})
+            elif kind == 'click':
+                self.pointer(step[1], step[2], 'click')
             elif kind == 'qml_settings':
-                self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
+                self.run(['quickshell', 'ipc', '--path', str(getattr(self, 'qml_entry', Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml')),
                           'call', 'settingsApp', 'open', step[1]], check=False)
             elif kind == 'qml_app':
-                self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
+                self.run(['quickshell', 'ipc', '--path', str(getattr(self, 'qml_entry', Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml')),
                           'call', *step[1:]], check=False)
             elif kind == 'only':
                 if step[1] == self.name:
@@ -884,19 +984,36 @@ os.execv(real, [real, *args])
                 self.run(['gdbus', 'call', '--session', '--dest', 'org.bead.FakeBluez', '--object-path', '/ctl',
                           '--method', 'org.bead.FakeBluez.Set', step[1], step[2]], check=False)
 
-    def rss(self):
+    def app_rss(self):
+        if self.name != 'bead':
+            return {}
+        import socket
+        import struct
+        result = {}
+        for name in ('chat', 'settings'):
+            try:
+                with socket.socket(socket.AF_UNIX) as client:
+                    client.connect(str(self.runtime / ('app-' + name + '.sock')))
+                    pid, _, _ = struct.unpack('3i', client.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                result[name] = self.rss(pid)
+            except OSError:
+                pass
+        return result
+
+    def rss(self, pid=None):
         """VmRSS and RssAnon (KiB) of the shell process: the relative memory gate compares two builds with this, same host and flags."""
+        pid = self.shell.pid if pid is None else pid
         try:
-            fields = dict(line.split(':', 1) for line in Path(f'/proc/{self.shell.pid}/status').read_text().splitlines() if ':' in line)
+            fields = dict(line.split(':', 1) for line in Path(f'/proc/{pid}/status').read_text().splitlines() if ':' in line)
             out = {key: int(fields[key].split()[0]) for key in ('VmRSS', 'RssAnon') if key in fields}
-            rollup = Path(f'/proc/{self.shell.pid}/smaps_rollup').read_text().splitlines()
+            rollup = Path(f'/proc/{pid}/smaps_rollup').read_text().splitlines()
             for line in rollup:
                 if ':' in line:
                     key, value = line.split(':', 1)
                     if key in ('Pss', 'Pss_Anon', 'Pss_File', 'Pss_Shmem', 'SwapPss'):
                         out[key] = int(value.split()[0])
             from measure import drm_memory
-            drm = drm_memory(self.shell.pid)
+            drm = drm_memory(pid)
             out['DRM'] = None if drm is None else round(sum(drm.values()) * 1024, 3)
             return out
         except (OSError, ValueError):
@@ -983,7 +1100,26 @@ os.execv(real, [real, *args])
                 early_hover = name == 'bar-title-hover'
                 if early_hover:
                     self.grab(shots / (name + '.png'))
+                if name == 'sidebar-pinned':
+                    if self.name == 'qml':
+                        state = self.dispatch('nacre', 'state')
+                        if isinstance(state, str):
+                            state = json.loads(state)
+                        info['pin_state'] = state
+                        if not state.get('leftPinned') or not state.get('left'):
+                            raise RuntimeError('QML pin did not survive outside click')
+                    else:
+                        state = self.socket_call(self.runtime / 'app-chat.sock', 'bead.panel', 'state', [])['result']
+                        if isinstance(state, str):
+                            state = json.loads(state)
+                        info['pin_state'] = state
+                        if not state.get('target_open') or not state.get('stores', {}).get('chat.pinned') or state.get('dismiss_active'):
+                            raise RuntimeError('Bead pin did not survive outside click')
+                    info['pinned_after_outside_click'] = True
+                if name.startswith('settings') and self.name == 'bead':
+                    info['window_state'] = self.socket_call(self.runtime / 'app-settings.sock', 'bead.window', 'state', [])['result']
                 info['rss_kib'] = self.rss()
+                info['rss_apps_kib'] = self.app_rss()
                 if info['rss_kib'].get('SwapPss') != 0:
                     raise RuntimeError('nonzero or unavailable process SwapPss')
                 if not early_hover:
@@ -996,13 +1132,21 @@ os.execv(real, [real, *args])
                 else:
                     self.steps(closes)
                 self.steps(STATE_CLEANUP.get(name, []))
-                time.sleep(0.6)
+                time.sleep(self.args.closed_settle)
                 info['rss_closed_kib'] = self.rss()
+                info['rss_apps_closed_kib'] = self.app_rss()
                 info['dispatch_trace'] = self.dispatch_trace
                 if info['rss_closed_kib'].get('SwapPss') != 0:
                     raise RuntimeError('nonzero or unavailable closed process SwapPss')
             except Exception as error:
                 self.errors.append(str(error)[:300])
+                if self.name == 'bead':
+                    # A failed sidebar state must not leave an exclusive panel over Settings.
+                    try:
+                        self.socket_call(self.runtime / 'app-chat.sock', 'bead.panel', 'close', [])
+                        time.sleep(self.args.closed_settle)
+                    except OSError:
+                        pass
             info['errors'] = self.errors
             results[name] = info
             log(f'{self.name}: {name} {"ERRORS " + "; ".join(self.errors) if self.errors else "ok"}')
@@ -1255,6 +1399,7 @@ def main():
     parser.add_argument('--fake-nm', action='store_true', help='B0087: a fake NetworkManager with two VPN profiles on the private bus (both arms)')
     parser.add_argument('--fake-wifi', action='store_true', help='B0095: the fake NetworkManager also has a Wi-Fi device with networks and a scan (implies --fake-nm)')
     parser.add_argument('--shortcut-fixture', action='store_true', help='include three harmless generated bindings in the private niri configuration')
+    parser.add_argument('--closed-settle', type=float, default=0.6, help='seconds after close before memory sampling')
     parser.add_argument('--settle', type=float, default=2.0, help='seconds between a state opening and its screenshot')
     parser.add_argument('--boot-settle', type=float, default=4.0)
     parser.add_argument('--seq-scale', type=float, default=0.5)
@@ -1318,7 +1463,7 @@ def main():
                             'NACRE_QS_CONFIG', 'DBUS_SESSION_BUS_ADDRESS']:
                     env.pop(key, None)
                 command = ['dbus-run-session', '--', sys.executable, __file__, '--run-arm', arm, '--private', private]
-                for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'settle', 'boot_settle',
+                for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'settle', 'closed_settle', 'boot_settle',
                              'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]

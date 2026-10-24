@@ -1028,6 +1028,30 @@ pub fn window_spec(
     client: Option<Client>,
     trace: bool,
 ) -> Result<bead::wayland::WindowSpec, Box<dyn std::error::Error>> {
+    let path = root.join("settings/behavior.luau");
+    let dimensions = bead::ui::script::Script::load(&std::fs::read(&path)?, &path)?.schema()?;
+    let number = |key: &str| -> Result<f64, Box<dyn std::error::Error>> {
+        match dimensions.get(key) {
+            Some(Value::Number(n)) if n.is_finite() && *n > 0. => Ok(*n),
+            _ => Err(format!("invalid Settings window dimension: {key}").into()),
+        }
+    };
+    let size = (
+        number("window.width")? as u32,
+        number("window.height")? as u32,
+    );
+    let min_size = (
+        number("window.min_width")? as u32,
+        number("window.min_height")? as u32,
+    );
+    let preferred_min = (
+        number("window.preferred_min_width")? as u32,
+        number("window.preferred_min_height")? as u32,
+    );
+    let fraction = (
+        number("window.width_fraction")?,
+        number("window.height_fraction")?,
+    );
     let mut fallback = crate::sound::fallback(colors.get("surface")?);
     fallback.motion = None;
     fallback.primitives.clear();
@@ -1038,8 +1062,18 @@ pub fn window_spec(
     Ok(bead::wayland::WindowSpec {
         app_id: "nacre-settings".into(),
         title: tr("bead.settings.title", &[]),
-        size: (960, 640),
-        min_size: (560, 400),
+        size,
+        min_size,
+        size_for_output: Some(Arc::new(move |output| {
+            (
+                ((f64::from(output.0) * fraction.0) as u32)
+                    .max(preferred_min.0)
+                    .min(size.0),
+                ((f64::from(output.1) * fraction.1) as u32)
+                    .max(preferred_min.1)
+                    .min(size.1),
+            )
+        })),
         fallback,
         factory: Arc::new(move |_| {
             let session = bead::ui::Session::new(

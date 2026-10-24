@@ -70,7 +70,16 @@ impl App {
         }
         let result = match call.method.as_str() {
             "state" => {
-                let mut value = serde_json::json!({"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count(),"keyboard_focus":self.options.panel_spec.as_ref().is_some_and(|spec| spec.keyboard_focus),"dismiss_active":self.dismiss.is_some(),"hidden":self.hidden});
+                let mut value = serde_json::json!({"size":self.surfaces.iter().find(|s|s.companion && s.configured && s.width > 0 && s.height > 0).map(|s|[s.width,s.height]),"target_open":self.panel_target,"resident":self.panel_runtime.is_some(),"prepared":self.panel_ui_serial != 0 && self.companion.as_ref().is_some_and(|c| !c.0.prepared.is_empty()),"surfaces":self.surfaces.iter().filter(|s|s.companion).count(),"keyboard_focus":self.options.panel_spec.as_ref().is_some_and(|spec| spec.keyboard_focus),"dismiss_active":self.dismiss.as_ref().is_some_and(|d| d.enabled),"hidden":self.hidden});
+                if std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
+                    value["stores"] = self
+                        .panel_runtime
+                        .as_ref()
+                        .and_then(|r| {
+                            serde_json::from_str::<serde_json::Value>(&r.state_summary()).ok()
+                        })
+                        .unwrap_or_default();
+                }
                 if let Some(name) = &self.panel_name {
                     value["view"] = serde_json::Value::String(name.clone());
                 }
@@ -111,7 +120,7 @@ impl App {
                     value["size"] = serde_json::json!(
                         self.surfaces
                             .iter()
-                            .find(|s| s.companion)
+                            .find(|s| s.companion && s.configured && s.width > 0 && s.height > 0)
                             .map(|s| [s.width, s.height])
                     );
                     if let Some(output) = self.panel_output.as_ref().or_else(|| {
@@ -804,6 +813,7 @@ impl App {
 }
 
 pub(super) struct Dismiss {
+    pub(super) enabled: bool,
     pub layer: LayerSurface,
     pub viewport: WpViewport,
     pub buffer: smithay_client_toolkit::shm::slot::Buffer,
@@ -816,6 +826,27 @@ impl Drop for Dismiss {
     }
 }
 impl App {
+    pub(super) fn set_dismiss_enabled(&mut self, enabled: bool) -> Result<(), String> {
+        let enabled = enabled && !self.options.test_passive;
+        let Some(dismiss) = self.dismiss.as_mut() else {
+            return Ok(());
+        };
+        if dismiss.enabled == enabled {
+            return Ok(());
+        }
+        let empty = if enabled {
+            None
+        } else {
+            Some(Region::new(&self.compositor).map_err(|e| e.to_string())?)
+        };
+        dismiss
+            .layer
+            .wl_surface()
+            .set_input_region(empty.as_ref().map(|r| r.wl_region()));
+        dismiss.layer.commit();
+        dismiss.enabled = enabled;
+        Ok(())
+    }
     pub(super) fn create_dismiss(&mut self, output: &wl_output::WlOutput) -> Result<(), String> {
         let manager = self
             .viewporter
@@ -845,6 +876,7 @@ impl App {
         bytes.fill(0);
         layer.commit();
         self.dismiss = Some(Dismiss {
+            enabled: !self.options.test_passive,
             layer,
             viewport,
             buffer,

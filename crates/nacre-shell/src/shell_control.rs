@@ -148,8 +148,7 @@ impl ShellControl for Gate {
         ) {
             self.controls.load(SeqCst)
         } else if view == "assistant" {
-            // `aiSidebarEnabled`: the assistant sidebar has no Bead view yet, so its lip
-            // stays hidden until a view of that name is registered.
+            // The on-demand app owns the sidebar; its lip follows aiSidebarEnabled.
             self.ai.load(SeqCst)
         } else {
             true
@@ -177,6 +176,17 @@ impl ShellControl for Gate {
         let settings = self.frame_lock().settings?;
         Some(Frame::from_settings(&settings).top as u32)
     }
+    fn external_panel_open(&self, view: &str, _output: &str) -> Option<bool> {
+        (view == "assistant" && crate::app::configured())
+            .then(|| crate::placement::external_open("chat"))
+    }
+    fn external_panel_request(&self, view: &str, _output: &str, toggle: bool) {
+        if view == "assistant" {
+            std::thread::spawn(move || {
+                crate::app::route(0, "chat", if toggle { "toggle" } else { "open" }, &[]);
+            });
+        }
+    }
     fn edge_chrome(&self) -> EdgeChrome {
         let frame = self.frame_lock();
         let settings = frame.settings.unwrap_or(FrameSettings {
@@ -196,7 +206,11 @@ impl ShellControl for Gate {
             .config
             .lips
             .iter()
-            .filter(|l| frame.views.contains(&l.opens) && self.panel_allowed(&l.opens))
+            .filter(|l| {
+                (frame.views.contains(&l.opens)
+                    || (l.opens == "assistant" && crate::app::configured()))
+                    && self.panel_allowed(&l.opens)
+            })
             .filter_map(|l| {
                 let thickness = match l.edge {
                     bead::core::Edge::Top => geometry.top,

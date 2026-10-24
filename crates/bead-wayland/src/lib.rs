@@ -24,6 +24,7 @@ mod protocols;
 mod rendering;
 mod report;
 mod runtime;
+mod scroll;
 mod transactions;
 mod window;
 pub use overlay::Overlays;
@@ -191,6 +192,12 @@ pub trait ShellControl: Send + Sync {
     fn edge_chrome(&self) -> EdgeChrome {
         EdgeChrome::default()
     }
+    /// An externally hosted panel: None means the local panel registry owns it.
+    fn external_panel_open(&self, _view: &str, _output: &str) -> Option<bool> {
+        None
+    }
+    /// Request an external target through its product adapter (open or toggle).
+    fn external_panel_request(&self, _view: &str, _output: &str, _toggle: bool) {}
     /// Whether hovering may open a lip's panel now; `open_panel` is the open panel's name.
     fn edge_hover_allowed(&self, _open_panel: Option<&str>) -> bool {
         true
@@ -375,6 +382,18 @@ pub trait SceneSource {
     /// Invocation coordinate along the panel's edge, in output logical pixels.
     fn panel_center(&mut self, _center: Option<f32>) {}
     fn set_idle(&mut self, _idle: bool) {}
+    /// Content viewports; other wheel targets keep their original single gesture event.
+    fn scroll_regions(&self) -> Vec<Rect> {
+        Vec::new()
+    }
+    /// Logical content distance for one wheel notch; pixel-axis input stays precise.
+    fn wheel_step(&self) -> f64 {
+        600.
+    }
+    /// Whether outside pointer presses may dismiss this surface.
+    fn outside_dismiss(&self) -> bool {
+        true
+    }
     fn focused_dismiss(&self) -> bool {
         false
     }

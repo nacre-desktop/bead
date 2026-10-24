@@ -61,9 +61,9 @@ impl Metrics {
             f64::from(scale.md),
         );
         let edge = md + xs;
-        let button = 3. * md;
+        let button = 2. * md + 2.5 * xs;
         let tabs = edge * 3.875;
-        let top = tabs + 10. * xs + 3.5 * xs;
+        let top = tabs + button + md + 0.5 * xs;
         Self {
             edge,
             gap: sm,
@@ -75,7 +75,7 @@ impl Metrics {
             body: scale.body,
             info: scale.caption,
             composer_min: 25. * xs,
-            composer_max: 60. * xs,
+            composer_max: 40. * xs,
             question_min: 20. * xs,
             question_max: 60. * xs,
         }
@@ -419,6 +419,14 @@ impl Chat {
         if self.ready(OPEN).is_none() {
             self.st.borrow_mut().opened_at = None;
         }
+        let labels = ["bead.panel.chat-tab-chat", "bead.panel.chat-tab-chats", "bead.panel.chat-tab-brain", "bead.panel.chat-new", "bead.panel.chat-workspace", "bead.panel.chat-send", "bead.panel.chat-attach", "bead.panel.chat-screenshot", "bead.panel.chat-latest", "bead.panel.chat-refresh", "bead.panel.chat-codex", "bead.panel.chat-claude"]
+            .into_iter().map(|id| {
+                let label = tr(id, &[]);
+                let transcript = self.transcript.borrow();
+                let meter = transcript.meter();
+                json!({"text": label,"body": meter.width(&label,SANS,self.metrics.body),"caption": meter.width(&label,SANS,self.metrics.info)})
+            }).collect();
+        out.insert("chat.labels".into(), Value::list(labels));
         let mut st = self.st.borrow_mut();
         self.parsed(&mut st);
         let connected = st.parsed.as_ref().is_some_and(|p| p.available);
@@ -780,6 +788,12 @@ impl Chat {
         let busy = state.as_ref().is_some_and(|s| s.busy);
         let (verb, rest) = arg.split_once(':').unwrap_or((arg, ""));
         match verb {
+            "pin" => {
+                out.stores.insert(
+                    "chat.pinned".into(),
+                    Value::Bool(stores.get("chat.pinned") != Some(&Value::Bool(true))),
+                );
+            }
             "send" => {
                 let draft = value("chat.draft");
                 if draft.trim().is_empty() || state.as_ref().is_none_or(|s| s.in_workspace) {

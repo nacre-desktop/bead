@@ -86,6 +86,7 @@ pub struct Meter {
     scene: RefCell<Option<Scene>>,
     covered: RefCell<BTreeSet<char>>,
     lines: RefCell<HashMap<u64, usize>>,
+    widths: RefCell<bead_core::cache::Lru<u64, f32>>,
 }
 impl Meter {
     pub fn new(picker: Picker) -> Self {
@@ -95,6 +96,7 @@ impl Meter {
             scene: Default::default(),
             covered: RefCell::new((' '..='~').collect()),
             lines: Default::default(),
+            widths: RefCell::new(bead_core::cache::Lru::new("text-widths", 32 * 1024)),
         }
     }
     /// A fixed font set, for deterministic tests.
@@ -105,6 +107,7 @@ impl Meter {
             scene: Default::default(),
             covered: RefCell::new((' '..='~').collect()),
             lines: Default::default(),
+            widths: RefCell::new(bead_core::cache::Lru::new("text-widths", 32 * 1024)),
         }
     }
     fn prepare(&self, text: &str, families: [&str; 2]) {
@@ -153,6 +156,7 @@ impl Meter {
             _ => vec![],
         };
         self.lines.borrow_mut().clear();
+        self.widths.borrow_mut().clear();
         *self.scene.borrow_mut() = Some(scene);
     }
     /// Drawn lines for `text` at `width`. Measured slightly narrower than painted so a
@@ -181,6 +185,24 @@ impl Meter {
         cache.insert(key, measured);
         measured
     }
+    /// Unwrapped label width, using the same selected fonts and text-size offset as painting.
+    pub fn width(&self, text: &str, family: &str, size: f32) -> f32 {
+        self.prepare(text, [family, family]);
+        let family = crate::text_style::family(family);
+        let size = crate::text_style::size(size, &family);
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        (text, &family, size.to_bits()).hash(&mut hash);
+        let key = hash.finish();
+        if let Some(width) = self.widths.borrow().get(&key) {
+            return *width;
+        }
+        let width = self.scene.borrow().as_ref().map_or(0., |scene| {
+            bead_render::text_width(scene, text, &family, size).unwrap_or(0.)
+        });
+        let mut cache = self.widths.borrow_mut();
+        let _ = cache.insert(key, width, 64);
+        width
+    }
     /// Pixel height of `text`, honouring the host's text-size offset.
     pub fn height(&self, text: &str, family: &str, size: f32, width: f32) -> f32 {
         let drawn = crate::text_style::size(size, &crate::text_style::family(family));
@@ -189,6 +211,7 @@ impl Meter {
     pub fn release(&self) {
         *self.scene.borrow_mut() = None;
         self.lines.borrow_mut().clear();
+        self.widths.borrow_mut().clear();
     }
 }
 
@@ -316,17 +339,17 @@ impl Flow<'_> {
 
 fn lay(meter: &Meter, style: &Style, entry: &Entry) -> Laid {
     let s = &style.scale;
-    let (pad, body, small) = (s.md, s.body, s.caption);
+    let (pad, body, small) = (s.md, s.body, s.caption - s.xs / 3.);
     let inner = style.width - 2. * pad;
     let mut flow = Flow {
         meter,
         style,
         cells: Vec::new(),
         id: &entry.key,
-        y: pad * 2.4,
+        y: pad * 2. + s.xs + 1.,
     };
     // The bubble comes first so it paints under everything; its height is patched last.
-    flow.fill(0., 0., style.width, 0., &entry.fill, s.md + s.xs);
+    flow.fill(0., 0., style.width, 0., &entry.fill, s.md + s.xs / 4.);
     let mut label = Cell::at(
         flow.next_id(),
         Kind::Text,
@@ -430,27 +453,25 @@ fn lay(meter: &Meter, style: &Style, entry: &Entry) -> Laid {
             buttons.push((label.clone(), format!("{prefix}:{}:{index}", entry.key)));
         }
     }
-    let button_h = s.xxl + s.xs;
-    let mut x = pad;
+    let button_h = s.xxl + 2.5 * s.xs;
+    let mut x = 0.;
+    let mut button_y = end + s.xs + 1.;
     if !buttons.is_empty() {
         for (label, action) in buttons {
-            let width = label.chars().count() as f32 * small * 0.62 + 2. * s.sm + s.xs;
-            let mut cell = Cell::at(
-                flow.next_id(),
-                Kind::Button,
-                x,
-                end + s.xs + 1.,
-                width,
-                button_h,
-            );
+            let width = (meter.width(&label, &style.sans, body) + s.xxl + s.sm).min(style.width);
+            if x > 0. && x + width > style.width {
+                x = 0.;
+                button_y += button_h + s.xs + 1.;
+            }
+            let mut cell = Cell::at(flow.next_id(), Kind::Button, x, button_y, width, button_h);
             cell.text = label;
             cell.action = action;
-            cell.size = small;
+            cell.size = body;
             flow.cells.push(cell);
-            x += width + s.xs;
+            x += width + s.xs + 1.;
         }
     }
-    let height = end + s.xs + 1. + button_h + pad - 1.;
+    let height = button_y + button_h + pad - 1.;
     flow.cells[0].h = height;
     Laid {
         cells: flow.cells,

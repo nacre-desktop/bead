@@ -248,6 +248,30 @@ impl Session {
         }
         self.stage_state(stores)
     }
+    /// Clipped content-scroll regions, excluding duplicate descendants of a viewport.
+    pub fn scroll_regions(&self) -> Vec<bead_render::Rect> {
+        let mut regions: Vec<bead_render::Rect> = Vec::new();
+        for node in self
+            .current_nodes
+            .iter()
+            .filter(|node| node.scroll_store.is_some())
+        {
+            let bounds = rect(&node.draw);
+            let bounds = node.clip.map_or(bounds, |clip| bounds.intersect(clip));
+            if bounds.w > 0.
+                && bounds.h > 0.
+                && !regions.iter().any(|r| {
+                    bounds.x >= r.x
+                        && bounds.y >= r.y
+                        && bounds.x + bounds.w <= r.x + r.w
+                        && bounds.y + bounds.h <= r.y + r.h
+                })
+            {
+                regions.push(bounds);
+            }
+        }
+        regions
+    }
     pub fn scroll(&mut self, x: f32, y: f32, delta: f64) -> Result<Option<Scene>, Diagnostic> {
         let Some(generation) = &self.generation else {
             return Ok(None);
@@ -263,7 +287,7 @@ impl Session {
             stores
                 .commit(BTreeMap::from([(
                     id.clone(),
-                    Value::Number((value + delta).max(0.)),
+                    Value::Number((value + delta).clamp(0., node.scroll_limit.unwrap_or(f64::MAX))),
                 )]))
                 .map_err(|e| node.diagnostic(e))?;
             stores

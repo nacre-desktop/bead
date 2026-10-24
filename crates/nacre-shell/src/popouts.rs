@@ -442,7 +442,10 @@ pub fn chat(
     if let Some(motion) = &mut fallback.motion {
         motion.id = "chat".into();
         motion.edge = bead::core::Edge::Left;
-        motion.duration = 0.2;
+        motion.duration = 0.4;
+        motion.curve = Some(bead::core::animation::Curve::EaseInOut);
+        motion.reveal = true;
+        motion.fade = false;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {

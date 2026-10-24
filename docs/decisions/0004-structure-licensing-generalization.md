@@ -164,6 +164,10 @@ After Bead's core switch on Nacre, plan support for:
 
 - B0077: `Session::action_values(name, argument)` evaluates a declared Luau action for host key bindings; the host stages its values through the existing validate-then-commit update path. No product key names enter the framework. The reusable Luau `shell/kit/virtual-list.luau` accepts model/scroll/row metrics/render callback; it uses bounded spacers and automatic extents for long lists, with no product IDs. Its module is imported only by views that use it.
 
+- B0098: measured `kit.PillButton` labels (`Meter::width`), source-controlled outside
+  dismissal/wheel distance, external lip targets and output-aware window sizing.
+  All are neutral hooks; Nacre routes and Settings dimensions stay at the edge.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

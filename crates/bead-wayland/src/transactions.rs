@@ -620,6 +620,45 @@ impl App {
                     self.runtime = Some(runtime);
                     return false;
                 }
+                if self.processing_panel {
+                    if self.pearl.is_none()
+                        && self
+                            .options
+                            .panel_spec
+                            .as_ref()
+                            .is_some_and(|spec| spec.keyboard_focus)
+                    {
+                        for surface in self.surfaces.iter().filter(|s| s.companion) {
+                            surface.layer.set_keyboard_interactivity(
+                                if runtime.outside_dismiss() {
+                                    KeyboardInteractivity::Exclusive
+                                } else {
+                                    KeyboardInteractivity::OnDemand
+                                },
+                            );
+                            surface.layer.commit();
+                        }
+                    }
+                    // Keep the catcher below the panel when pinning, then restore its input.
+                    // Recreating it on unpin would map a newer surface above the panel.
+                    if runtime.outside_dismiss()
+                        && self.dismiss.is_none()
+                        && self.panel_target
+                        && self.pearl.is_none()
+                        && self
+                            .options
+                            .panel_spec
+                            .as_ref()
+                            .is_some_and(|spec| spec.keyboard_focus)
+                        && let Some(output) = self.panel_output.clone()
+                        && let Err(error) = self.create_dismiss(&output)
+                    {
+                        self.fail(error);
+                    }
+                    if let Err(error) = self.set_dismiss_enabled(runtime.outside_dismiss()) {
+                        self.fail(error);
+                    }
+                }
                 if let (Some(bridge), Some(tree)) =
                     (&mut self.accessibility, runtime.accessibility_tree())
                 {

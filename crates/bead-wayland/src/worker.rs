@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Script/CPU preparation actor; validated candidates cross the draw thread by value.
 use crate::{InputRegion, SceneSource, UiEvent};
-use bead_render::Scene;
+use bead_render::{Rect, Scene};
 use std::{
     collections::VecDeque,
     error::Error,
@@ -12,6 +12,9 @@ pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Se
 #[derive(Default)]
 struct Mirror {
     focused_dismiss: bool,
+    outside_dismiss: bool,
+    wheel_step: f64,
+    scroll_regions: Vec<Rect>,
     regions: Vec<InputRegion>,
     surrounding: Option<(String, i32, i32)>,
     sensitive: bool,
@@ -34,6 +37,9 @@ impl Mirror {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
             focused_dismiss: source.focused_dismiss(),
+            outside_dismiss: source.outside_dismiss(),
+            wheel_step: source.wheel_step(),
+            scroll_regions: source.scroll_regions(),
             regions: source.input_regions(),
             surrounding: source.surrounding_text(),
             sensitive: source.sensitive_input(),
@@ -523,6 +529,15 @@ impl SceneSource for Source {
     }
     fn input_regions(&self) -> Vec<InputRegion> {
         self.mirror.regions.clone()
+    }
+    fn scroll_regions(&self) -> Vec<Rect> {
+        self.mirror.scroll_regions.clone()
+    }
+    fn wheel_step(&self) -> f64 {
+        self.mirror.wheel_step
+    }
+    fn outside_dismiss(&self) -> bool {
+        self.mirror.outside_dismiss
     }
     fn focused_dismiss(&self) -> bool {
         self.mirror.focused_dismiss

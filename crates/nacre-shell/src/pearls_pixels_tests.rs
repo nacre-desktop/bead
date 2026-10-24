@@ -19,6 +19,9 @@ fn palette() -> Palette {
     Palette::read(&root().join("palette.json")).unwrap()
 }
 fn chat_scene(scale: f32) -> Result<Scene> {
+    chat_scene_state(scale, false)
+}
+fn chat_scene_state(scale: f32, detached: bool) -> Result<Scene> {
     let (_source, chat) = offline(topic(
         &[
             ("u1", "user", "Why does the release build fail on CI?"),
@@ -30,7 +33,8 @@ fn chat_scene(scale: f32) -> Result<Scene> {
         ],
         state(false, "", None),
     ));
-    let out = chat.project(&Stores::default());
+    let mut out = chat.project(&Stores::default());
+    out.insert("view.detached".into(), bead::core::Value::Bool(detached));
     let h = crate::chat::tests::harness(out, scale)?;
     Ok(h.scene().clone())
 }
@@ -132,7 +136,8 @@ fn docked_and_detached_goldens() -> Result<()> {
             .decorate(&mut docked)
             .unwrap();
         golden("docked", &panel_shot(&docked, scale), scale)?;
-        let mut rest = base.clone();
+        let detached = chat_scene_state(scale, true)?;
+        let mut rest = detached.clone();
         let mut chrome = Chrome::new(Attachment::Pearl, &colors)?;
         chrome.decorate(&mut rest).unwrap();
         golden("detached", &panel_shot(&rest, scale), scale)?;
@@ -147,7 +152,7 @@ fn docked_and_detached_goldens() -> Result<()> {
                 .count(),
             8
         );
-        let mut hot = base.clone();
+        let mut hot = detached.clone();
         chrome.set_engaged(true);
         chrome.decorate(&mut hot).unwrap();
         golden("detached-engaged", &panel_shot(&hot, scale), scale)?;

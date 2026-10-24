@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 return {
   stores = {
+    ["bead.scroll.wheel_step"] = 300,
     ["panel.open"] = true, ["launcher.apps"] = {},
     ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.pending"]=false, ["launcher.result_count"]=0, ["launcher.total_count"]=0,
     ["launcher.rail.order"]={}, ["launcher.rail.hidden"]={}, ["launcher.groups"]={},

@@ -132,8 +132,75 @@ async fn typing_shift_enter_and_enter_send_the_exact_text_once() {
             .session
             .view_nodes()
             .iter()
-            .any(|n| n.id == "chat.stop")
+            .any(|n| n.id == "chat.actions.stop")
     );
+    step(
+        &mut runtime,
+        UiEvent::Command {
+            command: "escape".into(),
+            shift: false,
+        },
+    );
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&bead::core::Value::Bool(false))
+    );
+}
+
+#[test]
+fn pin_controls_only_outside_dismissal() {
+    let _guard = serial();
+    let (_, chat) = crate::chat::tests::offline(json!({"available":true,"channels":{}}));
+    let mut runtime = runtime(chat);
+    assert!(runtime.outside_dismiss());
+    step(&mut runtime, UiEvent::PanelDetached(true));
+    assert!(
+        !runtime
+            .session
+            .view_nodes()
+            .iter()
+            .any(|n| n.id == "chat.pin")
+    );
+    step(&mut runtime, UiEvent::PanelDetached(false));
+    let pin = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|n| n.id == "chat.pin")
+        .expect("pin button");
+    let r = match &pin.draw {
+        bead::render::Primitive::Rounded { rect, .. } => *rect,
+        _ => panic!("pin hit rect"),
+    };
+    step(
+        &mut runtime,
+        UiEvent::Click {
+            x: r.x + r.w / 2.,
+            y: r.y + r.h / 2.,
+        },
+    );
+    assert!(runtime.outside_dismiss(), "pin waits for release like QML");
+    step(&mut runtime, UiEvent::Release);
+    assert!(!runtime.outside_dismiss());
+    step(
+        &mut runtime,
+        UiEvent::Command {
+            command: "enter".into(),
+            shift: false,
+        },
+    );
+    assert!(
+        runtime.outside_dismiss(),
+        "unpin restores outside dismissal"
+    );
+    step(
+        &mut runtime,
+        UiEvent::Command {
+            command: "enter".into(),
+            shift: false,
+        },
+    );
+    assert!(!runtime.outside_dismiss());
     step(
         &mut runtime,
         UiEvent::Command {

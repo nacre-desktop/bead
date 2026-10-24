@@ -89,6 +89,9 @@ pub struct Node {
     pub action_arg: Option<Value>,
     #[serde(default)]
     pub scroll_store: Option<String>,
+    /// Content extent minus viewport, inherited by scrollable descendants.
+    #[serde(skip)]
+    pub scroll_limit: Option<f64>,
     #[serde(default)]
     pub focusable: bool,
     #[serde(default)]

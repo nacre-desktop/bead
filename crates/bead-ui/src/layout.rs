@@ -799,6 +799,7 @@ pub fn layout(
         parent_layer: Option<&str>,
         clip: Option<Rect>,
         scroll_store: Option<&str>,
+        scroll_limit: Option<f64>,
         resolve: &Resolve<'_>,
         palette: &Palette,
         hover: &str,
@@ -944,6 +945,11 @@ pub fn layout(
         }
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);
+        let scroll_limit = if view.scroll.is_some() {
+            Some(f64::from(l.scroll_height()))
+        } else {
+            scroll_limit
+        };
         if own_visible && (view.action.is_some() || view.input.is_some() || view.scroll.is_some()) {
             out.nodes.push(Node {
                 id: view.id.clone(),
@@ -969,6 +975,7 @@ pub fn layout(
                 scroll: None,
                 action_arg: view.argument.clone(),
                 scroll_store: inherited_scroll.map(str::to_owned),
+                scroll_limit,
                 focusable: view.action.is_some() || view.input.is_some(),
                 multiline: view.multiline && view.input.is_some(),
                 masked: view.masked && view.input.is_some(),
@@ -993,7 +1000,7 @@ pub fn layout(
             let Value::Number(offset) = resolve(store)? else {
                 return Err(source.error("scroll must bind a number"));
             };
-            children_pos.1 -= offset as f32;
+            children_pos.1 -= offset.clamp(0., scroll_limit.unwrap_or(f64::MAX)) as f32;
             child_clip = Some(if let Some(c) = clip {
                 intersect(c, r).unwrap_or(r)
             } else {
@@ -1009,6 +1016,7 @@ pub fn layout(
                 Some(&view.id),
                 child_clip,
                 inherited_scroll,
+                scroll_limit,
                 resolve,
                 palette,
                 hover,
@@ -1023,6 +1031,7 @@ pub fn layout(
         &tree,
         &ids,
         (0., 0.),
+        None,
         None,
         None,
         None,

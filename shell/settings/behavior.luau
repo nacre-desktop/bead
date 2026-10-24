@@ -2,6 +2,10 @@
 -- Store defaults for the Settings window. The adapter projects every `settings.*` value;
 -- navigation, search text and the edit field are plain view state.
 return {stores={
+    -- QML initial window policy, in logical units (minimum is 17/15 huge spacing units).
+    ["window.width"]=1100,["window.height"]=800,["window.min_width"]=544,["window.min_height"]=480,
+    ["window.preferred_min_width"]=720,["window.preferred_min_height"]=540,
+    ["window.width_fraction"]=.75,["window.height_fraction"]=.8,
     ["settings.page"]="",["settings.search"]="",["settings.edit.text"]="",
     ["settings.scroll"]=0,["settings.nav.scroll"]=0,["settings.select"]="",["settings.select.scroll"]=0,
     ["settings.nav"]={},["settings.items"]={},

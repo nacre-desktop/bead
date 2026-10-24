@@ -107,6 +107,13 @@ pub fn set_external(name: &str, panel: Option<External>) {
         notify();
     }
 }
+pub fn external_open(name: &str) -> bool {
+    EXTERNAL
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .any(|(n, _)| n == name)
+}
 pub fn external_rev() -> u64 {
     EXTERNAL_REV.load(std::sync::atomic::Ordering::SeqCst)
 }

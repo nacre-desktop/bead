@@ -1897,3 +1897,34 @@ return ui.Column{id="ranges",width=400,height=80,
         "a deferred button press must not inherit a slider's old focus"
     );
 }
+
+#[test]
+fn scroll_notches_clamp_at_both_content_edges() {
+    let f = fixture();
+    let mut session = session(&f);
+    let rows = (0..60)
+        .map(|i| serde_json::json!({"id":format!("row-{i}"),"name":format!("Item {i}")}))
+        .collect();
+    let scene = session
+        .update(BTreeMap::from([("rows".into(), Value::list(rows))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let scroll = session
+        .view_nodes()
+        .iter()
+        .find(|n| n.id.ends_with(".scroll"))
+        .unwrap();
+    let r = rect(&scroll.draw);
+    let key = scroll.scroll_store.clone().unwrap();
+    let limit = scroll.scroll_limit.unwrap();
+    assert!(limit > 0.);
+    for (delta, expected) in [(100_000., limit), (-100_000., 0.)] {
+        let scene = session
+            .scroll(r.x + r.w / 2., r.y + r.h / 2., delta)
+            .unwrap()
+            .unwrap();
+        session.commit(scene);
+        assert_eq!(session.stores.get(&key), Some(&Value::Number(expected)));
+    }
+}

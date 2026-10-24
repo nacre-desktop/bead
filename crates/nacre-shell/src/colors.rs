@@ -1154,6 +1154,7 @@ pub fn window_spec(
         app_id: "nacre-colors".into(),
         title: tr("bead.colors.title", &[]),
         size: (1100, 760),
+        size_for_output: None,
         min_size: (760, 560),
         fallback,
         factory: Arc::new(move |_| {
