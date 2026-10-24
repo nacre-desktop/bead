@@ -229,7 +229,10 @@ impl SceneSource for Source {
                 let mut active_scales = vec![1.];
                 'actor: loop {
                     for job in receiver.try_iter() {
-                        enqueue(&mut queue, job);
+                        match job {
+                            Job::Stop => break 'actor,
+                            job => enqueue(&mut queue, job),
+                        }
                     }
                     let job = if let Some(job) = queue.pop_front() {
                         job
@@ -711,6 +714,49 @@ mod tests {
             source.allows_edge_hover(8., 8.),
             "the accepted worker mirror must preserve edge-hover opt-in"
         );
+    }
+    #[test]
+    fn worker_stop_in_initial_drain_cancels_unacknowledged_stage() {
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let mut source = Source::new(
+            Box::new(move || {
+                let _ = started_tx.send(());
+                release_rx.recv().map_err(|error| error.to_string())?;
+                Ok(Box::new(Mock {
+                    commits: Arc::new(AtomicUsize::new(0)),
+                    panic: false,
+                }) as Box<dyn SceneSource>)
+            }),
+            scene(),
+        );
+        let (wakeup, _events) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = wakeup.send(event);
+        }));
+        started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("worker factory should start");
+
+        assert!(source.stage(UiEvent::Reload).unwrap().is_none());
+        // Send exactly one Stop and take the sender so Source::drop only joins;
+        // otherwise a second Stop could conceal the local-queue deadlock.
+        let stop_sender = source.sender.take().expect("worker sender");
+        assert!(stop_sender.send(Job::Stop).is_ok());
+
+        let (dropped_tx, dropped_rx) = mpsc::channel();
+        let dropper = std::thread::spawn(move || {
+            drop(source);
+            let _ = dropped_tx.send(());
+        });
+        release_tx.send(()).expect("release worker factory");
+        dropped_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("Stop queued behind Stage must not wait for an acknowledgement");
+        // Keep the channel connected until the assertion: disconnecting it
+        // would also unblock the old ack loop and mask the regression.
+        drop(stop_sender);
+        dropper.join().expect("source drop thread should finish");
     }
     #[test]
     fn worker_panic_becomes_fatal_event_instead_of_silent_frozen_ui() {
