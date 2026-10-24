@@ -1,7 +1,7 @@
 {
   "control": "51055ac",
   "qml": "f032c7b4",
-  "candidate_code": "19696b0",
+  "candidate_code": "002364b",
   "renderer": "tiny-skia CPU, release --no-default-features",
   "geometry": {
     "physical": [

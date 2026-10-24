@@ -1,7 +1,7 @@
 # B0074 — Dashboard first-reveal delay
 
 Status: **Review; dashboard first-reveal median target met.**
-Control: `51055ac`; candidate code: `19696b0`; QML: `f032c7b4`.
+Control: `51055ac`; candidate code: `002364b`; QML: `f032c7b4`.
 Scope: dashboard admission-to-presentation latency; launcher implementation,
 Nacre and other surface artwork are unchanged.
 
