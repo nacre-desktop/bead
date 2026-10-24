@@ -556,7 +556,7 @@ impl LayerShellHandler for App {
                     return;
                 }
             };
-            if !self.options.test_passive {
+            if dismiss.enabled && !self.options.test_passive {
                 let width = config.new_size.0.max(1) as i32;
                 let height = config.new_size.1.max(1) as i32;
                 let bar_extent = if self.options.bar {

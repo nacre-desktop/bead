@@ -61,12 +61,12 @@ int main(int argc, char **argv) {
     zwlr_virtual_pointer_v1_frame(pointer);
     wl_display_roundtrip(display);
     usleep(100000); // Let the compositor establish pointer focus before the gesture.
-    if (argc > 6 && (!strcmp(argv[5], "wheel") || !strcmp(argv[5], "pixel"))) {
-        int wheel = !strcmp(argv[5], "wheel");
+    if (argc > 6 && (!strcmp(argv[5], "wheel") || !strcmp(argv[5], "wheel-angle") || !strcmp(argv[5], "pixel"))) {
+        int wheel = strncmp(argv[5], "wheel", 5) == 0;
         double delta = atof(argv[6]);
         zwlr_virtual_pointer_v1_axis_source(pointer, wheel ? WL_POINTER_AXIS_SOURCE_WHEEL : WL_POINTER_AXIS_SOURCE_FINGER);
         if (wheel)
-            zwlr_virtual_pointer_v1_axis_discrete(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(delta * 15), (int)delta);
+            zwlr_virtual_pointer_v1_axis_discrete(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(!strcmp(argv[5], "wheel-angle") ? 0 : delta * 15), (int)delta);
         else
             zwlr_virtual_pointer_v1_axis(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(delta));
         zwlr_virtual_pointer_v1_frame(pointer);
