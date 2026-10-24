@@ -29,6 +29,21 @@ def run(*argv, directory="/nonexistent"):
 
 
 class PactlStandIn(unittest.TestCase):
+    def test_application_streams_match_the_private_pipewire_ones(self):
+        """B0095: two playback streams and one capture stream, the daemon's fields, and a pw-cat per stream with the same name."""
+        playback, capture = self.listing("sink-inputs"), self.listing("source-outputs")
+        self.assertEqual([e["properties"]["application.name"] for e in playback], ["Firefox", "Spotify"])
+        self.assertEqual([e["properties"]["application.name"] for e in capture], ["OBS Studio"])
+        for entry in playback + capture:
+            self.assertIsInstance(entry["index"], int)
+            self.assertIsInstance(entry["mute"], bool)
+            self.assertTrue(entry["volume"]["mono"]["value"])
+        commands = fake.stream_commands()
+        self.assertEqual(len(commands), 3)
+        for (name, argv, volume), entry in zip(commands, playback + capture):
+            self.assertIn(entry["properties"]["application.name"], argv[2])
+            self.assertAlmostEqual(volume ** (1 / 3), entry["volume"]["mono"]["value"] / 65536, places=3)
+
     def listing(self, kind, directory="/nonexistent"):
         status, text = run("--format=json", "list", kind, directory=directory)
         self.assertEqual(status, 0)

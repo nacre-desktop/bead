@@ -194,6 +194,35 @@ STATES = {
     'menu-input': ([('prompt', 'input'), ('sleep', 0.2)], [('prompt_end',)], 1.0),
     'pearl-detached': ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.2), ('ui', 'pearls', 'detach')], [('ui', 'nacre', 'close')], 0),
 }
+# B0095: the microphone muted (the meter is off in both shells and QML shows no peak-monitor card of its own), and Bead's meter at 60 %
+# (QML's cannot follow a level in the private PipeWire, see fake_system.PEAK).
+_MUTE_CLOSE = [('ui', 'nacre', 'close'), ('mute', 'source', False), ('level', 'peak', 0.0)]
+STATES.update({
+    'popout-audio-muted': ([('mute', 'source', True), ('sleep', 1.2), ('ui', 'nacre', 'popout', 'audio', '1520')], _MUTE_CLOSE, 0),
+    'control-audio-muted': ([('mute', 'source', True), ('sleep', 1.2), ('ui', 'nacre', 'controls', 'audio')], _MUTE_CLOSE, 0),
+    'popout-audio-peak': ([('only', 'bead', ('level', 'peak', 0.6)), ('sleep', 1.2), ('ui', 'nacre', 'popout', 'audio', '1520'), ('sleep', 0.6)],
+                          _MUTE_CLOSE, 0),
+})
+STATE_PREPARE['popout-audio-muted'] = STATE_PREPARE['popout-audio-peak'] = STATE_PREPARE['popout-audio']
+# B0095 (need --fake-wifi, and --pointer-tool for the scan clicks): the Wi-Fi list idle, while a scan runs (the fake takes 2 s) and
+# after it, in the bar popout and the docked page. The scan button is clicked in both shells; two more networks appear.
+PTR['wifi-scan'] = {'qml': (1700, 100), 'bead': (1700, 100)}
+PTR['wifi-scan-docked'] = {'qml': (1700, 100), 'bead': (1700, 100)}
+_SCAN_CLOSE = [('ui', 'nacre', 'close'), ('nm', 'reset', 'now')]
+STATES.update({
+    'popout-network-wifi': ([('ui', 'nacre', 'popout', 'network', '1560')], [('ui', 'nacre', 'close')], 0),
+    'popout-network-scanning': ([('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 1.2), ('press-target', 'wifi-scan'), ('release',)],
+                                _SCAN_CLOSE, 0),
+    'popout-network-scanned': ([('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 1.2), ('press-target', 'wifi-scan'), ('release',)],
+                               _SCAN_CLOSE, 0),
+    'control-network-wifi': ([('ui', 'nacre', 'controls', 'network')], [('ui', 'nacre', 'close')], 0),
+    'control-network-scanning': ([('ui', 'nacre', 'controls', 'network'), ('sleep', 1.2), ('press-target', 'wifi-scan-docked'), ('release',)],
+                                 _SCAN_CLOSE, 0),
+    'control-network-scanned': ([('ui', 'nacre', 'controls', 'network'), ('sleep', 1.2), ('press-target', 'wifi-scan-docked'), ('release',)],
+                                _SCAN_CLOSE, 0),
+})
+STATE_SETTLE.update({'popout-network-scanning': 0.6, 'popout-network-scanned': 3.4,
+                     'control-network-scanning': 0.6, 'control-network-scanned': 3.4})
 # Where each transition happens, in logical pixels ("x,y wxh"): a grim region is much faster than the whole output, which
 # is what gives a usable frame rate for the animation timing.
 REGIONS = {
@@ -409,7 +438,9 @@ class Arm:
         (fake / 'wpctl').write_text(
             f'#!/bin/sh\ncase "$1" in\nget-volume) case "$2" in *SOURCE*) n=source;; *) n=sink;; esac; echo "Volume: $(cat {fake}/$n)";;\n'
             'inspect) case "$2" in *SOURCE*) echo "  node.name = \\"fixture-microphone\\"";; *) echo "  node.name = \\"fixture-speakers\\"";; esac;;\nesac\n')
-        for name in ['pactl', 'wpctl']:
+        # B0095: the daemon's `audio.peak` capture (parec) plays silence (or the `level peak` step's level) instead of opening the microphone.
+        (fake / 'parec').write_text(f'#!/bin/sh\nFAKE_AUDIO_DIR={fake} exec {sys.executable} {HERE / "fake_system.py"} --parec\n')
+        for name in ['pactl', 'wpctl', 'parec']:
             (fake / name).chmod(0o755)
         self.env['PATH'] = f'{fake}:' + self.env['PATH']
         # The fixed battery and power profiles (UPower, power-profiles-daemon) on the same private bus.
@@ -433,7 +464,7 @@ class Arm:
                 'mic', 'night', 'appearance', 'screenshot', 'record', 'picker', 'clipboard', 'updates', 'displays', 'wallpaper',
                 'next-wallpaper', 'notifications']}))
             # B0087: a fake NetworkManager on the same private bus; the QML arm's nmcli is a stub that talks to it.
-            self.spawn([sys.executable, str(HERE / 'fake-nm.py')], 'fake-nm')
+            self.spawn([sys.executable, str(HERE / 'fake-nm.py')] + (['--wifi'] if a.fake_wifi else []), 'fake-nm')
             wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.NetworkManager',
                                                            '--object-path', '/org/freedesktop/NetworkManager/Settings',
                                                            '--method', 'org.freedesktop.NetworkManager.Settings.ListConnections'])),
@@ -467,6 +498,27 @@ class Arm:
         for name in [n for _, n, _ in fake_system.SINKS + fake_system.SOURCES]:
             channels = '[ %s ]' % ' '.join([f'{cubed:.6f}'] * (1 if 'microphone' in name else 2))
             self.run(['pw-cli', 's', str(nodes[name]), 'Props', '{ mute: false, channelVolumes: %s }' % channels])
+        # B0095: the application streams (spikes/fake_system.py STREAMS) as unlinked pw-cat nodes with a name, an icon and a volume.
+        commands = fake_system.stream_commands()
+        for name, command, volume in commands:
+            self.spawn(command, name)
+        wait_until(lambda: len([o for o in json.loads(self.run(['pw-dump']).stdout) if o.get('type') == 'PipeWire:Interface:Node'
+                                and str(o['info']['props'].get('node.name', '')).startswith('fixture-stream-')]) == len(commands),
+                   20, 'the stream nodes')
+        # pw-cat resets a stream's volume while it connects: set it again until pw-dump shows it.
+        def volumes_set():
+            dump = json.loads(self.run(['pw-dump']).stdout)
+            streams = {o['info']['props']['node.name']: o for o in dump if o.get('type') == 'PipeWire:Interface:Node'
+                       and str(o['info']['props'].get('node.name', '')).startswith('fixture-stream-')}
+            done = True
+            for name, _, volume in commands:
+                node = streams['fixture-stream-' + name.split('-')[1]]
+                have = [p.get('channelVolumes') for p in node['info'].get('params', {}).get('Props', [])]
+                if not any(h and abs(h[0] - volume) < 1e-4 for h in have):
+                    done = False
+                    self.run(['pw-cli', 's', str(node['id']), 'Props', '{ mute: false, channelVolumes: [ %.6f, %.6f ] }' % (volume, volume)])
+            return done
+        wait_until(lambda: time.sleep(0.5) or volumes_set(), 20, 'the stream volumes')
 
     @staticmethod
     def _try(function):
@@ -634,7 +686,22 @@ os.execv(real, [real, *args])
         process.stdout.close()
         process.stderr.close()
 
+    def set_mute(self, node, muted):
+        """B0095: mute or unmute the default sink/source in both views of the fixed machine (the daemon reads the pactl stand-in, Quickshell PipeWire)."""
+        mark = self.root / f'fakeaudio/{node}-mute'
+        mark.write_text('1\n') if muted else mark.unlink(missing_ok=True)
+        with (self.root / 'fakeaudio/events').open('a') as events:
+            events.write("Event 'change' on %s #0\n" % node)
+        name = (fake_system.SINKS if node == 'sink' else fake_system.SOURCES)[0][1]
+        nodes = {o['info']['props'].get('node.name'): o['id'] for o in json.loads(self.run(['pw-dump']).stdout)
+                 if o.get('type') == 'PipeWire:Interface:Node'}
+        channels = '[ %s ]' % ' '.join([f'{fake_system.DEFAULT_LEVEL ** 3:.6f}'] * (2 if node == 'sink' else 1))
+        self.run(['pw-cli', 's', str(nodes[name]), 'Props', '{ mute: %s, channelVolumes: %s }' % ('true' if muted else 'false', channels)])
+
     def set_level(self, node, value):
+        if node == 'peak':  # B0095: the level the daemon's parec stand-in plays (Bead's input meter; the QML meter cannot follow, see fake_system.PEAK)
+            (self.root / 'fakeaudio/peak').write_text(f'{value}\n')
+            return
         """The daemon's osd service polls `wpctl get-volume` after each `pactl subscribe` line (fake tools, see start_daemon)."""
         (self.root / f'fakeaudio/{node}').write_text(f'{value}\n')
         with (self.root / 'fakeaudio/events').open('a') as events:
@@ -758,6 +825,8 @@ os.execv(real, [real, *args])
                     self.steps([step[2]])
             elif kind == 'level':
                 self.set_level(step[1], step[2])
+            elif kind == 'mute':
+                self.set_mute(step[1], step[2])
             elif kind == 'pointer':
                 self.pointer(step[1], step[2])
             elif kind == 'press':
@@ -1138,6 +1207,7 @@ def main():
                         help='record copied read-only into both private states (wallpaper + palette); empty for none')
     parser.add_argument('--cpu', action='store_true', help='Bead on the CPU renderer')
     parser.add_argument('--fake-nm', action='store_true', help='B0087: a fake NetworkManager with two VPN profiles on the private bus (both arms)')
+    parser.add_argument('--fake-wifi', action='store_true', help='B0095: the fake NetworkManager also has a Wi-Fi device with networks and a scan (implies --fake-nm)')
     parser.add_argument('--shortcut-fixture', action='store_true', help='include three harmless generated bindings in the private niri configuration')
     parser.add_argument('--settle', type=float, default=2.0, help='seconds between a state opening and its screenshot')
     parser.add_argument('--boot-settle', type=float, default=4.0)
@@ -1155,6 +1225,7 @@ def main():
     if args.presentation:
         args.presentation = str(Path(args.presentation).expanduser().resolve())
     args.size = tuple(int(v) for v in args.size.split('x'))
+    args.fake_nm = args.fake_nm or args.fake_wifi
     args.states = list(STATES) if args.states == 'all' else args.states.split(',')
     unknown = [s for s in args.states if s not in STATES]
     if unknown:
@@ -1205,7 +1276,7 @@ def main():
                              'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
-                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else [])
+                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else []) + (['--fake-wifi'] if args.fake_wifi else [])
                 log(f'arm {arm} starting')
                 child = subprocess.Popen(command, env=env, start_new_session=True)
                 try:
