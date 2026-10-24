@@ -474,6 +474,28 @@ impl App {
             .as_ref()
             .and_then(|p| p.native.clone())
             .ok_or("native pearl options unavailable")?;
+        // Native pearls currently use the rendered body's fixed size. A stale
+        // saved size must not make a much wider body appear beyond the output.
+        if let Some([_, _, w, h]) = self
+            .companion
+            .as_ref()
+            .and_then(|(scene, _, _)| rendering::content_input_rect(scene))
+            && let Some(monitor) = self.monitors().into_iter().find(|monitor| {
+                self.surfaces
+                    .iter()
+                    .any(|surface| surface.companion && surface.output_name == monitor.name)
+            })
+            && let Some(info) = self.pearl
+        {
+            let rect = pearl::Rect::new(info.rect.x, info.rect.y, w as f64, h as f64);
+            let rect = pearl::recover(
+                Some(rect),
+                (w as f64, h as f64),
+                &monitor.rect,
+                &self.tuning(),
+            );
+            self.pearl = Some(Info { rect, ..info });
+        }
         let qh = self.qh.clone();
         let indices: Vec<_> = self
             .surfaces
