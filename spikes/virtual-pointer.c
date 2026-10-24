@@ -33,6 +33,14 @@ static void global(void *data, struct wl_registry *registry, uint32_t name, cons
 static void global_remove(void *data, struct wl_registry *registry, uint32_t name) { (void)data; (void)registry; (void)name; }
 static const struct wl_registry_listener listener = {global, global_remove};
 
+static void trace_motion(unsigned x, unsigned y) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    fprintf(stdout, "POINTER_SENT monotonic_ns=%llu x=%u y=%u\n",
+            (unsigned long long)now.tv_sec * 1000000000ULL + now.tv_nsec, x, y);
+    fflush(stdout);
+}
+
 int main(int argc, char **argv) {
     if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|drag X2 Y2 MS]\n", argv[0]); return 2; }
     struct wl_display *display = wl_display_connect(NULL);
@@ -43,6 +51,7 @@ int main(int argc, char **argv) {
     if (!manager || !seat) { fprintf(stderr, "no virtual pointer manager\n"); return 1; }
     struct zwlr_virtual_pointer_v1 *pointer = zwlr_virtual_pointer_manager_v1_create_virtual_pointer(manager, seat);
     unsigned x = (unsigned)atoi(argv[1]), y = (unsigned)atoi(argv[2]), w = (unsigned)atoi(argv[3]), h = (unsigned)atoi(argv[4]);
+    trace_motion(x, y);
     zwlr_virtual_pointer_v1_motion_absolute(pointer, 0, x, y, w, h);
     zwlr_virtual_pointer_v1_frame(pointer);
     wl_display_roundtrip(display);
@@ -66,10 +75,7 @@ int main(int argc, char **argv) {
                 usleep(ms * 1000 / steps);
                 unsigned px = (unsigned)((double)x + ((double)end_x - x) * i / steps);
                 unsigned py = (unsigned)((double)y + ((double)end_y - y) * i / steps);
-                struct timespec now;
-                clock_gettime(CLOCK_MONOTONIC, &now);
-                fprintf(stdout, "POINTER_SENT monotonic_ns=%llu x=%u y=%u\n",
-                        (unsigned long long)now.tv_sec * 1000000000ULL + now.tv_nsec, px, py);
+                trace_motion(px, py);
                 zwlr_virtual_pointer_v1_motion_absolute(pointer, i, px, py, w, h);
                 zwlr_virtual_pointer_v1_frame(pointer);
                 wl_display_roundtrip(display);

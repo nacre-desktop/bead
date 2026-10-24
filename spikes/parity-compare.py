@@ -339,7 +339,7 @@ class Arm:
         (config / 'autostart').write_text('')
         width, height = a.size
         (config / 'rc.xml').write_text(
-            '<labwc_config><windowRules><windowRule identifier="*"><decorations>no</decorations>'
+            '<labwc_config><windowRules><windowRule identifier="*" serverDecoration="no">'
             f'<action name="ResizeTo" width="{width}" height="{height}"/><action name="MoveTo" x="0" y="0"/>'
             '</windowRule></windowRules></labwc_config>')
         parent_env = dict(self.env, XDG_RUNTIME_DIR=str(parent_runtime), WLR_BACKENDS='headless',
