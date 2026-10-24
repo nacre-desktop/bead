@@ -1383,6 +1383,21 @@ pub(crate) async fn retirement() {
                 .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(true))]))
                 .unwrap();
             extras.project(&open, Some(Arc::new(|| {})));
+            let topic = extras.topic.as_ref().unwrap();
+            let mut ready = false;
+            for _ in 0..200 {
+                let snapshot = topic.snapshot();
+                ready = snapshot.connected && snapshot.data["revision"] == 17;
+                if ready {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert!(
+                ready,
+                "{} fixture publishes the active wallpaper topic",
+                kind.name()
+            );
         } else {
             ready(&extras, &stores("")).await;
         }
@@ -1400,7 +1415,8 @@ pub(crate) async fn retirement() {
         }
         assert!(
             payload.upgrade().is_none(),
-            "closed extras must release topic data"
+            "closed {} extras must release topic data",
+            kind.name()
         );
     }
 }
