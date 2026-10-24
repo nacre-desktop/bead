@@ -1,6 +1,7 @@
 # B0098 — Sidebar and Settings from owner use
 
-Status: review candidate. QML reference Nacre `3cc38598`: `LeftDrawer.qml`,
+Status: review candidate; memory outlier and physical-wheel validation remain
+for lead review. QML reference Nacre `3cc38598`: `LeftDrawer.qml`,
 `ChatPane.qml`, `ActionButton.qml`, `FastScroll.qml`, `NacreSettingsWindow.qml`,
 N0032 and published `ai.chat` contracts. Control is Bead `ac194d7` (B0096/B0102);
 candidate binary is the rebased product tree at `200c65e` (includes B0103 integration), including reveal-wait, unpin proofs and the pill focus appearance. No daemon contract or Nacre source change. Control adds only the matching
@@ -78,7 +79,8 @@ Touchpad release momentum remains a Qt parity gap.
 Always-on unreclaimable candidate-minus-control medians across the matched
 states in balanced seven-opening control/candidate arms: open +0.350, closed +0.383 MiB. This is one balanced control/candidate
 sweep, not a five-pair laptop acceptance measurement. The closed pressed sample
-is +1.705 MiB (anon +1.692), then falls by 1.192 MiB at the next closed state.
+is +1.705 MiB (anon +1.692); candidate anon then falls by 1.192 MiB at the
+next closed state.
 Its transient cause is unproven; this is an unresolved memory outlier for lead
 review, despite phase medians below +0.5 MiB. B0103 is in the candidate but not
 the control, so the remaining delta is not exclusively attributable to B0098.
@@ -91,10 +93,12 @@ No absolute laptop-cap claim.
 ## Checks and limits
 
 Full remote Arch CI-equivalent: every run step of `.github/workflows/ci.yml`,
-on rebased `200c65e` (including B0103), including fmt, clippy -D warnings, workspace/trace tests, feature matrix, Luau
+on captured `200c65e` (including B0103), including fmt, clippy -D warnings, workspace/trace tests, feature matrix, Luau
 checksum/analyzer, capture/packaging suites, wallpaper/services/private SNI,
 and cargo-deny for all independent framework graphs. Rust 1.99.1 (Arch patch
-release; workflow pin 1.99.0). Chat/pearl goldens regenerated remotely and inspected
+release; workflow pin 1.99.0). The final rebase adds only upstream private-pointer
+logging and parent decoration syntax; `crates/` and `shell/` are unchanged from
+the captured/CI-tested product. Chat/pearl goldens regenerated remotely and inspected
 at 1/1.5; pin/release/detach, scroll bounds and raw action gestures tested.
 
 B0043 integration gaps remain: Brain, attachments/screenshots, saved/workspace

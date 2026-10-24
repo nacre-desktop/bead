@@ -6,7 +6,8 @@ The sidebar now uses QML-shaped controls, Pin and an active external-panel lip.
 Private pointer probes verify pin/outside/unpin dismissal. Settings opens at
 1100×800 (minimum 544×480); shared scrolling applies QML's pixel multiplier and
 wheel easing while keeping non-content gestures raw. Matched evidence, memory,
-full remote Arch CI and explicit physical-wheel/integration limits are in
+full remote Arch CI, an unresolved transient memory sample and explicit
+physical-wheel/integration limits are in
 [B0098](specs/0098-sidebar-settings-owner.md). No live change or laptop acceptance claim.
 
 
