@@ -584,12 +584,6 @@ impl Settings {
         sections.sort_by_key(|s| Registry::order(s));
         for section in &sections {
             let sid = section["id"].as_str().unwrap_or("");
-            // B0089: the Displays page is several cards (QML `NacreDisplaysPage`), not one section.
-            if sid == "displays.devices" {
-                items.extend(self.display_sections(state));
-                topics.push("displays".into());
-                continue;
-            }
             let mut body = Vec::new();
             for setting in registry
                 .array(&registry.settings, "settings")

@@ -59,10 +59,14 @@ function row(item)
     elseif k=="actions" then
         if #item.options>3 or item.chips then
             -- A row that is off offers dim chips (the kit builds every chip's action, so the name stays set).
+            -- A `chips` row sizes its chips by label (long labels such as display modes need 10 px a character).
             local chips=item.options
-            if not on then
+            if item.chips or not on then
                 chips={}
-                for i,o in ipairs(item.options) do chips[i]={id=o.id,label=o.label,selected=o.selected,enabled=false} end
+                for i,o in ipairs(item.options) do
+                    chips[i]={id=o.id,label=o.label,selected=o.selected,enabled=on and o.enabled~=false,
+                        width=item.chips and 2*sp.md+8+(utf8.len(o.label) or 4)*10 or nil}
+                end
             end
             return kit.ChipsRow{id="chips",label=item.label,description=item.description,enabled=on,items=chips,per_row=item.per_row,on_change="settings.do"}
         end

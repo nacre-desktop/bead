@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! B0089: the Displays page over the Nacre N0063 contract (`displays` topic, `display.apply`,
-//! `display.confirm`, `display.revert`). Same shape as QML's `NacreDisplaysPage`: a "Displays"
-//! card (primary chips, Extend right/left, Mirror), one card per output (Scale, Resolution and
-//! refresh rate) and, while a change is pending, "Keep this display change?" with Keep and
-//! Revert. Two additions: the countdown the contract's `pending.deadline_ms` allows, and the Keep
-//! card first (QML put it last, below the fold on a small window, where a 20 s question is missed).
+//! `display.confirm`, `display.revert`). Same shape as QML's `NacreDisplaysPage`, inside the
+//! registry's one "Connected devices" card: a "Displays" part (primary chips, Extend right/left,
+//! Mirror), a part per output (Scale, Resolution and refresh rate) and, while a change is pending,
+//! "Keep this display change?" with Keep and Revert. Two additions: the countdown the contract's
+//! `pending.deadline_ms` allows, and the Keep part first (QML put it last, below the fold on a
+//! small window, where a 20 s question is missed).
 //!
 //! Nothing here positions anything: it emits generic rows (`actions`, `picker`, `keep`) that
 //! `shell/settings/main.luau` maps to kit components. Output names, scales and modes in a click
@@ -60,18 +61,13 @@ impl Settings {
             .or_else(|| display.outputs.first())
     }
 
-    /// The cards of the Displays page: one per section the QML page drew.
-    pub(super) fn display_sections(&self, state: &State) -> Vec<Json> {
+    /// The rows of the Displays page, one heading per part the QML page drew.
+    pub(super) fn display_rows(&self, state: &State) -> Vec<Json> {
         let title = tr("bead.settings.displays-title", &[]);
         let Some(display) = self.displays() else {
-            return vec![card(
-                "displays",
-                &title,
-                "",
-                vec![help(
-                    "displays.unavailable",
-                    &tr("bead.settings.unavailable-now", &[]),
-                )],
+            return vec![help(
+                "displays.unavailable",
+                &tr("bead.settings.unavailable-now", &[]),
             )];
         };
         let blocked = self.display_blocked(&display);
@@ -83,7 +79,7 @@ impl Settings {
         } else {
             "bead.settings.displays-description"
         };
-        let mut rows = Vec::new();
+        let mut rows = vec![part("displays", &title, &tr(description, &[]))];
         if display.outputs.len() > 1 {
             rows.push(chips(
                 actions(
@@ -135,49 +131,49 @@ impl Settings {
                 4,
             ));
         }
-        let mut cards = vec![card("displays", &title, &tr(description, &[]), rows)];
         for output in &display.outputs {
-            cards.push(self.output_card(&display, output, blocked, state));
+            rows.extend(self.output_rows(output, &display, blocked, state));
         }
         if let Some(pending) = display.pending {
             let seconds = pending.deadline_ms.saturating_sub(now_ms()).div_ceil(1000);
             let keep = |arg: &str, label: &str| opt(arg.into(), &tr(label, &[]), false, true);
-            cards.insert(
-                0,
-                card(
+            let mut first = vec![
+                part(
                     "displays.keep",
                     &tr("bead.settings.displays-keep-title", &[]),
                     &tr(
                         "bead.settings.displays-countdown",
                         &[("seconds", &seconds.to_string())],
                     ),
-                    vec![chips(
-                        actions(
-                            "displays.keep.buttons",
-                            "",
-                            "",
-                            vec![
-                                keep("do:disp-keep", "bead.settings.displays-keep"),
-                                keep("do:disp-revert", "bead.settings.displays-revert"),
-                            ],
-                            true,
-                        ),
-                        4,
-                    )],
                 ),
-            );
+                chips(
+                    actions(
+                        "displays.keep.buttons",
+                        "",
+                        "",
+                        vec![
+                            keep("do:disp-keep", "bead.settings.displays-keep"),
+                            keep("do:disp-revert", "bead.settings.displays-revert"),
+                        ],
+                        true,
+                    ),
+                    4,
+                ),
+            ];
+            first.extend(rows);
+            rows = first;
         }
-        cards
+        rows
     }
 
     /// "DP-1 · 2560×1440 · 60 Hz": Scale and Resolution and refresh rate.
-    fn output_card(
+    fn output_rows(
         &self,
-        display: &DisplaysState,
         output: &DisplayOutput,
+        display: &DisplaysState,
         blocked: bool,
         state: &State,
-    ) -> Json {
+    ) -> Vec<Json> {
         let name = short(&output.name, 40);
         let id = format!("displays.out.{}", output.name);
         let can = !blocked && splittable(&output.name);
@@ -274,7 +270,8 @@ impl Settings {
                     "more": if more > 0 { tr("bead.settings.displays-mode-more", &[("count", &more.to_string())]) } else { String::new() }}));
             }
         }
-        card(&id, &title, &note, rows)
+        rows.insert(0, part(&id, &title, &note));
+        rows
     }
 
     /// The buttons of the page: `do:disp-<op>|<a>|<b>`. Every name, scale and mode is looked up
@@ -380,8 +377,7 @@ fn chips(mut row: Json, per_row: u64) -> Json {
     row["per_row"] = per_row.into();
     row
 }
-/// One raised card: what `main.luau` draws for a `section` row.
-fn card(id: &str, label: &str, description: &str, rows: Vec<Json>) -> Json {
-    json!({"id": format!("section:{id}"), "kind": "section", "label": label,
-        "description": description, "rows": rows})
+/// A heading with a note inside the page's card (what `main.luau` draws for a `section` row without rows).
+fn part(id: &str, label: &str, description: &str) -> Json {
+    json!({"id": format!("section:{id}"), "kind": "section", "label": label, "description": description})
 }

@@ -248,6 +248,7 @@ impl Settings {
                 self.workflow_rows(editable, state),
                 vec!["settings.desktop".into(), "settings.store.desktop".into()],
             ),
+            "displays.devices" => (self.display_rows(state), topic("displays")),
             "sound.devices" => (self.sound_rows(editable), topic("audio")),
             "network.devices" => (self.network_rows(editable, state), topic("network")),
             "bluetooth.devices" => (self.bluetooth_rows(editable), topic("bluetooth")),

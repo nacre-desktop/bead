@@ -1369,27 +1369,34 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
     let at = stores("displays");
     let model = until(&settings, &at, |m| {
-        nested_items(m)
+        items(m)
             .iter()
             .any(|r| r["id"] == "section:displays.out.DP-1")
     })
     .await;
-    let cards = nested_items(&model);
-    let ids: Vec<&str> = cards.iter().map(|c| c["id"].as_str().unwrap()).collect();
+    // One registry card ("Connected devices", as QML) holds the parts QML drew.
+    assert_eq!(nested_items(&model).len(), 1);
+    let rows = items(&model);
+    let parts: Vec<&str> = rows
+        .iter()
+        .filter(|r| r["kind"] == "section")
+        .filter_map(|r| r["id"].as_str())
+        .collect();
     assert_eq!(
-        ids,
+        parts,
         [
+            "section:displays.devices",
             "section:displays",
             "section:displays.out.DP-1",
             "section:displays.out.HDMI-A-1"
         ],
-        "no Keep card while nothing is pending"
+        "no Keep part while nothing is pending"
     );
-    let rows = items(&model);
-    // Card 1: title, the niri mirroring sentence, primary chips and the two arrangements (no Mirror).
-    assert_eq!(cards[0]["label"], "Displays");
+    let part = |id: &str| row(&rows, id).clone();
+    // First part: title, the niri mirroring sentence, primary chips and the two arrangements (no Mirror).
+    assert_eq!(part("section:displays")["label"], "Displays");
     assert!(
-        cards[0]["description"]
+        part("section:displays")["description"]
             .as_str()
             .unwrap()
             .contains("mirroring is unavailable")
@@ -1409,10 +1416,13 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
             "do:disp-arrange|extend-left"
         ]
     );
-    // One card per output: QML's title, the 20 s note, the scale chips and the mode choices.
-    assert_eq!(cards[1]["label"], "DP-1 · 1920×1080 · 60 Hz");
+    // A part per output: QML's title, the 20 s note, the scale chips and the mode choices.
     assert_eq!(
-        cards[1]["description"],
+        part("section:displays.out.DP-1")["label"],
+        "DP-1 · 1920×1080 · 60 Hz"
+    );
+    assert_eq!(
+        part("section:displays.out.DP-1")["description"],
         "Display changes revert after 20 seconds unless you keep them."
     );
     let scale = row(&rows, "displays.out.DP-1.scale");
@@ -1565,7 +1575,7 @@ async fn displays_page_counts_down_and_keeps_or_reverts_a_pending_change() {
         ),
         (json!("Keep"), json!("Revert"))
     );
-    let text = nested_items(&model)[0]["description"]
+    let text = row(&rows, "section:displays.keep")["description"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -1574,8 +1584,12 @@ async fn displays_page_counts_down_and_keeps_or_reverts_a_pending_change() {
         "{text}"
     );
     assert_eq!(
-        nested_items(&model)[0]["label"],
-        "Keep this display change?",
+        row(&rows, "section:displays.keep")["label"],
+        "Keep this display change?"
+    );
+    let at_part = |id: &str| rows.iter().position(|r| r["id"] == id).unwrap();
+    assert!(
+        at_part("section:displays.keep") < at_part("section:displays"),
         "the question comes first, where a 20 s countdown is seen"
     );
     // While pending every change control is off (QML `blocked`) and nothing new is sent.
@@ -1636,13 +1650,13 @@ async fn displays_page_is_read_only_without_the_methods_or_the_compositor_flag()
     let l = lab(vec![("displays", topic)], &DISPLAY_METHODS).await;
     let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
     let model = until(&settings, &at, has("displays.arrange")).await;
+    let rows = items(&model);
     assert!(
-        nested_items(&model)[0]["description"]
+        row(&rows, "section:displays")["description"]
             .as_str()
             .unwrap()
             .starts_with("Display transactions are unavailable")
     );
-    let rows = items(&model);
     assert!(
         row(&rows, "displays.out.DP-1.scale")["options"]
             .as_array()
