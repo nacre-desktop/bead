@@ -105,7 +105,7 @@ STATES = {
     'wallpaper-dynamic-spotlight': ([('wallpaper-pref', 'dynamic', 'spotlight'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
     'wallpaper-dynamic-hexagons': ([('wallpaper-pref', 'dynamic', 'hexagons'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
     'wallpaper-empty': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 2), ('press', 960, 944), ('release',), ('type', 'zzzz-no-matches')], [('ui', 'nacre', 'close')], 0),
-    'wallpaper-video-activated': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('press', 960, 944), ('release',), ('type', 'motion-1'), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
+    'wallpaper-video-activated': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('press', 960, 944), ('release',), ('type', 'motion-1'), ('key', 'Right'), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
     'wallpaper-dynamic': ([('wallpaper-pref', 'dynamic', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper ')], [('ui', 'nacre', 'close')], 1.0),
     'wallpaper-activated': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('key', 'Right'), ('key', 'Return'), ('sleep', 6)], [('ui', 'nacre', 'close')], 0),
     'wallpaper-settled': ([('wallpaper-pref', 'static', 'carousel'), ('ui', 'nacre', 'launcher', '>wallpaper '), ('sleep', 3), ('ui', 'nacre', 'close'), ('sleep', 7)], [], 0),
@@ -1145,6 +1145,10 @@ os.execv(real, [real, *args])
             try:
                 self.steps([('ui', 'nacre', 'close')])
                 time.sleep(0.8)
+                if name.startswith('wallpaper-'):
+                    # QML retains this page for 5 s; start both arms after its
+                    # idle retirement so query/index state cannot leak between states.
+                    time.sleep(5.5)
                 self.steps(STATE_PREPARE.get(name, []))
                 if name.endswith('-warm'):
                     self.steps(opens)
