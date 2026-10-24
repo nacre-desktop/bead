@@ -47,7 +47,11 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
         .into_owned();
     std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
     let (tx, calls) = mpsc::unbounded_channel();
-    let mut offered_topics = BTreeMap::from([("compositor".into(), 1), ("shortcuts".into(), 1)]);
+    let mut offered_topics = BTreeMap::from([
+        ("compositor".into(), 1),
+        ("shortcuts".into(), 1),
+        ("wallpaper.active".into(), 1),
+    ]);
     for topic in &requested_topics {
         offered_topics.insert(topic.clone(), 1);
     }
@@ -1375,7 +1379,10 @@ fn wallpaper_picker_uses_active_middle_then_visible_query_and_pointer_selection(
 
 #[cfg(feature = "trace")]
 pub(crate) async fn retirement() {
-    let lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    // Exercise page-owned leases. A permanently requested wallpaper topic belongs
+    // to the shared renderer/client and correctly survives any picker closing.
+    let lab = lab().await;
+    assert!(lab.client.topic("wallpaper.active").is_err());
     for kind in [Kind::Overview, Kind::Keybindings, Kind::Wallpaper] {
         let extras = Extras::new(kind, lab.client.clone()).unwrap();
         if kind == Kind::Wallpaper {
