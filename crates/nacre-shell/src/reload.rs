@@ -618,6 +618,8 @@ impl Runtime {
                 bead::core::Value::Text(String::new()),
             ),
             ("network.rows".into(), bead::core::Value::list(Vec::new())),
+            // B0095: the scroll position of the nearby-network list (the popout caps it at 210 px as QML does).
+            ("network.scroll".into(), bead::core::Value::Number(0.)),
             (
                 "network.height".into(),
                 bead::core::Value::Number(crate::status_views::NETWORK_BASE_HEIGHT),
