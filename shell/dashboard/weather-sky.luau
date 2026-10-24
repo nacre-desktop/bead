@@ -25,7 +25,8 @@ function M.background()
         local w,h=photo.width*scale,photo.height*scale
         return ui.Box{id="sky",position="absolute",left=0,top=0,width=style.width,height=style.height,
             ui.Scroll{id="crop",width=style.width,height=style.height,scroll=ui.bind("dashboard.weather.scroll"),
-                ui.Image{id="photo",position="absolute",left=(style.width-w)/2,top=(style.height-h)/2,width=w,height=h,path=photo.path}},
+                ui.Row{id="centre",width=style.width,height=style.height,shrink=0,justify="center",align="center",
+                    ui.Image{id="photo",width=w,height=h,shrink=0,path=photo.path}}},
             ui.Image{id="shade",position="absolute",left=0,top=0,width=style.width,height=style.height,path=style.photo_overlay},
             ui.Text{id="credit",position="absolute",left=style.padding,top=style.height-24,width=style.width-2*style.padding,height=18,font_size=style.detail_size,color=style.muted,text=photo.author.." · "..photo.license},
         }
