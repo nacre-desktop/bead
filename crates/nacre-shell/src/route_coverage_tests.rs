@@ -215,3 +215,37 @@ fn a_selector_prompt_is_answered_cancelled_so_the_tool_does_not_wait() {
     assert!(cancel.error.is_none());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// B0084: every `nacrectl ui` call Nacre's niri/Hyprland binds and app wrappers issue
+/// (`shell/keybind-calls.json`) is accepted by the provider's catalog check and then mapped, forwarded
+/// or acknowledged. Only a stated refusal may differ; a call Bead rejects as unknown fails here.
+#[test]
+fn every_shipped_keybind_and_wrapper_call_is_accepted_by_the_provider() {
+    let json: Value =
+        serde_json::from_str(include_str!("../../../shell/keybind-calls.json")).unwrap();
+    let calls = json["calls"].as_array().unwrap();
+    assert!(calls.len() > 15, "the snapshot lost its calls");
+    for words in calls {
+        let words: Vec<String> = words
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w.as_str().unwrap().to_owned())
+            .collect();
+        let label = format!("{words:?}");
+        let c = from_strings(words[0].clone(), words[1].clone(), &words[2..])
+            .unwrap_or_else(|e| panic!("{label}: {e}"));
+        crate::commands::validate(&c)
+            .unwrap_or_else(|e| panic!("{label}: not in the catalog: {e:?}"));
+        match map_views(c) {
+            Ok(_) => {}
+            // A documented acknowledgement, or an on-demand app (unconfigured in unit tests).
+            Err(reply) => assert!(
+                reply.error.is_none()
+                    || reply.error.as_ref().map(|e| e.message.as_str())
+                        == Some("apps are not configured in this shell"),
+                "{label}: refused: {reply:?}"
+            ),
+        }
+    }
+}

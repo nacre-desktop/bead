@@ -1,7 +1,7 @@
 {
  "version": 1,
  "path": "nacrectl ui TARGET METHOD [ARGS...] -> daemon ui.dispatch -> the registered UI provider (QML shell today, Bead after the switch)",
- "bead_status": "done: Bead handles the route; partial: some arguments only; gap: Bead has no handler (the spec is the unit to do)",
+ "bead_status": "done: Bead handles the route; partial: some arguments only or a stated refusal; gap: Bead has no handler (the spec is the unit to do). Verified against Bead B0068's route_coverage_tests and B0084.",
  "routes": [
   {
    "id": "nacre.launcher",
@@ -69,8 +69,8 @@
    ],
    "qml": "NacreShellIpc.qml",
    "bead": "partial",
-   "spec": "B0026",
-   "note": "apps/wallpaper/palette/overview/clipboard/keys map to menu routes; QML overview grid and palette picker have no Bead view."
+   "spec": "B0026, B0077",
+   "note": "apps/wallpaper/clipboard map to menu routes; overview/palette/keys open Bead's own extras surfaces (B0077); `legacy` is refused."
   },
   {
    "id": "nacre.hide",
@@ -137,8 +137,8 @@
    ],
    "qml": "NacreShellIpc.qml",
    "bead": "partial",
-   "spec": "B0049",
-   "note": "home/edit open the control centre; calendar/network/bluetooth/battery/sound open their panel; other sections are refused."
+   "spec": "B0049, B0068",
+   "note": "home/edit open the control centre; calendar/network/bluetooth/battery/sound open their panel; session and notifications open the session view and the Notices page; `updates` is refused (no Bead updates view)."
   },
   {
    "id": "nacre.session",
@@ -148,9 +148,9 @@
     []
    ],
    "qml": "NacreShellIpc.qml",
-   "bead": "gap",
-   "spec": "Bead: new unit (session route)",
-   "note": "Catalog route with no Bead mapping; Bead has a session view reachable only from launcher power rows. Map `nacre session` to bead.panel toggle session."
+   "bead": "done",
+   "spec": "B0068",
+   "note": "`nacre session` toggles the session view."
   },
   {
    "id": "drawers.toggle",
@@ -163,8 +163,8 @@
    ],
    "qml": "NacreShellShortcuts.qml",
    "bead": "partial",
-   "spec": "B0026, B0049",
-   "note": "dashboard, left, right and sound map; the other QML drawer names are refused."
+   "spec": "B0026, B0049, B0068",
+   "note": "dashboard, left, right, sound, launcher and session map; osd/leftPinned/dashboardPinned/previewOnly are QML preview state and are refused."
   },
   {
    "id": "brightness.step",
@@ -193,9 +193,9 @@
     ]
    ],
    "qml": "NacreBrightness.qml",
-   "bead": "gap",
-   "spec": "Bead: control-centre brightness unit",
-   "note": "Used by `nacre-helper desktop-actions brightness N`; Bead has no route handler. Map to daemon brightness.set on the focused output."
+   "bead": "done",
+   "spec": "B0068",
+   "note": "Daemon brightness.set on the focused output; X is the QML fraction 0..1."
   },
   {
    "id": "keyboardLight.step",
@@ -210,9 +210,9 @@
     ]
    ],
    "qml": "NacreKeyboardLight.qml",
-   "bead": "gap",
-   "spec": "Bead: new unit (keyboard light keys, B0026 blocker B)",
-   "note": "Daemon keyboard_light.adjust is published (N0036) but Bead has no consumer."
+   "bead": "done",
+   "spec": "B0068",
+   "note": "Daemon keyboard_light.adjust (N0036)."
   },
   {
    "id": "pearls.detach",
@@ -236,9 +236,9 @@
     ]
    ],
    "qml": "NacrePearls.qml",
-   "bead": "partial",
-   "spec": "B0048",
-   "note": "launcher/ai/dashboard/media map; the controls kind is refused."
+   "bead": "done",
+   "spec": "B0048, B0068",
+   "note": "launcher/ai/dashboard/media/controls map."
   },
   {
    "id": "colorsApp.open",
@@ -253,9 +253,9 @@
     ]
    ],
    "qml": "NacreColorsApp.qml",
-   "bead": "gap",
-   "spec": "Bead: Colors app unit (B0052 pattern)",
-   "note": "Colors window; Bead has no Colors app. Follow the B0052 on-demand app pattern."
+   "bead": "done",
+   "spec": "B0060",
+   "note": "Colors app (on-demand app process)."
   },
   {
    "id": "welcomeApp.open",
@@ -270,9 +270,9 @@
     ]
    ],
    "qml": "NacreWelcomeApp.qml",
-   "bead": "gap",
-   "spec": "Bead: Welcome app unit (B0052 pattern)",
-   "note": "Welcome window; no Bead app."
+   "bead": "done",
+   "spec": "B0059",
+   "note": "Welcome app (on-demand app process)."
   },
   {
    "id": "welcomeApp.refresh",
@@ -282,9 +282,9 @@
     []
    ],
    "qml": "NacreWelcomeApp.qml",
-   "bead": "gap",
-   "spec": "Bead: Welcome app unit",
-   "note": "Reloads Welcome preferences after `nacre-welcome --enable/--disable`."
+   "bead": "done",
+   "spec": "B0068",
+   "note": "Acknowledged without work: Bead's Welcome keeps no first-run state to reload."
   },
   {
    "id": "menuPrompt.open",
@@ -296,9 +296,9 @@
     ]
    ],
    "qml": "NacreMenuPrompt.qml",
-   "bead": "gap",
-   "spec": "Bead: selector prompt unit",
-   "note": "Selector prompt for `nacre-menu pick|input`; Bead has no prompt view."
+   "bead": "partial",
+   "spec": "B0068",
+   "note": "Bead has no selector prompt view; it answers the waiting `nacre-menu pick|input` at once with a cancelled response (fail fast). Needs a Bead prompt unit."
   },
   {
    "id": "menuPrompt.cancel",
@@ -310,9 +310,9 @@
     ]
    ],
    "qml": "NacreMenuPrompt.qml",
-   "bead": "gap",
-   "spec": "Bead: selector prompt unit",
-   "note": ""
+   "bead": "done",
+   "spec": "B0068",
+   "note": "Nothing is ever open, so there is nothing to cancel."
   }
  ],
  "commands": [
@@ -598,7 +598,7 @@
  ],
  "fallbacks": [
   {
-   "what": "nacrectl ui: `legacy_ui` in crates/nacre-helper/src/daemon/client.rs runs `quickshell ipc -c nacre call` when the daemon is absent or no UI provider is registered",
+   "what": "nacrectl ui: `legacy_ui` in crates/nacre-helper/src/daemon/client.rs runs `quickshell ipc -c nacre call` only when the daemon is absent or no UI provider is registered; with Bead registered it is never reached",
    "expiry": "Group F QML deletion pass"
   },
   {
@@ -606,8 +606,12 @@
    "expiry": "Group F QML deletion pass"
   },
   {
-   "what": "QML-internal probes that read or restore QML view state with `qs ipc`: shell_supervisor.rs, session_watch.rs, daemon/session_policy.rs, display_recover.rs, lock_info.rs, niri_hover_probe.rs, tools/install.py validate_live, display-recover.py, desktop-actions.py lock widgets",
+   "what": "QML-internal probes that read or restore QML view state with `qs ipc`: shell_supervisor.rs (only run by `nacre start`; the Bead drop-in replaces that ExecStart), session_watch.rs (CLI; the daemon observer uses ui.dispatch), display_recover.rs (queued only by the QML DisplayRecovery), lock_info.rs `lockWidgets state` (used for labels the lock config does not call live), niri_hover_probe.rs, tools/install.py validate_live, display-recover.py, desktop-actions.py lock widgets",
    "expiry": "N-E2 supervisor unit; deleted with QML in Group F"
+  },
+  {
+   "what": "lock-info media buttons (`mpris previous|next|playPause`) go through ui.dispatch first and, when the provider refuses (Bead), to the daemon `player.*` methods on the active `dashboard.player` entity (B0084)",
+   "expiry": "none: provider-neutral"
   }
  ],
  "non_route_binds": [
