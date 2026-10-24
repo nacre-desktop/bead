@@ -1,4 +1,16 @@
 {
+  "builds": {
+    "control_commit": "ac194d7",
+    "candidate_product_commit": "200c65e4cf925ebe8f750d6a33019595617650bb",
+    "capture_harness_commit": "411f9d9",
+    "flags": {
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_INCREMENTAL": "0"
+    },
+    "control_binary_sha256": "0944505938433cdda2cea7ec37a3b8e1410e3eae7d76fa6abad1a7bf4261af10",
+    "after_binary_sha256": "7dab9582bf1f860fa176d3ab8cb01f3efe34607b51bdbd0295199a28875f8b14",
+    "pointer_binary_sha256": "1830942b099610fc7f946b616fc8112dbc4649cd37592d9cbc125e8adf4cd8c7"
+  },
   "backend": "CPU tiny-skia",
   "output_pixels": [
     2880,
@@ -7,29 +19,29 @@
   "scale": 1.5,
   "rmse_percent": {
     "sidebar": {
-      "after": 3.462,
-      "before": 4.144
+      "after": 3.474,
+      "before": 4.16
     },
     "sidebar-conversation": {
-      "after": 4.165,
-      "before": 4.899
+      "after": 4.175,
+      "before": 4.906
     },
     "sidebar-pinned": {
       "after": 4.736
     },
     "sidebar-hover": {
-      "after": 4.72
+      "after": 4.729
     },
     "sidebar-pressed": {
-      "after": 4.712
+      "after": 4.721
     },
     "settings": {
-      "after": 7.366,
-      "before": 19.61
+      "after": 7.369,
+      "before": 19.613
     },
     "settings-scroll": {
-      "after": 7.649,
-      "before": 19.673
+      "after": 7.37,
+      "before": 19.612
     }
   },
   "memory_mib": {
@@ -37,179 +49,263 @@
       "states": {
         "sidebar": {
           "control": {
-            "unreclaimable": 20.799,
-            "anon": 20.113,
+            "unreclaimable": 20.619,
+            "anon": 19.934,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.4,
-            "PSS_information": 46.199
+            "file_pss_information": 25.584,
+            "PSS_information": 46.203
           },
           "candidate": {
-            "unreclaimable": 20.686,
-            "anon": 19.992,
+            "unreclaimable": 20.908,
+            "anon": 20.215,
             "shmem": 0.693,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.412,
-            "PSS_information": 46.098
+            "file_pss_information": 25.604,
+            "PSS_information": 46.512
           },
-          "delta": -0.113
+          "delta": 0.289
         },
         "sidebar-conversation": {
           "control": {
-            "unreclaimable": 20.799,
-            "anon": 20.113,
+            "unreclaimable": 20.619,
+            "anon": 19.934,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.444,
-            "PSS_information": 46.243
+            "file_pss_information": 25.268,
+            "PSS_information": 45.887
           },
           "candidate": {
-            "unreclaimable": 20.898,
-            "anon": 20.199,
+            "unreclaimable": 20.938,
+            "anon": 20.238,
             "shmem": 0.699,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.758,
-            "PSS_information": 46.656
+            "file_pss_information": 25.389,
+            "PSS_information": 46.326
           },
-          "delta": 0.099
+          "delta": 0.319
+        },
+        "sidebar-hover": {
+          "control": {
+            "unreclaimable": 20.58,
+            "anon": 19.895,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.703,
+            "PSS_information": 46.283
+          },
+          "candidate": {
+            "unreclaimable": 20.969,
+            "anon": 20.27,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.547,
+            "PSS_information": 46.516
+          },
+          "delta": 0.389
+        },
+        "sidebar-pressed": {
+          "control": {
+            "unreclaimable": 20.584,
+            "anon": 19.898,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.362,
+            "PSS_information": 45.946
+          },
+          "candidate": {
+            "unreclaimable": 20.969,
+            "anon": 20.27,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 25.658,
+            "PSS_information": 46.627
+          },
+          "delta": 0.385
         },
         "settings": {
           "control": {
-            "unreclaimable": 20.92,
-            "anon": 20.234,
+            "unreclaimable": 20.725,
+            "anon": 20.039,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.42,
-            "PSS_information": 46.34
+            "file_pss_information": 25.819,
+            "PSS_information": 46.544
           },
           "candidate": {
-            "unreclaimable": 21.34,
-            "anon": 20.641,
+            "unreclaimable": 21.105,
+            "anon": 20.406,
             "shmem": 0.699,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.796,
-            "PSS_information": 47.136
+            "file_pss_information": 25.638,
+            "PSS_information": 46.743
           },
-          "delta": 0.42
+          "delta": 0.38
         },
         "settings-scroll": {
           "control": {
-            "unreclaimable": 20.83,
-            "anon": 20.145,
+            "unreclaimable": 22.369,
+            "anon": 21.684,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.65,
-            "PSS_information": 46.48
+            "file_pss_information": 25.636,
+            "PSS_information": 48.005
           },
           "candidate": {
-            "unreclaimable": 21.402,
-            "anon": 20.703,
+            "unreclaimable": 21.367,
+            "anon": 20.668,
             "shmem": 0.699,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 25.859,
-            "PSS_information": 47.262
+            "file_pss_information": 25.673,
+            "PSS_information": 47.04
           },
-          "delta": 0.572
+          "delta": -1.002
         }
       },
-      "median_delta": 0.26
+      "median_delta": 0.35
     },
     "closed": {
       "states": {
         "sidebar": {
           "control": {
-            "unreclaimable": 20.799,
-            "anon": 20.113,
+            "unreclaimable": 20.619,
+            "anon": 19.934,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 46.749,
-            "PSS_information": 67.548
+            "file_pss_information": 46.867,
+            "PSS_information": 67.486
           },
           "candidate": {
-            "unreclaimable": 20.887,
-            "anon": 20.188,
+            "unreclaimable": 20.918,
+            "anon": 20.219,
             "shmem": 0.699,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 47.36,
-            "PSS_information": 68.247
+            "file_pss_information": 46.87,
+            "PSS_information": 67.788
           },
-          "delta": 0.088
+          "delta": 0.299
         },
         "sidebar-conversation": {
           "control": {
-            "unreclaimable": 20.799,
-            "anon": 20.113,
+            "unreclaimable": 20.561,
+            "anon": 19.875,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 46.742,
-            "PSS_information": 67.541
+            "file_pss_information": 46.929,
+            "PSS_information": 67.489
           },
           "candidate": {
-            "unreclaimable": 20.902,
-            "anon": 20.203,
+            "unreclaimable": 20.938,
+            "anon": 20.238,
             "shmem": 0.699,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 47.358,
-            "PSS_information": 68.261
+            "file_pss_information": 46.868,
+            "PSS_information": 67.806
           },
-          "delta": 0.103
+          "delta": 0.377
+        },
+        "sidebar-hover": {
+          "control": {
+            "unreclaimable": 20.58,
+            "anon": 19.895,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.982,
+            "PSS_information": 67.562
+          },
+          "candidate": {
+            "unreclaimable": 20.969,
+            "anon": 20.27,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.921,
+            "PSS_information": 67.89
+          },
+          "delta": 0.389
+        },
+        "sidebar-pressed": {
+          "control": {
+            "unreclaimable": 20.584,
+            "anon": 19.898,
+            "shmem": 0.686,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.982,
+            "PSS_information": 67.566
+          },
+          "candidate": {
+            "unreclaimable": 22.289,
+            "anon": 21.59,
+            "shmem": 0.699,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "file_pss_information": 46.919,
+            "PSS_information": 69.208
+          },
+          "delta": 1.705
         },
         "settings": {
           "control": {
-            "unreclaimable": 20.818,
-            "anon": 20.133,
+            "unreclaimable": 20.666,
+            "anon": 19.98,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 46.772,
-            "PSS_information": 67.591
+            "file_pss_information": 47.019,
+            "PSS_information": 67.685
           },
           "candidate": {
-            "unreclaimable": 21.254,
-            "anon": 20.555,
+            "unreclaimable": 21.098,
+            "anon": 20.398,
             "shmem": 0.699,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 47.38,
-            "PSS_information": 68.634
+            "file_pss_information": 46.915,
+            "PSS_information": 68.013
           },
-          "delta": 0.436
+          "delta": 0.432
         },
         "settings-scroll": {
           "control": {
-            "unreclaimable": 20.861,
-            "anon": 20.176,
+            "unreclaimable": 21.252,
+            "anon": 20.566,
             "shmem": 0.686,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 46.795,
-            "PSS_information": 67.656
+            "file_pss_information": 47.019,
+            "PSS_information": 68.271
           },
           "candidate": {
-            "unreclaimable": 21.441,
-            "anon": 20.742,
+            "unreclaimable": 21.383,
+            "anon": 20.684,
             "shmem": 0.699,
             "DRM": 0.0,
             "SwapPss": 0.0,
-            "file_pss_information": 47.379,
-            "PSS_information": 68.82
+            "file_pss_information": 46.915,
+            "PSS_information": 68.298
           },
-          "delta": 0.58
+          "delta": 0.131
         }
       },
-      "median_delta": 0.27
+      "median_delta": 0.383
     }
   },
   "scroll": {
@@ -228,6 +324,13 @@
         "before": 30,
         "after": 75,
         "moved": 45
+      },
+      "wheel-angle": {
+        "input": 1,
+        "path": "direct",
+        "before": 0,
+        "after": 0,
+        "moved": 0
       }
     },
     "bead": {
@@ -245,6 +348,13 @@
         "before": 30.0,
         "after": 385.0,
         "moved": 355.0
+      },
+      "wheel-angle": {
+        "input": 1,
+        "path": "direct",
+        "before": 0.0,
+        "after": 0.0,
+        "moved": 0.0
       }
     },
     "control": {
@@ -262,7 +372,44 @@
         "before": 10.0,
         "after": 25.0,
         "moved": 15.0
+      },
+      "wheel-angle": {
+        "input": 1,
+        "path": "direct",
+        "before": 0.0,
+        "after": 0.0,
+        "moved": 0.0
       }
+    }
+  },
+  "source_png_sha256": {
+    "sidebar": {
+      "qml": "f922adbba8be4ff57097a1ed945ce4a6863b120bc089f39c1c9542962033a91e",
+      "bead": "abeccb648ff8a76ea5cd9adc373b086133b44730747026d801a9875213fcd12f"
+    },
+    "sidebar-conversation": {
+      "qml": "1cfd99e76d8a34a7f3c31078f7ce95e974b5f3bf797e1536abcdd4d6c28d7a46",
+      "bead": "88e6d0e7e4aa84600b67daca32be3088f4373f1c12807451bf15bccfc8fb509c"
+    },
+    "sidebar-pinned": {
+      "qml": "30ee4c1a0e65cf40f693c276478aed74779e8f629e25e9c29c502d3e758b60b6",
+      "bead": "ee304e8cd02f0415c184e348e68a6de2df342f3bb9d0765e96d65785cc869e43"
+    },
+    "sidebar-hover": {
+      "qml": "5d9c6dda48568432999ad6e10a1dfda7866ec4640e4109fe7b9c2ec86d9a42b0",
+      "bead": "8bf9e4efbefbdeef3b501e20b1c52fc0dc6ab388f2520433b7a1fa6780b5be9a"
+    },
+    "sidebar-pressed": {
+      "qml": "04a1ef60bab3cf0e549cc0774274162b934d57337e9b6255dc21f3b60ba03f1e",
+      "bead": "73a325b2b28a715e290f908136c21b131b5f400cfcc82941736a729b77841f1d"
+    },
+    "settings": {
+      "qml": "57143ff115d9c25b46c171a5d099075845d031d88b4a924671a606a587d25cc5",
+      "bead": "c0bf271cfa49967c77d27c7e77e2286aad00546f703c7c2381a059ac78e0e1de"
+    },
+    "settings-scroll": {
+      "qml": "8779023e86801ab6449e004576f7832dae20be330c850d674868e99fab008ba3",
+      "bead": "c0bf271cfa49967c77d27c7e77e2286aad00546f703c7c2381a059ac78e0e1de"
     }
   },
   "qml_state_errors": {
@@ -275,6 +422,7 @@
     "settings-scroll": []
   },
   "qml_pinned": true,
+  "qml_unpin_then_outside_closes": true,
   "bead_state_errors": {
     "sidebar": [],
     "sidebar-conversation": [],
@@ -285,17 +433,46 @@
     "settings-scroll": []
   },
   "bead_pinned": true,
+  "bead_unpin_then_outside_closes": true,
+  "memory_arm_open_sequences": {
+    "control": [
+      "sidebar",
+      "sidebar-conversation",
+      "sidebar-hover",
+      "sidebar-hover",
+      "sidebar-pressed",
+      "settings",
+      "settings-scroll"
+    ],
+    "candidate": [
+      "sidebar",
+      "sidebar-conversation",
+      "sidebar-pinned",
+      "sidebar-hover",
+      "sidebar-pressed",
+      "settings",
+      "settings-scroll"
+    ]
+  },
+  "control_state_errors": {
+    "sidebar": [],
+    "sidebar-conversation": [],
+    "sidebar-hover": [],
+    "sidebar-pressed": [],
+    "settings": [],
+    "settings-scroll": []
+  },
   "apps": {
     "sidebar": {
       "open": {
         "chat": {
-          "unreclaimable": 31.646,
-          "anon": 23.648,
+          "unreclaimable": 31.662,
+          "anon": 23.664,
           "shmem": 7.998,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.436,
-          "PSS_information": 55.082
+          "file_pss_information": 23.826,
+          "PSS_information": 55.488
         }
       },
       "closed": {}
@@ -303,13 +480,13 @@
     "sidebar-conversation": {
       "open": {
         "chat": {
-          "unreclaimable": 28.666,
-          "anon": 20.668,
+          "unreclaimable": 28.682,
+          "anon": 20.684,
           "shmem": 7.998,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.811,
-          "PSS_information": 52.477
+          "file_pss_information": 23.446,
+          "PSS_information": 52.128
         }
       },
       "closed": {}
@@ -317,13 +494,13 @@
     "sidebar-pinned": {
       "open": {
         "chat": {
-          "unreclaimable": 27.85,
-          "anon": 20.977,
+          "unreclaimable": 27.881,
+          "anon": 21.008,
           "shmem": 6.873,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.701,
-          "PSS_information": 51.551
+          "file_pss_information": 23.458,
+          "PSS_information": 51.339
         }
       },
       "closed": {}
@@ -331,13 +508,13 @@
     "sidebar-hover": {
       "open": {
         "chat": {
-          "unreclaimable": 28.814,
-          "anon": 20.941,
+          "unreclaimable": 28.787,
+          "anon": 20.914,
           "shmem": 7.873,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.735,
-          "PSS_information": 52.55
+          "file_pss_information": 23.902,
+          "PSS_information": 52.689
         }
       },
       "closed": {}
@@ -345,13 +522,13 @@
     "sidebar-pressed": {
       "open": {
         "chat": {
-          "unreclaimable": 28.834,
-          "anon": 20.961,
+          "unreclaimable": 28.768,
+          "anon": 20.895,
           "shmem": 7.873,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.616,
-          "PSS_information": 52.45
+          "file_pss_information": 23.852,
+          "PSS_information": 52.619
         }
       },
       "closed": {}
@@ -359,13 +536,13 @@
     "settings": {
       "open": {
         "settings": {
-          "unreclaimable": 26.23,
-          "anon": 18.676,
+          "unreclaimable": 26.242,
+          "anon": 18.688,
           "shmem": 7.555,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.505,
-          "PSS_information": 49.735
+          "file_pss_information": 23.601,
+          "PSS_information": 49.843
         }
       },
       "closed": {}
@@ -373,13 +550,13 @@
     "settings-scroll": {
       "open": {
         "settings": {
-          "unreclaimable": 26.539,
-          "anon": 18.984,
+          "unreclaimable": 26.66,
+          "anon": 19.105,
           "shmem": 7.555,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.591,
-          "PSS_information": 50.13
+          "file_pss_information": 23.71,
+          "PSS_information": 50.37
         }
       },
       "closed": {}
@@ -394,8 +571,8 @@
           "shmem": 7.936,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.59,
-          "PSS_information": 51.693
+          "file_pss_information": 23.693,
+          "PSS_information": 51.797
         }
       },
       "closed": {}
@@ -403,13 +580,41 @@
     "sidebar-conversation": {
       "open": {
         "chat": {
-          "unreclaimable": 30.037,
-          "anon": 23.695,
+          "unreclaimable": 29.834,
+          "anon": 23.492,
           "shmem": 6.342,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.695,
-          "PSS_information": 53.732
+          "file_pss_information": 23.143,
+          "PSS_information": 52.977
+        }
+      },
+      "closed": {}
+    },
+    "sidebar-hover": {
+      "open": {
+        "chat": {
+          "unreclaimable": 31.643,
+          "anon": 23.77,
+          "shmem": 7.873,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.727,
+          "PSS_information": 55.369
+        }
+      },
+      "closed": {}
+    },
+    "sidebar-pressed": {
+      "open": {
+        "chat": {
+          "unreclaimable": 31.584,
+          "anon": 23.711,
+          "shmem": 7.873,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "file_pss_information": 23.191,
+          "PSS_information": 54.775
         }
       },
       "closed": {}
@@ -417,13 +622,13 @@
     "settings": {
       "open": {
         "settings": {
-          "unreclaimable": 23.688,
-          "anon": 18.414,
+          "unreclaimable": 23.617,
+          "anon": 18.344,
           "shmem": 5.273,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.638,
-          "PSS_information": 47.325
+          "file_pss_information": 23.465,
+          "PSS_information": 47.082
         }
       },
       "closed": {}
@@ -431,13 +636,13 @@
     "settings-scroll": {
       "open": {
         "settings": {
-          "unreclaimable": 23.668,
-          "anon": 18.395,
+          "unreclaimable": 23.645,
+          "anon": 18.371,
           "shmem": 5.273,
           "DRM": 0.0,
           "SwapPss": 0.0,
-          "file_pss_information": 23.332,
-          "PSS_information": 47.0
+          "file_pss_information": 23.023,
+          "PSS_information": 46.668
         }
       },
       "closed": {}
@@ -450,33 +655,29 @@
   "animation_samples_ms": {
     "qml": [
       88,
-      189,
       289,
-      389,
       489,
-      690
+      690,
+      991,
+      1241
     ],
     "bead": [
       88,
-      188,
       288,
-      389,
       489,
-      689
+      689,
+      990,
+      1240
     ]
   },
-  "validation_status": "reference_only_final_capture_blocked",
-  "reference_builds": {
-    "control_commit": "8e0c487",
-    "candidate_product_commit": "e830672",
-    "control_binary_sha256": "ff3c059c4e6718e5bb66b2cf691202cd17f0fd6ccb0ff62e045a7233771f3ee5",
-    "candidate_binary_sha256": "221c0caae13c1145bc756e4db0084eb36f7d014ac39b54f6da923643f76c7ee1"
-  },
-  "uncaptured_final_builds": {
-    "control_commit": "ac194d7",
-    "candidate_product_commit": "33bbc50",
-    "capture_harness_commit": "411f9d9",
-    "control_binary_sha256": "0944505938433cdda2cea7ec37a3b8e1410e3eae7d76fa6abad1a7bf4261af10",
-    "candidate_binary_sha256": "67f12798d7912a81f53c5720abd469a4c0192893bf6e290665694e94a0b5d9c9"
+  "animation_image_proxy_ms": {
+    "qml": {
+      "0.1": 239,
+      "0.9": 464
+    },
+    "bead": {
+      "0.1": 865,
+      "0.9": 915
+    }
   }
 }
