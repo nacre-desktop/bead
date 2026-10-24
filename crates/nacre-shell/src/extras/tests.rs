@@ -848,10 +848,7 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         .unwrap();
     runtime.commit();
     assert_eq!(
-        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
-            .await
-            .unwrap()
-            .unwrap(),
+        next_wallpaper_runtime_call(&mut runtime, &mut lab.calls).await,
         (
             "wallpaper.activate".into(),
             json!({"revision":17,"id":"/fixture/next.jpg"})
@@ -891,22 +888,12 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         runtime.session.stores.get("extras.wallpaper.selection_id"),
         Some(&Value::Text("/fixture/current.jpg".into()))
     );
-    let mut navigation_call = None;
-    for _ in 0..200 {
-        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
-        runtime.commit();
-        if let Ok(call) = lab.calls.try_recv() {
-            navigation_call = Some(call);
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(5)).await;
-    }
     assert_eq!(
-        navigation_call,
-        Some((
+        next_wallpaper_runtime_call(&mut runtime, &mut lab.calls).await,
+        (
             "wallpaper.activate".into(),
             json!({"revision":18,"id":"/fixture/current.jpg"})
-        ))
+        )
     );
     let card = runtime.session.view_nodes().iter().find(|node|
         matches!(&node.action_arg, Some(Value::Text(argument)) if argument.starts_with("wallpaper:select:")))
@@ -920,22 +907,12 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         })
         .unwrap();
     runtime.commit();
-    let mut wheel_call = None;
-    for _ in 0..200 {
-        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
-        runtime.commit();
-        if let Ok(call) = lab.calls.try_recv() {
-            wheel_call = Some(call);
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(5)).await;
-    }
     assert_eq!(
-        wheel_call,
-        Some((
+        next_wallpaper_runtime_call(&mut runtime, &mut lab.calls).await,
+        (
             "wallpaper.activate".into(),
             json!({"revision":19,"id":"/fixture/next.jpg"})
-        )),
+        ),
         "positive Wayland wheel distance moves to the next wallpaper"
     );
     let root_node = runtime
@@ -973,6 +950,33 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         runtime.session.stores.get("panel.open"),
         Some(&Value::Bool(false))
     );
+}
+
+async fn next_wallpaper_runtime_call(
+    runtime: &mut crate::reload::Runtime,
+    calls: &mut mpsc::UnboundedReceiver<(String, Json)>,
+) -> (String, Json) {
+    use bead::wayland::{SceneSource, UiEvent};
+    for _ in 0..200 {
+        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        runtime.commit();
+        if let Ok(call) = calls.try_recv() {
+            if call.0 == "wallpaper.catalogue" {
+                let ids = call.1["ids"]
+                    .as_array()
+                    .expect("hydration call carries ids");
+                assert!(!ids.is_empty(), "metadata loading uses ids:[] only once");
+                assert!(
+                    ids.len() <= 128,
+                    "hydration request stays within protocol bounds"
+                );
+                continue;
+            }
+            return call;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    panic!("wallpaper runtime did not issue its action")
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1349,13 +1353,18 @@ fn wallpaper_picker_uses_active_middle_then_visible_query_and_pointer_selection(
         )]))?
         .expect("dynamic filter update");
     session.commit(dynamic);
-    let dynamic_ids: std::collections::BTreeSet<&str> = session
-        .view_nodes()
+    let behavior_path = root.join("extras/behavior.luau");
+    let behavior =
+        bead::ui::script::Script::load(&std::fs::read(&behavior_path)?, &behavior_path).unwrap();
+    let Value::List(dynamic_rows) = behavior
+        .resolve("extras.filtered", &session.stores)
+        .unwrap()
+    else {
+        panic!("dynamic wallpaper filter returns rows")
+    };
+    let dynamic_ids: std::collections::BTreeSet<&str> = dynamic_rows
         .iter()
-        .filter_map(|node| match &node.action_arg {
-            Some(Value::Text(argument)) => argument.strip_prefix("wallpaper:select:"),
-            _ => None,
-        })
+        .filter_map(|row| row["id"].as_str())
         .collect();
     assert_eq!(
         dynamic_ids,
