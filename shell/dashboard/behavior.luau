@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 return {stores={
     ["panel.open"]=true,["view.edge"]="top",
-    ["dashboard.weather.code"]=-1,["dashboard.weather.day"]=true,["dashboard.weather.scroll"]=0,
+    ["dashboard.weather.photos_enabled"]=true,["dashboard.weather.city"]="",["dashboard.weather.code"]=-1,["dashboard.weather.day"]=true,["dashboard.weather.scroll"]=0,
     ["dashboard.page"]="system",["dashboard.title"]=tr("bead.dashboard.page-system"),
     ["dashboard.preview"]=false,["dashboard.ready"]=false,["dashboard.stale"]=false,
     ["dashboard.heading"]=tr("bead.dashboard.page-unavailable",{page=tr("bead.dashboard.page-system")}),["dashboard.summary"]=tr("bead.dashboard.data-pending"),

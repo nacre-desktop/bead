@@ -1377,7 +1377,12 @@ fn weather_sky_uses_condition_and_daylight_and_draws_every_fallback() -> Result<
             let mut data = fixture("weather");
             data["current"]["wmo"] = json!(code);
             data["current"]["is_day"] = json!(day);
+            data["current"]["location"] = json!("A city name longer than the display heading");
             let model = page_view(Page::Weather, data).project();
+            assert_eq!(
+                text(&model, "dashboard.weather.city"),
+                "A city name longer than the display heading"
+            );
             assert_eq!(model["dashboard.weather.day"], Value::Bool(day));
             assert_eq!(
                 model["dashboard.weather.code"],
@@ -1424,7 +1429,7 @@ fn weather_local_photo_crops_keeps_credit_and_releases_the_asset() -> Result<()>
     let style = temp.join("dashboard/weather/weather-style.luau");
     std::fs::write(&style, std::fs::read_to_string(&style)?.replace(
         "photos={enabled=false,city={},fallback=nil}",
-        "photos={enabled=true,city={},fallback={path='fixture.svg',width=1000,height=100,author='Fixture artist',license='CC0'}}",
+        "photos={enabled=true,city={Harbour={path='fixture.svg',width=1000,height=100,author='Fixture artist',license='CC0'}},fallback=nil}",
     ))?;
     std::fs::write(
         temp.join("fixture.svg"),
@@ -1472,4 +1477,23 @@ fn weather_local_photo_crops_keeps_credit_and_releases_the_asset() -> Result<()>
     );
     std::fs::remove_dir_all(temp)?;
     Ok(())
+}
+
+#[test]
+fn weather_photos_follow_the_published_setting() {
+    for enabled in [true, false] {
+        let mut settings = fixture("settings");
+        settings["data"]["weatherPhotos"] = json!(enabled);
+        let model = page_view(Page::Weather, fixture("weather"))
+            .with_controls(
+                Some(Arc::new(FakeSource::new(settings).unwrap())),
+                None,
+                None,
+            )
+            .project();
+        assert_eq!(
+            model["dashboard.weather.photos_enabled"],
+            Value::Bool(enabled)
+        );
+    }
 }

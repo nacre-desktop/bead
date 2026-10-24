@@ -15,8 +15,9 @@ end
 function M.background()
     local code=ui.resolve_for_check(ui.bind("dashboard.weather.code"))
     local day=ui.resolve_for_check(ui.bind("dashboard.weather.day"))
-    local city=ui.resolve_for_check(ui.bind("dashboard.heading"))
-    local photo=style.photos.enabled and (style.photos.city[city] or style.photos.fallback)
+    local city=ui.resolve_for_check(ui.bind("dashboard.weather.city"))
+    local enabled=ui.resolve_for_check(ui.bind("dashboard.weather.photos_enabled"))
+    local photo=enabled and style.photos.enabled and (style.photos.city[city] or style.photos.fallback)
     -- No remote URLs, fetches or ambient cache lookup. Attribution travels with a local asset.
     if photo then
         assert(type(photo.path)=="string" and not string.find(photo.path,":",1,true),"weather photo needs a bundle-relative path")

@@ -768,6 +768,21 @@ impl Dashboard {
                     Value::Number(current.wmo.map_or(-1., f64::from)),
                 );
                 out.insert("dashboard.weather.day".into(), Value::Bool(current.is_day));
+                let photos_enabled = self
+                    .settings
+                    .as_ref()
+                    .and_then(|source| {
+                        serde_json::from_value::<SettingsStore>((*source.snapshot().data).clone())
+                            .ok()
+                    })
+                    .is_none_or(|store| {
+                        store.data.get("weatherPhotos") != Some(&Json::Bool(false))
+                    });
+                out.insert(
+                    "dashboard.weather.photos_enabled".into(),
+                    Value::Bool(photos_enabled),
+                );
+                text(&mut out, "weather.city", current.location.trim(), 100);
                 text(&mut out, "heading", &current.location, 24);
                 text(&mut out, "summary", &current.description, 48);
                 text(&mut out, "metric", &self.degrees(current.temperature), 24);
