@@ -103,6 +103,7 @@ pub const PROPERTIES: &[&str] = &[
     "on_activate",
     "activate_on_release",
     "focus_on_pointer",
+    "focus_ring",
     "scroll",
     "fill",
     "color",
@@ -152,6 +153,8 @@ pub struct ViewSpec {
     pub argument: Option<Value>,
     pub activate_on_release: bool,
     pub focus_on_pointer: bool,
+    /// Whether a focused interactive node gets the standard focus outline.
+    pub focus_ring: bool,
     pub input: Option<String>,
     /// TextInput accepts newlines (Shift+Enter) and wraps at its width.
     pub multiline: bool,
@@ -535,6 +538,7 @@ impl ViewSpec {
                 argument: action.and_then(|a| a.1),
                 activate_on_release,
                 focus_on_pointer,
+                focus_ring: boolean(p, "focus_ring", true, source)?,
                 input,
                 multiline: boolean(p, "multiline", false, source)?,
                 masked: boolean(p, "masked", false, source)?,
@@ -934,6 +938,7 @@ pub fn layout(
                 action: view.action.clone(),
                 activate_on_release: view.activate_on_release,
                 focus_on_pointer: view.focus_on_pointer,
+                focus_ring: view.focus_ring,
                 icon: None,
                 input: view.input.clone(),
                 scroll: None,

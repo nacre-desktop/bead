@@ -31,6 +31,7 @@ export type Props = {
     on_activate:any?,
     activate_on_release:any?,
     focus_on_pointer:any?,
+    focus_ring:any?,
     scroll:any?,
     fill:any?,
     color:any?,

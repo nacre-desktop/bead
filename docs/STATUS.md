@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-24 — B0079 extras placement and reveal (review)
+
+Windows, Commands and Keyboard shortcuts now use QML’s centered bottom
+attachment and 300 ms OutCubic reveal, with token-controlled edge and geometry.
+Search fields keep the filled background without a focus outline; Overview
+reuses the bar’s category glyphs. Final full-frame RMSE is 7.803%/4.369%/2.851%
+(from 25.606%/29.112%/30.109%). Full remote Arch CI passed after B0075 integration;
+matched private captures, corrected Overview motion sequences and residual gaps
+are in [B0079](specs/0079-extras-placement.md). No live change or new memory claim.
+
 ## 2026-10-24 — B0075 first-key recovery (review)
 
 Cold opening motion left a terminal pose and old SHM repairs for the next input.

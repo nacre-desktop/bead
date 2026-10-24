@@ -55,9 +55,10 @@ STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed':
 # 352 px content-width precondition for both builds, independent of state order.
 STATE_PREPARE = {'popout-audio': [('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 0.4),
                                   ('ui', 'nacre', 'close'), ('sleep', 0.5)]}
+STATE_CLEANUP = {}
 STATES = {
     'idle': ([], [], 0),
-    'overview': ([('ui', 'nacre', 'settings'), ('sleep', 2.0), ('ui', 'nacre', 'mode', 'overview')], [('ui', 'nacre', 'close'), ('app_close', 'settings')], 1.0),
+    'overview': ([('ui', 'nacre', 'mode', 'overview')], [('ui', 'nacre', 'close')], 1.0),
     'palette': ([('ui', 'nacre', 'mode', 'palette')], [('ui', 'nacre', 'close')], 1.0),
     'keybindings': ([('ui', 'nacre', 'mode', 'keys')], [('ui', 'nacre', 'close')], 1.0),
     'launcher': ([('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
@@ -173,15 +174,19 @@ animations {
 
 
 # B0077: close controls exercise the same semantic hover/press state at each
-# shell's attached edge. QML is bottom attached; Bead follows the owner's top edge.
+# shell's bottom attachment (B0079).
 for _name in ("overview", "palette", "keybindings"):
     _overview = _name == "overview"
     _target = "extras-close-" + _name
     PTR[_target] = {"qml": (1400 if _overview else 1320, 419 if _overview else 659),
-                    "bead": (1400 if _overview else 1320, 81)}
+                    "bead": (1400 if _overview else 1320, 419 if _overview else 659)}
     _open, _close, _seconds = STATES[_name]
     STATES[_name + "-hover"] = (_open + [("sleep", 1.0), ("pointer-target", _target)], _close, 0)
     STATES[_name + "-pressed"] = (_open + [("sleep", 1.0), ("press-target", _target)], [("release",)] + _close, 0)
+    if _overview:
+        for _state in (_name, _name + "-hover", _name + "-pressed"):
+            STATE_PREPARE[_state] = [("ui", "nacre", "settings"), ("sleep", 2.0)]
+            STATE_CLEANUP[_state] = [("app_close", "settings")]
 
 
 def log(message):
@@ -734,6 +739,7 @@ os.execv(real, [real, *args])
                     info['close_ms'] = self.sequence(name + '-close', lambda: self.steps(closes), seconds)
                 else:
                     self.steps(closes)
+                self.steps(STATE_CLEANUP.get(name, []))
                 time.sleep(0.6)
                 info['rss_closed_kib'] = self.rss()
                 info['dispatch_trace'] = self.dispatch_trace

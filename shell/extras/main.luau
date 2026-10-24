@@ -48,8 +48,9 @@ local function window_tile(item)
     activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do","focus:"..tostring(item.id)),aria_label=item.title or item.app_id or "Window",
     ui.Box{id="preview",position="absolute",left=0,top=0,width=item.tile_width,height=item.preview_height,
       radius=T.overview.thumbnail_radius,fill=selected and "secondaryContainer" or "surfaceContainerHigh",
-      ui.Image{position="absolute",left=(item.tile_width-T.overview.icon_size)/2,top=(item.preview_height-T.overview.icon_size)/2,
-        icon=item.icon or "application-x-executable",width=T.overview.icon_size,height=T.overview.icon_size,
+      ui.Text{position="absolute",left=(item.tile_width-T.overview.icon_size)/2,top=(item.preview_height-T.overview.icon_size)/2,
+        text=item.icon or "apps",family="Material Symbols Rounded",font_size=T.overview.icon_size,color="onSurfaceVariant",
+        width=T.overview.icon_size,height=T.overview.icon_size,
         aria_label=item.title or "Window"}},
     ui.Text{id="window-title",position="absolute",left=0,top=item.tile_height-T.overview.caption_height,
       width=item.tile_width,height=T.overview.caption_height,text=item.title or item.app_id or "Window",
@@ -131,12 +132,12 @@ heading[#heading+1] = kit.Button{id="close",aria_label="Close",width=T.panel.clo
     ui.Text{text="Close",width=T.panel.close_label_width,height=T.panel.close_content_height,font_size=T.panel.close_font,color="onSurface"}}}
 
 
-return kit.Panel{id="extras",edge="top",open=ui.bind("panel.open"),width=width,height=panel_height,
-  duration=T.panel.duration,transition="ease",fade=false,radius=T.panel.radius,fill="surface",border_width=T.panel.border,border_color="outlineVariant",
+return kit.Panel{id="extras",edge=T.panel.edge,open=ui.bind("panel.open"),width=width,height=panel_height,
+  duration=T.panel.duration,transition=T.panel.transition,reveal=T.panel.reveal,fade=T.panel.fade,radius=T.panel.radius,fill="surface",border_width=T.panel.border,border_color="outlineVariant",
   padding_left=T.panel.horizontal_inset,padding_right=T.panel.horizontal_inset,
   padding_top=T.panel.heading_top,padding_bottom=T.panel.bottom_inset,gap=T.panel.search_gap,
   ui.Row{id="heading",width="fill",height=T.panel.heading_height,gap=T.panel.heading_gap,align="center",table.unpack(heading)},
-  kit.TextInput{id="search",text=ui.bind("extras.query"),placeholder=ui.bind("extras.placeholder"),width="fill",
+  kit.TextInput{id="search",focus_ring=false,text=ui.bind("extras.query"),placeholder=ui.bind("extras.placeholder"),width="fill",
     height=T.panel.search_height,padding_left=T.panel.search_padding,padding_right=T.panel.search_padding,padding_top=T.panel.search_vertical,padding_bottom=T.panel.search_vertical,radius=T.panel.search_radius,font_size=kit.tokens.text.body*4/3,
     fill="surfaceContainerHigh"},
   ui.Box{id="body",width="fill",height=body_height,body},

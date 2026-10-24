@@ -54,6 +54,7 @@ pub struct Extras {
     client: Client,
     topic: Option<Arc<dyn Source>>,
     state: RefCell<State>,
+    glyphs: crate::workspace_rows::Rows,
 }
 impl Extras {
     pub fn new(kind: Kind, client: Client) -> bead::core::source::Result<Self> {
@@ -71,6 +72,7 @@ impl Extras {
             client,
             topic,
             state: Default::default(),
+            glyphs: Default::default(),
         })
     }
     pub fn subscribe(&self, wake: CallWake) -> bead::core::source::Result<Vec<Subscription>> {
@@ -124,6 +126,12 @@ impl Extras {
                 if self.kind == Kind::Overview {
                     per_output = data["capabilities"]["perOutputWorkspaces"] == true;
                     (windows, workspaces) = compositor_rows(data);
+                    for window in &mut windows {
+                        window["icon"] = self
+                            .glyphs
+                            .app_glyph(window["app_id"].as_str().unwrap_or_default())
+                            .into();
+                    }
                 } else {
                     rows = ordered(&data["items"]["items"], &data["items"]["order"])
                         .map(|(id, row)| json!({"id":id,"key":row["key"].as_str().unwrap_or_default(),"description":row["description"].as_str().unwrap_or_default()})).collect();
@@ -350,7 +358,7 @@ fn compositor_rows(data: &Json) -> (Vec<Json>, Vec<Json>) {
         .map(|(id, row)| json!({"id":id,"index":row["index"].as_i64().or_else(|| row["id"].as_i64()).or_else(|| id.parse().ok()).unwrap_or(0),"name":row["name"].as_str().unwrap_or_default(),"output":row["outputId"]})).collect();
     let windows = ordered(&data["windows"], &data["windowOrder"])
         .filter(|(_, row)| row["hidden"] != true && (!local || &row["outputId"] == output))
-        .map(|(id, row)| json!({"id":id,"title":row["title"].as_str().unwrap_or_default(),"app_id":row["wmClass"].as_str().or_else(|| row["appId"].as_str()).unwrap_or_default(),"workspace":row["workspaceId"],"icon":row["wmClass"].as_str().unwrap_or("application-x-executable")})).collect();
+        .map(|(id, row)| json!({"id":id,"title":row["title"].as_str().unwrap_or_default(),"app_id":row["wmClass"].as_str().or_else(|| row["appId"].as_str()).unwrap_or_default(),"workspace":row["workspaceId"],"icon":"apps"})).collect();
     (windows, workspaces)
 }
 
@@ -363,10 +371,13 @@ pub fn panel(
     colors: bead::render::Palette,
     trace: bool,
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
-    let cold = crate::sound::fallback(colors.get("surface")?);
+    let mut cold = crate::sound::fallback(colors.get("surface")?);
+    if let Some(motion) = &mut cold.motion {
+        motion.edge = bead::core::Edge::Bottom;
+    }
     Ok(bead::wayland::PanelSpec {
         position: Some(crate::placement::Frame::default().positioner(
-            crate::placement::Attachment::Attached(bead::core::Edge::Top),
+            crate::placement::Attachment::SceneEdge(bead::core::Edge::Bottom),
         )),
         engages_decorations: true,
         passive: false,
@@ -385,7 +396,7 @@ pub fn panel(
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
                 .with_frame(
-                    crate::placement::Attachment::Attached(bead::core::Edge::Top),
+                    crate::placement::Attachment::SceneEdge(bead::core::Edge::Bottom),
                     &colors,
                 )
                 .and_then(|runtime| runtime.with_extras(Extras::new(kind, client.clone())?))

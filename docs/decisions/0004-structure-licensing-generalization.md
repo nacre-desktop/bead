@@ -78,6 +78,8 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0079: `focus_ring` lets a view suppress the default focus outline while retaining input focus.
+
 - B0076: optional `bundle.json` lists root-relative shared Luau modules in a view’s validated reload snapshot;
   no sibling views are loaded implicitly. Optional `kit.SliderTile.on_detail` opens caller-owned details without changing its level or toggle action.
 

@@ -616,7 +616,10 @@ impl Generation {
                 }
             }
             if let Some(Value::Text(focused)) = stores.get("bead.focused")
-                && let Some(node) = result.nodes.iter().find(|n| &n.id == focused)
+                && let Some(node) = result
+                    .nodes
+                    .iter()
+                    .find(|n| &n.id == focused && n.focus_ring)
             {
                 let index = result.scene.primitives.len();
                 result.scene.primitives.push(Primitive::Rounded {

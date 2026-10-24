@@ -10,6 +10,8 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Attachment {
     Attached(Edge),
+    /// Luau owns the attached edge; the argument is the cold-scene default.
+    SceneEdge(Edge),
     /// Compact Nacre control panel: joins the top frame at the usable top-right.
     ControlCenter,
     Popout,
@@ -137,6 +139,17 @@ pub struct FrameSettings {
 impl Default for Frame {
     fn default() -> Self {
         Self::DEFAULT
+    }
+}
+
+// Opt-in Luau panels own their edge; keep positioning and joined chrome in sync
+// with the motion token, including a user moving a panel to the opposite edge.
+fn scene_attachment(fallback: Attachment, scene: &Scene) -> Attachment {
+    match (fallback, scene.motion.as_ref()) {
+        (Attachment::SceneEdge(edge), motion) => {
+            Attachment::Attached(motion.map_or(edge, |motion| motion.edge))
+        }
+        _ => fallback,
     }
 }
 
@@ -449,17 +462,21 @@ impl Chrome {
         if matches!(self.attachment, Attachment::Pearl) {
             return self.decorate_pearl(scene);
         }
+        let attachment = scene_attachment(self.attachment, scene);
+        let engaged = self.engaged
+            || (matches!(self.attachment, Attachment::SceneEdge(_))
+                && matches!(attachment, Attachment::Attached(Edge::Left | Edge::Right)));
         let body = body(scene);
         let output = (self.output.0 as f32, self.output.1 as f32);
         let top_inset = if matches!(
-            self.attachment,
+            attachment,
             Attachment::Popout | Attachment::ControlCenter | Attachment::Attached(Edge::Top)
         ) {
             2.
         } else {
             32.
         };
-        let panel = frame.panel(self.attachment, output, (body.w, body.h), self.center);
+        let panel = frame.panel(attachment, output, (body.w, body.h), self.center);
         let mut rectangles = frame.material(output);
         rectangles.push(panel);
         let svg = self.svg(
@@ -472,7 +489,7 @@ impl Chrome {
                 body.w + 64.,
                 body.h + 32. + top_inset,
             ),
-            self.engaged,
+            engaged,
         )?;
         let mut hash = std::collections::hash_map::DefaultHasher::new();
         svg.hash(&mut hash);
@@ -566,7 +583,7 @@ impl Chrome {
                     let local = |r: Rect| {
                         Rect::new(body.x + r.x - panel.x, body.y + r.y - panel.y, r.w, r.h)
                     };
-                    match chrome.svg(frame, output, &rectangles, trimmed, chrome.engaged) {
+                    match chrome.svg(frame, output, &rectangles, trimmed, engaged) {
                         Ok(svg) => (local(trimmed), Arc::from(svg.into_bytes())),
                         Err(error) => {
                             eprintln!("FRAME_REVEAL_FAILED {error}");
@@ -618,7 +635,9 @@ impl Frame {
             (output.1 - self.top - self.bottom).max(0.),
         );
         let (x, y) = match attachment {
-            Attachment::Attached(edge) => attached(edge, viewport, size, 0.),
+            Attachment::Attached(edge) | Attachment::SceneEdge(edge) => {
+                attached(edge, viewport, size, 0.)
+            }
             Attachment::ControlCenter => {
                 let (x, _) = attached(Edge::Right, viewport, size, 0.);
                 (x, 0.)
@@ -646,7 +665,7 @@ impl Frame {
         Arc::new(move |scene, center, output| {
             let body = body(scene);
             let panel = Frame::current().panel(
-                attachment,
+                scene_attachment(attachment, scene),
                 (output.0 as f32, output.1 as f32),
                 (body.w, body.h),
                 center,
@@ -672,6 +691,45 @@ mod tests {
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json"),
         )
         .unwrap()
+    }
+    #[test]
+    fn attached_position_and_chrome_follow_the_luau_edge() {
+        let colors = colors();
+        let mut scene = crate::sound::fallback(colors.get("surface").unwrap());
+        scene.motion.as_mut().unwrap().edge = Edge::Bottom;
+        let frame = Frame::default();
+        let bottom = frame.positioner(Attachment::Attached(Edge::Bottom));
+        let token = frame.positioner(Attachment::SceneEdge(Edge::Top));
+        assert_eq!(
+            bottom(&scene, None, (1920, 1200)),
+            token(&scene, None, (1920, 1200))
+        );
+        let chrome = Chrome::new(Attachment::SceneEdge(Edge::Top), &colors).unwrap();
+        chrome.decorate(&mut scene).unwrap();
+        assert!(
+            scene
+                .asset_data
+                .keys()
+                .any(|p| p.to_string_lossy().starts_with("@joined-frame-32-"))
+        );
+        scene.motion.as_mut().unwrap().edge = Edge::Top;
+        let top_origin = token(&scene, None, (1920, 1200));
+        scene.motion.as_mut().unwrap().edge = Edge::Bottom;
+        assert_ne!(top_origin, token(&scene, None, (1920, 1200)));
+        for edge in [Edge::Left, Edge::Top] {
+            let mut token_scene = crate::sound::fallback(colors.get("surface").unwrap());
+            token_scene.motion.as_mut().unwrap().edge = edge;
+            let mut fixed_scene = token_scene.clone();
+            Chrome::new(Attachment::SceneEdge(Edge::Bottom), &colors)
+                .unwrap()
+                .decorate(&mut token_scene)
+                .unwrap();
+            Chrome::new(Attachment::Attached(edge), &colors)
+                .unwrap()
+                .decorate(&mut fixed_scene)
+                .unwrap();
+            assert_eq!(token_scene.asset_data, fixed_scene.asset_data);
+        }
     }
     #[test]
     fn revealing_joined_art_rebakes_the_growing_contour_without_moving_content() {

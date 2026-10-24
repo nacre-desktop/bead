@@ -316,6 +316,43 @@ return ui.Panel{id="panel",width=240,height=120,
     assert_eq!(s.stores.get("count"), Some(&Value::Number(2.)));
     assert_eq!(s.stores.get("last"), Some(&Value::Text("quick".into())));
 }
+
+#[test]
+fn text_input_focus_ring_defaults_on_and_can_be_suppressed() {
+    for (property, expected) in [("", true), (",focus_ring=false", false)] {
+        let f = fixture();
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require(\"bead.ui\"); return ui.TextInput{{id=\"search\",text=ui.bind(\"query\"){property}}}"
+            ),
+        )
+        .unwrap();
+        let mut s = session(&f);
+        let node = s
+            .current_nodes
+            .iter()
+            .find(|node| node.id == "search")
+            .unwrap();
+        let rect = rect(&node.draw);
+        let scene = s.focus_id("search").unwrap().unwrap();
+        s.commit(scene);
+        let scene = s.key("x", false).unwrap().unwrap();
+        let primary = s.palette.get("primary").unwrap_or([200, 200, 200, 255]);
+        let has_focus_ring = scene.primitives.iter().any(|primitive| {
+            matches!(
+                primitive,
+                Primitive::Rounded {
+                    rect: ring_rect,
+                    border: Some((color, width)),
+                    ..
+                } if *ring_rect == rect && *color == primary && *width == 1.
+            )
+        });
+        assert_eq!(has_focus_ring, expected, "focus_ring property: {property}");
+    }
+}
+
 #[test]
 fn panel_transition_selects_cubic_in_out_without_changing_legacy_curves() {
     use bead_core::animation::Curve;

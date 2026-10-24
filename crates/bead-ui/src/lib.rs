@@ -70,6 +70,8 @@ pub struct Node {
     pub activate_on_release: bool,
     #[serde(default = "default_true")]
     pub focus_on_pointer: bool,
+    #[serde(default = "default_true")]
+    pub focus_ring: bool,
     pub icon: Option<String>,
     pub input: Option<String>,
     pub scroll: Option<String>,

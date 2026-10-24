@@ -241,6 +241,10 @@ impl Rows {
         cache.insert(app_id.to_owned(), glyph);
         glyph
     }
+    /// Shared window category glyph lookup; cache belongs to the open view.
+    pub(crate) fn app_glyph(&self, app_id: &str) -> &'static str {
+        self.glyph(app_id, &data_dirs)
+    }
     /// The `bead.workspaces` model of one output (`None`: every output).
     pub fn rows(&self, snapshot: &Snapshot, output: Option<&str>) -> Vec<Json> {
         self.rows_with(snapshot, output, &data_dirs)

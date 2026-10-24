@@ -3,6 +3,9 @@
 Status: **Review — native surfaces implemented; exact palette content parity awaits an engine contract.** QML reference: Nacre `16436a34` (`origin/main` when this unit started)
 (`nacre/shell/modules/extras/{Overview,Palette,Keybindings}.qml`).
 
+Placement, reveal motion, window glyphs and the focused search outline in this
+historical baseline are superseded by [B0079](0079-extras-placement.md).
+
 ## Reference behavior and parity targets
 
 All three use `SearchSurface`: 16 px outer margins, a 30 px heading with 17 pt

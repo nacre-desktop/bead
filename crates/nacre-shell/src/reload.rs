@@ -1691,6 +1691,7 @@ impl Runtime {
         // Only panels that can float need the second look.
         self.spare_chrome = match attachment {
             crate::placement::Attachment::Attached(_)
+            | crate::placement::Attachment::SceneEdge(_)
             | crate::placement::Attachment::Popout
             | crate::placement::Attachment::ControlCenter => Some(crate::placement::Chrome::new(
                 crate::placement::Attachment::Pearl,

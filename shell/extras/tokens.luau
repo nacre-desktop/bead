@@ -3,6 +3,7 @@
 -- Keybindings. Settings-ready layout values are grouped by view.
 return {
   panel = {
+    edge = "bottom", reveal = true, transition = "ease", fade = false,
     overview_width = 1020, search_width = 860, max_width_fraction = .94,
     default_screen_height = 900, overview_body_max = 690, overview_body_reserve = 230,
     body_min = 0, search_body_height = 450, body_internal_loss = 26, search_chrome = 112,
