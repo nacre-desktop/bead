@@ -197,7 +197,7 @@ STATES = {
     'sidebar-hover': ([('ui', 'nacre', 'left'), ('sleep', 0.8), ('pointer', 80, 342)], [('release',), ('ui', 'nacre', 'left')], 0),
     'sidebar-pressed': ([('ui', 'nacre', 'left'), ('sleep', 0.8), ('press', 80, 342)], [('release',), ('ui', 'nacre', 'left')], 0),
     'sidebar-conversation': ([('ui', 'nacre', 'left'), ('chat-seed',), ('sleep', 1.0)], [('ui', 'nacre', 'left')], 0),
-    'sidebar-pinned': ([('ui', 'nacre', 'left'), ('chat-seed',), ('pin',), ('click', 1600, 600), ('sleep', 0.3)], [('ui', 'nacre', 'left')], 0),
+    'sidebar-pinned': ([('ui', 'nacre', 'left'), ('chat-seed',), ('sleep', 1.0), ('pin',), ('click', 1600, 600), ('sleep', 0.3)], [('ui', 'nacre', 'left')], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
     # B0093: the selector prompt (`nacre-menu pick|input`), the same request through the same helper in both shells
     'menu-pick': ([('prompt', 'pick'), ('sleep', 0.2)], [('prompt_end',)], 1.0),
