@@ -142,7 +142,7 @@ impl App {
         }
         let mut pool = SlotPool::new(total.max(4096), &self.shm).map_err(|e| e.to_string())?;
         let empty = Region::new(&self.compositor).map_err(|e| e.to_string())?;
-        let parent = surface.layer.wl_surface();
+        let parent = surface.wl_surface();
         let mut children = Vec::new();
         for (spec, (w, h)) in specs.into_iter().zip(sizes) {
             let child = self.compositor.create_surface(&self.qh);
@@ -185,7 +185,7 @@ impl App {
             _children: children,
             _pool: pool,
         });
-        self.surfaces[index].layer.commit();
+        self.surfaces[index].commit();
         Ok(())
     }
 }

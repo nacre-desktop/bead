@@ -6,7 +6,10 @@
 use bead::{
     core::Edge,
     render::{Palette, Primitive, Rect, Scene},
-    wayland::{Guide, PanelSpec, PearlOptions, SceneSource, UiEvent},
+    wayland::{
+        Guide, NativePearlMotion, NativePearlOptions, NativePearlPlacement, PanelSpec,
+        PearlOptions, SceneSource, UiEvent,
+    },
 };
 use std::{
     error::Error,
@@ -19,21 +22,237 @@ pub const GUIDE_VIEW: &str = "pearl-guide";
 pub const RADIUS: f32 = 18.;
 const FILM_STRETCH: f64 = 170.;
 
-pub fn options(store: Option<std::path::PathBuf>) -> PearlOptions {
-    let frame = crate::placement::Frame::default();
+/// View-owned state only: never providers, results, credentials or image data.
+pub fn capture_state(stores: &bead::core::Stores) -> serde_json::Value {
+    let mut values = crate::launcher::remember(stores);
+    for key in ["dashboard.page", "cc.page", "chat.mode", "chat.page"] {
+        if let Some(bead::core::Value::Text(value)) = stores.get(key)
+            && value.len() <= 256
+        {
+            values.insert(key.into(), bead::core::Value::Text(value.clone()));
+        }
+    }
+    serde_json::to_value(values).unwrap_or_default()
+}
+pub fn restore_state(
+    saved: serde_json::Value,
+    stores: &bead::core::Stores,
+) -> std::collections::BTreeMap<String, bead::core::Value> {
+    let Ok(values) =
+        serde_json::from_value::<std::collections::BTreeMap<String, bead::core::Value>>(saved)
+    else {
+        return Default::default();
+    };
+    // Project through the same whitelist and bounds as capture; saved files are
+    // external input and must not inject provider or secret state.
+    let mut candidate = stores.clone();
+    if candidate.commit(values.clone()).is_err() {
+        return Default::default();
+    }
+    let allowed = capture_state(&candidate);
+    serde_json::from_value::<std::collections::BTreeMap<String, bead::core::Value>>(allowed)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(key, _)| values.contains_key(key))
+        .collect()
+}
+
+pub fn options(
+    store: Option<std::path::PathBuf>,
+    client: Option<crate::nacre_source::Client>,
+) -> PearlOptions {
     PearlOptions {
         tuning: Default::default(),
-        frame: Arc::new(move |_, _| bead::core::pearl::Insets {
-            top: frame.top as f64,
-            right: frame.right as f64,
-            bottom: frame.bottom as f64,
-            left: frame.left as f64,
+        frame: Arc::new(move |_, _| {
+            let frame = crate::placement::Frame::current();
+            bead::core::pearl::Insets {
+                top: frame.top as f64,
+                right: frame.right as f64,
+                bottom: frame.bottom as f64,
+                left: frame.left as f64,
+            }
         }),
         guide_view: Some(GUIDE_VIEW.into()),
         store,
         max: 8,
         test_any_press: std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() == Ok("1"),
+        native: Some(native_options(client)),
     }
+}
+
+/// Reuse Nacre's owned-window placement tool. Only the latest pending position
+/// for each pearl matters; the UI never waits for compositor IPC or a helper.
+fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOptions {
+    #[derive(Default)]
+    struct Queue {
+        pending: std::collections::BTreeMap<u32, NativePearlPlacement>,
+        running: bool,
+    }
+    let queue = Arc::new(std::sync::Mutex::new(Queue::default()));
+    NativePearlOptions {
+        watch: client.map(|client| {
+            Arc::new(move |send: Box<dyn Fn(NativePearlMotion) + Send + Sync>| {
+                use bead::core::source::Source;
+                let topic = client.lease_topic("compositor").ok()?;
+                let previous = std::sync::Mutex::new(std::collections::BTreeMap::new());
+                let subscription = topic
+                    .subscribe(Arc::new(move |snapshot| {
+                        let data = if snapshot.connected {
+                            &*snapshot.data
+                        } else {
+                            &serde_json::Value::Null
+                        };
+                        let mut previous = previous.lock().unwrap_or_else(|p| p.into_inner());
+                        for motion in native_motions(data, &mut previous, std::process::id()) {
+                            send(motion);
+                        }
+                    }))
+                    .ok()?;
+                Some(Box::new((topic, subscription)) as Box<dyn Send>)
+            }) as bead::wayland::NativePearlWatch
+        }),
+        title: Arc::new(|id, view| {
+            let kind = match view {
+                "launcher" => "Launcher",
+                "chat" => "AI",
+                "control" => "Controls",
+                _ => "Dashboard",
+            };
+            format!("Nacre Pearl {kind} {id}")
+        }),
+        place: Arc::new(move |placement| {
+            let mut state = queue.lock().unwrap_or_else(|p| p.into_inner());
+            let mut placement = placement;
+            if let Some(previous) = state.pending.get(&placement.id) {
+                placement.first |= previous.first;
+            }
+            state.pending.insert(placement.id, placement);
+            if state.running {
+                return;
+            }
+            state.running = true;
+            drop(state);
+            let queue = queue.clone();
+            std::thread::spawn(move || {
+                loop {
+                    let next = {
+                        let mut state = queue.lock().unwrap_or_else(|p| p.into_inner());
+                        let next = state.pending.pop_first();
+                        if next.is_none() {
+                            state.running = false;
+                        }
+                        next
+                    };
+                    let Some((_, event)) = next else {
+                        break;
+                    };
+                    let rect = event.rect;
+                    let result = std::process::Command::new(crate::prompt::helper_binary())
+                        .args([
+                            "pearl-window",
+                            "place",
+                            &event.title,
+                            &std::process::id().to_string(),
+                            &rect.x.round().to_string(),
+                            &rect.y.round().to_string(),
+                            &if event.first {
+                                rect.w.round().to_string()
+                            } else {
+                                "0".into()
+                            },
+                            &if event.first {
+                                rect.h.round().to_string()
+                            } else {
+                                "0".into()
+                            },
+                        ])
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .output();
+                    match result {
+                        Ok(output) if output.status.success() => {}
+                        Ok(_) => eprintln!("PEARL_PLACE_ERROR id={} helper failed", event.id),
+                        Err(error) => eprintln!("PEARL_PLACE_ERROR id={} {error}", event.id),
+                    }
+                }
+            });
+        }),
+    }
+}
+
+/// Niri exposes the completed body, not a live drag cursor. Follow QML's
+/// moving -> geometry-known transition and show only landing fields in between.
+fn native_motions(
+    data: &serde_json::Value,
+    previous: &mut std::collections::BTreeMap<u32, bool>,
+    pid: u32,
+) -> Vec<NativePearlMotion> {
+    let mut next = std::collections::BTreeMap::new();
+    let mut motions = Vec::new();
+    if data["available"] != false
+        && let Some(windows) = data.get("windows").and_then(serde_json::Value::as_object)
+    {
+        for window in windows.values() {
+            if window["pid"].as_u64() != Some(pid as u64) {
+                continue;
+            }
+            let Some(title) = window["title"].as_str() else {
+                continue;
+            };
+            let Some((kind, id)) = title
+                .strip_prefix("Nacre Pearl ")
+                .and_then(|s| s.rsplit_once(' '))
+            else {
+                continue;
+            };
+            if !["Launcher", "Dashboard", "AI", "Controls", "Media"].contains(&kind) {
+                continue;
+            }
+            let Ok(id) = id.parse::<u32>() else {
+                continue;
+            };
+            let moving = window["moving"] == true;
+            let was_moving = previous.get(&id).copied().unwrap_or(false);
+            if moving && !was_moving {
+                motions.push(NativePearlMotion {
+                    id,
+                    moving: true,
+                    rect: None,
+                    output: None,
+                });
+            } else if was_moving && !moving && window["geometryKnown"] == true {
+                let g = &window["geometry"];
+                let rect = (|| {
+                    Some(bead::core::pearl::Rect::new(
+                        g["x"].as_f64()?,
+                        g["y"].as_f64()?,
+                        g["width"].as_f64()?,
+                        g["height"].as_f64()?,
+                    ))
+                })();
+                motions.push(NativePearlMotion {
+                    id,
+                    moving: false,
+                    rect: rect.filter(|_| window["floating"] == true),
+                    output: window["outputId"].as_str().map(String::from),
+                });
+            }
+            next.insert(
+                id,
+                moving || (was_moving && window["geometryKnown"] != true),
+            );
+        }
+    }
+    for id in previous.keys().filter(|id| !next.contains_key(id)) {
+        motions.push(NativePearlMotion {
+            id: *id,
+            moving: false,
+            rect: None,
+            output: None,
+        });
+    }
+    *previous = next;
+    motions
 }
 
 /// The palette entries the art is drawn from (NacreTokens: body, accent,
@@ -350,6 +569,7 @@ pub fn guide_scene(g: &Guide, ink: &Ink) -> Scene {
 struct GuideSource {
     ink: Ink,
     scene: Scene,
+    film: bool,
 }
 impl SceneSource for GuideSource {
     fn watch(&mut self, _: Box<dyn Fn(Result<(), String>) + Send>) -> Result<(), Box<dyn Error>> {
@@ -359,6 +579,10 @@ impl SceneSource for GuideSource {
         match event {
             UiEvent::PearlGuide(guide) => {
                 EDGE.store(edge_code(guide.edge), Ordering::Relaxed);
+                let mut guide = (*guide).clone();
+                if !self.film {
+                    guide.film = None;
+                }
                 self.scene = guide_scene(&guide, &self.ink);
                 self.scene.resource_revision += 1;
                 Ok(Some(self.scene.clone()))
@@ -384,6 +608,13 @@ impl SceneSource for GuideSource {
 /// by its own strip.
 pub fn guide_spec(colors: &Palette) -> Result<PanelSpec, Box<dyn Error>> {
     let ink = Ink::new(colors)?;
+    // QML suppresses magneticCue on niri: its compositor move contract has no
+    // live cursor. The stationary landing guide remains available.
+    let film = match std::env::var("NACRE_COMPOSITOR").as_deref() {
+        Ok("niri") => false,
+        Ok("hyprland") => true,
+        _ => std::env::var_os("NIRI_SOCKET").is_none(),
+    };
     Ok(PanelSpec {
         position: Some(Arc::new(|scene, _, output| guide_origin(scene, output))),
         engages_decorations: false,
@@ -396,6 +627,7 @@ pub fn guide_spec(colors: &Palette) -> Result<PanelSpec, Box<dyn Error>> {
             Ok(Box::new(GuideSource {
                 ink,
                 scene: blank(1., 1.),
+                film,
             }) as Box<dyn SceneSource>)
         }),
     })
@@ -432,6 +664,66 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compositor_moves_require_owned_identity_and_completed_geometry() {
+        let mut previous = Default::default();
+        let snapshot = |pid, moving, known| {
+            serde_json::json!({"windows":{"one":{
+                "pid":pid,"title":"Nacre Pearl Launcher 7","moving":moving,"geometryKnown":known,
+                "floating":true,"outputId":"fixture","geometry":{"x":400,"y":50,"width":600,"height":400}
+            }}})
+        };
+        assert!(native_motions(&snapshot(22, false, true), &mut previous, 22).is_empty());
+        let begin = native_motions(&snapshot(22, true, false), &mut previous, 22);
+        assert_eq!(begin.len(), 1);
+        assert!(begin[0].moving && begin[0].id == 7 && begin[0].rect.is_none());
+        assert!(native_motions(&snapshot(22, false, false), &mut previous, 22).is_empty());
+        let end = native_motions(&snapshot(22, false, true), &mut previous, 22);
+        assert_eq!(end.len(), 1);
+        assert!(!end[0].moving);
+        assert_eq!(
+            end[0].rect,
+            Some(bead::core::pearl::Rect::new(400., 50., 600., 400.))
+        );
+        assert!(
+            native_motions(&snapshot(23, true, true), &mut previous, 22)
+                .iter()
+                .all(|m| !m.moving)
+        );
+        native_motions(&snapshot(22, true, false), &mut previous, 22);
+        let mut unavailable = snapshot(22, false, true);
+        unavailable["available"] = false.into();
+        let cancel = native_motions(&unavailable, &mut previous, 22);
+        assert_eq!(cancel.len(), 1);
+        assert!(!cancel[0].moving && cancel[0].rect.is_none());
+        assert!(previous.is_empty());
+    }
+
+    #[test]
+    fn pearl_state_restores_bounded_view_fields_without_secrets_or_providers() {
+        use bead::core::{Stores, Value};
+        let stores = Stores::default()
+            .reconcile(&std::collections::BTreeMap::from([
+                ("launcher.search.text".into(), Value::Text("hello".into())),
+                ("cc.page".into(), Value::Text("network".into())),
+                ("network.secret".into(), Value::Text("private".into())),
+            ]))
+            .unwrap();
+        let saved = capture_state(&stores);
+        let restored = restore_state(saved, &stores);
+        assert_eq!(
+            restored.get("launcher.search.text"),
+            Some(&Value::Text("hello".into()))
+        );
+        assert_eq!(
+            restored.get("cc.page"),
+            Some(&Value::Text("network".into()))
+        );
+        assert!(!restored.contains_key("network.secret"));
+        let invalid = serde_json::json!({"network.secret":"injected", "launcher.search.text":"x".repeat(65537)});
+        assert!(restore_state(invalid, &stores).is_empty());
+    }
 
     fn ink() -> Ink {
         Ink::new(

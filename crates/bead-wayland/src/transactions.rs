@@ -15,6 +15,10 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
 
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
+        if let UiEvent::NativePearlMotion(motion) = event {
+            self.native_pearl_motion(motion);
+            return;
+        }
         if self.options.primary_factory.is_some()
             && self.active_output.is_none()
             && matches!(&event, UiEvent::Remote(_) | UiEvent::Accessibility { .. })
@@ -30,7 +34,7 @@ impl App {
                 .and_then(|surface| {
                     self.surfaces
                         .iter()
-                        .find(|s| s.layer.wl_surface() == surface)
+                        .find(|s| s.wl_surface() == surface)
                         .map(|s| s.output_name.as_str())
                 })
                 .or(self.active_input_output.as_deref());
@@ -318,6 +322,12 @@ impl App {
                     }
                 } else {
                     self.panel_ui(*event);
+                    if self
+                        .pearl
+                        .is_some_and(|info| info.kind == pearls::Kind::Pearl)
+                    {
+                        self.schedule_pearl_save();
+                    }
                 }
             }
             return;
@@ -719,7 +729,8 @@ impl App {
                         bead_core::Edge::Bottom => Anchor::BOTTOM,
                     };
                     for surface in self.surfaces.iter().filter(|s| {
-                        s.companion == self.processing_panel
+                        s.native.is_none()
+                            && s.companion == self.processing_panel
                             && output_scope_matches(active_output.as_deref(), &s.output_name)
                     }) {
                         if self.processing_panel {
@@ -742,7 +753,8 @@ impl App {
                     .ceil()
                     .max(1.) as u32;
                     for surface in self.surfaces.iter().filter(|s| {
-                        s.companion == self.processing_panel
+                        s.native.is_none()
+                            && s.companion == self.processing_panel
                             && output_scope_matches(active_output.as_deref(), &s.output_name)
                     }) {
                         if surface.width != width || surface.height != height {
@@ -830,7 +842,7 @@ impl App {
         let panel_focus = self.keyboard_surface.as_ref().is_some_and(|p| {
             self.surfaces
                 .iter()
-                .any(|s| s.companion && s.layer.wl_surface() == p)
+                .any(|s| s.companion && s.wl_surface() == p)
         });
         let source = if self.processing_panel {
             self.runtime.as_ref()
@@ -840,7 +852,7 @@ impl App {
             let output = self.keyboard_surface.as_ref().and_then(|surface| {
                 self.surfaces
                     .iter()
-                    .find(|s| s.layer.wl_surface() == surface)
+                    .find(|s| s.wl_surface() == surface)
                     .map(|s| s.output_name.as_str())
             });
             if output == self.active_output.as_deref() {

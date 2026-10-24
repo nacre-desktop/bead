@@ -321,6 +321,34 @@ impl Drag {
     pub fn delta(&self) -> (f64, f64) {
         (self.point.x - self.start.x, self.point.y - self.start.y)
     }
+    /// Relative-pointer deltas use logical pixels and do not include clipping at
+    /// output edges. Keep the accumulated pointer on the output union, so pushing
+    /// against an edge does not build up invisible travel before reversing.
+    pub fn relative_point(&self, dx: f64, dy: f64, monitors: &[Monitor]) -> Point {
+        if !dx.is_finite() || !dy.is_finite() {
+            return self.point;
+        }
+        let point = Point {
+            x: self.point.x + dx,
+            y: self.point.y + dy,
+        };
+        if monitors.iter().any(|m| m.rect.contains(point)) {
+            return point;
+        }
+        monitors
+            .iter()
+            .filter(|m| m.rect.finite() && m.rect.w > 0. && m.rect.h > 0.)
+            .map(|m| Point {
+                x: clamp(point.x, m.rect.x, m.rect.x + m.rect.w - 1. / 256.),
+                y: clamp(point.y, m.rect.y, m.rect.y + m.rect.h - 1. / 256.),
+            })
+            .min_by(|a, b| {
+                (a.x - point.x)
+                    .hypot(a.y - point.y)
+                    .total_cmp(&(b.x - point.x).hypot(b.y - point.y))
+            })
+            .unwrap_or(self.point)
+    }
     /// The panel's rectangle under the pointer.
     pub fn current(&self) -> Rect {
         let (dx, dy) = self.delta();
@@ -419,6 +447,54 @@ impl Placement {
             height: r.h,
         }
     }
+}
+
+/// Recover a saved pearl rectangle onto a monitor's usable area.
+///
+/// Saved dimensions are retained up to the current output's usable size. Invalid
+/// geometry uses `fallback_size` and is centred; otherwise the saved position is
+/// clamped into the monitor with the configured margin.
+pub fn recover(saved: Option<Rect>, fallback_size: (f64, f64), monitor: &Rect, t: &Tuning) -> Rect {
+    let valid_monitor = monitor.finite() && monitor.w > 0. && monitor.h > 0.;
+    if !valid_monitor {
+        return Rect::default();
+    }
+    let fallback_w = if fallback_size.0.is_finite() && fallback_size.0 > 0. {
+        fallback_size.0
+    } else {
+        1.
+    };
+    let fallback_h = if fallback_size.1.is_finite() && fallback_size.1 > 0. {
+        fallback_size.1
+    } else {
+        1.
+    };
+    let valid_saved = saved.filter(|r| r.finite() && r.w > 0. && r.h > 0.);
+    let mut body = valid_saved.unwrap_or_else(|| Rect::new(0., 0., fallback_w, fallback_h));
+    body.w = body.w.min((monitor.w - 2. * t.margin).max(1.));
+    body.h = body.h.min((monitor.h - 2. * t.margin).max(1.));
+    let centre = monitor.centre();
+    let x = if let Some(saved) = valid_saved.filter(|r| r.x.is_finite()) {
+        saved.x
+    } else {
+        centre.x - body.w / 2.
+    };
+    let y = if let Some(saved) = valid_saved.filter(|r| r.y.is_finite()) {
+        saved.y
+    } else {
+        centre.y - body.h / 2.
+    };
+    body.x = clamp(
+        x,
+        monitor.x + t.margin,
+        monitor.x + monitor.w - body.w - t.margin,
+    );
+    body.y = clamp(
+        y,
+        monitor.y + t.margin,
+        monitor.y + monitor.h - body.h - t.margin,
+    );
+    body
 }
 const MAX_PEARLS: usize = 32;
 impl Layout {
@@ -521,6 +597,32 @@ mod tests {
         let m2 = Rect::new(1920., 0., 1280., 800.);
         let p = place(Point { x: 2000., y: 100. }, (400., 300.), &m2, &t());
         assert_eq!((p.x, p.y), (1932., 76.));
+    }
+
+    #[test]
+    fn recover_keeps_valid_size_and_repairs_bad_or_offscreen_saved_geometry() {
+        let monitor = Rect::new(1920., 0., 1280., 800.);
+        let saved = recover(
+            Some(Rect::new(-900., 900., 400., 300.)),
+            (500., 400.),
+            &monitor,
+            &t(),
+        );
+        assert_eq!(saved, Rect::new(1932., 488., 400., 300.));
+        let invalid = recover(
+            Some(Rect::new(f64::NAN, 50., f64::INFINITY, 0.)),
+            (500., 400.),
+            &monitor,
+            &t(),
+        );
+        assert_eq!(invalid, Rect::new(2310., 200., 500., 400.));
+        let oversized = recover(
+            Some(Rect::new(2000., 50., 2000., 900.)),
+            (300., 200.),
+            &monitor,
+            &t(),
+        );
+        assert_eq!(oversized, Rect::new(1932., 12., 1256., 776.));
     }
 
     #[test]
@@ -843,6 +945,85 @@ mod tests {
         );
         d.update(Point { x: 703., y: 82. }, &ms, &t());
         assert!(matches!(d.release(), Outcome::Moved { .. }));
+    }
+
+    #[test]
+    fn drag_outcomes_use_logical_pointer_travel_at_fractional_scales() {
+        let ms = [monitor("A", 0., 0., 1920., 1200.)];
+        for scale in [1., 1.25, 1.5] {
+            // Capture actuators use output pixels; Wayland motion and Drag use
+            // logical coordinates regardless of the framebuffer scale.
+            let logical = |v: f64| {
+                let physical = v * scale;
+                physical / scale
+            };
+            let body = Rect::new(400., 50., 1000., 600.);
+            let start = Point { x: 800., y: 300. };
+            let mut docked = drag(Source::Docked, &ms, body, start);
+            docked.update(
+                Point {
+                    x: logical(800.),
+                    y: logical(330.),
+                },
+                &ms,
+                &t(),
+            );
+            assert_eq!(docked.release(), Outcome::Return, "scale {scale}");
+
+            let pearl = Rect::new(500., 300., 600., 400.);
+            let mut docking = drag(Source::Pearl, &ms, pearl, Point { x: 700., y: 320. });
+            docking.update(
+                Point {
+                    x: logical(710.),
+                    y: logical(40.),
+                },
+                &ms,
+                &t(),
+            );
+            assert_eq!(
+                docking.release(),
+                Outcome::Dock { screen: "A".into() },
+                "scale {scale}"
+            );
+
+            let mut moving = drag(Source::Pearl, &ms, pearl, Point { x: 700., y: 320. });
+            moving.update(
+                Point {
+                    x: logical(800.),
+                    y: logical(420.),
+                },
+                &ms,
+                &t(),
+            );
+            assert_eq!(
+                moving.release(),
+                Outcome::Moved {
+                    rect: Rect::new(600., 400., 600., 400.)
+                },
+                "scale {scale}"
+            );
+        }
+    }
+
+    #[test]
+    fn relative_motion_does_not_accumulate_surface_moves_or_travel_beyond_outputs() {
+        let ms = [
+            monitor("A", 0., 0., 1920., 1200.),
+            monitor("B", 1920., 0., 1280., 800.),
+        ];
+        let body = Rect::new(500., 300., 600., 400.);
+        let mut d = drag(Source::Pearl, &ms, body, Point { x: 700., y: 320. });
+        for _ in 0..10 {
+            let point = d.relative_point(10., 5., &ms);
+            d.update(point, &ms, &t());
+        }
+        assert_eq!(d.current(), body.translated(100., 50.));
+        let point = d.relative_point(5000., 0., &ms);
+        assert!(ms[1].rect.contains(point));
+        d.update(point, &ms, &t());
+        let reverse = d.relative_point(-10., 0., &ms);
+        assert_eq!(reverse.x, point.x - 10.);
+        assert_eq!(d.relative_point(f64::NAN, 0., &ms), d.point);
     }
 
     #[test]

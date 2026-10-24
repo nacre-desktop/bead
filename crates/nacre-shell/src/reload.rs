@@ -3239,6 +3239,7 @@ impl SceneSource for Runtime {
                 return Err("companion model reached primary script".into());
             }
             UiEvent::CompanionVisibility(_)
+            | UiEvent::NativePearlMotion(_)
             | UiEvent::CompanionSelect { .. }
             | UiEvent::CompanionOffer { .. }
             | UiEvent::ShellHidden(_)
@@ -3653,6 +3654,10 @@ impl SceneSource for Runtime {
                 }
             }
             UiEvent::Reload => Some(self.session.reload()?),
+            UiEvent::Restore(saved) => {
+                let values = crate::pearls::restore_state(saved, &self.session.stores);
+                self.session.update(values)?
+            }
             // The Colors view sizes its pieces from the window width: project again.
             UiEvent::Relayout if self.colors.is_some() => self.session.update(BTreeMap::new())?,
             // The Welcome layout reads the window size: a resize projects it again.
@@ -4027,6 +4032,9 @@ impl SceneSource for Runtime {
     }
     fn outside_dismiss(&self) -> bool {
         self.session.stores.get("chat.pinned") != Some(&bead::core::Value::Bool(true))
+    }
+    fn saved_state(&self) -> serde_json::Value {
+        crate::pearls::capture_state(&self.session.stores)
     }
     fn focused_dismiss(&self) -> bool {
         self.session.stores.get("panel.open").is_some()

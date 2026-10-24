@@ -907,6 +907,7 @@ fn start(
             state::File::path()
                 .ok()
                 .and_then(|p| p.parent().map(|d| d.join("pearls.json"))),
+            _ui_provider.clone(),
         ));
         // Explicit benchmark/user selection applies to named core panels too.
         // Without an override each view retains its deliberate default renderer.

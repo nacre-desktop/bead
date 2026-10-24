@@ -172,6 +172,10 @@ After Bead's core switch on Nacre, plan support for:
   dismissal/wheel distance, external lip targets and output-aware window sizing.
   All are neutral hooks; Nacre routes and Settings dimensions stay at the edge.
 
+- B0104: native pearl surface handoff, logical relative motion, output-bound recovery,
+  saved-state hooks and compositor motion notifications are general primitives;
+  Nacre titles, helper calls and daemon snapshot decoding stay in the shell adapter.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

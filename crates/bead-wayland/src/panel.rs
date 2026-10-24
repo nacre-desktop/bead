@@ -50,7 +50,7 @@ impl App {
                 self.keyboard_surface.as_ref().and_then(|surface| {
                     self.surfaces
                         .iter()
-                        .find(|s| s.layer.wl_surface() == surface)
+                        .find(|s| s.wl_surface() == surface)
                         .map(|s| s.output_name.clone())
                 })
             });
@@ -226,6 +226,10 @@ impl App {
                 .and_then(|rect| self.detach_resident(rect))
                 .map(|id| serde_json::json!(id)),
             "pearls" => Ok(self.pearl_listing()),
+            "pearls-reset" => {
+                self.reset_pearls();
+                Ok(serde_json::Value::Null)
+            }
             "pearl-open" => {
                 let view = call.args.first().and_then(serde_json::Value::as_str);
                 let output = call.output.as_deref();
@@ -485,7 +489,7 @@ impl App {
             if let Some((scene, _, _)) = &self.companion {
                 for surface in self.surfaces.iter().filter(|s| s.companion) {
                     self.position_panel_surface(&surface.layer, &surface.output, scene);
-                    surface.layer.commit();
+                    surface.commit();
                 }
             }
             self.sync_all_decorations()?;

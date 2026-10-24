@@ -4,6 +4,21 @@
 // pearl swapped in, so some parameters are used only by that recursive call.
 #![allow(clippy::only_used_in_recursion)]
 use super::*;
+delegate_noop!(App: ignore ZwpRelativePointerManagerV1);
+impl Dispatch<ZwpRelativePointerV1, ()> for App {
+    fn event(
+        state: &mut Self,
+        _: &ZwpRelativePointerV1,
+        event: zwp_relative_pointer_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zwp_relative_pointer_v1::Event::RelativeMotion { dx, dy, .. } = event {
+            state.gesture_relative_motion(dx, dy);
+        }
+    }
+}
 impl CompositorHandler for App {
     fn scale_factor_changed(
         &mut self,
@@ -36,10 +51,7 @@ impl CompositorHandler for App {
             // Integer scale only matters without wp_fractional_scale.
             return;
         }
-        if let Some(i) = self
-            .surfaces
-            .iter()
-            .position(|s| s.layer.wl_surface() == surface)
+        if let Some(i) = self.surfaces.iter().position(|s| s.wl_surface() == surface)
             && self.surfaces[i].fractional.is_none()
         {
             self.surfaces[i].scale120 = scale.max(1) as u32 * 120;
@@ -82,11 +94,7 @@ impl CompositorHandler for App {
             self.in_slot(id, |app| app.frame(conn, qh, surface, time));
             return;
         }
-        if let Some(i) = self
-            .surfaces
-            .iter()
-            .position(|s| s.layer.wl_surface() == surface)
-        {
+        if let Some(i) = self.surfaces.iter().position(|s| s.wl_surface() == surface) {
             let now_seconds = self.started.elapsed().as_secs_f64();
             let animation_active = if self.surfaces[i].companion {
                 self.panel_animations.active(now_seconds)
@@ -182,7 +190,7 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
             && let Some(i) = state
                 .surfaces
                 .iter()
-                .position(|s| s.layer.wl_surface() == surface)
+                .position(|s| s.wl_surface() == surface)
         {
             state.surfaces[i].scale120 = scale;
             if state.options.primary_factory.is_some() && !state.surfaces[i].companion {
@@ -229,11 +237,7 @@ fn layout_input_point(visual_point: (f32, f32), content_offset: (f32, f32)) -> (
 
 impl App {
     fn record_first_frame(&mut self, surface: &wl_surface::WlSurface, revision: u64, epoch: u64) {
-        let Some(index) = self
-            .surfaces
-            .iter()
-            .position(|s| s.layer.wl_surface() == surface)
-        else {
+        let Some(index) = self.surfaces.iter().position(|s| s.wl_surface() == surface) else {
             return;
         };
         let companion = self.surfaces[index].companion;
@@ -285,7 +289,7 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
         if let Some(s) = state
             .surfaces
             .iter_mut()
-            .find(|s| s.layer.wl_surface() == &data.surface)
+            .find(|s| s.wl_surface() == &data.surface)
         {
             match event {
                 wp_presentation_feedback::Event::Presented {
@@ -464,6 +468,14 @@ impl ShmHandler for App {
 }
 impl LayerShellHandler for App {
     fn closed(&mut self, conn: &Connection, qh: &QueueHandle<Self>, layer: &LayerSurface) {
+        // The dormant layer role is retained while the visible xdg pearl is open.
+        if self
+            .surfaces
+            .iter()
+            .any(|s| s.layer == *layer && s.native.is_some())
+        {
+            return;
+        }
         if let Some(id) = self.slot_of_layer(layer) {
             self.in_slot(id, |app| app.closed(conn, qh, layer));
             return;
@@ -620,6 +632,11 @@ impl LayerShellHandler for App {
             return;
         }
         if let Some(i) = self.surfaces.iter().position(|s| s.layer == *layer) {
+            // Native pearl content is configured by its fresh xdg toplevel role.
+            // This retained layer role is blank and exists for a later dock.
+            if self.surfaces[i].native.is_some() {
+                return;
+            }
             let s = &mut self.surfaces[i];
             if (s.width, s.height) != config.new_size {
                 // A compositor may park the old-size callback until a buffer
@@ -760,6 +777,9 @@ impl SeatHandler for App {
             Capability::Pointer if self.pointer.is_none() => match self.seat.get_pointer(qh, &seat)
             {
                 Ok(p) => {
+                    if let Some(manager) = &self.relative_manager {
+                        self.relative_pointer = Some(manager.get_relative_pointer(&p, qh, ()));
+                    }
                     if let Some(manager) = &self.cursor_manager {
                         self.cursor_device = Some(manager.get_pointer(&p, qh, ()));
                     }
@@ -785,6 +805,10 @@ impl SeatHandler for App {
                 }
             }
             Capability::Pointer => {
+                if let Some(relative) = self.relative_pointer.take() {
+                    relative.destroy();
+                }
+                self.gesture_release();
                 if let Some(p) = self.pointer.take() {
                     p.release();
                 }
@@ -805,10 +829,8 @@ impl PointerHandler for App {
         for event in events {
             // B0048: a held Super+drag belongs to the gesture, wherever the panel is now.
             if self.gesture_owns(&event.surface) {
-                match event.kind {
-                    PointerEventKind::Motion { .. } => self.gesture_motion(event.position),
-                    PointerEventKind::Release { button: 0x110, .. } => self.gesture_release(),
-                    _ => {}
+                if let PointerEventKind::Release { button: 0x110, .. } = event.kind {
+                    self.gesture_release();
                 }
                 continue;
             }
@@ -867,7 +889,7 @@ impl App {
         let Some(bar) = self
             .surfaces
             .iter()
-            .position(|s| s.layer.wl_surface() == &event.surface)
+            .position(|s| s.wl_surface() == &event.surface)
         else {
             return;
         };
@@ -1141,21 +1163,21 @@ impl KeyboardHandler for App {
             self.window_key(&event);
             return;
         }
-        if self.keyboard_surface.as_ref().is_some_and(|surface| {
-            self.surfaces
-                .iter()
-                .any(|s| s.layer.wl_surface() == surface)
-        }) {
+        if self
+            .keyboard_surface
+            .as_ref()
+            .is_some_and(|surface| self.surfaces.iter().any(|s| s.wl_surface() == surface))
+        {
             self.active_input_output = self.keyboard_surface.as_ref().and_then(|surface| {
                 self.surfaces
                     .iter()
-                    .find(|s| s.layer.wl_surface() == surface)
+                    .find(|s| s.wl_surface() == surface)
                     .map(|s| s.output_name.clone())
             });
             let panel = self.keyboard_surface.as_ref().is_some_and(|surface| {
                 self.surfaces
                     .iter()
-                    .any(|s| s.companion && s.layer.wl_surface() == surface)
+                    .any(|s| s.companion && s.wl_surface() == surface)
             });
             let command = window::key_command(event.keysym, self.modifiers.ctrl);
             if let Some(command) = command {
@@ -1234,7 +1256,7 @@ impl Dispatch<ZwpTextInputV3, ()> for App {
                 state.active_input_output = state
                     .surfaces
                     .iter()
-                    .find(|s| s.layer.wl_surface() == &surface)
+                    .find(|s| s.wl_surface() == &surface)
                     .map(|s| s.output_name.clone());
                 state.ime_surface = Some(surface);
                 state.sync_ime();
@@ -1294,7 +1316,7 @@ impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for 
             && let Some(surface) = state
                 .surfaces
                 .iter_mut()
-                .find(|s| s.layer.wl_surface() == &data.surface)
+                .find(|s| s.wl_surface() == &data.surface)
             && surface.callbacks.accept(data.epoch)
         {
             if state.presentation.is_none() {

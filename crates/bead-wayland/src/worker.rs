@@ -21,6 +21,7 @@ struct Mirror {
     tree: Option<accesskit::TreeUpdate>,
     summary: String,
     resources: String,
+    saved_state: serde_json::Value,
 }
 impl Mirror {
     fn region_at(&self, x: f32, y: f32) -> Option<&InputRegion> {
@@ -46,6 +47,7 @@ impl Mirror {
             tree: source.accessibility_tree(),
             summary: source.state_summary(),
             resources: source.resource_counts(),
+            saved_state: source.saved_state(),
         }
     }
 }
@@ -515,6 +517,9 @@ impl SceneSource for Source {
     fn state_summary(&self) -> String {
         self.mirror.summary.clone()
     }
+    fn saved_state(&self) -> serde_json::Value {
+        self.mirror.saved_state.clone()
+    }
     fn resource_counts(&self) -> String {
         self.mirror.resources.clone()
     }
@@ -618,6 +623,9 @@ mod tests {
         fn state_summary(&self) -> String {
             "accepted".into()
         }
+        fn saved_state(&self) -> serde_json::Value {
+            serde_json::json!({"page":"details"})
+        }
         fn commit(&mut self) -> bool {
             self.commits.fetch_add(1, Ordering::SeqCst);
             true
@@ -697,6 +705,7 @@ mod tests {
         assert!(source.commit());
         assert_eq!(commits.load(Ordering::SeqCst), 1);
         assert_eq!(source.state_summary(), "accepted");
+        assert_eq!(source.saved_state(), serde_json::json!({"page":"details"}));
         assert_eq!(source.pointer_cursor(8., 8.), "pointer");
         assert!(
             source.allows_edge_hover(8., 8.),

@@ -39,6 +39,8 @@ pub(super) struct App {
     pub(super) seat: SeatState,
     pub(super) keyboard: Option<wl_keyboard::WlKeyboard>,
     pub(super) pointer: Option<wl_pointer::WlPointer>,
+    pub(super) relative_manager: Option<ZwpRelativePointerManagerV1>,
+    pub(super) relative_pointer: Option<ZwpRelativePointerV1>,
     pub(super) keyboard_surface: Option<wl_surface::WlSurface>,
     pub(super) modifiers: Modifiers,
     pub(super) accessibility: Option<accessibility::Bridge>,
@@ -109,6 +111,9 @@ pub(super) struct App {
     pub(super) guide_ids: std::collections::BTreeMap<String, u32>,
     pub(super) guide_last: std::collections::BTreeMap<String, std::sync::Arc<Guide>>,
     pub(super) pending_pearls: Vec<bead_core::pearl::Entry>,
+    pub(super) pearl_watch: Option<Box<dyn Send>>,
+    pub(super) pearl_save_pending: bool,
+    pub(super) pearl_saved: Option<bead_core::pearl::Layout>,
 }
 
 pub(super) struct OutputSession {
@@ -222,6 +227,8 @@ pub fn run_runtime(
         seat: SeatState::new(&globals, &qh),
         keyboard: None,
         pointer: None,
+        relative_manager: globals.bind(&qh, 1..=1, ()).ok(),
+        relative_pointer: None,
         keyboard_surface: None,
         modifiers: Modifiers::default(),
         accessibility: None,
@@ -290,6 +297,9 @@ pub fn run_runtime(
         guide_ids: Default::default(),
         guide_last: Default::default(),
         pending_pearls: Vec::new(),
+        pearl_watch: None,
+        pearl_save_pending: false,
+        pearl_saved: None,
     };
     app.load_pearls();
     if let Some(hub) = app.options.capture.clone() {
@@ -1575,6 +1585,7 @@ impl App {
                 output: output.clone(),
                 output_name: output_id.clone(),
                 layer,
+                native: None,
                 pool: SlotPool::new(4096, &self.shm)?,
                 #[cfg(feature = "wgpu")]
                 gpu: None,
@@ -1583,6 +1594,7 @@ impl App {
                 buffers: Vec::new(),
                 width: 0,
                 height: 32,
+                native_configure_size: None,
                 scale120,
                 configured: false,
                 ready: false,

@@ -462,6 +462,9 @@ fn map_pearls(mut call: Call) -> Result<Call, Reply> {
     let (method, args) = match call.method.as_str() {
         "detach" => ("detach", vec![]),
         "state" => ("pearls", vec![]),
+        "close" if call.args.first().and_then(Value::as_str) == Some("all") => {
+            ("pearls-reset", vec![])
+        }
         "open" => {
             let kind = call.args[0].as_str().unwrap_or_default();
             let view = match kind {
@@ -519,6 +522,14 @@ fn fixture_catalog() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pearls_close_all_resets_open_and_remembered_pearls() {
+        let call = from_strings("pearls".into(), "close".into(), &["all".into()]).unwrap();
+        let mapped = map(call).unwrap();
+        assert_eq!(mapped.target, "bead.panel");
+        assert_eq!(mapped.method, "pearls-reset");
+        assert!(mapped.args.is_empty());
+    }
     #[test]
     fn hide_is_one_shell_wide_toggle_and_close_still_closes_the_panel() {
         let hide = from_strings("nacre".into(), "hide".into(), &[]).unwrap();

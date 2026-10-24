@@ -12,6 +12,38 @@ use bead_core::pearl::{self, Drag, Insets, Monitor, Outcome, Point, Source, Tuni
 /// Reserved edge space of an output (bar, frame) by output name and logical size.
 pub type FrameInsets = std::sync::Arc<dyn Fn(&str, (i32, i32)) -> Insets + Send + Sync>;
 
+/// A mapped or moved native pearl. `first` is true after its initial xdg configure.
+#[derive(Clone, Debug)]
+pub struct NativePearlPlacement {
+    pub id: u32,
+    pub view: String,
+    pub title: String,
+    pub rect: pearl::Rect,
+    pub first: bool,
+}
+
+/// A compositor-owned move of a native pearl, reported at move begin and end.
+#[derive(Clone, Debug)]
+pub struct NativePearlMotion {
+    pub id: u32,
+    pub moving: bool,
+    pub rect: Option<pearl::Rect>,
+    pub output: Option<String>,
+}
+
+pub type NativePearlWatch = std::sync::Arc<
+    dyn Fn(Box<dyn Fn(NativePearlMotion) + Send + Sync>) -> Option<Box<dyn Send>> + Send + Sync,
+>;
+pub type NativePearlTitle = std::sync::Arc<dyn Fn(u32, &str) -> String + Send + Sync>;
+
+/// Product supplied identity and asynchronous placement for native pearl windows.
+#[derive(Clone)]
+pub struct NativePearlOptions {
+    pub title: NativePearlTitle,
+    pub place: std::sync::Arc<dyn Fn(NativePearlPlacement) + Send + Sync>,
+    pub watch: Option<NativePearlWatch>,
+}
+
 /// What the application decides about pearls.
 #[derive(Clone)]
 pub struct PearlOptions {
@@ -27,6 +59,8 @@ pub struct PearlOptions {
     /// Private-compositor proofs only: any left press starts the pull-out gesture,
     /// because a virtual pointer cannot hold Super.
     pub test_any_press: bool,
+    /// Use xdg toplevels for detached pearls and report their placement to the product.
+    pub native: Option<NativePearlOptions>,
 }
 
 /// One frame of drag guidance for one output, in that output's logical pixels.
@@ -109,9 +143,7 @@ impl Group {
         self.info.map(|i| i.id)
     }
     pub(crate) fn owns(&self, surface: &wl_surface::WlSurface) -> bool {
-        self.surfaces
-            .iter()
-            .any(|s| s.layer.wl_surface() == surface)
+        self.surfaces.iter().any(|s| s.wl_surface() == surface)
     }
     pub(crate) fn alive(&self) -> bool {
         self.runtime.is_some() && !self.surfaces.is_empty()
@@ -124,7 +156,6 @@ pub(crate) struct Gesture {
     drag: Drag,
     /// The pearl the docked panel turned into, once it left the threshold.
     lifted: Option<u32>,
-    last_move: Instant,
 }
 
 impl App {
@@ -192,6 +223,7 @@ impl App {
         }
         let at = self.slots.iter().position(|g| g.id() == Some(id))?;
         let mut g = self.slots.remove(at);
+        let previous_output = g.output.clone();
         self.swap_group(&mut g);
         let result = f(self);
         self.swap_group(&mut g);
@@ -199,20 +231,23 @@ impl App {
             self.slots.insert(at.min(self.slots.len()), g);
         } else {
             let was_pearl = g.info.is_some_and(|i| i.kind == Kind::Pearl);
+            let output = g.output.clone().or(previous_output);
             drop(g);
             if was_pearl {
+                if self.panel_runtime.is_none()
+                    && !self.slots.iter().any(|slot| slot.is_pearl())
+                    && let Some(output) = output
+                {
+                    self.primary_idle(&output, true);
+                }
                 self.save_pearls();
+                self.release_pearl_watch_if_idle();
             }
         }
         Some(result)
     }
     pub(super) fn slot_of_surface(&self, surface: &wl_surface::WlSurface) -> Option<u32> {
-        if self.slots.is_empty()
-            || self
-                .surfaces
-                .iter()
-                .any(|s| s.layer.wl_surface() == surface)
-        {
+        if self.slots.is_empty() || self.surfaces.iter().any(|s| s.wl_surface() == surface) {
             return None;
         }
         self.slots
@@ -355,8 +390,24 @@ impl App {
 
     /// Move the open resident panel out into a pearl whose body is at `rect`.
     pub(super) fn detach_resident(&mut self, rect: pearl::Rect) -> Result<u32, String> {
+        self.detach_resident_with_role(rect, true)
+    }
+    fn detach_resident_with_role(
+        &mut self,
+        rect: pearl::Rect,
+        native: bool,
+    ) -> Result<u32, String> {
         if !self.pearls_on() {
             return Err("pearls are disabled".into());
+        }
+        if self
+            .options
+            .pearls
+            .as_ref()
+            .is_some_and(|p| p.native.is_some())
+            && self.xdg.is_none()
+        {
+            return Err("native pearls require xdg-shell".into());
         }
         let name = self.panel_name.clone().unwrap_or_default();
         if self.panel_runtime.is_none() || !self.panel_target || self.pearl.is_some() {
@@ -386,7 +437,7 @@ impl App {
         });
         drop(g.dismiss.take());
         self.slots.push(g);
-        self.in_slot(id, |app| app.become_pearl());
+        self.in_slot(id, |app| app.become_pearl(native));
         if let Err(error) = self.sync_all_decorations() {
             eprintln!("DECORATION_ERROR {error}");
         }
@@ -395,9 +446,157 @@ impl App {
         Ok(id)
     }
     /// With the slot swapped in: reposition, hand focus to click, tell the view.
-    fn become_pearl(&mut self) {
+    fn become_pearl(&mut self, native: bool) {
         self.panel_ui(UiEvent::PanelDetached(true));
+        if native
+            && self.native_pearls_enabled()
+            && let Err(error) = self.promote_native_pearl()
+        {
+            eprintln!("PEARL_NATIVE_ERROR {error}");
+        }
         self.place_pearl_surfaces();
+    }
+    fn native_pearls_enabled(&self) -> bool {
+        self.pearl.is_some_and(|i| i.kind == Kind::Pearl)
+            && self
+                .options
+                .pearls
+                .as_ref()
+                .is_some_and(|p| p.native.is_some())
+    }
+    fn promote_native_pearl(&mut self) -> Result<(), String> {
+        let xdg = self.xdg.as_ref().ok_or("compositor has no xdg-shell")?;
+        let id = self.pearl.ok_or("no pearl to promote")?.id;
+        let name = self.panel_name.clone().ok_or("pearl has no view")?;
+        let native = self
+            .options
+            .pearls
+            .as_ref()
+            .and_then(|p| p.native.clone())
+            .ok_or("native pearl options unavailable")?;
+        let qh = self.qh.clone();
+        let indices: Vec<_> = self
+            .surfaces
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.companion && s.native.is_none())
+            .map(|(i, _)| i)
+            .collect();
+        for i in indices {
+            let surface = self.compositor.create_surface(&qh);
+            let fractional = if self.viewporter.is_some() {
+                self.fractional
+                    .as_ref()
+                    .map(|m| m.get_fractional_scale(&surface, &qh, surface.clone()))
+            } else {
+                None
+            };
+            let viewport = if fractional.is_some() {
+                self.viewporter
+                    .as_ref()
+                    .map(|m| m.get_viewport(&surface, &qh, ()))
+            } else {
+                None
+            };
+            let window = xdg.create_window(
+                surface,
+                smithay_client_toolkit::shell::xdg::window::WindowDecorations::RequestClient,
+                &qh,
+            );
+            let title = (native.title)(id, &name);
+            window.set_title(title);
+            window.set_app_id("bead.pearl");
+            window.set_min_size(Some((1, 1)));
+            if let Some((scene, _, _)) = &self.companion
+                && let Some([x, y, w, h]) = rendering::content_input_rect(scene)
+            {
+                smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
+                    &window,
+                    x.max(0) as u32,
+                    y.max(0) as u32,
+                    w.max(1) as u32,
+                    h.max(1) as u32,
+                );
+                window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
+                window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
+            }
+            window.commit();
+            let s = &mut self.surfaces[i];
+            if let Some(old) = s.fractional.take() {
+                old.destroy();
+            }
+            if let Some(old) = s.viewport.take() {
+                old.destroy();
+            }
+            s.fractional = fractional;
+            s.viewport = viewport;
+            s.native = Some(window);
+            s.native_configure_size = None;
+            s.configured = false;
+            s.redraw = true;
+            if let Some(background) = s.background.take() {
+                background.destroy();
+            }
+            s.background_size = None;
+            s.decorations = None;
+            s.callbacks.invalidate();
+            s.buffers.clear();
+            s.previous = None;
+            s.visual_damage = Default::default();
+            s.presented_generation = None;
+            #[cfg(feature = "wgpu")]
+            drop(s.gpu.take());
+            #[cfg(feature = "native-gl")]
+            drop(s.gl.take());
+            s.pool = SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?;
+            let empty = Region::new(&self.compositor).map_err(|e| e.to_string())?;
+            s.layer
+                .wl_surface()
+                .set_input_region(Some(empty.wl_region()));
+            s.layer.wl_surface().attach(None, 0, 0);
+            s.layer.wl_surface().damage_buffer(0, 0, 1, 1);
+            s.layer.commit();
+        }
+        if self.pearl_watch.is_none()
+            && let Some(watch) = native.watch
+        {
+            let sender = self
+                .event_sender
+                .clone()
+                .ok_or("UI event channel unavailable")?;
+            let notify: Box<dyn Fn(NativePearlMotion) + Send + Sync> = Box::new(move |motion| {
+                let _ = sender.send(UiEvent::NativePearlMotion(motion));
+            });
+            self.pearl_watch = watch(notify);
+        }
+        Ok(())
+    }
+    fn place_native_pearl(&self, first: bool) {
+        let (Some(info), Some(name), Some(native)) = (
+            self.pearl,
+            self.panel_name.as_ref(),
+            self.options.pearls.as_ref().and_then(|p| p.native.as_ref()),
+        ) else {
+            return;
+        };
+        if info.kind != Kind::Pearl {
+            return;
+        }
+        if !self
+            .surfaces
+            .iter()
+            .any(|surface| surface.companion && surface.native.is_some() && surface.configured)
+        {
+            return;
+        }
+        let title = (native.title)(info.id, name);
+        (native.place)(NativePearlPlacement {
+            id: info.id,
+            view: name.clone(),
+            title,
+            rect: info.rect,
+            first,
+        });
     }
     /// Re-anchor every surface of the swapped-in pearl and redraw it.
     fn place_pearl_surfaces(&mut self) {
@@ -413,15 +612,13 @@ impl App {
     /// Apply the swapped-in panel's placement; `reset` forgets cached input and
     /// keyboard state so the next frame recomputes it (a pearl focuses on click).
     fn reposition_companions(&mut self, reset: bool) {
-        let layers: Vec<_> = self
-            .surfaces
-            .iter()
-            .filter(|s| s.companion)
-            .map(|s| (s.layer.clone(), s.output.clone()))
-            .collect();
         if let Some((scene, _, _)) = &self.companion {
-            for (layer, output) in &layers {
-                self.position_panel_surface(layer, output, scene);
+            for s in self
+                .surfaces
+                .iter()
+                .filter(|s| s.companion && s.native.is_none())
+            {
+                self.position_panel_surface(&s.layer, &s.output, scene);
             }
         }
         for s in self.surfaces.iter_mut().filter(|s| s.companion) {
@@ -430,7 +627,7 @@ impl App {
                 s.input_visible = None;
                 s.callbacks.invalidate();
             }
-            s.layer.commit();
+            s.commit();
         }
     }
     pub(super) fn move_pearl(&mut self, id: u32, rect: pearl::Rect) {
@@ -439,7 +636,188 @@ impl App {
                 info.rect = rect;
             }
             app.reposition_companions(false);
+            app.place_native_pearl(false);
         });
+    }
+    pub(super) fn native_window_configure(
+        &mut self,
+        window: &smithay_client_toolkit::shell::xdg::window::Window,
+        configure: smithay_client_toolkit::shell::xdg::window::WindowConfigure,
+    ) {
+        let Some(i) = self
+            .surfaces
+            .iter()
+            .position(|s| s.native.as_ref() == Some(window))
+        else {
+            return;
+        };
+        let first = !self.surfaces[i].configured;
+        let configured_width = configure
+            .new_size
+            .0
+            .map_or(self.surfaces[i].width.max(1), |v| v.get());
+        let configured_height = configure
+            .new_size
+            .1
+            .map_or(self.surfaces[i].height.max(1), |v| v.get());
+        let resized =
+            self.surfaces[i].native_configure_size != Some((configured_width, configured_height));
+        let (width, height, body) = self.companion.as_ref().map_or(
+            (configured_width, configured_height, None),
+            |(scene, _, _)| {
+                (
+                    scene.bounds.w.ceil().max(1.) as u32,
+                    (scene.bounds.y + scene.bounds.h + scene.offset.1)
+                        .ceil()
+                        .max(1.) as u32,
+                    rendering::content_input_rect(scene),
+                )
+            },
+        );
+        let surface = &mut self.surfaces[i];
+        surface.width = width;
+        surface.height = height;
+        surface.configured = true;
+        surface.native_configure_size = Some((configured_width, configured_height));
+        surface.redraw = true;
+        if let Some(viewport) = &surface.viewport {
+            viewport.set_destination(width as i32, height as i32);
+        }
+        if let (Some(window), Some([x, y, w, h])) = (&surface.native, body) {
+            smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
+                window,
+                x.max(0) as u32,
+                y.max(0) as u32,
+                w.max(1) as u32,
+                h.max(1) as u32,
+            );
+            window.commit();
+        }
+        if !first
+            && resized
+            && let Some(info) = &mut self.pearl
+        {
+            info.rect.w = configured_width as f64;
+            info.rect.h = configured_height as f64;
+        }
+        if first {
+            self.place_native_pearl(first);
+        } else if resized {
+            self.save_pearls();
+        }
+        let qh = self.qh.clone();
+        self.draw(i, &qh);
+    }
+    pub(super) fn native_pearl_motion(&mut self, motion: NativePearlMotion) {
+        if self.slot_of_id(motion.id).is_none() {
+            return;
+        }
+        let outcome = self.in_slot(motion.id, |app| app.native_pearl_motion_in_slot(&motion));
+        if let Some(Some(Outcome::Dock { screen })) = outcome {
+            if let Err(error) = self.dock_pearl(motion.id, Some(&screen)) {
+                eprintln!("PEARL_DOCK_ERROR id={} {error}", motion.id);
+            }
+        } else if !motion.moving {
+            self.save_pearls();
+            self.release_pearl_watch_if_idle();
+        }
+    }
+    fn native_pearl_motion_in_slot(&mut self, motion: &NativePearlMotion) -> Option<Outcome> {
+        let mut info = self.pearl?;
+        if info.kind != Kind::Pearl {
+            return None;
+        }
+        if let Some(rect) = motion.rect {
+            info.rect = rect;
+            self.pearl = Some(info);
+        }
+        let monitors = self.monitors();
+        if motion.moving {
+            if let Some(monitor) = motion
+                .output
+                .as_deref()
+                .and_then(|name| monitors.iter().find(|m| m.name == name))
+                .or_else(|| {
+                    monitors
+                        .iter()
+                        .find(|m| m.rect.contains(info.rect.centre()))
+                })
+            {
+                let center = info.rect.centre();
+                let point = Point {
+                    x: center
+                        .x
+                        .clamp(monitor.rect.x, monitor.rect.x + monitor.rect.w - 1. / 256.),
+                    y: center
+                        .y
+                        .clamp(monitor.rect.y, monitor.rect.y + monitor.rect.h - 1. / 256.),
+                };
+                let mut drag = Drag::begin(
+                    Source::Pearl,
+                    self.resident_edge(),
+                    &monitor.name,
+                    info.rect,
+                    point,
+                    &monitors,
+                    &self.tuning(),
+                );
+                drag.ready = true;
+                drag.magnet = None;
+                self.update_guides(&drag, &monitors);
+            }
+            return None;
+        }
+        self.end_guides();
+        motion.rect?;
+        let center = info.rect.centre();
+        let monitor = motion
+            .output
+            .as_deref()
+            .and_then(|name| monitors.iter().find(|m| m.name == name))
+            .or_else(|| monitors.iter().find(|m| m.rect.contains(center)))
+            .or_else(|| monitors.first());
+        let Some(monitor) = monitor else {
+            return Some(Outcome::Moved { rect: info.rect });
+        };
+        if let Some(output) = self.output_named(&monitor.name) {
+            self.panel_output = Some(output.clone());
+            for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
+                surface.output = output.clone();
+                surface.output_name = monitor.name.clone();
+            }
+        }
+        let point = Point {
+            x: center
+                .x
+                .clamp(monitor.rect.x, monitor.rect.x + monitor.rect.w - 1. / 256.),
+            y: center
+                .y
+                .clamp(monitor.rect.y, monitor.rect.y + monitor.rect.h - 1. / 256.),
+        };
+        let mut drag = Drag::begin(
+            Source::Pearl,
+            self.resident_edge(),
+            &monitor.name,
+            info.rect,
+            point,
+            &monitors,
+            &self.tuning(),
+        );
+        drag.ready = true;
+        Some(drag.release())
+    }
+    fn slot_of_id(&self, id: u32) -> Option<usize> {
+        self.slots.iter().position(|group| group.id() == Some(id))
+    }
+    fn release_pearl_watch_if_idle(&mut self) {
+        if !self.surfaces.iter().any(|s| s.native.is_some())
+            && !self
+                .slots
+                .iter()
+                .any(|g| g.surfaces.iter().any(|s| s.native.is_some()))
+        {
+            self.pearl_watch = None;
+        }
     }
     /// Dock a pearl to the edge of `output` (its own when none).
     pub(super) fn dock_pearl(&mut self, id: u32, output: Option<&str>) -> Result<(), String> {
@@ -460,6 +838,42 @@ impl App {
         self.swap_group(&mut g);
         drop(g);
         self.pearl = None;
+        let qh = self.qh.clone();
+        for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
+            if let Some(background) = surface.background.take() {
+                background.destroy();
+            }
+            surface.background_size = None;
+            surface.decorations = None;
+            surface.native = None;
+            surface.native_configure_size = None;
+            if let Some(fractional) = surface.fractional.take() {
+                fractional.destroy();
+            }
+            if let Some(viewport) = surface.viewport.take() {
+                viewport.destroy();
+            }
+            surface.fractional = if self.viewporter.is_some() {
+                self.fractional.as_ref().map(|manager| {
+                    manager.get_fractional_scale(
+                        surface.layer.wl_surface(),
+                        &qh,
+                        surface.layer.wl_surface().clone(),
+                    )
+                })
+            } else {
+                None
+            };
+            surface.viewport = if surface.fractional.is_some() {
+                self.viewporter
+                    .as_ref()
+                    .map(|manager| manager.get_viewport(surface.layer.wl_surface(), &qh, ()))
+            } else {
+                None
+            };
+            surface.configured = true;
+            surface.redraw = true;
+        }
         let spec = self
             .options
             .panel_spec
@@ -483,26 +897,38 @@ impl App {
         self.reposition_companions(true);
         self.sync_all_decorations()?;
         self.save_pearls();
+        self.release_pearl_watch_if_idle();
         println!("PEARL_DOCKED id={id}");
         Ok(())
     }
     pub(super) fn close_pearl(&mut self, id: u32) -> Result<(), String> {
-        let output = self
-            .slots
-            .iter()
-            .find(|g| g.id() == Some(id))
-            .and_then(|g| g.output.clone());
+        if self.gesture.as_ref().is_some_and(|g| g.lifted == Some(id)) {
+            self.gesture = None;
+            self.end_guides();
+        }
         self.in_slot(id, |app| app.release_panel())
             .ok_or("no such pearl")?;
         // Opening a panel wakes the primary view; `release_panel` leaves that to the
         // last panel out, which for a pearl can only be known here.
-        if self.panel_runtime.is_none()
-            && !self.slots.iter().any(|g| g.is_pearl())
-            && let Some(output) = output
-        {
-            self.primary_idle(&output, true);
-        }
+        self.save_pearls();
+        self.release_pearl_watch_if_idle();
         Ok(())
+    }
+    /// Close every open pearl and forget entries for absent outputs as well.
+    pub(super) fn reset_pearls(&mut self) {
+        self.gesture = None;
+        self.end_guides();
+        self.pending_pearls.clear();
+        let ids: Vec<_> = self
+            .slots
+            .iter()
+            .filter(|g| g.is_pearl())
+            .filter_map(Group::id)
+            .collect();
+        for id in ids {
+            let _ = self.close_pearl(id);
+        }
+        self.save_pearls();
     }
     pub(super) fn pearl_listing(&self) -> serde_json::Value {
         serde_json::json!(
@@ -524,6 +950,30 @@ impl App {
 
     // ---- persistence ---------------------------------------------------------
 
+    pub(super) fn schedule_pearl_save(&mut self) {
+        if self.pearl_save_pending
+            || self
+                .options
+                .pearls
+                .as_ref()
+                .is_none_or(|p| p.store.is_none())
+        {
+            return;
+        }
+        self.pearl_save_pending = true;
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(Duration::from_millis(300)),
+            |_, _, app| {
+                app.pearl_save_pending = false;
+                app.save_pearls();
+                TimeoutAction::Drop
+            },
+        ) {
+            self.pearl_save_pending = false;
+            eprintln!("PEARL_SAVE_ERROR {error}");
+        }
+    }
+
     pub(super) fn save_pearls(&mut self) {
         let Some(path) = self.options.pearls.as_ref().and_then(|p| p.store.clone()) else {
             return;
@@ -540,13 +990,40 @@ impl App {
                         .first()
                         .map(|s| s.output_name.clone())
                         .unwrap_or_default(),
-                    initial: serde_json::Value::Null,
+                    initial: g
+                        .runtime
+                        .as_ref()
+                        .map_or(serde_json::Value::Null, |source| source.saved_state()),
                     placement: Some(pearl::Placement::exact(i.rect)),
                 });
             }
         }
+        // Configure callbacks can save while their slot is swapped in. Include
+        // that live group as well, otherwise resizing forgets the current pearl.
+        if let (Some(info), Some(name), Some(source)) = (
+            self.pearl.filter(|info| info.kind == Kind::Pearl),
+            self.panel_name.as_ref(),
+            self.panel_runtime.as_ref(),
+        ) {
+            layout.windows.push(pearl::Entry {
+                kind: name.clone(),
+                origin: self
+                    .surfaces
+                    .iter()
+                    .find(|s| s.companion)
+                    .map(|s| s.output_name.clone())
+                    .unwrap_or_default(),
+                initial: source.saved_state(),
+                placement: Some(pearl::Placement::exact(info.rect)),
+            });
+        }
+        if self.pearl_saved.as_ref() == Some(&layout) {
+            return;
+        }
         if let Err(error) = layout.save(&path) {
             eprintln!("PEARL_SAVE_ERROR {error}");
+        } else {
+            self.pearl_saved = Some(layout);
         }
     }
     pub(super) fn load_pearls(&mut self) {
@@ -566,8 +1043,11 @@ impl App {
         self.pending_pearls = later;
         for entry in now {
             let rect = entry.placement.map(|p| p.rect());
-            if let Err(error) = self.open_pearl(&entry.kind, Some(&entry.origin), rect) {
-                eprintln!("PEARL_RESTORE_ERROR view={} {error}", entry.kind);
+            match self.open_pearl(&entry.kind, Some(&entry.origin), rect) {
+                Ok(id) => {
+                    self.in_slot(id, |app| app.panel_ui(UiEvent::Restore(entry.initial)));
+                }
+                Err(error) => eprintln!("PEARL_RESTORE_ERROR view={} {error}", entry.kind),
             }
         }
     }
@@ -580,6 +1060,15 @@ impl App {
     ) -> Result<u32, String> {
         if !self.pearls_on() {
             return Err("pearls are disabled".into());
+        }
+        if self
+            .options
+            .pearls
+            .as_ref()
+            .is_some_and(|p| p.native.is_some())
+            && self.xdg.is_none()
+        {
+            return Err("native pearls require xdg-shell".into());
         }
         let control = self.options.control.clone();
         if control
@@ -608,13 +1097,10 @@ impl App {
         };
         self.pearl_seq += 1;
         let id = self.pearl_seq;
-        let rect = rect.unwrap_or_else(|| {
-            // Not a position to guess: the middle of the output.
-            let size = (spec.fallback.bounds.w as f64, spec.fallback.bounds.h as f64);
-            let at = monitor.rect.centre();
-            let p = pearl::place(at, size, &monitor.rect, &self.tuning());
-            pearl::Rect::new(p.x, p.y, size.0, size.1)
-        });
+        let fallback_size = rendering::content_input_rect(&spec.fallback)
+            .map(|body| (body[2].max(1) as f64, body[3].max(1) as f64))
+            .unwrap_or((spec.fallback.bounds.w as f64, spec.fallback.bounds.h as f64));
+        let rect = pearl::recover(rect, fallback_size, &monitor.rect, &self.tuning());
         let mut g = Group::empty(self.epoch_seq, Some(name), Some(spec));
         g.info = Some(Info {
             id,
@@ -625,7 +1111,7 @@ impl App {
         self.swap_group(&mut g);
         let started = self.start_panel(Some(&monitor.name), true);
         if started.is_ok() {
-            self.become_pearl();
+            self.become_pearl(true);
         }
         self.swap_group(&mut g);
         started?;
@@ -647,7 +1133,7 @@ impl App {
             None => self
                 .surfaces
                 .iter()
-                .any(|s| s.layer.wl_surface() == surface)
+                .any(|s| s.wl_surface() == surface)
                 .then(|| f(self)),
         }
     }
@@ -671,7 +1157,7 @@ impl App {
         let s = self
             .surfaces
             .iter()
-            .find(|s| s.layer.wl_surface() == surface && s.companion)?;
+            .find(|s| s.wl_surface() == surface && s.companion)?;
         let (gx, gy) = self.surface_origin_global(s);
         let point = Point {
             x: gx + local.0,
@@ -714,6 +1200,7 @@ impl App {
     ) -> bool {
         if !self.pearls_on()
             || self.gesture.is_some()
+            || self.relative_pointer.is_none()
             || !(self.modifiers.logo
                 || self
                     .options
@@ -747,28 +1234,25 @@ impl App {
             surface: surface.clone(),
             drag,
             lifted,
-            last_move: Instant::now() - Duration::from_secs(1),
         });
         true
     }
     pub(super) fn gesture_owns(&self, surface: &wl_surface::WlSurface) -> bool {
         self.gesture.as_ref().is_some_and(|g| &g.surface == surface)
     }
-    /// Pointer motion while a gesture is held. `local` is surface-relative.
-    pub(super) fn gesture_motion(&mut self, local: (f64, f64)) {
-        let Some(mut gesture) = self.gesture.take() else {
+    pub(super) fn gesture_relative_motion(&mut self, dx: f64, dy: f64) {
+        let monitors = self.monitors();
+        let Some(gesture) = self.gesture.as_ref() else {
             return;
         };
-        // Right after a move the compositor may still deliver positions relative
-        // to the old origin; wait for them to settle rather than overshoot.
-        if gesture.last_move.elapsed() < Duration::from_millis(4) {
-            self.gesture = Some(gesture);
+        // Accelerated deltas are logical surface coordinates. Buffer scale and
+        // our own margin commits must never feed back into pointer travel.
+        let point = gesture.drag.relative_point(dx, dy, &monitors);
+        self.gesture_point(point);
+    }
+    fn gesture_point(&mut self, point: Point) {
+        let Some(mut gesture) = self.gesture.take() else {
             return;
-        }
-        let (ox, oy) = self.gesture_origin(&gesture);
-        let point = Point {
-            x: ox + local.0,
-            y: oy + local.1,
         };
         let monitors = self.monitors();
         let tuning = self.tuning();
@@ -776,7 +1260,7 @@ impl App {
         if gesture.drag.ready && gesture.lifted.is_none() && gesture.drag.source == Source::Docked {
             // Pulled past the threshold: the panel itself comes along as a pearl.
             let body = gesture.drag.body;
-            match self.detach_resident(body) {
+            match self.detach_resident_with_role(body, false) {
                 Ok(id) => gesture.lifted = Some(id),
                 Err(error) => {
                     eprintln!("PEARL_LIFT_ERROR {error}");
@@ -791,23 +1275,11 @@ impl App {
             let r = gesture.drag.current();
             let rect = pearl::Rect::new(r.x.round(), r.y.round(), r.w, r.h);
             self.move_pearl(id, rect);
-            gesture.last_move = Instant::now();
         }
         if gesture.drag.ready {
             self.update_guides(&gesture.drag, &monitors);
         }
         self.gesture = Some(gesture);
-    }
-    fn gesture_origin(&mut self, gesture: &Gesture) -> (f64, f64) {
-        let surface = gesture.surface.clone();
-        self.on_surface(&surface.clone(), |app| {
-            app.surfaces
-                .iter()
-                .find(|s| s.layer.wl_surface() == &surface)
-                .map(|s| app.surface_origin_global(s))
-        })
-        .flatten()
-        .unwrap_or((0., 0.))
     }
     pub(super) fn gesture_release(&mut self) {
         let Some(gesture) = self.gesture.take() else {
@@ -834,6 +1306,13 @@ impl App {
             }
             (Outcome::Detach { rect, .. } | Outcome::Moved { rect }, Some(id)) => {
                 self.move_pearl(id, rect);
+                self.in_slot(id, |app| {
+                    if app.native_pearls_enabled()
+                        && let Err(error) = app.promote_native_pearl()
+                    {
+                        eprintln!("PEARL_NATIVE_ERROR {error}");
+                    }
+                });
                 self.save_pearls();
             }
             // Never pulled: the press was only a press.
@@ -961,7 +1440,10 @@ impl App {
                 self.pending_pearls.push(pearl::Entry {
                     kind: name.clone(),
                     origin: s.output_name.clone(),
-                    initial: serde_json::Value::Null,
+                    initial: g
+                        .runtime
+                        .as_ref()
+                        .map_or(serde_json::Value::Null, |source| source.saved_state()),
                     placement: Some(pearl::Placement::exact(i.rect)),
                 });
             }
@@ -969,5 +1451,6 @@ impl App {
         self.guide_ids.clear();
         self.guide_last.clear();
         drop(gone);
+        self.release_pearl_watch_if_idle();
     }
 }

@@ -37,7 +37,7 @@ pub(super) fn update(
             println!("BACKGROUND_EFFECT destroyed={}", effect.id().protocol_id());
             effect.destroy();
             surface.background_size = None;
-            surface.layer.commit();
+            surface.commit();
             println!("BACKGROUND_EFFECT enabled=false reason=capability_or_request");
         }
         return;
@@ -53,7 +53,7 @@ pub(super) fn update(
         }
     };
     if surface.background.is_none() {
-        match state.get_background_effect(surface.layer.wl_surface(), qh) {
+        match state.get_background_effect(surface.wl_surface(), qh) {
             Ok(effect) => {
                 println!("BACKGROUND_EFFECT created={}", effect.id().protocol_id());
                 surface.background = Some(effect);
@@ -71,7 +71,7 @@ pub(super) fn update(
     surface.background_size = Some((width, height));
     // The protocol copies the region and applies it on commit. This state-only
     // commit does not bake/layout content or create a presentation timing sample.
-    surface.layer.commit();
+    surface.commit();
     println!("BACKGROUND_EFFECT enabled=true logical_width={width} logical_height={height}");
 }
 impl BackgroundEffectHandler for App {

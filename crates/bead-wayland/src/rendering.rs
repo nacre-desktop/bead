@@ -152,7 +152,7 @@ impl App {
             return;
         }
         surface.shm_trim_pending = true;
-        let identity = surface.layer.wl_surface().clone();
+        let identity = surface.wl_surface().clone();
         let qh = self.qh.clone();
         let expires = Instant::now() + SHM_COMPACT_FOCUSED_IDLE + Duration::from_secs(3);
         if let Err(error) = self.loop_handle.insert_source(
@@ -163,7 +163,7 @@ impl App {
                     let Some(index) = app
                         .surfaces
                         .iter()
-                        .position(|s| s.layer.wl_surface() == &identity)
+                        .position(|s| s.wl_surface() == &identity)
                     else {
                         return TimeoutAction::Drop;
                     };
@@ -319,7 +319,7 @@ impl App {
                 .ok_or("native display missing")?,
         ));
         let window = RawWindowHandle::Wayland(WaylandWindowHandle::new(
-            NonNull::new(surface.layer.wl_surface().id().as_ptr().cast())
+            NonNull::new(surface.wl_surface().id().as_ptr().cast())
                 .ok_or("native surface missing")?,
         ));
         #[cfg(feature = "native-gl")]
@@ -424,6 +424,7 @@ impl App {
         let mut busy = false;
         let result = (|| -> Result<(), Box<dyn Error>> {
             let s = &mut self.surfaces[index];
+            let wl_surface = s.wl_surface().clone();
             let (scene, renderer, _kind, panel) = if s.companion {
                 let (scene, renderer, kind) =
                     self.companion.as_mut().ok_or("missing companion scene")?;
@@ -589,17 +590,13 @@ impl App {
                             if w > 0 && h > 0 {
                                 region.add(x, y, w, h);
                             }
-                            s.layer
-                                .wl_surface()
-                                .set_input_region(Some(region.wl_region()));
+                            wl_surface.set_input_region(Some(region.wl_region()));
                         } else {
-                            s.layer.wl_surface().set_input_region(None);
+                            wl_surface.set_input_region(None);
                         }
                     } else {
                         let empty = Region::new(&self.compositor)?;
-                        s.layer
-                            .wl_surface()
-                            .set_input_region(Some(empty.wl_region()));
+                        wl_surface.set_input_region(Some(empty.wl_region()));
                     }
                     s.input_visible = Some(visible);
                     s.input_rect = input_rect;
@@ -694,12 +691,10 @@ impl App {
                 );
             }
             if let Some(viewport) = &s.viewport {
-                s.layer.wl_surface().set_buffer_scale(1);
+                wl_surface.set_buffer_scale(1);
                 viewport.set_destination(s.width as i32, s.height as i32);
             } else {
-                s.layer
-                    .wl_surface()
-                    .set_buffer_scale((s.scale120 / 120) as i32);
+                wl_surface.set_buffer_scale((s.scale120 / 120) as i32);
             }
             #[cfg(feature = "native-gl")]
             if _kind == RendererKind::FemtovgGl {
@@ -712,7 +707,7 @@ impl App {
                         .ok_or("native display missing")?,
                 ));
                 let window = RawWindowHandle::Wayland(WaylandWindowHandle::new(
-                    NonNull::new(s.layer.wl_surface().id().as_ptr().cast())
+                    NonNull::new(wl_surface.id().as_ptr().cast())
                         .ok_or("native surface missing")?,
                 ));
                 if self.gl.is_none() {
@@ -746,17 +741,17 @@ impl App {
                         .push(activate_started.elapsed().as_secs_f64() * 1000.);
                 }
                 if regions.is_empty() {
-                    s.layer.wl_surface().frame(
+                    wl_surface.frame(
                         qh,
                         FrameData {
-                            surface: s.layer.wl_surface().clone(),
+                            surface: wl_surface.clone(),
                             epoch: s.callbacks.request(),
                             generation: scene.resource_revision,
                             source_epoch: if s.companion { self.panel_epoch } else { 0 },
                         },
                     );
                     s.callbacks.pending = true;
-                    s.layer.commit();
+                    wl_surface.commit();
                     s.frames += 1;
                     return Ok(());
                 }
@@ -776,17 +771,17 @@ impl App {
                     s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
                 }
                 for region in &regions {
-                    s.layer.wl_surface().damage_buffer(
+                    wl_surface.damage_buffer(
                         region.x as i32,
                         region.y as i32,
                         region.w as i32,
                         region.h as i32,
                     );
                 }
-                s.layer.wl_surface().frame(
+                wl_surface.frame(
                     qh,
                     FrameData {
-                        surface: s.layer.wl_surface().clone(),
+                        surface: wl_surface.clone(),
                         epoch: s.callbacks.request(),
                         generation: scene.resource_revision,
                         source_epoch: if s.companion { self.panel_epoch } else { 0 },
@@ -795,12 +790,12 @@ impl App {
                 s.callbacks.pending = true;
                 if let Some(p) = &self.presentation {
                     p.feedback(
-                        s.layer.wl_surface(),
+                        &wl_surface,
                         qh,
                         PresentationData {
                             source_epoch: if s.companion { self.panel_epoch } else { 0 },
                             update: s.ui_serial,
-                            surface: s.layer.wl_surface().clone(),
+                            surface: wl_surface.clone(),
                             generation: scene.resource_revision,
                         },
                     );
@@ -833,7 +828,7 @@ impl App {
                             .ok_or("native display missing")?,
                     ));
                     let surface = RawWindowHandle::Wayland(WaylandWindowHandle::new(
-                        NonNull::new(s.layer.wl_surface().id().as_ptr().cast())
+                        NonNull::new(wl_surface.id().as_ptr().cast())
                             .ok_or("native surface missing")?,
                     ));
                     // SAFETY: Surface::drop destroys GPU surface before protocol surface;
@@ -908,11 +903,11 @@ impl App {
                         s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
                         s.acquire_ms.push(acquire_ms);
                     }
-                    s.layer.wl_surface().damage_buffer(0, 0, w, h);
-                    s.layer.wl_surface().frame(
+                    wl_surface.damage_buffer(0, 0, w, h);
+                    wl_surface.frame(
                         qh,
                         FrameData {
-                            surface: s.layer.wl_surface().clone(),
+                            surface: wl_surface.clone(),
                             epoch: s.callbacks.request(),
                             generation: scene.resource_revision,
                             source_epoch: if s.companion { self.panel_epoch } else { 0 },
@@ -921,12 +916,12 @@ impl App {
                     s.callbacks.pending = true;
                     if let Some(p) = &self.presentation {
                         p.feedback(
-                            s.layer.wl_surface(),
+                            &wl_surface,
                             qh,
                             PresentationData {
                                 source_epoch: if s.companion { self.panel_epoch } else { 0 },
                                 update: s.ui_serial,
-                                surface: s.layer.wl_surface().clone(),
+                                surface: wl_surface.clone(),
                                 generation: scene.resource_revision,
                             },
                         );
@@ -1113,17 +1108,17 @@ impl App {
             }
             let _commit_profile = bead_core::profile::Span::new("commit");
             for region in &regions {
-                s.layer.wl_surface().damage_buffer(
+                wl_surface.damage_buffer(
                     region.x as i32,
                     region.y as i32,
                     region.w as i32,
                     region.h as i32,
                 );
             }
-            s.layer.wl_surface().frame(
+            wl_surface.frame(
                 qh,
                 FrameData {
-                    surface: s.layer.wl_surface().clone(),
+                    surface: wl_surface.clone(),
                     epoch: s.callbacks.request(),
                     generation: scene.resource_revision,
                     source_epoch: if s.companion { self.panel_epoch } else { 0 },
@@ -1132,21 +1127,21 @@ impl App {
             s.callbacks.pending = true;
             if let Some(p) = &self.presentation {
                 p.feedback(
-                    s.layer.wl_surface(),
+                    &wl_surface,
                     qh,
                     PresentationData {
                         source_epoch: if s.companion { self.panel_epoch } else { 0 },
                         update: s.ui_serial,
-                        surface: s.layer.wl_surface().clone(),
+                        surface: wl_surface.clone(),
                         generation: scene.resource_revision,
                     },
                 );
             }
-            b.buffer.attach_to(s.layer.wl_surface())?;
+            b.buffer.attach_to(&wl_surface)?;
             if s.companion {
                 bead_core::profile::mark("panel_commit");
             }
-            s.layer.commit();
+            wl_surface.commit();
             b.pending.clear();
             s.previous = Some(current);
             s.frames += 1;

@@ -17,7 +17,10 @@ mod panels;
 pub use edges::{EdgeArt, EdgeChrome, LipState};
 mod pearls;
 pub use panels::Panels;
-pub use pearls::{Film, Guide, PearlOptions};
+pub use pearls::{
+    Film, Guide, NativePearlMotion, NativePearlOptions, NativePearlPlacement, NativePearlTitle,
+    NativePearlWatch, PearlOptions,
+};
 mod overlay;
 mod policy;
 mod protocols;
@@ -80,6 +83,10 @@ use wayland_client::{
 use wayland_protocols::wp::cursor_shape::v1::client::{
     wp_cursor_shape_device_v1::{self, WpCursorShapeDeviceV1},
     wp_cursor_shape_manager_v1::WpCursorShapeManagerV1,
+};
+use wayland_protocols::wp::relative_pointer::zv1::client::{
+    zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1,
+    zwp_relative_pointer_v1::{self, ZwpRelativePointerV1},
 };
 use wayland_protocols::wp::text_input::zv3::client::{
     zwp_text_input_manager_v3::ZwpTextInputManagerV3,
@@ -224,6 +231,10 @@ pub enum UiEvent {
     PanelDetached(bool),
     /// Drag guidance for a guide view.
     PearlGuide(std::sync::Arc<Guide>),
+    /// Restore opaque view-owned state after a remembered pearl is recreated.
+    Restore(serde_json::Value),
+    /// Geometry/move state from a compositor adapter for a native pearl.
+    NativePearlMotion(NativePearlMotion),
     CompanionVisibility(bool),
     /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.
     ShellHidden(Option<bool>),
@@ -393,6 +404,10 @@ pub trait SceneSource {
     /// Whether outside pointer presses may dismiss this surface.
     fn outside_dismiss(&self) -> bool {
         true
+    }
+    /// Opaque state saved alongside a remembered pearl.
+    fn saved_state(&self) -> serde_json::Value {
+        serde_json::Value::Null
     }
     fn focused_dismiss(&self) -> bool {
         false
@@ -630,6 +645,9 @@ struct Surface {
     output: wl_output::WlOutput,
     output_name: String,
     layer: LayerSurface,
+    /// Fresh xdg role used while detached. The layer role remains available for
+    /// docking because Wayland surfaces cannot change roles.
+    native: Option<smithay_client_toolkit::shell::xdg::window::Window>,
     pool: SlotPool,
     #[cfg(feature = "wgpu")]
     gpu: Option<bead_render::gpu::Surface>,
@@ -638,6 +656,7 @@ struct Surface {
     buffers: Vec<Reusable>,
     width: u32,
     height: u32,
+    native_configure_size: Option<(u32, u32)>,
     scale120: u32,
     configured: bool,
     ready: bool,
@@ -674,6 +693,16 @@ struct Surface {
     presented_generation: Option<u64>,
     recovered_generation: Option<(u64, u64)>,
     ui_serial: u64,
+}
+impl Surface {
+    fn wl_surface(&self) -> &wl_surface::WlSurface {
+        self.native
+            .as_ref()
+            .map_or_else(|| self.layer.wl_surface(), |window| window.wl_surface())
+    }
+    fn commit(&self) {
+        self.wl_surface().commit();
+    }
 }
 struct WallpaperSurface {
     output: wl_output::WlOutput,

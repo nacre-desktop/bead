@@ -106,6 +106,12 @@ pub(super) fn key_command(keysym: Keysym, ctrl: bool) -> Option<&'static str> {
 
 impl WindowHandler for App {
     fn request_close(&mut self, _: &Connection, _: &QueueHandle<Self>, window: &Window) {
+        if let Some(id) = self.slot_of_surface(window.wl_surface()) {
+            if let Err(error) = self.close_pearl(id) {
+                eprintln!("PEARL_CLOSE_ERROR id={id} {error}");
+            }
+            return;
+        }
         if self.window.as_ref().is_some_and(|w| &w.window == window) {
             self.close_window();
         }
@@ -118,6 +124,10 @@ impl WindowHandler for App {
         configure: WindowConfigure,
         _: u32,
     ) {
+        if let Some(id) = self.slot_of_surface(window.wl_surface()) {
+            self.in_slot(id, |app| app.native_window_configure(window, configure));
+            return;
+        }
         let Some(win) = self.window.as_mut().filter(|w| &w.window == window) else {
             return;
         };
