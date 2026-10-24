@@ -1,0 +1,2 @@
+{"t":"call","id":50,"m":"menu.groups","p":{}}
+{"t":"ret","id":50,"ok":{"catalog_rev":1,"groups":[{"id":"home","label":"Home","icon":"home"},{"id":"style","label":"Style","icon":"palette"}]}}

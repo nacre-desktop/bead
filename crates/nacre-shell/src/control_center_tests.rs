@@ -34,6 +34,12 @@ fn bluetooth() -> Json {
         "adapters": {"order": ["hci0"], "items": {"hci0": {"name": "hci0", "powered": true, "discovering": false}}},
         "devices": {"order": ["d1"], "items": {"d1": {"name": "Buds", "connected": true, "adapter":"hci0", "paired":true, "trusted":true, "pairing":false}}}})
 }
+/// N0062 `vpn`: one connected WireGuard profile and one idle VPN-plugin profile.
+fn vpn() -> Json {
+    json!({"health": health(), "connections": {"order": ["home", "work"], "items": {
+        "home": {"name": "Home WG", "kind": "wireguard", "uuid": "bbbbbbbb-1111-4222-8333-444444444444", "state": "connected", "active": true},
+        "work": {"name": "Work VPN", "kind": "vpn", "uuid": "aaaaaaaa-1111-4222-8333-444444444444", "state": "disconnected", "active": false}}}})
+}
 fn power() -> Json {
     json!({"health": health(), "active": "balanced",
         "profiles": {"order": ["power-saver", "balanced", "performance"], "items": {
@@ -59,6 +65,7 @@ fn topic_data(name: &str) -> Json {
         "audio" => audio(),
         "network" => network(),
         "bluetooth" => bluetooth(),
+        "vpn" => vpn(),
         "power.profiles" => power(),
         "battery" => battery(),
         _ => notifications(),
@@ -191,7 +198,7 @@ fn sources_read_the_published_topics_and_hide_what_is_missing() {
     let Value::List(all) = &out["cc.src"] else {
         panic!()
     };
-    assert!(all.iter().all(|s| s["id"] != "vpn.state"));
+    assert!(all.iter().all(|s| s["id"] != "screenshot.capture"));
     assert_eq!(source(&out, "brightness.level")["status"], "60%");
     assert_eq!(source(&out, "brightness.level")["set"], false);
     assert_eq!(out["cc.battery"], Value::Text("78%".into()));
@@ -968,6 +975,7 @@ async fn tiles_exist_exactly_when_their_member_and_method_are_published() {
             "audio.input",
             "network.wifi",
             "bluetooth.power",
+            "vpn.state",
             "power.profile",
             "notifications.dnd"
         ]
@@ -1998,5 +2006,309 @@ async fn nacre_transcripts_drive_the_audio_and_power_tiles() {
             "power.set_profile".into(),
             json!({"profile": "power-saver"})
         )
+    );
+}
+
+// ---- B0087: the VPN tile and page ------------------------------------------------------
+
+fn row<'a>(out: &'a BTreeMap<String, Value>, id: &str) -> &'a Json {
+    let Value::List(items) = &out["cc.vpn"] else {
+        panic!("cc.vpn");
+    };
+    items
+        .iter()
+        .find(|item| item["id"] == id)
+        .unwrap_or_else(|| panic!("no vpn row {id}"))
+}
+fn vpn_with(state: Json, profiles: Json) -> Json {
+    let mut data = vpn();
+    data["connections"]["items"]["home"]["state"] = json!(state);
+    data["connections"]["items"]["home"]["active"] = json!(matches!(
+        state.as_str(),
+        Some("connecting" | "connected" | "disconnecting")
+    ));
+    if !profiles.is_null() {
+        data["connections"] = profiles;
+    }
+    data
+}
+fn offline_vpn(data: Json) -> ControlCenter {
+    let topics = TOPICS
+        .iter()
+        .map(|name| {
+            let data = if *name == "vpn" {
+                data.clone()
+            } else {
+                topic_data(name)
+            };
+            (
+                *name,
+                Arc::new(FakeSource::new(data).unwrap()) as Arc<dyn Source>,
+            )
+        })
+        .collect();
+    ControlCenter::new(None, topics, None, views())
+}
+
+#[test]
+fn the_vpn_tile_names_the_first_active_profile_and_the_page_lists_every_profile() {
+    let out = offline().project(&Stores::default());
+    let tile = source(&out, "vpn.state");
+    assert_eq!(tile["on"], true);
+    assert_eq!(tile["status"], "Home WG");
+    assert_eq!(tile["icon"], "vpn_key");
+    assert_eq!(
+        tile["toggle"], false,
+        "a navigation tile: the press opens the page"
+    );
+    // The daemon's order; "Connected" / "Off" as QML; nothing is switchable without a daemon link.
+    let (home, work) = (row(&out, "home"), row(&out, "work"));
+    assert_eq!(
+        (
+            home["label"].as_str(),
+            home["detail"].as_str(),
+            home["on"].as_bool()
+        ),
+        (Some("Home WG"), Some("Connected"), Some(true))
+    );
+    assert_eq!(
+        (
+            work["label"].as_str(),
+            work["detail"].as_str(),
+            work["on"].as_bool()
+        ),
+        (Some("Work VPN"), Some("Off"), Some(false))
+    );
+    assert_eq!(home["enabled"], false);
+    assert_eq!(out["cc.vpn_message"], Value::Text(String::new()));
+    // Nothing active: "Off", not on.
+    let idle = offline_vpn(vpn_with(json!("disconnected"), Json::Null)).project(&Stores::default());
+    assert_eq!(
+        (
+            source(&idle, "vpn.state")["on"].clone(),
+            source(&idle, "vpn.state")["status"].clone()
+        ),
+        (json!(false), json!("Off"))
+    );
+    // A profile that is still connecting is active (QML: it has a device) and says so.
+    let busy = offline_vpn(vpn_with(json!("connecting"), Json::Null)).project(&Stores::default());
+    assert_eq!(source(&busy, "vpn.state")["on"], true);
+    assert_eq!(row(&busy, "home")["detail"], "Connecting…");
+    let leaving =
+        offline_vpn(vpn_with(json!("disconnecting"), Json::Null)).project(&Stores::default());
+    assert_eq!(row(&leaving, "home")["detail"], "Disconnecting…");
+}
+
+#[test]
+fn the_vpn_page_says_what_is_wrong_and_the_tile_hides_when_the_topic_is_unavailable() {
+    // No saved profiles: the tile stays (QML) and the page says so.
+    let none = offline_vpn(vpn_with(
+        json!("disconnected"),
+        json!({"order": [], "items": {}}),
+    ))
+    .project(&Stores::default());
+    assert_eq!(source(&none, "vpn.state")["status"], "Off");
+    assert_eq!(
+        none["cc.vpn_message"],
+        Value::Text("No saved VPN profiles found.".into())
+    );
+    // NetworkManager gone (stale or unavailable): no source, no rows, the QML wording.
+    for (available, stale) in [(false, false), (true, true)] {
+        let mut data = vpn();
+        data["health"] = json!({"available": available, "stale": stale});
+        let out = offline_vpn(data).project(&Stores::default());
+        let Value::List(all) = &out["cc.src"] else {
+            panic!()
+        };
+        assert!(
+            all.iter().all(|s| s["id"] != "vpn.state"),
+            "{available} {stale}"
+        );
+        assert_eq!(out["cc.vpn"], Value::list(Vec::new()));
+        assert_eq!(
+            out["cc.vpn_message"],
+            Value::Text("NetworkManager VPN controls are unavailable.".into())
+        );
+    }
+    // A profile whose last activation failed shows the QML failure text.
+    let failed = offline_vpn(vpn_with(json!("failed"), Json::Null)).project(&Stores::default());
+    assert_eq!(row(&failed, "home")["detail"], "Off");
+    assert_eq!(
+        failed["cc.vpn_message"],
+        Value::Text(
+            "Could not change the VPN connection. Check its saved credentials and try again."
+                .into()
+        )
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn vpn_rows_connect_or_disconnect_by_published_id_and_a_refusal_is_shown_until_the_next_try()
+{
+    let mut lab = lab(&["vpn.connect", "vpn.disconnect"]).await;
+    let control = control_for(&lab).await;
+    let out = settle(&control, &Stores::default()).await;
+    assert_eq!(row(&out, "home")["enabled"], true);
+    assert_eq!(row(&out, "work")["enabled"], true);
+    control.act("switch:vpn.state:work");
+    assert_eq!(
+        call(&mut lab).await,
+        ("vpn.connect".into(), json!({"connection": "work"}))
+    );
+    let out = settle(&control, &Stores::default()).await;
+    assert_eq!(out["cc.vpn_message"], Value::Text(String::new()));
+    control.act("switch:vpn.state:home");
+    assert_eq!(
+        call(&mut lab).await,
+        ("vpn.disconnect".into(), json!({"connection": "home"}))
+    );
+    settle(&control, &Stores::default()).await;
+    // Only IDs the daemon published, and only for the vpn source.
+    control.act("switch:vpn.state:../x");
+    control.act("switch:network.wifi:home");
+    settle(&control, &Stores::default()).await;
+    assert!(lab.calls.try_recv().is_err());
+    // A refused change shows the QML failure text, not the generic one, and the next attempt clears it.
+    lab.fail
+        .lock()
+        .unwrap()
+        .insert("vpn.connect".into(), ErrorCode::Unavailable);
+    control.act("switch:vpn.state:work");
+    call(&mut lab).await;
+    let out = settle(&control, &Stores::default()).await;
+    assert_eq!(
+        out["cc.vpn_message"],
+        Value::Text(
+            "Could not change the VPN connection. Check its saved credentials and try again."
+                .into()
+        )
+    );
+    assert_eq!(
+        out["cc.message"],
+        Value::Text(String::new()),
+        "the dock's own line is not used"
+    );
+    lab.fail.lock().unwrap().clear();
+    control.act("switch:vpn.state:work");
+    call(&mut lab).await;
+    let out = settle(&control, &Stores::default()).await;
+    assert_eq!(out["cc.vpn_message"], Value::Text(String::new()));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn without_the_vpn_methods_the_rows_are_inert() {
+    let lab = lab(&["network.set_wifi"]).await;
+    let control = control_for(&lab).await;
+    let out = settle(&control, &Stores::default()).await;
+    assert_eq!(row(&out, "home")["enabled"], false);
+    assert_eq!(row(&out, "work")["enabled"], false);
+    drop(lab);
+}
+
+fn vpn_view(page: &str, detail: &str, scale: f32) -> bead_test::Result<Harness> {
+    let mut out = base();
+    let Value::List(rows) = offline().project(&Stores::default())["cc.vpn"].clone() else {
+        panic!()
+    };
+    // The offline adapter has no daemon link; the view wants armed rows.
+    let armed = rows
+        .iter()
+        .map(|r| {
+            let mut r = r.clone();
+            r["enabled"] = json!(true);
+            r
+        })
+        .collect();
+    out.insert("cc.vpn".into(), Value::list(armed));
+    out.insert("cc.vpn_message".into(), Value::Text(String::new()));
+    out.insert("cc.detail".into(), Value::Text(detail.into()));
+    out.insert(
+        "cc.saved".into(),
+        ids(vec![
+            "volume",
+            "network",
+            "bluetooth",
+            "vpn",
+            "battery",
+            "dnd",
+        ]),
+    );
+    harness(out, page, scale)
+}
+
+#[test]
+fn the_vpn_tile_opens_its_page_and_each_row_switches_its_profile() -> bead_test::Result<()> {
+    let h = vpn_view("home", "", 1.)?;
+    let action = |h: &Harness, part: &str| {
+        let node = h
+            .session
+            .view_nodes()
+            .iter()
+            .find(|n| n.id.contains(part))
+            .unwrap_or_else(|| panic!("no node {part} in {:?}", node_ids(h)));
+        (node.action.clone(), node.action_arg.clone())
+    };
+    for part in ["tile-vpn.main", "tile-vpn.detail-open"] {
+        assert_eq!(
+            action(&h, part),
+            (Some("detail".into()), Some(Value::Text("vpn".into())))
+        );
+    }
+    let h = vpn_view("detail", "vpn", 1.)?;
+    assert_eq!(
+        action(&h, "vpn-work.main"),
+        (
+            Some("cc.do".into()),
+            Some(Value::Text("switch:vpn.state:work".into()))
+        )
+    );
+    assert_eq!(
+        action(&h, "vpn-home.main"),
+        (
+            Some("cc.do".into()),
+            Some(Value::Text("switch:vpn.state:home".into()))
+        )
+    );
+    Ok(())
+}
+
+#[test]
+fn the_vpn_tile_and_page_match_goldens() -> bead_test::Result<()> {
+    for scale in [1., 1.5] {
+        for (name, page, detail) in [
+            ("vpn-overview", "home", ""),
+            ("vpn-detail", "detail", "vpn"),
+        ] {
+            let mut h = vpn_view(page, detail, scale)?;
+            golden(name, &mut h, scale)?;
+        }
+    }
+    Ok(())
+}
+
+/// Nacre's own `vpn` transcript, byte for byte, drives the tile and the page rows and the two calls.
+#[tokio::test(flavor = "current_thread")]
+async fn nacre_vpn_transcript_drives_the_tile_the_rows_and_the_calls() {
+    let vpn = first_snap(include_str!("../tests/protocol-v1/core-vpn.jsonl"));
+    let mut lab = lab_topics(&["vpn.connect", "vpn.disconnect"], &[("vpn", vpn)]).await;
+    let control = control_for(&lab).await;
+    let out = settle(&control, &Stores::default()).await;
+    let tile = source(&out, "vpn.state");
+    assert_eq!(
+        (tile["on"].clone(), tile["status"].clone()),
+        (json!(true), json!("Fixture office"))
+    );
+    assert_eq!(row(&out, "vpn-1")["detail"], "Connected");
+    assert_eq!(row(&out, "vpn-2")["detail"], "Off");
+    control.act("switch:vpn.state:vpn-2");
+    assert_eq!(
+        call(&mut lab).await,
+        ("vpn.connect".into(), json!({"connection": "vpn-2"}))
+    );
+    settle(&control, &Stores::default()).await;
+    control.act("switch:vpn.state:vpn-1");
+    assert_eq!(
+        call(&mut lab).await,
+        ("vpn.disconnect".into(), json!({"connection": "vpn-1"}))
     );
 }

@@ -1,0 +1,50 @@
+{
+ "control-center": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "rmse": 6.113,
+  "changed_pct": 7.959
+ },
+ "control-center-vpn": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "rmse": 6.142,
+  "changed_pct": 8.072
+ },
+ "control-vpn": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "rmse": 6.111,
+  "changed_pct": 8.121
+ },
+ "control-vpn-connected": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "rmse": 4.971,
+  "changed_pct": 9.325
+ },
+ "control-vpn-hover": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "rmse": 4.822,
+  "changed_pct": 9.403
+ },
+ "control-vpn-pressed": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "rmse": 4.752,
+  "changed_pct": 8.429
+ }
+}

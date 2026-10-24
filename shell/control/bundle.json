@@ -4,6 +4,7 @@
     "status/bluetooth-body.luau",
     "status/battery-body.luau",
     "status/body.luau",
-    "sound/body.luau"
+    "sound/body.luau",
+    "control/vpn-body.luau"
   ]
 }

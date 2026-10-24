@@ -1,0 +1,6 @@
+{"t":"snap","topic":"vpn","seq":0,"data":{"health":{"available":true,"stale":false},"connections":{"items":{"vpn-1":{"name":"Fixture office","kind":"vpn","uuid":"11111111-2222-4333-8444-555555555555","state":"connected","active":true},"vpn-2":{"name":"Fixture wireguard","kind":"wireguard","uuid":"66666666-7777-4888-9999-000000000000","state":"disconnected","active":false}},"order":["vpn-1","vpn-2"]}}}
+{"t":"call","id":0,"m":"vpn.connect","p":{"connection":"vpn-2"},"timeout":10000}
+{"t":"ret","id":0,"ok":{"changed":true}}
+{"t":"call","id":1,"m":"vpn.disconnect","p":{"connection":"vpn-1"},"timeout":10000}
+{"t":"ret","id":1,"ok":{"changed":true}}
+{"t":"patch","topic":"vpn","base":0,"seq":1,"data":{"health":{"available":false,"stale":true,"error":{"code":"unavailable","message":"Service unavailable","retry":true}}}}

@@ -50,9 +50,11 @@ import fake_system  # noqa: E402
 #   ('pointer', x, y) / ('press', x, y) / ('release',)   B0067: a virtual pointer on the private parent compositor (logical px; needs --pointer-tool)
 #   ('journal', 'on'|'off')         B0089: write/remove the controller's display-pending journal (a pending change; nothing is applied)
 #   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
+#   ('nm', key, value)              the fake NetworkManager (spikes/fake-nm.py, needs --fake-nm): connect|disconnect work|home, reset
 # Logical pointer targets (2880x1800 at 1.5), per arm. Bluetooth is available
 # in both arms through the private BlueZ fixture.
 PTR = {'control-tile': {'qml': (1790, 290), 'bead': (1800, 290)}, 'launcher-quick': (1350, 745),
+       'vpn-tile': {'qml': (1793, 220), 'bead': (1793, 220)}, 'vpn-row': {'qml': (1650, 242), 'bead': (1650, 324)},
        # B0093: the third row of the selector prompt (panel x 410, y 610; list at 20,54; 58 px pitch)
        'prompt-row': {'qml': (930, 807), 'bead': (930, 807)}}
 # B0093: one fixed selector request for both shells (`nacre-menu pick --json` / `nacre-menu input`).
@@ -64,7 +66,7 @@ PROMPT_CHOICES = json.dumps([
     {'label': 'Neighbour', 'value': 'neighbour', 'description': 'WPA2 · 33%', 'icon': 'wifi'},
     {'label': 'Cafe', 'value': 'cafe', 'description': 'Open · 21%', 'icon': 'wifi'}])
 # A normal press is sampled before QML's long-press detail timer can fire.
-STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed': 0.05}
+STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed': 0.05, 'control-vpn-pressed': 0.05}
 # QML audio inherits the preceding popup's width. Establish the same explicit
 # 352 px content-width precondition for both builds, independent of state order.
 STATE_PREPARE = {'popout-audio': [('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 0.4),
@@ -115,6 +117,21 @@ STATES = {
                         [('release',), ('ui', 'nacre', 'close')], 0),
     'lip-hover-right': ([('pointer', 1919, 600), ('sleep', 1.0)], [('pointer', 960, 600)], 0),
     'control-bluetooth': ([('ui', 'nacre', 'controls', 'bluetooth')], [('ui', 'nacre', 'close')], 0),
+    # B0087 (need --fake-nm): the VPN tile and page, idle and with one profile connected.
+    # QML refuses `controls vpn`: the page opens from the tile (a virtual-pointer click, so --pointer-tool is needed).
+    'control-vpn': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('press-target', 'vpn-tile'), ('release',), ('sleep', 1.0)],
+                    [('ui', 'nacre', 'close')], 0),
+    'control-vpn-connected': ([('nm', 'connect', 'home'), ('sleep', 1.5), ('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2),
+                               ('press-target', 'vpn-tile'), ('release',), ('sleep', 1.0)],
+                              [('ui', 'nacre', 'close'), ('nm', 'reset', 'now')], 0),
+    'control-vpn-hover': ([('nm', 'connect', 'home'), ('sleep', 1.5), ('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2),
+                           ('press-target', 'vpn-tile'), ('release',), ('sleep', 1.0), ('pointer-target', 'vpn-row')],
+                          [('release',), ('ui', 'nacre', 'close'), ('nm', 'reset', 'now')], 0),
+    'control-vpn-pressed': ([('nm', 'connect', 'home'), ('sleep', 1.5), ('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2),
+                             ('press-target', 'vpn-tile'), ('release',), ('sleep', 1.0), ('press-target', 'vpn-row')],
+                            [('release',), ('ui', 'nacre', 'close'), ('nm', 'reset', 'now')], 0),
+    'control-center-vpn': ([('nm', 'connect', 'home'), ('sleep', 1.5), ('ui', 'nacre', 'controls', 'home')],
+                           [('ui', 'nacre', 'close'), ('nm', 'reset', 'now')], 1.2),
     'notification': ([('notify', 'Parity check', 'The same notification in both shells.'), ('sleep', 1.5)], [('ui', 'nacre', 'close')], 1.2),
     'osd-volume': ([('only', 'qml', ('ui', 'nacre', 'previewFeedback', 'volume')), ('only', 'bead', ('level', 'sink', 0.62))],
                    [('ui', 'nacre', 'close')], 0),
@@ -406,6 +423,25 @@ class Arm:
                                                        '--method', 'org.freedesktop.DBus.ObjectManager.GetManagedObjects'])),
                    20, 'the fake org.bluez')
         self.start_pipewire()  # QML reads it directly; the Nacre daemon only offers audio.set_volume while its socket exists (B0091)
+        if a.fake_nm:
+            # B0087: the owner's saved file holds the complete default tile list (QML NacreControlPreferences.defaults, VPN
+            # included); a fresh private profile would otherwise give Bead the registry's shorter list. Both arms read this file.
+            saved = self.root / 'config/nacre'
+            saved.mkdir(parents=True, exist_ok=True)
+            (saved / 'control-center.json').write_text(json.dumps({'version': 2, 'defaultsRevision': 2, 'tiles': [
+                'volume', 'mic-volume', 'brightness', 'keyboard', 'network', 'bluetooth', 'airplane', 'vpn', 'battery', 'awake', 'dnd',
+                'mic', 'night', 'appearance', 'screenshot', 'record', 'picker', 'clipboard', 'updates', 'displays', 'wallpaper',
+                'next-wallpaper', 'notifications']}))
+            # B0087: a fake NetworkManager on the same private bus; the QML arm's nmcli is a stub that talks to it.
+            self.spawn([sys.executable, str(HERE / 'fake-nm.py')], 'fake-nm')
+            wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.NetworkManager',
+                                                           '--object-path', '/org/freedesktop/NetworkManager/Settings',
+                                                           '--method', 'org.freedesktop.NetworkManager.Settings.ListConnections'])),
+                       20, 'the fake NetworkManager')
+            stub = self.root / 'fakenm'
+            stub.mkdir()
+            (stub / 'nmcli').symlink_to(HERE / 'fake-nmcli.py')
+            self.env['PATH'] = f'{stub}:' + self.env['PATH']
         command = [str(Path(a.bead_bin).resolve() / 'nacre-helper'), 'daemon']
         if self.name == 'bead':
             command.append('--notifications=daemon')
@@ -740,6 +776,9 @@ os.execv(real, [real, *args])
                     journal.write_text(json.dumps({'token': 'parity', 'previous': [], 'monitors': []}))
                 else:
                     journal.unlink(missing_ok=True)
+            elif kind == 'nm':
+                self.run(['gdbus', 'call', '--session', '--dest', 'org.bead.FakeNm', '--object-path', '/ctl',
+                          '--method', 'org.bead.FakeNm.Set', step[1], step[2]], check=False)
             elif kind == 'bluez':
                 self.run(['gdbus', 'call', '--session', '--dest', 'org.bead.FakeBluez', '--object-path', '/ctl',
                           '--method', 'org.bead.FakeBluez.Set', step[1], step[2]], check=False)
@@ -1098,6 +1137,7 @@ def main():
     parser.add_argument('--presentation', default='~/.local/state/nacre/presentation.json',
                         help='record copied read-only into both private states (wallpaper + palette); empty for none')
     parser.add_argument('--cpu', action='store_true', help='Bead on the CPU renderer')
+    parser.add_argument('--fake-nm', action='store_true', help='B0087: a fake NetworkManager with two VPN profiles on the private bus (both arms)')
     parser.add_argument('--shortcut-fixture', action='store_true', help='include three harmless generated bindings in the private niri configuration')
     parser.add_argument('--settle', type=float, default=2.0, help='seconds between a state opening and its screenshot')
     parser.add_argument('--boot-settle', type=float, default=4.0)
@@ -1165,7 +1205,7 @@ def main():
                              'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
-                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--shortcut-fixture'] if args.shortcut_fixture else [])
+                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else [])
                 log(f'arm {arm} starting')
                 child = subprocess.Popen(command, env=env, start_new_session=True)
                 try:

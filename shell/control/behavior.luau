@@ -15,6 +15,7 @@ local behavior={stores={
     ["cc.src"]={},["cc.views"]={},["cc.saved"]={},["cc.saved_known"]=false,["cc.writable"]=false,["cc.message"]="",
     ["cc.battery"]="",["cc.battery_icon"]="battery_charging_full",["cc.battery_estimate"]="",
     ["cc.notices"]={},["cc.notice_count"]=0,["cc.notice_ready"]=false,["cc.notice_clear"]=false,
+    ["cc.vpn"]={},["cc.vpn_message"]="",
     ["cc.edited"]=false,["cc.order"]={},["cc.drag"]="",
 },actions={
     close=function(s) s["panel.open"]=false s["network.secret"]="" s["bluetooth.secret"]="" end,

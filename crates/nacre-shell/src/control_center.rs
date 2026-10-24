@@ -17,15 +17,18 @@ use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
 /// Topics a tile source may read; the panel leases each for as long as it is open.
-pub const TOPICS: [&str; 7] = [
+pub const TOPICS: [&str; 8] = [
     "audio",
     "controls",
     "network",
     "bluetooth",
+    "vpn",
     "power.profiles",
     "battery",
     "notifications",
 ];
+/// The VPN tile's source; its profile list and `switch` verb feed the dock page (N0062).
+const VPN: &str = "vpn.state";
 /// The settings store and key behind `control-center.tiles`.
 pub const STORE: &str = "control-center";
 pub const STORE_TOPIC: &str = "settings.store.control-center";
@@ -96,6 +99,8 @@ struct St {
     targets: BTreeMap<String, f64>,
     /// An interactive tool was started: the host closes the panel (N0046: "close your panels first").
     close: bool,
+    /// The last VPN change was refused: the page says so until the next attempt (QML `NacreVpn.error`).
+    vpn_failed: bool,
     /// The viewport height; `cc.max_height` is what remains inside the live frame.
     max_height: f64,
 }
@@ -112,6 +117,7 @@ impl Default for St {
             message: String::new(),
             targets: BTreeMap::new(),
             close: false,
+            vpn_failed: false,
             max_height: 800.,
         }
     }
@@ -168,6 +174,25 @@ fn profile_name(id: &str) -> String {
     )
 }
 
+/// N0062 `vpn` profiles in the daemon's order: `(id, name, state, active)`.
+fn vpn_profiles(data: &Json) -> Vec<(String, String, String, bool)> {
+    let items = &data["connections"]["items"];
+    data["connections"]["order"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|id| {
+            let id = id.as_str()?;
+            let profile = &items[id];
+            Some((
+                id.to_owned(),
+                profile["name"].as_str()?.to_owned(),
+                profile["state"].as_str()?.to_owned(),
+                profile["active"] == true,
+            ))
+        })
+        .collect()
+}
 fn text(value: impl Into<String>) -> Value {
     Value::Text(value.into())
 }
@@ -446,6 +471,21 @@ impl ControlCenter {
                     ..Default::default()
                 })
             }
+            // N0062: as QML, the tile is on while any profile is active and names the first one.
+            VPN => {
+                let data = self.data("vpn")?;
+                if !healthy(&data) {
+                    return None;
+                }
+                let profiles = vpn_profiles(&data);
+                let first = profiles.iter().find(|profile| profile.3);
+                Some(Reading {
+                    on: first.is_some(),
+                    status: first.map_or_else(|| onoff(false), |profile| profile.1.clone()),
+                    icon: "vpn_key",
+                    ..Default::default()
+                })
+            }
             "notifications.dnd" => {
                 let data = self.data("notifications")?;
                 if !healthy(&data) {
@@ -618,6 +658,7 @@ impl ControlCenter {
             "audio.input",
             "network.wifi",
             "bluetooth.power",
+            VPN,
             "power.profile",
             "notifications.dnd",
             "brightness.level",
@@ -673,6 +714,9 @@ impl ControlCenter {
                     ticket,
                 });
                 st.message.clear();
+                if source == VPN {
+                    st.vpn_failed = false;
+                }
                 true
             }
             Err(_) => {
@@ -900,7 +944,71 @@ impl ControlCenter {
             st.targets.insert(source.into(), percent);
         }
     }
-    /// A tile asks: `toggle:<source>`, `press:<source>`, `choose:<source>:<id>` or `set:<source>:<percent>`.
+    /// N0062: the page row for a profile connects it, or disconnects it when it is active (QML
+    /// `activate(uuid, !active)`). Only IDs the daemon published are sent back.
+    fn vpn_switch(&self, id: &str) {
+        let Some(data) = self.data("vpn").filter(|data| healthy(data)) else {
+            return;
+        };
+        if let Some((_, _, _, active)) = vpn_profiles(&data).iter().find(|p| p.0 == id) {
+            let method = if *active {
+                "vpn.disconnect"
+            } else {
+                "vpn.connect"
+            };
+            self.begin(VPN, method, json!({"connection": id}));
+        }
+    }
+    /// N0062: the VPN page's rows and its one status line (QML `NacreControlVpn`): the failure text
+    /// until the next attempt, else the busy text, else "none saved"; unavailable when the topic is.
+    fn vpn_page(&self) -> Vec<(String, Value)> {
+        let data = self.data("vpn").filter(|data| healthy(data));
+        let busy = self.quick_pending(VPN);
+        let profiles = data.as_deref().map(vpn_profiles).unwrap_or_default();
+        let rows: Vec<Json> = profiles
+            .iter()
+            .map(|(id, name, state, active)| {
+                let detail = match state.as_str() {
+                    "connected" => tr("bead.common.connected", &[]),
+                    "connecting" => tr("bead.panel.control-vpn-connecting", &[]),
+                    "disconnecting" => tr("bead.panel.control-vpn-disconnecting", &[]),
+                    _ => onoff(false),
+                };
+                let method = if *active {
+                    "vpn.disconnect"
+                } else {
+                    "vpn.connect"
+                };
+                json!({"id": id, "label": name, "detail": detail, "on": active,
+                    "enabled": !busy && self.can(method)})
+            })
+            .collect();
+        let failed = self.st.borrow().vpn_failed || profiles.iter().any(|p| p.2 == "failed");
+        let key = if data.is_none() {
+            "bead.panel.control-vpn-unavailable"
+        } else if failed {
+            "bead.panel.control-vpn-failed"
+        } else if busy {
+            "bead.panel.control-vpn-working"
+        } else if profiles.is_empty() {
+            "bead.panel.control-vpn-none"
+        } else {
+            ""
+        };
+        vec![
+            ("cc.vpn".into(), Value::list(rows)),
+            (
+                "cc.vpn_message".into(),
+                text(if key.is_empty() {
+                    String::new()
+                } else {
+                    tr(key, &[])
+                }),
+            ),
+        ]
+    }
+    /// A tile asks: `toggle:<source>`, `press:<source>`, `choose:<source>:<id>`, `set:<source>:<percent>`
+    /// or `switch:vpn.state:<id>`.
     pub fn act(&self, arg: &str) {
         let mut parts = arg.splitn(3, ':');
         let (verb, source, rest) = (
@@ -912,6 +1020,7 @@ impl ControlCenter {
             "toggle" => self.toggle(source),
             "press" => self.press(source),
             "choose" => self.choose(source, rest),
+            "switch" if source == VPN => self.vpn_switch(rest),
             "clear" if source == "notifications" => {
                 self.begin(source, "notifications.clear", json!({"scope": "history"}));
             }
@@ -1036,8 +1145,10 @@ impl ControlCenter {
             match st.calls[index].ticket.try_take() {
                 None => index += 1,
                 Some(reply) => {
-                    st.calls.remove(index);
-                    if reply.is_err() {
+                    let call = st.calls.remove(index);
+                    if reply.is_err() && call.source == VPN {
+                        st.vpn_failed = true;
+                    } else if reply.is_err() {
                         st.message = tr("bead.common.request-failed", &[]);
                     }
                 }
@@ -1157,6 +1268,7 @@ impl ControlCenter {
         ])
         .into_iter()
         .chain(self.notices())
+        .chain(self.vpn_page())
         .collect()
     }
 }

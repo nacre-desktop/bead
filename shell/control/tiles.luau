@@ -19,7 +19,7 @@ local tiles={
     {id="network",kind="link",size="half",icon="wifi",label="bead.panel.control-network",source="network.wifi",view="network",dock="network",default=true},
     {id="bluetooth",kind="link",size="half",icon="bluetooth",label="bead.panel.control-bluetooth",source="bluetooth.power",view="bluetooth",dock="bluetooth",default=true},
     {id="airplane",kind="toggle",size="half",icon="flight",label="bead.panel.control-airplane",source="airplane.mode",ask="airplane.set",need="toggle"},
-    {id="vpn",kind="toggle",size="half",icon="vpn_key",label="bead.panel.control-vpn",source="vpn.state",ask="vpn topic"},
+    {id="vpn",kind="toggle",size="half",icon="vpn_key",label="bead.panel.control-vpn",source="vpn.state",dock="vpn",navigate=true,hide_unsupported=true,ask="vpn"},
     {id="battery",kind="link",size="half",icon="balance",label="bead.panel.control-battery",source="power.profile",view="battery",dock="battery",ask="power.set_profile",default=true},
     {id="awake",kind="toggle",size="half",icon="coffee",label="bead.panel.control-awake",source="stay-awake.state",ask="stay_awake.set",need="toggle",default=true},
     {id="dnd",kind="toggle",size="half",icon="do_not_disturb_on",label="bead.panel.control-dnd",source="notifications.dnd",page="notifications",default=true},

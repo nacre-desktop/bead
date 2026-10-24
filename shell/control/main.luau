@@ -102,10 +102,12 @@ local function build_tile(t,w,h,embedded)
     elseif t.kind=="button" then
         return kit.ButtonTile{id=id,width=w,height=h,icon=t.icon,label=label,on_activate=t.open and ui.action("cc.do","open:"..t.open) or s.press and act("press") or opener}
     end
+    -- A navigation tile (QML `navigation`) opens its page on every press; the chevron is the same opener.
+    local nav=t.navigate and opener or nil
     -- the mic switch shares its source with the microphone slider, so its words are On/Off, not the level
     local detail=t.onoff and (s.on and ui.tr("bead.common.on") or ui.tr("bead.common.off")) or s.status
     return kit.ToggleTile{id=id,width=w,height=h,icon=s.icon or t.icon,label=label,detail=detail,on=s.on==true,
-        on_activate=s.toggle and act("toggle") or opener,on_detail=s.toggle and opener or nil,
+        on_activate=nav or (s.toggle and act("toggle") or opener),on_detail=nav or (s.toggle and opener or nil),
         detail_label=ui.tr("bead.panel.control-details",{name=label})}
 end
 local NOTICE_H=70
@@ -259,7 +261,8 @@ local function detail()
     local dock={network={function() return require("../status/network-body")({width=INNER}) end,"bead.panel.control-network"},
         bluetooth={function() return require("../status/bluetooth-body")({width=INNER}) end,"bead.panel.control-bluetooth"},
         battery={function() return require("../status/battery-body")({width=INNER}) end,"bead.panel.control-power-brightness"},
-        audio={function() return require("../sound/body")({width=INNER}) end,"bead.panel.control-sound"}}
+        audio={function() return require("../sound/body")({width=INNER}) end,"bead.panel.control-sound"},
+        vpn={function() return require("./vpn-body")({width=INNER}) end,"bead.panel.control-vpn"}}
     if dock[id] then
         local node,height=dock[id][1]()
         local items={header(ui.tr(dock[id][2]),ui.action("page","home")),{node,height}}
