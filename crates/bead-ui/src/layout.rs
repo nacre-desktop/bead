@@ -108,6 +108,7 @@ pub const PROPERTIES: &[&str] = &[
     "border_width",
     "radius",
     "font_size",
+    "font_weight",
     "family",
     "icon",
     "path",
@@ -161,6 +162,7 @@ pub struct ViewSpec {
     pub blur: f32,
     pub drag: bool,
     pub font_size: f32,
+    pub font_weight: u16,
     pub family: String,
     pub icon: Option<String>,
     pub path: Option<PathBuf>,
@@ -289,6 +291,11 @@ impl ViewSpec {
             if !(1. ..=256.).contains(&font_size) {
                 return Err(source.error("font_size must be1..256"));
             }
+            let font_weight = number(p, "font_weight", 400., source)?;
+            if !(1. ..=1000.).contains(&font_weight) || font_weight.fract() != 0. {
+                return Err(source.error("font_weight must be an integer 1..1000"));
+            }
+            let font_weight = font_weight as u16;
             let family = crate::text_style::family(&text(p, "family", "IBM Plex Sans", source)?);
             let font_size = crate::text_style::size(font_size, &family);
             let visible = boolean(p, "visible", true, source)?;
@@ -531,6 +538,7 @@ impl ViewSpec {
                     source,
                 )?,
                 font_size,
+                font_weight,
                 family,
                 icon: p
                     .get("icon")
@@ -875,6 +883,7 @@ pub fn layout(
                     view.text.clone()
                 },
                 family: view.family.clone(),
+                weight: view.font_weight,
                 align: view.text_align,
                 size: view.font_size,
                 color: if input_empty { muted } else { foreground },

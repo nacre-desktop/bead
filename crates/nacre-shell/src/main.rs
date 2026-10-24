@@ -2,6 +2,7 @@
 mod app;
 mod backends;
 mod bar_routes;
+mod bar_updates;
 mod calendar;
 mod chat;
 mod colors;
@@ -1034,6 +1035,7 @@ fn start(
                         runtime
                             .with_bar_routes(client.clone(), tray)?
                             .with_workspace_origins(&client)?
+                            .with_bar_updates(&client)?
                     } else {
                         runtime
                     };
@@ -1096,6 +1098,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
                 rect: Rect::new(x, y, w, h),
                 text: s.into(),
                 family: "IBM Plex Sans".into(),
+                weight: 400,
                 align: None,
                 size,
                 color,

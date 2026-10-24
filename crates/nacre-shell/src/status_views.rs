@@ -845,6 +845,15 @@ impl Status {
             ),
             ("network.wifi_busy".into(), Value::Bool(busy)),
             ("network.wifi_message".into(), Value::Text(message)),
+            (
+                "network.health_message".into(),
+                Value::Text(line(
+                    snapshot.data["health"]["error"]["message"]
+                        .as_str()
+                        .unwrap_or(""),
+                    160,
+                )),
+            ),
             ("network.rows".into(), Value::list(rows)),
             (
                 "network.height".into(),

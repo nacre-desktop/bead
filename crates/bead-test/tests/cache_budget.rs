@@ -55,6 +55,7 @@ fn real_ui_and_legacy_rasters_remain_byte_bounded() -> Result<()> {
     scene.prepared.clear();
     scene.clips.clear();
     scene.primitives = vec![Primitive::Text {
+        weight: 400,
         align: None,
         rect: Rect::new(0., 0., 512., 256.),
         text: "fixture".into(),

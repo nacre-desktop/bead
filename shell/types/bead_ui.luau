@@ -36,6 +36,7 @@ export type Props = {
     border_width:any?,
     radius:any?,
     font_size:any?,
+    font_weight:any?,
     family:any?,
     icon:any?,
     path:any?,

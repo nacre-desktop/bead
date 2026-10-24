@@ -3,7 +3,11 @@
 use bead::render::{Primitive, Result, Scene};
 use skrifa::MetadataProvider;
 use std::{collections::BTreeSet, ffi::CString, path::PathBuf, time::Instant};
-type Selection = (BTreeSet<String>, BTreeSet<char>);
+type Selection = (BTreeSet<(String, u16)>, BTreeSet<char>);
+#[link(name = "fontconfig")]
+unsafe extern "C" {
+    fn FcWeightFromOpenType(weight: std::ffi::c_int) -> std::ffi::c_int;
+}
 pub struct Selector {
     entries: bead::core::cache::Lru<Selection, Vec<PathBuf>>,
     ascii: bool,
@@ -31,8 +35,14 @@ impl Selector {
         let mut families = BTreeSet::new();
         let mut chars = BTreeSet::new();
         for p in &scene.primitives {
-            if let Primitive::Text { family, text, .. } = p {
-                families.insert(family.clone());
+            if let Primitive::Text {
+                family,
+                text,
+                weight,
+                ..
+            } = p
+            {
+                families.insert((family.clone(), *weight));
                 chars.extend(text.chars().filter(|c| !c.is_control()));
             }
         }
@@ -53,7 +63,10 @@ impl Selector {
         }
         let paths = select_chars(scene, self.ascii)?;
         if families.len() <= 32 && chars.len() <= 4096 {
-            let bytes = families.iter().map(|f| f.capacity() + 64).sum::<usize>()
+            let bytes = families
+                .iter()
+                .map(|(f, _)| f.capacity() + 64)
+                .sum::<usize>()
                 + chars.len() * 40
                 + paths
                     .iter()
@@ -79,8 +92,14 @@ fn select_chars(scene: &Scene, ascii: bool) -> Result<Vec<PathBuf>> {
     let mut families = BTreeSet::new();
     let mut needed = BTreeSet::new();
     for p in &scene.primitives {
-        if let Primitive::Text { family, text, .. } = p {
-            families.insert(family.as_str());
+        if let Primitive::Text {
+            family,
+            text,
+            weight,
+            ..
+        } = p
+        {
+            families.insert((family.as_str(), *weight));
             needed.extend(text.chars().filter(|c| !c.is_control()));
         }
     }
@@ -93,9 +112,10 @@ fn select_chars(scene: &Scene, ascii: bool) -> Result<Vec<PathBuf>> {
     let fc = fontconfig::Fontconfig::new().ok_or("native fontconfig unavailable")?;
     let mut paths = BTreeSet::new();
     let mut db = fontdb::Database::new();
-    for family in &families {
+    for (family, weight) in &families {
         let mut pattern = fontconfig::Pattern::new(&fc)?;
         pattern.add_string(fontconfig::FC_FAMILY, &CString::new(*family)?)?;
+        pattern.add_integer(c"weight", unsafe { FcWeightFromOpenType((*weight).into()) })?;
         let matched = pattern.font_match()?;
         load(
             &mut db,
@@ -108,7 +128,7 @@ fn select_chars(scene: &Scene, ascii: bool) -> Result<Vec<PathBuf>> {
         let mut pattern = fontconfig::Pattern::new(&fc)?;
         pattern.add_string(
             fontconfig::FC_FAMILY,
-            &CString::new(*families.first().unwrap())?,
+            &CString::new(families.first().unwrap().0)?,
         )?;
         let mut charset = fontconfig::CharSet::new(&fc)?;
         charset.add_char(ch)?;

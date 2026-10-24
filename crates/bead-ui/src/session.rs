@@ -363,6 +363,7 @@ impl Session {
                     error.chars().take(500).collect::<String>()
                 ),
                 family: "IBM Plex Sans".into(),
+                weight: 400,
                 align: None,
                 size: 14.,
                 color: [255, 225, 225, 255],

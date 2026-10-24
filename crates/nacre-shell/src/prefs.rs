@@ -40,6 +40,8 @@ pub struct Prefs {
     pub dashboard_enabled: bool,
     pub control_center_enabled: bool,
     pub top_bar_enabled: bool,
+    /// Optional updates bar item (`desktop.barUpdatesEnabled`, default on).
+    pub bar_updates_enabled: bool,
     pub frame_sheen: bool,
     /// B0047 frame: `frameWidth` (`?? 10`), `frameRounding` (`?? 25`), the four side
     /// toggles (`!== false`), `aiSidebarEnabled`, `lipHoverDelay` (integer 0..800, else
@@ -157,6 +159,7 @@ impl Prefs {
             dashboard_enabled: on("dashboardEnabled"),
             control_center_enabled: on("controlCenterEnabled"),
             top_bar_enabled: on("topBarEnabled"),
+            bar_updates_enabled: on("barUpdatesEnabled"),
             frame_sheen: on("frameSheen"),
             // JS `value ?? fallback`, bounded to the ranges Nacre's settings helper accepts
             // (frameWidth 0..30, frameRounding 0..40, lipHoverDelay 0..800).
@@ -232,6 +235,7 @@ impl Prefs {
         let icons = self.workspace_icons.iter().map(|i| json!({ "icon": i }));
         [
             ("bar.dashboard.enabled".into(), Bool(self.dashboard_enabled)),
+            ("bar.updates.enabled".into(), Bool(self.bar_updates_enabled)),
             // The header: the bar's own height plus the top frame edge (`NacreFrame`).
             (
                 "bar.height".into(),
@@ -762,5 +766,19 @@ mod tests {
         client.stop().await.unwrap();
         server.abort();
         std::fs::remove_dir_all(dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod bar_item_tests {
+    use super::*;
+    #[test]
+    fn updates_item_can_be_removed_by_preferences() {
+        let prefs = Prefs::decode(&json!({"barUpdatesEnabled": false}), &Json::Null);
+        assert_eq!(
+            prefs.bar_stores()["bar.updates.enabled"],
+            bead::core::Value::Bool(false)
+        );
+        assert!(Prefs::default().bar_updates_enabled);
     }
 }

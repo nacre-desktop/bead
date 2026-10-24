@@ -1,0 +1,1 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 5" preserveAspectRatio="none"><defs><linearGradient id="progress"><stop stop-color="@primary@"/><stop offset="1" stop-color="@secondary@"/></linearGradient></defs><rect width="252" height="5" rx="2.5" fill="url(#progress)"/></svg>

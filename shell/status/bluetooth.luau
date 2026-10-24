@@ -10,10 +10,10 @@ local visible=get("bluetooth.power_visible")
 local enabled=get("bluetooth.power_enabled")
 local view=get("bluetooth.view")
 local padding=T.spacing.panel
-local gap=T.spacing.sm
+local gap=T.spacing.compact
 local width=get("view.width")
 local duration=get("view.duration")
-local BODY,CAPTION,TITLE=T.text.body*4/3,T.text.caption*4/3,T.text.title*4/3
+local BODY,CAPTION,TITLE=(T.text.caption+1)*4/3,T.text.caption*4/3,T.text.title*4/3
 local FIELD,ROW=40,68
 if view=="pair" then
     -- Page children with their heights, so the panel height follows the content and tokens.
@@ -80,12 +80,12 @@ local scan_w,switch_w=T.spacing.huge*4,48
 -- The heading takes what the buttons leave (a growing text would push them out of the panel).
 local head_w=inner-(visible and scan_w+switch_w+gap*2 or 0)
 local head={id="bluetooth-row",height=36,align="center",gap=T.spacing.sm,
-    ui.Text{id="heading",text=ui.tr("bead.panel.bluetooth"),height=28,width=head_w,font_size=TITLE,
+    ui.Text{id="heading",text=ui.tr("bead.panel.bluetooth"),height=28,width=head_w,font_size=(T.text.body+1)*4/3,
         color=(visible and not enabled) and "onSurfaceVariant" or "onSurface"}}
 if visible then
     local inner_w=scan_w-T.spacing.sm*2
-    table.insert(head,kit.Button{id="scan",width=scan_w,height=32,padding=0,padding_top=4,radius=T.radii.small,justify="center",align="center",
-        fill="surfaceContainerHigh",aria_label=ui.bind("bluetooth.scan_label"),on_activate=scan_on and ui.action("bluetooth.scan") or nil,
+    table.insert(head,kit.Button{id="scan",width=scan_w,height=34,padding=0,padding_top=5,radius=T.radii.full,justify="center",align="center",
+        fill=ui.alpha("surfaceContainerHigh",scan_on and 1 or .4),aria_label=ui.bind("bluetooth.scan_label"),on_activate=scan_on and ui.action("bluetooth.scan") or nil,
         ui.Row{id="scan-row",width=inner_w,height=24,gap=T.spacing.xs,align="center",justify="center",
             ui.Text{id="scan-icon",text=scanning and "bluetooth_searching" or "search",family="Material Symbols Rounded",
                 font_size=T.icons.medium*4/3,width=T.icons.medium*4/3,height=24,shrink=0,color=scanning and "primary" or (scan_on and "onSurface" or "onSurfaceVariant")},
@@ -105,9 +105,12 @@ local function fit(name)
     if (utf8.len(name) or 0)<=name_chars then return name end
     return string.sub(name,1,(utf8.offset(name,name_chars) or #name+1)-1).."…"
 end
-if count>0 then add(ui.Repeat{id="devices",model=ui.bind("bluetooth.devices"),key="id",render=function(item)
+local device_gap=T.spacing.sm-T.spacing.hairline
+if count>0 then add(ui.Column{id="device-list",width=inner,gap=device_gap,
+ ui.Repeat{id="devices",model=ui.bind("bluetooth.devices"),key="id",render=function(item)
     local ink=item.active and "onPrimaryContainer" or "onSurface"
     local quiet=item.active and "onPrimaryContainer" or "onSurfaceVariant"
+    local action_width=(utf8.len(item.action) or #item.action)*CAPTION*.5+T.spacing.xl
     local act=item.enabled and ui.action(item.kind=="pair" and "bluetooth.pair" or "bluetooth.link",item.id) or nil
     local state={id="device-state",height=20,gap=T.spacing.xs,align="center"}
     if item.battery~="" then
@@ -121,11 +124,11 @@ if count>0 then add(ui.Repeat{id="devices",model=ui.bind("bluetooth.devices"),ke
         ui.Column{id="device-text",height=44,grow=1,
             ui.Text{id="device-name",text=fit(item.label),height=24,font_size=BODY,color=ink},
             ui.Row(state)},
-        kit.Button{id="act",width=button_w,height=32,padding=0,padding_top=4,radius=T.radii.small,
+        kit.Button{id="act",width=action_width,height=34,padding=0,padding_top=5,radius=T.radii.full,
             justify="center",align="center",fill="surfaceContainerHigh",aria_label=item.action..", "..item.label,on_activate=act,
             ui.Text{id="act-label",text=item.action,height=24,grow=1,font_size=CAPTION,text_align="center",
                 color=item.enabled and "onSurface" or "onSurfaceVariant"}}}
-end},count*ROW+(count-1)*gap) end
+end}},count*ROW+(count-1)*device_gap) end
 if get("bluetooth.empty_text")~="" then
     add(ui.Text{id="empty",text=ui.bind("bluetooth.empty_text"),font_size=BODY,height=24,color="onSurfaceVariant"},24)
 end

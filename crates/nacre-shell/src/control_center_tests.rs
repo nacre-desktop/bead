@@ -1125,3 +1125,20 @@ fn n0046_tiles_and_the_profile_picker_match_goldens() -> bead_test::Result<()> {
     let mut h = harness(out, "detail", 1.)?;
     golden("n0046-profiles", &mut h, 1.)
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn audio_picker_rechecks_device_kind_and_uses_the_published_node_id() {
+    let mut lab = lab(&["audio.set_default"]).await;
+    let control = control_for(&lab).await;
+    let devices = control.audio_devices();
+    assert_eq!(devices.len(), 2);
+    control.act("choose:audio.output:in");
+    control.act("choose:audio.input:missing");
+    settle(&control, &Stores::default()).await;
+    assert!(lab.calls.try_recv().is_err());
+    control.act("choose:audio.output:out");
+    assert_eq!(
+        call(&mut lab).await,
+        ("audio.set_default".into(), json!({"node":"out"}))
+    );
+}

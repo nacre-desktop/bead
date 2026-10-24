@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 return {stores={["bar.height"]=50,["bar.notifications.count"]=0,["bar.launcher"]=false,["bar.popouts"]=false,["bar.reconnecting"]=false,["bar.workspace.enabled"]=true,["bar.tray.enabled"]=true,["bar.window.focus.enabled"]=true,["bar.workspace.origins"]={},["bar.dashboard.enabled"]=true,
-    ["bar.workspace.count"]=6,["bar.workspace.icons"]={},["bar.workspace.hints"]=true,["bar.clock.twelve"]=false,["bar.updates.count"]=0,
+    ["bar.workspace.count"]=6,["bar.workspace.icons"]={},["bar.workspace.hints"]=true,["bar.clock.twelve"]=false,["bar.updates.count"]=0,["bar.updates.enabled"]=true,
     ["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",
     ["status.panel.kind"]=""},actions={["launcher.open"]=function(_) end},computed={
     -- desktop.clockFormat: the daemon clock is "HH:MM"; 12-hour shows "h:MM AM/PM".

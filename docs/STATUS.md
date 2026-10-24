@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-24 — B0073 status controls and parity (review)
+
+Status popouts now share QML switch/button styling, network empty-state metrics,
+Bluetooth ordering/density, guarded audio/profile actions and weighted OSD text.
+Nested CPU Wi-Fi RMSE 10.248→6.195%, audio 7.200→5.482%;
+three bar-only pairs add a median 0.027 MiB PSS+DRM+SwapPss. Full remote Arch
+CI passed. Updates is configurable but awaits its live daemon count; dashboard
+first-reveal delay remains. Details and known gaps: [B0073](specs/0073-visual-parity-6.md).
+No live or launcher changes.
+
 ## 2026-10-24 — B0071 visual parity round 5 (review)
 
 Dashboard artwork now grows with rounded corners and a moving rim; four status

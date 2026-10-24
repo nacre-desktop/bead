@@ -506,6 +506,23 @@ impl ControlCenter {
         };
         Verbs { toggle, set, press }
     }
+    pub(crate) fn audio_devices(&self) -> Vec<Json> {
+        let Some(data) = self.data("audio").filter(|data| healthy(data)) else {
+            return Vec::new();
+        };
+        let Some(order) = data["nodes"]["order"].as_array() else {
+            return Vec::new();
+        };
+        order.iter().filter_map(|id| {
+            let id = id.as_str()?;
+            let node = &data["nodes"]["items"][id];
+            let kind = node["kind"].as_str()?;
+            if !matches!(kind, "output" | "input") { return None; }
+            Some(json!({"id": id, "kind": kind, "label": node["name"].as_str().unwrap_or(id),
+                "selected": data[if kind == "output" { "default_output" } else { "default_input" }] == id,
+                "enabled": node["ready"] == true && self.can("audio.set_default")}))
+        }).collect()
+    }
     fn sources(&self) -> Vec<Json> {
         [
             "audio.output",
@@ -695,7 +712,27 @@ impl ControlCenter {
         ]
     }
     fn choose(&self, source: &str, choice: &str) {
-        if source == "power.profile" && PROFILES.contains(&choice) {
+        if matches!(source, "audio.output" | "audio.input") {
+            let kind = if source == "audio.output" {
+                "output"
+            } else {
+                "input"
+            };
+            if let Some(data) = self.data("audio").filter(|data| healthy(data))
+                && let Some(node) = data["nodes"]["items"].get(choice)
+                && node["ready"] == true
+                && node["kind"] == kind
+            {
+                self.begin(source, "audio.set_default", json!({"node": choice}));
+            }
+            return;
+        }
+
+        if source == "power.profile"
+            && self
+                .read(source)
+                .is_some_and(|reading| reading.choices.iter().any(|(id, _, _)| id == choice))
+        {
             self.begin(source, "power.set_profile", json!({"profile": choice}));
         } else if source == "appearance.mode" && MODES.contains(&choice) {
             // B0067: the segmented Light | Dark | Auto control names its mode; tapping the current one is a no-op.

@@ -97,7 +97,7 @@ struct Rules<'a> {
     busy: Option<&'a DeviceOp>,
 }
 
-/// Device rows: connected first, then devices that can be paired, then the rest, by name.
+/// QML service order: connected first, then name and stable id.
 fn rows(state: &BluetoothState, rules: &Rules) -> Vec<serde_json::Value> {
     let mut devices: Vec<(&EntityId, &BluetoothDevice)> = state
         .devices
@@ -105,11 +105,7 @@ fn rows(state: &BluetoothState, rules: &Rules) -> Vec<serde_json::Value> {
         .iter()
         .filter_map(|id| state.devices.items.get(id).map(|device| (id, device)))
         .collect();
-    let rank = |d: &BluetoothDevice| match (d.connected, d.paired) {
-        (true, _) => 0,
-        (false, false) => 1,
-        _ => 2,
-    };
+    let rank = |d: &BluetoothDevice| !d.connected;
     devices.sort_by(|a, b| {
         (rank(a.1), a.1.name.to_lowercase(), &a.0.0).cmp(&(
             rank(b.1),

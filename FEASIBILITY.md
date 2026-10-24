@@ -2733,3 +2733,19 @@ CPU small panels/GL large animated views; earlier ~20MiB Mesa residue unchanged.
 ~200 protocol/proof/audit lines plus report. Raw .research/foundation/f5e-*.
 STOP after F5e. Adapter deferred under allowed unpublished-v1 fallback; Features
 9–10/typing remain paused until owner OK and migration phase. See F5 report.
+
+## B0073 — Status controls and parity (2026-10-24)
+
+Wi-Fi and audio are visibly closer to the QML reference; controls reuse guarded
+published calls. The updates consumer is ready but its private daemon count is
+unavailable. Dashboard reveal still starts later despite faster dispatch acks.
+Full Arch CI and private capture gates passed; no live desktop changes.
+
+| Nested CPU, scale 1.5 | Before | After |
+| --- | ---: | ---: |
+| Wi-Fi whole-image RMSE % | 10.248 | 6.195 |
+| Audio whole-image RMSE % | 7.200 | 5.482 |
+| Median idle PSS+DRM+SwapPss delta MiB, three pairs | reference | +0.027 |
+
+Remote relative memory gate passed; no populated-panel/laptop acceptance claimed.
+All residual differences and source/timing gaps are in B0073 with paired evidence.

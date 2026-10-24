@@ -26,9 +26,14 @@ return function(ui, tokens)
     function kit.StatusIcon(p) return kit.Button(p) end
     function kit.Switch(p)
         local checked=value(p.checked,false)
-        local out=props(p,{width=48,height=28,padding=4,radius=tokens.radii.full,
-            fill=checked and "primary" or "surfaceContainerHigh",aria_label=checked and "On" or "Off"},{checked=true})
-        out[1]=ui.Box{id="thumb",position="absolute",left=checked and 24 or 4,top=4,width=20,height=20,radius=10,fill=checked and "onPrimary" or "onSurface"}
+        local opacity=p.on_activate~=nil and 1 or .4
+        local out=props(p,{width=46,height=32,padding=0,fill="transparent",
+            aria_label=checked and "On" or "Off"},{checked=true})
+        out[1]=ui.Box{id="track",position="absolute",left=4,top=5,width=38,height=22,radius=11,
+            fill=ui.alpha(checked and "primaryContainer" or "surfaceContainerHighest",opacity),
+            border_width=1,border_color=ui.alpha("outline",.4*opacity),
+            ui.Box{id="thumb",position="absolute",left=checked and 19 or 3,top=3,width=16,height=16,radius=8,
+                fill=ui.alpha(checked and "onPrimaryContainer" or "onSurfaceVariant",opacity)}}
         return kit.Button(out)
     end
     function kit.Slider(p)
@@ -47,7 +52,7 @@ return function(ui, tokens)
                 on_activate=ui.action(p.on_change,p.change_arg and p.change_arg(n) or n),
                 ui.Box{id="hit",width="100%",height="100%",fill=ui.alpha("surface",0)}}
         end
-        return ui.Box{id=p.id,width=width,height=28,
+        return ui.Box{id=p.id,width=width,height=28,position=p.position,left=p.left,top=p.top,
             ui.Box{id="track",position="absolute",top=11,width="100%",height=6,radius=3,fill="surfaceContainerHigh"},
             ui.Box{id="level",position="absolute",top=11,width=(fraction*100).."%",height=6,radius=3,fill="primary"},
             ui.Box{id="thumb",position="absolute",left=fraction*(width-20),top=4,width=20,height=20,radius=10,fill="primary"},
@@ -242,8 +247,8 @@ return function(ui, tokens)
     function kit.ActionButton(p)
         local height=p.height or 36
         local armed=p.on_activate~=nil
-        return kit.Button{id=p.id,height=height,grow=1,padding=0,padding_top=(height-24)/2,radius=tokens.radii.small,justify="center",align="center",
-            fill=p.primary and (armed and "primary" or "surfaceContainerHigh") or "surfaceContainer",aria_label=p.label,on_activate=p.on_activate,
+        return kit.Button{id=p.id,height=height,grow=1,padding=0,padding_top=(height-24)/2,radius=tokens.radii.full,justify="center",align="center",
+            fill=ui.alpha(p.primary and "primary" or "surfaceContainerHigh",armed and 1 or .4),aria_label=p.label,on_activate=p.on_activate,
             ui.Text{id=p.id.."-label",text=p.label,height=24,grow=1,font_size=tokens.text.body*4/3,text_align="center",
                 color=p.primary and armed and "onPrimary" or (armed and "onSurface" or "onSurfaceVariant")}}
     end

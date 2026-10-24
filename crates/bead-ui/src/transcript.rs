@@ -139,6 +139,7 @@ impl Meter {
             (None, Some(picker)) => {
                 for family in families {
                     scene.primitives.push(Primitive::Text {
+                        weight: 400,
                         align: None,
                         rect: Rect::new(0., 0., 100., 20.),
                         text: covered.iter().collect(),

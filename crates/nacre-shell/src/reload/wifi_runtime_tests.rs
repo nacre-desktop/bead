@@ -568,7 +568,7 @@ fn switch_rect(scene: &bead::render::Scene) -> bead::render::Rect {
         .iter()
         .find_map(|primitive| match primitive {
             bead::render::Primitive::Rounded { rect, .. }
-                if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1 =>
+                if (rect.w - 38.).abs() < 0.1 && (rect.h - 22.).abs() < 0.1 =>
             {
                 Some(*rect)
             }
@@ -1196,7 +1196,7 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
                 let scene = read_only.stage(UiEvent::Reload).unwrap().unwrap();
                 let visible = scene.primitives.iter().any(|primitive| {
                     matches!(primitive, bead::render::Primitive::Rounded { rect, .. }
-                        if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)
+                        if (rect.w - 38.).abs() < 0.1 && (rect.h - 22.).abs() < 0.1)
                 });
                 read_only.commit();
                 if visible || !std::ptr::eq(other, &bluetooth) {

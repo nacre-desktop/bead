@@ -5,12 +5,13 @@ return {stores={
     ["status.heading"]=tr("bead.panel.status-heading"),["status.icon"]="info",["status.primary"]=tr("bead.panel.status-none"),
     ["status.kind"]="network",
     -- Typed network fields. `*.secret` stores are never traced or saved; the host clears them after use.
-    ["network.secret"]="",["network.hidden_ssid"]="",["network.hidden_security"]="wpa_psk",["network.reveal"]=false,
+    ["network.health_message"]="",["network.secret"]="",["network.hidden_ssid"]="",["network.hidden_security"]="wpa_psk",["network.reveal"]=false,
     -- Typed Bluetooth PIN or passkey (same convention); the host clears it after use.
     ["bluetooth.secret"]="",["bluetooth.reveal"]=false,
     ["status.secondary"]=tr("bead.panel.status-data-unavailable"),["status.detail"]="",
-    ["battery.level"]=0,
+    ["battery.level"]=0,["cc.src"]={},["cc.audio_devices"]={},["cc.message"]="",
 },actions={
+    ["cc.do"]=function(_) end,
     close=function(s) s["panel.open"]=false;s["network.secret"]="";s["bluetooth.secret"]="" end,
     -- The controlled Runtime authorizes and handles this host action.
     ["network.toggle_wifi"]=function(_) end,

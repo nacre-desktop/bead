@@ -7,6 +7,7 @@ local ws_on=ui.resolve_for_check(ui.bind("bar.workspace.enabled"))
 local tray_on=ui.resolve_for_check(ui.bind("bar.tray.enabled"))
 local dash_on=ui.resolve_for_check(ui.bind("bar.dashboard.enabled"))
 local focus_on=ui.resolve_for_check(ui.bind("bar.window.focus.enabled"))
+local updates_on=ui.resolve_for_check(ui.bind("bar.updates.enabled"))
 local updates_n=ui.resolve_for_check(ui.bind("bar.updates.count"))
 local header=ui.resolve_for_check(ui.bind("bar.height"))
 local function glyph(id,text,color)
@@ -115,11 +116,11 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
             end},
         },
         ui.Row{id="system-pill",height=34,gap=1,shrink=0,padding_left=6,padding_right=6,align="center",fill="surfaceContainer",radius=17,
-            -- QML shows the package updates only when there are some; the count is a host store (none published: hidden).
-            updates_n>0 and ui.Row{id="updates",height=34,gap=4,shrink=0,padding_left=3,padding_right=3,align="center",
+            -- Optional item: unavailable and zero counts occupy no space.
+            updates_on and updates_n>0 and ui.Row{id="updates",height=34,gap=4,shrink=0,padding_left=3,padding_right=3,align="center",
                 glyph("package","package_2","primary"),
                 ui.Text{id="count",text=ui.bind("bar.updates.text"),width=7.5*#tostring(updates_n)+3,height=24,font_size=16,color="primary"},
-            } or ui.Box{id="updates",width=0,height=0,shrink=0},
+            } or ui.Box{id="updates",width=0,height=0,shrink=0,visible=false},
             ui.Row{id="status",height=34,gap=1,shrink=0,align="center",
             kit.StatusIcon{id="audio",width=30,height=28,padding=0,fill="transparent",hover_fill="surfaceContainerHigh",aria_label=popouts and ui.tr("bead.bar.open-sound") or ui.tr("bead.bar.audio-hint"),on_activate=popouts and ui.action("status.pill.open","audio") or ui.action("services.audio"),
                 glyph("glyph",ui.bind("bead.desktop.audio")),

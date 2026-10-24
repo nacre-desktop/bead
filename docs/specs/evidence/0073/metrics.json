@@ -1,0 +1,683 @@
+{
+  "control": "91a6227",
+  "qml": "f032c7b4",
+  "renderer": "CPU, no-default-features release",
+  "geometry": {
+    "size": [
+      2880,
+      1800
+    ],
+    "scale": 1.5
+  },
+  "states": {
+    "idle": {
+      "before": {
+        "rmse": 3.867,
+        "changed_pct": 7.628,
+        "bar_rmse": 6.641,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 3.87,
+        "changed_pct": 7.628,
+        "bar_rmse": 6.674,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          1700,
+          0,
+          2880,
+          100
+        ],
+        "before_rmse": 8.674,
+        "after_rmse": 8.729
+      }
+    },
+    "popout-network": {
+      "before": {
+        "rmse": 10.248,
+        "changed_pct": 9.294,
+        "bar_rmse": 6.677,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 6.195,
+        "changed_pct": 8.37,
+        "bar_rmse": 6.709,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          1700,
+          0,
+          2880,
+          750
+        ],
+        "before_rmse": 23.244,
+        "after_rmse": 12.244
+      }
+    },
+    "popout-bluetooth": {
+      "before": {
+        "rmse": 5.531,
+        "changed_pct": 8.229,
+        "bar_rmse": 6.664,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 5.236,
+        "changed_pct": 8.178,
+        "bar_rmse": 6.709,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          1700,
+          0,
+          2880,
+          750
+        ],
+        "before_rmse": 10.215,
+        "after_rmse": 9.257
+      }
+    },
+    "popout-battery": {
+      "before": {
+        "rmse": 4.846,
+        "changed_pct": 8.05,
+        "bar_rmse": 6.671,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 4.854,
+        "changed_pct": 8.05,
+        "bar_rmse": 6.715,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          1700,
+          0,
+          2880,
+          750
+        ],
+        "before_rmse": 7.916,
+        "after_rmse": 7.947
+      }
+    },
+    "popout-audio": {
+      "before": {
+        "rmse": 7.2,
+        "changed_pct": 8.582,
+        "bar_rmse": 6.665,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 5.482,
+        "changed_pct": 8.194,
+        "bar_rmse": 6.709,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          1700,
+          0,
+          2880,
+          750
+        ],
+        "before_rmse": 15.115,
+        "after_rmse": 10.043
+      }
+    },
+    "osd-brightness": {
+      "before": {
+        "rmse": 4.226,
+        "changed_pct": 7.478,
+        "bar_rmse": 6.629,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 4.08,
+        "changed_pct": 7.424,
+        "bar_rmse": 6.674,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          1050,
+          1600,
+          1830,
+          1770
+        ],
+        "before_rmse": 13.417,
+        "after_rmse": 11.47
+      }
+    },
+    "osd-keyboard": {
+      "before": {
+        "rmse": 4.212,
+        "changed_pct": 7.395,
+        "bar_rmse": 6.629,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 4.136,
+        "changed_pct": 7.36,
+        "bar_rmse": 6.674,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          1050,
+          1600,
+          1830,
+          1770
+        ],
+        "before_rmse": 13.253,
+        "after_rmse": 12.225
+      }
+    },
+    "dashboard-warm": {
+      "before": {
+        "rmse": 7.759,
+        "changed_pct": 8.561,
+        "bar_rmse": 6.629,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 7.756,
+        "changed_pct": 8.614,
+        "bar_rmse": 6.681,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "progress": {
+        "qml": {
+          "t10": 150,
+          "t50": 219,
+          "t90": 270
+        },
+        "before": {
+          "t10": 251,
+          "t50": 309,
+          "t90": 355
+        },
+        "after": {
+          "t10": 251,
+          "t50": 310,
+          "t90": 355
+        }
+      }
+    },
+    "control-hover": {
+      "before": {
+        "rmse": 6.18,
+        "changed_pct": 8.022,
+        "bar_rmse": 6.649,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 6.18,
+        "changed_pct": 8.022,
+        "bar_rmse": 6.66,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          2040,
+          40,
+          2880,
+          900
+        ],
+        "before_rmse": 10.982,
+        "after_rmse": 10.983
+      }
+    },
+    "control-pressed": {
+      "before": {
+        "rmse": 6.323,
+        "changed_pct": 8.376,
+        "bar_rmse": 6.665,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "after": {
+        "rmse": 6.324,
+        "changed_pct": 8.375,
+        "bar_rmse": 6.676,
+        "bbox": [
+          2,
+          17,
+          2878,
+          1785
+        ]
+      },
+      "errors": {
+        "qml": [],
+        "bead": []
+      },
+      "crop": {
+        "box": [
+          2040,
+          40,
+          2880,
+          900
+        ],
+        "before_rmse": 11.551,
+        "after_rmse": 11.553
+      }
+    }
+  },
+  "memory": {
+    "unit": "KiB",
+    "renderer": "CPU",
+    "runs": [
+      {
+        "before": {
+          "idle": {
+            "VmRSS": 48072,
+            "RssAnon": 17384,
+            "Pss": 33553,
+            "Pss_Anon": 17384,
+            "Pss_File": 5341,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "closed": {
+            "VmRSS": 48076,
+            "RssAnon": 17388,
+            "Pss": 33557,
+            "Pss_Anon": 17388,
+            "Pss_File": 5341,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        },
+        "after": {
+          "idle": {
+            "VmRSS": 48104,
+            "RssAnon": 17436,
+            "Pss": 33581,
+            "Pss_Anon": 17436,
+            "Pss_File": 5317,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "closed": {
+            "VmRSS": 48108,
+            "RssAnon": 17440,
+            "Pss": 33585,
+            "Pss_Anon": 17440,
+            "Pss_File": 5317,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        }
+      },
+      {
+        "before": {
+          "idle": {
+            "VmRSS": 48164,
+            "RssAnon": 17416,
+            "Pss": 33646,
+            "Pss_Anon": 17416,
+            "Pss_File": 5402,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "closed": {
+            "VmRSS": 48164,
+            "RssAnon": 17416,
+            "Pss": 33646,
+            "Pss_Anon": 17416,
+            "Pss_File": 5402,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        },
+        "after": {
+          "idle": {
+            "VmRSS": 48204,
+            "RssAnon": 17400,
+            "Pss": 33695,
+            "Pss_Anon": 17400,
+            "Pss_File": 5467,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "closed": {
+            "VmRSS": 48208,
+            "RssAnon": 17404,
+            "Pss": 33699,
+            "Pss_Anon": 17404,
+            "Pss_File": 5467,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        }
+      },
+      {
+        "before": {
+          "idle": {
+            "VmRSS": 47984,
+            "RssAnon": 17188,
+            "Pss": 33463,
+            "Pss_Anon": 17188,
+            "Pss_File": 5447,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "closed": {
+            "VmRSS": 56756,
+            "RssAnon": 16836,
+            "Pss": 41913,
+            "Pss_Anon": 16836,
+            "Pss_File": 14249,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        },
+        "after": {
+          "idle": {
+            "VmRSS": 47820,
+            "RssAnon": 17380,
+            "Pss": 33315,
+            "Pss_Anon": 17380,
+            "Pss_File": 5107,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "closed": {
+            "VmRSS": 47824,
+            "RssAnon": 17384,
+            "Pss": 33319,
+            "Pss_Anon": 17384,
+            "Pss_File": 5107,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        }
+      }
+    ],
+    "median_delta_mib": {
+      "idle": {
+        "Pss": 0.027344,
+        "Pss_Anon": 0.050781,
+        "Pss_File": -0.023438,
+        "Pss_Shmem": 0.0,
+        "DRM": 0.0,
+        "SwapPss": 0.0
+      },
+      "closed": {
+        "Pss": 0.027344,
+        "Pss_Anon": 0.050781,
+        "Pss_File": -0.023438,
+        "Pss_Shmem": 0.0,
+        "DRM": 0.0,
+        "SwapPss": 0.0
+      }
+    }
+  },
+  "dispatch": {
+    "qml": [
+      {
+        "target": "nacre",
+        "method": "close",
+        "args": [],
+        "start_ms": 0.002,
+        "ack_ms": 8.845
+      },
+      {
+        "target": "drawers",
+        "method": "toggle",
+        "args": [
+          "dashboard"
+        ],
+        "start_ms": 808.94,
+        "ack_ms": 831.051
+      },
+      {
+        "target": "nacre",
+        "method": "tab",
+        "args": [
+          "0"
+        ],
+        "start_ms": 831.057,
+        "ack_ms": 849.618
+      },
+      {
+        "target": "nacre",
+        "method": "close",
+        "args": [],
+        "start_ms": 3349.872,
+        "ack_ms": 3359.981
+      },
+      {
+        "target": "drawers",
+        "method": "toggle",
+        "args": [
+          "dashboard"
+        ],
+        "start_ms": 4861.122,
+        "ack_ms": 4878.164
+      },
+      {
+        "target": "nacre",
+        "method": "tab",
+        "args": [
+          "0"
+        ],
+        "start_ms": 4878.174,
+        "ack_ms": 4893.964
+      },
+      {
+        "target": "nacre",
+        "method": "close",
+        "args": [],
+        "start_ms": 8756.094,
+        "ack_ms": 8766.071
+      }
+    ],
+    "bead": [
+      {
+        "target": "nacre",
+        "method": "close",
+        "args": [],
+        "start_ms": 0.002,
+        "ack_ms": 10.06
+      },
+      {
+        "target": "drawers",
+        "method": "toggle",
+        "args": [
+          "dashboard"
+        ],
+        "start_ms": 810.148,
+        "ack_ms": 819.754
+      },
+      {
+        "target": "nacre",
+        "method": "tab",
+        "args": [
+          "0"
+        ],
+        "start_ms": 819.757,
+        "ack_ms": 829.02
+      },
+      {
+        "target": "nacre",
+        "method": "close",
+        "args": [],
+        "start_ms": 3329.334,
+        "ack_ms": 3352.139
+      },
+      {
+        "target": "drawers",
+        "method": "toggle",
+        "args": [
+          "dashboard"
+        ],
+        "start_ms": 4853.274,
+        "ack_ms": 4862.681
+      },
+      {
+        "target": "nacre",
+        "method": "tab",
+        "args": [
+          "0"
+        ],
+        "start_ms": 4862.684,
+        "ack_ms": 4870.736
+      },
+      {
+        "target": "nacre",
+        "method": "close",
+        "args": [],
+        "start_ms": 8779.363,
+        "ack_ms": 8802.305
+      }
+    ]
+  }
+}

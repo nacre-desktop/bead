@@ -162,12 +162,14 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                 }
             }
             Primitive::Text {
+                weight,
                 text,
                 family,
                 size,
                 color,
                 ..
             } => {
+                weight.hash(&mut h);
                 text.hash(&mut h);
                 family.hash(&mut h);
                 size.to_bits().hash(&mut h);

@@ -417,7 +417,12 @@ os.execv(real, [real, *args])
         Path(path).chmod(0o700)
 
     def dispatch(self, target, method, *args):
+        begin = time.monotonic()
         reply = self.call('ui.dispatch', {'target': target, 'method': method, 'args': list(args)})
+        if hasattr(self, 'dispatch_trace'):
+            self.dispatch_trace.append({'target': target, 'method': method, 'args': list(args),
+                                        'start_ms': round((begin - self.state_start) * 1000, 3),
+                                        'ack_ms': round((time.monotonic() - self.state_start) * 1000, 3)})
         if isinstance(reply, dict) and reply.get('err'):
             raise RuntimeError(str(reply['err'].get('message') or reply['err'])[:160])
         return reply
@@ -577,7 +582,17 @@ os.execv(real, [real, *args])
         """VmRSS and RssAnon (KiB) of the shell process: the relative memory gate compares two builds with this, same host and flags."""
         try:
             fields = dict(line.split(':', 1) for line in Path(f'/proc/{self.shell.pid}/status').read_text().splitlines() if ':' in line)
-            return {key: int(fields[key].split()[0]) for key in ('VmRSS', 'RssAnon') if key in fields}
+            out = {key: int(fields[key].split()[0]) for key in ('VmRSS', 'RssAnon') if key in fields}
+            rollup = Path(f'/proc/{self.shell.pid}/smaps_rollup').read_text().splitlines()
+            for line in rollup:
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    if key in ('Pss', 'Pss_Anon', 'Pss_File', 'Pss_Shmem', 'SwapPss'):
+                        out[key] = int(value.split()[0])
+            from measure import drm_memory
+            drm = drm_memory(self.shell.pid)
+            out['DRM'] = None if drm is None else round(sum(drm.values()) * 1024, 3)
+            return out
         except (OSError, ValueError):
             return {}
 
@@ -635,6 +650,8 @@ os.execv(real, [real, *args])
             opens, closes, seconds = STATES[name]
             self.errors = []
             info = {}
+            self.dispatch_trace = []
+            self.state_start = time.monotonic()
             try:
                 self.steps([('ui', 'nacre', 'close')])
                 time.sleep(0.8)
@@ -657,6 +674,7 @@ os.execv(real, [real, *args])
                     self.steps(closes)
                 time.sleep(0.6)
                 info['rss_closed_kib'] = self.rss()
+                info['dispatch_trace'] = self.dispatch_trace
             except Exception as error:
                 self.errors.append(str(error)[:300])
             info['errors'] = self.errors
@@ -686,6 +704,8 @@ def run_arm(args):
         arm.start_shell()
         arm.drive(args.states)
         shell_log = (arm.logs / 'shell.log').read_text(errors='replace')
+        if args.run_arm == 'bead' and 'UI_ERROR' in shell_log:
+            raise RuntimeError('Bead reported UI_ERROR; see shell.log')
         (arm.out / 'shell.log.txt').write_text(shell_log[:6000] + '\n...\n' + shell_log[-14000:])
         (arm.out / 'daemon.log.txt').write_text((arm.logs / 'daemon.log').read_text(errors='replace')[-8000:])
         return 0

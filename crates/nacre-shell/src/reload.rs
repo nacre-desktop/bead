@@ -70,6 +70,8 @@ pub struct Runtime {
     tray_topic_subscription: Option<bead::core::source::Subscription>,
     daemon_tray: std::sync::Arc<std::sync::Mutex<Vec<bead::services::TrayItem>>>,
     /// N0040: the niri `compositor` topic, read only for workspace origins (visitor groups).
+    updates_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    updates_subscription: Option<bead::core::source::Subscription>,
     origins_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     origins_subscription: Option<bead::core::source::Subscription>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
@@ -308,6 +310,8 @@ impl Runtime {
             tray_topic: None,
             tray_topic_subscription: None,
             daemon_tray: Default::default(),
+            updates_topic: None,
+            updates_subscription: None,
             origins_topic: None,
             origins_subscription: None,
             backend: None,
@@ -392,6 +396,25 @@ impl Runtime {
                 )]))?;
         }
         Ok(())
+    }
+    /// Optional bar item; one daemon lease, no local polling or provider.
+    pub fn with_bar_updates(
+        mut self,
+        client: &crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        if self.session.stores.get("bar.updates.enabled") == Some(&bead::core::Value::Bool(false)) {
+            return Ok(self);
+        }
+        match client.lease_topic("dashboard.updates") {
+            Ok(topic) => {
+                self.session.stores = self.session.stores.reconcile(
+                    &crate::bar_updates::values(&bead::core::source::Source::snapshot(&topic)),
+                )?;
+                self.updates_topic = Some(std::sync::Arc::new(topic));
+            }
+            Err(_) => eprintln!("SOURCE_ERROR code=bar_updates_lease"),
+        }
+        Ok(self)
     }
     /// N0040 visitor groups: on niri the daemon `compositor` topic carries each workspace's home
     /// output and number. Leased only for the bar's lifetime; other backends need nothing.
@@ -826,6 +849,36 @@ impl Runtime {
         if let Some(chrome) = &mut self.chrome {
             chrome.set_engaged(true);
         }
+        self.control = Some(control);
+        Ok(self)
+    }
+    /// Reuse the control centre's guarded calls with a status view and only its topic leases.
+    pub fn with_status_controls(
+        mut self,
+        client: Option<crate::nacre_source::Client>,
+        topics: Vec<(&'static str, std::sync::Arc<dyn bead::core::source::Source>)>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let status = self.status.clone().ok_or("status projector required")?;
+        let control = std::rc::Rc::new(crate::control_center::ControlCenter::new(
+            client,
+            topics,
+            None,
+            Vec::new(),
+        ));
+        let projector = control.clone();
+        self.session.set_projector(Box::new(move |stores| {
+            let mut values = status.project();
+            values.extend(projector.project(stores).into_iter().filter(|(key, _)| {
+                matches!(key.as_str(), "cc.src" | "cc.audio_devices" | "cc.message")
+            }));
+            values.insert(
+                "cc.audio_devices".into(),
+                bead::core::Value::list(projector.audio_devices()),
+            );
+            Ok(values)
+        }));
+        self.actions.register("cc.do", "cc.control")?;
+        self.actions.grant("cc.control");
         self.control = Some(control);
         Ok(self)
     }
@@ -1637,6 +1690,15 @@ impl SceneSource for Runtime {
             })) {
                 Ok(subscription) => self.tray_topic_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=tray_topic_subscription"),
+            }
+        }
+        if let Some(topic) = &self.updates_topic {
+            let wakeup = wakeup.clone();
+            match topic.subscribe(std::sync::Arc::new(move |snapshot| {
+                wakeup(UiEvent::Model(crate::bar_updates::values(&snapshot)));
+            })) {
+                Ok(subscription) => self.updates_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=bar_updates_subscription"),
             }
         }
         if let Some(topic) = &self.origins_topic {

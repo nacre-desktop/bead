@@ -28,6 +28,7 @@ pub fn safe_bar(palette: &Palette) -> Scene {
                 family: "sans-serif".into(),
                 size: 16.,
                 color: palette.get("onSurface").unwrap_or([240, 240, 240, 255]),
+                weight: 400,
                 align: None,
             },
         ],

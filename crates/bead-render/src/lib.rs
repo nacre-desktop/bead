@@ -19,6 +19,9 @@ pub mod gl;
 pub mod gpu;
 pub mod retained;
 pub mod tree;
+fn normal_weight() -> u16 {
+    400
+}
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -109,6 +112,8 @@ pub enum Primitive {
         border: Option<([u8; 4], f32)>,
     },
     Text {
+        #[serde(default = "normal_weight")]
+        weight: u16,
         #[serde(default)]
         align: Option<TextAlign>,
         rect: Rect,
@@ -706,9 +711,10 @@ fn key(p: &Primitive, scale: f32) -> String {
             family,
             size,
             color,
+            weight,
             align,
         } => format!(
-            "t:{scale}:{}:{}:{family}:{size}:{color:?}:{align:?}:{text}",
+            "t:{scale}:{}:{}:{family}:{weight}:{size}:{color:?}:{align:?}:{text}",
             rect.w, rect.h
         ),
         Primitive::Image { rect, path, blur } => {
@@ -782,6 +788,7 @@ impl Renderer for CpuRenderer {
                     family,
                     size,
                     color,
+                    weight,
                     align,
                 } => {
                     let (w, h) = dimensions(*rect, scale);
@@ -794,7 +801,9 @@ impl Renderer for CpuRenderer {
                     buf.set_size(Some(w as f32), Some(h as f32));
                     buf.set_text(
                         text,
-                        &Attrs::new().family(Family::Name(family)),
+                        &Attrs::new()
+                            .family(Family::Name(family))
+                            .weight(cosmic_text::Weight(*weight)),
                         Shaping::Advanced,
                         align.map(|a| match a {
                             TextAlign::Left => cosmic_text::Align::Left,
@@ -836,7 +845,9 @@ impl Renderer for CpuRenderer {
                                     let px = x + dx as i32;
                                     let py = y + dy as i32;
                                     if px >= 0 && py >= 0 && px < w as i32 && py < h as i32 {
-                                        let a = c.a() as u16;
+                                        // cosmic-text supplies glyph coverage but ignores the base colour alpha.
+                                        let a =
+                                            (u16::from(c.a()) * u16::from(color[3]) + 127) / 255;
                                         let i = (py as usize * w as usize + px as usize) * 4;
                                         // Convert coverage/color to premultiplied RGBA and blend the cached glyph.
                                         let dst = &mut pix.data_mut()[i..i + 4];
@@ -1512,6 +1523,7 @@ mod tests {
                 family: "IBM Plex Sans".into(),
                 size: 14.,
                 color: [9, 9, 9, 255],
+                weight: 400,
                 align: None,
             },
         ];
@@ -1577,9 +1589,33 @@ mod tests {
                 family: "IBM Plex Sans".into(),
                 size: 17.,
                 color: [13, 27, 41, 255],
+                weight: 400,
                 align: None,
             }],
         }
+    }
+    #[test]
+    fn text_opacity_multiplies_glyph_coverage() {
+        let mut scene = font_pool_scene();
+        let Primitive::Text { color, .. } = &mut scene.primitives[0] else {
+            panic!("text")
+        };
+        color[3] = 102;
+        let mut renderer = CpuRenderer::default();
+        renderer.prepare(&scene, 1.).unwrap();
+        let pixmap = renderer
+            .textures
+            .get(&key(&scene.primitives[0], 1.))
+            .unwrap();
+        let maximum = pixmap
+            .data()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|pixel| pixel[3])
+            .max()
+            .unwrap();
+        assert!((100..=102).contains(&maximum), "alpha {maximum}");
     }
     #[test]
     fn caret_uses_existing_font_pool_with_exact_advances() {
@@ -1787,6 +1823,7 @@ mod tests {
                             rect: Rect::new(3., 3., 34., 20.),
                             text: "A 😀".into(),
                             family: "sans-serif".into(),
+                            weight: 400,
                             align: None,
                             size: 10.,
                             color: [20, 120, 210, 255],
@@ -1862,5 +1899,22 @@ mod tests {
             .max()
             .unwrap();
         assert!(max <= 2, "shadow channel difference {max}/255");
+    }
+}
+
+#[cfg(test)]
+mod weight_tests {
+    use super::*;
+    #[test]
+    fn weight_defaults_and_invalidates_text_rasters() {
+        let json = r#"{"type":"text","rect":{"x":0,"y":0,"w":120,"h":24},"text":"Title","family":"sans-serif","size":16,"color":[0,0,0,255]}"#;
+        let normal: Primitive = serde_json::from_str(json).unwrap();
+        let mut medium = normal.clone();
+        let Primitive::Text { weight, .. } = &mut medium else {
+            panic!("text")
+        };
+        assert_eq!(*weight, 400);
+        *weight = 500;
+        assert_ne!(key(&normal, 1.), key(&medium, 1.));
     }
 }

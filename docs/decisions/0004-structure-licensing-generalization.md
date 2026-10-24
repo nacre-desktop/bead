@@ -132,6 +132,8 @@ After Bead's core switch on Nacre, plan support for:
   the renderer retains one current SVG and restores the open-state artwork at completion. Frame contour
   geometry, palette and attachment policy remain in Nacre's `placement::Chrome`, outside the framework.
 
+- B0073: text `font_weight` (1–1000, default 400) flows to the neutral renderer and its cache key; the shell chooses the weights.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

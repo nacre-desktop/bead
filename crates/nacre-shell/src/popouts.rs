@@ -144,7 +144,10 @@ pub(crate) fn core_sound_with_root(
                 .with_panel_geometry(382., 286., 0.23)
                 .map_err(|error| error.to_string())?
                 .with_frame(crate::placement::Attachment::Popout, &colors)
-                .and_then(|runtime| runtime.with_core_audio_status(source))
+                .and_then(|runtime| runtime.with_core_audio_status(source.clone()))
+                .and_then(|runtime| {
+                    runtime.with_status_controls(client.clone(), vec![("audio", source)])
+                })
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),
@@ -384,7 +387,20 @@ fn status_at_root_mode(
                                 .clone(),
                         ),
                     Some("bluetooth") => runtime.with_core_bluetooth_status(source),
-                    Some("battery") => runtime.with_core_battery_status(source),
+                    Some("battery") => {
+                        let profiles: Arc<dyn bead::core::source::Source> = Arc::new(
+                            client
+                                .as_ref()
+                                .ok_or("daemon client unavailable")?
+                                .lease_topic("power.profiles")?,
+                        );
+                        runtime
+                            .with_core_battery_status(source)?
+                            .with_status_controls(
+                                client.clone(),
+                                vec![("power.profiles", profiles)],
+                            )
+                    }
                     Some("audio") => runtime.with_core_audio_status(source),
                     _ => runtime.with_status(kind, source),
                 })

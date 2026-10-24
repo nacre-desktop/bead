@@ -230,7 +230,7 @@ fn rendered_power_switch(runtime: &mut Runtime) -> bool {
     let scene = runtime.stage(UiEvent::Reload).unwrap().unwrap();
     let visible = scene.primitives.iter().any(|primitive| {
         matches!(primitive, bead::render::Primitive::Rounded { rect, .. }
-            if (rect.w - 48.).abs() < 0.1 && (rect.h - 28.).abs() < 0.1)
+            if (rect.w - 38.).abs() < 0.1 && (rect.h - 22.).abs() < 0.1)
     });
     runtime.commit();
     visible

@@ -113,6 +113,7 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
                 .hash(hash);
         }
         Primitive::Text {
+            weight,
             align,
             rect: r,
             text,
@@ -121,7 +122,7 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             color,
         } => {
             rect(r, hash);
-            (align, text, family, size.to_bits(), color).hash(hash);
+            (weight, align, text, family, size.to_bits(), color).hash(hash);
         }
         Primitive::Image {
             blur,
@@ -1358,6 +1359,7 @@ mod tests {
                                 family: "unused".into(),
                                 size: 12.,
                                 color: [40, 180, 90, 128],
+                                weight: 400,
                                 align: Some(crate::TextAlign::Left),
                             },
                             clip: Some(Rect::new(4., 3., 20., 14.)),
