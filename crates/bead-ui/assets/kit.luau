@@ -114,7 +114,7 @@ return function(ui, tokens)
         local color,armed=ink({available=p.available}),p.available~=false
         local pad=tokens.spacing.lg
         local detail_width=p.on_detail and tokens.spacing.huge or 0
-        local inner=p.width-pad*2-40-tokens.spacing.sm-detail_width
+        local inner=p.width-pad*2-40-tokens.spacing.sm-detail_width-(p.on_detail and tokens.spacing.sm or 0)
         local control
         if armed and p.on_change then
             control=kit.Slider{id="level",width=inner,value=p.value,min=0,max=100,step=p.step or 5,label=p.label,
