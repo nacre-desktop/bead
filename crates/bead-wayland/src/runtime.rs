@@ -1531,6 +1531,10 @@ impl App {
                     && ((companion
                         && self.pearl.is_none()
                         && self
+                            .panel_runtime
+                            .as_ref()
+                            .is_none_or(|source| source.outside_dismiss())
+                        && self
                             .options
                             .panel_spec
                             .as_ref()
@@ -1540,7 +1544,11 @@ impl App {
                     KeyboardInteractivity::Exclusive
                 } else if (self.options.interactive && self.options.keyboard_focus && !companion)
                     || (companion
-                        && self.pearl.is_some()
+                        && (self.pearl.is_some()
+                            || self
+                                .panel_runtime
+                                .as_ref()
+                                .is_some_and(|source| !source.outside_dismiss()))
                         && self
                             .options
                             .panel_spec

@@ -616,8 +616,14 @@ impl App {
                 if s.keyboard_visible != Some(focus_visible) {
                     let interactivity = if !focus_visible {
                         KeyboardInteractivity::None
-                    } else if s.companion && self.pearl.is_some() {
-                        // A pearl takes focus when clicked, like any window.
+                    } else if s.companion
+                        && (self.pearl.is_some()
+                            || self
+                                .panel_runtime
+                                .as_ref()
+                                .is_some_and(|source| !source.outside_dismiss()))
+                    {
+                        // A pearl or pinned panel takes focus when clicked.
                         KeyboardInteractivity::OnDemand
                     } else if self.options.test_keyboard || s.companion {
                         KeyboardInteractivity::Exclusive
