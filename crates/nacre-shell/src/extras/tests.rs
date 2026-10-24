@@ -117,12 +117,19 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                         } else {
                             json!(["action", "window", "app"])
                         };
-                        json!({"query":p["query"],"mode":p["mode"],"route":p["route"],"catalog_rev":7,"order":order,"items":{
+                        let all = json!({
                             "action":{"name":"Open Settings","kind":"action","activation":"opaque-ticket","disabled":false},
                             "action-b":{"name":"Calculator","kind":"action","activation":"ticket-b","disabled":false},
                             "window":{"name":"Term","kind":"window","description":"Window · workspace 1","icon":"window","activation":"ticket-w","disabled":false},
                             "app":{"name":"Zed","kind":"app","description":"Application","icon":"apps","activation":"ticket-a","disabled":false},
-                            "brain":{"name":"Search brain for x","kind":"action","description":"Open the brain drawer","icon":"neurology","activation":"ticket-br","disabled":false}}})
+                            "brain":{"name":"Search brain for x","kind":"action","description":"Open the brain drawer","icon":"neurology","activation":"ticket-br","disabled":false}});
+                        let items: serde_json::Map<String, Json> = order
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|id| (id.as_str().unwrap().to_owned(), all[id.as_str().unwrap()].clone()))
+                            .collect();
+                        json!({"query":p["query"],"mode":p["mode"],"route":p["route"],"catalog_rev":7,"order":order,"items":items})
                     } else if m == "menu.activate" {
                         json!({"keep_open":true,"view":{"route":"actions.windows","query":"edited"}})
                     } else {

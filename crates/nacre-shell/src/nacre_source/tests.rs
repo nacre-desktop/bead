@@ -44,6 +44,7 @@ fn text(name: &str) -> &'static str {
         "menu-activation" => include_str!("../../tests/protocol-v1/menu-activation.jsonl"),
         "menu-conversion" => include_str!("../../tests/protocol-v1/menu-conversion.jsonl"),
         "menu-ui-actions" => include_str!("../../tests/protocol-v1/menu-ui-actions.jsonl"),
+        "menu-palette" => include_str!("../../tests/protocol-v1/menu-palette.jsonl"),
         "wallpaper-active" => include_str!("../../tests/protocol-v1/wallpaper-active.jsonl"),
         _ => panic!("unknown fixture"),
     }
