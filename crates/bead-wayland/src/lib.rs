@@ -347,6 +347,8 @@ impl std::fmt::Display for GpuUnavailable {
 impl Error for GpuUnavailable {}
 #[derive(Clone)]
 pub struct InputRegion {
+    /// Optional normalized even-odd polygon, shared with the rendered control.
+    pub hit_polygon: Option<Vec<[f32; 2]>>,
     pub id: String,
     pub rect: Rect,
     pub clip: Option<Rect>,
@@ -359,6 +361,12 @@ pub struct InputRegion {
     /// Optional configured view; None retains the default preparation target.
     pub prepare_view: Option<String>,
     pub prepare_center: Option<f32>,
+}
+impl InputRegion {
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        self.rect
+            .hit_test(x, y, self.clip, self.hit_polygon.as_deref())
+    }
 }
 pub trait SceneSource {
     /// Optional local-state deadline. Workers wake a source without polling idle views.
@@ -413,16 +421,13 @@ pub trait SceneSource {
         false
     }
     fn dismiss_at(&self, x: f32, y: f32) -> bool {
-        self.input_regions().iter().any(|r| {
-            r.dismiss
-                && x >= r.rect.x
-                && y >= r.rect.y
-                && x < r.rect.x + r.rect.w
-                && y < r.rect.y + r.rect.h
-                && r.clip
-                    .is_none_or(|c| x >= c.x && y >= c.y && x < c.x + c.w && y < c.y + c.h)
-        })
+        self.input_regions()
+            .iter()
+            .rev()
+            .find(|r| r.contains(x, y))
+            .is_some_and(|r| r.dismiss)
     }
+
     fn scales(&mut self, _: Vec<f32>) {}
     fn input_regions(&self) -> Vec<InputRegion> {
         Vec::new()

@@ -31,7 +31,7 @@ local function normalized_selection(s)
         if item.active==true then return visible end
       end
     end
-    return 1
+    return math.max(1,math.min(s["extras.selection"] or 1,visible))
   end
   if s["extras.selection_query"] ~= (s["extras.query"] or "") then
     return 1

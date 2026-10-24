@@ -2,7 +2,11 @@
 use super::*;
 use crate::nacre_source::Config;
 use nacre_protocol::{Message, Reply, framing};
-use tokio::{io::BufReader, net::UnixListener, sync::mpsc};
+use tokio::{
+    io::BufReader,
+    net::UnixListener,
+    sync::{mpsc, oneshot},
+};
 fn fixture() -> Json {
     json!({"available":true,"capabilities":{"perOutputWorkspaces":true},"focus":{"outputId":"OUT"},
         "workspaces":{"ws1":{"index":1,"name":"Work","outputId":"OUT"},"ws2":{"index":2,"outputId":"OTHER"}},"workspaceOrder":["ws1","ws2"],
@@ -21,6 +25,7 @@ struct Lab {
     dir: std::path::PathBuf,
     client: Client,
     calls: mpsc::UnboundedReceiver<(String, Json)>,
+    activation_release: Option<oneshot::Sender<()>>,
 }
 impl Drop for Lab {
     fn drop(&mut self) {
@@ -28,6 +33,19 @@ impl Drop for Lab {
     }
 }
 async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
+    lab_with_activation_behavior(requested_topics, false, false).await
+}
+async fn lab_with_activation_gate(
+    requested_topics: Vec<String>,
+    gate_first_activation: bool,
+) -> Lab {
+    lab_with_activation_behavior(requested_topics, gate_first_activation, false).await
+}
+async fn lab_with_activation_behavior(
+    requested_topics: Vec<String>,
+    gate_first_activation: bool,
+    fail_first_activation: bool,
+) -> Lab {
     use std::os::unix::fs::PermissionsExt;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -39,6 +57,10 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
     let socket = dir.join("daemon.sock");
     let listener = UnixListener::bind(&socket).unwrap();
+    let (activation_release, activation_wait) = oneshot::channel();
+    let activation_wait = Arc::new(std::sync::Mutex::new(
+        gate_first_activation.then_some(activation_wait),
+    ));
     let fixture_image = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../shell/sample.png")
         .canonicalize()
@@ -55,6 +77,9 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
     for topic in &requested_topics {
         offered_topics.insert(topic.clone(), 1);
     }
+    let fail_activation = Arc::new(std::sync::atomic::AtomicBool::new(fail_first_activation));
+    let fail_activation_for_server = fail_activation.clone();
+    let activation_wait_for_server = activation_wait.clone();
     tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let (read, mut writer) = stream.into_split();
@@ -192,6 +217,13 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                             .collect();
                         json!({"entries":entries})
                     } else if m == "wallpaper.activate" {
+                        let wait = activation_wait_for_server
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .take();
+                        if let Some(wait) = wait {
+                            let _ = wait.await;
+                        }
                         let revision = p["revision"].as_u64().unwrap_or(17) + 1;
                         json!({"revision":revision,"palette_revision":revision,"path":p["id"],
                             "file_identity":{"device":"1","inode":"3","size":4,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
@@ -199,15 +231,23 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                     } else {
                         json!({"changed":true})
                     };
-                    if framing::write(
-                        &mut writer,
-                        &Message::Ret {
-                            id,
-                            reply: Reply::Ok { ok },
-                        },
-                    )
-                    .await
-                    .is_err()
+                    let reply = if m == "wallpaper.activate"
+                        && fail_activation_for_server
+                            .swap(false, std::sync::atomic::Ordering::AcqRel)
+                    {
+                        Reply::Err {
+                            err: nacre_protocol::Failure::new(
+                                nacre_protocol::ErrorCode::Unavailable,
+                                "fixture activation failure",
+                                false,
+                            ),
+                        }
+                    } else {
+                        Reply::Ok { ok }
+                    };
+                    if framing::write(&mut writer, &Message::Ret { id, reply })
+                        .await
+                        .is_err()
                     {
                         return;
                     }
@@ -224,7 +264,12 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
     assert!(client.snapshot().connected);
-    Lab { dir, client, calls }
+    Lab {
+        dir,
+        client,
+        calls,
+        activation_release: gate_first_activation.then_some(activation_release),
+    }
 }
 async fn lab() -> Lab {
     lab_with_topics(vec![]).await
@@ -754,6 +799,175 @@ async fn wallpaper_refreshes_deleted_cache_paths_and_settles_still_broken_paths(
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn wallpaper_latest_activation_survives_view_retirement() {
+    use bead::render::{Rect, Scene};
+    let mut lab = lab_with_activation_gate(vec!["wallpaper.active".into()], true).await;
+    let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let queue = extras.wallpaper_actions.as_ref().unwrap().clone();
+    let open = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.kind".into(), Value::Text("wallpaper".into())),
+        ]))
+        .unwrap();
+    let wake: CallWake = Arc::new(|| {});
+    extras.project(&open, Some(wake.clone()));
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        ("wallpaper.catalogue".into(), json!({"ids":[]}))
+    );
+    for _ in 0..200 {
+        extras.project(&open, Some(wake.clone()));
+        if extras.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(
+        extras.state.borrow().catalogue_result.len(),
+        4,
+        "activation fixture catalogue is ready"
+    );
+    extras.act(
+        "wallpaper:activate:/fixture/current.jpg",
+        &open,
+        wake.clone(),
+    );
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.activate".into(),
+            json!({"revision":17,"id":"/fixture/current.jpg"})
+        )
+    );
+    extras.act("wallpaper:activate:/fixture/next.jpg", &open, wake.clone());
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "only the first activation may be in flight"
+    );
+
+    let file = std::path::PathBuf::from("/cache/view-only.png");
+    let bytes: Arc<[u8]> = Arc::from(vec![1, 2, 3, 4]);
+    let weak = Arc::downgrade(&bytes);
+    extras
+        .state
+        .borrow_mut()
+        .images
+        .insert(file.clone(), bytes.clone());
+    let scene = Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: BTreeMap::from([(file, bytes.clone())]),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: Vec::new(),
+        width: 8.,
+        slide: None,
+        primitives: Vec::new(),
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 8., 8.),
+    };
+    drop(bytes);
+    drop(scene);
+    drop(extras);
+    drop(wake);
+    assert!(
+        weak.upgrade().is_none(),
+        "the activation queue must not retain view image data"
+    );
+
+    lab.activation_release.take().unwrap().send(()).unwrap();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        (
+            "wallpaper.activate".into(),
+            json!({"revision":18,"id":"/fixture/next.jpg"})
+        )
+    );
+    for _ in 0..200 {
+        if queue.lock().unwrap().inflight.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let state = queue.lock().unwrap();
+    assert!(state.inflight.is_none());
+    assert!(state.pending.is_none());
+    assert_eq!(state.confirmed, Some(("extras-boot".into(), 19)));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_activation_error_is_reported_without_retry_and_boot_change_drops_pending() {
+    let mut lab = lab_with_activation_behavior(vec!["wallpaper.active".into()], true, true).await;
+    let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let queue = extras.wallpaper_actions.as_ref().unwrap().clone();
+    let open = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.kind".into(), Value::Text("wallpaper".into())),
+        ]))
+        .unwrap();
+    let wake: CallWake = Arc::new(|| {});
+    extras.project(&open, Some(wake.clone()));
+    let _ = lab.calls.recv().await.unwrap();
+    for _ in 0..200 {
+        extras.project(&open, Some(wake.clone()));
+        if extras.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    extras.act(
+        "wallpaper:activate:/fixture/current.jpg",
+        &open,
+        wake.clone(),
+    );
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.activate".into(),
+            json!({"revision":17,"id":"/fixture/current.jpg"})
+        )
+    );
+    lab.activation_release.take().unwrap().send(()).unwrap();
+    for _ in 0..200 {
+        if queue.lock().unwrap().inflight.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let model = extras.project(&open, Some(wake));
+    assert_eq!(
+        model["extras.message"],
+        Value::Text("Wallpaper selection failed".into())
+    );
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "failed activation does not retry without a newer user selection"
+    );
+    {
+        let mut state = queue.lock().unwrap();
+        assert!(state.inflight.is_none());
+        assert!(state.pending.is_none());
+        state.confirmed = Some(("extras-boot".into(), 18));
+        state.pending = Some(WallpaperSelection {
+            id: "/fixture/next.jpg".into(),
+            boot: "extras-boot".into(),
+            revision: 17,
+        });
+        state.invalidate_boot(Some("new-boot"));
+        assert!(state.pending.is_none());
+        assert!(state.confirmed.is_none());
+        assert!(state.error.is_none());
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     use bead::wayland::{SceneSource, UiEvent};
     let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
@@ -772,11 +986,83 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         .with_extras(extras)
         .unwrap();
     runtime.services(Box::new(|_| {}));
-    runtime
+    assert!(runtime.viewport(1920, 1200));
+    let initial_scene = runtime
         .stage(UiEvent::Reload)
         .unwrap()
         .expect("wallpaper picker loads");
     runtime.commit();
+    let frame = crate::placement::Frame::current();
+    let usable_width = (1920. - frame.left - frame.right).max(1.);
+    let usable_height = (1200. - frame.top - frame.bottom).max(1.);
+    assert_eq!(
+        runtime.session.stores.get("extras.viewport.width"),
+        Some(&Value::Number(usable_width as f64))
+    );
+    assert_eq!(
+        runtime.session.stores.get("extras.viewport.height"),
+        Some(&Value::Number(usable_height as f64))
+    );
+    let carousel_root = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.action.as_deref() == Some("close"))
+        .expect("picker root has the generic close action");
+    let carousel_rect = bead::ui::rect(&carousel_root.draw);
+    let expected_carousel_width = 320_f32.max(1360_f32.min(usable_width - 96.));
+    assert_eq!(
+        (carousel_rect.w, carousel_rect.h),
+        (expected_carousel_width, 320.)
+    );
+    let motion = initial_scene
+        .motion
+        .as_ref()
+        .expect("picker uses sliding panel motion");
+    assert!(
+        !motion.reveal,
+        "wallpaper content slides without collapsing its children"
+    );
+    assert_eq!(motion.slide_distance, Some(carousel_rect.h));
+    runtime
+        .session
+        .stores
+        .commit(BTreeMap::from([(
+            "extras.wallpaper.layout".into(),
+            Value::Text("spotlight".into()),
+        )]))
+        .unwrap();
+    let full_scene = runtime
+        .session
+        .relayout()
+        .unwrap()
+        .expect("fullscreen layout relayouts");
+    runtime.session.commit(full_scene);
+    let fullscreen_root = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.action.as_deref() == Some("close"))
+        .expect("fullscreen picker root has the generic close action");
+    let fullscreen_rect = bead::ui::rect(&fullscreen_root.draw);
+    assert_eq!(
+        (fullscreen_rect.w, fullscreen_rect.h),
+        (usable_width, usable_height)
+    );
+    runtime
+        .session
+        .stores
+        .commit(BTreeMap::from([(
+            "extras.wallpaper.layout".into(),
+            Value::Text("carousel".into()),
+        )]))
+        .unwrap();
+    let carousel_scene = runtime
+        .session
+        .relayout()
+        .unwrap()
+        .expect("carousel relayouts");
+    runtime.session.commit(carousel_scene);
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
             .await
@@ -797,6 +1083,23 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     assert!(
         loaded,
         "the real picker must receive the asynchronous catalogue"
+    );
+    let first_card = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| {
+            matches!(&node.action_arg,
+            Some(Value::Text(argument)) if argument.starts_with("wallpaper:select:"))
+        })
+        .expect("wallpaper card remains focusable");
+    let first_card_rect = bead::ui::rect(&first_card.draw);
+    assert!(
+        !runtime.dismiss_at(
+            first_card_rect.x + first_card_rect.w / 2.,
+            first_card_rect.y + first_card_rect.h / 2.,
+        ),
+        "clicking a card must not dismiss the picker"
     );
     let (method, params) = tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
         .await
@@ -941,6 +1244,10 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
                 })
         })
         .expect("picker has a background point outside child actions");
+    assert!(
+        runtime.dismiss_at(point.0, point.1),
+        "the empty background still dismisses the picker"
+    );
     runtime
         .stage(UiEvent::Click {
             x: point.0,
@@ -1010,7 +1317,14 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
             "thumbnail":oversized.to_string_lossy(),"preview":"","active":false
         }),
     ];
-    extras.state.borrow_mut().wallpaper_open = true;
+    {
+        let mut state = extras.state.borrow_mut();
+        state.wallpaper_open = true;
+        state.wallpaper_boot = Some("extras-boot".into());
+        state.catalogue_boot = Some("extras-boot".into());
+        state.catalogue_request_boot = Some("extras-boot".into());
+        state.image_revision = 9;
+    }
 
     let logical =
         |field: &str, id: &str| std::path::PathBuf::from(format!("@icon:wallpaper:{field}:{id}"));
@@ -1064,18 +1378,52 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
         "unadvertised and invalid images are deferred out of the scene"
     );
 
-    let closed = Stores::default()
+    let opened = Stores::default()
         .reconcile(&BTreeMap::from([
-            ("panel.open".into(), Value::Bool(false)),
-            ("extras.query".into(), Value::Text(String::new())),
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.query".into(), Value::Text("Advertised".into())),
+            (
+                "extras.wallpaper.selection_id".into(),
+                Value::Text("/fixture/advertised.jpg".into()),
+            ),
             ("extras.wallpaper.kind".into(), Value::Text("static".into())),
         ]))
         .unwrap();
-    extras.project(&closed, None);
+    let opened_model = extras.project(&opened, None);
+    let generation = opened_model["extras.wallpaper.resource_revision"].clone();
+    let closed = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(false)),
+            ("extras.query".into(), Value::Text("Advertised".into())),
+            (
+                "extras.wallpaper.selection_id".into(),
+                Value::Text("/fixture/advertised.jpg".into()),
+            ),
+            ("extras.wallpaper.kind".into(), Value::Text("static".into())),
+        ]))
+        .unwrap();
+    let closing_model = extras.project(&closed, None);
+    assert!(matches!(&closing_model["extras.rows"], Value::List(rows) if rows.len()==2));
+    assert_eq!(closing_model["extras.available"], Value::Bool(true));
     assert_eq!(
-        extras.image_bytes(),
-        0,
-        "closing the picker releases encoded thumbnail bytes"
+        closing_model["extras.wallpaper.resource_revision"],
+        generation
+    );
+    assert!(
+        !closing_model.contains_key("extras.query"),
+        "query state remains unchanged during the slide-out"
+    );
+    assert!(!closing_model.contains_key("extras.wallpaper.selection_id"));
+    assert!(
+        extras.image_bytes() > 0,
+        "encoded thumbnail bytes remain leased through the closing frame"
+    );
+    let weak = Arc::downgrade(scene.asset_data.values().next().unwrap());
+    drop(scene);
+    drop(extras);
+    assert!(
+        weak.upgrade().is_none(),
+        "retiring Extras releases cached thumbnail bytes"
     );
 }
 
@@ -1373,6 +1721,12 @@ fn wallpaper_picker_uses_active_middle_then_visible_query_and_pointer_selection(
     assert_eq!(
         dynamic_ids,
         std::collections::BTreeSet::from(["/wallpapers/animated.gif", "/wallpapers/movie.mp4"])
+    );
+    let chosen = session.action_values("extras.choose", Value::Bool(true))?;
+    assert_eq!(
+        chosen["extras.request"],
+        Value::Text("wallpaper:activate:/wallpapers/movie.mp4".into()),
+        "a media filter clamps the prior ordinal when its selected/active ID is absent"
     );
     Ok(())
 }

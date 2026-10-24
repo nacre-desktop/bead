@@ -61,6 +61,7 @@ struct State {
     route: Option<String>,
     catalogue: Option<CallTicket>,
     catalogue_boot: Option<String>,
+    catalogue_request_boot: Option<String>,
     catalogue_result: Vec<Json>,
     catalogue_request_ids: Vec<String>,
     catalogue_request_handles: Vec<String>,
@@ -68,13 +69,206 @@ struct State {
     catalogue_visible_handles: std::collections::BTreeSet<String>,
     catalogue_settled_handles: std::collections::BTreeSet<String>,
     wallpaper_open: bool,
-    wallpaper_activation: bool,
-    wallpaper_pending: Option<String>,
-    wallpaper_revision: Option<u64>,
     wallpaper_boot: Option<String>,
     images: BTreeMap<std::path::PathBuf, Arc<[u8]>>,
     image_bytes: usize,
     image_revision: u64,
+    viewport: (u32, u32),
+}
+#[derive(Clone)]
+struct WallpaperSelection {
+    id: String,
+    boot: String,
+    revision: u64,
+}
+struct WallpaperActivationInFlight {
+    ticket: CallTicket,
+    boot: String,
+}
+/// Panel-factory-owned activation admission survives lazy view retirement without retaining its UI.
+struct WallpaperActivationQueue {
+    client: Client,
+    inflight: Option<WallpaperActivationInFlight>,
+    pending: Option<WallpaperSelection>,
+    confirmed: Option<(String, u64)>,
+    error: Option<String>,
+    wake: Option<std::sync::Weak<dyn Fn() + Send + Sync>>,
+}
+impl WallpaperActivationQueue {
+    fn new(client: Client) -> Self {
+        Self {
+            client,
+            inflight: None,
+            pending: None,
+            confirmed: None,
+            error: None,
+            wake: None,
+        }
+    }
+    fn confirmed_revision(&self, boot: &str) -> Option<u64> {
+        self.confirmed
+            .as_ref()
+            .filter(|(current, _)| current == boot)
+            .map(|(_, revision)| *revision)
+    }
+    fn error(&self) -> Option<String> {
+        self.error.clone()
+    }
+    fn invalidate_boot(&mut self, boot: Option<&str>) {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| Some(pending.boot.as_str()) != boot)
+        {
+            self.pending = None;
+        }
+        if self
+            .confirmed
+            .as_ref()
+            .is_some_and(|(current, _)| Some(current.as_str()) != boot)
+        {
+            self.confirmed = None;
+        }
+        self.error = None;
+    }
+    fn submit(
+        queue: &Arc<std::sync::Mutex<Self>>,
+        selection: WallpaperSelection,
+        wake: &CallWake,
+    ) -> bool {
+        let mut state = queue
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let status = state.client.status();
+        if !state.client.snapshot().connected
+            || status.boot.as_deref() != Some(selection.boot.as_str())
+        {
+            if state
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.boot != selection.boot)
+            {
+                state.pending = None;
+            }
+            state.error = Some("Wallpaper action unavailable".into());
+            return false;
+        }
+        state.wake = Some(Arc::downgrade(wake));
+        state.error = None;
+        if state
+            .confirmed
+            .as_ref()
+            .is_some_and(|(boot, _)| boot != &selection.boot)
+        {
+            state.confirmed = None;
+        }
+        if state.inflight.is_some() {
+            state.pending = Some(selection);
+            true
+        } else {
+            let started = Self::start(queue, &mut state, selection);
+            if !started {
+                state.error = Some("Wallpaper action unavailable".into());
+            }
+            started
+        }
+    }
+    fn start(
+        queue: &Arc<std::sync::Mutex<Self>>,
+        state: &mut Self,
+        selection: WallpaperSelection,
+    ) -> bool {
+        let status = state.client.status();
+        let Some(method) = status
+            .methods
+            .get("wallpaper.activate")
+            .filter(|method| method.v == 1)
+        else {
+            return false;
+        };
+        if !state.client.snapshot().connected
+            || status.boot.as_deref() != Some(selection.boot.as_str())
+        {
+            return false;
+        }
+        let revision = state
+            .confirmed_revision(&selection.boot)
+            .unwrap_or(selection.revision)
+            .max(selection.revision);
+        let weak_queue = Arc::downgrade(queue);
+        let wake: CallWake = Arc::new(move || Self::completed(weak_queue.clone()));
+        match state.client.begin_call(
+            "wallpaper.activate".into(),
+            json!({"revision":revision,"id":selection.id}),
+            Duration::from_millis(u64::from(method.timeout).clamp(1, 30_000)),
+            CallGuard {
+                boot: selection.boot.clone(),
+                version: 1,
+            },
+            Some(wake),
+        ) {
+            Ok(ticket) => {
+                state.inflight = Some(WallpaperActivationInFlight {
+                    ticket,
+                    boot: selection.boot,
+                });
+                true
+            }
+            Err(_) => false,
+        }
+    }
+    fn completed(weak_queue: std::sync::Weak<std::sync::Mutex<Self>>) {
+        let Some(queue) = weak_queue.upgrade() else {
+            return;
+        };
+        let mut state = queue
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(inflight) = state.inflight.as_mut() else {
+            return;
+        };
+        let Some(reply) = inflight.ticket.try_take() else {
+            return;
+        };
+        let boot = inflight.boot.clone();
+        state.inflight = None;
+        if state.client.status().boot.as_deref() == Some(boot.as_str()) {
+            match reply {
+                Ok(reply) => match serde_json::from_value::<
+                    nacre_protocol::wallpaper::ActiveWallpaper,
+                >(reply)
+                {
+                    Ok(active) if active.validate().is_ok() => {
+                        let revision = state
+                            .confirmed_revision(&boot)
+                            .unwrap_or_default()
+                            .max(active.revision);
+                        state.confirmed = Some((boot, revision));
+                        state.error = None;
+                    }
+                    _ => state.error = Some("Wallpaper selection response was invalid".into()),
+                },
+                Err(_) => state.error = Some("Wallpaper selection failed".into()),
+            }
+        }
+        let current_boot = state.client.status().boot;
+        let next = state.pending.take().filter(|pending| {
+            state.client.snapshot().connected
+                && current_boot.as_deref() == Some(pending.boot.as_str())
+        });
+        if let Some(selection) = next {
+            if Self::start(&queue, &mut state, selection) {
+                state.error = None;
+            } else {
+                state.error = Some("Wallpaper action unavailable".into());
+            }
+        }
+        let wake = state.wake.as_ref().and_then(std::sync::Weak::upgrade);
+        drop(state);
+        if let Some(wake) = wake {
+            wake();
+        }
+    }
 }
 pub struct Extras {
     pub kind: Kind,
@@ -84,6 +278,7 @@ pub struct Extras {
     glyphs: crate::workspace_rows::Rows,
     previews: Option<Previews>,
     wallpaper_settings: Option<crate::nacre_source::LeasedTopic>,
+    wallpaper_actions: Option<Arc<std::sync::Mutex<WallpaperActivationQueue>>>,
 }
 /// B0090 live previews: the leased capture exists only while the view is open and the
 /// Nacre setting `livePreviews` is on; dropping `Extras` (or closing) releases it.
@@ -112,6 +307,11 @@ impl Extras {
         } else {
             None
         };
+        let wallpaper_actions = (kind == Kind::Wallpaper).then(|| {
+            Arc::new(std::sync::Mutex::new(WallpaperActivationQueue::new(
+                client.clone(),
+            )))
+        });
         Ok(Self {
             kind,
             client,
@@ -120,7 +320,18 @@ impl Extras {
             glyphs: Default::default(),
             previews: None,
             wallpaper_settings,
+            wallpaper_actions,
         })
+    }
+    fn with_wallpaper_actions(
+        mut self,
+        actions: Arc<std::sync::Mutex<WallpaperActivationQueue>>,
+    ) -> Self {
+        self.wallpaper_actions = Some(actions);
+        self
+    }
+    pub fn set_viewport(&self, width: u32, height: u32) {
+        self.state.borrow_mut().viewport = (width.max(1), height.max(1));
     }
     /// Offer live window previews through `hub` (used only when the compositor supports it).
     pub fn with_capture(mut self, hub: Arc<bead::wayland::CaptureHub>) -> Self {
@@ -247,14 +458,21 @@ impl Extras {
         let mut wallpaper_revision = 0;
         let mut wallpaper_kind = "static";
         let mut wallpaper_layout = "carousel";
+        let mut wallpaper_opened = false;
         if self.kind == Kind::Wallpaper {
+            wallpaper_opened = open && !state.wallpaper_open;
             state.wallpaper_open = open;
             if state.wallpaper_boot != boot {
                 state.wallpaper_boot = boot.clone();
-                state.wallpaper_revision = None;
-                state.wallpaper_pending = None;
+                if let Some(actions) = &self.wallpaper_actions {
+                    actions
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .invalidate_boot(boot.as_deref());
+                }
                 state.catalogue = None;
                 state.catalogue_boot = None;
+                state.catalogue_request_boot = None;
                 state.catalogue_result.clear();
                 state.catalogue_request_ids.clear();
                 state.catalogue_request_handles.clear();
@@ -267,10 +485,16 @@ impl Extras {
             }
             if let Some(topic) = &self.topic {
                 let active = topic.snapshot();
-                wallpaper_revision = active.data["revision"]
-                    .as_u64()
-                    .unwrap_or_default()
-                    .max(state.wallpaper_revision.unwrap_or_default());
+                wallpaper_revision = active.data["revision"].as_u64().unwrap_or_default();
+            }
+            if let (Some(actions), Some(boot)) = (&self.wallpaper_actions, boot.as_deref()) {
+                if let Some(revision) = actions
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .confirmed_revision(boot)
+                {
+                    wallpaper_revision = wallpaper_revision.max(revision);
+                }
             }
             if let Some(settings) = &self.wallpaper_settings {
                 let snapshot = settings.snapshot();
@@ -285,15 +509,23 @@ impl Extras {
                     _ => "carousel",
                 };
             }
-            if open && boot.is_some() && state.catalogue_boot != boot {
-                state.catalogue_result.clear();
+            if open
+                && boot.is_some()
+                && state.catalogue.is_none()
+                && (wallpaper_opened || state.catalogue_request_boot != boot)
+            {
+                if state.catalogue_boot != boot {
+                    state.catalogue_result.clear();
+                }
                 state.catalogue_request_ids.clear();
                 state.catalogue_request_handles.clear();
                 state.catalogue =
                     self.begin("wallpaper.catalogue", json!({"ids": []}), wake.clone());
                 // A missing capability can be retried on the next registry wake. An admitted
                 // request (including an error reply) is attempted once per opening/daemon boot.
-                state.catalogue_boot = state.catalogue.as_ref().and(boot.clone());
+                if state.catalogue.is_some() {
+                    state.catalogue_request_boot = boot.clone();
+                }
                 state.message = if state.catalogue.is_some() {
                     String::new()
                 } else {
@@ -301,28 +533,15 @@ impl Extras {
                 };
             }
             if !open {
-                let had_resources = state.catalogue.is_some()
-                    || !state.catalogue_result.is_empty()
-                    || !state.catalogue_request_ids.is_empty()
-                    || !state.catalogue_pending_handles.is_empty()
-                    || !state.catalogue_visible_handles.is_empty()
-                    || !state.images.is_empty()
-                    || state.image_bytes != 0;
+                // The panel is sliding out. Cancel service work, but keep the last
+                // projected content and encoded image leases until the worker retires.
                 state.catalogue = None;
-                state.catalogue_result.clear();
-                state.catalogue_boot = None;
+                state.catalogue_request_boot = None;
                 state.catalogue_request_ids.clear();
                 state.catalogue_request_handles.clear();
                 state.catalogue_pending_handles.clear();
                 state.catalogue_visible_handles.clear();
                 state.catalogue_settled_handles.clear();
-                state.message.clear();
-                state.wallpaper_pending = None;
-                state.images.clear();
-                state.image_bytes = 0;
-                if had_resources {
-                    state.image_revision = state.image_revision.wrapping_add(1);
-                }
             }
             if let Some(ticket) = &mut state.catalogue
                 && let Some(reply) = ticket.try_take()
@@ -351,6 +570,7 @@ impl Extras {
                         .collect();
                     if request_ids.is_empty() {
                         state.catalogue_result = incoming;
+                        state.catalogue_boot = boot.clone();
                     } else {
                         for entry in incoming {
                             let Some(id) = entry["id"].as_str() else {
@@ -377,9 +597,6 @@ impl Extras {
                     for handle in request_handles {
                         state.catalogue_settled_handles.insert(handle);
                     }
-                    if request_ids.is_empty() {
-                        state.catalogue_result.clear();
-                    }
                     state.message = "Wallpaper catalogue unavailable".into();
                 }
             }
@@ -395,7 +612,7 @@ impl Extras {
                     }
                 }
             }
-            if open {
+            if boot.is_some() && state.catalogue_boot == boot {
                 rows = state
                     .catalogue_result
                     .iter()
@@ -415,7 +632,7 @@ impl Extras {
                         entry
                     })
                     .collect();
-                available = boot.is_some() && state.catalogue_boot == boot;
+                available = true;
             }
         }
         if self.kind == Kind::Keybindings && boot.is_some() && state.refreshed != boot {
@@ -487,7 +704,6 @@ impl Extras {
             && let Some(reply) = ticket.try_take()
         {
             state.action = None;
-            let wallpaper_activation = std::mem::take(&mut state.wallpaper_activation);
             match reply {
                 Err(_) => state.message = "Action unavailable; refresh and try again".into(),
                 Ok(reply) if self.kind == Kind::Palette => {
@@ -509,52 +725,7 @@ impl Extras {
                         state.message = "Invalid command response".into();
                     }
                 }
-                Ok(reply) if self.kind == Kind::Wallpaper && wallpaper_activation => {
-                    match serde_json::from_value::<nacre_protocol::wallpaper::ActiveWallpaper>(
-                        reply,
-                    ) {
-                        Ok(active) if active.validate().is_ok() => {
-                            state.wallpaper_revision = Some(active.revision);
-                            state.message.clear();
-                        }
-                        _ => state.message = "Wallpaper selection response was invalid".into(),
-                    }
-                }
                 Ok(_) => {}
-            }
-        }
-        if self.kind == Kind::Wallpaper
-            && state.action.is_none()
-            && let Some(id) = state.wallpaper_pending.take()
-            && state.catalogue_boot == boot
-            && state
-                .catalogue_result
-                .iter()
-                .any(|entry| entry["id"].as_str() == Some(id.as_str()))
-        {
-            let revision = self
-                .topic
-                .as_ref()
-                .and_then(|topic| {
-                    let snapshot = topic.snapshot();
-                    snapshot
-                        .connected
-                        .then(|| snapshot.data["revision"].as_u64())
-                        .flatten()
-                })
-                .into_iter()
-                .chain(state.wallpaper_revision)
-                .max();
-            if let Some(revision) = revision {
-                state.action = self.begin(
-                    "wallpaper.activate",
-                    json!({"revision":revision,"id":id}),
-                    wake.clone(),
-                );
-                state.wallpaper_activation = state.action.is_some();
-                if state.action.is_none() {
-                    state.message = "Wallpaper action unavailable".into();
-                }
             }
         }
         let mut values = BTreeMap::from([
@@ -568,14 +739,9 @@ impl Extras {
         ]);
         if self.kind == Kind::Wallpaper {
             let frame = crate::placement::Frame::current();
-            let output_width = match stores.get("bead.viewport.width") {
-                Some(Value::Number(w)) => *w as f32,
-                _ => 1440.,
-            };
-            let output_height = match stores.get("bead.viewport.height") {
-                Some(Value::Number(h)) => *h as f32,
-                _ => 900.,
-            };
+            let (width, height) = state.viewport;
+            let output_width = if width == 0 { 1440. } else { width as f32 };
+            let output_height = if height == 0 { 900. } else { height as f32 };
             values.insert(
                 "extras.viewport.width".into(),
                 Value::Number((output_width - frame.left - frame.right).max(1.) as f64),
@@ -603,18 +769,32 @@ impl Extras {
             );
             values.insert(
                 "extras.wallpaper.loading".into(),
-                Value::Bool(open && state.catalogue.is_some()),
+                Value::Bool(state.catalogue.is_some()),
             );
             values.insert(
                 "extras.wallpaper.resource_revision".into(),
                 Value::Number(state.image_revision as f64),
             );
+            if let Some(error) = self.wallpaper_actions.as_ref().and_then(|actions| {
+                actions
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .error()
+            }) {
+                values.insert("extras.message".into(), Value::Text(error));
+            }
         }
         // QML builds its search surface per opening, so a closed panel forgets the typed text.
-        if matches!(stores.get("panel.open"), Some(Value::Bool(false))) && !text.is_empty() {
+        if matches!(stores.get("panel.open"), Some(Value::Bool(false)))
+            && self.kind != Kind::Wallpaper
+            && !text.is_empty()
+        {
             values.insert("extras.query".into(), Value::Text(String::new()));
         }
-        if !open && self.kind == Kind::Wallpaper {
+        if wallpaper_opened && !text.is_empty() {
+            values.insert("extras.query".into(), Value::Text(String::new()));
+        }
+        if wallpaper_opened && self.kind == Kind::Wallpaper {
             values.insert(
                 "extras.wallpaper.selection_id".into(),
                 Value::Text(String::new()),
@@ -626,11 +806,11 @@ impl Extras {
         values
     }
     pub fn act(&self, request: &str, stores: &Stores, wake: CallWake) {
-        let mut state = self.state.borrow_mut();
         if self.kind == Kind::Wallpaper
             && let Some(id) = request.strip_prefix("wallpaper:activate:")
         {
             let boot = self.client.status().boot;
+            let state = self.state.borrow();
             if state.catalogue_boot != boot
                 || !state
                     .catalogue_result
@@ -639,37 +819,44 @@ impl Extras {
             {
                 return;
             }
-            if state.action.is_some() {
-                state.wallpaper_pending = Some(id.into());
+            drop(state);
+            let Some(boot) = boot else { return };
+            let Some(topic) = &self.topic else { return };
+            let active = topic.snapshot();
+            if !active.connected {
                 return;
             }
+            let revision = active.data["revision"]
+                .as_u64()
+                .or_else(|| {
+                    self.wallpaper_actions.as_ref().and_then(|queue| {
+                        queue
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .confirmed_revision(&boot)
+                    })
+                })
+                .unwrap_or_default();
+            let Some(queue) = &self.wallpaper_actions else {
+                return;
+            };
+            WallpaperActivationQueue::submit(
+                queue,
+                WallpaperSelection {
+                    id: id.into(),
+                    boot,
+                    revision,
+                },
+                &wake,
+            );
+            return;
         }
+        let mut state = self.state.borrow_mut();
         if state.action.is_some() {
             return;
         }
         if self.kind == Kind::Wallpaper {
-            let (method, params) = if let Some(id) = request.strip_prefix("wallpaper:activate:") {
-                let boot = self.client.status().boot;
-                if state.catalogue_boot != boot
-                    || !state
-                        .catalogue_result
-                        .iter()
-                        .any(|entry| entry["id"].as_str() == Some(id))
-                {
-                    return;
-                }
-                let Some(topic) = &self.topic else { return };
-                let active = topic.snapshot();
-                let revision = active.data["revision"]
-                    .as_u64()
-                    .into_iter()
-                    .chain(state.wallpaper_revision)
-                    .max();
-                let Some(revision) = revision.filter(|_| active.connected) else {
-                    return;
-                };
-                ("wallpaper.activate", json!({"revision":revision,"id":id}))
-            } else if let Some(value) = request.strip_prefix("wallpaper:kind:") {
+            let (method, params) = if let Some(value) = request.strip_prefix("wallpaper:kind:") {
                 if !matches!(value, "static" | "dynamic") {
                     return;
                 }
@@ -694,7 +881,6 @@ impl Extras {
             } else {
                 return;
             };
-            state.wallpaper_activation = method == "wallpaper.activate";
             state.action = self.begin(method, params, Some(wake));
             if state.action.is_none() {
                 state.message = "Wallpaper action unavailable".into();
@@ -898,6 +1084,9 @@ impl Extras {
                 state.catalogue = self.begin("wallpaper.catalogue", json!({"ids":ids}), Some(wake));
                 state.catalogue_request_ids = ids;
                 state.catalogue_request_handles = requested_handles;
+                if state.catalogue.is_some() {
+                    state.catalogue_request_boot = state.wallpaper_boot.clone();
+                }
                 if state.catalogue.is_none() {
                     for handle in std::mem::take(&mut state.catalogue_request_handles) {
                         state.catalogue_settled_handles.insert(handle);
@@ -992,6 +1181,11 @@ pub fn panel(
     trace: bool,
     capture: Option<Arc<bead::wayland::CaptureHub>>,
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
+    let wallpaper_actions = (kind == Kind::Wallpaper).then(|| {
+        Arc::new(std::sync::Mutex::new(WallpaperActivationQueue::new(
+            client.clone(),
+        )))
+    });
     let mut cold = crate::sound::fallback(colors.get("surface")?);
     if let Some(motion) = &mut cold.motion {
         motion.edge = bead::core::Edge::Bottom;
@@ -1022,6 +1216,10 @@ pub fn panel(
                 )
                 .and_then(|runtime| {
                     let extras = Extras::new(kind, client.clone())?;
+                    let extras = match &wallpaper_actions {
+                        Some(actions) => extras.with_wallpaper_actions(actions.clone()),
+                        None => extras,
+                    };
                     runtime.with_extras(match &capture {
                         Some(hub) => extras.with_capture(hub.clone()),
                         None => extras,

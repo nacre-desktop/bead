@@ -58,7 +58,7 @@ return {
     hex_side_padding=30, hex_column_overlap=.76,
     hex_tile_height_ratio=.87, hex_gap=12, hex_extent_tail=.5,
     hex_caption_left_fraction=.25, hex_caption_width_fraction=.5, hex_caption_bottom=30, hex_caption_height=20,
-    choice_padding=9, choice_advance=8, choice_line_height=1.4,
+    choice_padding=9,
     group_gap=12, add_width=61, add_gap=4, disabled_opacity=.4,
     hex_image_inset=0,
     add_icon_width=16, add_icon_height=23, add_icon_font=16, add_label_width=23, add_label_height=19,

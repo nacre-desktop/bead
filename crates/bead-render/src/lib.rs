@@ -35,6 +35,37 @@ impl Rect {
     pub fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
         Self { x, y, w, h }
     }
+    /// Rectangular bounds and clip, optionally restricted by a normalized even-odd polygon.
+    pub fn hit_test(
+        self,
+        x: f32,
+        y: f32,
+        clip: Option<Self>,
+        polygon: Option<&[[f32; 2]]>,
+    ) -> bool {
+        let inside_rect = |r: Rect| x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
+        if !inside_rect(self) || clip.is_some_and(|clip| !inside_rect(clip)) {
+            return false;
+        }
+        let Some(points) = polygon else {
+            return true;
+        };
+        if points.len() < 3 {
+            return false;
+        }
+        let (px, py) = ((x - self.x) / self.w, (y - self.y) / self.h);
+        let mut inside = false;
+        let mut previous = points.len() - 1;
+        for current in 0..points.len() {
+            let [xi, yi] = points[current];
+            let [xj, yj] = points[previous];
+            if (yi > py) != (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi {
+                inside = !inside;
+            }
+            previous = current;
+        }
+        inside
+    }
     pub fn union(self, other: Self) -> Self {
         let x = self.x.min(other.x);
         let y = self.y.min(other.y);

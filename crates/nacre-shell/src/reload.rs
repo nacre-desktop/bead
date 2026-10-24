@@ -2219,6 +2219,7 @@ impl SceneSource for Runtime {
                         && self.session.stores.get("panel.open").is_some(),
                     rect,
                     clip: node.clip,
+                    hit_polygon: node.hit_polygon.clone(),
                     cursor: if node.input.is_some() {
                         "text"
                     } else {
@@ -2262,6 +2263,9 @@ impl SceneSource for Runtime {
         }
         if let Some(welcome) = &self.welcome {
             welcome.set_viewport(width, height);
+        }
+        if let Some(extras) = &self.extras {
+            extras.set_viewport(width, height);
         }
         self.session.set_viewport(width, height)
     }

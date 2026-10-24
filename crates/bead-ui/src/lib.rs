@@ -126,29 +126,9 @@ impl Node {
         self.contains_in(rect(&self.draw), x, y)
     }
     pub fn contains_in(&self, r: Rect, x: f32, y: f32) -> bool {
-        let inside_rect = |r: Rect| x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
-        if !inside_rect(r) || self.clip.is_some_and(|clip| !inside_rect(clip)) {
-            return false;
-        }
-        let Some(points) = &self.hit_polygon else {
-            return true;
-        };
-        if points.len() < 3 {
-            return false;
-        }
-        let (px, py) = ((x - r.x) / r.w, (y - r.y) / r.h);
-        let mut inside = false;
-        let mut previous = points.len() - 1;
-        for current in 0..points.len() {
-            let [xi, yi] = points[current];
-            let [xj, yj] = points[previous];
-            if (yi > py) != (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi {
-                inside = !inside;
-            }
-            previous = current;
-        }
-        inside
+        r.hit_test(x, y, self.clip, self.hit_polygon.as_deref())
     }
+
     fn diagnostic(&self, message: impl ToString) -> Diagnostic {
         let (path, line, column) =
             self.source

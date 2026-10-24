@@ -51,14 +51,11 @@ end
 local hex_clip={{.25,0},{.75,0},{1,.5},{.75,1},{.25,1},{0,.5}}
 
 local function button(id,label,active,request)
-  local label_w=(utf8.len(label) or #label)*T.wallpaper.choice_advance
-  return kit.Button{id=id,aria_label=label,width=label_w+2*T.wallpaper.choice_padding,shrink=0,height=toolbar_h,padding=0,
+  return kit.Button{id=id,aria_label=label,text=label,shrink=0,height=toolbar_h,padding=0,
     padding_left=T.wallpaper.choice_padding,padding_right=T.wallpaper.choice_padding,
+    font_size=T.palette.description_font,text_align="center",color=active and "onPrimary" or "onSurface",
     radius=T.panel.close_radius,fill=active and "primary" or "surfaceContainerHigh",
-    hover_fill=active and "primary" or "surfaceContainerHigh",activate_on_release=true,on_activate=ui.action("extras.do",request),
-    ui.Row{width=label_w,height=toolbar_h,align="center",justify="center",
-      ui.Text{text=label,width=label_w,height=math.ceil(T.palette.description_font*1.4),font_size=T.palette.description_font,
-        text_align="center",color=active and "onPrimary" or "onSurface"}}}
+    hover_fill=active and "primary" or "surfaceContainerHigh",activate_on_release=true,on_activate=ui.action("extras.do",request)}
 end
 local function nav_button(id,label,glyph,action)
   return kit.Button{id=id,aria_label=label,width=T.wallpaper.nav_width,height=T.wallpaper.nav_height,padding=0,
@@ -201,7 +198,7 @@ local children={
     text_align="center",color="onSurfaceVariant"}}
 if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end
 return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=width,height=height,
-  duration=T.panel.duration,transition=T.panel.transition,reveal=true,fade=false,radius=T.panel.radius,
+  duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=height,fade=false,radius=T.panel.radius,
   fill=carousel and "surface" or "transparent",border_width=carousel and T.panel.border or 0,
   border_color="outlineVariant",padding=0,gap=0,
   on_activate=ui.action("close"),aria_label="Close wallpaper picker",table.unpack(children)}

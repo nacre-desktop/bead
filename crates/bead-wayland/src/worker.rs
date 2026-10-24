@@ -25,15 +25,9 @@ struct Mirror {
 }
 impl Mirror {
     fn region_at(&self, x: f32, y: f32) -> Option<&InputRegion> {
-        self.regions.iter().rev().find(|r| {
-            x >= r.rect.x
-                && y >= r.rect.y
-                && x < r.rect.x + r.rect.w
-                && y < r.rect.y + r.rect.h
-                && r.clip
-                    .is_none_or(|c| x >= c.x && y >= c.y && x < c.x + c.w && y < c.y + c.h)
-        })
+        self.regions.iter().rev().find(|r| r.contains(x, y))
     }
+
     fn read(source: &dyn SceneSource) -> Self {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
@@ -547,6 +541,9 @@ impl SceneSource for Source {
     fn outside_dismiss(&self) -> bool {
         self.mirror.outside_dismiss
     }
+    fn dismiss_at(&self, x: f32, y: f32) -> bool {
+        self.mirror.region_at(x, y).is_some_and(|r| r.dismiss)
+    }
     fn focused_dismiss(&self) -> bool {
         self.mirror.focused_dismiss
     }
@@ -590,6 +587,56 @@ mod tests {
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
         }
     }
+    #[test]
+    fn worker_dismissal_and_cursor_use_the_topmost_clipped_polygon_hit() {
+        let background = InputRegion {
+            id: "background".into(),
+            rect: bead_render::Rect::new(0., 0., 100., 100.),
+            clip: None,
+            hit_polygon: None,
+            cursor: "default",
+            edge_hover: false,
+            dismiss: true,
+            prepare_panel: false,
+            prepare_view: None,
+            prepare_center: None,
+        };
+        let mut card = background.clone();
+        card.id = "card".into();
+        card.rect = bead_render::Rect::new(10., 10., 80., 80.);
+        card.hit_polygon = Some(vec![
+            [0.25, 0.],
+            [0.75, 0.],
+            [1., 0.5],
+            [0.75, 1.],
+            [0.25, 1.],
+            [0., 0.5],
+        ]);
+        card.dismiss = false;
+        card.cursor = "pointer";
+        let mut source = Source::new(Box::new(|| Err("unused".into())), scene());
+        source.mirror = Arc::new(Mirror {
+            regions: vec![background, card],
+            ..Default::default()
+        });
+        assert!(
+            !source.dismiss_at(50., 50.),
+            "a card press must not activate its background"
+        );
+        assert!(
+            source.dismiss_at(11., 11.),
+            "a hexagon corner belongs to the background"
+        );
+        assert_eq!(source.pointer_cursor(50., 50.), "pointer");
+        assert_eq!(source.pointer_cursor(11., 11.), "default");
+        Arc::get_mut(&mut source.mirror).unwrap().regions[1].clip =
+            Some(bead_render::Rect::new(20., 20., 60., 60.));
+        assert!(
+            source.dismiss_at(15., 50.),
+            "clipped-out card pixels belong to the background"
+        );
+        assert!(!source.dismiss_at(50., 50.));
+    }
     struct Mock {
         commits: Arc<AtomicUsize>,
         panic: bool,
@@ -597,6 +644,7 @@ mod tests {
     impl SceneSource for Mock {
         fn input_regions(&self) -> Vec<InputRegion> {
             vec![InputRegion {
+                hit_polygon: None,
                 id: "button".into(),
                 rect: bead_render::Rect::new(0., 0., 16., 16.),
                 clip: None,
