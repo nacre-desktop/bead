@@ -1,0 +1,36 @@
+{
+ "idle": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "metrics": {
+   "rmse": 3.872,
+   "changed_pct": 7.631,
+   "bar_rmse": 6.716,
+   "bbox": [
+    2,
+    17,
+    2865,
+    1785
+   ]
+  }
+ },
+ "weather-hero": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "metrics": {
+   "rmse": 6.913,
+   "changed_pct": 8.501,
+   "bar_rmse": 6.728,
+   "bbox": [
+    2,
+    17,
+    2865,
+    1785
+   ]
+  }
+ }
+}

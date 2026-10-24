@@ -1,0 +1,89 @@
+--- spikes/parity-compare.py	2026-10-24 06:53:33.952920507 +0200
++++ .lead/parity-compare.py	2026-10-24 07:26:59.536197330 +0200
+@@ -334,6 +334,21 @@
+         wait_until(lambda: self._try(lambda: self.run(['gdbus', 'call', '--session', '--dest', 'org.bluez', '--object-path', '/',
+                                                        '--method', 'org.freedesktop.DBus.ObjectManager.GetManagedObjects'])),
+                    20, 'the fake org.bluez')
++        # B0078 private, shared weather fixture; no network/weather-provider reads.
++        fixture = json.loads((Path(a.bead_shell) / 'tests/fixtures/dashboard/weather.json').read_text())
++        current = fixture['current']
++        raw = dict(current, checked=time.time(), feelsLike=current['feels_like'], isDay=current['is_day'])
++        raw['hours'] = list(current['hours']['items'].values())
++        raw['days'] = list(current['days']['items'].values())
++        tools = self.root / 'weather-fixture'
++        tools.mkdir()
++        (tools / 'weather.py').write_text('import json\nprint(' + repr(json.dumps(raw)) + ')\n')
++        self.env['NACRE_DASHBOARD_TOOLS'] = str(tools)
++        config = self.root / 'config/nacre'
++        config.mkdir(parents=True, exist_ok=True)
++        settings = json.loads((Path(a.bead_shell) / 'tests/fixtures/dashboard-extras/settings.json').read_text())['data']
++        settings['weatherPhotos'] = False
++        (config / 'dashboard-extras.json').write_text(json.dumps(settings))
+         command = [str(Path(a.bead_bin).resolve() / 'nacre-helper'), 'daemon']
+         if self.name == 'bead':
+             command.append('--notifications=daemon')
+@@ -363,6 +378,15 @@
+                 (tools / entry.name).symlink_to(entry)
+             for name in ['nacre-helper', 'nacre-daemon']:
+                 (tools / name).symlink_to(Path(a.bead_bin).resolve() / 'nacre-helper')
++            # Current QML uses the native helper's weather verb; intercept only that verb.
++            helper = tools / 'nacre-helper'
++            helper.unlink()
++            fixture_reader = str(self.root / 'weather-fixture/weather.py')
++            real_helper = str(Path(a.bead_bin).resolve() / 'nacre-helper')
++            helper.write_text('#!/usr/bin/python3\nimport os,sys\n'
++                + 'if sys.argv[1:2] == ["weather"]: os.execv(sys.executable,[sys.executable,' + repr(fixture_reader) + '])\n'
++                + 'os.execv(' + repr(real_helper) + ',[' + repr(real_helper) + ',*sys.argv[1:]])\n')
++            helper.chmod(0o755)
+             # OSD-only descriptors must not invent controls in unrelated dock captures.
+             if any(state in a.states for state in ('osd-brightness', 'osd-keyboard')):
+                 self.install_fake_light_devices(tools / 'nacre-helper')
+@@ -378,6 +402,10 @@
+         else:
+             root = self.root / 'bead'
+             shutil.copytree(a.bead_shell, root / 'shell')
++            fixture_settings = root / 'shell/tests/fixtures/dashboard-extras/settings.json'
++            settings = json.loads(fixture_settings.read_text())
++            settings['data']['weatherPhotos'] = False
++            fixture_settings.write_text(json.dumps(settings))
+             # Pin the same read-only presentation inputs as QML even when this
+             # private daemon does not advertise wallpaper.active.
+             presentation = self.root / 'state/nacre/presentation.json'
+@@ -394,6 +422,7 @@
+             commands = self.runtime / 'bead-command.sock'
+             command = [str(Path(a.bead_bin).resolve() / 'nacre-shell'), '--bar', '--core-views', '--ui-provider',
+                        '--notices', '--daemon-socket', str(self.endpoint), '--command-socket', str(commands), '--palette', str(palette)]
++            command += ['--dashboard-fixtures', str(root / 'shell/tests/fixtures/dashboard')]
+             if a.cpu:
+                 command += ['--renderer', 'cpu', '--panel-renderer', 'cpu']
+             self.shell = self.spawn(command, 'shell', cwd=root)
+@@ -702,7 +731,7 @@
+                     info['close_ms'] = self.sequence(name + '-close', lambda: self.steps(closes), seconds)
+                 else:
+                     self.steps(closes)
+-                time.sleep(0.6)
++                time.sleep(6.0)  # B0078: 2.2 s retirement + next 3 s code-page idle tick
+                 info['rss_closed_kib'] = self.rss()
+                 info['dispatch_trace'] = self.dispatch_trace
+                 if info['rss_closed_kib'].get('SwapPss') != 0:
+@@ -754,6 +783,11 @@
+ 
+ # ---------------------------------------------------------------- comparison and gallery (plain PIL)
+ 
++# B0078: Weather has canonical IPC index 1, independent of navigation order.
++STATES['weather-hero'] = ([('ui', 'drawers', 'toggle', 'dashboard'),
++    ('ui', 'nacre', 'tab', '1')], [('ui', 'nacre', 'close')], 0)
++
++
+ def metrics(a, b):
+     from PIL import Image, ImageChops, ImageStat
+     if a.size != b.size:
+@@ -1001,7 +1035,7 @@
+             with tempfile.TemporaryDirectory(prefix='bd-par-') as private:
+                 runtime = Path(private) / 'r'
+                 runtime.mkdir(mode=0o700)
+-                env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_DATA_DIRS='/usr/local/share:/usr/share')
++                env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_DATA_DIRS='/usr/local/share:/usr/share', GIO_USE_VFS='local', GVFS_DISABLE_FUSE='1')
+                 for key in ['NIRI_SOCKET', 'HYPRLAND_INSTANCE_SIGNATURE', 'DISPLAY', 'NACRE_DAEMON_SOCKET',
+                             'NACRE_QS_CONFIG', 'DBUS_SESSION_BUS_ADDRESS']:
+                     env.pop(key, None)

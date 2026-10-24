@@ -1,0 +1,21 @@
+Candidate source: ec3a572; Arch container, Rust 1.99, cargo -j2, nice 10.
+Full check.sh core commands completed successfully on the final source.
+The capture-manifest suite initially rejected the modified temporary checkout;
+recording its final source snapshot and rerunning that suite resolved the error.
+Remaining CI commands then completed with exit 0, CI_OK and BUILD_OK.
+Formatting: PASS.
+Clippy workspace/all-targets, warnings denied: PASS.
+HEADLESS_SERVICE_BOUNDARY_OK default+all-features.
+Workspace tests: PASS; nacre-shell suite 485 passed, 0 failed, 1 ignored.
+Trace memory_policy tests: PASS (isolated allocation child included).
+No-default-features and workspace/all-features checks: PASS.
+Facade example and headless UI --check: PASS.
+LUAU_ANALYZE_OK 131 modules; actual source mirror, generated Rust SDK.
+All six CI spike regression suites and py_compile list: PASS.
+Packaging staging/launcher tests: PASS.
+Private motion-wallpaper renderer: all 12 checks true; failed=[].
+Private UPower/NM/BlueZ owner lifecycle/subscriptions: PASS.
+Private SNI/DBusMenu lifecycle: 3 passed, 0 failed.
+cargo-deny shell and each independent framework graph: PASS.
+Goldens regenerated and visually inspected at 1x and 1.5x.
+All new weather condition/daylight, full city, settings, crop/release tests: PASS.

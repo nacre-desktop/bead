@@ -1,0 +1,299 @@
+{
+  "renderer": "CPU",
+  "output": "2880x1800 at scale 1.5, private nested niri",
+  "control": "996031b",
+  "candidate": "ec3a572",
+  "closed_wait_seconds": 6,
+  "boot_wait_seconds": 8,
+  "pairs": 3,
+  "phases": {
+    "idle": {
+      "samples_kib": {
+        "control": [
+          {
+            "VmRSS": 48904,
+            "RssAnon": 17700,
+            "Pss": 34258,
+            "Pss_Anon": 17700,
+            "Pss_File": 5730,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 49420,
+            "RssAnon": 17952,
+            "Pss": 34774,
+            "Pss_Anon": 17952,
+            "Pss_File": 5994,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 49344,
+            "RssAnon": 17772,
+            "Pss": 34687,
+            "Pss_Anon": 17772,
+            "Pss_File": 6087,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        ],
+        "candidate": [
+          {
+            "VmRSS": 49292,
+            "RssAnon": 17748,
+            "Pss": 34657,
+            "Pss_Anon": 17748,
+            "Pss_File": 6081,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 48940,
+            "RssAnon": 17732,
+            "Pss": 34296,
+            "Pss_Anon": 17732,
+            "Pss_File": 5736,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 49012,
+            "RssAnon": 17704,
+            "Pss": 34371,
+            "Pss_Anon": 17704,
+            "Pss_File": 5839,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        ]
+      },
+      "median_mib": {
+        "control": {
+          "Pss": 33.8740234375,
+          "Pss_Anon": 17.35546875,
+          "Pss_File": 5.853515625,
+          "Pss_Shmem": 10.57421875,
+          "DRM": 0.0,
+          "SwapPss": 0.0
+        },
+        "candidate": {
+          "Pss": 33.5654296875,
+          "Pss_Anon": 17.31640625,
+          "Pss_File": 5.7021484375,
+          "Pss_Shmem": 10.57421875,
+          "DRM": 0.0,
+          "SwapPss": 0.0
+        }
+      },
+      "paired_delta_median_mib": {
+        "Pss": -0.30859375,
+        "Pss_Anon": -0.06640625,
+        "Pss_File": -0.2421875,
+        "Pss_Shmem": 0.0,
+        "DRM": 0.0,
+        "SwapPss": 0.0
+      }
+    },
+    "open": {
+      "samples_kib": {
+        "control": [
+          {
+            "VmRSS": 92944,
+            "RssAnon": 34632,
+            "Pss": 70800,
+            "Pss_Anon": 34632,
+            "Pss_File": 18632,
+            "Pss_Shmem": 17536,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 93640,
+            "RssAnon": 34884,
+            "Pss": 71483,
+            "Pss_Anon": 34884,
+            "Pss_File": 19063,
+            "Pss_Shmem": 17536,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 93016,
+            "RssAnon": 34408,
+            "Pss": 70839,
+            "Pss_Anon": 34408,
+            "Pss_File": 18895,
+            "Pss_Shmem": 17536,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        ],
+        "candidate": [
+          {
+            "VmRSS": 87692,
+            "RssAnon": 28600,
+            "Pss": 65500,
+            "Pss_Anon": 28600,
+            "Pss_File": 19364,
+            "Pss_Shmem": 17536,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 96084,
+            "RssAnon": 37556,
+            "Pss": 73994,
+            "Pss_Anon": 37556,
+            "Pss_File": 18902,
+            "Pss_Shmem": 17536,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 96220,
+            "RssAnon": 37604,
+            "Pss": 74088,
+            "Pss_Anon": 37604,
+            "Pss_File": 18948,
+            "Pss_Shmem": 17536,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        ]
+      },
+      "median_mib": {
+        "control": {
+          "Pss": 69.1787109375,
+          "Pss_Anon": 33.8203125,
+          "Pss_File": 18.4521484375,
+          "Pss_Shmem": 17.125,
+          "DRM": 0.0,
+          "SwapPss": 0.0
+        },
+        "candidate": {
+          "Pss": 72.259765625,
+          "Pss_Anon": 36.67578125,
+          "Pss_File": 18.50390625,
+          "Pss_Shmem": 17.125,
+          "DRM": 0.0,
+          "SwapPss": 0.0
+        }
+      },
+      "paired_delta_median_mib": {
+        "Pss": 2.4521484375,
+        "Pss_Anon": 2.609375,
+        "Pss_File": 0.0517578125,
+        "Pss_Shmem": 0.0,
+        "DRM": 0.0,
+        "SwapPss": 0.0
+      }
+    },
+    "closed": {
+      "samples_kib": {
+        "control": [
+          {
+            "VmRSS": 47512,
+            "RssAnon": 17700,
+            "Pss": 32988,
+            "Pss_Anon": 17700,
+            "Pss_File": 4460,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 48124,
+            "RssAnon": 18168,
+            "Pss": 33598,
+            "Pss_Anon": 18168,
+            "Pss_File": 4602,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 47896,
+            "RssAnon": 17832,
+            "Pss": 33373,
+            "Pss_Anon": 17832,
+            "Pss_File": 4713,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        ],
+        "candidate": [
+          {
+            "VmRSS": 48112,
+            "RssAnon": 18088,
+            "Pss": 33599,
+            "Pss_Anon": 18088,
+            "Pss_File": 4683,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 47620,
+            "RssAnon": 17916,
+            "Pss": 33097,
+            "Pss_Anon": 17916,
+            "Pss_File": 4353,
+            "Pss_Shmem": 10828,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          {
+            "VmRSS": 57136,
+            "RssAnon": 17528,
+            "Pss": 42177,
+            "Pss_Anon": 17528,
+            "Pss_File": 13105,
+            "Pss_Shmem": 11544,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        ]
+      },
+      "median_mib": {
+        "control": {
+          "Pss": 32.5908203125,
+          "Pss_Anon": 17.4140625,
+          "Pss_File": 4.494140625,
+          "Pss_Shmem": 10.57421875,
+          "DRM": 0.0,
+          "SwapPss": 0.0
+        },
+        "candidate": {
+          "Pss": 32.8115234375,
+          "Pss_Anon": 17.49609375,
+          "Pss_File": 4.5732421875,
+          "Pss_Shmem": 10.57421875,
+          "DRM": 0.0,
+          "SwapPss": 0.0
+        }
+      },
+      "paired_delta_median_mib": {
+        "Pss": 0.5966796875,
+        "Pss_Anon": -0.24609375,
+        "Pss_File": 0.2177734375,
+        "Pss_Shmem": 0.0,
+        "DRM": 0.0,
+        "SwapPss": 0.0
+      }
+    }
+  },
+  "candidate_closed_minus_initial_idle_mib": [
+    -1.033203125,
+    -1.1708984375,
+    7.623046875
+  ],
+  "candidate_closed_minus_initial_idle_median_mib": -1.033203125
+}
