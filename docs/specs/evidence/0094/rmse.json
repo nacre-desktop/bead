@@ -1,0 +1,26 @@
+{
+ "control home (frame)": {
+  "before": 17.434,
+  "after": 14.751
+ },
+ "control home (panel)": {
+  "before": 26.012,
+  "after": 20.686
+ },
+ "notifications header": {
+  "before": 29.638,
+  "after": 24.432
+ },
+ "slider close-up": {
+  "before": 30.654,
+  "after": 12.626
+ },
+ "Displays page (frame)": {
+  "before": 20.064,
+  "after": 19.696
+ },
+ "Displays page (window)": {
+  "before": 17.52,
+  "after": 16.876
+ }
+}
