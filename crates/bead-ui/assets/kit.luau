@@ -555,7 +555,7 @@ return function(ui, tokens)
     local function select_parts(p)
         local on=p.enabled~=false
         local open=value(p.open,false) and on
-        local width=p.width or sp.huge*8
+        local width=value(p.width,sp.huge*8)
         local field=kit.Button{id="field",width=width,height=SELECT_ROW,padding=0,shrink=0,radius=tokens.radii.small,
             fill="surfaceContainer",hover_fill=on and "surfaceContainerHigh" or "surfaceContainer",border_width=1,
             border_color=open and "primary" or "outline",aria_label=p.aria_label or p.label,on_activate=maybe(p.on_toggle,on),
