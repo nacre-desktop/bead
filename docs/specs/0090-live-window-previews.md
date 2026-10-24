@@ -1,7 +1,7 @@
 # B0090 — Live window previews in the Overview
 
-Status: **Review**. The capture primitive, the Luau tile and the lifecycle are implemented and
-verified on Hyprland. **niri 26.04 does not offer per-window capture**, so on the owner's main
+Status: **Review (live capture unverified)**. The capture primitive, the Luau tile and the lifecycle are implemented and
+unit-tested; a live Hyprland frame has not been observed (see Evidence). **niri 26.04 does not offer per-window capture**, so on the owner's main
 compositor the Overview keeps the window-icon tiles (the same as the QML shell, which turns
 `windowCapture` off for niri). What is missing there is listed exactly below.
 
@@ -91,7 +91,17 @@ projection. `BEAD_CAPTURE=off` keeps the icon tiles (measurement control).
 
 ## Evidence
 
-RESULTS_PLACEHOLDER
+- Protocol survey: the table above (real `wayland-info` of nested niri 26.04 and Hyprland 0.56.2).
+- Unit tests and the extras adapter test pass in the Arch container, and the full CI job passes (see the report).
+- **Not done: the end-to-end nested capture, CPU and memory numbers.** `spikes/b0090-previews.py`
+  (headless labwc, nested Hyprland, `spikes/shm-window.c` clients, real daemon, shell on CPU, per-window
+  frame counting, CPU and unreclaimable memory over open/close cycles, `--capture off` control) is written,
+  but the nested Hyprland never finished starting in the desktop's headless labwc parent (stops after
+  "Got registry"; `hyprctl clients` stays empty), so no window was ever captured. The next step is to get
+  a Hyprland that maps xdg toplevels in the nested session (how `spikes/measure.py` starts it differs only in
+  `--virtual120`), then run the harness for both arms. Until then the Hyprland path is verified by the
+  protocol code review and unit tests only, not by a live frame.
+- No QML pair: QML shows icons on niri, and no Hyprland session ran.
 
 ## Known gaps
 
