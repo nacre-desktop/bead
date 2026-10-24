@@ -1364,17 +1364,81 @@ fn every_dashboard_page_loads_with_live_controls() -> Result<()> {
 #[test]
 fn weather_sky_uses_condition_and_daylight_and_draws_every_fallback() -> Result<()> {
     for day in [true, false] {
-        for code in [None, Some(0), Some(2), Some(3), Some(45), Some(61), Some(73), Some(95)] {
+        for code in [
+            None,
+            Some(0),
+            Some(2),
+            Some(3),
+            Some(45),
+            Some(61),
+            Some(73),
+            Some(95),
+        ] {
             let mut data = fixture("weather");
             data["current"]["wmo"] = json!(code);
             data["current"]["is_day"] = json!(day);
             let model = page_view(Page::Weather, data).project();
             assert_eq!(model["dashboard.weather.day"], Value::Bool(day));
-            assert_eq!(model["dashboard.weather.code"], Value::Number(code.map_or(-1., f64::from)));
+            assert_eq!(
+                model["dashboard.weather.code"],
+                Value::Number(code.map_or(-1., f64::from))
+            );
             let mut h = extra_harness(Page::Weather, model, 1.)?;
             h.render()?;
-            assert!(h.scene().primitives.iter().any(|p| matches!(p, bead::render::Primitive::Image { .. })));
+            assert!(
+                h.scene()
+                    .primitives
+                    .iter()
+                    .any(|p| matches!(p, bead::render::Primitive::Image { .. }))
+            );
         }
     }
+    Ok(())
+}
+
+#[test]
+fn weather_local_photo_crops_keeps_credit_and_releases_the_asset() -> Result<()> {
+    fn copy_bundle(from: &Path, to: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(to)?;
+        for item in std::fs::read_dir(from)? {
+            let item = item?;
+            let dest = to.join(item.file_name());
+            if item.path().is_dir() {
+                copy_bundle(&item.path(), &dest)?;
+            } else {
+                std::fs::copy(item.path(), dest)?;
+            }
+        }
+        Ok(())
+    }
+    let temp = std::env::temp_dir().join(format!("bead-weather-photo-{}-{}", std::process::id(), unique()));
+    copy_bundle(&root().join("dashboard/weather"), &temp.join("dashboard/weather"))?;
+    std::fs::copy(root().join("palette.json"), temp.join("palette.json"))?;
+    let style = temp.join("dashboard/weather/weather-style.luau");
+    std::fs::write(&style, std::fs::read_to_string(&style)?.replace(
+        "photos={enabled=false,city={},fallback=nil}",
+        "photos={enabled=true,city={},fallback={path='fixture.svg',width=1000,height=100,author='Fixture artist',license='CC0'}}",
+    ))?;
+    std::fs::write(temp.join("fixture.svg"), r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 100"><rect width="1000" height="100" fill="#f00"/><rect x="400" width="200" height="100" fill="#0f0"/></svg>"##)?;
+    let mut h = Harness::load(&temp, Path::new("dashboard/weather/main.luau"), &temp.join("palette.json"), page_view(Page::Weather, fixture("weather")).project(), Default::default())?;
+    let frame = h.render()?;
+    let scene = h.scene();
+    let (index, rect) = scene.primitives.iter().enumerate().find_map(|(i, p)| match p {
+        bead::render::Primitive::Image { path, rect, .. } if path.ends_with("fixture.svg") => Some((i, rect)),
+        _ => None,
+    }).ok_or("local photo missing")?;
+    assert_eq!((rect.w, rect.h), (2980., 298.));
+    let clip = scene.clips.get(&index).ok_or("photo crop missing")?;
+    assert_eq!((clip.w, clip.h), (564., 298.));
+    assert!((rect.x + rect.w / 2. - (clip.x + clip.w / 2.)).abs() < 0.01);
+    assert!(scene.primitives.iter().any(|p| matches!(p, bead::render::Primitive::Text { text, .. } if text == "Fixture artist · CC0")));
+    let held = Arc::downgrade(scene.asset_data.get(&temp.join("fixture.svg")).ok_or("photo snapshot missing")?);
+    if let Ok(out) = std::env::var("BEAD_TEST_ARTIFACTS") {
+        std::fs::create_dir_all(&out)?;
+        frame.save(&PathBuf::from(out).join("weather-local-photo.png"))?;
+    }
+    drop(h);
+    assert!(held.upgrade().is_none(), "local photo survives view destruction");
+    std::fs::remove_dir_all(temp)?;
     Ok(())
 }

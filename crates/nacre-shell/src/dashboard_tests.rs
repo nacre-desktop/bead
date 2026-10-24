@@ -729,10 +729,12 @@ fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Re
                     .any(|part| part
                         == if page == Page::Today {
                             "sources=7"
+                        } else if page == Page::Weather {
+                            "sources=26"
                         } else {
                             "sources=6"
                         }),
-                "four selected-page modules plus two shared root image snapshots"
+                "selected-page modules and image snapshots remain lazy"
             );
             let frame = h.render()?;
             let rect = h
