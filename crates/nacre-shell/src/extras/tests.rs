@@ -27,7 +27,7 @@ impl Drop for Lab {
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
-async fn lab() -> Lab {
+async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
     use std::os::unix::fs::PermissionsExt;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -108,7 +108,7 @@ async fn lab() -> Lab {
                 Message::Call { id, m, p, .. } => {
                     let _ = tx.send((m.clone(), p.clone()));
                     let ok = if m == "menu.query" {
-                        json!({"query":p["query"],"mode":"apps","route":p["route"],"catalog_rev":7,"order":["action"],"items":{"action":{"name":"Open Settings","kind":"action","description":"Preferences","activation":"opaque-ticket","disabled":false}}})
+                        json!({"query":p["query"],"mode":"apps","route":p["route"],"catalog_rev":7,"order":["action"],"items":{"action":{"name":"Open Settings","kind":"action","activation":"opaque-ticket","disabled":false}}})
                     } else if m == "menu.activate" {
                         json!({"keep_open":false})
                     } else {
@@ -131,7 +131,7 @@ async fn lab() -> Lab {
             }
         }
     });
-    let client = Client::start(Config::new(socket, vec![])).unwrap();
+    let client = Client::start(Config::new(socket, requested_topics)).unwrap();
     for _ in 0..200 {
         if client.snapshot().connected {
             break;
@@ -140,6 +140,9 @@ async fn lab() -> Lab {
     }
     assert!(client.snapshot().connected);
     Lab { dir, client, calls }
+}
+async fn lab() -> Lab {
+    lab_with_topics(vec![]).await
 }
 fn stores(query: &str) -> Stores {
     Stores::default()
@@ -391,4 +394,81 @@ async fn workspace_actions_require_current_available_output_and_membership() {
             json!({"workspace":1,"output":"OUT"})
         )
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn shared_bar_compositor_and_nullable_menu_fields_load_real_views() {
+    use bead::wayland::{SceneSource, UiEvent};
+    let mut lab = lab_with_topics(vec!["compositor".into()]).await;
+    for kind in [Kind::Overview, Kind::Palette, Kind::Keybindings] {
+        let extras = Extras::new(kind, lab.client.clone()).unwrap();
+        let model = ready(&extras, &stores("")).await;
+        if kind == Kind::Palette {
+            assert!(
+                matches!(&model["extras.rows"], Value::List(rows) if rows[0]["description"] == "" && rows[0]["icon"] == "apps")
+            );
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+        let colors = bead::render::Palette::read(&root.join("palette.json")).unwrap();
+        let cold = crate::sound::fallback(colors.get("surface").unwrap());
+        let session = bead::ui::Session::new(
+            root.clone(),
+            "extras/main.luau".into(),
+            root.join("palette.json"),
+            colors,
+            cold,
+        );
+        let mut runtime = crate::reload::Runtime::panel_session(session, true)
+            .with_extras(extras)
+            .unwrap();
+        runtime.services(Box::new(|_| {}));
+        runtime
+            .stage(UiEvent::Reload)
+            .unwrap()
+            .expect("real topic-backed view loads");
+        runtime.commit();
+        let label = match kind {
+            Kind::Overview => "Editor",
+            Kind::Palette => "Open Settings",
+            Kind::Keybindings => "Super+K",
+        };
+        assert!(
+            runtime
+                .session
+                .view_nodes()
+                .iter()
+                .any(|node| node.label.trim() == label),
+            "{} must render its topic/engine rows",
+            kind.name()
+        );
+        if kind == Kind::Overview {
+            let node = runtime
+                .session
+                .view_nodes()
+                .iter()
+                .find(|node| node.label == "Editor" && node.action.is_some())
+                .unwrap();
+            let rect = bead::ui::rect(&node.draw);
+            runtime
+                .stage(UiEvent::Click {
+                    x: rect.x + rect.w / 2.,
+                    y: rect.y + rect.h / 2.,
+                })
+                .unwrap();
+            runtime.commit();
+            assert!(
+                lab.calls.try_recv().is_err(),
+                "press must not focus before release"
+            );
+            runtime.stage(UiEvent::Release).unwrap();
+            runtime.commit();
+            assert_eq!(
+                tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                ("window.focus".into(), json!({"window":"win1"}))
+            );
+        }
+    }
 }

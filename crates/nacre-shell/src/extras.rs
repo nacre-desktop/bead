@@ -59,10 +59,11 @@ impl Extras {
     pub fn new(kind: Kind, client: Client) -> bead::core::source::Result<Self> {
         let topic = kind
             .topic()
-            .map(|name| {
-                client
+            .map(|name| match client.topic(name) {
+                Ok(topic) => Ok(Arc::new(topic) as Arc<dyn Source>),
+                Err(_) => client
                     .lease_topic(name)
-                    .map(|t| Arc::new(t) as Arc<dyn Source>)
+                    .map(|topic| Arc::new(topic) as Arc<dyn Source>),
             })
             .transpose()?;
         Ok(Self {
@@ -197,7 +198,7 @@ impl Extras {
             {
                 available = true;
                 rows = result.order.iter().filter_map(|id| result.items.get(id).map(|row|
-                    json!({"id":id,"name":row.name,"description":row.description,"icon":row.icon,"kind":row.kind,"disabled":row.disabled}))).collect();
+                    json!({"id":id,"name":row.name,"description":row.description.as_deref().unwrap_or_default(),"icon":row.icon.as_deref().unwrap_or("apps"),"kind":row.kind,"disabled":row.disabled}))).collect();
             }
         }
         if let Some(ticket) = &mut state.action
