@@ -506,3 +506,45 @@ async fn palette_navigation_applies_engine_query_and_schedules_its_route() {
         matches!(&palette.state.borrow().result,Some((_,result)) if result.route=="actions.windows" && result.query=="edited")
     );
 }
+
+#[test]
+fn long_shortcut_lists_materialize_only_the_viewport() -> bead_test::Result<()> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let rows = (0..1000).map(|index| json!({"id":format!("key{index}"),"key":format!("Mod+{index}"),"description":format!("Action {index}")})).collect();
+    let mut h = bead_test::Harness::load(
+        &root,
+        std::path::Path::new("extras/main.luau"),
+        &root.join("palette.json"),
+        BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.kind".into(), Value::Text("keybindings".into())),
+            ("extras.rows".into(), Value::list(rows)),
+        ]),
+        bead_test::Config {
+            width: 1280,
+            height: 1000,
+            scale: 1.,
+        },
+    )?;
+    h.render()?;
+    assert!(
+        h.scene().primitives.len() < 200,
+        "off-screen rows must stay unmaterialized"
+    );
+    assert!(
+        matches!(h.session.stores.get("extras.rows"),Some(Value::List(rows)) if rows.len()==1000)
+    );
+    h.update(BTreeMap::from([(
+        "extras.scroll".into(),
+        Value::Number(4000.),
+    )]))?;
+    h.render()?;
+    assert!(h.scene().primitives.len() < 200);
+    assert!(
+        h.scene()
+            .primitives
+            .iter()
+            .any(|p| matches!(p,bead::render::Primitive::Text{text,..} if text=="Action 86"))
+    );
+    Ok(())
+}

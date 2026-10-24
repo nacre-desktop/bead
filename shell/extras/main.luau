@@ -2,6 +2,7 @@
 local ui = require("bead.ui")
 local kit = require("bead.kit")
 local T = require("./tokens")
+local VirtualList = require("../kit/virtual-list")
 local kind = ui.resolve_for_check(ui.bind("extras.kind")) or "overview"
 local overview = kind == "overview"
 local shortcuts = kind == "keybindings"
@@ -111,11 +112,11 @@ if overview then
         ui.Repeat{id="workspace-groups",model=ui.bind("extras.groups"),key="id",
           render=workspace_card}}}}
 else
-  body = ui.Scroll{id="extras-scroll",scroll=ui.bind("extras.scroll"),width="fill",height=body_height,
-    ui.Column{id="extras-rows",width="fill",gap=shortcuts and T.shortcuts.row_gap or T.palette.row_gap,
-      ui.Repeat{id="rows",model=ui.bind("extras.filtered"),key="id",render=function(item)
-        return row(item,item.selected == true)
-      end}}}
+  body = VirtualList{id="extras-scroll",scroll=ui.bind("extras.scroll"),width=body_width,height=body_height,
+    gap=shortcuts and T.shortcuts.row_gap or T.palette.row_gap,
+    row_height=shortcuts and T.shortcuts.row_height or T.palette.row_height,
+    model=ui.bind("extras.filtered"),key="id",render=function(item)return row(item,item.selected == true)end}
+
 end
 
 local heading = {
