@@ -584,11 +584,15 @@ fn form_kit_gallery_golden() {
 /// filter line, no match and a cut-off tail.
 #[test]
 fn select_rows_open_their_list_under_the_field() {
-    let option = |id: &str, label: &str, selected: bool| {
-        json!({"id": id, "label": label, "selected": selected, "enabled": true})
-    };
+    let option = |id: &str, label: &str, selected: bool| json!({"id": id, "label": label, "selected": selected, "enabled": true});
     let long: Vec<Json> = (0..12)
-        .map(|i| option(&format!("m|{i}"), &format!("{}x{}@60.000Hz", 640 + i * 160, 360 + i * 90), i == 2))
+        .map(|i| {
+            option(
+                &format!("m|{i}"),
+                &format!("{}x{}@60.000Hz", 640 + i * 160, 360 + i * 90),
+                i == 2,
+            )
+        })
         .collect();
     let body = vec![
         json!({"id":"a1","kind":"select","label":"Scale","description":"","enabled":true,"text":"125%",
@@ -596,10 +600,16 @@ fn select_rows_open_their_list_under_the_field() {
         json!({"id":"a2","kind":"select","label":"Resolution and refresh rate","description":"","enabled":true,"wide":true,
             "text":"960x540@60.000Hz","options":long,"filter":"Filter modes","more":"4 more, type to filter"}),
     ];
-    let rows = vec![json!({"id":"s1","kind":"section","label":"Display","description":"","rows":body})];
+    let rows =
+        vec![json!({"id":"s1","kind":"section","label":"Display","description":"","rows":body})];
     let model = |open: &str| {
         BTreeMap::from([
-            ("settings.nav".into(), Value::list(vec![json!({"id":"a","kind":"page","label":"Page","icon":"palette","selected":true})])),
+            (
+                "settings.nav".into(),
+                Value::list(vec![
+                    json!({"id":"a","kind":"page","label":"Page","icon":"palette","selected":true}),
+                ]),
+            ),
             ("settings.items".into(), Value::list(rows.clone())),
             ("settings.title".into(), Value::Text("Displays".into())),
             ("settings.writable".into(), Value::Bool(true)),

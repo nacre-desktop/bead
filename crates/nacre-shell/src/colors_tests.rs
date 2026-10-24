@@ -905,7 +905,7 @@ fn settings_wallpaper_and_colors_pages_are_editable_registry_rows() {
     assert_eq!(kind(&wallpaper, "wallpaper.motion.motionMode"), "choice");
     let (colors, readonly) = rows("colors");
     assert_eq!(readonly, Value::Bool(false));
-    assert_eq!(kind(&colors, "colors.palette.style"), "choice");
+    assert_eq!(kind(&colors, "colors.palette.style"), "select");
     // Mode and the schedule are applied by helpers, not by a store write: shown, not editable.
     assert_eq!(kind(&colors, "colors.palette.mode"), "help");
     let (targets, _) = rows("colors/app-theming");

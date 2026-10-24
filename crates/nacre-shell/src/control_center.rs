@@ -17,7 +17,7 @@ use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
 /// Topics a tile source may read; the panel leases each for as long as it is open.
-pub const TOPICS: [&str; 8] = [
+pub const TOPICS: [&str; 9] = [
     "audio",
     "controls",
     "network",
@@ -26,6 +26,7 @@ pub const TOPICS: [&str; 8] = [
     "power.profiles",
     "battery",
     "notifications",
+    "displays",
 ];
 /// The VPN tile's source; its profile list and `switch` verb feed the dock page (N0062).
 const VPN: &str = "vpn.state";
@@ -554,7 +555,7 @@ impl ControlCenter {
                     value,
                     status: format!("{value}%"),
                     icon: "brightness_6",
-                    label: name.clone(),
+                    label: self.output_description(name),
                     node: Some(name.clone()),
                     ..Default::default()
                 })
@@ -640,6 +641,24 @@ impl ControlCenter {
                 })
             }
         }
+    }
+    /// The output's description as the QML level tile shows it ("Make Model"), else its name.
+    fn output_description(&self, name: &str) -> String {
+        self.data("displays")
+            .and_then(|data| {
+                let output = data["outputs"]
+                    .as_array()?
+                    .iter()
+                    .find(|o| o["name"] == name)?;
+                let words: Vec<&str> = ["make", "model"]
+                    .iter()
+                    .filter_map(|key| output[*key].as_str())
+                    .map(str::trim)
+                    .filter(|w| !w.is_empty())
+                    .collect();
+                (!words.is_empty()).then(|| words.join(" "))
+            })
+            .unwrap_or_else(|| name.to_owned())
     }
     fn controls(&self) -> Option<Arc<Json>> {
         self.data("controls").filter(|data| healthy(data))

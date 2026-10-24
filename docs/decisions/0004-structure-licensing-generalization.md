@@ -110,6 +110,10 @@ After Bead's core switch on Nacre, plan support for:
   evaluates `visibleWhen`/`enabledWhen` against a flag map; which flags exist and the topics and methods behind each custom
   section stay in `nacre-shell/src/settings/pages.rs`.
 
+- B0094: `kit.Select`/`kit.SelectRow` (drop-down over plain option lists; open state, scroll and Esc are the caller's, the
+  Settings adapter keeps them in `settings.select*`), `kit.Fill` (two-colour bar from palette roles; steps of alpha, no renderer
+  gradient) and `bead_ui::text_style::gradients()` (the host's solid-colour choice, read into `tokens.gradients` while a view is built).
+
 - B0048: `bead_core::pearl` (magnet/landing/place geometry, drag state machine, layout store) and
   `bead_wayland::pearls` (detach/dock any panel session into a floating surface, guide slots). Edge, insets,
   tunings and the allowed views come from the application; the film/landing/border art is Nacre-specific in

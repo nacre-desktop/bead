@@ -2601,7 +2601,10 @@ impl SceneSource for Runtime {
             let mut changes = settings.act(arg, &edit, wake);
             // Any settings action (a choice in an open drop-down, a page change) closes the open list.
             if !arg.starts_with("do:vol|") {
-                changes.insert("settings.select".into(), bead::core::Value::Text(String::new()));
+                changes.insert(
+                    "settings.select".into(),
+                    bead::core::Value::Text(String::new()),
+                );
             }
             // A slider step keeps the focus so the drag continues over the next step.
             let scene = match arg

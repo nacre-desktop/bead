@@ -249,9 +249,11 @@ impl Settings {
                 row["empty"] = tr("bead.settings.displays-mode-none", &[]).into();
                 let more = matching.len().saturating_sub(MODE_ROWS);
                 if more > 0 {
-                    row["more"] =
-                        tr("bead.settings.displays-mode-more", &[("count", &more.to_string())])
-                            .into();
+                    row["more"] = tr(
+                        "bead.settings.displays-mode-more",
+                        &[("count", &more.to_string())],
+                    )
+                    .into();
                 }
             }
             rows.push(row);

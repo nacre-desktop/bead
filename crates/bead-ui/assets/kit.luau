@@ -54,10 +54,15 @@ return function(ui, tokens)
         local steps=math.min(24,math.max(2,math.floor(inner/5)))
         local kids={ui.Box{id="from",position="absolute",left=0,top=0,width=cap+1,height=h,radius=r,fill=p.from},
             ui.Box{id="body",position="absolute",left=r,top=0,width=w-2*r,height=h,fill=p.from}}
+        -- Each step lays `to` over everything from its left edge to the right end, so there is no seam to see; its alpha
+        -- is what lifts the blend from the previous step's share to its own.
+        local before=0
         for i=0,steps-1 do
             local t=(r+(i+.5)*(w-2*r)/steps)/w
-            kids[#kids+1]=ui.Box{id="step-"..i,position="absolute",left=r+i*(w-2*r)/steps,top=0,width=(w-2*r)/steps+(i<steps-1 and .5 or 0),height=h,
-                fill=ui.alpha(p.to,t)}
+            local alpha=1-(1-t)/(1-before)
+            before=t
+            local left=r+i*(w-2*r)/steps
+            kids[#kids+1]=ui.Box{id="step-"..i,position="absolute",left=left,top=0,width=w-r-left,height=h,fill=ui.alpha(p.to,alpha)}
         end
         kids[#kids+1]=ui.Box{id="to",position="absolute",left=w-cap-1,top=0,width=cap+1,height=h,radius=r,fill=p.to}
         for i,node in ipairs(kids) do out[i]=node end
@@ -131,7 +136,7 @@ return function(ui, tokens)
             local labels={ui.Text{id="label",text=p.label,width=text_w,height=18,font_size=label_size,font_weight=500,color=color}}
             if p.detail and p.detail~="" then
                 -- network and Bluetooth names may take a second line, as in QML; the height follows the estimated wrap
-                local lines=p.detail_lines and (#p.detail*small*.55>text_w and 2 or 1) or 1
+                local lines=p.detail_lines and (#p.detail*small*.5>text_w and 2 or 1) or 1
                 labels[2]=ui.Text{id="detail",text=p.detail,width=text_w,height=lines*16,font_size=small,
                     color=armed and p.on and "onPrimaryContainer" or "onSurfaceVariant"}
             end
@@ -587,9 +592,9 @@ return function(ui, tokens)
         local kids={}
         local height=2*sp.sm+2+list_h
         if searchable then
-            kids[1]=kit.TextInput{id="filter",text=p.field,placeholder=p.placeholder,width=inner,height=sp.xxl+sp.xs,shrink=0,
-                radius=tokens.radii.medium,fill="surfaceContainer",aria_label=p.placeholder}
-            height=height+sp.xxl+sp.xs+sp.sm
+            kids[1]=kit.TextInput{id="filter",text=p.field,placeholder=p.placeholder,width=inner,height=sp.huge,shrink=0,padding=sp.xs,
+                padding_left=sp.sm,radius=tokens.radii.medium,fill="surfaceContainer",aria_label=p.placeholder}
+            height=height+sp.huge+sp.sm
         end
         kids[#kids+1]=list
         if (p.more or "")~="" then

@@ -52,6 +52,20 @@ local function stack(id,items,spacing)
     kids.height=total
     return ui.Column(kids),total
 end
+-- Width of `text` at `size` px from per-class advances (the layout cannot measure text): capitals and digits .7 em,
+-- narrow letters .3, m and w .85, the rest .55, plus 2 px.
+local function textw(text,size)
+    local em=0
+    for _,cp in utf8.codes(text) do
+        local c=utf8.char(cp)
+        if c=="%" then em=em+.9
+        elseif string.find(c,"[A-Z0-9]") then em=em+.7
+        elseif string.find(c,"[iljtfr%s%.:,]") then em=em+.3
+        elseif c=="m" or c=="w" then em=em+.85
+        else em=em+.55 end
+    end
+    return math.ceil(em*size)+2
+end
 -- A QML `NacreControlButton`: a 32 px circle, glyph at 17 pt, no fill until hovered; `selected` fills it. It takes no
 -- focus ring (QML shows none for a page opened without the keyboard).
 local function tool(id,icon,label,action,selected)
@@ -137,7 +151,7 @@ end
 local function pill(id,label,icon,action,selected)
     local armed=action~=nil
     local ink=selected and "onPrimary" or "onSurface"
-    local text_w=(utf8.len(label) or 4)*8
+    local text_w=textw(label,CAPTION)
     local w=T.spacing.xl+text_w+(icon and 22 or 0)
     local inside={id=id.."-row",width=w,height=34,gap=T.spacing.xs,align="center",justify="center"}
     if icon then inside[#inside+1]=glyph(id.."-icon",icon,ink,T.icons.small*4/3) end
@@ -174,7 +188,7 @@ local function home()
     -- QML: glyph 15 pt, percentage 10 pt medium, estimate 9 pt muted, 5 px apart
     local percent=get("cc.battery")
     local pct,note=T.text.caption*4/3,(T.text.caption-1)*4/3
-    local pct_w=(utf8.len(percent) or 3)*8+4
+    local pct_w=textw(percent,pct)
     local status={id="status",width=INNER,height=HEAD,gap=STATUS_GAP,align="center",
         kit.Button{id="battery-status",width=status_w,height=HEAD,padding=0,fill="transparent",hover_fill="transparent",
             aria_label=ui.tr("bead.panel.control-battery-details"),on_activate=views.battery and ui.action("detail","battery") or nil,
@@ -206,7 +220,9 @@ local function home()
         local grid,height=kit.TileGrid{id="grid",width=INNER,gap=GAP,sizes=reg.layout.sizes,tiles=list}
         table.insert(items,{grid,height})
     end
-    for _,item in ipairs(notices(2,false)) do table.insert(items,item) end
+    -- the history sits 12 px under its toolbar (QML `NacreHistoryPopup`)
+    local group,height=stack("notices",notices(2,false),T.spacing.md)
+    table.insert(items,{group,height})
     return stack("home",items,T.spacing.xl)
 end
 local function row_button(id,icon,label,detail,action,sub)
@@ -271,7 +287,8 @@ local function catalog()
 end
 local function notifications_page()
     local items={header(ui.tr("bead.panel.control-notifications"),ui.action("page","home"))}
-    for _,item in ipairs(notices(nil,true)) do table.insert(items,item) end
+    local group,height=stack("notices",notices(nil,true),T.spacing.md)
+    table.insert(items,{group,height})
     return stack("detail",items,T.spacing.lg)
 end
 local function detail()

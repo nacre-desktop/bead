@@ -1183,7 +1183,7 @@ fn control_center_pages_match_goldens() -> bead_test::Result<()> {
                 }
                 "edit" => assert!(ids.iter().any(|i| i.contains(".slot-1"))),
                 "catalog" => assert!(ids.iter().any(|i| i.contains("add-notifications"))),
-                _ => assert!(ids.iter().any(|i| i.contains("switch"))),
+                _ => assert!(ids.iter().any(|i| i.contains("notices-dnd"))),
             }
             golden(name, &mut h, scale)?;
         }
@@ -1284,7 +1284,7 @@ fn tiles_dispatch_host_actions_and_the_detail_page_opens_in_place() -> bead_test
     );
     // The level slider sends percent steps for its own source.
     assert_eq!(
-        action(&h, "tile-volume.level-column.level.hits.value-10"),
+        action(&h, "tile-volume.level.hits.value-10"),
         (
             Some("cc.do".into()),
             Some(Value::Text("set:audio.output:50".into()))

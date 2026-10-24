@@ -1426,7 +1426,10 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
         "Display changes revert after 20 seconds unless you keep them."
     );
     let scale = row(&rows, "displays.out.DP-1.scale");
-    assert_eq!(scale["kind"], "select", "QML draws the scale as a drop-down");
+    assert_eq!(
+        scale["kind"], "select",
+        "QML draws the scale as a drop-down"
+    );
     assert_eq!(scale["label"], "Scale");
     assert_eq!(scale["text"], "100%");
     let labels: Vec<&str> = scale["options"]
@@ -1460,7 +1463,10 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
         (json!("select"), 12)
     );
     assert_eq!(long["filter"], "Filter modes");
-    assert!(long["more"].is_null(), "the whole list scrolls in the popup");
+    assert!(
+        long["more"].is_null(),
+        "the whole list scrolls in the popup"
+    );
     // The filter field narrows the long list by the typed text, case-insensitively.
     let filtered = stores("displays")
         .reconcile(&BTreeMap::from([(
