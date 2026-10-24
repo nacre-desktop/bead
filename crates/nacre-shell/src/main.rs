@@ -11,6 +11,7 @@ mod contour;
 mod control_center;
 mod dashboard;
 mod desktop;
+mod extras;
 mod font_sources;
 mod frame_art;
 mod frame_config;
@@ -746,6 +747,18 @@ fn start(
             );
         }
         if let Some(client) = &_ui_provider {
+            for kind in extras::Kind::ALL {
+                views.insert(
+                    kind.name().into(),
+                    extras::panel(
+                        kind,
+                        client.clone(),
+                        palette.clone(),
+                        colors.clone(),
+                        panel_trace,
+                    )?,
+                );
+            }
             views.insert(
                 "session".into(),
                 popouts::session(client.clone(), palette.clone(), colors.clone(), panel_trace)?,

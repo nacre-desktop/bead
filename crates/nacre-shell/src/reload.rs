@@ -48,6 +48,9 @@ pub struct Runtime {
     dock_subscriptions: Vec<bead::core::source::Subscription>,
     status_subscription: Option<bead::core::source::Subscription>,
     status_control_subscription: Option<bead::core::source::Subscription>,
+    extras: Option<std::rc::Rc<crate::extras::Extras>>,
+    extras_subscription: Vec<bead::core::source::Subscription>,
+    extras_wake: Option<std::sync::Arc<std::sync::Mutex<Option<crate::nacre_source::CallWake>>>>,
     session_menu: Option<std::rc::Rc<crate::session_menu::SessionMenu>>,
     session_menu_subscription: Option<bead::core::source::Subscription>,
     chat: Option<std::rc::Rc<crate::chat::Chat>>,
@@ -311,6 +314,9 @@ impl Runtime {
             dock_subscriptions: Vec::new(),
             status_subscription: None,
             status_control_subscription: None,
+            extras: None,
+            extras_subscription: Vec::new(),
+            extras_wake: None,
             session_menu: None,
             session_menu_subscription: None,
             chat: None,
@@ -758,6 +764,25 @@ impl Runtime {
         }
         runtime.actions.grant("bluetooth.control");
         Ok(runtime)
+    }
+    pub fn with_extras(mut self, extras: crate::extras::Extras) -> Result<Self, Box<dyn Error>> {
+        let extras = std::rc::Rc::new(extras);
+        let projector = extras.clone();
+        let wake =
+            std::sync::Arc::new(std::sync::Mutex::new(None::<crate::nacre_source::CallWake>));
+        let callback = wake.clone();
+        self.extras_wake = Some(wake);
+        self.session.set_projector(Box::new(move |stores| {
+            Ok(projector.project(stores, callback.lock().ok().and_then(|w| w.clone())))
+        }));
+        self.actions.register("extras.do", "extras.control")?;
+        self.actions.grant("extras.control");
+        self.extras = Some(extras);
+        self.session.stores = self.session.stores.reconcile(&BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text("extras.search".into()),
+        )]))?;
+        Ok(self)
     }
     /// Session menu panel (B0023). Controls stay disabled until the daemon
     /// advertises `session.request` v1.
@@ -1734,14 +1759,16 @@ impl Runtime {
                     *path = if std::env::var_os("BEAD_MATCHED_ICONS").is_some() {
                         std::env::var_os("BEAD_ICON_PATH")
                             .map(std::path::PathBuf::from)
-                            .unwrap_or_else(|| "shell/sample.svg".into())
+                            .unwrap_or_else(|| "@bead-icon-fallback".into())
                     } else {
                         freedesktop_icons::lookup(icon)
                             .with_size(48)
                             .find()
-                            .unwrap_or_else(|| "shell/sample.svg".into())
+                            .unwrap_or_else(|| "@bead-icon-fallback".into())
                     };
-                    let data = if !reload {
+                    let data = if path.as_path() == std::path::Path::new("@bead-icon-fallback") {
+                        std::sync::Arc::from(include_bytes!("../../../shell/sample.svg").as_slice())
+                    } else if !reload {
                         if let Some(data) = self.session.asset_snapshot(path) {
                             data
                         } else {
@@ -1917,6 +1944,19 @@ impl SceneSource for Runtime {
             match control.subscribe(wakeup.clone()) {
                 Ok(subscriptions) => self.control_subscription = subscriptions,
                 Err(_) => eprintln!("SOURCE_ERROR code=control_subscription"),
+            }
+        }
+        if let Some(extras) = &self.extras {
+            let wakeup = wakeup.clone();
+            let wake: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            if let Some(slot) = &self.extras_wake {
+                *slot.lock().unwrap() = Some(wake.clone());
+            }
+            match extras.subscribe(wake) {
+                Ok(subscriptions) => self.extras_subscription = subscriptions,
+                Err(_) => eprintln!("SOURCE_ERROR code=extras_subscription"),
             }
         }
         if let Some(menu) = &self.session_menu {
@@ -2126,6 +2166,64 @@ impl SceneSource for Runtime {
                     owner.hover(&key, true);
                     self.notification_hover = Some(key);
                 }
+            }
+        }
+        if self.extras.is_some() {
+            if let UiEvent::Hover { x, y } = &event
+                && let Some((_, name, bead::core::Value::Text(request))) =
+                    self.session.action_at(*x, *y)
+                && name == "extras.do"
+                && let Some(id) = request
+                    .strip_prefix("focus:")
+                    .or_else(|| request.strip_prefix("activate:"))
+            {
+                let values = self
+                    .session
+                    .action_values("extras.select", bead::core::Value::Text(id.into()))?;
+                let scene = self.session.update(values)?;
+                return self.finish_scene(scene, false);
+            }
+            let action = match &event {
+                UiEvent::Command { command, .. } => match command.as_str() {
+                    "up" => Some("extras.prev"),
+                    "down" => Some("extras.next"),
+                    "enter"
+                        if !self
+                            .session
+                            .focused_action()
+                            .is_some_and(|(_, name, _)| name == "extras.do") =>
+                    {
+                        Some("extras.choose")
+                    }
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(action) = action {
+                let mut values = self
+                    .session
+                    .action_values(action, bead::core::Value::Bool(true))?;
+                let request = match values.get("extras.request") {
+                    Some(bead::core::Value::Text(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                if !request.is_empty() {
+                    let wakeup = self
+                        .wakeup
+                        .clone()
+                        .ok_or("extras event channel unavailable")?;
+                    self.extras.as_ref().unwrap().act(
+                        &request,
+                        &self.session.stores,
+                        std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new()))),
+                    );
+                    values.insert(
+                        "extras.request".into(),
+                        bead::core::Value::Text(String::new()),
+                    );
+                }
+                let scene = self.session.update(values)?;
+                return self.finish_scene(scene, false);
             }
         }
         // Welcome: Enter advances the tour, except on a tile of the page itself (QML parity).
@@ -2459,6 +2557,25 @@ impl SceneSource for Runtime {
                 );
             }
             let scene = self.session.update(outcome.changes)?;
+            return self.finish_scene(scene, false);
+        }
+        if let (Some(extras), Some((_, name, bead::core::Value::Text(request)))) =
+            (&self.extras, &host_action)
+            && name == "extras.do"
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("extras event channel unavailable")?;
+            extras.act(
+                request,
+                &self.session.stores,
+                std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new()))),
+            );
+            let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)

@@ -34,6 +34,11 @@ pub fn configure() {
 
 #[cfg(all(test, feature = "trace", target_os = "linux", target_env = "gnu"))]
 mod tests {
+    #[tokio::test(flavor = "current_thread")]
+    async fn extras_retirement_releases_topic_data_and_subscriptions() {
+        crate::extras::tests::retirement().await;
+    }
+
     #[test]
     fn weather_hero_image_bytes_return_to_zero_after_close() -> bead_test::Result<()> {
         use bead::render::{Primitive, Renderer, tree::TreeCpuRenderer};

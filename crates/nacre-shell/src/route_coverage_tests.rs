@@ -27,7 +27,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("nacre.launcher", Launcher),
     ("nacre.menu", Launcher),
     ("nacre.clipboard", Launcher),
-    // overview and palette are daemon menu routes (windows list, style); QML's overview grid has no Bead view
+    // Extra modes are their own surfaces; the remaining modes stay menu-backed.
     ("nacre.mode", Launcher),
     ("nacre.hide", Panel("bead.panel", "hide")),
     ("nacre.close", Panel("bead.panel", "close")),
@@ -99,10 +99,17 @@ fn every_nacre_route_has_a_bead_handler_or_a_stated_refusal() {
                 }
                 Launcher => {
                     let mapped = map_views(c).unwrap_or_else(|e| panic!("{label}: {e:?}"));
-                    assert!(
-                        matches!(crate::key_routes::launcher(&mapped), Some(Ok(_))),
-                        "{label}"
-                    );
+                    if id == "nacre.mode"
+                        && matches!(args.first(), Some(&"overview" | &"palette" | &"keys"))
+                    {
+                        assert_eq!(mapped.target, "bead.panel", "{label}");
+                        assert_eq!(mapped.method, "toggle", "{label}");
+                    } else {
+                        assert!(
+                            matches!(crate::key_routes::launcher(&mapped), Some(Ok(_))),
+                            "{label}"
+                        );
+                    }
                 }
                 App => {
                     let reply = map_views(c).unwrap_err();

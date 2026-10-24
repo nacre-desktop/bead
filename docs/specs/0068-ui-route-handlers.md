@@ -14,7 +14,7 @@ Source: `shell/shell-routes.json`, a snapshot of Nacre `nacre/shell-tools/shell-
 | --- | --- | --- |
 | `nacre launcher [Q]` | `key_routes::launcher` (toggle) | done (B0026) |
 | `nacre menu ROUTE Q`, `nacre clipboard` | `key_routes::launcher` | done (B0026) |
-| `nacre mode apps\|wallpaper\|palette\|overview\|clipboard\|keys` | `key_routes::launcher`: daemon menu routes `style.wallpapers`, `style`, `actions.windows`, ... | done for the menu-backed modes. **Gap:** QML's overview grid and palette picker are not rebuilt; `overview` lists windows in the launcher (`actions.windows`), `palette` opens the launcher Style page |
+| `nacre mode apps\|wallpaper\|palette\|overview\|clipboard\|keys` | `key_routes::launcher`: daemon menu routes `style.wallpapers`, `style`, `actions.windows`, ... | done for the menu-backed modes. B0077 supersedes the overview/palette/keys aliases with independent lazy extras surfaces; remaining modes stay menu-backed |
 | `nacre hide`, `nacre close` | `bead.panel hide` / `close` | done (B0028, B0026) |
 | `nacre settings [PAGE]` | Settings app (`app::route`) | done (B0045, B0052) |
 | `nacre left`, `drawers toggle left` | chat app (`app::route`) | done (B0052) |

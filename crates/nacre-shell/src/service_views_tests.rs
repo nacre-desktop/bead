@@ -564,10 +564,23 @@ fn owner_key_routes_open_the_launcher_with_routes_and_toggle_like_qml() -> Resul
         ));
         assert_eq!(route(&memory), Value::Text("power".into()));
     }
-    // Super+Tab: the overview alias resolves to the window list route.
-    events.lock().unwrap().clear();
-    assert!(send("nacre", "mode", &["overview"], false)?.error.is_none());
-    assert_eq!(route(&memory), Value::Text("actions.windows".into()));
+    // Extras now leave the launcher family in the command map before Runtime admission.
+    for (mode, view) in [
+        ("overview", "overview"),
+        ("palette", "palette"),
+        ("keys", "keybindings"),
+    ] {
+        let mapped = crate::commands::map_views(crate::commands::from_strings(
+            "nacre".into(),
+            "mode".into(),
+            &[mode.into()],
+        )?)
+        .unwrap();
+        assert_eq!(mapped.target, "bead.panel");
+        assert_eq!(mapped.method, "toggle");
+        assert_eq!(mapped.args, vec![serde_json::json!(view)]);
+        assert_eq!(route(&memory), Value::Text("power".into()));
+    }
     // Super+Space twice: the second identical press closes the open launcher.
     events.lock().unwrap().clear();
     assert!(send("nacre", "launcher", &[""], false)?.error.is_none());

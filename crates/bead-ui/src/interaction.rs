@@ -20,6 +20,22 @@ pub(super) fn deferred_matches(nodes: &[Node], pending: &super::session::Deferre
         })
 }
 impl Session {
+    /// Evaluate a declared behavior action for a host key binding. The host can
+    /// consume effect requests before staging the resulting values with `update`.
+    pub fn action_values(
+        &self,
+        name: &str,
+        arg: Value,
+    ) -> Result<BTreeMap<String, Value>, Diagnostic> {
+        let Some(generation) = &self.generation else {
+            return Ok(BTreeMap::new());
+        };
+        Ok(generation
+            .script
+            .action(name, &self.stores, arg)?
+            .values()
+            .clone())
+    }
     fn deferred_valid(&self) -> Option<(String, String, Value)> {
         if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) {
             return None;

@@ -57,6 +57,9 @@ STATE_PREPARE = {'popout-audio': [('ui', 'nacre', 'popout', 'network', '1560'), 
                                   ('ui', 'nacre', 'close'), ('sleep', 0.5)]}
 STATES = {
     'idle': ([], [], 0),
+    'overview': ([('ui', 'nacre', 'settings'), ('sleep', 2.0), ('ui', 'nacre', 'mode', 'overview')], [('ui', 'nacre', 'close'), ('app_close', 'settings')], 1.0),
+    'palette': ([('ui', 'nacre', 'mode', 'palette')], [('ui', 'nacre', 'close')], 1.0),
+    'keybindings': ([('ui', 'nacre', 'mode', 'keys')], [('ui', 'nacre', 'close')], 1.0),
     'launcher': ([('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
     'launcher-hover': ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.4), ('pointer', *PTR['launcher-quick'])],
                        [('ui', 'nacre', 'close')], 0),

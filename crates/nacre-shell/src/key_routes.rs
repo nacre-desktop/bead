@@ -81,7 +81,13 @@ fn menu_route(route: &str) -> Result<String, &'static str> {
 
 /// `None` is not a launcher-family route; `Some(Err)` is one Bead refuses.
 pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
-    if call.target != "nacre" {
+    if call.target != "nacre"
+        || (call.method == "mode"
+            && matches!(
+                call.args.first().and_then(serde_json::Value::as_str),
+                Some("overview" | "palette" | "keys")
+            ))
+    {
         return None;
     }
     let arg = |i: usize| call.args.get(i).and_then(serde_json::Value::as_str);
@@ -106,9 +112,7 @@ pub fn launcher(call: &Call) -> Option<Result<Launch, &'static str>> {
         "mode" => match arg(0).unwrap_or_default() {
             "apps" => launch("", None, true),
             "legacy" => Err("legacy launcher mode is not implemented"),
-            name @ ("wallpaper" | "palette" | "overview" | "clipboard" | "keys") => {
-                launch("", resolve(name), true)
-            }
+            name @ ("wallpaper" | "clipboard") => launch("", resolve(name), true),
             _ => Err("unknown launcher mode"),
         },
         _ => return None,
@@ -240,13 +244,13 @@ mod tests {
             assert_eq!((l.route.as_deref(), l.toggle), (Some(id), false));
         }
         for (mode, id) in [
-            ("overview", "actions.windows"),
-            ("palette", "style"),
             ("clipboard", "actions.clipboard"),
-            ("keys", "learn.shortcuts"),
             ("wallpaper", "style.wallpapers"),
         ] {
             assert_eq!(routed("mode", &[mode]).route.as_deref(), Some(id), "{mode}");
+        }
+        for mode in ["overview", "palette", "keys"] {
+            assert!(launcher(&call("mode", &[mode])).is_none());
         }
         assert_eq!(routed("mode", &["apps"]).route, None);
     }

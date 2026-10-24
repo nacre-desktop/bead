@@ -226,6 +226,20 @@ fn is_prompt_id(ident: &str) -> bool {
 }
 
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
+    // Native extras have their own lazy surfaces; menu routes remain engine-owned.
+    if call.target == "nacre"
+        && call.method == "mode"
+        && let Some(mode) = call.args.first().and_then(Value::as_str)
+        && matches!(mode, "overview" | "palette" | "keys")
+    {
+        validate(&call)?;
+        let view = if mode == "keys" { "keybindings" } else { mode }.to_owned();
+        call.target = "bead.panel".into();
+        call.method = "toggle".into();
+        call.args = vec![Value::String(view)];
+        return Ok(call);
+    }
+
     // The AI sidebar (QML left drawer): `nacre left` and `drawers toggle left` both
     // toggle it, as in the QML shell. It is an on-demand app process (B0052).
     let left = (call.target == "nacre" && call.method == "left")
