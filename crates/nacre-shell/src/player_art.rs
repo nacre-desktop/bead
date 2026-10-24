@@ -32,9 +32,8 @@ pub(crate) const SHOT: Cache = Cache {
     h: 96,
 };
 
-/// The decoded image of a plain regular PNG file directly inside the cache directory, or
-/// `None` for anything else (relative or foreign path, symlink, oversized file or image).
-pub(crate) fn decode(cache: &Cache, path: &str) -> Option<image::DynamicImage> {
+/// The bytes of a plain regular file directly inside the cache directory within its size cap.
+fn read(cache: &Cache, path: &str) -> Option<Vec<u8>> {
     let path = Path::new(path);
     if !path.is_absolute() || !path.parent()?.ends_with(cache.dir) {
         return None;
@@ -43,7 +42,37 @@ pub(crate) fn decode(cache: &Cache, path: &str) -> Option<image::DynamicImage> {
     if !meta.is_file() || meta.len() > cache.max_file {
         return None;
     }
-    let bytes = std::fs::read(path).ok()?;
+    std::fs::read(path).ok()
+}
+/// N0056: the daemon's weather-photo cache. The daemon already decoded and bounded the image.
+const PHOTO: Cache = Cache {
+    dir: "nacre/daemon-weather-photo",
+    max_file: 2 * 1024 * 1024,
+    w: 0,
+    h: 0,
+};
+/// The published city photo as bytes plus its size: a JPEG or PNG of at most 1400 per side
+/// from the daemon's cache only. The renderer decodes it once to display size.
+pub(crate) fn photo(path: &str) -> Option<(Arc<[u8]>, u32, u32)> {
+    let bytes = read(&PHOTO, path)?;
+    let reader = ImageReader::new(Cursor::new(&bytes))
+        .with_guessed_format()
+        .ok()?;
+    if !matches!(reader.format(), Some(ImageFormat::Jpeg | ImageFormat::Png)) {
+        return None;
+    }
+    let (w, h) = reader.into_dimensions().ok()?;
+    // 1400 per side already bounds the pixels at the daemon's 1.96 million.
+    if !(1..=1400).contains(&w) || !(1..=1400).contains(&h) {
+        return None;
+    }
+    Some((Arc::from(bytes), w, h))
+}
+
+/// The decoded image of a plain regular PNG file directly inside the cache directory, or
+/// `None` for anything else (relative or foreign path, symlink, oversized file or image).
+pub(crate) fn decode(cache: &Cache, path: &str) -> Option<image::DynamicImage> {
+    let bytes = read(cache, path)?;
     let (w, h) = ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png)
         .into_dimensions()
         .ok()?;
@@ -118,6 +147,46 @@ mod tests {
         assert!(thumbnail(&ART, root.join(ART.dir).join("none.png").to_str().unwrap()).is_none());
         std::fs::write(root.join(ART.dir).join("junk.png"), b"not a png").unwrap();
         assert!(thumbnail(&ART, root.join(ART.dir).join("junk.png").to_str().unwrap()).is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_weather_photo_is_raw_bytes_from_the_daemon_cache_within_its_limits() {
+        let root = std::env::temp_dir().join(format!("bead-photo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join(PHOTO.dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let save = |name: &str, w: u32, h: u32, format: ImageFormat| {
+            let path = dir.join(name);
+            image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+                w,
+                h,
+                image::Rgb([9, 90, 200]),
+            ))
+            .save_with_format(&path, format)
+            .unwrap();
+            path.to_str().unwrap().to_owned()
+        };
+        // The daemon's file name has no extension: the format comes from the bytes.
+        let jpeg = save("city.image", 960, 600, ImageFormat::Jpeg);
+        let (bytes, w, h) = photo(&jpeg).expect("jpeg");
+        assert_eq!((w, h), (960, 600));
+        assert_eq!(&bytes[..], &std::fs::read(&jpeg).unwrap()[..]);
+        assert_eq!(
+            photo(&save("a.png", 400, 300, ImageFormat::Png)).unwrap().1,
+            400
+        );
+        assert!(photo(&save("wide.png", 1401, 10, ImageFormat::Png)).is_none());
+        std::fs::write(dir.join("junk.image"), b"GIF89a not a photo").unwrap();
+        assert!(photo(dir.join("junk.image").to_str().unwrap()).is_none());
+        // Relative, foreign and symlinked paths never reach the decoder.
+        assert!(photo("city.image").is_none());
+        let outside = root.join("outside.png");
+        std::fs::copy(&jpeg, &outside).unwrap();
+        assert!(photo(outside.to_str().unwrap()).is_none());
+        let link = dir.join("link.image");
+        std::os::unix::fs::symlink(&jpeg, &link).unwrap();
+        assert!(photo(link.to_str().unwrap()).is_none());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

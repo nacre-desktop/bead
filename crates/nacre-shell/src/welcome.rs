@@ -272,7 +272,7 @@ pub(crate) fn in_dirs(name: &str, path: &std::ffi::OsStr) -> bool {
 }
 
 /// Start `program args` detached from this process (own group, no stdio); true when it started.
-fn detach(program: &str, args: &[&str]) -> bool {
+pub(crate) fn detach(program: &str, args: &[&str]) -> bool {
     use std::os::unix::process::CommandExt;
     let Ok(mut child) = std::process::Command::new(program)
         .args(args)

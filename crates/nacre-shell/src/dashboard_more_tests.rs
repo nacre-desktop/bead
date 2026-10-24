@@ -1459,7 +1459,7 @@ fn weather_local_photo_crops_keeps_credit_and_releases_the_asset() -> Result<()>
     let clip = scene.clips.get(&index).ok_or("photo crop missing")?;
     assert_eq!((clip.w, clip.h), (564., 298.));
     assert!((rect.x + rect.w / 2. - (clip.x + clip.w / 2.)).abs() < 0.01);
-    assert!(scene.primitives.iter().any(|p| matches!(p, bead::render::Primitive::Text { text, .. } if text == "Fixture artist · CC0")));
+    assert!(scene.primitives.iter().any(|p| matches!(p, bead::render::Primitive::Text { text, .. } if text == "Photo: Fixture artist · CC0 · cropped/softened")));
     let held = Arc::downgrade(
         scene
             .asset_data
@@ -1496,4 +1496,301 @@ fn weather_photos_follow_the_published_setting() {
             Value::Bool(enabled)
         );
     }
+}
+
+/// A JPEG of `w`x`h`, red at the sides and green in the middle fifth, in a daemon-shaped cache
+/// (`<root>/nacre/daemon-weather-photo/city.image`); returns the file path.
+fn daemon_photo(root: &Path, w: u32, h: u32) -> String {
+    let dir = root.join("nacre/daemon-weather-photo");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("city.image");
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(w, h, |x, _| {
+        if x >= w * 2 / 5 && x < w * 3 / 5 {
+            image::Rgb([0, 255, 0])
+        } else {
+            image::Rgb([255, 0, 0])
+        }
+    }))
+    .save_with_format(&path, image::ImageFormat::Jpeg)
+    .unwrap();
+    path.to_str().unwrap().to_owned()
+}
+fn photo_state(path: &str, status: &str, ready: bool) -> Json {
+    json!({"enabled": true, "ready": ready, "status": status,
+        "location": {"city": "Harbour", "latitude": 60.0, "longitude": 5.0},
+        "asset": if ready { json!({"path": path, "checked": 1800000000.0, "author": "Fixture artist",
+            "license": "CC BY-SA 4.0", "source": "https://commons.wikimedia.org/wiki/File:Harbour.jpg"}) } else { Json::Null }})
+}
+fn weather_with_photo(state: Json) -> (Dashboard, Arc<FakeSource>) {
+    let photo = Arc::new(FakeSource::new(state).unwrap());
+    let dashboard = Dashboard::new(
+        Page::Weather,
+        Arc::new(FakeSource::new(fixture("weather")).unwrap()),
+        Some(photo.clone()),
+        true,
+    );
+    (dashboard, photo)
+}
+fn node_ids(h: &Harness) -> Vec<String> {
+    h.session
+        .view_nodes()
+        .iter()
+        .map(|n| n.id.clone())
+        .collect()
+}
+fn flag(model: &BTreeMap<String, Value>, key: &str) -> bool {
+    model[key] == Value::Bool(true)
+}
+
+/// N0056: only a ready, consented photo from the daemon's cache is projected; every other state
+/// leaves the local imagery in charge and holds no photo bytes.
+#[test]
+fn weather_photo_follows_the_leased_state_and_consent() {
+    let root = std::env::temp_dir().join(format!(
+        "bead-photo-state-{}-{}",
+        std::process::id(),
+        unique()
+    ));
+    let path = daemon_photo(&root, 1000, 100);
+    let (dashboard, photo) = weather_with_photo(photo_state(&path, "ready", true));
+    let model = dashboard.project();
+    assert!(flag(&model, "dashboard.weather.photo"));
+    assert_eq!(model["dashboard.weather.photo_w"], Value::Number(1000.));
+    assert_eq!(model["dashboard.weather.photo_h"], Value::Number(100.));
+    assert_eq!(
+        text(&model, "dashboard.weather.photo_author"),
+        "Fixture artist"
+    );
+    assert_eq!(
+        text(&model, "dashboard.weather.photo_license"),
+        "CC BY-SA 4.0"
+    );
+    assert!(flag(&model, "dashboard.weather.photo_link"));
+    // A new version of the same file is read again; the old bytes are not kept.
+    assert!(
+        dashboard
+            .photo
+            .borrow()
+            .as_ref()
+            .is_some_and(|(_, v, p)| *v == 1_800_000_000 && p.is_some())
+    );
+    for (status, ready) in [
+        ("disabled", false),
+        ("idle", false),
+        ("paused", false),
+        ("waiting_location", false),
+        ("loading", false),
+        ("unavailable", false),
+    ] {
+        photo.publish(photo_state(&path, status, ready)).unwrap();
+        let model = dashboard.project();
+        assert!(!flag(&model, "dashboard.weather.photo"), "{status}");
+        assert!(
+            dashboard.photo.borrow().is_none(),
+            "{status} releases the bytes"
+        );
+        assert_eq!(text(&model, "dashboard.weather.photo_author"), "");
+    }
+    // Ready, but the file is outside the daemon cache or gone: no photo, no panic.
+    photo
+        .publish(photo_state("/etc/hostname", "ready", true))
+        .unwrap();
+    assert!(!flag(&dashboard.project(), "dashboard.weather.photo"));
+    photo
+        .publish(photo_state(&format!("{path}.missing"), "ready", true))
+        .unwrap();
+    assert!(!flag(&dashboard.project(), "dashboard.weather.photo"));
+    // A link that is not a Commons file page is credited but never opened.
+    let mut other = photo_state(&path, "ready", true);
+    other["asset"]["source"] = json!("https://example.org/wiki/File:x.jpg");
+    photo.publish(other).unwrap();
+    let model = dashboard.project();
+    assert!(flag(&model, "dashboard.weather.photo"));
+    assert!(!flag(&model, "dashboard.weather.photo_link"));
+    // The Nacre setting turns the photo off even while the daemon still reports it.
+    photo.publish(photo_state(&path, "ready", true)).unwrap();
+    let mut settings = fixture("settings");
+    settings["data"]["weatherPhotos"] = json!(false);
+    let off = Dashboard::new(
+        Page::Weather,
+        Arc::new(FakeSource::new(fixture("weather")).unwrap()),
+        Some(photo.clone()),
+        true,
+    )
+    .with_controls(
+        Some(Arc::new(FakeSource::new(settings).unwrap())),
+        None,
+        None,
+    );
+    assert!(!flag(&off.project(), "dashboard.weather.photo"));
+    // A disconnected daemon shows nothing.
+    photo.disconnect().unwrap();
+    assert!(!flag(&dashboard.project(), "dashboard.weather.photo"));
+    // Hiding the panel drops the held bytes.
+    photo.publish(photo_state(&path, "ready", true)).unwrap();
+    dashboard.project();
+    assert!(dashboard.photo.borrow().is_some());
+    dashboard.project_with_stores(
+        &bead::core::Stores::default()
+            .reconcile(&BTreeMap::from([(
+                "panel.open".to_owned(),
+                Value::Bool(false),
+            )]))
+            .unwrap(),
+    );
+    assert!(dashboard.photo.borrow().is_none());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn weather_credit_link_accepts_only_commons_file_pages() {
+    let ok = "https://commons.wikimedia.org/wiki/File:Harbour_view.jpg";
+    assert_eq!(credit_url(ok), Some(ok));
+    for bad in [
+        "http://commons.wikimedia.org/wiki/File:A.jpg",
+        "https://commons.wikimedia.org.evil.example/wiki/File:A.jpg",
+        "https://commons.wikimedia.org/wiki/File:",
+        "https://commons.wikimedia.org/wiki/File:A.jpg?x=1",
+        "https://commons.wikimedia.org/wiki/File:A.jpg#frag",
+        "https://commons.wikimedia.org/wiki/File:A b.jpg",
+        "https://commons.wikimedia.org/wiki/File:A\\b.jpg",
+        "https://commons.wikimedia.org/wiki/File:A\nb.jpg",
+        "file:///etc/passwd",
+        "",
+    ] {
+        assert_eq!(credit_url(bad), None, "{bad:?}");
+    }
+    // The action opens nothing in a preview and nothing without a published source.
+    let (dashboard, _) = weather_with_photo(photo_state("/x/city.image", "ready", true));
+    assert_eq!(
+        dashboard.credit_url().as_deref(),
+        Some("https://commons.wikimedia.org/wiki/File:Harbour.jpg")
+    );
+    dashboard.act("weather.credit", Arc::new(|| {}));
+}
+
+/// The Weather hero shows the daemon photo centre-cropped under the shade, with the QML credit
+/// line as a link, and the decoded bytes leave with the view.
+#[test]
+fn weather_daemon_photo_crops_credits_links_and_releases_the_asset() -> Result<()> {
+    let root = std::env::temp_dir().join(format!(
+        "bead-photo-hero-{}-{}",
+        std::process::id(),
+        unique()
+    ));
+    let path = daemon_photo(&root, 1000, 100);
+    let (dashboard, _) = weather_with_photo(photo_state(&path, "ready", true));
+    let mut h = Harness::load_with_icons(
+        &super::tests::root(),
+        Path::new("dashboard/weather/main.luau"),
+        &super::tests::root().join("palette.json"),
+        dashboard.project(),
+        bead_test::Config {
+            width: 1048,
+            height: 714,
+            scale: 1.,
+        },
+        BTreeMap::from([("weather-photo".to_owned(), PathBuf::from(&path))]),
+    )?;
+    let frame = h.render()?;
+    let scene = h.scene();
+    let (index, rect) = scene
+        .primitives
+        .iter()
+        .enumerate()
+        .find_map(|(i, p)| match p {
+            bead::render::Primitive::Image { path: p, rect, .. } if p.ends_with("city.image") => {
+                Some((i, rect))
+            }
+            _ => None,
+        })
+        .ok_or("daemon photo missing")?;
+    assert_eq!((rect.w, rect.h), (2980., 298.));
+    let clip = scene.clips.get(&index).ok_or("photo crop missing")?;
+    assert_eq!((clip.w, clip.h), (564., 298.));
+    assert!((rect.x + rect.w / 2. - (clip.x + clip.w / 2.)).abs() < 0.01);
+    assert!(scene.primitives.iter().any(|p| matches!(p, bead::render::Primitive::Text { text, .. } if text == "Photo: Fixture artist · CC BY-SA 4.0 · cropped/softened")));
+    assert!(
+        node_ids(&h).iter().any(|id| id.contains("credit-link")),
+        "credit is a link"
+    );
+    if let Ok(out) = std::env::var("BEAD_TEST_ARTIFACTS") {
+        std::fs::create_dir_all(&out)?;
+        frame.save(&PathBuf::from(out).join("weather-daemon-photo.png"))?;
+    }
+    let held = Arc::downgrade(
+        scene
+            .asset_data
+            .get(Path::new(&path))
+            .ok_or("photo snapshot missing")?,
+    );
+    drop(h);
+    assert!(
+        held.upgrade().is_none(),
+        "daemon photo survives view destruction"
+    );
+    // Without the photo the sky illustration returns and no link remains.
+    let (dashboard, _) = weather_with_photo(photo_state(&path, "loading", false));
+    let h = Harness::load(
+        &super::tests::root(),
+        Path::new("dashboard/weather/main.luau"),
+        &super::tests::root().join("palette.json"),
+        dashboard.project(),
+        bead_test::Config {
+            width: 1048,
+            height: 714,
+            scale: 1.,
+        },
+    )?;
+    assert!(!node_ids(&h).iter().any(|id| id.contains("credit")));
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+/// The scene's placeholder icon becomes the held bytes under a versioned key, and only then.
+#[test]
+fn weather_photo_placeholder_is_swapped_for_the_held_bytes() {
+    let root = std::env::temp_dir().join(format!(
+        "bead-photo-attach-{}-{}",
+        std::process::id(),
+        unique()
+    ));
+    let path = daemon_photo(&root, 640, 360);
+    let (dashboard, photo) = weather_with_photo(photo_state(&path, "ready", true));
+    let mut scene = bead::render::Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: vec![],
+        prepared: Default::default(),
+        font_files: vec![],
+        width: 100.,
+        slide: None,
+        primitives: vec![bead::render::Primitive::Image {
+            rect: bead::render::Rect::new(0., 0., 10., 10.),
+            path: PathBuf::from("@icon:weather-photo"),
+            blur: 0.,
+        }],
+        offset: (0., 0.),
+        bounds: bead::render::Rect::new(0., 0., 100., 100.),
+    };
+    dashboard.attach_art(&mut scene);
+    assert!(
+        matches!(&scene.primitives[0], bead::render::Primitive::Image { path, .. } if path == Path::new("@icon:weather-photo")),
+        "nothing held yet"
+    );
+    dashboard.project();
+    dashboard.attach_art(&mut scene);
+    let key = PathBuf::from("@weather-photo/1800000000");
+    assert!(
+        matches!(&scene.primitives[0], bead::render::Primitive::Image { path, .. } if *path == key)
+    );
+    assert_eq!(
+        &scene.asset_data[&key][..],
+        &std::fs::read(&path).unwrap()[..]
+    );
+    photo.disconnect().unwrap();
+    std::fs::remove_dir_all(root).unwrap();
 }

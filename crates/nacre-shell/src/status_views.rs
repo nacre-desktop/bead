@@ -1034,14 +1034,7 @@ impl Status {
             });
         if fresh && let Some(CoreSnapshot::Battery(state)) = battery {
             let display = core_battery_display(&state);
-            let secondary = tr(
-                match state.charging {
-                    Some(true) => "bead.panel.battery-charging",
-                    Some(false) => "bead.panel.battery-not-charging",
-                    None => "bead.panel.battery-charging-unknown",
-                },
-                &[],
-            );
+            let secondary = battery_estimate(&state);
             *self.last_good.borrow_mut() = Some(display.clone());
             return core_battery_values(display, true, &secondary);
         }
@@ -1567,6 +1560,42 @@ fn core_bluetooth_values(
     display.insert("status.kind".into(), Value::Text("bluetooth".into()));
     display.insert("status.secondary".into(), Value::Text(secondary.into()));
     display
+}
+/// The QML battery estimate: time to empty on battery, time to full on mains, else the plain state.
+pub(crate) fn battery_estimate(state: &BatteryState) -> String {
+    let on_battery = state.on_battery == Some(true);
+    let seconds = if on_battery {
+        state.time_to_empty_seconds
+    } else {
+        state.time_to_full_seconds
+    };
+    let Some(seconds) = seconds.filter(|seconds| *seconds > 0) else {
+        return tr(
+            if on_battery {
+                "bead.panel.battery-remaining-unknown"
+            } else {
+                "bead.panel.control-battery-unknown"
+            },
+            &[],
+        );
+    };
+    let minutes = seconds.div_ceil(60).max(1);
+    let (hours, rest) = ((minutes / 60).to_string(), (minutes % 60).to_string());
+    if minutes >= 60 {
+        let id = if on_battery {
+            "bead.panel.battery-remaining-hours"
+        } else {
+            "bead.panel.battery-full-hours"
+        };
+        tr(id, &[("hours", &hours), ("minutes", &rest)])
+    } else {
+        let id = if on_battery {
+            "bead.panel.battery-remaining-minutes"
+        } else {
+            "bead.panel.battery-full-minutes"
+        };
+        tr(id, &[("minutes", &rest)])
+    }
 }
 fn core_battery_display(state: &BatteryState) -> BTreeMap<String, Value> {
     let primary = state

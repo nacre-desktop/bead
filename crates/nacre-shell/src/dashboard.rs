@@ -9,6 +9,7 @@ use nacre_protocol::{
     core_services::{AudioKind, CoreSnapshot},
     dashboard_extras::{DashboardExtrasSnapshot as Extra, FocusStatus},
     settings::SettingsStore,
+    weather_photo,
 };
 use serde_json::{Value as Json, json};
 use std::{
@@ -247,6 +248,11 @@ pub fn spec(
             let source = choice.open(page).map_err(|e| e.to_string())?;
             let secondary = match page {
                 Page::Today => Some(choice.open_named("dashboard.weather", "weather")),
+                // N0056: only the visible Weather page leases the city photo; previews without one go on.
+                Page::Weather => choice
+                    .open_named(weather_photo::TOPIC, "weather_photo")
+                    .ok()
+                    .map(Ok),
                 Page::System => Some(choice.open_named("dashboard.updates", "updates")),
                 Page::Devices => Some(choice.open_named("audio", "audio")),
                 _ => None,
@@ -327,6 +333,10 @@ impl ReadOnly {
         match topic {
             SETTINGS => {
                 serde_json::from_value::<SettingsStore>(data.clone()).map_err(|_| invalid())?;
+            }
+            weather_photo::TOPIC => {
+                serde_json::from_value::<weather_photo::State>(data.clone())
+                    .map_err(|_| invalid())?;
             }
             _ if extra(topic, &data).is_some() => {}
             _ => {
@@ -427,6 +437,8 @@ struct Ticker {
 }
 /// Art path and its thumbnail (`None` when the file was refused).
 type Art = (String, Option<Arc<[u8]>>);
+/// A published city photo: path, version (`checked`) and its bytes and size (`None` when refused).
+type Photo = (String, u64, Option<(Arc<[u8]>, u32, u32)>);
 type Notify = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
 
 #[path = "dashboard_controls.rs"]
@@ -440,6 +452,8 @@ pub struct Dashboard {
     player: Option<Arc<dyn Source>>,
     /// Thumbnail of the active player's art, decoded once per path while visible.
     art: std::cell::RefCell<Option<Art>>,
+    /// The Weather page's daemon city photo, held only while the page is shown.
+    photo: std::cell::RefCell<Option<Photo>>,
     /// Screenshot row thumbnails by capture id, only for the listed rows while shown.
     shots: std::cell::RefCell<BTreeMap<String, Art>>,
     clock: Option<Arc<dyn Source>>,
@@ -466,6 +480,7 @@ impl Dashboard {
             secondary: updates,
             player: None,
             art: Default::default(),
+            photo: Default::default(),
             shots: Default::default(),
             clock: None,
             settings: None,
@@ -530,6 +545,7 @@ impl Dashboard {
         if !open {
             // Hidden: the art thumbnail is released with the card.
             *self.art.borrow_mut() = None;
+            *self.photo.borrow_mut() = None;
             self.shots.borrow_mut().clear();
         }
         if let Some(clock) = &self.clock {
@@ -782,6 +798,7 @@ impl Dashboard {
                     "dashboard.weather.photos_enabled".into(),
                     Value::Bool(photos_enabled),
                 );
+                self.project_photo(&mut out, photos_enabled);
                 text(&mut out, "weather.city", current.location.trim(), 100);
                 text(&mut out, "heading", &current.location, 24);
                 text(&mut out, "summary", &current.description, 48);
@@ -1082,6 +1099,82 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
+}
+impl Dashboard {
+    /// N0056: the leased city photo, shown only while consent is on and the daemon reports it ready.
+    /// The file is read once per published version and dropped with the page; `photo_link` is set
+    /// only for an HTTPS Commons file page, the one URL the credit may open.
+    fn project_photo(&self, out: &mut BTreeMap<String, Value>, enabled: bool) {
+        let asset = enabled
+            .then_some(self.secondary.as_ref())
+            .flatten()
+            .and_then(|source| {
+                let snapshot = source.snapshot();
+                let state =
+                    serde_json::from_value::<weather_photo::State>((*snapshot.data).clone())
+                        .ok()?;
+                (snapshot.connected
+                    && state.enabled
+                    && state.ready
+                    && state.status == weather_photo::Status::Ready)
+                    .then_some(state.asset)
+                    .flatten()
+            });
+        let mut held = self.photo.borrow_mut();
+        let shown = asset.and_then(|asset| {
+            let version = asset.checked as u64;
+            if held
+                .as_ref()
+                .is_none_or(|(path, checked, _)| *path != asset.path || *checked != version)
+            {
+                let loaded = crate::player_art::photo(&asset.path);
+                *held = Some((asset.path.clone(), version, loaded));
+            }
+            let (_, _, loaded) = held.as_ref()?;
+            loaded.as_ref().map(|(_, w, h)| (asset, *w, *h))
+        });
+        if shown.is_none() {
+            *held = None;
+        }
+        let (w, h) = shown.as_ref().map_or((0, 0), |(_, w, h)| (*w, *h));
+        out.insert(
+            "dashboard.weather.photo".into(),
+            Value::Bool(shown.is_some()),
+        );
+        out.insert(
+            "dashboard.weather.photo_w".into(),
+            Value::Number(f64::from(w)),
+        );
+        out.insert(
+            "dashboard.weather.photo_h".into(),
+            Value::Number(f64::from(h)),
+        );
+        let (author, license, link) = shown.as_ref().map_or(("", "", false), |(asset, _, _)| {
+            (
+                &asset.author,
+                &asset.license,
+                credit_url(&asset.source).is_some(),
+            )
+        });
+        text(out, "weather.photo_author", author, 160);
+        text(out, "weather.photo_license", license, 40);
+        out.insert("dashboard.weather.photo_link".into(), Value::Bool(link));
+    }
+    /// The Commons file page the credit opens, if the daemon's source is one.
+    fn credit_url(&self) -> Option<String> {
+        let source = self.secondary.as_ref()?.snapshot();
+        let state = serde_json::from_value::<weather_photo::State>((*source.data).clone()).ok()?;
+        credit_url(&state.asset?.source).map(str::to_owned)
+    }
+}
+/// `https://commons.wikimedia.org/wiki/File:...` without query, fragment, controls or spaces.
+fn credit_url(url: &str) -> Option<&str> {
+    let name = url.strip_prefix("https://commons.wikimedia.org/wiki/File:")?;
+    (!name.is_empty()
+        && url.len() <= 2048
+        && !name.contains(['?', '#', '\\'])
+        && !url.chars().any(|c| c.is_control() || c.is_whitespace()))
+    .then_some(url)
 }
 fn text(out: &mut BTreeMap<String, Value>, key: &str, value: &str, limit: usize) {
     out.insert(format!("dashboard.{key}"), Value::Text(line(value, limit)));

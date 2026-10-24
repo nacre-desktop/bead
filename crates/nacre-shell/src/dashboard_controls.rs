@@ -90,9 +90,18 @@ impl Dashboard {
     /// One host action `dashboard.do`, argument `op[:id]`. Row ids are re-resolved
     /// against the current topic; callers never construct them.
     pub fn act(&self, arg: &str, wake: CallWake) {
-        let Some(c) = &self.controls else { return };
         let (op, id) = arg.split_once(':').unwrap_or((arg, ""));
         let page = self.page;
+        // The photo credit opens the published Commons page; it needs no daemon call.
+        if (page, op) == (Page::Weather, "weather.credit") {
+            if !self.preview
+                && let Some(url) = self.credit_url()
+            {
+                crate::welcome::detach("xdg-open", &[&url]);
+            }
+            return;
+        }
+        let Some(c) = &self.controls else { return };
         match (page, op) {
             (Page::Focus, "focus.start") => {
                 if let Ok(minutes @ 1..=180) = id.parse::<u32>() {
@@ -491,6 +500,14 @@ impl Dashboard {
             let Some(name) = path.to_str().and_then(|s| s.strip_prefix("@icon:")) else {
                 continue;
             };
+            if name == "weather-photo" {
+                if let Some((_, version, Some((bytes, _, _)))) = &*self.photo.borrow() {
+                    let key = std::path::PathBuf::from(format!("@weather-photo/{version}"));
+                    scene.asset_data.insert(key.clone(), bytes.clone());
+                    *path = key;
+                }
+                continue;
+            }
             let (key, thumb) = match name.strip_prefix(SHOT_ICON) {
                 Some(id) => (
                     format!("@screenshot-thumb/{id}.png"),

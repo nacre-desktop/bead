@@ -10,6 +10,7 @@ local W,PAD,GAP=reg.layout.width,T.spacing.xl,T.spacing.sm
 local INNER=W-2*PAD
 local BODY,CAPTION=T.text.body*4/3,T.text.caption*4/3
 local HEAD=T.spacing.huge
+local BATTERY_W=T.spacing.huge+T.spacing.md -- the percentage; the estimate takes the rest of the row
 local ROW=T.spacing.huge+T.spacing.md
 local page=get("cc.page")
 local src,views={},{}
@@ -140,12 +141,14 @@ local function notices(limit,page)
 end
 local function home()
     local status_w=INNER-3*HEAD-3*GAP
+    local estimate=get("cc.battery_estimate")
     local status={id="status",width=INNER,height=HEAD,gap=GAP,align="center",
         kit.Button{id="battery-status",width=status_w,height=HEAD,padding=0,fill="transparent",hover_fill="transparent",
             aria_label=ui.tr("bead.panel.control-battery-details"),on_activate=views.battery and ui.action("detail","battery") or nil,
             ui.Row{id="battery-row",width=status_w,height=HEAD,gap=T.spacing.xs,align="center",
                 glyph("battery-glyph",get("cc.battery_icon"),"primary"),
-                ui.Text{id="battery-text",text=get("cc.battery"),width=status_w-40,height=24,font_size=BODY,color="onSurface"}}},
+                ui.Text{id="battery-text",text=get("cc.battery"),width=estimate=="" and status_w-40 or BATTERY_W,height=24,font_size=BODY,color="onSurface"},
+                estimate~="" and ui.Text{id="battery-estimate",text=estimate,width=status_w-40-BATTERY_W-T.spacing.xs,height=24,font_size=CAPTION,color="onSurfaceVariant"} or nil}},
         kit.IconButton{id="edit",text="edit",aria_label=ui.tr("bead.panel.control-edit"),width=HEAD,height=HEAD,
             on_activate=ui.action("begin",table.concat(order,","))},
         kit.IconButton{id="settings",text="settings",aria_label=ui.tr("bead.panel.control-settings"),width=HEAD,height=HEAD,

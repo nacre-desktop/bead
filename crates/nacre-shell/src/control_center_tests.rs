@@ -15,11 +15,14 @@ fn root() -> std::path::PathBuf {
 fn health() -> Json {
     json!({"available": true, "stale": false})
 }
+/// PipeWire `node.name`s as the daemon publishes them (N0059): dots, dashes and underscores.
+const OUT: &str = "alsa_output.pci-0000_00_1f.3.analog-stereo";
+const IN: &str = "alsa_input.usb-Fixture_Mic-00.mono-fallback";
 fn audio() -> Json {
-    json!({"health": health(), "default_output": "out", "default_input": "in", "nodes": {"order": ["out", "in"], "items": {
-        "out": {"name": "Speakers", "kind": "output", "volume": 0.125, "muted": false, "ready": true,
+    json!({"health": health(), "default_output": OUT, "default_input": IN, "nodes": {"order": [OUT, IN], "items": {
+        OUT: {"name": "Speakers", "kind": "output", "volume": 0.125, "muted": false, "ready": true,
             "readback": {"perceptual_volume": 0.5, "linear_volume": 0.125, "muted": false}},
-        "in": {"name": "Mic", "kind": "input", "volume": 0.512, "muted": true, "ready": true}}}})
+        IN: {"name": "Mic", "kind": "input", "volume": 0.512, "muted": true, "ready": true}}}})
 }
 fn network() -> Json {
     json!({"health": health(), "wireless_enabled": true,
@@ -39,7 +42,8 @@ fn power() -> Json {
             "performance": {"name": "performance", "available": false}}}})
 }
 fn battery() -> Json {
-    json!({"health": health(), "percentage": 78.0, "charging": false})
+    json!({"health": health(), "percentage": 78.0, "charging": false, "state": 2,
+        "time_to_empty_seconds": 7380, "on_battery": true})
 }
 fn notifications() -> Json {
     json!({"health": health(), "do_not_disturb": false})
@@ -207,6 +211,23 @@ async fn lab_with_payloads(
     permanent: Vec<String>,
     notices: Json,
 ) -> Lab {
+    lab_full(methods, published, permanent, notices, BTreeMap::new()).await
+}
+/// A daemon whose named topics publish the given payloads instead of the shared fixtures.
+async fn lab_topics(methods: &[&str], topics: &[(&str, Json)]) -> Lab {
+    let topics = topics
+        .iter()
+        .map(|(n, d)| (n.to_string(), d.clone()))
+        .collect();
+    lab_full(methods, controls(), Vec::new(), notifications(), topics).await
+}
+async fn lab_full(
+    methods: &[&str],
+    published: Json,
+    permanent: Vec<String>,
+    notices: Json,
+    topics: BTreeMap<String, Json>,
+) -> Lab {
     use std::os::unix::fs::PermissionsExt;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -224,6 +245,7 @@ async fn lab_with_payloads(
     let fail: Arc<Mutex<BTreeMap<String, ErrorCode>>> = Default::default();
     let failing = fail.clone();
     let notices = Arc::new(notices);
+    let overrides = Arc::new(topics);
     let advertised: Vec<String> = methods.iter().map(|m| m.to_string()).collect();
     tokio::spawn(async move {
         let mut boot = 0;
@@ -285,6 +307,8 @@ async fn lab_with_payloads(
                                 json!({"health": health(), "count": 0, "text": "No updates"})
                             } else if topic == "controls" {
                                 published.clone()
+                            } else if let Some(data) = overrides.get(&topic) {
+                                data.clone()
                             } else if topic == "notifications" {
                                 (*notices).clone()
                             } else {
@@ -348,6 +372,10 @@ async fn lab_with_payloads(
     }
 }
 async fn control_for(lab: &Lab) -> ControlCenter {
+    control_with(lab, 13).await
+}
+/// A control centre that waits until `sources` data sources are projected.
+async fn control_with(lab: &Lab, sources: usize) -> ControlCenter {
     for _ in 0..500 {
         if lab.client.snapshot().connected && lab.client.status().boot.is_some() {
             break;
@@ -368,7 +396,7 @@ async fn control_for(lab: &Lab) -> ControlCenter {
     // Wait for the leased topics to deliver their first snapshots.
     for _ in 0..500 {
         let out = control.project(&Stores::default());
-        if out["cc.saved_known"] == Value::Bool(true) && source_count(&out) >= 13 {
+        if out["cc.saved_known"] == Value::Bool(true) && source_count(&out) >= sources {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1357,14 +1385,14 @@ async fn audio_picker_rechecks_device_kind_and_uses_the_published_node_id() {
     let control = control_for(&lab).await;
     let devices = control.audio_devices();
     assert_eq!(devices.len(), 2);
-    control.act("choose:audio.output:in");
+    control.act(&format!("choose:audio.output:{IN}"));
     control.act("choose:audio.input:missing");
     settle(&control, &Stores::default()).await;
     assert!(lab.calls.try_recv().is_err());
-    control.act("choose:audio.output:out");
+    control.act(&format!("choose:audio.output:{OUT}"));
     assert_eq!(
         call(&mut lab).await,
-        ("audio.set_default".into(), json!({"node":"out"}))
+        ("audio.set_default".into(), json!({"node":OUT}))
     );
 }
 
@@ -1551,4 +1579,372 @@ fn unsupported_tiles_hide_and_catalog_order_is_the_unsaved_default() -> bead_tes
     let mut h = harness(out, "home", 1.)?;
     golden("unsupported", &mut h, 1.)?;
     Ok(())
+}
+
+// ---- B0082: the N0059 producers' real shapes ---------------------------------------------
+
+const BLUEZ: &str = "bluez_output.AA_BB_CC_DD_EE_FF.1";
+const USB_IN: &str = "alsa_input.usb-Other_Mic-00.analog-stereo";
+/// What the daemon publishes with several devices: ids are PipeWire `node.name`s, labels are the
+/// device descriptions, the Bluetooth sink is not ready yet and has no readback.
+fn busy_audio() -> Json {
+    json!({"health": health(), "default_output": OUT, "default_input": IN, "nodes": {
+        "order": [OUT, BLUEZ, IN, USB_IN],
+        "items": {
+            OUT: {"name": "Built-in Audio Analog Stereo", "kind": "output", "volume": 0.125, "muted": false, "ready": true,
+                "readback": {"linear_volume": 0.125, "perceptual_volume": 0.5, "muted": false}},
+            BLUEZ: {"name": "Fixture Headphones", "kind": "output", "volume": 0.0, "muted": false, "ready": false, "readback": {}},
+            IN: {"name": "Fixture Mic", "kind": "input", "volume": 0.512, "muted": false, "ready": true,
+                "readback": {"linear_volume": 0.512, "perceptual_volume": 0.8, "muted": false}},
+            USB_IN: {"name": "Other Mic", "kind": "input", "volume": 1.0, "muted": true, "ready": true,
+                "readback": {"linear_volume": 1.0, "perceptual_volume": 1.0, "muted": true}}}}})
+}
+const AUDIO_CALLS: [&str; 3] = ["audio.set_volume", "audio.set_mute", "audio.set_default"];
+
+#[tokio::test(flavor = "current_thread")]
+async fn audio_from_the_daemon_is_live_choosable_and_addressed_by_node_name() {
+    let mut lab = lab_topics(&AUDIO_CALLS, &[("audio", busy_audio())]).await;
+    let control = control_with(&lab, 3).await;
+    let out = settle(&control, &Stores::default()).await;
+    assert_eq!(source(&out, "audio.output")["status"], "50%");
+    assert_eq!(source(&out, "audio.output")["set"], true);
+    assert_eq!(source(&out, "audio.input")["value"], 80.);
+    // Devices in the daemon's order, the defaults selected, a device that is not ready listed but inert.
+    let devices = control.audio_devices();
+    let row = |id: &str| {
+        devices
+            .iter()
+            .find(|d| d["id"] == id)
+            .unwrap_or_else(|| panic!("{id}"))
+    };
+    assert_eq!(
+        devices
+            .iter()
+            .map(|d| d["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [OUT, BLUEZ, IN, USB_IN]
+    );
+    assert_eq!(row(OUT)["label"], "Built-in Audio Analog Stereo");
+    assert_eq!(
+        (row(OUT)["selected"].clone(), row(OUT)["enabled"].clone()),
+        (json!(true), json!(true))
+    );
+    assert_eq!(
+        (
+            row(BLUEZ)["selected"].clone(),
+            row(BLUEZ)["enabled"].clone()
+        ),
+        (json!(false), json!(false))
+    );
+    assert_eq!(
+        (
+            row(USB_IN)["selected"].clone(),
+            row(USB_IN)["enabled"].clone()
+        ),
+        (json!(false), json!(true))
+    );
+    control.act(&format!("choose:audio.output:{BLUEZ}"));
+    control.act(&format!("choose:audio.output:{USB_IN}"));
+    settle(&control, &Stores::default()).await;
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "not ready, or the wrong kind"
+    );
+    control.act(&format!("choose:audio.input:{USB_IN}"));
+    assert_eq!(
+        call(&mut lab).await,
+        ("audio.set_default".into(), json!({"node": USB_IN}))
+    );
+    settle(&control, &Stores::default()).await;
+    control.act("toggle:audio.output");
+    assert_eq!(
+        call(&mut lab).await,
+        (
+            "audio.set_mute".into(),
+            json!({"target": "sink", "muted": true})
+        )
+    );
+    settle(&control, &Stores::default()).await;
+    control.act("set:audio.input:50");
+    let (method, params) = call(&mut lab).await;
+    assert_eq!(
+        (method.as_str(), &params["target"]),
+        ("audio.set_volume", &json!("source"))
+    );
+    assert!((params["value"].as_f64().unwrap() - 0.125).abs() < 1e-9);
+}
+
+#[test]
+fn audio_that_is_not_ready_or_unavailable_has_no_tiles() {
+    let sources = |audio: Json| {
+        let topics = TOPICS
+            .iter()
+            .map(|name| {
+                let data = if *name == "audio" {
+                    audio.clone()
+                } else {
+                    topic_data(name)
+                };
+                (
+                    *name,
+                    Arc::new(FakeSource::new(data).unwrap()) as Arc<dyn Source>,
+                )
+            })
+            .collect();
+        let control = ControlCenter::new(None, topics, None, views());
+        let out = control.project(&Stores::default());
+        let Value::List(items) = &out["cc.src"] else {
+            panic!()
+        };
+        let ids = items
+            .iter()
+            .filter_map(|s| s["id"].as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        (ids, control.audio_devices().len())
+    };
+    // A default output that is not ready and has no readback is not shown as 0% or unmuted.
+    let mut unready = busy_audio();
+    unready["default_output"] = json!(BLUEZ);
+    let (ids, devices) = sources(unready);
+    assert!(!ids.iter().any(|id| id == "audio.output") && ids.iter().any(|id| id == "audio.input"));
+    assert_eq!(devices, 4);
+    // Only the legacy members of a ready node: the cube root of the linear volume.
+    let mut legacy = busy_audio();
+    legacy["nodes"]["items"][OUT]["readback"] = json!(null);
+    legacy["nodes"]["items"][OUT]
+        .as_object_mut()
+        .unwrap()
+        .remove("readback");
+    assert!(sources(legacy).0.iter().any(|id| id == "audio.output"));
+    // No default input (no microphone): the microphone tiles disappear, the output stays.
+    let mut no_mic = busy_audio();
+    no_mic.as_object_mut().unwrap().remove("default_input");
+    let (ids, _) = sources(no_mic);
+    assert!(ids.iter().any(|id| id == "audio.output") && !ids.iter().any(|id| id == "audio.input"));
+    // The topic says the backend is unavailable (no PipeWire/pactl): nothing is offered.
+    let mut down = json!({"health": {"available": false, "stale": false}, "nodes": {"items": {}, "order": []}});
+    let (ids, devices) = sources(down.clone());
+    assert!(!ids.iter().any(|id| id.starts_with("audio.")));
+    assert_eq!(devices, 0);
+    down["health"]["stale"] = json!(true);
+    assert_eq!(sources(down).1, 0);
+}
+
+fn profiles_as_daemon_names_them(active: &str) -> Json {
+    json!({"health": health(), "active": active, "degraded": "thermal",
+        "holds": [{"profile": "balanced", "reason": "Fixture hold", "application_id": "org.example.fixture"}],
+        "profiles": {"order": ["balanced", "performance", "power-saver"], "items": {
+            "balanced": {"name": "Balanced", "available": true},
+            "performance": {"name": "Performance", "available": false, "reason": "Unavailable on this device"},
+            "power-saver": {"name": "Power saver", "available": true}}}})
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn power_profiles_follow_the_daemon_ids_availability_and_degradation() {
+    let mut lab = lab_topics(
+        &["power.set_profile"],
+        &[(
+            "power.profiles",
+            profiles_as_daemon_names_them("power-saver"),
+        )],
+    )
+    .await;
+    let control = control_with(&lab, 3).await;
+    let out = settle(&control, &Stores::default()).await;
+    let profile = source(&out, "power.profile");
+    assert_eq!(
+        (profile["status"].clone(), profile["icon"].clone()),
+        (json!("Power saver"), json!("eco"))
+    );
+    assert_eq!(profile["note"], "thermal");
+    // Display names do not matter, ids do; an unavailable profile is not offered.
+    let choices: Vec<_> = profile["choices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["id"].as_str().unwrap(),
+                c["name"].as_str().unwrap(),
+                c["active"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        choices,
+        [
+            ("balanced", "Balanced", false),
+            ("power-saver", "Power saver", true)
+        ]
+    );
+    control.act("choose:power.profile:performance");
+    control.act("choose:power.profile:turbo");
+    settle(&control, &Stores::default()).await;
+    assert!(lab.calls.try_recv().is_err());
+    control.act("choose:power.profile:balanced");
+    assert_eq!(
+        call(&mut lab).await,
+        ("power.set_profile".into(), json!({"profile": "balanced"}))
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_system_without_a_profile_daemon_keeps_an_explained_inert_tile() {
+    // The producer's unavailable state: no active profile, no entries.
+    let none = json!({"health": {"available": false, "stale": false}, "profiles": {"items": {}, "order": []}});
+    let lab = lab_topics(&["power.set_profile"], &[("power.profiles", none)]).await;
+    let control = control_with(&lab, 3).await;
+    let out = settle(&control, &Stores::default()).await;
+    let profile = source(&out, "power.profile");
+    assert_eq!(profile["status"], "Power profiles unavailable");
+    assert_eq!(
+        (
+            profile["set"].clone(),
+            profile["choices"].clone(),
+            profile["toggle"].clone()
+        ),
+        (json!(false), json!([]), json!(false))
+    );
+    // The dimmed, stale state of a lost daemon is still no source at all.
+    let mut stale = profiles_as_daemon_names_them("balanced");
+    stale["health"]["stale"] = json!(true);
+    let topics = TOPICS
+        .iter()
+        .map(|name| {
+            (
+                *name,
+                Arc::new(
+                    FakeSource::new(if *name == "power.profiles" {
+                        stale.clone()
+                    } else {
+                        topic_data(name)
+                    })
+                    .unwrap(),
+                ) as Arc<dyn Source>,
+            )
+        })
+        .collect();
+    let out = ControlCenter::new(None, topics, None, views()).project(&Stores::default());
+    let Value::List(items) = &out["cc.src"] else {
+        panic!()
+    };
+    assert!(items.iter().all(|s| s["id"] != "power.profile"));
+}
+
+#[test]
+fn the_battery_header_reads_the_producers_state_and_estimate() {
+    let header = |battery: Json| {
+        let topics = TOPICS
+            .iter()
+            .map(|name| {
+                (
+                    *name,
+                    Arc::new(
+                        FakeSource::new(if *name == "battery" {
+                            battery.clone()
+                        } else {
+                            topic_data(name)
+                        })
+                        .unwrap(),
+                    ) as Arc<dyn Source>,
+                )
+            })
+            .collect();
+        let out = ControlCenter::new(None, topics, None, views()).project(&Stores::default());
+        let text = |key: &str| match &out[key] {
+            Value::Text(t) => t.clone(),
+            other => panic!("{key} {other:?}"),
+        };
+        (
+            text("cc.battery"),
+            text("cc.battery_icon"),
+            text("cc.battery_estimate"),
+        )
+    };
+    let s = |a: &str, b: &str, c: &str| (a.to_owned(), b.to_owned(), c.to_owned());
+    assert_eq!(
+        header(battery()),
+        s("78%", "battery_full", "2h 3m remaining")
+    );
+    let mut mains = battery();
+    mains["on_battery"] = json!(false);
+    mains["state"] = json!(1);
+    mains["charging"] = json!(true);
+    mains["time_to_full_seconds"] = json!(1800);
+    assert_eq!(
+        header(mains),
+        s("78%", "battery_charging_full", "30m until full")
+    );
+    // Only the always-present members: the percentage is shown, time and source are unknown.
+    let bare = json!({"health": health(), "percentage": 55.4});
+    assert_eq!(
+        header(bare),
+        s("55%", "battery_charging_full", "Connected to power")
+    );
+    // A desktop (no battery) or a backend that is down: the QML text, no estimate.
+    let desktop = json!({"health": {"available": false, "stale": false}});
+    assert_eq!(
+        header(desktop),
+        s("Connected to power", "battery_charging_full", "")
+    );
+    let mut stale = battery();
+    stale["health"]["stale"] = json!(true);
+    assert_eq!(
+        header(stale),
+        s("Connected to power", "battery_charging_full", "")
+    );
+}
+
+fn first_snap(text: &str) -> Json {
+    match framing::decode(text.lines().next().unwrap().as_bytes()).unwrap() {
+        Message::Snap { data, .. } => data,
+        _ => panic!("snapshot expected"),
+    }
+}
+
+/// Nacre's own audio and power transcripts, byte for byte, drive the tiles and the pickers.
+#[tokio::test(flavor = "current_thread")]
+async fn nacre_transcripts_drive_the_audio_and_power_tiles() {
+    let audio = first_snap(include_str!("../tests/protocol-v1/core-audio.jsonl"));
+    let power = first_snap(include_str!(
+        "../tests/protocol-v1/core-power-profiles.jsonl"
+    ));
+    let mut lab = lab_topics(
+        &[
+            "audio.set_volume",
+            "audio.set_mute",
+            "audio.set_default",
+            "power.set_profile",
+        ],
+        &[("audio", audio), ("power.profiles", power)],
+    )
+    .await;
+    let control = control_with(&lab, 3).await;
+    let out = settle(&control, &Stores::default()).await;
+    // No readback members: ready nodes show their linear volume as the slider's cube root.
+    assert_eq!(source(&out, "audio.output")["value"], 79.);
+    assert_eq!(source(&out, "audio.input")["on"], true);
+    assert_eq!(source(&out, "audio.input")["icon"], "mic_off");
+    // Streams are not devices.
+    let devices = control.audio_devices();
+    assert_eq!(
+        devices
+            .iter()
+            .map(|d| d["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["output-1", "input-1"]
+    );
+    let power = source(&out, "power.profile");
+    assert_eq!(
+        (power["status"].clone(), power["note"].clone()),
+        (json!("Balanced"), json!("thermal"))
+    );
+    control.act("choose:power.profile:power-saver");
+    assert_eq!(
+        call(&mut lab).await,
+        (
+            "power.set_profile".into(),
+            json!({"profile": "power-saver"})
+        )
+    );
 }

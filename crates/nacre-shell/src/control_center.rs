@@ -12,6 +12,7 @@ use bead::core::{
     Stores, Value,
     source::{Source, Subscription},
 };
+use nacre_protocol::core_services::BatteryState;
 use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -101,6 +102,8 @@ struct Reading {
     node: Option<String>,
     /// The profiles a picker offers: `(id, shown name, active)`.
     choices: Vec<(String, String, bool)>,
+    /// A note the backend attaches to the state (the profile daemon's degradation reason).
+    note: String,
 }
 /// What the daemon lets a tile do right now.
 #[derive(Default)]
@@ -122,6 +125,18 @@ fn capital(name: &str) -> String {
 /// Slider percent (perceptual) to the daemon's linear level: the slider is cube-rooted.
 fn linear(percent: f64) -> f64 {
     (percent / 100.).clamp(0., 1.).powi(3)
+}
+
+/// The shown name of a known power profile id.
+fn profile_name(id: &str) -> String {
+    tr(
+        match id {
+            "power-saver" => "bead.osd.power-saver",
+            "performance" => "bead.osd.performance",
+            _ => "bead.osd.balanced",
+        },
+        &[],
+    )
 }
 
 fn text(value: impl Into<String>) -> Value {
@@ -354,39 +369,49 @@ impl ControlCenter {
             }
             "power.profile" => {
                 let data = self.data("power.profiles")?;
+                // A live link whose backend is absent (no power-profiles-daemon): the QML tile stays and says so.
+                if data["health"]["available"] == false && data["health"]["stale"] != true {
+                    return Some(Reading {
+                        status: tr("bead.panel.battery-profiles-unavailable", &[]),
+                        icon: "balance",
+                        ..Default::default()
+                    });
+                }
                 let id = data["active"].as_str()?;
                 if !healthy(&data) {
                     return None;
                 }
-                let name = data["profiles"]["items"].get(id)?["name"]
-                    .as_str()?
-                    .to_owned();
-                let lower = name.to_lowercase();
+                // N0059: entity ids are the profile daemon's own (`power-saver`, `balanced`, `performance`)
+                // and what `power.set_profile` takes; the entry's name may be a display name or the id.
                 let items = &data["profiles"]["items"];
+                let name = items.get(id)?["name"].as_str()?;
                 let choices = data["profiles"]["order"]
                     .as_array()
                     .map(|order| {
                         order
                             .iter()
-                            .filter_map(|id| items.get(id.as_str()?))
-                            .filter(|p| p["available"] != false)
-                            .filter_map(|p| p["name"].as_str())
-                            .map(str::to_lowercase)
-                            .filter(|name| PROFILES.contains(&name.as_str()))
-                            .map(|name| (capital(&name), name))
-                            .map(|(shown, name)| (name.clone(), shown, name == lower))
+                            .filter_map(|entry| entry.as_str())
+                            .filter(|entry| PROFILES.contains(entry))
+                            .filter(|entry| items[*entry]["available"] == true)
+                            .map(|entry| (entry.to_owned(), profile_name(entry), entry == id))
                             .collect()
                     })
                     .unwrap_or_default();
                 Some(Reading {
-                    status: capital(&name),
-                    choices,
-                    icon: if lower.contains("saver") {
-                        "eco"
-                    } else if lower.contains("perf") {
-                        "bolt"
+                    status: if PROFILES.contains(&id) {
+                        profile_name(id)
                     } else {
-                        "balance"
+                        capital(name)
+                    },
+                    note: data["degraded"]
+                        .as_str()
+                        .map(|reason| reason.chars().take(80).collect())
+                        .unwrap_or_default(),
+                    choices,
+                    icon: match id {
+                        "power-saver" => "eco",
+                        "performance" => "bolt",
+                        _ => "balance",
                     },
                     ..Default::default()
                 })
@@ -530,7 +555,11 @@ impl ControlCenter {
                 false,
                 false,
             ),
-            "power.profile" => (false, self.can("power.set_profile"), false),
+            "power.profile" => (
+                false,
+                self.can("power.set_profile") && !reading.choices.is_empty(),
+                false,
+            ),
             _ => (false, false, ACTIONS.iter().any(|(id, _)| *id == source)),
         };
         Verbs { toggle, set, press }
@@ -586,6 +615,7 @@ impl ControlCenter {
                 "id": source, "available": true, "on": reading.on, "value": reading.value,
                 "status": reading.status, "icon": reading.icon, "toggle": verbs.toggle,
                 "set": verbs.set && choices.is_empty(), "press": verbs.press, "choices": choices,
+                "note": reading.note,
                 "mode": reading.node.as_deref().filter(|_| *source == "appearance.mode").unwrap_or(""),
             }))
         })
@@ -1009,14 +1039,24 @@ impl ControlCenter {
         for (source, percent) in pending {
             self.level(&source, percent);
         }
-        let battery = self.data("battery").filter(|data| healthy(data));
+        let battery = self
+            .data("battery")
+            .filter(|data| healthy(data))
+            .and_then(|data| serde_json::from_value::<BatteryState>((*data).clone()).ok());
         let percent = battery
             .as_ref()
-            .and_then(|data| data["percentage"].as_f64())
+            .and_then(|state| state.percentage)
+            .filter(|p| p.is_finite())
             .map(|p| p.round().clamp(0., 100.));
-        let charging = battery
+        // QML: the glyph shows mains power unless the system reports battery power.
+        let on_battery = battery
             .as_ref()
-            .is_some_and(|data| data["charging"] == true);
+            .is_some_and(|state| state.on_battery == Some(true));
+        let estimate = battery
+            .as_ref()
+            .filter(|_| percent.is_some())
+            .map(crate::status_views::battery_estimate)
+            .unwrap_or_default();
         let saved = self.saved();
         let frame = crate::placement::Frame::current();
         let frame_height = f64::from(frame.top) + f64::from(frame.bottom);
@@ -1051,12 +1091,13 @@ impl ControlCenter {
             ),
             (
                 "cc.battery_icon".into(),
-                text(if charging {
-                    "battery_charging_full"
-                } else {
+                text(if on_battery {
                     "battery_full"
+                } else {
+                    "battery_charging_full"
                 }),
             ),
+            ("cc.battery_estimate".into(), text(estimate)),
             // B0067: the dock is as tall as the framed viewport (QML: the sidebar keeps the full frame height).
             (
                 "cc.max_height".into(),

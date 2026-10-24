@@ -12,8 +12,10 @@ local percent=ui.resolve_for_check(ui.bind("status.primary"))
 local known=type(percent)=="string" and string.find(percent,"%%")~=nil
 local choices={}
 local active=""
+local degraded=""
+local message=ui.resolve_for_check(ui.bind("cc.message"))
 for _,source in ipairs(ui.resolve_for_check(ui.bind("cc.src")) or {}) do
-    if source.id=="power.profile" then choices=source.choices or {};active=source.status end
+    if source.id=="power.profile" then choices=source.choices or {};active=source.status;degraded=source.note or "" end
 end
 local padding=embedded and 0 or T.spacing.panel
 local inner=width-padding*2
@@ -58,7 +60,7 @@ return panel(embedded,{id="status-popout",edge="top",open=ui.bind("panel.open"),
             end
             return table.unpack(tiles)
         end)()},
-    ui.Text{id="profiles-status",text=ui.bind("cc.message"),width=inner,height=20,
+    ui.Text{id="profiles-status",text=message~="" and message or degraded,width=inner,height=20,
         font_size=T.text.caption*4/3,text_align="center",color="onSurfaceVariant"},
 })
 end

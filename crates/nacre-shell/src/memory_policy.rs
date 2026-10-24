@@ -104,6 +104,88 @@ mod tests {
         Ok(())
     }
 
+    /// N0056: the leased city photo's decoded raster follows the same rule as the local hero.
+    #[test]
+    fn weather_daemon_photo_pixels_return_to_zero_after_close() -> bead_test::Result<()> {
+        use bead::{
+            core::Value,
+            render::{Primitive, Renderer, tree::TreeCpuRenderer},
+        };
+        use std::{
+            collections::BTreeMap,
+            path::{Path, PathBuf},
+            sync::Arc,
+        };
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+        let dir = std::env::temp_dir().join(format!("bead-photo-memory-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        let photo = dir.join("city.image");
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            960,
+            720,
+            image::Rgb([20, 90, 160]),
+        ))
+        .save_with_format(&photo, image::ImageFormat::Jpeg)?;
+        let panel = bead_test::Harness::load_with_icons(
+            &root,
+            Path::new("dashboard/weather/main.luau"),
+            &root.join("palette.json"),
+            BTreeMap::from([
+                ("dashboard.weather.photo".into(), Value::Bool(true)),
+                ("dashboard.weather.photo_w".into(), Value::Number(960.)),
+                ("dashboard.weather.photo_h".into(), Value::Number(720.)),
+                (
+                    "dashboard.weather.photo_author".into(),
+                    Value::Text("Fixture".into()),
+                ),
+                (
+                    "dashboard.weather.photo_license".into(),
+                    Value::Text("CC0".into()),
+                ),
+            ]),
+            Default::default(),
+            BTreeMap::from([("weather-photo".to_owned(), PathBuf::from(&photo))]),
+        )?;
+        let mut renderer = TreeCpuRenderer::default();
+        renderer.prepare(panel.scene(), 1.5)?;
+        let frame = renderer
+            .prepared_frame()
+            .ok_or("unprepared Weather frame")?;
+        let images: Vec<_> = frame
+            .items
+            .iter()
+            .filter(|item| matches!(item.primitive, Primitive::Image { .. }))
+            .filter_map(|item| item.raster.as_ref())
+            .map(|raster| Arc::downgrade(&raster.pixels))
+            .collect();
+        let live_bytes = || {
+            images
+                .iter()
+                .filter_map(std::sync::Weak::upgrade)
+                .map(|pixels| pixels.data().len())
+                .sum::<usize>()
+        };
+        assert_eq!(images.len(), 2, "photo and shade must have decoded pixels");
+        let open = live_bytes();
+        assert!(open > 0);
+        drop(panel);
+        drop(renderer);
+        assert!(
+            live_bytes() > 0,
+            "the held presented frame must own its images"
+        );
+        drop(frame);
+        assert_eq!(
+            live_bytes(),
+            0,
+            "photo bytes retained after panel retirement"
+        );
+        println!("MEMORY_POLICY_WEATHER_PHOTO_RELEASE open_bytes={open} closed_bytes=0");
+        std::fs::remove_dir_all(dir)?;
+        Ok(())
+    }
+
     #[test]
     fn large_transients_return_their_mapping_after_repeated_release() {
         // Isolate the process-wide policy and accounting from parallel tests.

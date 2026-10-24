@@ -78,7 +78,10 @@ fn core_battery() -> serde_json::Value {
     serde_json::json!({
         "health":{"available":true,"stale":false},
         "percentage":83.0,
-        "charging":true
+        "charging":true,
+        "state":1,
+        "time_to_full_seconds":5400,
+        "on_battery":false
     })
 }
 fn core_audio() -> serde_json::Value {
@@ -829,16 +832,23 @@ fn bluetooth_power_legacy_preview_unchanged() -> Result<()> {
 
 #[test]
 fn battery_core_optional_readings_remain_unknown() -> Result<()> {
+    // The fixture is on mains with 1h30m to full; the estimate follows the system's on-battery flag.
     let cases = [
-        (Some(83.0), Some(true), "83%", "Charging", true),
-        (Some(44.0), Some(false), "44%", "Not charging", false),
-        (Some(57.0), None, "57%", "Charging state unknown", false),
-        (None, Some(true), "Battery level unknown", "Charging", true),
+        (Some(83.0), Some(true), "83%", "1h 30m until full", true),
+        (Some(44.0), Some(false), "44%", "1h 30m until full", false),
+        (Some(57.0), None, "57%", "1h 30m until full", false),
+        (
+            None,
+            Some(true),
+            "Battery level unknown",
+            "1h 30m until full",
+            true,
+        ),
         (
             None,
             None,
             "Battery level unknown",
-            "Charging state unknown",
+            "1h 30m until full",
             false,
         ),
     ];
@@ -909,7 +919,7 @@ fn battery_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
     let status = Status::core_battery(source.clone());
     let good = status.project();
     assert_eq!(text_value(&good, "status.primary"), "83%");
-    assert_eq!(text_value(&good, "status.secondary"), "Charging");
+    assert_eq!(text_value(&good, "status.secondary"), "1h 30m until full");
     assert_eq!(good["status.active"], Value::Bool(true));
 
     let mut stale = core_battery();
@@ -940,6 +950,9 @@ fn battery_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
     let mut recovered = core_battery();
     recovered.as_object_mut().unwrap().remove("percentage");
     recovered.as_object_mut().unwrap().remove("charging");
+    for key in ["time_to_full_seconds", "on_battery", "state"] {
+        recovered.as_object_mut().unwrap().remove(key);
+    }
     source.publish(recovered)?;
     let current = status.project();
     assert_eq!(current["status.ready"], Value::Bool(true));
@@ -949,9 +962,62 @@ fn battery_core_disconnect_retains_last_good_until_recovery() -> Result<()> {
     );
     assert_eq!(
         text_value(&current, "status.secondary"),
-        "Charging state unknown"
+        "Connected to power"
     );
     assert_eq!(current["status.active"], Value::Bool(false));
+    Ok(())
+}
+
+/// QML's estimate: time to empty on battery, time to full on mains, minutes below an hour,
+/// and a plain state when the system gives no usable time.
+#[test]
+fn battery_estimate_follows_the_systems_time_and_power_source() -> Result<()> {
+    let estimate = |on_battery: Option<bool>, empty: Option<u64>, full: Option<u64>| {
+        let mut state = core_battery();
+        let map = state.as_object_mut().unwrap();
+        for key in [
+            "on_battery",
+            "time_to_empty_seconds",
+            "time_to_full_seconds",
+        ] {
+            map.remove(key);
+        }
+        if let Some(on) = on_battery {
+            map.insert("on_battery".into(), on.into());
+        }
+        if let Some(seconds) = empty {
+            map.insert("time_to_empty_seconds".into(), seconds.into());
+        }
+        if let Some(seconds) = full {
+            map.insert("time_to_full_seconds".into(), seconds.into());
+        }
+        let values = Status::core_battery(Arc::new(FakeSource::new(state).unwrap())).project();
+        text_value(&values, "status.secondary").to_owned()
+    };
+    assert_eq!(
+        estimate(Some(true), Some(7200), Some(60)),
+        "2h 0m remaining"
+    );
+    assert_eq!(estimate(Some(true), Some(61), None), "2m remaining");
+    assert_eq!(estimate(Some(true), Some(3599), None), "1h 0m remaining");
+    assert_eq!(
+        estimate(Some(true), None, Some(60)),
+        "Remaining time unavailable"
+    );
+    assert_eq!(
+        estimate(Some(true), Some(0), None),
+        "Remaining time unavailable"
+    );
+    assert_eq!(
+        estimate(Some(false), Some(7200), Some(1800)),
+        "30m until full"
+    );
+    assert_eq!(
+        estimate(Some(false), Some(60), Some(3601)),
+        "1h 1m until full"
+    );
+    assert_eq!(estimate(Some(false), None, None), "Connected to power");
+    assert_eq!(estimate(None, Some(60), Some(60)), "1m until full");
     Ok(())
 }
 
@@ -1554,5 +1620,44 @@ fn bluetooth_pairing_pages_have_goldens_at_both_scales() -> Result<()> {
             )?;
         }
     }
+    Ok(())
+}
+
+/// N0059: the battery view shows the profile daemon's degradation reason under the picker, and a
+/// failed call's message takes that line instead.
+#[test]
+fn battery_popout_shows_the_degradation_reason_until_a_message_replaces_it() -> Result<()> {
+    let line = |message: &str| -> Result<bool> {
+        let mut h = Harness::load(
+            &root(),
+            Path::new("status/battery.luau"),
+            &root().join("palette.json"),
+            BTreeMap::new(),
+            Config {
+                width: 380,
+                height: 420,
+                scale: 1.,
+            },
+        )?;
+        let view = Status::core_battery(Arc::new(FakeSource::new(core_battery())?));
+        let mut base = view.project();
+        base.insert("view.edge".into(), Value::Text("top".into()));
+        base.insert("panel.open".into(), Value::Bool(true));
+        base.insert("cc.message".into(), Value::Text(message.into()));
+        base.insert(
+            "cc.src".into(),
+            Value::list(vec![
+                serde_json::json!({"id":"power.profile","status":"Balanced","note":"thermal",
+                "choices":[{"id":"balanced","name":"Balanced","active":true}]}),
+            ]),
+        );
+        h.update(base)?;
+        Ok(h.scene()
+            .primitives
+            .iter()
+            .any(|p| matches!(p, bead::render::Primitive::Text { text, .. } if text == "thermal")))
+    };
+    assert!(line("")?);
+    assert!(!line("Request failed")?);
     Ok(())
 }
