@@ -1785,6 +1785,86 @@ fn stationary_hover_does_not_reproject_services() {
 }
 
 #[test]
+fn local_feedback_skips_projector_until_the_next_model_wakeup() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        "return {stores={external=\"\"},actions={noop=function(s) end},computed={}}",
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Column{id="root",width=200,height=100,
+ ui.Button{id="target",width=100,height=40,text="Target",on_activate=ui.action("noop")},
+ ui.Text{id="external",text=ui.bind("external")}}
+"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = calls.clone();
+    s.set_projector(Box::new(move |_| {
+        count.set(count.get() + 1);
+        Ok(BTreeMap::from([(
+            "external".into(),
+            Value::Text("fresh model".into()),
+        )]))
+    }));
+
+    let scene = s
+        .with_local_feedback(|s| {
+            if let Some(scene) = s.hover(20., 20.)? {
+                s.commit(scene);
+            }
+            s.pointer_focus_id("root.target", true, None)
+        })
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(calls.get(), 0);
+    assert_eq!(
+        s.stores.get("bead.hovered"),
+        Some(&Value::Text("root.target".into()))
+    );
+    assert_eq!(
+        s.stores.get("bead.focused"),
+        Some(&Value::Text("root.target".into()))
+    );
+
+    let scene = s.update_model(BTreeMap::new()).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(calls.get(), 1);
+    assert!(
+        s.current
+            .primitives
+            .iter()
+            .any(|p| matches!(p, Primitive::Text { text, .. } if text == "fresh model"))
+    );
+}
+
+#[test]
+fn local_feedback_restores_projector_after_invalid_focus() {
+    let f = fixture();
+    let mut s = session(&f);
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = calls.clone();
+    s.set_projector(Box::new(move |_| {
+        count.set(count.get() + 1);
+        Ok(BTreeMap::new())
+    }));
+
+    let result = s
+        .with_local_feedback(|s| s.focus_id("missing"))
+        .err()
+        .expect("invalid focus must fail");
+    assert!(result.message.contains("focus"));
+    assert_eq!(calls.get(), 0);
+    assert!(s.update_model(BTreeMap::new()).unwrap().is_none());
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
 fn kit_slider_feedback_is_continuous_and_scoped_to_its_instance() {
     let f = fixture();
     fs::write(

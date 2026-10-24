@@ -74,6 +74,20 @@ impl Session {
     pub fn set_projector(&mut self, projector: Projector) {
         self.projector = Some(projector);
     }
+    /// Run host-selected presentation feedback without consulting the external projector.
+    ///
+    /// The closure should change only pure local presentation input state, such as hover or
+    /// pointer focus. Normal actions and model updates must keep the projector enabled. This
+    /// opt-in scope lets a host avoid service work for transient local feedback.
+    pub fn with_local_feedback(
+        &mut self,
+        feedback: impl FnOnce(&mut Session) -> Result<Option<Scene>, Diagnostic>,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        let projector = self.projector.take();
+        let result = feedback(self);
+        self.projector = projector;
+        result
+    }
     /// Recheck an asynchronous projection once after markup, without waiting.
     /// A reply already ready replaces the intermediate scene before raster work.
     pub fn set_projection_coalescing(&mut self, enabled: bool) {
@@ -298,6 +312,7 @@ impl Session {
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
         }
         if let Some(projector) = &self.projector {
+            let _projection_profile = bead_core::profile::Span::new("projection");
             stores
                 .commit(projector(&stores)?)
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
@@ -471,6 +486,7 @@ impl Session {
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
         }
         if let Some(projector) = &self.projector {
+            let _projection_profile = bead_core::profile::Span::new("projection");
             stores
                 .commit(projector(&stores)?)
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
@@ -486,6 +502,7 @@ impl Session {
             && let Some(projector) = &self.projector
         {
             let revision = stores.revision();
+            let _projection_profile = bead_core::profile::Span::new("projection");
             let changes = projector(&stores)?;
             stores
                 .commit(changes)

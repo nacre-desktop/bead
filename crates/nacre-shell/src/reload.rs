@@ -1877,14 +1877,22 @@ impl Runtime {
         &mut self,
         id: &str,
         event: &UiEvent,
+        local: bool,
     ) -> Result<Option<Scene>, bead::ui::Diagnostic> {
-        match event {
-            UiEvent::Click { x, .. } => self.session.pointer_focus_id(id, true, Some(*x)),
-            UiEvent::Drag { x, .. } => self.session.pointer_focus_id(id, false, Some(*x)),
+        let feedback = |session: &mut bead::ui::Session| match event {
+            UiEvent::Click { x, .. } => session.pointer_focus_id(id, true, Some(*x)),
+            UiEvent::Drag { x, .. } => session.pointer_focus_id(id, false, Some(*x)),
             UiEvent::Command { command, .. } if command == "left" || command == "right" => {
-                self.session.range_step_id(id)
+                session.range_step_id(id)
             }
-            _ => self.session.focus_id(id),
+            _ => session.focus_id(id),
+        };
+        // Async services publish their model separately. Pure range feedback can
+        // draw immediately; synchronous local models (e.g. colors) still project.
+        if local && self.session.has_preview(id) {
+            self.session.with_local_feedback(feedback)
+        } else {
+            feedback(&mut self.session)
         }
     }
 }
@@ -2406,7 +2414,7 @@ impl SceneSource for Runtime {
                 .slider_sent
                 .is_some_and(|sent| sent.elapsed() < std::time::Duration::from_millis(34))
             {
-                let scene = self.pointer_feedback(id, &event)?;
+                let scene = self.pointer_feedback(id, &event, true)?;
                 self.slider_pending = Some(event);
                 return self.finish_scene(scene, false);
             }
@@ -2632,7 +2640,7 @@ impl SceneSource for Runtime {
                 return self.finish_scene(scene, false);
             }
             // A level step keeps the focus so the drag continues over the next step.
-            let scene = match self.pointer_feedback(id, &event) {
+            let scene = match self.pointer_feedback(id, &event, true) {
                 Ok(scene) => scene,
                 Err(_) => self.session.update(BTreeMap::new())?,
             };
@@ -2699,7 +2707,7 @@ impl SceneSource for Runtime {
             // A slider step keeps the focus so the drag continues over the next step.
             let scene = match arg
                 .starts_with("do:vol|")
-                .then(|| self.pointer_feedback(id, &event))
+                .then(|| self.pointer_feedback(id, &event, true))
             {
                 Some(Ok(scene)) => scene,
                 _ => self.session.update(changes)?,
@@ -2716,7 +2724,7 @@ impl SceneSource for Runtime {
             let changes = colors.act(arg, &self.session.stores);
             // A slider step keeps the focus so the drag continues over the next step.
             let level = arg.starts_with("brightness:") || arg.starts_with("saturation:");
-            let scene = match level.then(|| self.pointer_feedback(id, &event)) {
+            let scene = match level.then(|| self.pointer_feedback(id, &event, false)) {
                 Some(Ok(scene)) => scene,
                 _ => self.session.update(changes)?,
             };
@@ -3036,7 +3044,7 @@ impl SceneSource for Runtime {
             if self.session.has_preview(id)
                 && matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             {
-                let scene = self.pointer_feedback(id, &event)?;
+                let scene = self.pointer_feedback(id, &event, true)?;
                 return self.finish_scene(scene, false);
             }
             return Ok(None);
@@ -3075,7 +3083,7 @@ impl SceneSource for Runtime {
             if self.session.has_preview(id)
                 && matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             {
-                let scene = self.pointer_feedback(id, &event)?;
+                let scene = self.pointer_feedback(id, &event, true)?;
                 return self.finish_scene(scene, false);
             }
             if !self.bar {
@@ -3675,7 +3683,9 @@ impl SceneSource for Runtime {
                         None
                     }
                 });
-                let hovered = self.session.hover(x, y)?;
+                let hovered = self
+                    .session
+                    .with_local_feedback(|session| session.hover(x, y))?;
                 let pill = if self.bar {
                     if let Some(item) = pill_item {
                         self.status_pill.enter_icon(item, std::time::Instant::now());

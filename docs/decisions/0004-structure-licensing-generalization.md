@@ -80,6 +80,7 @@ After Bead's core switch on Nacre, plan support for:
 
 - B0103: `preview_key`/`preview_value` and `ui.preview_value` supply transient numeric control feedback;
   `SceneSource::wakeup_at` expires it without idle polling; Session scopes pointer focus, range capture and keyboard steps.
+  `Session::with_local_feedback` lets hosts stage presentation-only input without service projection; model wakes keep it.
   `Desktop::queue_volume` admits levels without blocking UI input; snapshots confirm the result. Neither names a shell, transport or service.
 
 - B0096: `edge_hover` lets an interactive region opt into edge hover; `ui.tint` composes palette/RGBA colours;

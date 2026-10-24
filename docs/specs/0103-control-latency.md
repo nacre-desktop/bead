@@ -1,7 +1,7 @@
 # B0103 — control input latency
 
-Status: blocked on private capture availability; candidate passes remote CI, but is not accepted.
-No latency, parity, first-key or memory acceptance is claimed.
+Status: runtime and measurement fixes integrated by lead decision; local-feedback follow-up under validation.
+Formal timing, parity, first-key and memory acceptance remains pending.
 
 Control pointer positions previously queued independently behind every script/render acknowledgement.
 Changing hover targets reprojects services and materializes the view; unchanged hover did so too.
@@ -11,7 +11,8 @@ also painted on pointer focus. These are code findings; timing attribution requi
 ## Candidate
 
 - Coalesce consecutive worker hover/drag positions, preserving all other event ordering.
-- Skip unchanged hover before service projection; retain projection for actual hover transitions.
+- Skip unchanged hover. Host-selected `Session::with_local_feedback` stages pure hover/range feedback
+  against the current model without service projection; actions, model wakes, release, and synchronous color edits retain projection.
 - General numeric feedback: `preview_key`/`preview_value` on an action region and
   `ui.preview_value(key, authoritative)` in markup. `preview_inset` maps the track to its thumb centre;
   intermediate pointer positions move the knob continuously while action values retain their declared step. The kit slider uses this; service IDs stay at the edge.
@@ -43,9 +44,10 @@ geometry, presentation inputs and daemon fixtures. Missing measurements are not 
 
 ## Checks and limitations
 
-The blocking private capture lease did not become available during more than 90 minutes of queued waiting.
-No nested session started; there are no paired screenshots or before/after timing results.
-Resume the CPU/GL, matched QML, first-key and same-host memory proofs before integration.
+The first private arm exposed a fixture coordinate error (scene inset plus parent decorations); its drag result was rejected.
+The corrected CPU control reproduces slider lag. Quiet timing uses presentation feedback without concurrent screencopy.
+Explicit `--panel-renderer` selection now applies to named core panels; their default renderer policy is unchanged.
+CPU/GL, matched QML, first-key and same-host memory proofs are still in progress.
 
 Validation is remote only. Full CI follows `.github/workflows/ci.yml`, in an Arch container.
 The Arch replica needs Git snapshot metadata, Sway's `swaybg` helper, and Sway's file capability removed

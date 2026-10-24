@@ -886,6 +886,16 @@ fn start(
                 .ok()
                 .and_then(|p| p.parent().map(|d| d.join("pearls.json"))),
         ));
+        // Explicit benchmark/user selection applies to named core panels too.
+        // Without an override each view retains its deliberate default renderer.
+        if let Some(renderer) = panel_renderer {
+            for view in views.values_mut() {
+                view.renderer = renderer;
+            }
+            if let Some(primary) = options.panel_spec.as_mut() {
+                primary.renderer = renderer;
+            }
+        }
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
         // B0052: Settings and the AI sidebar are separate on-demand processes.
         if let Some(socket) = &options.command_socket {
