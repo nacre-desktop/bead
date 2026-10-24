@@ -135,8 +135,9 @@ impl Host {
             Err(error) => Reply::error(id, "spawn", error),
         }
     }
-    /// B0093 selector prompt. `open` starts the prompt app for a request; a prompt that is already up
-    /// (a stale one of a killed tool) is refused, so the new tool fails at once instead of waiting.
+    /// B0093 selector prompt. `open` starts the prompt app for a request. One that is still up is the previous
+    /// prompt closing (a chained `pick` then `input`) or a stale one of a killed tool (the tool's own lock makes
+    /// two live prompts impossible): it is closed and given a second to leave before the new one starts.
     /// `cancel` closes the prompt that is up and never starts one.
     pub fn prompt(&self, id: u64, method: &str, ident: &str) -> Reply {
         let call = |method: &str| Call {
@@ -148,15 +149,24 @@ impl Host {
             output: None,
         };
         let socket = self.socket("prompt");
-        let up = ipc::call(&socket, &call("state"), Duration::from_millis(300)).is_ok();
+        let up = || ipc::call(&socket, &call("state"), Duration::from_millis(300)).is_ok();
         if method == "cancel" {
-            if up {
+            if up() {
                 let _ = ipc::call(&socket, &call("close"), Duration::from_millis(800));
             }
             return Reply::ok(id, Value::Null);
         }
-        if up {
-            return Reply::error(id, "busy", "another selector is already open");
+        if up() {
+            let _ = ipc::call(&socket, &call("close"), Duration::from_millis(800));
+            for _ in 0..20 {
+                std::thread::sleep(Duration::from_millis(50));
+                if !up() {
+                    break;
+                }
+            }
+            if up() {
+                return Reply::error(id, "busy", "another selector is still open");
+            }
         }
         match self.spawn("prompt", &[json!(ident)]) {
             Ok(()) => Reply::ok(id, Value::Null),

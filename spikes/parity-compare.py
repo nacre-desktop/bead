@@ -50,7 +50,17 @@ import fake_system  # noqa: E402
 #   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
 # Logical pointer targets (2880x1800 at 1.5), per arm. Bluetooth is available
 # in both arms through the private BlueZ fixture.
-PTR = {'control-tile': {'qml': (1790, 290), 'bead': (1800, 290)}, 'launcher-quick': (1350, 745)}
+PTR = {'control-tile': {'qml': (1790, 290), 'bead': (1800, 290)}, 'launcher-quick': (1350, 745),
+       # B0093: the third row of the selector prompt (panel x 410, y 610; list at 20,54; 58 px pitch)
+       'prompt-row': {'qml': (930, 807), 'bead': (930, 807)}}
+# B0093: one fixed selector request for both shells (`nacre-menu pick --json` / `nacre-menu input`).
+PROMPT_CHOICES = json.dumps([
+    {'label': 'Home Wi-Fi', 'value': 'home', 'description': 'WPA2 · 92%', 'icon': 'wifi'},
+    {'label': 'Guest', 'value': 'guest', 'description': 'Open · 71%', 'icon': 'wifi'},
+    {'label': 'Workshop', 'value': 'workshop', 'description': 'WPA3 · 48%', 'icon': 'wifi'},
+    {'label': 'Office (out of range)', 'value': 'office', 'description': 'Saved', 'icon': 'wifi_off', 'disabled': True},
+    {'label': 'Neighbour', 'value': 'neighbour', 'description': 'WPA2 · 33%', 'icon': 'wifi'},
+    {'label': 'Cafe', 'value': 'cafe', 'description': 'Open · 21%', 'icon': 'wifi'}])
 # A normal press is sampled before QML's long-press detail timer can fire.
 STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed': 0.05}
 # QML audio inherits the preceding popup's width. Establish the same explicit
@@ -58,6 +68,9 @@ STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed':
 STATE_PREPARE = {'popout-audio': [('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 0.4),
                                   ('ui', 'nacre', 'close'), ('sleep', 0.5)]}
 STATE_CLEANUP = {}
+# B0093: QML creates its selector service (and registers `menuPrompt`) with the launcher, so open and close it once first.
+for _prompt_state in ('menu-pick', 'menu-pick-hover', 'menu-input'):
+    STATE_PREPARE[_prompt_state] = [('ui', 'nacre', 'launcher', ''), ('sleep', 2.0), ('ui', 'nacre', 'close'), ('sleep', 1.0)]
 STATES = {
     'idle': ([], [], 0),
     'overview': ([('ui', 'nacre', 'mode', 'overview')], [('ui', 'nacre', 'close')], 1.0),
@@ -149,6 +162,10 @@ STATES = {
     'settings-appearance': ([('only', 'qml', ('qml_settings', 'appearance')), ('only', 'bead', ('shell', 'nacre', 'settings', 'appearance')), ('sleep', 2.0)],
     [('app_close', 'settings')], 0),
     'sidebar': ([('ui', 'nacre', 'left'), ('sleep', 1.0)], [('only', 'qml', ('ui', 'nacre', 'close')), ('only', 'bead', ('ui', 'nacre', 'left'))], 1.2),
+    # B0093: the selector prompt (`nacre-menu pick|input`), the same request through the same helper in both shells
+    'menu-pick': ([('prompt', 'pick'), ('sleep', 0.2)], [('prompt_end',)], 1.0),
+    'menu-pick-hover': ([('prompt', 'pick'), ('sleep', 1.5), ('pointer-target', 'prompt-row')], [('prompt_end',)], 0),
+    'menu-input': ([('prompt', 'input'), ('sleep', 0.2)], [('prompt_end',)], 1.0),
     'pearl-detached': ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.2), ('ui', 'pearls', 'detach')], [('ui', 'nacre', 'close')], 0),
 }
 # Where each transition happens, in logical pixels ("x,y wxh"): a grim region is much faster than the whole output, which
@@ -156,7 +173,7 @@ STATES = {
 REGIONS = {
     'launcher': '340,520 1240x680', 'dashboard-0': '300,0 1320x760', 'dashboard-warm': '300,0 1320x760', 'popout-calendar': '1250,0 670x520',
     'popout-network': '1250,0 670x520', 'control-center': '1360,0 560x760', 'notification': '1300,0 620x420',
-    'session': '560,260 800x680', 'sidebar': '0,0 760x1200',
+    'session': '560,260 800x680', 'sidebar': '0,0 760x1200', 'menu-pick': '340,520 1240x680', 'menu-input': '340,520 1240x680',
 }
 NIRI_CONFIG = '''input {
     keyboard {
@@ -457,6 +474,7 @@ class Arm:
             else:
                 palette = root / 'shell/palette.json'
             commands = self.runtime / 'bead-command.sock'
+            self.env['NACRE_HELPER'] = str(Path(a.bead_bin).resolve() / 'nacre-helper')  # B0093: the prompt app answers through it
             command = [str(Path(a.bead_bin).resolve() / 'nacre-shell'), '--bar', '--core-views', '--ui-provider',
                        '--notices', '--daemon-socket', str(self.endpoint), '--command-socket', str(commands), '--palette', str(palette)]
             if a.cpu:
@@ -533,6 +551,44 @@ os.execv(real, [real, *args])
                 self.socket_call(self.runtime / f'app-{name}.sock', 'bead.window', 'close', [])
             except OSError as error:
                 self.errors.append(f'closing {name}: {error}')
+
+    def prompt_start(self, mode):
+        """B0093: ask for a selection or a text through `menu-cli`, as `nacre-menu pick|input` does. The helper stays
+        running (it waits for the answer) until `prompt_end` ends this exact PID."""
+        helper = str(Path(self.args.bead_bin).resolve() / 'nacre-helper')
+        tools = self.root / 'promptbin'
+        tools.mkdir(exist_ok=True)
+        if not (tools / 'nacrectl').exists():
+            (tools / 'nacrectl').symlink_to(helper)
+        env = dict(self.env, PATH=f'{tools}:' + self.env['PATH'])
+        if mode == 'pick':
+            command = [helper, 'menu-cli', 'pick', '--json', '--title', 'Choose a network', '--timeout', '120']
+        else:
+            command = [helper, 'menu-cli', 'input', '--title', 'Name this workspace', '--initial', 'Work', '--timeout', '120']
+        self.prompt_proc = subprocess.Popen(command, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, text=True)
+        if mode == 'pick':
+            self.prompt_proc.stdin.write(PROMPT_CHOICES)
+        self.prompt_proc.stdin.close()
+
+    def prompt_end(self):
+        """Stop the helper this harness started (SIGTERM: it cancels its own prompt and exits 1)."""
+        process = getattr(self, 'prompt_proc', None)
+        if process is None:
+            return
+        self.prompt_proc = None
+        if process.poll() is not None:
+            self.errors.append(f'the selector helper had already exited ({process.returncode}): {process.stderr.read()[:160]}')
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+            self.errors.append('the selector helper ignored SIGTERM')
+        process.stdout.close()
+        process.stderr.close()
 
     def set_level(self, node, value):
         """The daemon's osd service polls `wpctl get-volume` after each `pactl subscribe` line (fake tools, see start_daemon)."""
@@ -640,6 +696,10 @@ os.execv(real, [real, *args])
                     self.errors.append(f'Bead {step[1]} OSD preview: {error}')
             elif kind == 'app_close':
                 self.app_close(step[1])
+            elif kind == 'prompt':
+                self.prompt_start(step[1])
+            elif kind == 'prompt_end':
+                self.prompt_end()
             elif kind == 'qml_settings':
                 self.run(['quickshell', 'ipc', '--path', str(Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'),
                           'call', 'settingsApp', 'open', step[1]], check=False)
