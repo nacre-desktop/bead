@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-24 — B0074 dashboard first reveal (review)
+
+The reveal clock now starts at admission and transient contour SVGs use content-sized
+rasters. Three matched nested CPU pairs on B0072's landed base: cold 10% progress
+201/256/197 ms and warm 200/250/205 ms (QML/control/candidate). Median differences
+meet ±20 ms. Relative UI memory medians idle/open/closed: −0.029/−0.235/+0.262 MiB;
+full remote Arch CI passed. First-key CPU remains above 8 ms in both builds
+(17.991/17.915 ms); no launcher changes. The 90% image proxy remains ~25 ms later
+than QML. Method, spreads and remaining limits: [B0074](specs/0074-dashboard-reveal-delay.md).
+
 ## 2026-10-24 — B0072 launcher Quick controls (review; CPU gate fails)
 
 The launcher now projects DND, night light, stay awake and a known updates count

@@ -12,6 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
+| 0 | [B0074 Dashboard first-reveal delay](0074-dashboard-reveal-delay.md) | Review — median 10% within −4/+5 ms of QML cold/warm; memory +0.262 MiB closed; full Arch CI | Admission clock and content-sized SVGs. Inherited first-key CPU gate remains; 90% image proxy ~25 ms later. |
 | 0 | [B0072 Launcher Quick controls](0072-launcher-quick-controls.md) | Review — scoped controls/notifications/updates, shared control calls, release activation and search focus | Full Arch CI and native parity; five desktop pairs pass memory/opening/flips, first-key CPU 18.359 ms fails 8 ms (main 17.656). |
 | 0 | [B0073 Visual parity round 6](0073-visual-parity-6.md) | Review — guarded audio/profile controls, optional updates consumer, shared control and OSD metrics | Full Arch CI and nested CPU evidence; live updates producer and dashboard reveal offset remain. |
 | 0 | [B0071 Visual parity round 5](0071-visual-parity-5.md) | Review — rounded growing frame, top-attached status popouts, verified per-arm pointer targets and brightness/keyboard OSD fixtures | Full remote Arch CI and nested CPU pairs; remaining visual/control gaps and unmeasured memory gate explicit in spec. |

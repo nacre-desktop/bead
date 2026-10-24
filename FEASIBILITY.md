@@ -1,5 +1,19 @@
 # Feasibility
 
+## 2026-10-24 — B0074 dashboard admission and reveal preparation
+
+Starting the reveal clock at admission removes worker/configure time from its start.
+Content-sized contour SVGs avoid rasterizing transparent rows on early frames.
+Three nested CPU pairs meet the median 10% ±20 ms goal; full remote Arch CI passes.
+The inherited first-key CPU gate still fails in both builds; see B0074 for spreads and limits.
+
+| Metric | Control | Candidate | QML / gate |
+| --- | ---: | ---: | ---: |
+| Cold 10% image progress, ms | 256 | 197 | 201 |
+| Warm 10% image progress, ms | 250 | 205 | 200 |
+| Closed UI PSS+DRM+SwapPss paired Δ, MiB | — | +0.262 | ≤+0.5 |
+| First-key UI CPU, ms | 17.991 | 17.915 | ≤8 fails both |
+
 ## 2026-10-24 — B0072 launcher Quick controls
 
 The launcher gains scoped controls and a published updates-count consumer.
