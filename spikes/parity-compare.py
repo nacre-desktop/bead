@@ -67,6 +67,7 @@ PROMPT_CHOICES = json.dumps([
     {'label': 'Cafe', 'value': 'cafe', 'description': 'Open · 21%', 'icon': 'wifi'}])
 # A normal press is sampled before QML's long-press detail timer can fire.
 STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed': 0.05, 'control-vpn-pressed': 0.05}
+STATE_SETTLE.update({'bar-title-hover': .18, 'bar-title-open': .8})
 # QML audio inherits the preceding popup's width. Establish the same explicit
 # 352 px content-width precondition for both builds, independent of state order.
 STATE_PREPARE = {'popout-audio': [('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 0.4),
@@ -77,6 +78,10 @@ for _prompt_state in ('menu-pick', 'menu-pick-hover', 'menu-input'):
     STATE_PREPARE[_prompt_state] = [('ui', 'nacre', 'launcher', ''), ('sleep', 2.0), ('ui', 'nacre', 'close'), ('sleep', 1.0)]
 STATES = {
     'idle': ([], [], 0),
+    'bar-idle': ([], [], 0),
+    'bar-workspace': ([('bar-window',)], [('bar-window-close',)], 0),
+    'bar-title-hover': ([('pointer-fast', 960, 25)], [('pointer', 960, 600)], 0),
+    'bar-title-open': ([('pointer', 960, 25)], [('pointer', 960, 600), ('ui', 'nacre', 'close')], 0),
     'overview': ([('ui', 'nacre', 'mode', 'overview')], [('ui', 'nacre', 'close')], 1.0),
     'palette': ([('ui', 'nacre', 'mode', 'palette')], [('ui', 'nacre', 'close')], 1.0),
     'palette-typed': ([('ui', 'nacre', 'mode', 'palette'), ('sleep', 2.5), ('type', 'set')], [('ui', 'nacre', 'close')], 0),
@@ -226,6 +231,10 @@ STATES.update({
     'control-network-scanned': ([('nm', 'scan', 'now'), ('sleep', 3.0), ('ui', 'nacre', 'controls', 'network')], _SCAN_CLOSE, 0),
 })
 STATE_SETTLE.update({'popout-network-scanning': 0.6, 'control-network-scanning': 0.6})
+for _bar_cycle in range(1, 4):
+    # Identical forced opens in control/candidate; title hover intentionally differs before the fix.
+    STATES[f'bar-memory-{_bar_cycle}'] = ([('ui', 'drawers', 'toggle', 'dashboard')],
+                                        [('ui', 'nacre', 'close'), ('sleep', 1.5)], 0)
 # Where each transition happens, in logical pixels ("x,y wxh"): a grim region is much faster than the whole output, which
 # is what gives a usable frame rate for the animation timing.
 REGIONS = {
@@ -483,6 +492,9 @@ class Arm:
             self.env['NACRE_DAEMON_CLIENT'] = '1'
         self.daemon = self.spawn(command, 'daemon')
         wait_until(lambda: self._try(lambda: self.call('daemon.status', {})), 30, 'the private daemon')
+        if any(state.startswith('bar-') for state in a.states):
+            self.spawn([sys.executable, str(HERE / 'fake-sni.py')], 'fake-sni')
+            wait_until(lambda: 'registered two' in (self.logs / 'fake-sni.log').read_text(), 20, 'the two private SNI items')
 
     def start_pipewire(self):
         """QML reads audio through PipeWire, not pactl (the daemon reads pactl but needs the socket to offer volume writes): each arm gets a private server with the same nodes (spikes/fake_system.py),
@@ -588,6 +600,8 @@ class Arm:
                 raise RuntimeError('the shell exited; see shell.log')
             return self._try(lambda: self.dispatch('nacre', 'state'))
         wait_until(provider, 60, 'the UI provider')
+        if any(state.startswith('bar-') for state in a.states):
+            self.spawn([self.nacrectl, 'watch', 'tray'], 'tray-snapshot')
         time.sleep(self.args.boot_settle)
 
     def install_fake_light_devices(self, path):
@@ -747,7 +761,7 @@ os.execv(real, [real, *args])
         self.socket_call(self.runtime / 'bead-command.sock', 'bead.osd', 'preview',
                          [kind, level['value'], False, '', level['device']])
 
-    def pointer(self, x, y, mode=None):
+    def pointer(self, x, y, mode=None, settle=None):
         """B0067: hover or press at a logical position through spikes/virtual-pointer.c (wlr-virtual-pointer on the private
         parent labwc; the nested niri receives it as a normal pointer). `press` holds the button until release_pointer."""
         tool = self.args.pointer_tool
@@ -763,7 +777,7 @@ os.execv(real, [real, *args])
         if mode in ('press', 'hover'):
             self.held = subprocess.Popen(command, env=env, start_new_session=True)
             self.procs.append(self.held)
-            time.sleep(0.04 if mode == 'press' else 0.4)
+            time.sleep(settle if settle is not None else 0.04 if mode == 'press' else 0.4)
         else:
             subprocess.run(command, env=env, timeout=10, check=False)
             time.sleep(0.3)
@@ -814,6 +828,15 @@ os.execv(real, [real, *args])
                     self.errors.append(f'Bead {step[1]} OSD preview: {error}')
             elif kind == 'app_close':
                 self.app_close(step[1])
+            elif kind == 'bar-window':
+                fixture = self.root / 'bar-window.qml'
+                fixture.write_text('import QtQuick\nimport Quickshell\nFloatingWindow { visible: true; implicitWidth: 320; implicitHeight: 180; title: "Bar parity fixture"; color: "#203030" }\n')
+                self.bar_window = self.spawn(['quickshell', '--path', str(fixture)], 'bar-window')
+                time.sleep(1)
+                if self.bar_window.poll() is not None:
+                    raise RuntimeError('bar workspace fixture window exited')
+            elif kind == 'bar-window-close':
+                stop(self.bar_window)
             elif kind == 'prompt':
                 self.prompt_start(step[1])
             elif kind == 'prompt_end':
@@ -836,6 +859,8 @@ os.execv(real, [real, *args])
                 self.set_mute(step[1], step[2])
             elif kind == 'pointer':
                 self.pointer(step[1], step[2])
+            elif kind == 'pointer-fast':
+                self.pointer(step[1], step[2], settle=0.01)
             elif kind == 'press':
                 self.pointer(step[1], step[2], 'press')
             elif kind in ('pointer-target', 'press-target'):
@@ -954,10 +979,18 @@ os.execv(real, [real, *args])
                     info['ui_state'] = state
                     if not isinstance(state, dict) or state.get('launcher') is not True:
                         raise RuntimeError('launcher capture is not an open launcher')
+                # Capture the short dwell cue before /proc sampling can outlast it.
+                early_hover = name == 'bar-title-hover'
+                if early_hover:
+                    self.grab(shots / (name + '.png'))
                 info['rss_kib'] = self.rss()
                 if info['rss_kib'].get('SwapPss') != 0:
                     raise RuntimeError('nonzero or unavailable process SwapPss')
-                self.grab(shots / (name + '.png'))
+                if not early_hover:
+                    self.grab(shots / (name + '.png'))
+                if name.startswith('bar-title'):
+                    state = self.dispatch('nacre', 'state')
+                    info['ui_state'] = json.loads(state) if isinstance(state, str) else state
                 if seconds and closes:
                     info['close_ms'] = self.sequence(name + '-close', lambda: self.steps(closes), seconds)
                 else:
@@ -986,7 +1019,7 @@ os.execv(real, [real, *args])
         for process in reversed(self.procs):
             stop(process)
         # Keep the shell log with the captures (frame/motion traces, errors).
-        for name in ('shell', 'fake-nm'):
+        for name in ('shell', 'fake-nm', 'fake-sni', 'tray-snapshot'):
             try:
                 shutil.copy(self.logs / f'{name}.log', self.out / f'{name}.log')
             except OSError:

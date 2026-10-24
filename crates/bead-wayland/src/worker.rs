@@ -20,6 +20,16 @@ struct Mirror {
     resources: String,
 }
 impl Mirror {
+    fn region_at(&self, x: f32, y: f32) -> Option<&InputRegion> {
+        self.regions.iter().rev().find(|r| {
+            x >= r.rect.x
+                && y >= r.rect.y
+                && x < r.rect.x + r.rect.w
+                && y < r.rect.y + r.rect.h
+                && r.clip
+                    .is_none_or(|c| x >= c.x && y >= c.y && x < c.x + c.w && y < c.y + c.h)
+        })
+    }
     fn read(source: &dyn SceneSource) -> Self {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
@@ -465,19 +475,12 @@ impl SceneSource for Source {
         self.mirror.focused_dismiss
     }
     fn pointer_cursor(&self, x: f32, y: f32) -> &str {
+        self.mirror.region_at(x, y).map_or("default", |r| r.cursor)
+    }
+    fn allows_edge_hover(&self, x: f32, y: f32) -> bool {
         self.mirror
-            .regions
-            .iter()
-            .rev()
-            .find(|r| {
-                x >= r.rect.x
-                    && y >= r.rect.y
-                    && x < r.rect.x + r.rect.w
-                    && y < r.rect.y + r.rect.h
-                    && r.clip
-                        .is_none_or(|c| x >= c.x && y >= c.y && x < c.x + c.w && y < c.y + c.h)
-            })
-            .map_or("default", |r| r.cursor)
+            .region_at(x, y)
+            .is_none_or(|r| r.edge_hover || r.cursor == "default")
     }
 }
 
@@ -516,6 +519,19 @@ mod tests {
         panic: bool,
     }
     impl SceneSource for Mock {
+        fn input_regions(&self) -> Vec<InputRegion> {
+            vec![InputRegion {
+                id: "button".into(),
+                rect: bead_render::Rect::new(0., 0., 16., 16.),
+                clip: None,
+                cursor: "pointer",
+                edge_hover: true,
+                dismiss: false,
+                prepare_panel: false,
+                prepare_view: None,
+                prepare_center: None,
+            }]
+        }
         fn watch(
             &mut self,
             _: Box<dyn Fn(Result<(), String>) + Send>,
@@ -571,6 +587,11 @@ mod tests {
         assert!(source.commit());
         assert_eq!(commits.load(Ordering::SeqCst), 1);
         assert_eq!(source.state_summary(), "accepted");
+        assert_eq!(source.pointer_cursor(8., 8.), "pointer");
+        assert!(
+            source.allows_edge_hover(8., 8.),
+            "the accepted worker mirror must preserve edge-hover opt-in"
+        );
     }
     #[test]
     fn worker_panic_becomes_fatal_event_instead_of_silent_frozen_ui() {

@@ -741,10 +741,10 @@ impl App {
             self.runtime.as_ref()
         };
         source.is_none_or(|r| {
-            r.pointer_cursor(
+            r.allows_edge_hover(
                 event.position.0 as f32 - self.bar_offset(output).0,
                 event.position.1 as f32 - self.bar_offset(output).1,
-            ) == "default"
+            )
         })
     }
     fn bar_offset(&self, output: &str) -> (f32, f32) {

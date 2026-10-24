@@ -165,6 +165,7 @@ fn bar_with(client: &Client, output: &str, origins: bool) -> (Runtime, Events) {
                 "bead.focused_title".into(),
                 bead::core::Value::Text("Title".into()),
             ),
+            ("bar.tray.visible".into(), bead::core::Value::Bool(true)),
         ]))
         .unwrap();
     let mut runtime = Runtime::for_output(session, Some(output.into()))

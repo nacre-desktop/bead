@@ -1,0 +1,6 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<defs><linearGradient id="enamel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="@secondary|#fff9f1|0.88@"/><stop offset=".45" stop-color="@secondary|#fff9f1|0.4@"/><stop offset="1" stop-color="@secondary|secondary|.28@"/></linearGradient></defs>
+<circle cx="50" cy="50" r="50" fill="url(#enamel)"/>
+<rect x="23" y="14" width="44" height="23" rx="11.5" fill="#fff9f1" opacity="0.6"/>
+</svg>

@@ -69,6 +69,20 @@ fn node_center(s: &Session, id: &str) -> (f32, f32) {
 }
 
 #[test]
+fn clickable_region_can_opt_into_edge_hover() {
+    let f = fixture();
+    fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")
+return ui.Button{id="target",text="Target",width=100,height=40,edge_hover=true,on_activate=ui.action("select","a")}"#).unwrap();
+    let s = session(&f);
+    assert_eq!(s.pointer_cursor(20., 20.), "pointer");
+    assert!(s.allows_edge_hover(20., 20.));
+    assert!(
+        s.action_at(20., 20.).is_some(),
+        "click and wheel target remains available"
+    );
+}
+
+#[test]
 fn release_activated_button_defers_luau_focus_and_host_action_until_exactly_once() {
     let (_f, mut s) = deferred_fixture();
     if let Some(scene) = s.focus_id("panel.normal").unwrap() {

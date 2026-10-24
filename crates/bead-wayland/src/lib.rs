@@ -333,6 +333,8 @@ pub struct InputRegion {
     pub rect: Rect,
     pub clip: Option<Rect>,
     pub cursor: &'static str,
+    /// Permit configured edge dwell while retaining the region's normal cursor.
+    pub edge_hover: bool,
     pub dismiss: bool,
     /// Start bounded preparation when the pointer enters this host-selected region.
     pub prepare_panel: bool,
@@ -341,6 +343,10 @@ pub struct InputRegion {
     pub prepare_center: Option<f32>,
 }
 pub trait SceneSource {
+    /// Whether configured edge hover may start over this region.
+    fn allows_edge_hover(&self, x: f32, y: f32) -> bool {
+        self.pointer_cursor(x, y) == "default"
+    }
     /// Successful staging without a scene schedules a later worker event.
     fn deferred_updates(&self) -> bool {
         false

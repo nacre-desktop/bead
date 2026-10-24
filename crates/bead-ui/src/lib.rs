@@ -72,6 +72,9 @@ pub struct Node {
     pub focus_on_pointer: bool,
     #[serde(default = "default_true")]
     pub focus_ring: bool,
+    /// Allow this interactive region to participate in configured edge hover.
+    #[serde(default)]
+    pub edge_hover: bool,
     pub icon: Option<String>,
     pub input: Option<String>,
     pub scroll: Option<String>,

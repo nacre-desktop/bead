@@ -104,6 +104,7 @@ pub const PROPERTIES: &[&str] = &[
     "activate_on_release",
     "focus_on_pointer",
     "focus_ring",
+    "edge_hover",
     "scroll",
     "fill",
     "color",
@@ -164,6 +165,7 @@ pub struct ViewSpec {
     pub focus_on_pointer: bool,
     /// Whether a focused interactive node gets the standard focus outline.
     pub focus_ring: bool,
+    pub edge_hover: bool,
     pub input: Option<String>,
     /// TextInput accepts newlines (Shift+Enter) and wraps at its width.
     pub multiline: bool,
@@ -550,6 +552,7 @@ impl ViewSpec {
                 activate_on_release,
                 focus_on_pointer,
                 focus_ring: boolean(p, "focus_ring", true, source)?,
+                edge_hover: boolean(p, "edge_hover", false, source)?,
                 input,
                 multiline: boolean(p, "multiline", false, source)?,
                 masked: boolean(p, "masked", false, source)?,
@@ -672,19 +675,17 @@ pub(super) fn color(
         Some(Json::Object(object)) if object.contains_key("base") => {
             let base = object
                 .get("base")
-                .and_then(Json::as_str)
-                .ok_or_else(|| source.error("base role must be text"))?;
+                .ok_or_else(|| source.error("base color is required"))?;
             let over = object
                 .get("over")
-                .and_then(Json::as_str)
-                .ok_or_else(|| source.error("overlay role must be text"))?;
+                .ok_or_else(|| source.error("overlay color is required"))?;
             let alpha = object
                 .get("alpha")
                 .and_then(Json::as_f64)
                 .filter(|a| (0. ..=1.).contains(a))
                 .ok_or_else(|| source.error("tint amount needs0..1"))?;
-            let a = palette.get(base).map_err(|e| source.error(e))?;
-            let b = palette.get(over).map_err(|e| source.error(e))?;
+            let a = color(Some(base), default, palette, source)?;
+            let b = color(Some(over), default, palette, source)?;
             Ok(std::array::from_fn(|i| {
                 (f64::from(a[i]) * (1. - alpha) + f64::from(b[i]) * alpha).round() as u8
             }))
@@ -950,6 +951,7 @@ pub fn layout(
                 activate_on_release: view.activate_on_release,
                 focus_on_pointer: view.focus_on_pointer,
                 focus_ring: view.focus_ring,
+                edge_hover: view.edge_hover,
                 icon: None,
                 input: view.input.clone(),
                 scroll: None,

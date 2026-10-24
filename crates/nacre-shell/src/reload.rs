@@ -2162,12 +2162,16 @@ impl SceneSource for Runtime {
                     } else {
                         "pointer"
                     },
+                    edge_hover: node.edge_hover,
                 }
             })
             .collect()
     }
     fn pointer_cursor(&self, x: f32, y: f32) -> &str {
         self.session.pointer_cursor(x, y)
+    }
+    fn allows_edge_hover(&self, x: f32, y: f32) -> bool {
+        self.session.allows_edge_hover(x, y)
     }
     fn accessibility_tree(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.session.accessibility_tree())

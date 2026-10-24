@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-24 — B0096 owner bar parity (review candidate)
+
+Status values now share icon hit areas and centered line boxes; the default tray
+visibility, pearl geometry/app alignment and dashboard dwell follow the QML
+reference. Full remote Arch CI passes. Five private same-host paired cycles give
+open/closed unreclaimable median deltas −0.314/+0.375 MiB (CPU bar/native-GL
+dashboard), within the relative gate. [B0096](specs/0096-bar-parity-owner.md) records
+paired 2× crops, RMSE and remaining compositor hover-cue/font/updates-popout gaps.
+No live desktop change or laptop-cap claim.
+
 ## 2026-10-24 — B0080 populated Home first key (review)
 
 Five matched CPU pairs now measure Home → completed search at 7.598 ms

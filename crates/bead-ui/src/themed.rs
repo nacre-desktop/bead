@@ -5,6 +5,35 @@
 use bead_render::Palette;
 use std::path::{Path, PathBuf};
 
+// SVG colour stops may mix two palette roles or literal RGB colours. Artwork
+// declares the colours and amount; the framework has no product palette constants.
+fn token_color(token: &str, palette: &Palette) -> Result<[u8; 4], String> {
+    let color = |name: &str| -> Result<[u8; 4], String> {
+        if let Some(hex) = name.strip_prefix('#').filter(|hex| hex.len() == 6) {
+            let rgb = u32::from_str_radix(hex, 16).map_err(|_| "invalid SVG RGB colour")?;
+            Ok([(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255])
+        } else {
+            palette.get(name).map_err(|e| e.to_string())
+        }
+    };
+    let parts: Vec<_> = token.split('|').collect();
+    match parts.as_slice() {
+        [name] => color(name),
+        [base, over, amount] => {
+            let amount = amount
+                .parse::<f64>()
+                .ok()
+                .filter(|v| (0. ..=1.).contains(v))
+                .ok_or("SVG mix needs an amount in 0..1")?;
+            let (a, b) = (color(base)?, color(over)?);
+            Ok(std::array::from_fn(|i| {
+                (f64::from(a[i]) * (1. - amount) + f64::from(b[i]) * amount).round() as u8
+            }))
+        }
+        _ => Err("SVG mix needs base|overlay|amount".into()),
+    }
+}
+
 fn luminance([r, g, b, _]: [u8; 4]) -> f64 {
     let lin = |v: u8| {
         let v = f64::from(v) / 255.;
@@ -69,7 +98,7 @@ pub(crate) fn themed_asset(
         let (name, lifted) = tail[..end]
             .strip_suffix('+')
             .map_or((&tail[..end], false), |n| (n, true));
-        let color = palette.get(name).map_err(|e| e.to_string())?;
+        let color = token_color(name, palette)?;
         let color = if lifted {
             lift(color, bg, fg, 3.4)
         } else {
@@ -135,5 +164,16 @@ mod tests {
             )]);
             assert!(themed_asset(&path, &p, &mut assets).is_err());
         }
+    }
+
+    #[test]
+    fn svg_mix_tokens_follow_palette_and_validate_amounts() {
+        let p = palette(&[("surface", [0, 0, 0, 255]), ("primary", [0, 100, 200, 255])]);
+        assert_eq!(
+            fill("<a fill='@primary|#ffffff|0.4@'/>", &p),
+            "<a fill='#66a2de'/>"
+        );
+        assert!(token_color("primary|#ffffff|NaN", &p).is_err());
+        assert!(token_color("primary|#ffffff|1.1", &p).is_err());
     }
 }

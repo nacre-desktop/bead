@@ -367,6 +367,111 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
 }
 
 #[test]
+fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
+    for scale in [1., 1.5] {
+        let mut values = super::initial_models()?;
+        values.extend(BTreeMap::from([
+            ("bar.popouts".into(), Value::Bool(true)),
+            ("bar.launcher".into(), Value::Bool(true)),
+            ("bar.updates.count".into(), Value::Number(12.)),
+            ("bar.notifications.count".into(), Value::Number(7.)),
+            ("bead.desktop.battery.value".into(), Value::Text("77".into())),
+            ("bead.desktop.clock".into(), Value::Text("12:34".into())),
+            ("bead.desktop.battery.value.width".into(), Value::Number(30.)),
+            ("bead.workspaces".into(), Value::list(vec![
+                serde_json::json!({"id":"one","index":1,"label":"1","active":true,"hinted":true,"shown":1,"app1":"terminal"}),
+                serde_json::json!({"id":"two","index":2,"label":"2","occupied":true}),
+                serde_json::json!({"id":"three","index":3,"label":"3"}),
+            ])),
+        ]));
+        let mut h = Harness::load(
+            &root(),
+            Path::new("bar/main.luau"),
+            &root().join("palette.json"),
+            values,
+            Config {
+                width: 1920,
+                height: 50,
+                scale,
+            },
+        )?;
+        for (suffix, action) in [
+            ("updates.count", "view.open"),
+            ("battery.battery-value", "status.pill.open"),
+            ("notifications.notifications-count", "view.open"),
+        ] {
+            let layer = h
+                .scene()
+                .layers
+                .iter()
+                .find(|l| l.id.ends_with(suffix))
+                .ok_or("count layer missing")?;
+            let rect = h.scene().primitives[layer.own.clone()]
+                .iter()
+                .find_map(|p| {
+                    if let bead::render::Primitive::Text { rect, .. } = p {
+                        Some(*rect)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or("count text missing")?;
+            let (_, name, _) = h
+                .session
+                .action_at(rect.x + rect.w / 2., rect.y + rect.h / 2.)
+                .ok_or("count hit missing")?;
+            assert_eq!(name, action);
+            assert!(
+                (rect.y + rect.h / 2. - 25.).abs() < 0.1,
+                "count line box must be centered in pill: {rect:?}"
+            );
+        }
+        assert_eq!(h.session.pointer_cursor(960., 25.), "pointer");
+        assert!(h.session.allows_edge_hover(960., 25.));
+        let frame = h.pose((0., 0.), 1.)?;
+        let golden = root()
+            .join("tests/goldens")
+            .join(format!("bar-parity-{scale}.png"));
+        if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+            frame.save(&golden)?;
+        }
+        frame.compare(
+            &golden,
+            bead_test::Tolerance::default(),
+            &std::env::temp_dir().join(format!("bead-bar-parity-{scale}")),
+        )?;
+        h.script([Input::Pointer { x: 960., y: 25. }])?;
+        assert_eq!(
+            h.session.stores.get("bead.hovered"),
+            Some(&Value::Text("bar.title-band".into()))
+        );
+        let trace = h
+            .scene()
+            .layers
+            .iter()
+            .find(|l| l.id.ends_with("title-trace"))
+            .ok_or("title underline missing")?;
+        assert!(
+            !trace.own.is_empty(),
+            "the title underline must paint on hover"
+        );
+        let hover = h.pose((0., 0.), 1.)?;
+        let golden = root()
+            .join("tests/goldens")
+            .join(format!("bar-parity-hover-{scale}.png"));
+        if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+            hover.save(&golden)?;
+        }
+        hover.compare(
+            &golden,
+            bead_test::Tolerance::default(),
+            &std::env::temp_dir().join(format!("bead-bar-hover-{scale}")),
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
 fn status_pill_click_routes_switch_escape_and_reopen() -> Result<()> {
     use bead::wayland::{SceneSource, UiEvent};
     use std::sync::{Arc, Mutex};

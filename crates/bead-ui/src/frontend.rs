@@ -38,7 +38,8 @@ return function(ui, constructors, allowed, arrayMarker)
         return {role=string_arg(role, "alpha role"), alpha=number_arg(alpha, "alpha")}
     end
     ui.tint = function(base, over, alpha)
-        return {base=string_arg(base, "tint base"), over=string_arg(over, "tint over"), alpha=number_arg(alpha, "tint alpha")}
+        return {base=type(base)=="table" and base or string_arg(base,"tint base"),
+            over=type(over)=="table" and over or string_arg(over,"tint over"), alpha=number_arg(alpha, "tint alpha")}
     end
     ui.bind = function(name)
         return {__bind=string_arg(name, "bind name")}

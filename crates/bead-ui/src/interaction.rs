@@ -754,6 +754,10 @@ impl Session {
             if n.input.is_some() { "text" } else { "pointer" }
         })
     }
+    /// Controls opt in explicitly; empty background continues to host edge hover.
+    pub fn allows_edge_hover(&self, x: f32, y: f32) -> bool {
+        self.hit(x, y, false).is_none_or(|n| n.edge_hover)
+    }
     pub fn selected_text(&self) -> Option<String> {
         let (id, _, text) = self.focused_input()?;
         if self.focused_masked() {

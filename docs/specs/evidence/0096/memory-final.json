@@ -1,0 +1,237 @@
+{
+  "backend": "CPU bar / native-GL dashboard",
+  "build": "debug",
+  "pairs": [
+    {
+      "pair": 1,
+      "open": {
+        "before": {
+          "Pss_Anon": 30.72265625,
+          "Pss_Shmem": 7.818359375,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.9453125,
+          "Pss_File": 51.412109375,
+          "unreclaimable_mib": 38.533203125
+        },
+        "after": {
+          "Pss_Anon": 31.1015625,
+          "Pss_Shmem": 6.5546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.0009765625,
+          "Pss_File": 51.3408203125,
+          "unreclaimable_mib": 37.66015625
+        },
+        "delta_mib": -0.873046875
+      },
+      "closed": {
+        "before": {
+          "Pss_Anon": 30.23046875,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.33984375,
+          "Pss_File": 51.412109375,
+          "unreclaimable_mib": 37.927734375
+        },
+        "after": {
+          "Pss_Anon": 30.62109375,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.6396484375,
+          "Pss_File": 51.3408203125,
+          "unreclaimable_mib": 38.306640625
+        },
+        "delta_mib": 0.37890625
+      }
+    },
+    {
+      "pair": 2,
+      "open": {
+        "before": {
+          "Pss_Anon": 30.92578125,
+          "Pss_Shmem": 7.818359375,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.9560546875,
+          "Pss_File": 51.2314453125,
+          "unreclaimable_mib": 38.724609375
+        },
+        "after": {
+          "Pss_Anon": 30.93359375,
+          "Pss_Shmem": 7.5546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.994140625,
+          "Pss_File": 51.583984375,
+          "unreclaimable_mib": 38.41015625
+        },
+        "delta_mib": -0.314453125
+      },
+      "closed": {
+        "before": {
+          "Pss_Anon": 30.3984375,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.3154296875,
+          "Pss_File": 51.2314453125,
+          "unreclaimable_mib": 38.083984375
+        },
+        "after": {
+          "Pss_Anon": 30.46484375,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.73046875,
+          "Pss_File": 51.583984375,
+          "unreclaimable_mib": 38.150390625
+        },
+        "delta_mib": 0.06640625
+      }
+    },
+    {
+      "pair": 3,
+      "open": {
+        "before": {
+          "Pss_Anon": 31.4609375,
+          "Pss_Shmem": 6.5546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.2958984375,
+          "Pss_File": 51.2802734375,
+          "unreclaimable_mib": 38.015625
+        },
+        "after": {
+          "Pss_Anon": 30.9765625,
+          "Pss_Shmem": 6.5546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 88.95703125,
+          "Pss_File": 51.41796875,
+          "unreclaimable_mib": 37.5390625
+        },
+        "delta_mib": -0.4765625
+      },
+      "closed": {
+        "before": {
+          "Pss_Anon": 30.05859375,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.025390625,
+          "Pss_File": 51.2802734375,
+          "unreclaimable_mib": 37.744140625
+        },
+        "after": {
+          "Pss_Anon": 30.44921875,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.5498046875,
+          "Pss_File": 51.41796875,
+          "unreclaimable_mib": 38.134765625
+        },
+        "delta_mib": 0.390625
+      }
+    },
+    {
+      "pair": 4,
+      "open": {
+        "before": {
+          "Pss_Anon": 30.64453125,
+          "Pss_Shmem": 6.5546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 88.634765625,
+          "Pss_File": 51.435546875,
+          "unreclaimable_mib": 37.19921875
+        },
+        "after": {
+          "Pss_Anon": 30.95703125,
+          "Pss_Shmem": 6.5546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 88.8037109375,
+          "Pss_File": 51.2763671875,
+          "unreclaimable_mib": 37.52734375
+        },
+        "delta_mib": 0.328125
+      },
+      "closed": {
+        "before": {
+          "Pss_Anon": 30.1953125,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.3173828125,
+          "Pss_File": 51.435546875,
+          "unreclaimable_mib": 37.880859375
+        },
+        "after": {
+          "Pss_Anon": 30.5,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.4619140625,
+          "Pss_File": 51.2763671875,
+          "unreclaimable_mib": 38.185546875
+        },
+        "delta_mib": 0.3046875
+      }
+    },
+    {
+      "pair": 5,
+      "open": {
+        "before": {
+          "Pss_Anon": 30.71875,
+          "Pss_Shmem": 6.5546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 88.67578125,
+          "Pss_File": 51.40234375,
+          "unreclaimable_mib": 37.2734375
+        },
+        "after": {
+          "Pss_Anon": 31.01171875,
+          "Pss_Shmem": 7.818359375,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 90.3662109375,
+          "Pss_File": 51.4501953125,
+          "unreclaimable_mib": 38.916015625
+        },
+        "delta_mib": 1.642578125
+      },
+      "closed": {
+        "before": {
+          "Pss_Anon": 30.234375,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.322265625,
+          "Pss_File": 51.40234375,
+          "unreclaimable_mib": 37.919921875
+        },
+        "after": {
+          "Pss_Anon": 30.5859375,
+          "Pss_Shmem": 7.685546875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss": 89.7451171875,
+          "Pss_File": 51.4501953125,
+          "unreclaimable_mib": 38.294921875
+        },
+        "delta_mib": 0.375
+      }
+    }
+  ],
+  "median_delta_mib": {
+    "open": -0.314453125,
+    "closed": 0.375
+  },
+  "gate_pass": true,
+  "note": "Five alternating same-host pairs; three identical forced dashboard cycles per arm. Unreclaimable gates; clean-file PSS is informational. No laptop absolute-cap claim."
+}

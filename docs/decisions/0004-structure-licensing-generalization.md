@@ -78,6 +78,9 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0096: `edge_hover` lets an interactive region opt into edge hover; `ui.tint` composes palette/RGBA colours;
+  SVG `@base|overlay|amount@` tokens blend palette/literal colours. Artwork and shell behavior stay in the bundle.
+
 - B0090: `bead_wayland::CaptureHub` / `Options::capture` (leased, rate-limited toplevel capture over
   ext-image-copy-capture with foreign-toplevel sources; thumbnails as small files the renderer already loads by path;
   capability detection, no product ids). Which windows to lease, the interval and the bound are the application's

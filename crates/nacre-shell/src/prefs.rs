@@ -42,6 +42,9 @@ pub struct Prefs {
     pub top_bar_enabled: bool,
     /// Optional updates bar item (`desktop.barUpdatesEnabled`, default on).
     pub bar_updates_enabled: bool,
+    /// The QML header renders no SNI tray. An explicit desktop.tray opt-in
+    /// enables Bead's existing tray without an application-ID blacklist.
+    pub tray_visible: bool,
     pub frame_sheen: bool,
     /// `interfaceGradients` (`!== false`): kit fills blend the accent into the secondary role.
     pub interface_gradients: bool,
@@ -162,6 +165,7 @@ impl Prefs {
             control_center_enabled: on("controlCenterEnabled"),
             top_bar_enabled: on("topBarEnabled"),
             bar_updates_enabled: on("barUpdatesEnabled"),
+            tray_visible: flag("tray") == Some(true),
             frame_sheen: on("frameSheen"),
             interface_gradients: on("interfaceGradients"),
             // JS `value ?? fallback`, bounded to the ranges Nacre's settings helper accepts
@@ -240,6 +244,7 @@ impl Prefs {
         [
             ("bar.dashboard.enabled".into(), Bool(self.dashboard_enabled)),
             ("bar.updates.enabled".into(), Bool(self.bar_updates_enabled)),
+            ("bar.tray.visible".into(), Bool(self.tray_visible)),
             // The header: the bar's own height plus the top frame edge (`NacreFrame`).
             (
                 "bar.height".into(),
@@ -384,6 +389,8 @@ mod tests {
     fn defaults_match_nacre_when_stores_are_empty_or_wrong_typed() {
         let d = Prefs::default();
         assert!(!d.reduce_motion && !d.fahrenheit);
+        assert!(!d.tray_visible);
+        assert!(Prefs::decode(&json!({"tray":true}), &Json::Null).tray_visible);
         assert_eq!(d.core_tabs, ["today", "media", "weather", "system"]);
         let bad = json!({"reduceMotion": "yes", "animations": 0, "weatherFahrenheit": 1});
         assert_eq!(Prefs::decode(&bad, &json!({"tabs": 5})), d);
