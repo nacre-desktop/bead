@@ -1015,6 +1015,10 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         (carousel_rect.w, carousel_rect.h),
         (expected_carousel_width, 320.)
     );
+    assert!(
+        runtime.scroll_regions().is_empty(),
+        "carousel wheel ticks navigate once instead of expanding into smooth scrolling"
+    );
     let motion = initial_scene
         .motion
         .as_ref()
@@ -1048,6 +1052,28 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     assert_eq!(
         (fullscreen_rect.w, fullscreen_rect.h),
         (usable_width, usable_height)
+    );
+    assert!(
+        runtime.scroll_regions().is_empty(),
+        "spotlight remains a discrete navigation surface"
+    );
+    runtime
+        .session
+        .stores
+        .commit(BTreeMap::from([(
+            "extras.wallpaper.layout".into(),
+            Value::Text("hexagons".into()),
+        )]))
+        .unwrap();
+    let hex_scene = runtime
+        .session
+        .relayout()
+        .unwrap()
+        .expect("hexagon layout relayouts");
+    runtime.session.commit(hex_scene);
+    assert!(
+        !runtime.scroll_regions().is_empty(),
+        "hexagon gallery retains its content-scroll region"
     );
     runtime
         .session
@@ -1135,6 +1161,25 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
             "all catalogue hydration calls are settled before activation assertions"
         );
     }
+    let search = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.id.ends_with(".search") && node.input.is_some())
+        .expect("wallpaper search input is visible");
+    let search_rect = bead::ui::rect(&search.draw);
+    runtime
+        .stage(UiEvent::Scroll {
+            x: search_rect.x + search_rect.w / 2.,
+            y: search_rect.y + search_rect.h / 2.,
+            delta: 15.,
+        })
+        .unwrap();
+    runtime.commit();
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "scrolling the search toolbar does not navigate wallpapers"
+    );
 
     runtime
         .stage(UiEvent::Key {

@@ -2386,13 +2386,19 @@ impl SceneSource for Runtime {
                     "enter" if self.session.focused_action().is_none() => Some("extras.choose"),
                     _ => None,
                 },
-                UiEvent::Scroll { delta, .. } | UiEvent::HorizontalScroll { delta, .. }
+                UiEvent::Scroll { x, y, delta }
                     if self
                         .extras
                         .as_ref()
                         .is_some_and(|e| e.kind == crate::extras::Kind::Wallpaper)
+                        && *delta != 0.
                         && self.session.stores.get("extras.wallpaper.layout")
-                            != Some(&bead::core::Value::Text("hexagons".into())) =>
+                            != Some(&bead::core::Value::Text("hexagons".into()))
+                        && self.session.view_nodes().iter().any(|node| {
+                            (node.id.ends_with(".carousel-strip")
+                                || node.id.ends_with(".spotlight-strip"))
+                                && node.contains(*x, *y)
+                        }) =>
                 {
                     Some(if *delta > 0. {
                         "extras.next"
@@ -4157,6 +4163,13 @@ impl SceneSource for Runtime {
         self.session.state_summary()
     }
     fn scroll_regions(&self) -> Vec<bead::render::Rect> {
+        if self.extras.as_ref().is_some_and(|extras| {
+            extras.kind == crate::extras::Kind::Wallpaper
+                && self.session.stores.get("extras.wallpaper.layout")
+                    != Some(&bead::core::Value::Text("hexagons".into()))
+        }) {
+            return Vec::new();
+        }
         self.session.scroll_regions()
     }
     fn wheel_step(&self) -> f64 {

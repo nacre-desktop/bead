@@ -117,6 +117,8 @@ if layout=="carousel" then
 elseif layout=="spotlight" then
   local hero_width=math.min(body_w*(count>1 and T.wallpaper.spotlight_multiple_fraction or T.wallpaper.spotlight_single_fraction),T.wallpaper.spotlight_max,body_h*T.wallpaper.spotlight_aspect_ratio)
   nav_y=math.min(nav_y,body_y+(body_h+hero_width*T.wallpaper.spotlight_card_height_ratio)/2+T.wallpaper.spotlight_nav_gap)
+  local hero_height=hero_width*T.wallpaper.spotlight_card_height_ratio
+  local hero_y=body_y+(body_h-hero_height)/2
   local side_width=hero_width*T.wallpaper.spotlight_side_fraction
   local area={}
   local side_slots=math.max(0,math.min(T.wallpaper.spotlight_max_side_slots,math.ceil((count-1)/2)))
@@ -129,11 +131,12 @@ elseif layout=="spotlight" then
     local card_w=side_width*math.max(T.wallpaper.spotlight_side_min_scale,1-math.max(0,distance-1)*T.wallpaper.spotlight_side_falloff)+(hero_width-side_width)*weight
     local card_h=card_w*T.wallpaper.spotlight_card_height_ratio
     local center_distance=hero_width*T.wallpaper.spotlight_center_offset
-    local x=T.wallpaper.content_inset+body_w/2+math.sign(offset)*(math.min(1,distance)*center_distance+math.max(0,distance-1)*hero_width*T.wallpaper.spotlight_travel_offset)-card_w/2
-    local y=body_y+(body_h-card_h)/2
+    local x=body_w/2+math.sign(offset)*(math.min(1,distance)*center_distance+math.max(0,distance-1)*hero_width*T.wallpaper.spotlight_travel_offset)-card_w/2
+    local y=(hero_height-card_h)/2
     if distance<side_slots+1 then area[#area+1]=card(item,card_w,card_h,x,y,item.selected,nil) end
   end
-  body=ui.Box{id="spotlight-strip",position="absolute",left=0,top=0,width=width,height=height,table.unpack(area)}
+  body=ui.Scroll{id="spotlight-strip",position="absolute",left=T.wallpaper.content_inset,top=hero_y,width=body_w,height=hero_height,
+    ui.Box{width=body_w,height=hero_height,shrink=0,table.unpack(area)}}
 else
   local area_w=width-T.wallpaper.content_inset*2
   local columns=math.max(T.wallpaper.hex_min_columns,math.min(T.wallpaper.hex_max_columns,math.floor(area_w/T.wallpaper.hex_column_width)))
