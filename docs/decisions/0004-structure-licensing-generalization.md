@@ -80,6 +80,8 @@ After Bead's core switch on Nacre, plan support for:
 
 - B0072: opt-in `Button.activate_on_release` with pointer/model/reload cancellation and `focus_on_pointer`,
   and `kit.Paragraph.advance` for a theme's average glyph width; neither names a shell or service.
+- B0074: `RevealArt` callbacks return content-sized SVG bounds as well as bytes; the scene keeps its layout bounds and restores settled artwork. Reveal clocks start at admission; contour generation stays in the shell adapter.
+
 - B0043: `bead_ui::transcript` (message list layout, windowing, bounded caches),
   `bead_ui::markdown` (block subset), `kit.Transcript`, `kit.Composer`, and
   `TextInput multiline` (Shift+Enter, wrapped caret, vertical moves). Chat-agnostic;

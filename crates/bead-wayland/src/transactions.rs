@@ -344,6 +344,9 @@ impl App {
         }
     }
     pub(super) fn ui_inner(&mut self, event: UiEvent) -> bool {
+        if matches!(&event, UiEvent::Remote(_)) {
+            bead_core::profile::mark("dispatch_received");
+        }
         match &event {
             UiEvent::ClipboardSet(text) => {
                 if let Err(error) =

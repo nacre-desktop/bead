@@ -55,6 +55,7 @@ impl Script {
             lua.load(bytes).set_name(format!("@{name}")).eval()
         })()
         .map_err(|e| lua_error(path, e))?;
+        bead_core::profile::mark("vm_ready");
         Ok(Self {
             source: bytes.to_vec(),
             lua,

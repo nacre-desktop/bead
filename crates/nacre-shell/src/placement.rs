@@ -548,11 +548,29 @@ impl Chrome {
                         revealed.w,
                         revealed.h,
                     ));
-                    match chrome.svg(frame, output, &rectangles, crop, chrome.engaged) {
-                        Ok(svg) => Arc::from(svg.into_bytes()),
+                    // Trim transparent rows/columns before SVG rasterization. A 120 px
+                    // logical grid keeps crop offsets integral in scale120 physical pixels.
+                    let visible = Rect::new(
+                        panel.x + revealed.x - body.x - 32.,
+                        panel.y + revealed.y - body.y - top_inset,
+                        revealed.w + 64.,
+                        revealed.h + 32. + top_inset,
+                    );
+                    let x = crop.x + ((visible.x - crop.x) / 120.).floor() * 120.;
+                    let y = crop.y + ((visible.y - crop.y) / 120.).floor() * 120.;
+                    let right = (crop.x + ((visible.x + visible.w - crop.x) / 120.).ceil() * 120.)
+                        .min(crop.x + crop.w);
+                    let bottom = (crop.y + ((visible.y + visible.h - crop.y) / 120.).ceil() * 120.)
+                        .min(crop.y + crop.h);
+                    let trimmed = Rect::new(x, y, right - x, bottom - y);
+                    let local = |r: Rect| {
+                        Rect::new(body.x + r.x - panel.x, body.y + r.y - panel.y, r.w, r.h)
+                    };
+                    match chrome.svg(frame, output, &rectangles, trimmed, chrome.engaged) {
+                        Ok(svg) => (local(trimmed), Arc::from(svg.into_bytes())),
                         Err(error) => {
                             eprintln!("FRAME_REVEAL_FAILED {error}");
-                            original.clone()
+                            (local(crop), original.clone())
                         }
                     }
                 }),
@@ -666,6 +684,12 @@ mod tests {
         chrome.decorate(&mut scene).unwrap();
         let full_body = body(&scene);
         let index = scene.motion.as_ref().unwrap().art.as_ref().unwrap().index;
+        let (full_rect, full_svg) = match &scene.primitives[index] {
+            bead::render::Primitive::Image { rect, path, .. } => {
+                (*rect, scene.asset_data[path].clone())
+            }
+            _ => panic!("frame artwork must be an image"),
+        };
         let mut cache = bead::render::tree::TreeCache::default();
         cache.prepare(&scene, 1.).unwrap();
         scene
@@ -703,6 +727,53 @@ mod tests {
                     .alpha(),
                 0
             );
+            if progress == 0.25 {
+                // Reference is the same contour in the former full-height SVG
+                // viewport. Cropping must preserve every rasterized pixel at 1.5.
+                let mut reference = scene.clone();
+                let bead::render::Primitive::Image { rect, path, .. } =
+                    &mut reference.primitives[index]
+                else {
+                    panic!("image")
+                };
+                *rect = full_rect;
+                let prefix = std::str::from_utf8(&full_svg)
+                    .unwrap()
+                    .split_once('>')
+                    .unwrap()
+                    .0;
+                let dynamic = std::str::from_utf8(&scene.asset_data[path])
+                    .unwrap()
+                    .split_once('>')
+                    .unwrap()
+                    .1;
+                reference.asset_data.insert(
+                    path.clone(),
+                    Arc::from(format!("{prefix}>{dynamic}").into_bytes()),
+                );
+                let mut full_cache = bead::render::tree::TreeCache::default();
+                let mut cropped_cache = bead::render::tree::TreeCache::default();
+                full_cache.prepare(&reference, 1.5).unwrap();
+                cropped_cache.prepare(&scene, 1.5).unwrap();
+                let full = &full_cache.frame.as_ref().unwrap().items[index]
+                    .raster
+                    .as_ref()
+                    .unwrap()
+                    .pixels;
+                let cropped = &cropped_cache.frame.as_ref().unwrap().items[index]
+                    .raster
+                    .as_ref()
+                    .unwrap()
+                    .pixels;
+                assert!(cropped.height() < full.height());
+                assert_eq!(cropped.width(), full.width());
+                assert_eq!(cropped.data(), &full.data()[..cropped.data().len()]);
+                assert!(
+                    full.data()[cropped.data().len()..]
+                        .iter()
+                        .all(|byte| *byte == 0)
+                );
+            }
             assert_eq!(body(&scene), full_body);
             assert_eq!(origin(&scene, None, (1920, 1200)), before);
             assert_eq!(

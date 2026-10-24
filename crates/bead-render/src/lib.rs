@@ -157,13 +157,16 @@ pub struct Slide {
     pub open_y: f32,
     pub period_seconds: f32,
 }
-/// Application-supplied vector artwork for a revealing body. The viewport stays fixed;
-/// only the material contour changes. The callback receives the revealed body rectangle.
+/// Content-sized artwork placement and its vector payload.
+pub type RevealFrame = (Rect, std::sync::Arc<[u8]>);
+
+/// Application-supplied vector artwork for a revealing body. The callback receives
+/// the revealed body and returns its content-sized artwork rectangle and SVG bytes.
 #[derive(Clone)]
 pub struct RevealArt {
     pub body: Rect,
     pub index: usize,
-    pub draw: std::sync::Arc<dyn Fn(Rect) -> std::sync::Arc<[u8]> + Send + Sync>,
+    pub draw: std::sync::Arc<dyn Fn(Rect) -> RevealFrame + Send + Sync>,
 }
 #[derive(Clone)]
 pub struct Motion {
@@ -338,15 +341,20 @@ impl Scene {
                 return;
             }
             use std::hash::{Hash, Hasher};
-            let bytes = (art.draw)(now);
+            let (rect, bytes) = (art.draw)(now);
             let mut hash = std::collections::hash_map::DefaultHasher::new();
             bytes.hash(&mut hash);
             let path = std::path::PathBuf::from(format!("@reveal-art-{:x}.svg", hash.finish()));
             self.asset_data
                 .retain(|p, _| !p.to_string_lossy().starts_with("@reveal-art-"));
             self.asset_data.insert(path.clone(), bytes);
-            if let Some(Primitive::Image { path: target, .. }) = self.primitives.get_mut(art.index)
+            if let Some(Primitive::Image {
+                path: target,
+                rect: target_rect,
+                ..
+            }) = self.primitives.get_mut(art.index)
             {
+                *target_rect = rect;
                 *target = path;
             }
             if let Some(m) = &mut self.motion {

@@ -250,6 +250,7 @@ impl Session {
         let palette = merged_palette(&base_palette, self.runtime_palette.as_ref());
         let (generation, mut stores) =
             Generation::load(&self.root, &self.entry, &self.stores, self.attempts)?;
+        bead_core::profile::mark("generation_ready");
         if self.generation.is_none()
             && let Some(saved) = &self.restore
         {
@@ -288,6 +289,7 @@ impl Session {
             (scene, nodes) = generation.materialize(&stores, &palette, self.viewport)?;
         }
 
+        bead_core::profile::mark("layout_ready");
         self.pending = Some(Pending {
             generation: Some(generation),
             stores,

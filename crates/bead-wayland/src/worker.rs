@@ -160,7 +160,9 @@ impl SceneSource for Source {
         };
         let (sender, receiver) = mpsc::channel();
         self.sender = Some(sender);
+        bead_core::profile::mark("worker_spawn");
         self.thread = Some(std::thread::spawn(move || {
+            bead_core::profile::mark("worker_started");
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
             let report = wakeup.clone();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -179,6 +181,7 @@ impl SceneSource for Source {
                         return;
                     }
                 };
+                bead_core::profile::mark("runtime_ready");
                 let service_wakeup = wakeup.clone();
                 source.services(Box::new(move |event| service_wakeup(event)));
                 let mut cache = bead_render::tree::TreeCache::default();
@@ -271,6 +274,7 @@ impl SceneSource for Source {
                                     (source.error_scene(error.clone()), Some(error))
                                 }
                             };
+                            bead_core::profile::mark("worker_layout_ready");
                             needs_trim = true;
                             let bake_profile = bead_core::profile::Span::new("bake");
                             if let Err(error) = bake(&mut cache, &mut scene, &scales) {
@@ -286,6 +290,7 @@ impl SceneSource for Source {
                                 continue;
                             }
                             drop(bake_profile);
+                            bead_core::profile::mark("worker_paint_ready");
                             println!(
                                 "WORKER_PREPARE token={token} reload={reload} total_ms={:.3} builds={}",
                                 started.elapsed().as_secs_f64() * 1000.,

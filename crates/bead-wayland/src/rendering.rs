@@ -1003,6 +1003,9 @@ impl App {
                 );
             }
             b.buffer.attach_to(s.layer.wl_surface())?;
+            if s.companion {
+                bead_core::profile::mark("panel_commit");
+            }
             s.layer.commit();
             b.pending.clear();
             s.previous = Some(current);

@@ -418,6 +418,7 @@ impl App {
         layer.set_margin(top, right, bottom, left);
     }
     pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
+        bead_core::profile::mark("panel_admission");
         let spec = self
             .options
             .panel_spec
@@ -438,6 +439,19 @@ impl App {
             .ok_or("panel output not available")?;
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
+        if let Some(m) = spec.fallback.motion.as_ref().filter(|m| m.reveal) {
+            let now = self.started.elapsed().as_secs_f64();
+            let curve = m.curve.unwrap_or(bead_core::animation::Curve::EaseOut);
+            if self.panel_animations.value(&m.id, now).is_none() {
+                self.panel_animations
+                    .target(&m.id, 0., now, m.duration, curve);
+            }
+            // Visibility starts the reveal clock, including prepared/reopened views.
+            // Worker preparation and configure advance it; draw() keeps the target.
+            self.panel_animations
+                .target(&m.id, if open { 1. } else { 0. }, now, m.duration, curve);
+            bead_core::profile::mark("reveal_admitted");
+        }
         self.edges_panel_changed(false);
         if let Some(source) = &mut self.panel_runtime {
             source.panel_center(self.panel_center);
@@ -469,7 +483,9 @@ impl App {
             self.panel_ui(UiEvent::PanelVisibility(true));
             return Ok(());
         }
-        if let Some(m) = &spec.fallback.motion {
+        if let Some(m) = &spec.fallback.motion
+            && !m.reveal
+        {
             self.animations.target(
                 &m.id,
                 0.,

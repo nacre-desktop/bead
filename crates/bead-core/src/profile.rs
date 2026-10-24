@@ -54,3 +54,14 @@ impl Drop for Span {
         }
     }
 }
+
+/// Opt-in cross-thread timeline; no clock read or allocation when profiling is off.
+pub fn mark(stage: &'static str) {
+    if enabled() {
+        println!(
+            "UI_TIMELINE stage={stage} monotonic_ns={} thread={:?}",
+            monotonic_ns(),
+            std::thread::current().id()
+        );
+    }
+}
