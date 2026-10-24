@@ -1534,7 +1534,7 @@ def main():
         else:
             return capture_safety.run_guarded(
                 [sys.executable, __file__, *sys.argv[1:]],
-                report_path=args.out / 'capture-safety.json', env=os.environ.copy())
+                report_path=args.out / f'capture-safety-{args.arms}.json', env=os.environ.copy())
         if os.getpriority(os.PRIO_PROCESS, 0) < 10:
             os.setpriority(os.PRIO_PROCESS, 0, 10)
         for tool in ['labwc', 'niri', 'grim', 'dbus-run-session', 'gdbus'] + (['quickshell'] if 'qml' in args.arms else []):

@@ -63,7 +63,7 @@ return {
     hex_image_inset=0,
     add_icon_width=16, add_icon_height=23, add_icon_font=16, add_label_width=25, add_label_height=19,
     divider_width=1, divider_height=24,
-    nav_width=40, nav_height=34, nav_font=14.667, nav_gap=14, nav_bottom=12, spotlight_nav_y=54,
+    nav_width=40, nav_height=34, nav_font=14.667, nav_gap=14, nav_bottom=12, spotlight_nav_gap=16,
     nav_title_max_width=420, nav_title_reserved_width=300, nav_title_height=21,
     nav_icon_width=20, nav_icon_height=23, nav_icon_font=16,
     empty_center_offset=12, empty_height=24, status_center_offset=14, status_height=24,

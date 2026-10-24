@@ -36,6 +36,7 @@ local body_y=layout=="spotlight" and query_y+search_h+T.wallpaper.spotlight_top_
   or query_y+search_h+T.wallpaper.carousel_content_gap
 local body_h=math.max(0,height-body_y-(layout=="spotlight" and T.wallpaper.spotlight_body_clearance or T.wallpaper.fullscreen_nav_clearance))
 local body_w=width-T.wallpaper.content_inset*2
+local nav_y=height-T.wallpaper.nav_bottom-T.wallpaper.nav_height
 -- A normalized polygon approximates the QML rounded image clip within a pixel.
 local function rounded_clip(w,h)
   local r=math.min(T.wallpaper.image_radius,w/2,h/2)
@@ -115,6 +116,7 @@ if layout=="carousel" then
     scroll=ui.bind("extras.wallpaper.carousel_scroll"),ui.Box{width=strip_w,height=card_h,shrink=0,table.unpack(children)}}
 elseif layout=="spotlight" then
   local hero_width=math.min(body_w*(count>1 and T.wallpaper.spotlight_multiple_fraction or T.wallpaper.spotlight_single_fraction),T.wallpaper.spotlight_max,body_h*T.wallpaper.spotlight_aspect_ratio)
+  nav_y=math.min(nav_y,body_y+(body_h+hero_width*T.wallpaper.spotlight_card_height_ratio)/2+T.wallpaper.spotlight_nav_gap)
   local side_width=hero_width*T.wallpaper.spotlight_side_fraction
   local area={}
   local side_slots=math.max(0,math.min(T.wallpaper.spotlight_max_side_slots,math.ceil((count-1)/2)))
@@ -172,7 +174,7 @@ local controls=ui.Row{id="wallpaper-controls",position="absolute",left=0,top=too
 
 local nav_title=selected and selected.title or ""
 local nav=ui.Row{id="wallpaper-navigation",position="absolute",left=0,
-  top=height-(layout=="spotlight" and T.wallpaper.spotlight_nav_y or T.wallpaper.nav_bottom+T.wallpaper.nav_height),
+  top=nav_y,
   width=width,height=T.wallpaper.nav_height,gap=T.wallpaper.nav_gap,align="center",justify="center",
   nav_button("previous","Previous wallpaper","chevron_left","extras.prev"),
   ui.Text{id="selected-title",width=math.min(T.wallpaper.nav_title_max_width,width-T.wallpaper.nav_title_reserved_width),height=T.wallpaper.nav_title_height,text=nav_title,
