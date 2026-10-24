@@ -424,6 +424,7 @@ dependencies = [
  "bead-render",
  "bead-services",
  "calloop",
+ "image",
  "libc",
  "raw-window-handle",
  "serde_json",
