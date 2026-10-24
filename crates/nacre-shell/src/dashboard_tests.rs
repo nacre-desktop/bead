@@ -195,6 +195,42 @@ fn unknown_weather_updates_and_hardware_values_never_become_zero() -> Result<()>
 }
 
 #[test]
+fn every_dashboard_page_handles_bar_pointer_and_timer_events() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    for page in Page::every() {
+        let harness = Harness::load(
+            &root(),
+            Path::new(&format!("dashboard/{}/main.luau", page.name())),
+            &root().join("palette.json"),
+            BTreeMap::new(),
+            Config {
+                width: 1048,
+                height: 714,
+                scale: 1.5,
+            },
+        )?;
+        let dashboard = view(page, fixture(page.name()), None);
+        let mut runtime =
+            crate::reload::Runtime::new(harness.session).with_dashboard_view(dashboard)?;
+        for event in [
+            UiEvent::PointerRegion(true),
+            UiEvent::Hover { x: 24., y: 24. },
+            UiEvent::PointerRegion(false),
+            UiEvent::Timer { token: 0 },
+            UiEvent::PanelSelected(format!("dashboard-{}", page.name())),
+            UiEvent::PanelDismissed,
+            UiEvent::Reload,
+        ] {
+            if let Some(scene) = runtime.stage(event)? {
+                runtime.session.commit(scene);
+            }
+        }
+        assert!(runtime.session.stores.get("status.hovered").is_none());
+    }
+    Ok(())
+}
+
+#[test]
 fn dashboard_four_tabs_have_complete_state_defaults() -> Result<()> {
     for page in Page::ALL {
         let harness = Harness::load(

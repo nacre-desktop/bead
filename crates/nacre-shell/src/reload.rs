@@ -165,6 +165,11 @@ impl Runtime {
         Ok(self.session.update(changes)?.or(scene))
     }
     fn publish_status_pill(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
+        // Pointer-region and timer events also reach companion surfaces. Only
+        // the bar owns the pill state declared by bar/behavior.luau.
+        if !self.bar {
+            return Ok(None);
+        }
         let values = BTreeMap::from([
             (
                 "status.hovered".into(),
