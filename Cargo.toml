@@ -12,6 +12,39 @@ publish = false
 [profile.release]
 opt-level = 3
 codegen-units = 1
+lto = "fat"
+
+# B0085: dependencies are size-optimised (about 2 MiB less resident code, no measured latency change);
+# the render/text hot path and every workspace crate stay at 3. Release builds only.
+[profile.release.package."*"]
+opt-level = "s"
+
+[profile.release.package.tiny-skia]
+opt-level = 3
+
+[profile.release.package.tiny-skia-path]
+opt-level = 3
+
+[profile.release.package.skrifa]
+opt-level = 3
+
+[profile.release.package.read-fonts]
+opt-level = 3
+
+[profile.release.package.harfrust]
+opt-level = 3
+
+[profile.release.package.zeno]
+opt-level = 3
+
+[profile.release.package.taffy]
+opt-level = 3
+
+[profile.release.package.usvg]
+opt-level = 3
+
+[profile.release.package.cosmic-text]
+opt-level = 3
 
 # Upstream 0.8.9 leaves DBusMenu signal tasks alive after an item exits.
 [patch.crates-io]
