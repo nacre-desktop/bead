@@ -1,7 +1,7 @@
 # B0100 — Wallpaper picker
 
-Status: implementation committed; private desktop verification blocked by another session's
-capture lock. N0070 supplies the missing catalogue. Bead remains unpublished pending evidence.
+Status: implementation committed; private desktop parity and memory verification in progress.
+N0070 supplies the missing catalogue. Bead remains unpublished pending evidence.
 
 ## QML reference
 
@@ -69,10 +69,10 @@ The protocol pin is Nacre `bdc7c2ff` (N0070); both wallpaper transcripts are mir
 Full remote Arch CI passes at `9920e2a` after the final theme-token pass and rebase
 onto B0102. This includes the video renderer smoke (12/12 checks),
 private service and tray lifecycles, Luau/generated schemas and independent license graphs.
-Paired captures at 2880×1800, scale 1.5 are pending. The capture wrapper blocked on
-the required desktop lock for over 42 minutes while an unrelated idle session held it.
-No capture arm ran; RMSE, reveal timings and five-pair relative memory are unavailable.
-Only our waiting capture process was stopped; the unrelated lock holder was untouched.
+Paired captures at 2880×1800, scale 1.5 are pending. The lead clarified that B0104
+owns the shared desktop slot; this continuation waits without a timeout and takes the
+lock separately for the parity script and each memory arm. The harness also rejects
+any host swap-in during an arm, alongside its existing swap-used and process SwapPss gates.
 The prepared fixture is ten images plus two short videos, covering every layout/media
 kind, hover/pressed, search/empty and image/video activation; memory uses five alternating
 same-host CPU control/candidate pairs at idle and after close+idle. This is not acceptance evidence.

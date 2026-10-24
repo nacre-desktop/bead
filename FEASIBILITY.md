@@ -81,7 +81,7 @@ Allocator follow-up shows stable live heap/cache sizes with varying anonymous ma
 The missing catalogue is now an additive Nacre contract; Bead keeps layout in Luau.
 Only an open picker owns its bounded images and service leases.
 Full remote Arch CI passes at `9920e2a`, including the final theme/rebase pass.
-Private desktop captures are blocked by another session's lock; parity is unverified.
+Private captures are resuming under the shared per-command lock; parity is unverified.
 
 | Check | Result |
 | --- | --- |
