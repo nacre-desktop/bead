@@ -74,7 +74,11 @@ fn main() {
     let mut ui_started = false;
     if let Err(e) = start(&mut health, &mut ui_started) {
         if ui_started {
-            eprintln!("nacre-shell: fatal code=runtime_error");
+            if std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() == Ok("1") {
+                eprintln!("nacre-shell: fatal code=runtime_error detail={e}");
+            } else {
+                eprintln!("nacre-shell: fatal code=runtime_error");
+            }
         } else {
             eprintln!("nacre-shell: {e}");
         }
