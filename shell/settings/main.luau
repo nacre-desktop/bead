@@ -7,6 +7,7 @@ local sp=kit.tokens.spacing
 local tx=kit.tokens.text
 local writable=ui.resolve_for_check(ui.bind("settings.writable"))
 local searching=ui.resolve_for_check(ui.bind("settings.searching"))
+local opened=ui.resolve_for_check(ui.bind("settings.select"))
 local function act(arg) return ui.action("settings.do",arg) end
 -- B0067: the QML rail. Width huge*7+xl, group captions huge+hairline tall, items huge+compact tall with a caption-size
 -- label and an accent wash on the current page (SettingsView.qml).
@@ -84,6 +85,13 @@ function row(item)
         node=kit.ToggleRow{id="toggle",label=item.label,description=item.description,checked=item.checked,enabled=on,on_activate=act("set:"..id)}
     elseif k=="choice" then
         node=kit.ChoiceRow{id="choice",label=item.label,description=item.description,enabled=on,options=item.options,on_change="settings.do"}
+    elseif k=="select" then
+        -- A drop-down (QML NacreSelect): a field with the current choice; the list opens under it. `filter` rows
+        -- (many options) carry the page's shared search field and only the matching options.
+        node=kit.SelectRow{id="select",label=item.label,description=item.description,enabled=on,text=item.text,options=item.options,
+            width=sp.huge*(item.wide and 10 or 8),open=opened==id,on_toggle=ui.action("settings.dropdown",id),on_change="settings.do",
+            scroll=ui.bind("settings.select.scroll"),field=item.filter and ui.bind("settings.pick.text") or nil,
+            placeholder=item.filter,empty=item.empty,more=item.more}
     elseif k=="number" then
         local n=item.number
         node=kit.NumberRow{id="number",label=item.label,description=item.description,enabled=on,text=item.text,unit=item.unit~="" and " "..item.unit or "",

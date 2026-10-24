@@ -37,6 +37,32 @@ return function(ui, tokens)
         return kit.Button(out)
     end
     -- QML NacreControlSlider: a 6 px rounded track, a filled part up to the value and an 8x16 handle, all inset 6 px.
+    -- A horizontal two-colour fill (QML `Gradient` blending the accent into `secondary`): a flat `from` bar with
+    -- round ends, and, while `tokens.gradients` is on (the `interfaceGradients` setting) and the bar is long
+    -- enough, the interior blended in equal steps by laying `to` over it at rising alpha. Roles are palette
+    -- names; `opacity` dims the whole fill. Off or short or dimmed, it is the flat `from` bar.
+    function kit.Fill(p)
+        local w,h,r=p.width,p.height,p.radius or p.height/2
+        local opacity=p.opacity or 1
+        local cap=2*r
+        local out=props(p,{},{from=true,to=true,opacity=true})
+        if tokens.gradients==false or opacity<1 or w<2*cap+4 then
+            out.fill=ui.alpha(p.from,opacity)
+            return ui.Box(out)
+        end
+        local inner=w-2*cap
+        local steps=math.min(24,math.max(2,math.floor(inner/5)))
+        local kids={ui.Box{id="from",position="absolute",left=0,top=0,width=cap+1,height=h,radius=r,fill=p.from},
+            ui.Box{id="body",position="absolute",left=r,top=0,width=w-2*r,height=h,fill=p.from}}
+        for i=0,steps-1 do
+            local t=(r+(i+.5)*(w-2*r)/steps)/w
+            kids[#kids+1]=ui.Box{id="step-"..i,position="absolute",left=r+i*(w-2*r)/steps,top=0,width=(w-2*r)/steps+(i<steps-1 and .5 or 0),height=h,
+                fill=ui.alpha(p.to,t)}
+        end
+        kids[#kids+1]=ui.Box{id="to",position="absolute",left=w-cap-1,top=0,width=cap+1,height=h,radius=r,fill=p.to}
+        for i,node in ipairs(kids) do out[i]=node end
+        return ui.Box(out)
+    end
     -- Without `on_change` (or with `enabled=false`) the same drawing shows at 35 % and takes no input.
     function kit.Slider(p)
         local lo,hi=p.min or 0,p.max or 100
@@ -62,7 +88,8 @@ return function(ui, tokens)
         end
         return ui.Box{id=p.id,width=width,height=height,position=p.position,left=p.left,top=p.top,
             ui.Box{id="track",position="absolute",left=inset,top=12,width=avail,height=6,radius=3,fill="surfaceContainerHighest"},
-            ui.Box{id="level",position="absolute",left=inset,top=12,width=fraction*avail,height=6,radius=3,fill=ui.alpha("primary",opacity)},
+            kit.Fill{id="level",position="absolute",left=inset,top=12,width=fraction*avail,height=6,radius=3,
+                from="primary",to="secondary",opacity=opacity},
             ui.Box{id="thumb",position="absolute",left=inset+fraction*(avail-8),top=7,width=8,height=16,radius=3,fill=ui.alpha("primary",opacity)},
             live and ui.Row(props(children,{id="hits",width="100%",height=height,gap=0})) or nil}
     end
@@ -497,12 +524,92 @@ return function(ui, tokens)
             kit.Button{id="join",text=p.join_label,width=88,height=32,padding=sp.xs,fill="primaryContainer",color="onPrimaryContainer",on_activate=maybe(p.on_join,on)},
             kit.Button{id="cancel",text=p.cancel_label,width=88,height=32,padding=sp.xs,on_activate=p.on_cancel}}
     end
-    -- A choice that needs an explicit apply: shows what is pending and offers both ways out.
+    -- A choice that needs an explicit apply: shows what is pending and offers both ways out. The buttons keep
+    -- their width (`shrink=0`); the sentence takes what is left and clips.
     function kit.ApplyBar(p)
-        return ui.Row{id=p.id,width="fill",height=40,shrink=0,gap=sp.sm,align="center",padding_left=sp.sm,radius=tokens.radii.small,fill="secondaryContainer",
-            ui.Text{id="pending",text=p.text,grow=1,height=20,font_size=tx.caption*4/3,color="onSecondaryContainer"},
-            kit.Button{id="apply",text=p.apply_label,width=96,on_activate=p.on_apply},
-            kit.Button{id="discard",text=p.discard_label,width=96,on_activate=p.on_discard}}
+        local function button(id,label,action,primary)
+            return kit.Button{id=id,text=label,width=96,height=32,shrink=0,padding=sp.xs,radius=tokens.radii.full,
+                fill=primary and "primary" or "surfaceContainerHigh",color=primary and "onPrimary" or "onSurface",
+                aria_label=label,on_activate=action}
+        end
+        return ui.Row{id=p.id,width="fill",height=40,shrink=0,gap=sp.sm,align="center",padding_left=sp.sm,padding_right=sp.sm,
+            radius=tokens.radii.small,fill="secondaryContainer",
+            ui.Text{id="pending",text=p.text,grow=1,shrink=1,height=20,font_size=tx.caption*4/3,color="onSecondaryContainer"},
+            button("apply",p.apply_label,p.on_apply,true),button("discard",p.discard_label,p.on_discard,false)}
+    end
+    -- A drop-down (QML `NacreSelect`): a field (`text` is the chosen option's label) with the list under it
+    -- while `open`. The kit has no overlay layer, so the list is part of the layout and the rows below move
+    -- down. `options`: `{id,label,selected,enabled}`; a click sends `on_change` with the option id, `on_toggle`
+    -- opens and closes. The caller keeps `open` (and the list's `scroll` store) and closes it on a choice and
+    -- on Escape. `field` (a store) adds a filter line above the list: the caller passes only the matching
+    -- options, `empty` is shown for none and `more` for a cut-off tail.
+    local SELECT_ROW=sp.huge+sp.sm
+    local function select_parts(p)
+        local on=p.enabled~=false
+        local open=value(p.open,false) and on
+        local width=p.width or sp.huge*8
+        local field=kit.Button{id="field",width=width,height=SELECT_ROW,padding=0,shrink=0,radius=tokens.radii.small,
+            fill="surfaceContainer",hover_fill=on and "surfaceContainerHigh" or "surfaceContainer",border_width=1,
+            border_color=open and "primary" or "outline",aria_label=p.aria_label or p.label,on_activate=maybe(p.on_toggle,on),
+            ui.Row{id="field-row",width=width,height=SELECT_ROW,align="center",padding_left=sp.md,padding_right=sp.sm,
+                ui.Text{id="value",text=p.text or "",grow=1,shrink=1,height=24,font_size=tx.body*4/3,color=on and "onSurface" or "onSurfaceVariant"},
+                ui.Text{id="indicator",text="expand_more",family="Material Symbols Rounded",font_size=tokens.icons.medium*4/3,
+                    width=tokens.icons.medium*4/3+2,height=24,shrink=0,color=on and "onSurface" or "onSurfaceVariant"}}}
+        if not open then return field,nil,width end
+        local searchable=p.field~=nil
+        local pop_w=searchable and math.max(width,sp.huge*11) or width
+        local inner=pop_w-2*sp.sm-2
+        local count=#p.options
+        local list_h=math.min(math.max(count,1)*SELECT_ROW,sp.huge*9)
+        local rows={}
+        for i,o in ipairs(p.options) do
+            local picked=o.selected==true
+            rows[i]=kit.Button{id="option-"..i,width=inner,height=SELECT_ROW,padding=0,shrink=0,radius=tokens.radii.small,
+                selected=picked,fill=picked and "primary" or "transparent",hover_fill=picked and "primary" or ui.alpha("primary",.15),
+                aria_label=o.label,on_activate=maybe(ui.action(p.on_change,o.id),on and o.enabled~=false),
+                ui.Row{id="option-row",width=inner,height=SELECT_ROW,align="center",padding_left=sp.md,padding_right=sp.md,
+                    ui.Text{id="label",text=o.label,grow=1,shrink=1,height=24,font_size=tx.body*4/3,color=picked and "onPrimary" or "onSurface"}}}
+        end
+        if count==0 and p.empty then
+            rows[1]=ui.Text{id="empty",text=p.empty,width=inner,height=SELECT_ROW,padding_left=sp.md,font_size=tx.caption*4/3,color="onSurfaceVariant"}
+        end
+        local list
+        if count*SELECT_ROW>list_h and p.scroll~=nil then
+            rows.id="entries";rows.width=inner
+            list=ui.Scroll{id="list",scroll=p.scroll,width=inner,height=list_h,shrink=0,ui.Column(rows)}
+        else
+            rows.id="list";rows.width=inner;rows.height=list_h;rows.shrink=0
+            list=ui.Column(rows)
+        end
+        local kids={}
+        local height=2*sp.sm+2+list_h
+        if searchable then
+            kids[1]=kit.TextInput{id="filter",text=p.field,placeholder=p.placeholder,width=inner,height=sp.xxl+sp.xs,shrink=0,
+                radius=tokens.radii.medium,fill="surfaceContainer",aria_label=p.placeholder}
+            height=height+sp.xxl+sp.xs+sp.sm
+        end
+        kids[#kids+1]=list
+        if (p.more or "")~="" then
+            kids[#kids+1]=ui.Text{id="more",text=p.more,width=inner,height=16,shrink=0,font_size=tx.caption*4/3,color="onSurfaceVariant"}
+            height=height+16+sp.sm
+        end
+        kids.id="popup";kids.width=pop_w;kids.height=height;kids.shrink=0;kids.padding=sp.sm;kids.gap=sp.sm
+        kids.radius=tokens.radii.medium;kids.fill="surfaceContainer";kids.border_width=1;kids.border_color="outline"
+        return field,ui.Column(kids),pop_w,height
+    end
+    -- The field alone with its list under it, both `width` wide.
+    function kit.Select(p)
+        local field,popup=select_parts(p)
+        return ui.Column{id=p.id,width=p.width or sp.huge*8,shrink=0,gap=sp.xs,field,popup}
+    end
+    -- A form row (label and description on the left) whose control is a select; the list opens under the row,
+    -- right-aligned with the field.
+    function kit.SelectRow(p)
+        local field,popup,pop_w,height=select_parts(p)
+        local row=kit.FormRow{id="row",label=p.label,description=p.description,enabled=p.enabled,field}
+        if not popup then return ui.Column{id=p.id,width="fill",shrink=0,row} end
+        return ui.Column{id=p.id,width="fill",shrink=0,gap=sp.xs,row,
+            ui.Row{id="popup-row",width="fill",height=height,shrink=0,justify="end",padding_right=sp.sm,popup}}
     end
     function kit.BlurredArtwork(p) return ui.Image(props(p,{blur=12})) end
     -- Wrapped text. Callers may supply their font's average advance in em (default 0.56).

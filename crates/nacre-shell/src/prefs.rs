@@ -43,6 +43,8 @@ pub struct Prefs {
     /// Optional updates bar item (`desktop.barUpdatesEnabled`, default on).
     pub bar_updates_enabled: bool,
     pub frame_sheen: bool,
+    /// `interfaceGradients` (`!== false`): kit fills blend the accent into the secondary role.
+    pub interface_gradients: bool,
     /// B0047 frame: `frameWidth` (`?? 10`), `frameRounding` (`?? 25`), the four side
     /// toggles (`!== false`), `aiSidebarEnabled`, `lipHoverDelay` (integer 0..800, else
     /// 350) and `clickEdgeMenus` (`=== true`).
@@ -161,6 +163,7 @@ impl Prefs {
             top_bar_enabled: on("topBarEnabled"),
             bar_updates_enabled: on("barUpdatesEnabled"),
             frame_sheen: on("frameSheen"),
+            interface_gradients: on("interfaceGradients"),
             // JS `value ?? fallback`, bounded to the ranges Nacre's settings helper accepts
             // (frameWidth 0..30, frameRounding 0..40, lipHoverDelay 0..800).
             frame_width: number("frameWidth", 10, 0, 30),
@@ -226,6 +229,7 @@ impl Prefs {
             .flatten()
             .collect(),
             size_offset: self.text_offset as f32,
+            solid: !self.interface_gradients,
         }
     }
     /// Host stores the bar markup reads to drop the button of a disabled panel (the
@@ -425,6 +429,10 @@ mod tests {
         );
         assert!(!set.dashboard_enabled && !set.control_center_enabled && !set.top_bar_enabled);
         assert!(!set.frame_sheen);
+        // `interfaceGradients` follows the same `!== false` rule and reaches the kit as the style's `solid`.
+        assert!(d.interface_gradients && !d.text_style().solid);
+        let flat = Prefs::decode(&json!({"interfaceGradients": false}), &Json::Null);
+        assert!(!flat.interface_gradients && flat.text_style().solid);
         let style = set.text_style();
         assert_eq!(style.size_offset, 2.);
         assert_eq!(style.aliases[INTERFACE_FONT], "DejaVu Sans");

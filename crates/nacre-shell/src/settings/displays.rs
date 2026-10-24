@@ -7,15 +7,17 @@
 //! `pending.deadline_ms` allows, and the Keep part first (QML put it last, below the fold on a
 //! small window, where a 20 s question is missed).
 //!
-//! Nothing here positions anything: it emits generic rows (`actions`, `picker`, `keep`) that
+//! Nothing here positions anything: it emits generic rows (`actions`, `select`) that
 //! `shell/settings/main.luau` maps to kit components. Output names, scales and modes in a click
 //! are re-resolved against the published topic and never trusted.
-use super::pages::{actions, healthy, help, opt, short};
+use super::pages::{actions, healthy, help, opt, select, short};
 use super::*;
 use nacre_protocol::displays::{DisplayOutput, DisplaysState};
 
-const MODE_CHIPS: usize = 8;
-const MODE_ROWS: usize = 8;
+/// QML makes the mode list searchable above this many entries.
+const MODE_SEARCH: usize = 8;
+/// Most modes listed at once (the filter narrows the rest).
+const MODE_ROWS: usize = 64;
 
 /// Stops the one-second countdown wake when dropped.
 pub(super) struct Ticker {
@@ -193,82 +195,66 @@ impl Settings {
                 &nacre_protocol::displays::CONFIRM_SECONDS.to_string(),
             )],
         );
-        let mut rows = vec![actions(
+        // QML draws both as drop-downs (`NacreSelect`): the scale list, and the modes, searchable above 8.
+        let scale_options: Vec<Json> = display
+            .scales
+            .iter()
+            .map(|scale| {
+                opt(
+                    format!("do:disp-scale|{}|{scale}", output.name),
+                    &percent(*scale),
+                    (*scale - output.scale).abs() < 1e-9,
+                    can,
+                )
+            })
+            .collect();
+        let mut rows = vec![select(
             &format!("{id}.scale"),
             &tr("bead.settings.displays-scale", &[]),
-            "",
-            display
-                .scales
-                .iter()
-                .map(|scale| {
-                    opt(
-                        format!("do:disp-scale|{}|{scale}", output.name),
-                        &percent(*scale),
-                        (*scale - output.scale).abs() < 1e-9,
-                        can,
-                    )
-                })
-                .collect(),
+            scale_options,
             can,
         )];
         if !output.modes.is_empty() {
             let label = tr("bead.settings.displays-mode", &[]);
-            let option = |index: usize, mode: &String| {
-                (
-                    format!("do:disp-mode|{}|{index}", output.name),
-                    mode.clone(),
-                    output.mode.as_ref() == Some(mode),
-                )
-            };
-            if output.modes.len() <= MODE_CHIPS {
-                rows.push(chips(
-                    actions(
-                        &format!("{id}.mode"),
-                        &label,
-                        "",
-                        output
-                            .modes
-                            .iter()
-                            .enumerate()
-                            .map(|(i, m)| {
-                                let (arg, text, selected) = option(i, m);
-                                opt(arg, &text, selected, can)
-                            })
-                            .collect(),
-                        can,
-                    ),
-                    3,
-                ));
+            let searchable = output.modes.len() > MODE_SEARCH;
+            // QML filters on the typed text as one substring, case-insensitively.
+            let typed = if searchable {
+                state.pick.to_lowercase()
             } else {
-                // QML searches above 8 entries: the same filter field the other pickers use.
-                let tokens: Vec<String> = state
-                    .pick
-                    .split_whitespace()
-                    .map(str::to_lowercase)
-                    .collect();
-                let matching: Vec<(usize, &String)> = output
-                    .modes
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, m)| {
-                        let hay = m.to_lowercase();
-                        tokens.iter().all(|t| hay.contains(t))
-                    })
-                    .collect();
-                let shown: Vec<Json> = matching
-                    .iter()
-                    .take(MODE_ROWS)
-                    .map(|(i, m)| {
-                        let (arg, text, selected) = option(*i, m);
-                        json!({"id": arg, "label": text, "selected": selected})
-                    })
-                    .collect();
+                String::new()
+            };
+            let matching: Vec<(usize, &String)> = output
+                .modes
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.to_lowercase().contains(&typed))
+                .collect();
+            let shown: Vec<Json> = matching
+                .iter()
+                .take(MODE_ROWS)
+                .map(|(i, m)| {
+                    opt(
+                        format!("do:disp-mode|{}|{i}", output.name),
+                        m,
+                        output.mode.as_ref() == Some(*m),
+                        can,
+                    )
+                })
+                .collect();
+            let mut row = select(&format!("{id}.mode"), &label, shown, can);
+            row["wide"] = true.into();
+            row["text"] = output.mode.clone().unwrap_or_default().into();
+            if searchable {
+                row["filter"] = tr("bead.settings.displays-mode-filter", &[]).into();
+                row["empty"] = tr("bead.settings.displays-mode-none", &[]).into();
                 let more = matching.len().saturating_sub(MODE_ROWS);
-                rows.push(json!({"id": format!("{id}.mode"), "kind": "picker", "enabled": can, "own": true,
-                    "label": label, "placeholder": tr("bead.settings.displays-mode-filter", &[]),
-                    "items": shown, "empty": tr("bead.settings.displays-mode-none", &[]),
-                    "more": if more > 0 { tr("bead.settings.displays-mode-more", &[("count", &more.to_string())]) } else { String::new() }}));
+                if more > 0 {
+                    row["more"] =
+                        tr("bead.settings.displays-mode-more", &[("count", &more.to_string())])
+                            .into();
+                }
             }
+            rows.push(row);
         }
         rows.insert(0, part(&id, &title, &note));
         rows

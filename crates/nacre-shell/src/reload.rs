@@ -2598,7 +2598,11 @@ impl SceneSource for Runtime {
             {
                 settings.secret(secret);
             }
-            let changes = settings.act(arg, &edit, wake);
+            let mut changes = settings.act(arg, &edit, wake);
+            // Any settings action (a choice in an open drop-down, a page change) closes the open list.
+            if !arg.starts_with("do:vol|") {
+                changes.insert("settings.select".into(), bead::core::Value::Text(String::new()));
+            }
             // A slider step keeps the focus so the drag continues over the next step.
             let scene = match arg
                 .starts_with("do:vol|")
@@ -3712,6 +3716,18 @@ impl SceneSource for Runtime {
                             bead::core::Value::Text(String::new()),
                         ),
                     ]))?
+                }
+                // Esc closes an open Settings drop-down before anything else.
+                "escape"
+                    if matches!(
+                        self.session.stores.get("settings.select"),
+                        Some(bead::core::Value::Text(open)) if !open.is_empty()
+                    ) =>
+                {
+                    self.session.update(BTreeMap::from([(
+                        "settings.select".into(),
+                        bead::core::Value::Text(String::new()),
+                    )]))?
                 }
                 "escape" if self.prompt.is_some() => {
                     let changes = self

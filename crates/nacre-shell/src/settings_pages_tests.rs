@@ -1426,7 +1426,9 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
         "Display changes revert after 20 seconds unless you keep them."
     );
     let scale = row(&rows, "displays.out.DP-1.scale");
+    assert_eq!(scale["kind"], "select", "QML draws the scale as a drop-down");
     assert_eq!(scale["label"], "Scale");
+    assert_eq!(scale["text"], "100%");
     let labels: Vec<&str> = scale["options"]
         .as_array()
         .unwrap()
@@ -1443,30 +1445,33 @@ async fn displays_page_draws_the_qml_cards_from_the_topic() {
         true,
         "125 %"
     );
+    assert_eq!(row(&rows, "displays.out.HDMI-A-1.scale")["text"], "125%");
     let mode = row(&rows, "displays.out.DP-1.mode");
-    assert_eq!(mode["kind"], "actions", "few modes are chips");
+    assert_eq!(mode["kind"], "select", "the modes are a drop-down too");
     assert_eq!(mode["options"][0]["selected"], true);
     assert_eq!(mode["options"][1]["id"], "do:disp-mode|DP-1|1");
+    assert!(mode["filter"].is_null(), "few modes need no search");
     let long = row(&rows, "displays.out.HDMI-A-1.mode");
     assert_eq!(
         (
             long["kind"].clone(),
-            long["items"].as_array().unwrap().len()
+            long["options"].as_array().unwrap().len()
         ),
-        (json!("picker"), 8)
+        (json!("select"), 12)
     );
-    assert_eq!(long["more"], "4 more, type to filter");
-    // The filter field narrows the long list by the typed words.
+    assert_eq!(long["filter"], "Filter modes");
+    assert!(long["more"].is_null(), "the whole list scrolls in the popup");
+    // The filter field narrows the long list by the typed text, case-insensitively.
     let filtered = stores("displays")
         .reconcile(&BTreeMap::from([(
             "settings.pick.text".into(),
-            Value::Text("1920x1080".into()),
+            Value::Text("1920X1080".into()),
         )]))
         .unwrap();
     settings.project(&filtered);
     let rows = items(&settings.project(&filtered));
     assert_eq!(
-        row(&rows, "displays.out.HDMI-A-1.mode")["items"]
+        row(&rows, "displays.out.HDMI-A-1.mode")["options"]
             .as_array()
             .unwrap()
             .len(),

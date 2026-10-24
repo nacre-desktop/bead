@@ -22,6 +22,8 @@ const REGISTRY_DIR: &str = "settings/registry";
 const MAX_REGISTRY_FILE: u64 = 1 << 20;
 pub const METHOD: &str = "settings.set";
 const MAX_TEXT: usize = 200;
+/// Most options QML draws as a segmented row; more are a drop-down.
+const SEGMENTS: usize = 4;
 const MAX_ITEMS: usize = 64;
 const MAX_RESULTS: usize = 40;
 /// Followed while the window is open: the registry's capability flags (N0051 C1 publishes
@@ -513,16 +515,25 @@ impl Settings {
                 row["at_max"] = (shown.as_f64().unwrap_or(max) >= max).into();
             }
             Some("enum") => {
-                row["kind"] = "choice".into();
                 let options: Vec<Json> = self
                     .registry
                     .array(setting, "options")
                     .enumerate()
                     .map(|(i, o)| {
-                        json!({"id": format!("{id}|{i}"), "label": self.registry.text(o, "labelId"),
+                        json!({"id": format!("set:{id}|{i}"), "label": self.registry.text(o, "labelId"),
                             "selected": o["value"] == shown, "enabled": self.allowed(o.get("enabledWhen"))})
                     })
                     .collect();
+                // QML (`SettingsRow`): up to four options are a segmented row, more are a drop-down.
+                if options.len() > SEGMENTS {
+                    row["kind"] = "select".into();
+                    row["text"] = options
+                        .iter()
+                        .find(|o| o["selected"] == true)
+                        .map_or(Json::from(""), |o| o["label"].clone());
+                } else {
+                    row["kind"] = "choice".into();
+                }
                 row["options"] = options.into();
             }
             Some("string") => {

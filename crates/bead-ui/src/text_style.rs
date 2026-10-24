@@ -13,6 +13,8 @@ pub struct TextStyle {
     pub aliases: BTreeMap<String, String>,
     /// Added to every non-icon font size, in the markup's size unit.
     pub size_offset: f32,
+    /// Solid colours: the owner turned interface gradients off (`tokens.gradients` is false in the kit).
+    pub solid: bool,
 }
 impl TextStyle {
     fn family(&self, name: &str) -> String {
@@ -50,6 +52,11 @@ pub fn set(style: TextStyle) -> bool {
 pub fn refresh() {
     crate::i18n::refresh();
 }
+/// Whether gradient fills are drawn (true until the host asks for solid colours).
+pub fn gradients() -> bool {
+    let held = STYLE.lock().unwrap_or_else(|p| p.into_inner());
+    !held.as_ref().is_some_and(|s| s.solid)
+}
 /// The family to draw for a markup family name.
 pub fn family(name: &str) -> String {
     let held = STYLE.lock().unwrap_or_else(|p| p.into_inner());
@@ -70,6 +77,7 @@ mod tests {
         let style = TextStyle {
             aliases: BTreeMap::from([("IBM Plex Sans".into(), "DejaVu Sans".into())]),
             size_offset: 2.,
+            ..Default::default()
         };
         assert_eq!(style.family("IBM Plex Sans"), "DejaVu Sans");
         assert_eq!(style.family("Other"), "Other");
@@ -77,6 +85,18 @@ mod tests {
         assert_eq!(style.size(255., "DejaVu Sans"), 256.);
         assert_eq!(style.size(20., "Material Symbols Rounded"), 20.);
         assert_eq!(TextStyle::default().size(12., "IBM Plex Sans"), 12.);
+    }
+    #[test]
+    fn gradients_stay_on_until_the_host_asks_for_solid_colours() {
+        let solid = TextStyle {
+            aliases: BTreeMap::from([("Unique Solid Family".into(), "Other".into())]),
+            solid: true,
+            ..Default::default()
+        };
+        assert!(set(solid));
+        assert!(!gradients());
+        assert!(set(TextStyle::default()));
+        assert!(gradients());
     }
     #[test]
     fn a_change_wakes_listeners_and_a_repeat_does_not() {
@@ -89,6 +109,7 @@ mod tests {
         let style = TextStyle {
             aliases: BTreeMap::from([("Unique Test Family".into(), "Other".into())]),
             size_offset: 0.,
+            ..Default::default()
         };
         assert!(set(style.clone()));
         assert!(woke.load(std::sync::atomic::Ordering::SeqCst) >= 1);

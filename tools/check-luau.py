@@ -14,6 +14,7 @@ with tempfile.TemporaryDirectory(prefix='bead-luau-') as directory:
     else:shutil.copyfile(generated,tracked)
     shutil.copyfile(ROOT/'crates/bead-ui/assets/kit.luau',types/'kit_impl.luau')
     tokens=json.loads((ROOT/'crates/bead-ui/assets/size-scale.json').read_text())
+    tokens['gradients']=True  # the host adds it when it builds the kit (the interfaceGradients setting)
     def literal(v):
         if isinstance(v,dict):return '{'+','.join('['+json.dumps(k)+']='+literal(x) for k,x in v.items())+'}'
         return json.dumps(v)

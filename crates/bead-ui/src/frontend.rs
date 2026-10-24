@@ -441,9 +441,11 @@ impl FrontEnd for LuauFrontEnd {
                 let sdk_copy = sdk.clone();
                 let kit_factory: Function =
                     lua.load(self.kit.as_slice()).set_name("@bead.kit").eval()?;
-                let tokens: serde_json::Value =
+                let mut tokens: serde_json::Value =
                     serde_json::from_str(include_str!("../assets/size-scale.json"))
                         .map_err(mlua::Error::external)?;
+                // The owner's `interfaceGradients` choice, read while the scene is built (the host reloads views on a change).
+                tokens["gradients"] = crate::text_style::gradients().into();
                 let kit: Table = kit_factory.call((sdk.clone(), lua.to_value(&tokens)?))?;
                 let require = scope.create_function(move |lua, name: String| {
                     if name == "bead.kit" {

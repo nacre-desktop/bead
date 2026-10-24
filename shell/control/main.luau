@@ -10,7 +10,9 @@ local W,PAD,GAP=reg.layout.width,T.spacing.xl,T.spacing.sm
 local INNER=W-2*PAD
 local BODY,CAPTION=T.text.body*4/3,T.text.caption*4/3
 local HEAD=T.spacing.huge
-local BATTERY_W=T.spacing.huge+T.spacing.md -- the percentage; the estimate takes the rest of the row
+-- QML NacreControlSurface: content starts 14 px down, the status row is 32 tall with 3 px between its parts, a
+-- page header 36 tall, and the page 18 px under the status row (14 under a header). Tool buttons are 32 px circles.
+local TOP,HEADER,STATUS_GAP,HEADER_GAP=T.spacing.lg,T.spacing.huge+T.spacing.xs,3,5
 local ROW=T.spacing.huge+T.spacing.md
 local page=get("cc.page")
 local src,views={},{}
@@ -50,12 +52,19 @@ local function stack(id,items,spacing)
     kids.height=total
     return ui.Column(kids),total
 end
+-- A QML `NacreControlButton`: a 32 px circle, glyph at 17 pt, no fill until hovered; `selected` fills it. It takes no
+-- focus ring (QML shows none for a page opened without the keyboard).
+local function tool(id,icon,label,action,selected)
+    return kit.IconButton{id=id,text=icon,aria_label=label,width=HEAD,height=HEAD,padding=0,radius=T.radii.full,font_size=17*4/3,
+        fill=selected and "primaryContainer" or "transparent",color=selected and "onPrimaryContainer" or "onSurface",
+        hover_fill="surfaceContainerHighest",focus_ring=false,on_activate=action}
+end
 local function header(title,back,tools)
-    local row={id="header",width=INNER,height=HEAD,gap=GAP,align="center"}
-    if back then row[#row+1]=kit.IconButton{id="back",text="arrow_back",aria_label=ui.tr("bead.panel.control-back"),width=HEAD,height=HEAD,on_activate=back} end
-    row[#row+1]=ui.Text{id="title",text=title,height=HEAD,grow=1,shrink=1,font_size=T.text.headline*4/3,color="onSurface"}
-    for _,tool in ipairs(tools or {}) do row[#row+1]=tool end
-    return {ui.Row(row),HEAD}
+    local row={id="header",width=INNER,height=HEADER,gap=HEADER_GAP,align="center"}
+    if back then row[#row+1]=tool("back","arrow_back",ui.tr("bead.panel.control-back"),back) end
+    row[#row+1]=ui.Text{id="title",text=title,height=HEAD,grow=1,shrink=1,font_size=T.text.headline*4/3,font_weight=500,color="onSurface"}
+    for _,item in ipairs(tools or {}) do row[#row+1]=item end
+    return {ui.Row(row),HEADER}
 end
 local function message()
     local text=get("cc.message")
@@ -121,22 +130,36 @@ local function notices_empty()
     local text=get("cc.notice_ready") and ui.tr("bead.panel.control-notices-empty") or ui.tr("bead.panel.control-notices-loading")
     return {ui.Text{id="notices-empty",text=text,width=INNER,height=CAPTION*2,font_size=CAPTION,color="onSurfaceVariant"},CAPTION*2}
 end
--- The notification summary under the tiles (the QML NacreControlNotices): title, count, clear and "view all",
--- then the newest two entries; `limit` 0 on the full page, which lists every projected entry instead.
+-- QML `ActionButton` (compact): a 34 px pill, 12 pt glyph and a caption-size label, `primary` while selected, dimmed to 40 %
+-- while it cannot act. The label's width is an estimate (the layout cannot measure text).
+local function pill(id,label,icon,action,selected)
+    local armed=action~=nil
+    local ink=selected and "onPrimary" or "onSurface"
+    local text_w=(utf8.len(label) or 4)*8
+    local w=T.spacing.xl+text_w+(icon and 22 or 0)
+    local inside={id=id.."-row",width=w,height=34,gap=T.spacing.xs,align="center",justify="center"}
+    if icon then inside[#inside+1]=glyph(id.."-icon",icon,ink,T.icons.small*4/3) end
+    inside[#inside+1]=ui.Text{id=id.."-label",text=label,width=text_w,height=18,shrink=0,font_size=CAPTION,color=ink}
+    return kit.Button{id=id,width=w,height=34,padding=0,shrink=0,radius=T.radii.full,
+        fill=ui.alpha(selected and "primary" or "surfaceContainerHigh",armed and 1 or .4),aria_label=label,on_activate=action,
+        ui.Row(inside)}
+end
+-- The notification summary under the tiles (the QML history popup in the full sidebar): the title with the DND and
+-- Clear pills, then the newest two entries; `limit` 0 on the full page, which lists every projected entry
+-- and leaves the title to the page header.
 local function notices(limit,page)
     local list=get("cc.notices")
-    local count=get("cc.notice_count")
     local clear=get("cc.notice_clear")
-    local row={id="notices-head",width=INNER,height=HEAD,gap=GAP,align="center",
-        ui.Text{id="notices-title",text=ui.tr("bead.panel.control-notifications"),height=HEAD,grow=1,shrink=1,font_size=T.text.title*4/3,color="onSurface"}}
-    if count>0 then row[#row+1]=ui.Text{id="notices-count",text=tostring(count),height=HEAD,font_size=BODY,color="onSurfaceVariant"} end
-    row[#row+1]=kit.IconButton{id="notices-clear",text="delete_sweep",aria_label=ui.tr("bead.panel.control-notices-clear"),width=HEAD,height=HEAD,
-        on_activate=clear and ui.action("cc.do","clear:notifications") or nil}
-    if not page then
-        row[#row+1]=kit.IconButton{id="notices-all",text="chevron_right",aria_label=ui.tr("bead.panel.control-notices-all"),width=HEAD,height=HEAD,
-            on_activate=ui.action("detail","notifications")}
-    end
-    local items={{ui.Row(row),HEAD}}
+    local dnd=src["notifications.dnd"]
+    local row={id="notices-head",width=INNER,height=34,gap=T.spacing.sm+2,align="center"}
+    row[#row+1]=ui.Text{id="notices-title",text=page and "" or ui.tr("bead.panel.control-notifications"),height=HEAD,grow=1,shrink=1,
+        font_size=T.text.title*4/3,color="onSurface"}
+    local on=dnd~=nil and dnd.on==true
+    row[#row+1]=pill("notices-dnd",ui.tr("bead.panel.control-pill-dnd"),on and "do_not_disturb_on" or "notifications_active",
+        dnd and dnd.toggle and ui.action("cc.do","toggle:notifications.dnd") or nil,on)
+    row[#row+1]=pill("notices-clear",ui.tr("bead.panel.control-pill-clear"),nil,
+        clear and ui.action("cc.do","clear:notifications") or nil,false)
+    local items={{ui.Row(row),34}}
     if #list==0 then table.insert(items,notices_empty()) end
     for i,n in ipairs(list) do
         if not limit or i<=limit then table.insert(items,{notice_card(n),NOTICE_H}) end
@@ -144,21 +167,22 @@ local function notices(limit,page)
     return items
 end
 local function home()
-    local status_w=INNER-3*HEAD-3*GAP
+    local status_w=INNER-3*HEAD-3*STATUS_GAP
     local estimate=get("cc.battery_estimate")
-    local status={id="status",width=INNER,height=HEAD,gap=GAP,align="center",
+    -- QML: glyph 15 pt, percentage 10 pt medium, estimate 9 pt muted, 5 px apart
+    local percent=get("cc.battery")
+    local pct,note=T.text.caption*4/3,(T.text.caption-1)*4/3
+    local pct_w=(utf8.len(percent) or 3)*8+4
+    local status={id="status",width=INNER,height=HEAD,gap=STATUS_GAP,align="center",
         kit.Button{id="battery-status",width=status_w,height=HEAD,padding=0,fill="transparent",hover_fill="transparent",
             aria_label=ui.tr("bead.panel.control-battery-details"),on_activate=views.battery and ui.action("detail","battery") or nil,
-            ui.Row{id="battery-row",width=status_w,height=HEAD,gap=T.spacing.xs,align="center",
-                glyph("battery-glyph",get("cc.battery_icon"),"primary"),
-                ui.Text{id="battery-text",text=get("cc.battery"),width=estimate=="" and status_w-40 or BATTERY_W,height=24,font_size=BODY,color="onSurface"},
-                estimate~="" and ui.Text{id="battery-estimate",text=estimate,width=status_w-40-BATTERY_W-T.spacing.xs,height=24,font_size=CAPTION,color="onSurfaceVariant"} or nil}},
-        kit.IconButton{id="edit",text="edit",aria_label=ui.tr("bead.panel.control-edit"),width=HEAD,height=HEAD,
-            on_activate=ui.action("begin",table.concat(order,","))},
-        kit.IconButton{id="settings",text="settings",aria_label=ui.tr("bead.panel.control-settings"),width=HEAD,height=HEAD,
-            on_activate=ui.action("cc.do","open:settings")},
-        kit.IconButton{id="power",text="power_settings_new",aria_label=ui.tr("bead.panel.control-power"),width=HEAD,height=HEAD,
-            on_activate=views.session and ui.action("view.open","session") or nil}}
+            ui.Row{id="battery-row",width=status_w,height=HEAD,gap=5,align="center",
+                glyph("battery-glyph",get("cc.battery_icon"),"primary",T.icons.medium*4/3),
+                ui.Text{id="battery-text",text=percent,width=estimate=="" and status_w-27 or pct_w,height=24,font_size=pct,font_weight=500,color="onSurface"},
+                estimate~="" and ui.Text{id="battery-estimate",text=estimate,width=status_w-27-pct_w-5,height=24,font_size=note,color="onSurfaceVariant"} or nil}},
+        tool("edit","edit",ui.tr("bead.panel.control-edit"),ui.action("begin",table.concat(order,",")),page=="edit"),
+        tool("settings","settings",ui.tr("bead.panel.control-settings"),ui.action("cc.do","open:settings")),
+        tool("power","power_settings_new",ui.tr("bead.panel.control-power"),views.session and ui.action("view.open","session") or nil,false)}
     local list={}
     for _,id in ipairs(order) do
         local t=reg.by_id[id]
@@ -181,7 +205,7 @@ local function home()
         table.insert(items,{grid,height})
     end
     for _,item in ipairs(notices(2,false)) do table.insert(items,item) end
-    return stack("home",items)
+    return stack("home",items,T.spacing.xl)
 end
 local function row_button(id,icon,label,detail,action,sub)
     local ink=sub and "onSurfaceVariant" or "onSurface"
@@ -244,17 +268,9 @@ local function catalog()
     return stack("catalog",items)
 end
 local function notifications_page()
-    local dnd=src["notifications.dnd"]
     local items={header(ui.tr("bead.panel.control-notifications"),ui.action("page","home"))}
-    if dnd and dnd.toggle then
-        table.insert(items,{kit.Button{id="dnd-switch",width=INNER,height=HEAD+T.spacing.sm,padding=0,radius=T.radii.full,
-            fill=dnd.on and "primary" or "surfaceContainerHigh",aria_label=ui.tr("bead.panel.control-dnd"),on_activate=ui.action("cc.do","toggle:notifications.dnd"),
-            ui.Row{id="dnd-row",width=INNER,height=HEAD+T.spacing.sm,align="center",justify="center",
-                ui.Text{id="dnd-label",text=ui.tr("bead.panel.control-dnd").." · "..(dnd.status or ""),width=INNER-T.spacing.lg*2,height=22,
-                    text_align="center",font_size=BODY,color=dnd.on and "onPrimary" or "onSurface"}}},HEAD+T.spacing.sm})
-    end
     for _,item in ipairs(notices(nil,true)) do table.insert(items,item) end
-    return stack("detail",items)
+    return stack("detail",items,T.spacing.lg)
 end
 local function detail()
     local id=get("cc.detail")
@@ -309,8 +325,8 @@ local max=get("cc.max_height")
 -- B0067: the dock is as tall as the framed viewport (the QML sidebar keeps the full frame height); long pages scroll.
 local height=max
 local inner=body
-if content+2*PAD>max then
-    inner=ui.Scroll{id="scroll",scroll=ui.bind("cc.scroll"),width=INNER,height=height-2*PAD,body}
+if content+TOP+PAD>max then
+    inner=ui.Scroll{id="scroll",scroll=ui.bind("cc.scroll"),width=INNER,height=height-TOP-PAD,body}
 end
-return kit.Panel{id="control-center",edge=get("view.edge"),open=ui.bind("panel.open"),duration=0.28,width=W,height=height,padding=PAD,
+return kit.Panel{id="control-center",edge=get("view.edge"),open=ui.bind("panel.open"),duration=0.28,width=W,height=height,padding=PAD,padding_top=TOP,
     gap=GAP,radius=T.radii.medium,fill="surface",inner}

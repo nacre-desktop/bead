@@ -162,6 +162,15 @@ pub(super) fn actions(
     json!({"id": id, "kind": "actions", "label": label, "description": description,
         "options": options, "enabled": enabled, "own": true})
 }
+/// A drop-down row (`NacreSelect`): `options` are `opt` entries, `text` shows the chosen one.
+pub(super) fn select(id: &str, label: &str, options: Vec<Json>, enabled: bool) -> Json {
+    let text = options
+        .iter()
+        .find(|o| o["selected"] == true)
+        .map_or(Json::from(""), |o| o["label"].clone());
+    json!({"id": id, "kind": "select", "label": label, "description": "", "text": text,
+        "options": options, "enabled": enabled, "own": true})
+}
 pub(super) fn help(id: &str, label: &str) -> Json {
     json!({"id": id, "kind": "help", "label": label})
 }

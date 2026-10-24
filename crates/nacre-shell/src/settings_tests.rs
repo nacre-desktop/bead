@@ -361,6 +361,30 @@ fn panels_windows_date_and_lock_pages_follow_the_registry() {
     assert_eq!(row(&lock, "lock-login.widgets.lockMedia")["enabled"], true);
 }
 
+/// B0094: QML (`SettingsRow`) draws an enum of up to four options as a segmented row and more as a drop-down; the
+/// options of both carry the `set:` argument `settings.do` takes (a segmented click used to send a bare `id|n`).
+#[test]
+fn enum_rows_are_segments_to_four_options_and_a_drop_down_beyond() {
+    let (settings, _) = fixture(json!({"language": "nb"}));
+    let dt = items(&settings.project(&stores("date-time-language", "")));
+    let language = row(&dt, "date-time-language.locale.language");
+    assert_eq!(language["kind"], "choice");
+    assert_eq!(
+        language["options"][1]["id"],
+        "set:date-time-language.locale.language|1"
+    );
+    let colors = items(&settings.project(&stores("colors", "")));
+    let source = row(&colors, "colors.palette.source");
+    assert_eq!(source["kind"], "select");
+    assert_eq!(source["options"].as_array().unwrap().len(), 31);
+    assert!(
+        source["options"][3]["id"]
+            .as_str()
+            .unwrap()
+            .starts_with("set:colors.palette.source|")
+    );
+}
+
 /// B0058 slice 2: launcher, apps and the dashboard sub-pages.
 #[test]
 fn launcher_apps_and_dashboard_pages_follow_the_registry() {
@@ -522,6 +546,8 @@ fn form_kit_gallery_golden() {
         json!({"id":"t2","kind":"toggle","label":"Needs apply","description":"Pending value","enabled":true,"checked":true,"staged":true,"apply":true}),
         json!({"id":"c1","kind":"choice","label":"Segmented choice","description":"","enabled":true,
             "options":[{"id":"c1|0","label":"One","selected":false},{"id":"c1|1","label":"Two","selected":true},{"id":"c1|2","label":"Three","selected":false}]}),
+        json!({"id":"d2","kind":"select","label":"Drop-down","description":"A select, closed","enabled":true,"text":"Two",
+            "options":[{"id":"d2|0","label":"One","selected":false},{"id":"d2|1","label":"Two","selected":true}]}),
         json!({"id":"n1","kind":"number","label":"Number","description":"Stepper with a unit","enabled":true,"number":12,"text":"12","unit":"px","step":1,"min":0,"max":30,"at_min":false,"at_max":false}),
         json!({"id":"x1","kind":"text","label":"Text","description":"","enabled":true,"text":"Fira Code","editing":false}),
         json!({"id":"x2","kind":"text","label":"Colour","description":"Swatch","enabled":true,"text":"#7aa2f7","swatch":[122,162,247,255],"editing":false}),
@@ -552,6 +578,38 @@ fn form_kit_gallery_golden() {
     ]);
     let mut h = harness(model, 960, 900, 1.);
     golden("settings-kit-1", &mut h);
+}
+
+/// B0094: the drop-down open (the list under its field, the chosen option filled) and the searchable one with its
+/// filter line, no match and a cut-off tail.
+#[test]
+fn select_rows_open_their_list_under_the_field() {
+    let option = |id: &str, label: &str, selected: bool| {
+        json!({"id": id, "label": label, "selected": selected, "enabled": true})
+    };
+    let long: Vec<Json> = (0..12)
+        .map(|i| option(&format!("m|{i}"), &format!("{}x{}@60.000Hz", 640 + i * 160, 360 + i * 90), i == 2))
+        .collect();
+    let body = vec![
+        json!({"id":"a1","kind":"select","label":"Scale","description":"","enabled":true,"text":"125%",
+            "options":[option("a1|0","100%",false),option("a1|1","125%",true),option("a1|2","150%",false)]}),
+        json!({"id":"a2","kind":"select","label":"Resolution and refresh rate","description":"","enabled":true,"wide":true,
+            "text":"960x540@60.000Hz","options":long,"filter":"Filter modes","more":"4 more, type to filter"}),
+    ];
+    let rows = vec![json!({"id":"s1","kind":"section","label":"Display","description":"","rows":body})];
+    let model = |open: &str| {
+        BTreeMap::from([
+            ("settings.nav".into(), Value::list(vec![json!({"id":"a","kind":"page","label":"Page","icon":"palette","selected":true})])),
+            ("settings.items".into(), Value::list(rows.clone())),
+            ("settings.title".into(), Value::Text("Displays".into())),
+            ("settings.writable".into(), Value::Bool(true)),
+            ("settings.select".into(), Value::Text(open.into())),
+        ])
+    };
+    let mut h = harness(model("a1"), 960, 640, 1.);
+    golden("settings-select-open-1", &mut h);
+    let mut h = harness(model("a2"), 960, 760, 1.);
+    golden("settings-select-search-1", &mut h);
 }
 
 /// Typing in the search field rebuilds the filtered list each key. Budget 8 ms per key
