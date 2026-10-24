@@ -1458,7 +1458,8 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
         .filter(|(_, ap)| state.devices.items.contains_key(&ap.device))
         .collect();
     aps.sort_by_key(|(_, ap)| (!ap.active, std::cmp::Reverse(ap.strength)));
-    let nearby: std::collections::BTreeSet<&str> = aps.iter().map(|(_, ap)| ap.name.as_str()).collect();
+    let nearby: std::collections::BTreeSet<&str> =
+        aps.iter().map(|(_, ap)| ap.name.as_str()).collect();
     // Names with a saved Wi-Fi profile: those networks are "known" (QML reads the saved SSIDs the same way).
     let saved: std::collections::BTreeSet<&str> = state
         .connections
