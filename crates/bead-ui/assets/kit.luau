@@ -156,28 +156,31 @@ return function(ui, tokens)
     function kit.ToggleTile(p) return tile(p,"toggle") end
     function kit.LinkTile(p) return tile(props(p,{on=false,detail_lines=true}),"link") end
     function kit.ButtonTile(p) return tile(props(p,{on=false,stacked=true}),"button") end
-    -- Level control: icon button (mute), caption (`caption`, else `label`), value text and a stepped slider; the
-    -- slider is drawn dimmed and takes no input when no `on_change` action is given.
+    -- Level control (QML `NacreControlLevels`, 56 tall, radius 18): the caption (`caption`, else `label`) on top at 46, a
+    -- 32 px icon button (mute) at 8, the stepped slider at 42, the value text 40 from the right and the details
+    -- chevron 4 from it. The slider is drawn dimmed and takes no input when no `on_change` action is given.
     function kit.SliderTile(p)
         local color,armed=ink({available=p.available}),p.available~=false
-        local pad=tokens.spacing.lg
-        local detail_width=p.on_detail and tokens.spacing.huge or 0
-        local inner=p.width-pad*2-40-tokens.spacing.sm-detail_width-(p.on_detail and tokens.spacing.sm or 0)
-        local control=kit.Slider{id="level",width=inner,value=p.value,min=0,max=100,step=p.step or 5,label=p.label,
-            enabled=armed,on_change=p.on_change,change_arg=p.change_arg}
-        return ui.Row{id=p.id,width=p.width,height=p.height,padding_left=pad,padding_right=pad,gap=tokens.spacing.sm,align="center",
-            radius=tokens.radii.large,fill=armed and "surfaceContainer" or ui.alpha("surfaceContainer",.4),
-            kit.Button{id="toggle",width=40,height=40,padding=0,radius=tokens.radii.full,fill="transparent",hover_fill=ui.alpha("onSurface",.08),
-                aria_label=p.toggle_label or p.label,on_activate=armed and p.on_toggle or nil,
-                ui.Row{id="icon-row",width=40,height=40,align="center",justify="center",glyph("icon",p.icon,color)}},
-            ui.Column{id="level-column",width=inner,gap=2,
-                ui.Row{id="level-head",width=inner,height=20,align="center",
-                    ui.Text{id="label",text=p.caption or p.label,width=inner-56,height=20,font_size=tokens.text.caption*4/3,color=color},
-                    ui.Text{id="value",text=p.detail or "",width=56,height=20,shrink=0,text_align="right",font_size=tokens.text.caption*4/3,color="onSurfaceVariant"}},
-                control},
-            if p.on_detail then kit.IconButton{id="detail",text="chevron_right",width=detail_width,height=40,
-                aria_label=p.detail_label or p.label,on_activate=armed and p.on_detail or nil} else nil,
-        }
+        local W,H=p.width,p.height
+        local detail=p.on_detail~=nil
+        local right=detail and 40 or 8
+        local control=kit.Slider{id="level",position="absolute",left=42,top=23,width=W-90-right,
+            value=p.value,min=0,max=100,step=p.step or 5,label=p.label,enabled=armed,on_change=p.on_change,change_arg=p.change_arg}
+        local kids={
+            ui.Text{id="label",position="absolute",left=46,top=7,width=W-46-(detail and 86 or 54),height=16,font_size=(tokens.text.caption-1)*4/3,
+                color="onSurfaceVariant",text=p.caption or p.label},
+            kit.IconButton{id="toggle",position="absolute",left=8,top=17,width=32,height=32,padding=0,radius=tokens.radii.full,
+                font_size=17*4/3,text=p.icon,fill="transparent",hover_fill=ui.alpha("onSurface",.08),color=armed and "primary" or "onSurfaceVariant",
+                aria_label=p.toggle_label or p.label,on_activate=armed and p.on_toggle or nil},
+            control,
+            ui.Text{id="value",position="absolute",left=W-right-48,top=29,width=48,height=20,text_align="right",
+                font_size=tokens.text.caption*4/3,color="onSurfaceVariant",text=p.detail or ""}}
+        if detail then
+            kids[#kids+1]=kit.IconButton{id="detail",position="absolute",left=W-36,top=22,width=32,height=32,padding=0,radius=tokens.radii.full,
+                font_size=17*4/3,text="chevron_right",fill="transparent",hover_fill=ui.alpha("onSurface",.08),color=armed and "onSurface" or "onSurfaceVariant",
+                aria_label=p.detail_label or p.label,on_activate=armed and p.on_detail or nil}
+        end
+        return ui.Box(props(kids,{id=p.id,width=W,height=H,radius=18,fill=ui.alpha("surfaceContainer",.65)}))
     end
     -- Packs tiles into rows by size: `sizes[size]={per_row,height}`; a tile is
     -- `{size,build=function(width,height) return node end}`. A change of size starts a new row. Returns the

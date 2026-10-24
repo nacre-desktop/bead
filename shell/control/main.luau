@@ -86,21 +86,23 @@ local function build_tile(t,w,h,embedded)
             on_toggle=s.toggle and act("toggle") or nil,on_change=s.set and "cc.do" or nil,
             change_arg=function(n) return "set:"..t.source..":"..n end}
     elseif t.kind=="segmented" then
-        -- Light | Dark | Auto as one control (QML NacreControlAppearance); the daemon names the mode that is set.
+        -- Light | Dark | Auto as one control (QML NacreControlAppearance): a raised pill, 4 px inside, 2 px between the three
+        -- segments; the daemon names the mode that is set.
         local modes={{"light","light_mode","bead.panel.control-mode-light"},{"dark","dark_mode","bead.panel.control-mode-dark"},
             {"auto","brightness_auto","bead.panel.control-mode-auto"}}
-        local seg=(w-2*T.spacing.xs)/#modes
-        local row={id=id,width=w,height=h,gap=T.spacing.xs}
+        local inset,between=T.spacing.xs,T.spacing.hairline
+        local seg=(w-2*inset-(#modes-1)*between)/#modes
+        local row={id=id,width=w,height=h,padding=inset,gap=between,radius=h/2,fill="surfaceContainer",align="center"}
         for i,m in ipairs(modes) do
             local picked=s.mode==m[1]
-            local ink=picked and "onPrimaryContainer" or "onSurface"
             local name=ui.tr(m[3])
-            row[i]=kit.Button{id="mode-"..m[1],width=seg,height=h,padding=0,radius=T.radii.full,selected=picked,
-                fill=picked and "primaryContainer" or "surfaceContainer",aria_label=ui.tr(m[3]),
+            row[i]=kit.Button{id="mode-"..m[1],width=seg,height=h-2*inset,padding=0,radius=18,selected=picked,
+                fill=picked and "primaryContainer" or "transparent",hover_fill=picked and "primaryContainer" or ui.alpha("onSurface",.06),aria_label=name,
                 on_activate=s.toggle and ui.action("cc.do","choose:"..t.source..":"..m[1]) or nil,
-                ui.Row{id="mode-row-"..m[1],width=seg,height=h,gap=T.spacing.xs,align="center",justify="center",
-                    glyph("mode-icon-"..m[1],m[2],ink,T.icons.medium*4/3),
-                    ui.Text{id="mode-label-"..m[1],text=name,width=(utf8.len(name) or 4)*8+4,height=22,shrink=0,font_size=CAPTION,color=ink}}}
+                ui.Row{id="mode-row-"..m[1],width=seg,height=h-2*inset,gap=6,align="center",justify="center",
+                    glyph("mode-icon-"..m[1],m[2],picked and "onPrimaryContainer" or "onSurfaceVariant",13*4/3),
+                    ui.Text{id="mode-label-"..m[1],text=name,width=(utf8.len(name) or 4)*8+4,height=22,shrink=0,font_size=CAPTION,
+                        color=picked and "onPrimaryContainer" or "onSurface"}}}
         end
         return ui.Row(row)
     elseif t.kind=="link" then

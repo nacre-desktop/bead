@@ -9,7 +9,7 @@ local T=require("bead.kit").tokens
 local layout={
     width=T.spacing.huge*13+T.spacing.sm,
     -- tiles per row and row height for each size; heights are multiples of the shared scale
-    sizes={full={per_row=1,height=56},segment={per_row=1,height=40},half={per_row=2,height=66},third={per_row=3,height=76}},
+    sizes={full={per_row=1,height=56},segment={per_row=1,height=44},half={per_row=2,height=66},third={per_row=3,height=76}},
 }
 local tiles={
     {id="volume",kind="slider",size="full",icon="volume_up",label="bead.panel.control-volume",source="audio.output",dock="audio",hide_unsupported=true,default=true},
