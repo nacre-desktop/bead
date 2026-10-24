@@ -31,6 +31,10 @@ pub trait Notices: Send + Sync {
     fn action(&self, name: &str, arg: &Value) -> Result<(), String>;
     fn audio_changed(&self, audio: &bead::services::Audio);
     fn feedback(&self, args: &[serde_json::Value]) -> Result<serde_json::Value, &'static str>;
+    /// Harness-only OSD preview; it never asks the daemon to emit a device event.
+    fn preview(&self, _args: &[serde_json::Value]) -> Result<serde_json::Value, &'static str> {
+        Err("OSD preview is unavailable")
+    }
     fn command(&self, call: &bead::services::ipc::Call) -> Result<serde_json::Value, &'static str>;
 }
 struct Shared {

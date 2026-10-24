@@ -696,6 +696,7 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
             reveal: false,
             progress: 1.,
             parts: Vec::new(),
+            art: None,
         });
         let mut cache = bead_render::tree::TreeCache::default();
         if prepared {

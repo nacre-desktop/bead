@@ -273,7 +273,7 @@ fn read_only_status_popouts_have_populated_goldens_at_both_scales() -> Result<()
 }
 
 #[test]
-fn clicked_status_factories_use_right_edge_control_geometry_and_peeks_stay_small() -> Result<()> {
+fn clicked_status_factories_use_top_popout_geometry_and_peeks_stay_small() -> Result<()> {
     use std::sync::{Arc, OnceLock};
     let palette_path = root().join("palette.json");
     let colors = Arc::new(bead::render::Palette::read(&palette_path)?);
@@ -288,10 +288,10 @@ fn clicked_status_factories_use_right_edge_control_geometry_and_peeks_stay_small
         16.,
         false,
     )?;
-    assert_eq!(status.fallback.width, 400.);
+    assert_eq!(status.fallback.width, 230.);
     assert!(matches!(
         status.fallback.motion.as_ref().map(|motion| motion.edge),
-        Some(bead::core::Edge::Right)
+        Some(bead::core::Edge::Top)
     ));
     assert_eq!(
         status
@@ -299,23 +299,15 @@ fn clicked_status_factories_use_right_edge_control_geometry_and_peeks_stay_small
             .motion
             .as_ref()
             .map(|motion| motion.duration),
-        Some(0.28)
+        Some(0.23)
     );
     let position = status
         .position
         .as_ref()
-        .ok_or("control panel positioner missing")?;
+        .ok_or("status popout positioner missing")?;
     let (x, y) = position(&status.fallback, None, (1920, 1200));
-    assert_eq!(
-        x + 32 + 400,
-        1910,
-        "visible control frame keeps the shell's right inset"
-    );
-    assert_eq!(
-        y + 32,
-        50,
-        "visible control frame begins at the usable top edge"
-    );
+    assert_eq!(x + 32 + 115, 960, "status popout is centered over the bar");
+    assert_eq!(y + 32, 50, "status popout begins at the usable top edge");
 
     let peek =
         crate::popouts::status_peek(Kind::Battery, palette, colors, owner, None, 16., false)?;
@@ -869,7 +861,7 @@ fn battery_core_optional_readings_remain_unknown() -> Result<()> {
         assert_eq!(text_value(&values, "status.secondary"), secondary);
         assert_eq!(
             text_value(&values, "status.detail"),
-            "Power controls unavailable"
+            "Power profiles unavailable"
         );
     }
 
@@ -1104,7 +1096,7 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
     let colors = bead::render::Palette::read(&palette_path)?;
     let spec =
         crate::popouts::core_sound_with_root(root(), None, palette_path.clone(), colors, false)?;
-    assert_eq!(spec.fallback.width, 400.);
+    assert_eq!(spec.fallback.width, 382.);
     assert_eq!(spec.fallback.bounds.h, 350.);
 
     let mut runtime = (spec.factory)(true).map_err(std::io::Error::other)?;
@@ -1112,11 +1104,14 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         .stage(bead::wayland::UiEvent::Reload)?
         .ok_or("unavailable Sound view did not render")?;
     for expected in [
-        "Sound output",
+        "Output",
+        "Input",
+        "Applications",
+        "Microphone unavailable",
+        "Applications appear here when they play or record audio.",
         "Output unavailable",
         "Audio unavailable",
         "Mute state unknown",
-        "Status data unavailable",
     ] {
         assert!(
             scene.primitives.iter().any(|primitive| matches!(primitive,
@@ -1128,6 +1123,7 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
 
     let initial = BTreeMap::from([
         ("panel.open".into(), Value::Bool(true)),
+        ("view.duration".into(), Value::Number(0.23)),
         ("status.ready".into(), Value::Bool(false)),
         ("status.active".into(), Value::Bool(false)),
         (
@@ -1145,6 +1141,14 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         (
             "status.health".into(),
             Value::Text("Status data unavailable".into()),
+        ),
+        (
+            "audio.input_device".into(),
+            Value::Text("Microphone unavailable".into()),
+        ),
+        (
+            "audio.streams".into(),
+            Value::list(Vec::<serde_json::Value>::new()),
         ),
     ]);
     let h = Harness::load(
@@ -1164,17 +1168,19 @@ fn core_sound_without_client_has_visible_read_only_factory() -> Result<()> {
         .iter()
         .filter_map(|node| node.action.as_deref())
         .collect::<Vec<_>>();
-    assert_eq!(actions.len(), 1);
-    assert_eq!(actions[0], "close");
+    assert!(
+        actions.is_empty(),
+        "read-only audio status exposes no controls"
+    );
     Ok(())
 }
 
 #[test]
 fn network_popout_height_follows_rows_and_message() -> Result<()> {
-    assert_eq!(crate::status_views::network_popout_height(0, false), 262.);
-    assert_eq!(crate::status_views::network_popout_height(2, false), 342.);
-    assert_eq!(crate::status_views::network_popout_height(5, false), 462.);
-    assert_eq!(crate::status_views::network_popout_height(9, true), 490.);
+    assert_eq!(crate::status_views::network_popout_height(0, false), 246.);
+    assert_eq!(crate::status_views::network_popout_height(2, false), 258.);
+    assert_eq!(crate::status_views::network_popout_height(5, false), 450.);
+    assert_eq!(crate::status_views::network_popout_height(9, true), 478.);
     for (count, message) in [(0usize, false), (2, false), (5, false), (2, true)] {
         let rows = (0..count)
             .map(|i| {
@@ -1232,9 +1238,19 @@ fn network_popout_height_follows_rows_and_message() -> Result<()> {
             .expect("panel is drawn");
         assert_eq!(
             f64::from(panel.h),
-            expected,
-            "{count} rows, message {message}"
+            expected + 40.,
+            "{count} rows, message {message} (including the available form footer)"
         );
+        for node in h.session.view_nodes() {
+            let rect = bead::render::tree::rect(&node.draw);
+            assert!(
+                rect.y + rect.h <= panel.y + panel.h - 15. + 0.1,
+                "{} extends below the panel content: {:?} vs {:?}",
+                node.id,
+                rect,
+                panel
+            );
+        }
     }
     Ok(())
 }

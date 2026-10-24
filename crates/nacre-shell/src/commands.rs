@@ -396,10 +396,18 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
             .args
             .first()
             .and_then(Value::as_str)
-            .is_some_and(|name| matches!(name, "calendar" | "network" | "bluetooth" | "battery"))
+            .is_some_and(|name| {
+                matches!(
+                    name,
+                    "calendar" | "network" | "bluetooth" | "battery" | "sound" | "audio"
+                )
+            })
     {
         validate(&call)?;
-        let view = call.args[0].clone();
+        let view = match call.args[0].as_str() {
+            Some("audio") => Value::String("sound".into()),
+            _ => call.args[0].clone(),
+        };
         let center = (call.method == "popout").then(|| call.args[1].clone());
         call.target = "bead.panel".into();
         call.method = if center.is_some() { "toggle" } else { "open" }.into();
@@ -623,6 +631,20 @@ mod tests {
             let mapped = map_views(call).unwrap();
             assert_eq!(mapped.method, "open");
             assert_eq!(mapped.args, vec![Value::String(view.into())]);
+        }
+        for route in ["sound", "audio"] {
+            let call = from_strings(
+                "nacre".into(),
+                "popout".into(),
+                &[route.into(), "1512.5".into()],
+            )
+            .unwrap();
+            let mapped = map_views(call).unwrap();
+            assert_eq!(mapped.method, "toggle");
+            assert_eq!(
+                mapped.args,
+                vec![Value::String("sound".into()), Value::from(1512.5)]
+            );
         }
     }
     #[test]

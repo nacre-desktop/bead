@@ -302,12 +302,12 @@ impl TreeCache {
         for (index, item) in items.iter_mut().enumerate() {
             if motion.parts.iter().any(|(i, _)| *i == index) {
                 let shaped = scene.primitives[index].clone();
-                if matches!(shaped, Primitive::Shadow { .. }) {
+                if matches!(shaped, Primitive::Shadow { .. } | Primitive::Image { .. }) {
                     let content = Scene {
                         opacity: 1.,
                         motion: None,
                         resource_revision: scene.resource_revision,
-                        asset_data: Default::default(),
+                        asset_data: scene.asset_data.clone(),
                         clips: Default::default(),
                         layers: Vec::new(),
                         prepared: Default::default(),
@@ -327,7 +327,7 @@ impl TreeCache {
                         .raster
                         .textures
                         .remove(&texture)
-                        .ok_or("missing prepared shadow raster")?;
+                        .ok_or("missing prepared reveal raster")?;
                     let bytes = pixels.data().len() + 192;
                     let charge = self
                         .raster_budget

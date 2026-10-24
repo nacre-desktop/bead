@@ -907,9 +907,55 @@ impl Notices for Service {
         Ok(())
     }
     fn audio_changed(&self, _: &bead::services::Audio) {}
-    /// The OSD is driven by the daemon's `osd` events alone (N0043); nothing else may show it.
+    /// Normal feedback comes from daemon `osd` events (N0043); isolated previews use `preview`.
     fn feedback(&self, _: &[Json]) -> Result<Json, &'static str> {
         Err("the OSD shows daemon osd events only")
+    }
+    fn preview(&self, args: &[Json]) -> Result<Json, &'static str> {
+        if !(2..=5).contains(&args.len()) {
+            return Err("OSD preview needs kind, value, optional muted, label and device");
+        }
+        let kind = match args[0].as_str() {
+            Some("volume") => OsdKind::Volume,
+            Some("output") => OsdKind::Output,
+            Some("microphone") => OsdKind::Microphone,
+            Some("brightness") => OsdKind::Brightness,
+            Some("keyboard") => OsdKind::Keyboard,
+            Some("night_light") => OsdKind::NightLight,
+            Some("power_profile") => OsdKind::PowerProfile,
+            Some("capslock") => OsdKind::Capslock,
+            _ => return Err("unknown OSD preview kind"),
+        };
+        let value = args[1]
+            .as_f64()
+            .filter(|n| n.is_finite() && (0. ..=1.).contains(n))
+            .ok_or("OSD preview value must be within 0..1")?;
+        let muted = args
+            .get(2)
+            .map_or(Some(false), Json::as_bool)
+            .ok_or("OSD preview muted must be boolean")?;
+        let label = args
+            .get(3)
+            .map_or(Some(""), Json::as_str)
+            .ok_or("OSD preview label must be text")?;
+        let device = args
+            .get(4)
+            .map_or(Some(""), Json::as_str)
+            .ok_or("OSD preview device must be text")?;
+        {
+            let mut g = self.shared.lock();
+            g.osd.shown = Some(Shown {
+                kind,
+                value,
+                muted,
+                label: label.into(),
+                device: device.into(),
+            });
+            g.osd.deadline = (!g.osd.hovered).then(|| Instant::now() + OSD_HIDE);
+        }
+        self.shared.wake.notify_all();
+        publish(&self.shared);
+        Ok(Json::Null)
     }
     fn command(&self, call: &bead::services::ipc::Call) -> Result<Json, &'static str> {
         match call.method.as_str() {

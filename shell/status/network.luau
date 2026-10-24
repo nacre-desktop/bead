@@ -6,17 +6,33 @@ local ui=require("bead.ui")
 local kit=require("bead.kit")
 local T=kit.tokens
 local function get(name) return ui.resolve_for_check(ui.bind(name)) end
-local ready=get("status.ready")
-local active=get("status.active")
 local enabled=get("network.wifi_enabled")
 local view=get("network.view")
-local padding=T.spacing.md
+local padding=T.spacing.panel
 local gap=T.spacing.sm
-local icon_size=T.icons.xlarge*4/3
 local width=get("view.width")
+local link_inner=width-padding*2-T.spacing.md-T.spacing.sm
+local action_width=T.spacing.huge*3
+local name_width=link_inner-T.icons.medium*4/3-T.spacing.md*2-action_width
 local duration=get("view.duration")
 local BODY,CAPTION,TITLE=T.text.body*4/3,T.text.caption*4/3,T.text.title*4/3
 local FIELD,BUTTON=40,36
+local rows=get("network.rows")
+local can_hidden=get("network.can_hidden")
+local can_forget=get("network.can_forget")
+local can_more=can_hidden or can_forget
+local empty_sections={ui.Box{id="empty-network-groups",visible=false,height=0}}
+if #rows==0 then
+    local function empty_section(id,title,detail)
+        return ui.Column{id=id,height=28,gap=T.spacing.hairline,
+            ui.Text{id="group-title",text=title,height=14,font_size=CAPTION,color="onSurfaceVariant"},
+            ui.Text{id="group-empty",text=detail,height=14,font_size=CAPTION*.9,color="onSurfaceVariant"}}
+    end
+    empty_sections={ui.Column{id="empty-network-groups",width=width-padding*2,gap=T.spacing.md,
+        empty_section("connected",ui.tr("bead.common.connected"),ui.tr("bead.common.not-connected")),
+        empty_section("known",ui.tr("bead.panel.network-saved-title"),ui.tr("bead.panel.network-saved-none")),
+        empty_section("available",ui.tr("bead.panel.network-available"),ui.tr("bead.panel.network-no-nearby"))}}
+end
 -- Page children with their heights, so the panel height follows the content and tokens.
 local kids,heights={},{}
 local function add(node,h)
@@ -31,6 +47,12 @@ local function Page()
 end
 local function button(id,label,action,primary,h)
     return kit.ActionButton{id=id,label=label,on_activate=action,primary=primary,height=h}
+end
+local footer={}
+if can_more then
+    footer={ui.Row{id="more",height=32,gap=gap,
+        button("hidden",ui.tr("bead.panel.network-hidden-open"),can_hidden and ui.action("network.open","hidden") or nil,false,32),
+        button("saved",ui.tr("bead.panel.network-saved-title"),can_forget and ui.action("network.open","saved") or nil,false,32)}}
 end
 -- Back arrow plus title: leaves the prompt or form without sending anything.
 local function header(title)
@@ -90,39 +112,36 @@ if view=="saved" then
     message_line("link-message","network.link_message",get("network.link_message")~="")
     return Page()
 end
-local text_width=width-padding*2-icon_size-T.spacing.md
 return kit.Panel{id="status-popout",edge=get("view.edge"),
-    open=ui.bind("panel.open"),duration=duration,width=width,height=math.max(get("network.height"),get("view.height")),padding=padding,
+    open=ui.bind("panel.open"),duration=duration,width=width,
+    height=math.max(get("network.height"),get("view.height"))+(can_more and 32+gap or 0),padding=padding,
     gap=gap,radius=T.radii.medium,fill="surface",
-    ui.Text{id="heading",text=ui.bind("status.heading"),height=24,font_size=TITLE,color="onSurface"},
-    ui.Row{id="summary",height=88,gap=T.spacing.md,align="center",
-        ui.Text{id="icon",text=ui.bind("status.icon"),family="Material Symbols Rounded",font_size=icon_size,
-            width=icon_size,height=42,shrink=0,color=ready and active and "primary" or "onSurfaceVariant"},
-        ui.Column{width=text_width,height=84,gap=2,
-            ui.Text{id="primary",text=ui.bind("status.primary"),font_size=BODY,height=60,color="onSurface"},
-            ui.Text{id="secondary",text=ui.bind("status.secondary"),font_size=CAPTION,height=22,color="onSurfaceVariant"},
-        },
-    },
-    ui.Text{id="detail",text=ui.bind("status.detail"),font_size=CAPTION,height=24,color="onSurfaceVariant"},
-    ui.Row{id="wifi-row",height=36,align="center",gap=T.spacing.md,
-        ui.Text{id="wifi-label",text=ui.tr("bead.panel.wifi"),height=28,grow=1,font_size=BODY,
+    ui.Row{id="wifi-row",width=width-padding*2,height=36,align="center",gap=T.spacing.md,
+        ui.Text{id="wifi-label",text=ui.tr("bead.panel.wifi"),height=28,width=width-padding*2-T.spacing.xxl*2-T.spacing.md*2-T.spacing.huge*3,font_size=BODY,
             color=enabled and "onSurface" or "onSurfaceVariant"},
+        kit.Button{id="scan",width=T.spacing.huge*3,height=T.spacing.xxl,padding=0,radius=T.radii.full,
+            text=ui.tr("bead.panel.network-scan"),font_size=T.text.caption,color="onSurfaceVariant"},
         kit.Switch{id="wifi-radio",checked=ui.bind("network.wifi_checked"),aria_label=ui.tr("bead.panel.wifi-radio"),
             on_activate=enabled and ui.action("network.toggle_wifi") or nil},
     },
     ui.Text{id="wifi-message",text=ui.bind("network.wifi_message"),font_size=CAPTION,height=20,color="onSurfaceVariant"},
+    empty_sections[1],
     ui.Repeat{id="links",model=ui.bind("network.rows"),key="id",render=function(item)
-        return kit.Button{id="link",height=32,padding=T.spacing.sm,fill="transparent",
+        local ink=item.active and "onPrimaryContainer" or "onSurface"
+        local quiet=item.active and "onPrimaryContainer" or "onSurfaceVariant"
+        return kit.Button{id="link",height=56,padding_left=T.spacing.md,padding_right=T.spacing.sm,
+            radius=T.radii.medium,fill=item.active and "primaryContainer" or "surfaceContainer",
             aria_label=item.label,
             on_activate=item.enabled and (item.active and ui.action("network.disconnect",item.id) or ui.action("network.connect",item.id)) or nil,
-            ui.Row{id="link-row",height=28,align="center",gap=T.spacing.md,
-                ui.Text{id="link-name",text=item.label,height=24,grow=1,font_size=BODY,color=item.enabled and "onSurface" or "onSurfaceVariant"},
-                ui.Text{id="link-action",text=item.action,height=24,font_size=CAPTION,color=item.active and "primary" or "onSurfaceVariant"},
+            ui.Row{id="link-row",width=link_inner,height=48,align="center",gap=T.spacing.md,
+                ui.Text{id="link-icon",text=item.secured and "wifi_lock" or "wifi",family="Material Symbols Rounded",
+                    width=T.icons.medium*4/3,height=24,font_size=T.icons.medium*4/3,color=quiet,shrink=0},
+                ui.Text{id="link-name",text=item.label,height=32,width=name_width,font_size=BODY,color=ink},
+                ui.Text{id="link-action",text=item.action,height=24,width=action_width,shrink=0,font_size=CAPTION,color=quiet},
             },
         }
     end},
     ui.Text{id="link-message",visible=ui.bind("network.link_visible"),text=ui.bind("network.link_message"),font_size=CAPTION,height=20,color="onSurfaceVariant"},
-    ui.Row{id="more",height=32,gap=gap,
-        button("hidden",ui.tr("bead.panel.network-hidden-open"),get("network.can_hidden") and ui.action("network.open","hidden") or nil,false,32),
-        button("saved",ui.tr("bead.panel.network-saved-title"),get("network.can_forget") and ui.action("network.open","saved") or nil,false,32)},
+    ui.Text{id="network-health",text=ui.bind("status.primary"),font_size=CAPTION,height=20,color="onSurfaceVariant"},
+    table.unpack(footer),
 }

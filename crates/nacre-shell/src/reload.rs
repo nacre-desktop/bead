@@ -2674,16 +2674,23 @@ impl SceneSource for Runtime {
                 let reply = match validation {
                     Err(reply) => reply,
                     Ok(()) => match (call.target.as_str(), call.method.as_str()) {
-                        ("bead.osd", "show") => match self
+                        ("bead.osd", "show" | "preview") => match self
                             .actions
                             .authorize("notifications.feedback")
                             .map_err(|_| "notification feedback capability denied")
                             .and_then(|_| {
-                                self.notifications
+                                let owner = self
+                                    .notifications
                                     .as_ref()
                                     .or(self.notice_host.as_ref())
-                                    .ok_or("notification server unavailable")
-                                    .and_then(|owner| owner.feedback(&call.args))
+                                    .ok_or("notification server unavailable");
+                                owner.and_then(|owner| {
+                                    if call.method == "preview" {
+                                        owner.preview(&call.args)
+                                    } else {
+                                        owner.feedback(&call.args)
+                                    }
+                                })
                             }) {
                             Ok(value) => bead::services::ipc::Reply::ok(call.id, value),
                             Err(e) => bead::services::ipc::Reply::error(call.id, "osd", e),

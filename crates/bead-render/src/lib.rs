@@ -152,6 +152,14 @@ pub struct Slide {
     pub open_y: f32,
     pub period_seconds: f32,
 }
+/// Application-supplied vector artwork for a revealing body. The viewport stays fixed;
+/// only the material contour changes. The callback receives the revealed body rectangle.
+#[derive(Clone)]
+pub struct RevealArt {
+    pub body: Rect,
+    pub index: usize,
+    pub draw: std::sync::Arc<dyn Fn(Rect) -> std::sync::Arc<[u8]> + Send + Sync>,
+}
 #[derive(Clone)]
 pub struct Motion {
     pub id: String,
@@ -172,6 +180,7 @@ pub struct Motion {
     /// The primitives that make the panel body (its shadow and fill) with their open-state shapes, found on the
     /// first revealing frame: they shrink with `progress` so the growing edge keeps its rounded corners and shadow.
     pub parts: Vec<(usize, Primitive)>,
+    pub art: Option<RevealArt>,
 }
 impl Motion {
     /// Scene opacity at a progress: the progress itself when fading, else opaque once any of it is shown.
@@ -231,7 +240,10 @@ impl Scene {
                 _ => None,
             })
         });
-        from_parts
+        self.motion
+            .as_ref()
+            .and_then(|m| m.art.as_ref().map(|a| a.body))
+            .or(from_parts)
             .or_else(|| {
                 // Panel scenes carry the presenter's 32 px shadow margin around the body (see `offset`).
                 (self.bounds.w > 64. && self.bounds.h > 64.).then(|| {
@@ -304,6 +316,39 @@ impl Scene {
             return;
         };
         let now = Self::revealed(body, edge, progress);
+        if let Some(art) = self.motion.as_ref().and_then(|m| m.art.clone()) {
+            if progress >= 1. {
+                let motion = self.motion.as_mut().unwrap();
+                for (index, original) in &motion.parts {
+                    if let Some(slot) = self.primitives.get_mut(*index) {
+                        *slot = original.clone();
+                    }
+                }
+                motion.progress = 1.;
+                self.asset_data
+                    .retain(|p, _| !p.to_string_lossy().starts_with("@reveal-art-"));
+                return;
+            }
+            if self.motion.as_ref().is_some_and(|m| m.progress == progress) {
+                return;
+            }
+            use std::hash::{Hash, Hasher};
+            let bytes = (art.draw)(now);
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut hash);
+            let path = std::path::PathBuf::from(format!("@reveal-art-{:x}.svg", hash.finish()));
+            self.asset_data
+                .retain(|p, _| !p.to_string_lossy().starts_with("@reveal-art-"));
+            self.asset_data.insert(path.clone(), bytes);
+            if let Some(Primitive::Image { path: target, .. }) = self.primitives.get_mut(art.index)
+            {
+                *target = path;
+            }
+            if let Some(m) = &mut self.motion {
+                m.progress = progress;
+            }
+            return;
+        }
         let Some(m) = &mut self.motion else { return };
         m.progress = progress;
         for (index, original) in &m.parts {
@@ -1482,6 +1527,7 @@ mod tests {
             reveal: true,
             progress: 1.,
             parts: Vec::new(),
+            art: None,
         });
         scene.reveal(0.5);
         let Primitive::Rounded { rect, radius, .. } = &scene.primitives[1] else {

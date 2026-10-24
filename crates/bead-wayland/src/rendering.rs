@@ -1369,6 +1369,7 @@ mod input_tests {
             reveal: false,
             progress: 1.,
             parts: Vec::new(),
+            art: None,
         });
         scene.offset = (32., -18.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 50]));

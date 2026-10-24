@@ -19,6 +19,7 @@ pub fn fallback(fill: [u8; 4]) -> Scene {
             reveal: false,
             progress: 1.,
             parts: Vec::new(),
+            art: None,
         }),
         resource_revision: 0,
         asset_data: Default::default(),

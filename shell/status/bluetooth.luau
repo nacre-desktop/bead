@@ -9,7 +9,7 @@ local function get(name) return ui.resolve_for_check(ui.bind(name)) end
 local visible=get("bluetooth.power_visible")
 local enabled=get("bluetooth.power_enabled")
 local view=get("bluetooth.view")
-local padding=T.spacing.md
+local padding=T.spacing.panel
 local gap=T.spacing.sm
 local width=get("view.width")
 local duration=get("view.duration")

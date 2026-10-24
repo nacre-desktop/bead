@@ -46,8 +46,15 @@ HERE = Path(__file__).resolve().parent
 #   ('level', 'sink'|'source', 0..1) a fake audio level the daemon's osd service reads (Bead shows it; the QML has no daemon osd)
 #   ('pointer', x, y) / ('press', x, y) / ('release',)   B0067: a virtual pointer on the private parent compositor (logical px; needs --pointer-tool)
 #   ('bluez', key, value)           the fake org.bluez on the private bus (spikes/fake-bluez.py): power on|off, discovering on|off, reset
-# Logical pointer targets for the pointer states (2880x1800 at 1.5: the control dock's first tile).
-PTR = {'control-tile': (1600, 150)}
+# Logical pointer targets (2880x1800 at 1.5), per arm. Bluetooth is available
+# in both arms through the private BlueZ fixture.
+PTR = {'control-tile': {'qml': (1790, 290), 'bead': (1800, 290)}}
+# A normal press is sampled before QML's long-press detail timer can fire.
+STATE_SETTLE = {'osd-brightness': 0.35, 'osd-keyboard': 0.35, 'control-pressed': 0.05}
+# QML audio inherits the preceding popup's width. Establish the same explicit
+# 352 px content-width precondition for both builds, independent of state order.
+STATE_PREPARE = {'popout-audio': [('ui', 'nacre', 'popout', 'network', '1560'), ('sleep', 0.4),
+                                  ('ui', 'nacre', 'close'), ('sleep', 0.5)]}
 STATES = {
     'idle': ([], [], 0),
     'launcher': ([('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
@@ -72,10 +79,10 @@ STATES = {
     'popout-audio': ([('ui', 'nacre', 'popout', 'audio', '1520')], [('ui', 'nacre', 'close')], 0),
     'control-center': ([('ui', 'nacre', 'controls', 'home')], [('ui', 'nacre', 'close')], 1.2),
     'control-network': ([('ui', 'nacre', 'controls', 'network')], [('ui', 'nacre', 'close')], 0),
-    # B0067: pointer states (need --pointer-tool): hover and press on the first control tile, and the right-edge lip
-    'control-hover': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('pointer', PTR['control-tile'][0], PTR['control-tile'][1])],
+    # B0067: pointer states (need --pointer-tool): same semantic Bluetooth toggle per arm.
+    'control-hover': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('pointer-target', 'control-tile')],
                       [('release',), ('ui', 'nacre', 'close')], 0),
-    'control-pressed': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('press', PTR['control-tile'][0], PTR['control-tile'][1])],
+    'control-pressed': ([('ui', 'nacre', 'controls', 'home'), ('sleep', 1.2), ('press-target', 'control-tile')],
                         [('release',), ('ui', 'nacre', 'close')], 0),
     'lip-hover-right': ([('pointer', 1919, 600), ('sleep', 1.0)], [('pointer', 960, 600)], 0),
     'control-bluetooth': ([('ui', 'nacre', 'controls', 'bluetooth')], [('ui', 'nacre', 'close')], 0),
@@ -84,6 +91,12 @@ STATES = {
                    [('ui', 'nacre', 'close')], 0),
     'osd-microphone': ([('only', 'qml', ('ui', 'nacre', 'previewFeedback', 'microphone')), ('only', 'bead', ('level', 'source', 0.45))],
                        [('ui', 'nacre', 'close')], 0),
+    'osd-brightness': ([('only', 'qml', ('qml-osd-preview', 'display')),
+                        ('only', 'bead', ('bead-osd-preview', 'brightness', 'display'))],
+                       [('ui', 'nacre', 'close')], 0),
+    'osd-keyboard': ([('only', 'qml', ('qml-osd-preview', 'keyboard')),
+                      ('only', 'bead', ('bead-osd-preview', 'keyboard', 'keyboard'))],
+                     [('ui', 'nacre', 'close')], 0),
     'session': ([('ui', 'nacre', 'session')],
                 [('ui', 'nacre', 'close')], 1.0),
     'settings': ([('ui', 'nacre', 'settings'), ('sleep', 1.5)], [('app_close', 'settings')], 0),
@@ -217,6 +230,19 @@ class Arm:
         parent = self.spawn(['labwc', '--config-dir', str(config)], 'labwc', parent_env)
         socket = wait_until(lambda: next((f for f in parent_runtime.glob('wayland-*')
                                           if stat.S_ISSOCK(f.stat().st_mode)), None), 20, 'labwc socket')
+        if a.pointer_tool:
+            if not a.parent_output_tool:
+                raise RuntimeError('pointer captures require --parent-output-tool (wlr-randr)')
+            parent_control = dict(parent_env, WAYLAND_DISPLAY=str(socket))
+            outputs = json.loads(self.run([a.parent_output_tool, '--json'], env=parent_control).stdout)
+            parent_name = outputs[0]['name']
+            self.run([a.parent_output_tool, '--output', parent_name, '--custom-mode',
+                      f'{width}x{height}@60Hz'], env=parent_control)
+            outputs = json.loads(self.run([a.parent_output_tool, '--json'], env=parent_control).stdout)
+            mode = next(mode for mode in outputs[0]['modes'] if mode.get('current'))
+            if (mode['width'], mode['height']) != (width, height) or outputs[0]['scale'] != 1:
+                raise RuntimeError('private parent output does not match pointer coordinates')
+            (self.out / 'parent-geometry.json').write_text(json.dumps(outputs))
         niri_config = self.root / 'niri.kdl'
         niri_config.write_text(NIRI_CONFIG)
         env = dict(self.env, WAYLAND_DISPLAY=str(socket))
@@ -331,6 +357,7 @@ class Arm:
                 (tools / entry.name).symlink_to(entry)
             for name in ['nacre-helper', 'nacre-daemon']:
                 (tools / name).symlink_to(Path(a.bead_bin).resolve() / 'nacre-helper')
+            self.install_fake_light_devices(tools / 'nacre-helper')
             (base / 'bin').mkdir()
             (base / 'bin/qs').symlink_to(shutil.which('quickshell'))
             local_bin = Path(self.env['HOME']) / '.local/bin'
@@ -358,6 +385,36 @@ class Arm:
             return self._try(lambda: self.dispatch('nacre', 'state'))
         wait_until(provider, 60, 'the UI provider')
         time.sleep(self.args.boot_settle)
+
+    def install_fake_light_devices(self, path):
+        """Supply read-only DDC-shaped descriptors so QML previews work without host backlights."""
+        real = str(Path(self.args.bead_bin).resolve() / 'nacre-helper')
+        wrapper = '''#!/usr/bin/env python3
+import json, os, sys
+real = {real!r}
+args = sys.argv[1:]
+if args[:2] == ["light-devices", "discover"]:
+    screens = json.loads(args[2])
+    screen = screens[0] if screens else "bead-parity"
+    print(json.dumps({{"backlight": None,
+        "keyboard": {{"kind": "ddc", "device": "fixture-keyboard", "screen": screen,
+            "maximum": 100, "current": 42}},
+        "ddc": [{{"kind": "ddc", "screen": screen, "bus": 0,
+            "connector": "fixture", "identity": "bead-parity-fixture",
+            "current": 68, "maximum": 100}}]}}))
+    raise SystemExit(0)
+if args[:1] == ["light-devices"]:
+    if args[1:2] == ["read-ddc"]:
+        descriptor = json.loads(args[2])
+        print(json.dumps({{"current": descriptor["current"], "maximum": descriptor["maximum"]}}))
+    else:
+        print(json.dumps({{"error": "private parity light fixture is read-only"}}))
+    raise SystemExit(0)
+os.execv(real, [real, *args])
+'''.format(real=real)
+        Path(path).unlink()
+        Path(path).write_text(wrapper)
+        Path(path).chmod(0o700)
 
     def dispatch(self, target, method, *args):
         reply = self.call('ui.dispatch', {'target': target, 'method': method, 'args': list(args)})
@@ -392,6 +449,42 @@ class Arm:
         with (self.root / 'fakeaudio/events').open('a') as events:
             events.write(f"Event 'change' on {node} #1\n")
 
+    def qml_osd_preview(self, channel):
+        """Show the QML preview and read the same live level that NacreOsdModel uses."""
+        shell = Path(self.args.nacre).resolve() / 'nacre/shell/shell.qml'
+        def ipc(target, method):
+            output = self.run(['quickshell', 'ipc', '--path', str(shell), 'call', target, method]).stdout.strip()
+            value = json.loads(output)
+            return json.loads(value) if isinstance(value, str) else value
+        self.run(['quickshell', 'ipc', '--path', str(shell), 'call', 'nacre', 'previewFeedback', channel])
+        time.sleep(0.2)
+        if channel == 'display':
+            state = ipc('brightness', 'state')
+            monitor = next((item for item in state.get('monitors', []) if item.get('name') == self.geometry['name']), None)
+            if monitor is None:
+                monitor = next(iter(state.get('monitors', [])), {})
+            value = monitor.get('brightness', 0.0)
+            available = monitor.get('available', False)
+            device = ''  # The nested parity session has one output, so QML detail is empty.
+        else:
+            state = ipc('keyboardLight', 'state')
+            value = state.get('brightness', 0.0)
+            available = state.get('available', False)
+            device = ''
+        if not available:
+            raise RuntimeError(f'QML {channel} OSD preview unavailable despite private light fixture')
+        levels_path = Path(self.args.out).resolve() / 'osd-preview-levels.json'
+        levels = json.loads(levels_path.read_text()) if levels_path.exists() else {}
+        levels[channel] = {'value': float(value), 'available': bool(available), 'device': device}
+        levels_path.write_text(json.dumps(levels, indent=1) + '\n')
+
+    def bead_osd_preview(self, kind, channel):
+        levels_path = Path(self.args.out).resolve() / 'osd-preview-levels.json'
+        levels = json.loads(levels_path.read_text())
+        level = levels[channel]
+        self.socket_call(self.runtime / 'bead-command.sock', 'bead.osd', 'preview',
+                         [kind, level['value'], False, '', level['device']])
+
     def pointer(self, x, y, mode=None):
         """B0067: hover or press at a logical position through spikes/virtual-pointer.c (wlr-virtual-pointer on the private
         parent labwc; the nested niri receives it as a normal pointer). `press` holds the button until release_pointer."""
@@ -399,14 +492,16 @@ class Arm:
         if not tool or not Path(tool).is_file():
             self.errors.append('no --pointer-tool: pointer states are skipped')
             return
+        self.release_pointer()
+        mode = mode or 'hover'
         width, height = self.args.size
         scale = self.geometry['scale']
         command = [tool, str(round(x * scale)), str(round(y * scale)), str(width), str(height)] + ([mode] if mode else [])
         env = dict(self.env, WAYLAND_DISPLAY=self.env['BEAD_PARENT'])
-        if mode == 'press':
+        if mode in ('press', 'hover'):
             self.held = subprocess.Popen(command, env=env, start_new_session=True)
             self.procs.append(self.held)
-            time.sleep(0.4)
+            time.sleep(0.04 if mode == 'press' else 0.4)
         else:
             subprocess.run(command, env=env, timeout=10, check=False)
             time.sleep(0.3)
@@ -442,6 +537,16 @@ class Arm:
                     self.socket_call(self.runtime / 'bead-command.sock', step[1], step[2], list(step[3:]))
                 except OSError as error:
                     self.errors.append(f'{" ".join(step[1:])}: {error}')
+            elif kind == 'qml-osd-preview':
+                try:
+                    self.qml_osd_preview(step[1])
+                except Exception as error:
+                    self.errors.append(f'QML {step[1]} OSD preview: {error}')
+            elif kind == 'bead-osd-preview':
+                try:
+                    self.bead_osd_preview(step[1], step[2])
+                except Exception as error:
+                    self.errors.append(f'Bead {step[1]} OSD preview: {error}')
             elif kind == 'app_close':
                 self.app_close(step[1])
             elif kind == 'qml_settings':
@@ -459,6 +564,9 @@ class Arm:
                 self.pointer(step[1], step[2])
             elif kind == 'press':
                 self.pointer(step[1], step[2], 'press')
+            elif kind in ('pointer-target', 'press-target'):
+                x, y = PTR[step[1]][self.name]
+                self.pointer(x, y, 'press' if kind == 'press-target' else None)
             elif kind == 'release':
                 self.release_pointer()
             elif kind == 'bluez':
@@ -530,6 +638,7 @@ class Arm:
             try:
                 self.steps([('ui', 'nacre', 'close')])
                 time.sleep(0.8)
+                self.steps(STATE_PREPARE.get(name, []))
                 if name.endswith('-warm'):
                     self.steps(opens)
                     time.sleep(2.5)
@@ -539,7 +648,7 @@ class Arm:
                     info['open_ms'] = self.sequence(name + '-open', lambda: self.steps(opens), seconds)
                 else:
                     self.steps(opens)
-                time.sleep(self.args.settle)
+                time.sleep(STATE_SETTLE.get(name, self.args.settle))
                 info['rss_kib'] = self.rss()
                 self.grab(shots / (name + '.png'))
                 if seconds and closes:
@@ -553,6 +662,8 @@ class Arm:
             info['errors'] = self.errors
             results[name] = info
             log(f'{self.name}: {name} {"ERRORS " + "; ".join(self.errors) if self.errors else "ok"}')
+            if (name in STATE_SETTLE or name in ('control-hover', 'control-pressed', 'lip-hover-right')) and self.errors:
+                raise RuntimeError(f'{name} failed: {"; ".join(self.errors)}')
         (self.out / 'drive.json').write_text(json.dumps(results, indent=1))
 
     def shutdown(self):
@@ -792,6 +903,7 @@ def main():
     parser.add_argument('--settle', type=float, default=2.0, help='seconds between a state opening and its screenshot')
     parser.add_argument('--boot-settle', type=float, default=4.0)
     parser.add_argument('--seq-scale', type=float, default=0.5)
+    parser.add_argument('--parent-output-tool', default=shutil.which('wlr-randr') or '', help='wlr-randr for the private parent output of pointer captures')
     parser.add_argument('--pointer-tool', default='', help='built spikes/virtual-pointer.c (hover and pressed states); empty skips them')
     parser.add_argument('--seq-interval', type=int, default=25, help='ms between overlapped grim captures of a transition (B0067)')
     parser.add_argument('--baseline', help='an earlier results.json: adds a before value to the gallery')
@@ -821,7 +933,18 @@ def main():
         if available < 4096:
             parser.error(f'MemAvailable {available} MiB is below 4 GiB; not starting')
         log('free -h before:\n' + subprocess.run(['free', '-h'], capture_output=True, text=True).stdout)
-        for arm in args.arms.split(','):
+        arms = args.arms.split(',')
+        if {'qml', 'bead'}.issubset(arms) and any(name in args.states for name in ('osd-brightness', 'osd-keyboard')):
+            arms = ['qml', 'bead'] + [name for name in arms if name not in ('qml', 'bead')]
+        if 'qml' in arms:
+            (args.out / 'osd-preview-levels.json').unlink(missing_ok=True)
+        for arm in arms:
+            meminfo = Path('/proc/meminfo').read_text()
+            swap_used = int([line for line in meminfo.splitlines() if line.startswith('SwapTotal:')][0].split()[1]) - int(
+                [line for line in meminfo.splitlines() if line.startswith('SwapFree:')][0].split()[1])
+            log(f'swap used before {arm}: {swap_used // 1024} MiB')
+            if swap_used >= 64 * 1024:
+                parser.error(f'swap used {swap_used // 1024} MiB is at least 64 MiB before {arm}; reset between arms and retry')
             shutil.rmtree(args.out / arm, ignore_errors=True)
             with tempfile.TemporaryDirectory(prefix='bd-par-') as private:
                 runtime = Path(private) / 'r'
@@ -832,7 +955,7 @@ def main():
                     env.pop(key, None)
                 command = ['dbus-run-session', '--', sys.executable, __file__, '--run-arm', arm, '--private', private]
                 for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'settle', 'boot_settle',
-                             'seq_scale', 'seq_interval', 'pointer_tool']:
+                             'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
                 command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else [])
@@ -843,6 +966,8 @@ def main():
                 except subprocess.TimeoutExpired:
                     stop(child, 20)
                 log(f'arm {arm} finished rc={child.returncode}')
+                if child.returncode != 0:
+                    return child.returncode
         log('free -h after:\n' + subprocess.run(['free', '-h'], capture_output=True, text=True).stdout)
     results = build_gallery(args, args.states)
     worst = sorted(((v['metrics']['rmse'], k) for k, v in results.items() if 'metrics' in v), reverse=True)[:8]

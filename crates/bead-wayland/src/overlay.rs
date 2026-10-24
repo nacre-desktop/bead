@@ -236,6 +236,9 @@ impl App {
             last_draw: None,
             timer: false,
         });
+        if let Some(palette) = self.wallpaper_palette.clone() {
+            self.overlay_ui(UiEvent::WallpaperPalette(palette));
+        }
         self.overlay_ui(UiEvent::Reload);
         self.overlay_ui(UiEvent::PanelVisibility(true));
         println!("OVERLAY_OPEN view={view} epoch={epoch}");

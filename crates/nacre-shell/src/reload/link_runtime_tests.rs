@@ -224,7 +224,7 @@ async fn link_connect_waits_for_readback_then_errors_never_retry()
     .await?;
     assert!(rows(&runtime).iter().all(|row| row["enabled"] == true));
     let height = |r: &Runtime| r.session.stores.get("network.height").cloned();
-    assert_eq!(height(&runtime), Some(bead::core::Value::Number(382.)));
+    assert_eq!(height(&runtime), Some(bead::core::Value::Number(322.)));
     // Stale IDs send nothing.
     act(&runtime, "network.connect", "ap:vanished");
     project(&mut runtime);
@@ -232,7 +232,7 @@ async fn link_connect_waits_for_readback_then_errors_never_retry()
         text(&runtime, "network.link_message"),
         "Network list changed"
     );
-    assert_eq!(height(&runtime), Some(bead::core::Value::Number(410.)));
+    assert_eq!(height(&runtime), Some(bead::core::Value::Number(350.)));
     // Wrong action for the row (connect on an active device) is also stale.
     act(&runtime, "network.connect", "dev:wifi0");
     act(&runtime, "network.connect", "ap:ap1");

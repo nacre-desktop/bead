@@ -13,6 +13,7 @@
     "compact": 10,
     "md": 12,
     "lg": 14,
+    "panel": 15,
     "xl": 18,
     "xxl": 24,
     "huge": 32

@@ -36,6 +36,7 @@ pub fn check(file: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 fn initial_models()
 -> Result<std::collections::BTreeMap<String, bead::core::Value>, Box<dyn std::error::Error>> {
+    crate::i18n::init();
     let mut session = bead::core::Stores::default();
     session = session.reconcile(&crate::notifications::values(&serde_json::Value::Null))?;
     session = session.reconcile(&crate::desktop::values(&Default::default(), ""))?;

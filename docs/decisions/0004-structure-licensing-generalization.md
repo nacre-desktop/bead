@@ -128,6 +128,10 @@ After Bead's core switch on Nacre, plan support for:
   `ui.Column{radius,fill,...}` section cards (`kit.Card`) and the nested-rows projection (`rows` inside a settings `section`) stay
   in `nacre-shell/src/settings.rs`; the pointer tool `spikes/virtual-pointer.c` is harness-only.
 
+- B0071: `bead_render::RevealArt` supplies progress-aware vector artwork for an existing motion body;
+  the renderer retains one current SVG and restores the open-state artwork at completion. Frame contour
+  geometry, palette and attachment policy remain in Nacre's `placement::Chrome`, outside the framework.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

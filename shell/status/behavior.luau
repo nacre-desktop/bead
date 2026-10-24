@@ -9,6 +9,7 @@ return {stores={
     -- Typed Bluetooth PIN or passkey (same convention); the host clears it after use.
     ["bluetooth.secret"]="",["bluetooth.reveal"]=false,
     ["status.secondary"]=tr("bead.panel.status-data-unavailable"),["status.detail"]="",
+    ["battery.level"]=0,
 },actions={
     close=function(s) s["panel.open"]=false;s["network.secret"]="";s["bluetooth.secret"]="" end,
     -- The controlled Runtime authorizes and handles this host action.

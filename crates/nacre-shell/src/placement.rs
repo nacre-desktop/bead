@@ -175,6 +175,9 @@ pub fn popout(
 }
 
 pub fn body(scene: &Scene) -> Rect {
+    if let Some(art) = scene.motion.as_ref().and_then(|m| m.art.as_ref()) {
+        return art.body;
+    }
     scene
         .primitives
         .iter()
@@ -218,6 +221,7 @@ fn sheen() -> bool {
 
 /// Worker-owned and transient. No module, raster or generated asset survives the
 /// existing panel worker's close/idle retirement. Renderer caches remain capped.
+#[derive(Clone)]
 pub struct Chrome {
     pub center: Option<f32>,
     pub output: (u32, u32),
@@ -517,6 +521,43 @@ impl Chrome {
         if !replaced {
             return Err("Panel root background missing".into());
         }
+        if scene.motion.as_ref().is_some_and(|m| m.reveal) {
+            let index = scene
+                .primitives
+                .iter()
+                .position(|p| matches!(p, Primitive::Image { path: p, .. } if *p == path))
+                .ok_or("Missing frame artwork")?;
+            let chrome = self.clone();
+            let original = scene.asset_data[&path].clone();
+            let crop = Rect::new(
+                panel.x - 32.,
+                panel.y - top_inset,
+                body.w + 64.,
+                body.h + 32. + top_inset,
+            );
+            let motion = scene.motion.as_mut().unwrap();
+            motion.parts = vec![(index, scene.primitives[index].clone())];
+            motion.art = Some(bead::render::RevealArt {
+                body,
+                index,
+                draw: Arc::new(move |revealed| {
+                    let mut rectangles = frame.material(output);
+                    rectangles.push(Rect::new(
+                        panel.x + revealed.x - body.x,
+                        panel.y + revealed.y - body.y,
+                        revealed.w,
+                        revealed.h,
+                    ));
+                    match chrome.svg(frame, output, &rectangles, crop, chrome.engaged) {
+                        Ok(svg) => Arc::from(svg.into_bytes()),
+                        Err(error) => {
+                            eprintln!("FRAME_REVEAL_FAILED {error}");
+                            original.clone()
+                        }
+                    }
+                }),
+            });
+        }
         scene.prepared.clear();
         Ok(())
     }
@@ -613,6 +654,74 @@ mod tests {
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json"),
         )
         .unwrap()
+    }
+    #[test]
+    fn revealing_joined_art_rebakes_the_growing_contour_without_moving_content() {
+        let colors = colors();
+        let chrome = Chrome::new(Attachment::Attached(Edge::Top), &colors).unwrap();
+        let mut scene = crate::sound::fallback(colors.get("surface").unwrap());
+        let motion = scene.motion.as_mut().unwrap();
+        motion.reveal = true;
+        motion.edge = Edge::Top;
+        chrome.decorate(&mut scene).unwrap();
+        let full_body = body(&scene);
+        let index = scene.motion.as_ref().unwrap().art.as_ref().unwrap().index;
+        let mut cache = bead::render::tree::TreeCache::default();
+        cache.prepare(&scene, 1.).unwrap();
+        scene
+            .prepared
+            .insert(1_f32.to_bits(), cache.frame.clone().unwrap());
+        let origin = Frame::default().positioner(Attachment::Attached(Edge::Top));
+        let before = origin(&scene, None, (1920, 1200));
+        for progress in [0.5, 0.25, 0.75] {
+            scene.reveal(progress);
+            cache.prepare(&scene, 1.).unwrap();
+            let frame = cache.frame.as_ref().unwrap();
+            let item = &frame.items[index];
+            assert!(
+                item.clip.is_none(),
+                "art must keep its curved edge beyond the content clip"
+            );
+            let pixels = &item.raster.as_ref().unwrap().pixels;
+            let bottom = (2. + full_body.h * progress).round() as u32;
+            assert!(
+                pixels
+                    .pixel((32. + full_body.w / 2.) as u32, bottom - 2)
+                    .unwrap()
+                    .alpha()
+                    > 0
+            );
+            assert_eq!(
+                pixels.pixel(33, bottom - 2).unwrap().alpha(),
+                0,
+                "growing corner stays rounded"
+            );
+            assert_eq!(
+                pixels
+                    .pixel((32. + full_body.w / 2.) as u32, bottom + 2)
+                    .unwrap()
+                    .alpha(),
+                0
+            );
+            assert_eq!(body(&scene), full_body);
+            assert_eq!(origin(&scene, None, (1920, 1200)), before);
+            assert_eq!(
+                scene.asset_data.len(),
+                2,
+                "only open art and the current reveal asset survive"
+            );
+        }
+        scene.reveal(1.);
+        assert_eq!(
+            scene.asset_data.len(),
+            1,
+            "settled art drops the transient payload"
+        );
+        cache.prepare(&scene, 1.).unwrap();
+        assert_eq!(
+            cache.frame.as_ref().unwrap().key,
+            scene.prepared[&1_f32.to_bits()].key
+        );
     }
     #[test]
     fn frame_tiles_stay_small_and_panel_redecoration_keeps_one_asset() {

@@ -100,11 +100,16 @@ struct LinkOp {
 }
 const LINK_READBACK: Duration = Duration::from_secs(30);
 const MAX_LINK_ROWS: usize = 5;
-/// Zero-row popout height (includes the hidden/saved footer row), plus each row
-/// (32 high + 8 gap) and the message line (20 high + 8 gap) only while a message shows.
-pub(crate) const NETWORK_BASE_HEIGHT: f64 = 262.;
+/// Empty-list body height. Populated lists use 56 px cards and 8 px gaps; the
+/// frontend adds its form footer only when those controls are available.
+pub(crate) const NETWORK_BASE_HEIGHT: f64 = 246.;
 pub(crate) fn network_popout_height(rows: usize, message: bool) -> f64 {
-    NETWORK_BASE_HEIGHT + 40. * rows.min(MAX_LINK_ROWS) as f64 + if message { 28. } else { 0. }
+    let rows = rows.min(MAX_LINK_ROWS);
+    (if rows == 0 {
+        NETWORK_BASE_HEIGHT
+    } else {
+        130. + 64. * rows as f64
+    }) + if message { 28. } else { 0. }
 }
 struct LinkTarget {
     method: &'static str,
@@ -1075,7 +1080,41 @@ impl Status {
                     && state.valid()
             });
         if fresh && let Some(CoreSnapshot::Audio(state)) = audio {
-            let display = core_audio_display(&state);
+            let mut display = core_audio_display(&state);
+            let input = state
+                .default_input
+                .as_ref()
+                .and_then(|id| state.nodes.items.get(id))
+                .filter(|node| node.ready)
+                .map(|node| {
+                    if node.name.trim().is_empty() {
+                        tr("bead.panel.audio-default-input", &[])
+                    } else {
+                        line(&node.name, 40)
+                    }
+                })
+                .unwrap_or_else(|| tr("bead.panel.audio-input-unavailable", &[]));
+            let streams = state
+                .nodes
+                .order
+                .iter()
+                .filter_map(|id| state.nodes.items.get(id).map(|node| (id, node)))
+                .filter(|(_, node)| {
+                    matches!(&node.kind, &AudioKind::Playback | &AudioKind::Capture)
+                })
+                .map(|(id, node)| {
+                    serde_json::json!({
+                        "id": id.0.clone(),
+                        "label": if node.name.trim().is_empty() {
+                            tr("bead.panel.audio-application", &[])
+                        } else {
+                            line(&node.name, 40)
+                        },
+                    })
+                })
+                .collect::<Vec<_>>();
+            display.insert("audio.input_device".into(), Value::Text(input));
+            display.insert("audio.streams".into(), Value::list(streams));
             *self.last_good.borrow_mut() = Some(display.clone());
             return core_audio_values(display, true, &tr("bead.panel.audio-available", &[]));
         }
@@ -1093,6 +1132,14 @@ impl Status {
                 (
                     "status.mute".into(),
                     Value::Text(tr("bead.panel.audio-mute-unknown", &[])),
+                ),
+                (
+                    "audio.input_device".into(),
+                    Value::Text(tr("bead.panel.audio-input-unavailable", &[])),
+                ),
+                (
+                    "audio.streams".into(),
+                    Value::list(Vec::<serde_json::Value>::new()),
                 ),
                 ("status.active".into(), Value::Bool(false)),
             ])
@@ -1520,8 +1567,17 @@ fn core_battery_display(state: &BatteryState) -> BTreeMap<String, Value> {
     BTreeMap::from([
         ("status.primary".into(), Value::Text(line(&primary, 32))),
         (
+            "battery.level".into(),
+            Value::Number(
+                state
+                    .percentage
+                    .filter(|percentage| percentage.is_finite())
+                    .unwrap_or(0.0),
+            ),
+        ),
+        (
             "status.detail".into(),
-            Value::Text(tr("bead.panel.battery-controls-unavailable", &[])),
+            Value::Text(tr("bead.panel.battery-profiles-unavailable", &[])),
         ),
         (
             "status.active".into(),
@@ -1564,6 +1620,8 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
                 "status.mute".into(),
                 Value::Text(tr("bead.panel.audio-mute-unknown", &[])),
             ),
+            ("audio.level".into(), Value::Number(0.0)),
+            ("audio.level_available".into(), Value::Bool(false)),
             ("status.active".into(), Value::Bool(false)),
         ]);
     };
@@ -1589,6 +1647,13 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
         node.name.clone()
     };
     let active = muted.as_deref() == Some(muted_text(true).as_str());
+    let level = node
+        .readback
+        .as_ref()
+        .and_then(|readback| readback.perceptual_volume)
+        .filter(|value| value.is_finite())
+        .or_else(|| node.ready.then_some(node.volume.cbrt()))
+        .map(|value| value.clamp(0.0, 1.0) * 100.0);
     BTreeMap::from([
         (
             "status.primary".into(),
@@ -1598,6 +1663,8 @@ fn core_audio_display(state: &AudioState) -> BTreeMap<String, Value> {
             )),
         ),
         ("status.device".into(), Value::Text(line(&device, 40))),
+        ("audio.level".into(), Value::Number(level.unwrap_or(0.0))),
+        ("audio.level_available".into(), Value::Bool(level.is_some())),
         (
             "status.mute".into(),
             Value::Text(muted.unwrap_or_else(|| tr("bead.panel.audio-mute-unknown", &[]))),

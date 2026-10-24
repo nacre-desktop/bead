@@ -998,6 +998,64 @@ mod daemon {
     }
 
     #[test]
+    fn osd_preview_accepts_fixture_fields_without_daemon_osd_or_device_writes() {
+        let lab = lab();
+        let data = serde_json::to_value(state(json!({}))).unwrap();
+        let (socket, calls, close) = fake(&lab, json!({"notifications":1,"osd":1}), data);
+        let service = start(socket, false, false);
+        let rx = models(&service);
+
+        service
+            .preview(&[
+                json!("brightness"),
+                json!(0.68),
+                json!(false),
+                json!(""),
+                json!(""),
+            ])
+            .unwrap();
+        until(&rx, |m| {
+            flag(m, "osd.open")
+                && text(m, "osd.kind") == "brightness"
+                && (number(m, "osd.value") - 0.68).abs() < 1e-9
+                && text(m, "osd.device").is_empty()
+        });
+        service
+            .preview(&[
+                json!("keyboard"),
+                json!(0.42),
+                json!(false),
+                json!(""),
+                json!("kbd0"),
+            ])
+            .unwrap();
+        until(&rx, |m| {
+            flag(m, "osd.open")
+                && text(m, "osd.kind") == "keyboard"
+                && (number(m, "osd.value") - 0.42).abs() < 1e-9
+                && text(m, "osd.device") == "kbd0"
+        });
+
+        for args in [
+            vec![],
+            vec![json!("unknown"), json!(0.5)],
+            vec![json!("brightness"), json!(1.01)],
+            vec![json!("keyboard"), json!(0.5), json!("muted")],
+        ] {
+            assert!(
+                service.preview(&args).is_err(),
+                "accepted invalid preview: {args:?}"
+            );
+        }
+        // Displaying an OSD follows the normal popup-suppression lifecycle, but
+        // preview must never send an OSD/device mutation to the daemon.
+        while let Ok(call) = calls.recv_timeout(Duration::from_millis(100)) {
+            assert_eq!(call["m"], "notifications.set_inhibited");
+        }
+        let _ = close.send(());
+    }
+
+    #[test]
     fn absent_capability_is_unavailable_and_sends_nothing() {
         let lab = lab();
         let data = serde_json::to_value(state(json!({}))).unwrap();

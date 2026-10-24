@@ -32,11 +32,11 @@ local H=level and (text~="" and 76 or 60) or 68
 local titleTop=level and 12 or 14
 local TRACK_W=W-TEXT_X-EDGE
 return kit.Panel{edge="bottom",id="osd",width=W,height=H,on_activate=ui.action("notifications.osd",true),open=ui.bind("panel.open"),duration=.150,slide_distance=4,
-    fill="surfaceContainer",radius=H/2,border_width=1,border_color=ui.alpha("outline",.28),padding=0,
+    fill="surface",radius=H/2,border_width=1,border_color=ui.alpha("outline",.28),padding=0,
     ui.Text{id="icon",position="absolute",left=ICON_X,top=(H-30)/2,width=30,height=30,text=glyph(spec.glyph),family="Material Symbols Rounded",font_size=29.333,color=dim and "onSurfaceVariant" or "primary"},
     ui.Text{id="title",position="absolute",left=TEXT_X,top=titleTop,width=W-TEXT_X-EDGE-VALUE_W,height=TITLE_H,family="IBM Plex Sans",text=ui.tr(spec.title),font_size=TITLE},
     ui.Text{id="value",position="absolute",left=W-EDGE-VALUE_W,top=titleTop,width=VALUE_W,height=TITLE_H,family="IBM Plex Sans",text=level and percent or "",text_align="right",font_size=TITLE,color="onSurfaceVariant"},
     ui.Text{id="detail",position="absolute",left=TEXT_X,top=titleTop+TITLE_H+2,width=W-TEXT_X-EDGE,height=DETAIL_H,family="IBM Plex Sans",text=text,font_size=12,color="onSurfaceVariant",visible=text~=""},
-    ui.Box{id="track",position="absolute",left=TEXT_X,top=H-18,width=TRACK_W,height=5,radius=2.5,fill="surfaceContainerHigh",visible=level,
+    ui.Box{id="track",position="absolute",left=TEXT_X,top=H-18,width=TRACK_W,height=5,radius=2.5,fill="surfaceContainer",visible=level,
         ui.Box{id="fill",width=TRACK_W*value,height=5,radius=2.5,fill=muted and ui.alpha("primary",.35) or "primary"}},
 }

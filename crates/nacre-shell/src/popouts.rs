@@ -76,13 +76,13 @@ pub fn status(
         colors,
         owner,
         client,
-        (radius, trace, StatusPanelMode::Control),
+        (radius, trace, StatusPanelMode::Popout),
         (PathBuf::from("shell"), None),
     )
 }
 
-/// Dedicated Sound route in core mode. The audio topic lease is acquired only
-/// when the right-side panel opens and is owned by that Runtime.
+/// Dedicated Sound popout in core mode. Its audio topic lease is acquired only
+/// while the top-edge popout is open and is owned by that Runtime.
 pub fn core_sound(
     client: Option<crate::nacre_source::Client>,
     palette: PathBuf,
@@ -101,16 +101,24 @@ pub(crate) fn core_sound_with_root(
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
     let fill = colors.get("surface")?;
     let mut fallback = crate::sound::fallback(fill);
+    fallback.width = 382.;
+    fallback.bounds = Rect::new(-32., -32., 446., 350.);
+    fallback.primitives = vec![Primitive::Rounded {
+        rect: Rect::new(0., 0., 382., 286.),
+        radius: 16.,
+        fill,
+        border: None,
+    }];
     if let Some(motion) = &mut fallback.motion {
         motion.id = "sound-output".into();
-        motion.edge = bead::core::Edge::Right;
-        motion.duration = 0.28;
+        motion.curve = Some(bead::core::animation::Curve::EaseInOut);
+        motion.edge = bead::core::Edge::Top;
+        motion.duration = 0.23;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
         position: Some(
-            crate::placement::Frame::default()
-                .positioner(crate::placement::Attachment::ControlCenter),
+            crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
         ),
         engages_decorations: true,
         passive: false,
@@ -132,8 +140,10 @@ pub(crate) fn core_sound_with_root(
             );
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_view_edge("right")?
-                .with_frame(crate::placement::Attachment::ControlCenter, &colors)
+                .with_view_edge("top")?
+                .with_panel_geometry(382., 286., 0.23)
+                .map_err(|error| error.to_string())?
+                .with_frame(crate::placement::Attachment::Popout, &colors)
                 .and_then(|runtime| runtime.with_core_audio_status(source))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
@@ -206,7 +216,7 @@ enum StatusPanelMode {
     #[cfg(test)]
     Legacy,
     Peek,
-    Control,
+    Popout,
 }
 
 pub(crate) fn status_peek(
@@ -263,21 +273,22 @@ fn status_at_root_mode(
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
     let (radius, trace, mode) = style;
     let peek = mode == StatusPanelMode::Peek;
-    let control_panel = mode == StatusPanelMode::Control;
     let (root, initialize) = fixture;
     let fill = colors.get("surface")?;
     let (panel_width, panel_height) = if peek {
         (190., 72.)
-    } else if control_panel {
-        (400., 286.)
     } else if matches!(kind, crate::status_views::Kind::Network) && client.is_some() {
-        // The controlled network popout carries the hidden/saved footer.
-        (310., crate::status_views::NETWORK_BASE_HEIGHT as f32)
+        // QML's 352 px body sits in a 15 px inset inside the framed popup.
+        (382., crate::status_views::NETWORK_BASE_HEIGHT as f32)
     } else if matches!(kind, crate::status_views::Kind::Bluetooth) && client.is_some() {
-        // The controlled Bluetooth popout is the QML popup's 352 px with its device cards.
-        (352., 100.)
+        // QML's 352 px body sits in a 15 px inset inside the framed popup.
+        (382., 100.)
+    } else if matches!(kind, crate::status_views::Kind::Audio) {
+        (382., 286.)
+    } else if matches!(kind, crate::status_views::Kind::Battery) {
+        (230., 224.)
     } else {
-        (310., 222.)
+        (382., 222.)
     };
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = panel_width;
@@ -294,28 +305,14 @@ fn status_at_root_mode(
     }];
     if let Some(motion) = &mut fallback.motion {
         motion.id = "status-popout".into();
-        motion.curve = peek.then_some(bead::core::animation::Curve::EaseInOut);
-        motion.edge = if peek || !control_panel {
-            bead::core::Edge::Top
-        } else {
-            bead::core::Edge::Right
-        };
-        motion.duration = if peek {
-            0.23
-        } else if control_panel {
-            0.28
-        } else {
-            0.2
-        };
+        motion.curve = Some(bead::core::animation::Curve::EaseInOut);
+        motion.edge = bead::core::Edge::Top;
+        motion.duration = 0.23;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
         position: Some(
-            crate::placement::Frame::default().positioner(if control_panel && !peek {
-                crate::placement::Attachment::ControlCenter
-            } else {
-                crate::placement::Attachment::Popout
-            }),
+            crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
         ),
         engages_decorations: !peek,
         passive: false,
@@ -336,6 +333,8 @@ fn status_at_root_mode(
                     "status/network.luau"
                 } else if controlled_bluetooth {
                     "status/bluetooth.luau"
+                } else if matches!(kind, crate::status_views::Kind::Battery) {
+                    "status/battery.luau"
                 } else {
                     "status/main.luau"
                 }
@@ -363,31 +362,10 @@ fn status_at_root_mode(
             };
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_view_edge(if peek || !control_panel {
-                    "top"
-                } else {
-                    "right"
-                })?
-                .with_panel_geometry(
-                    panel_width as f64,
-                    panel_height as f64,
-                    if peek {
-                        0.23
-                    } else if control_panel {
-                        0.28
-                    } else {
-                        0.2
-                    },
-                )
+                .with_view_edge("top")?
+                .with_panel_geometry(panel_width as f64, panel_height as f64, 0.23)
                 .map_err(|error| error.to_string())?
-                .with_frame(
-                    if peek || !control_panel {
-                        crate::placement::Attachment::Popout
-                    } else {
-                        crate::placement::Attachment::ControlCenter
-                    },
-                    &colors,
-                )
+                .with_frame(crate::placement::Attachment::Popout, &colors)
                 .and_then(|runtime| match typed_topic {
                     Some("network") if controlled_network => runtime.with_core_network_control(
                         source,

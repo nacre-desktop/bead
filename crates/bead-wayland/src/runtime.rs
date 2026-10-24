@@ -945,7 +945,10 @@ impl App {
             control.palette_changed(&palette);
         }
         if self.panel_runtime.is_some() {
-            self.panel_ui(UiEvent::WallpaperPalette(palette));
+            self.panel_ui(UiEvent::WallpaperPalette(palette.clone()));
+        }
+        if self.overlay.is_some() {
+            self.overlay_ui(UiEvent::WallpaperPalette(palette));
         }
     }
 
