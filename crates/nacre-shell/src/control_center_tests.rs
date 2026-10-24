@@ -1736,7 +1736,7 @@ async fn audio_from_the_daemon_is_live_choosable_and_addressed_by_node_name() {
 
 // B0086 (N0061): application streams are listed from the `audio` topic and addressed by their id.
 #[tokio::test(flavor = "current_thread")]
-async fn application_streams_list_with_linear_levels_and_call_the_stream_target() {
+async fn application_streams_list_with_perceptual_levels_and_call_the_stream_target() {
     let mut data = busy_audio();
     for (id, node) in [
         (
@@ -1777,14 +1777,14 @@ async fn application_streams_list_with_linear_levels_and_call_the_stream_target(
     );
     assert_eq!(
         (rows[0]["value"].clone(), rows[0]["status"].clone()),
-        (json!(25.), json!("25%"))
+        (json!(63.), json!("63%"))
     );
     assert_eq!(rows[0]["enabled"], true);
     assert_eq!(
         (rows[1]["muted"].clone(), rows[1]["label"].clone()),
         (json!(true), json!("Application"))
     );
-    // Mute and volume name the stream target; the slider is linear (QML wrote the stream's own volume).
+    // Mute and volume name the stream target; the slider is perceptual and the call linear, as for a device (B0095).
     control.act("toggle:stream:sink-input:7");
     assert_eq!(
         call(&mut lab).await,
@@ -1801,7 +1801,7 @@ async fn application_streams_list_with_linear_levels_and_call_the_stream_target(
         (&params["target"], &params["node"]),
         (&json!("stream"), &json!("source-output:3"))
     );
-    assert!((params["value"].as_f64().unwrap() - 0.4).abs() < 1e-9);
+    assert!((params["value"].as_f64().unwrap() - 0.064).abs() < 1e-9);
     settle(&control, &Stores::default()).await;
     // Unknown or malformed stream ids send nothing.
     for arg in [

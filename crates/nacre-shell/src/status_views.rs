@@ -139,6 +139,10 @@ struct LinkRow {
     action: &'static str,
     active: bool,
     secured: bool,
+    /// `connected`, `known` (a saved profile has this name) or `available`, as the QML list groups them (B0095).
+    group: &'static str,
+    /// Signal strength 0..=100 (the row icon); 0 for a profile without an access point.
+    strength: u8,
 }
 struct BluetoothControl {
     client: crate::nacre_source::Client,
@@ -893,6 +897,8 @@ impl Status {
                         "action": action,
                         "active": row.active,
                         "secured": row.secured,
+                        "group": row.group,
+                        "strength": row.strength,
                         "enabled": allowed && !link_busy && !busy,
                     })
                 })
@@ -1452,6 +1458,14 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
         .filter(|(_, ap)| state.devices.items.contains_key(&ap.device))
         .collect();
     aps.sort_by_key(|(_, ap)| (!ap.active, std::cmp::Reverse(ap.strength)));
+    // Names with a saved Wi-Fi profile: those networks are "known" (QML reads the saved SSIDs the same way).
+    let saved: std::collections::BTreeSet<&str> = state
+        .connections
+        .items
+        .values()
+        .filter_map(|connection| connection.ssid.as_deref())
+        .filter(|ssid| !ssid.is_empty())
+        .collect();
     let name = |text: &str| {
         line(
             &if text.is_empty() {
@@ -1481,6 +1495,14 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
             },
             active: ap.active,
             secured: ap.secured,
+            group: if ap.active {
+                "connected"
+            } else if saved.contains(ap.name.as_str()) {
+                "known"
+            } else {
+                "available"
+            },
+            strength: ap.strength,
         });
     }
     let represented: std::collections::BTreeSet<_> = state
@@ -1493,7 +1515,8 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
         let Some(connection) = state.connections.items.get(id) else {
             continue;
         };
-        if represented.contains(id) {
+        // A saved Wi-Fi profile is listed through its access point (and not at all out of range, as in QML).
+        if represented.contains(id) || connection.ssid.is_some() {
             continue;
         }
         let key = if connection.active {
@@ -1519,6 +1542,8 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
             },
             active: connection.active,
             secured: connection.security.as_deref().is_some_and(|s| s != "open"),
+            group: if connection.active { "connected" } else { "known" },
+            strength: 0,
         });
     }
     rows.truncate(MAX_LINK_ROWS);

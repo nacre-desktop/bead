@@ -236,18 +236,6 @@ fn level(node: &Json) -> Option<(f64, bool)> {
         .or_else(|| ready.then(|| node["muted"].as_bool()).flatten());
     Some((volume, muted.unwrap_or(false)))
 }
-/// `(linear 0..1, muted)` of an application stream: QML wrote the stream slider's linear value.
-fn stream_level(node: &Json) -> Option<(f64, bool)> {
-    let ready = node["ready"] == true;
-    let readback = node.get("readback");
-    let volume = readback
-        .and_then(|r| r["linear_volume"].as_f64())
-        .or_else(|| ready.then(|| node["volume"].as_f64()).flatten())?;
-    let muted = readback
-        .and_then(|r| r["muted"].as_bool())
-        .or_else(|| ready.then(|| node["muted"].as_bool()).flatten());
-    Some((volume, muted.unwrap_or(false)))
-}
 /// Whether the icon theme has this application icon (QML shows its `apps` glyph otherwise).
 fn themed_icon(name: &str) -> bool {
     thread_local! {
@@ -626,12 +614,12 @@ impl ControlCenter {
             "screenshot.capture" | "color-picker.pick" | "wallpaper.next" => self
                 .can(ACTIONS.iter().find(|(id, _)| *id == source)?.1)
                 .then(Reading::default),
-            // B0086: an application stream, `stream:<audio topic id>`; its level is linear.
+            // B0086: an application stream, `stream:<audio topic id>`; its slider is perceptual like a device's (B0095: QML's stream slider is Quickshell's volume, the cube root of PipeWire's).
             _ => {
                 let id = source.strip_prefix(STREAM)?;
                 let data = self.data("audio").filter(|data| healthy(data))?;
-                let (linear, muted) = stream_level(data["nodes"]["items"].get(id)?)?;
-                let percent = (linear * 100.).round().clamp(0., 100.);
+                let (perceptual, muted) = level(data["nodes"]["items"].get(id)?)?;
+                let percent = (perceptual * 100.).round().clamp(0., 100.);
                 Some(Reading {
                     on: muted,
                     value: percent,
@@ -722,8 +710,8 @@ impl ControlCenter {
                 if !matches!(node["kind"].as_str(), Some("playback" | "capture")) {
                     return None;
                 }
-                let (linear, muted) = stream_level(node)?;
-                let percent = (linear * 100.).round().clamp(0., 100.);
+                let (perceptual, muted) = level(node)?;
+                let percent = (perceptual * 100.).round().clamp(0., 100.);
                 let name = node["name"].as_str().filter(|name| !name.is_empty());
                 let icon = node["icon"].as_str().filter(|icon| themed_icon(icon));
                 Some(json!({
@@ -1022,7 +1010,7 @@ impl ControlCenter {
                 }
                 Some((
                     "audio.set_volume",
-                    json!({"target": "stream", "node": reading.node, "value": (percent / 100.).clamp(0., 1.)}),
+                    json!({"target": "stream", "node": reading.node, "value": linear(percent)}),
                 ))
             }
             "brightness.level" => {
