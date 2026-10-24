@@ -83,6 +83,8 @@ After Bead's core switch on Nacre, plan support for:
   `Session::with_local_feedback` lets hosts stage presentation-only input without service projection; model wakes keep it.
   `Desktop::queue_volume` admits levels without blocking UI input; snapshots confirm the result. Neither names a shell, transport or service.
 
+- B0102: `ui.Arc` paints a bounded, signed-angle stroke directly on CPU/GL; shell markup supplies progress, geometry, colour and caps.
+
 - B0096: `edge_hover` lets an interactive region opt into edge hover; `ui.tint` composes palette/RGBA colours;
   SVG `@base|overlay|amount@` tokens blend palette/literal colours. Artwork and shell behavior stay in the bundle.
 - B0097: combining `reveal` and `slide_distance` slides retained content behind a growing contour; the stationary edge join and reusable rasters are independent of shell policy.

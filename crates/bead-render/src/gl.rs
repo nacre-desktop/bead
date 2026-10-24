@@ -459,6 +459,41 @@ impl GlRenderer {
                     &path,
                     &femtovg::Paint::image(texture.image, x.round(), y.round(), w, h, 0., 1.),
                 );
+            } else if let crate::Primitive::Arc {
+                start_angle,
+                sweep_angle,
+                stroke_width,
+                color,
+                round_caps,
+                ..
+            } = &item.primitive
+            {
+                if color[3] == 0 {
+                    continue;
+                }
+                if let Some(points) = crate::arc_points(
+                    r.translated(offset.0, offset.1),
+                    *stroke_width,
+                    *start_angle,
+                    *sweep_angle,
+                ) {
+                    let mut path = femtovg::Path::new();
+                    path.move_to(points[0].0 * frame.scale, points[0].1 * frame.scale);
+                    for &(px, py) in &points[1..] {
+                        path.line_to(px * frame.scale, py * frame.scale);
+                    }
+                    if sweep_angle.abs() == 360. {
+                        path.close();
+                    }
+                    let mut paint = femtovg::Paint::color(femtovg::Color::rgba(
+                        color[0], color[1], color[2], color[3],
+                    ));
+                    paint.set_line_width(*stroke_width * frame.scale);
+                    if *round_caps {
+                        paint.set_line_cap(femtovg::LineCap::Round);
+                    }
+                    canvas.stroke_path(&path, &paint);
+                }
             } else if let crate::Primitive::Rounded {
                 radius,
                 fill,

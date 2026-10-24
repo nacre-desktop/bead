@@ -16,7 +16,7 @@ local function media(layout)
     local function transport(id,glyph,label,action)
         return kit.Button{id=id,width=34,height=34,padding=0,radius=17,justify="center",align="center",
             fill="transparent",hover_fill=ui.alpha("onSurface",.08),aria_label=label,on_activate=action,
-            ui.Text{text=glyph,family="Material Symbols Rounded",font_size=20,width=24,height=24,
+            ui.Text{text=glyph,family="Material Symbols Rounded",font_size=17*4/3,width=24,height=24,
                 text_align="center",color=action and "onSurface" or "onSurfaceVariant"}}
     end
     local artwork=ui.Box{id="artwork",position="absolute",left=(layout.artContainer-artSize)/2,top=28,
@@ -35,7 +35,14 @@ local function media(layout)
     return ui.Box{id="media",position="absolute",left=layout.calendar+layout.host+32,top=0,
         width=layout.media,height=layout.summary,radius=layout.cardRadius,fill="surfaceContainerLow",
         ui.Box{id="album-container",position="absolute",left=(layout.media-layout.artContainer)/2,top=8,
-            width=layout.artContainer,height=layout.artContainer,fill="transparent",artwork},
+            width=layout.artContainer,height=layout.artContainer,fill="transparent",artwork,
+            ui.Arc{id="progress-track",position="absolute",left=(layout.artContainer-artSize-12)/2,
+                top=22,width=artSize+12,height=artSize+12,start_angle=-90,sweep_angle=360,
+                stroke_width=5,color=ui.alpha("onSurface",.12),round_caps=true},
+            ui.Arc{id="progress",position="absolute",left=(layout.artContainer-artSize-12)/2,
+                top=22,width=artSize+12,height=artSize+12,start_angle=-90,
+                sweep_angle=math.max(0,math.min(1,ui.resolve_for_check(ui.bind("dashboard.progress"))))*360,
+                stroke_width=5,color="primary",round_caps=true}},
         ui.Text{id="track",position="absolute",left=14,top=layout.artContainer+16,width=layout.media-28,height=layout.mediaMetadataTitleHeight,
             text=live and ui.bind("dashboard.track") or ui.tr("bead.dashboard.playback-unavailable"),
             font_size=layout.mediaTitleSize,text_align="center",color="primary"},
@@ -92,12 +99,20 @@ return function()
     }
     local gaugeRow={}
     for i,metric in ipairs(gauges) do
-        gaugeRow[i]=ui.Column{id=metric.id,width=(l.host-24)/3,height=l.metrics,padding=6,gap=1,
-            ui.Row{id="gauge-heading",width=(l.host-36)/3,height=20,gap=4,align="center",
-                ui.Text{text=metric.icon,family="Material Symbols Rounded",font_size=14,width=18,height=18,color="primary"},
-                ui.Text{text=metric.label,width=(l.host-60)/3,height=18,font_size=10,color="onSurfaceVariant"}},
-            ui.Text{text=metric.value,width=(l.host-36)/3,height=30,font_size=21,color="onSurface"},
-        }
+        local w=l.host/3
+        local diameter=math.min(w-12,l.metrics-28,64)
+        gaugeRow[i]=ui.Box{id=metric.id,width=w,height=l.metrics,fill="transparent",
+            ui.Arc{id="track",position="absolute",left=(w-diameter)/2+2,top=2,
+                width=diameter-4,height=diameter-4,start_angle=-90,sweep_angle=360,
+                stroke_width=4,color=ui.alpha("onSurface",.15),round_caps=true},
+            ui.Arc{id="value",position="absolute",left=(w-diameter)/2+2,top=2,
+                width=diameter-4,height=diameter-4,start_angle=-90,
+                sweep_angle=math.max(0,math.min(1,metric.fraction or 0))*360,
+                stroke_width=4,color="primary",round_caps=true},
+            ui.Text{id="reading",position="absolute",left=0,top=(diameter-24)/2,width=w,height=24,
+                text=metric.value,font_size=14*4/3,text_align="center",color="onSurface"},
+            ui.Text{id="label",position="absolute",left=0,top=diameter+8,width=w,height=20,
+                text=metric.label,font_size=10*4/3,text_align="center",color="onSurfaceVariant"}}
     end
     local summary=ui.Box{id="summary",position="absolute",left=0,top=l.hero+l.gap,width=l.width,height=l.summary,
         ui.Box{id="month",position="absolute",left=0,top=0,width=l.calendar,height=l.summary,

@@ -547,7 +547,7 @@ impl Dashboard {
     fn degrees(&self, value: Option<f64>) -> String {
         let fahrenheit = self.prefs().is_some_and(|p| p.fahrenheit);
         number(
-            value.map(|v| if fahrenheit { v * 9. / 5. + 32. } else { v }),
+            value.map(|v| (if fahrenheit { v * 9. / 5. + 32. } else { v } + 0.5).floor()),
             "°",
         )
     }
@@ -735,6 +735,7 @@ impl Dashboard {
                 let disk = s.disks.order.iter().find_map(|id| s.disks.items.get(id));
                 gauges[2] = json!({"id":"storage","label":tr("bead.dashboard.system-drives", &[]),"icon":"storage",
                     "value":disk.map_or("—".into(), |d| format!("{:.0}%", d.used as f64 * 100. / d.total as f64)),
+                    "fraction":disk.map(|d| (d.used as f64 / d.total as f64).clamp(0.,1.)),
                     "detail":disk.map_or(String::new(), |d| format!("{} / {}", bytes(d.used), bytes(d.total)))});
                 out.insert("dashboard.gauges".into(), Value::list(gauges));
             }

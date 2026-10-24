@@ -139,7 +139,8 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
     for p in &scene.primitives {
         std::mem::discriminant(p).hash(&mut h);
         let r = match p {
-            Primitive::Rounded { rect, .. }
+            Primitive::Arc { rect, .. }
+            | Primitive::Rounded { rect, .. }
             | Primitive::Text { rect, .. }
             | Primitive::Image { rect, .. }
             | Primitive::Shadow { rect, .. } => rect,
@@ -148,6 +149,20 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
             f.to_bits().hash(&mut h);
         }
         match p {
+            Primitive::Arc {
+                start_angle,
+                sweep_angle,
+                stroke_width,
+                color,
+                round_caps,
+                ..
+            } => {
+                start_angle.to_bits().hash(&mut h);
+                sweep_angle.to_bits().hash(&mut h);
+                stroke_width.to_bits().hash(&mut h);
+                color.hash(&mut h);
+                round_caps.hash(&mut h);
+            }
             Primitive::Rounded {
                 radius,
                 fill,

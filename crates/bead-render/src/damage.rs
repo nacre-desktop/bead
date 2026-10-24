@@ -136,10 +136,10 @@ impl FrameDamage {
                 rect(&item.primitive)
             };
             let geometry = source.translated(offset.0, offset.1);
-            let pad = if let crate::Primitive::Rounded { border, .. } = item.primitive {
-                border.map_or(1., |(_, w)| w / 2. + 1.)
-            } else {
-                0.
+            let pad = match item.primitive {
+                crate::Primitive::Rounded { border, .. } => border.map_or(1., |(_, w)| w / 2. + 1.),
+                crate::Primitive::Arc { .. } => 1.,
+                _ => 0.,
             };
             let mut bounds = Rect::new(
                 geometry.x - pad,
@@ -492,6 +492,179 @@ mod tests {
         assert_eq!(
             damage.update(&frame, (0., 0.), 1., 300, 200).unwrap(),
             hover
+        );
+    }
+
+    #[test]
+    fn arc_progress_repairs_only_clipped_pixels_at_fractional_scale_and_honors_round_caps() {
+        use crate::{
+            PixelFormat, Primitive, ShmTarget,
+            tree::{Item, paint},
+        };
+        let clip = Rect::new(40., 25., 10., 12.);
+        let arc = |sweep_angle, round_caps| Item {
+            id: "progress".into(),
+            primitive: Primitive::Arc {
+                rect: Rect::new(10., 10., 40., 40.),
+                start_angle: 0.,
+                sweep_angle,
+                stroke_width: 8.,
+                color: [255, 20, 10, 255],
+                round_caps,
+            },
+            clip: Some(clip),
+            raster: None,
+        };
+        let frame = |item| Frame {
+            items: vec![item],
+            scale: 1.5,
+            key: 0,
+            layer_count: 0,
+            layers: vec![],
+            _accounting: None,
+        };
+        let before = frame(arc(20., true));
+        let after = frame(arc(90., true));
+        let (width, height) = (120, 120);
+        let mut tracker = FrameDamage::default();
+        tracker
+            .update(&before, (0., 0.), 1., width, height)
+            .unwrap();
+        let dirty = tracker.update(&after, (0., 0.), 1., width, height).unwrap();
+        assert!(!dirty.is_empty());
+        let clip_px = clip.pixels(1.5, width, height);
+        assert!(
+            dirty.iter().all(|d| {
+                d.x >= clip_px.x
+                    && d.y >= clip_px.y
+                    && d.x + d.w <= clip_px.x + clip_px.w
+                    && d.y + d.h <= clip_px.y + clip_px.h
+            }),
+            "arc damage escaped clip: {dirty:?}"
+        );
+
+        let mut repaired = vec![0; (width * height * 4) as usize];
+        paint(
+            &before,
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut repaired,
+                width,
+                height,
+                scale: 1.5,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        let mut expected = vec![0; repaired.len()];
+        paint(
+            &after,
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut expected,
+                width,
+                height,
+                scale: 1.5,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        for d in dirty {
+            paint(
+                &after,
+                (0., 0.),
+                ShmTarget {
+                    bytes: &mut repaired,
+                    width,
+                    height,
+                    scale: 1.5,
+                    format: PixelFormat::Rgba,
+                },
+                d,
+            )
+            .unwrap();
+        }
+        assert!(
+            repaired == expected,
+            "incremental arc repaint differs first at {:?}",
+            repaired
+                .iter()
+                .zip(&expected)
+                .position(|(a, b)| a != b)
+                .map(|i| (
+                    i / 4 % width as usize,
+                    i / 4 / width as usize,
+                    repaired[i],
+                    expected[i]
+                ))
+        );
+
+        let cap_frame = |round_caps| frame(arc(90., round_caps));
+        let mut round = vec![0; repaired.len()];
+        let mut butt = vec![0; repaired.len()];
+        paint(
+            &cap_frame(true),
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut round,
+                width,
+                height,
+                scale: 1.5,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        paint(
+            &cap_frame(false),
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut butt,
+                width,
+                height,
+                scale: 1.5,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        let (sample_x, sample_y) = (69, 42);
+        let sample = ((sample_y * width + sample_x) * 4) as usize;
+        assert!(
+            round[sample + 3] > 0,
+            "round cap should extend along its tangent"
+        );
+        assert_eq!(
+            butt[sample + 3],
+            0,
+            "butt cap should stop at the path endpoint"
+        );
+        let mut translucent = arc(90., true);
+        if let Primitive::Arc { color, .. } = &mut translucent.primitive {
+            color[3] = 128;
+        }
+        let mut layered = frame(translucent.clone());
+        layered.items.push(translucent);
+        let mut pixels = vec![0; repaired.len()];
+        paint(
+            &layered,
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut pixels,
+                width,
+                height,
+                scale: 1.5,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        assert_eq!(
+            pixels.as_chunks::<4>().0.iter().map(|p| p[3]).max(),
+            Some(192),
+            "each arc must clear temporary pixels before source-over compositing"
         );
     }
 }

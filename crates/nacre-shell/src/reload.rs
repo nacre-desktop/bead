@@ -2156,7 +2156,8 @@ impl SceneSource for Runtime {
                     bead::render::Primitive::Rounded { rect, .. }
                     | bead::render::Primitive::Text { rect, .. }
                     | bead::render::Primitive::Image { rect, .. }
-                    | bead::render::Primitive::Shadow { rect, .. } => *rect,
+                    | bead::render::Primitive::Shadow { rect, .. }
+                    | bead::render::Primitive::Arc { rect, .. } => *rect,
                 };
                 bead::wayland::InputRegion {
                     id: node.id.clone(),

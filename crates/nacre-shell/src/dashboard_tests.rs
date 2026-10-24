@@ -923,6 +923,11 @@ fn today_calendar_navigation_uses_real_input() -> Result<()> {
         },
     )?;
     h.render()?;
+    assert_eq!(
+        h.session.stores.get("calendar.first_weekday"),
+        Some(&Value::Number(0.)),
+        "Today follows the QML reference's Sunday-first default; the store remains configurable"
+    );
     let next = h
         .session
         .view_nodes()

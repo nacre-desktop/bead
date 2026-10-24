@@ -8,7 +8,9 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use tiny_skia::{FillRule, Mask, Paint, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform};
+use tiny_skia::{
+    FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
+};
 
 #[derive(Clone)]
 pub struct Raster {
@@ -71,7 +73,8 @@ pub struct TreeCache {
 }
 pub fn rect(primitive: &Primitive) -> Rect {
     match primitive {
-        Primitive::Rounded { rect, .. }
+        Primitive::Arc { rect, .. }
+        | Primitive::Rounded { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
         | Primitive::Shadow { rect, .. } => *rect,
@@ -80,7 +83,8 @@ pub fn rect(primitive: &Primitive) -> Rect {
 fn local(primitive: &Primitive) -> Primitive {
     let mut p = primitive.clone();
     match &mut p {
-        Primitive::Rounded { rect, .. }
+        Primitive::Arc { rect, .. }
+        | Primitive::Rounded { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
         | Primitive::Shadow { rect, .. } => {
@@ -100,6 +104,24 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
     };
     std::mem::discriminant(primitive).hash(hash);
     match primitive {
+        Primitive::Arc {
+            rect: r,
+            start_angle,
+            sweep_angle,
+            stroke_width,
+            color,
+            round_caps,
+        } => {
+            rect(r, hash);
+            (
+                start_angle.to_bits(),
+                sweep_angle.to_bits(),
+                stroke_width.to_bits(),
+                color,
+                round_caps,
+            )
+                .hash(hash);
+        }
         Primitive::Rounded {
             rect: r,
             radius,
@@ -417,6 +439,7 @@ impl TreeCache {
         serde_json::to_vec(&scene.bounds)?.hash(&mut frame_hash);
         for (index, primitive) in scene.primitives.iter().enumerate() {
             let kind = match primitive {
+                Primitive::Arc { .. } => "arc",
                 Primitive::Rounded { .. } => "fill",
                 Primitive::Text { .. } => "text",
                 Primitive::Image { .. } => "image",
@@ -441,7 +464,7 @@ impl TreeCache {
                     value.to_bits().hash(&mut frame_hash);
                 }
             }
-            let raster = if kind == "fill" {
+            let raster = if kind == "fill" || kind == "arc" {
                 None
             } else {
                 let slot = (id.clone(), scale.to_bits());
@@ -934,6 +957,7 @@ fn paint_with_scratch(
     let mut painted = false;
     for item in &frame.items[start.unwrap_or(0)..] {
         let _item_profile = bead_core::profile::Span::new(match item.primitive {
+            Primitive::Arc { .. } => "paint_arc",
             Primitive::Rounded { .. } => "paint_rounded",
             Primitive::Text { .. } => "paint_text",
             Primitive::Image { .. } => "paint_image",
@@ -942,6 +966,9 @@ fn paint_with_scratch(
         if item.raster.is_none()
             && matches!(&item.primitive,Primitive::Rounded{fill,border,..} if fill[3]==0 && border.as_ref().is_none_or(|(color,_)|color[3]==0))
         {
+            continue;
+        }
+        if matches!(&item.primitive, Primitive::Arc { color, .. } if color[3] == 0) {
             continue;
         }
 
@@ -957,6 +984,25 @@ fn paint_with_scratch(
         }
         if let Primitive::Rounded { rect, border, .. } = &item.primitive {
             let outset = border.as_ref().map_or(0., |(_, w)| *w * 0.5) + 2. / scale;
+            let bounds = Rect::new(
+                rect.x - outset,
+                rect.y - outset,
+                rect.w + 2. * outset,
+                rect.h + 2. * outset,
+            )
+            .translated(offset.0, offset.1)
+            .pixels(scale, width, height);
+            let overlap = intersection(clip, bounds);
+            if overlap.w == 0 || overlap.h == 0 {
+                continue;
+            }
+            clip = overlap;
+        }
+        if let Primitive::Arc {
+            rect, stroke_width, ..
+        } = &item.primitive
+        {
+            let outset = stroke_width * 0.5 + 2. / scale;
             let bounds = Rect::new(
                 rect.x - outset,
                 rect.y - outset,
@@ -1073,6 +1119,70 @@ fn paint_with_scratch(
                 Transform::identity(),
                 mask_needed.then_some(&mask),
             );
+        } else if let Primitive::Arc {
+            start_angle,
+            sweep_angle,
+            stroke_width,
+            color,
+            round_caps,
+            ..
+        } = &item.primitive
+            && let Some(points) = crate::arc_points(r, *stroke_width, *start_angle, *sweep_angle)
+        {
+            let mut path = PathBuilder::new();
+            path.move_to(points[0].0, points[0].1);
+            for &(x, y) in &points[1..] {
+                path.line_to(x, y);
+            }
+            if sweep_angle.abs() == 360. {
+                path.close();
+            }
+            if let Some(path) = path.finish() {
+                let mut paint = Paint::default();
+                paint.set_color_rgba8(color[0], color[1], color[2], color[3]);
+                let stroke = Stroke {
+                    width: *stroke_width,
+                    line_cap: if *round_caps {
+                        tiny_skia::LineCap::Round
+                    } else {
+                        tiny_skia::LineCap::Butt
+                    },
+                    ..Stroke::default()
+                };
+                // Arc tessellation and antialiasing can depend on target origin
+                // and dimensions. Rasterize into a deterministic, padded scratch
+                // bound for every paint, then composite only the clipped damage.
+                // The scratch is transient and rebuilt for each progress value.
+                let paint_bounds = r
+                    .translated(offset.0, offset.1)
+                    .pixels(scale, width, height);
+                let padding = 2;
+                let x = paint_bounds.x.saturating_sub(padding);
+                let y = paint_bounds.y.saturating_sub(padding);
+                let right = (paint_bounds.x + paint_bounds.w)
+                    .saturating_add(padding)
+                    .min(width);
+                let bottom = (paint_bounds.y + paint_bounds.h)
+                    .saturating_add(padding)
+                    .min(height);
+                let (w, h) = (right - x, bottom - y);
+                let (scratch, _) = repair_scratch.obtain(w, h)?;
+                scratch.data_mut().fill(0);
+                let transform = Transform::from_scale(scale, scale)
+                    .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
+                scratch.stroke_path(&path, &paint, &stroke, transform, None);
+                target.draw_pixmap(
+                    x as i32,
+                    y as i32 - damage.y as i32,
+                    scratch.as_ref(),
+                    &PixmapPaint::default(),
+                    Transform::identity(),
+                    Some(&mask),
+                );
+                target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
+                    .ok_or("invalid restored SHM strip")?;
+                painted = true;
+            }
         } else if let Primitive::Rounded {
             radius,
             fill,

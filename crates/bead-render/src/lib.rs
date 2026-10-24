@@ -105,6 +105,16 @@ impl Damage {
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Primitive {
+    /// A stroked elliptical arc. Angles are degrees clockwise from the rightmost point.
+    /// `rect` is the outer paint bound; the path is inset by half the stroke width.
+    Arc {
+        rect: Rect,
+        start_angle: f32,
+        sweep_angle: f32,
+        stroke_width: f32,
+        color: [u8; 4],
+        round_caps: bool,
+    },
     Rounded {
         rect: Rect,
         radius: f32,
@@ -137,12 +147,78 @@ pub enum Primitive {
 impl Primitive {
     fn translated(&self, x: f32, y: f32) -> Self {
         let mut primitive = self.clone();
-        let (Self::Rounded { rect, .. }
+        let (Self::Arc { rect, .. }
+        | Self::Rounded { rect, .. }
         | Self::Text { rect, .. }
         | Self::Image { rect, .. }
         | Self::Shadow { rect, .. }) = &mut primitive;
         *rect = rect.translated(x, y);
         primitive
+    }
+}
+/// Build a directly painted arc path. Segment density is fixed in angular space, so
+/// dynamic progress changes never create retained raster entries or asset data.
+pub(crate) fn arc_points(
+    rect: Rect,
+    stroke_width: f32,
+    start: f32,
+    sweep: f32,
+) -> Option<Vec<(f32, f32)>> {
+    if ![rect.x, rect.y, rect.w, rect.h, stroke_width, start, sweep]
+        .iter()
+        .all(|v| v.is_finite())
+        || rect.w <= 0.
+        || rect.h <= 0.
+        || stroke_width <= 0.
+        || !(-360. ..=360.).contains(&start)
+        || !(-360. ..=360.).contains(&sweep)
+        || sweep == 0.
+    {
+        return None;
+    }
+    let rx = rect.w * 0.5 - stroke_width * 0.5;
+    let ry = rect.h * 0.5 - stroke_width * 0.5;
+    if rx <= 0. || ry <= 0. {
+        return None;
+    }
+    let count = (sweep.abs() / 3.).ceil().max(1.) as usize;
+    let points = (0..=count)
+        .map(|i| {
+            let a = (start + sweep * i as f32 / count as f32).to_radians();
+            (
+                rect.x + rect.w * 0.5 + rx * a.cos(),
+                rect.y + rect.h * 0.5 + ry * a.sin(),
+            )
+        })
+        .collect();
+    Some(points)
+}
+#[cfg(test)]
+mod arc_tests {
+    use super::{Rect, arc_points};
+
+    #[test]
+    fn empty_half_full_and_negative_sweeps_follow_clockwise_degrees() {
+        let rect = Rect::new(0., 0., 100., 100.);
+        assert!(arc_points(rect, 8., 0., 0.).is_none());
+        let half = arc_points(rect, 8., 0., 180.).unwrap();
+        assert!((half.first().unwrap().0 - 96.).abs() < 0.01);
+        assert!((half.last().unwrap().0 - 4.).abs() < 0.01);
+        assert!(half[half.len() / 2].1 > 49.);
+        let negative = arc_points(rect, 8., 0., -90.).unwrap();
+        assert!(negative[negative.len() / 2].1 < 50.);
+        let full = arc_points(rect, 8., -360., 360.).unwrap();
+        let (first, last) = (full.first().unwrap(), full.last().unwrap());
+        assert!((first.0 - last.0).abs() < 0.01 && (first.1 - last.1).abs() < 0.01);
+        assert_eq!(full.len(), 121);
+    }
+
+    #[test]
+    fn invalid_ranges_and_strokes_are_empty() {
+        let rect = Rect::new(0., 0., 20., 20.);
+        assert!(arc_points(rect, 20., 0., 90.).is_none());
+        assert!(arc_points(rect, 2., 361., 90.).is_none());
+        assert!(arc_points(rect, f32::NAN, 0., 90.).is_none());
     }
 }
 #[derive(Clone, Copy, Debug, Hash, serde::Serialize, serde::Deserialize)]
@@ -805,7 +881,7 @@ impl Renderer for CpuRenderer {
         let before = self.textures.len();
         let mut stages = [0f64; 3];
         for p in &scene.primitives {
-            if matches!(p, Primitive::Rounded { .. }) {
+            if matches!(p, Primitive::Rounded { .. } | Primitive::Arc { .. }) {
                 continue;
             }
             let k = key(p, scale);
@@ -941,7 +1017,7 @@ impl Renderer for CpuRenderer {
         if scene
             .primitives
             .iter()
-            .filter(|p| !matches!(p, Primitive::Rounded { .. }))
+            .filter(|p| !matches!(p, Primitive::Rounded { .. } | Primitive::Arc { .. }))
             .any(|p| !self.textures.contains_key(&key(p, scale)))
         {
             return Err("active CPU textures exceed cache budget".into());
@@ -1048,6 +1124,7 @@ impl Renderer for CpuRenderer {
                 self.old_mask = Some(region);
             }
             let bounds = match p {
+                Primitive::Arc { rect, .. } => *rect,
                 Primitive::Rounded { rect, border, .. } => {
                     let pad = border.map_or(1., |(_, w)| w + 1.);
                     Rect::new(
@@ -1069,6 +1146,49 @@ impl Renderer for CpuRenderer {
                 continue;
             }
             match p {
+                Primitive::Arc {
+                    rect,
+                    start_angle,
+                    sweep_angle,
+                    stroke_width,
+                    color,
+                    round_caps,
+                } => {
+                    if color[3] == 0 {
+                        continue;
+                    }
+                    if let Some(points) =
+                        arc_points(*rect, *stroke_width, *start_angle, *sweep_angle)
+                    {
+                        let mut path = PathBuilder::new();
+                        path.move_to(points[0].0, points[0].1);
+                        for &(x, y) in &points[1..] {
+                            path.line_to(x, y);
+                        }
+                        if sweep_angle.abs() == 360. {
+                            path.close();
+                        }
+                        if let Some(path) = path.finish() {
+                            let mut paint = Paint::default();
+                            paint.set_color_rgba8(color[0], color[1], color[2], color[3]);
+                            pix.stroke_path(
+                                &path,
+                                &paint,
+                                &Stroke {
+                                    width: *stroke_width,
+                                    line_cap: if *round_caps {
+                                        tiny_skia::LineCap::Round
+                                    } else {
+                                        tiny_skia::LineCap::Butt
+                                    },
+                                    ..Stroke::default()
+                                },
+                                transform,
+                                Some(mask),
+                            );
+                        }
+                    }
+                }
                 Primitive::Rounded {
                     rect,
                     radius,

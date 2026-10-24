@@ -777,12 +777,12 @@ pub(super) fn gauges(s: &DashboardSystemState) -> Vec<Json> {
     }
     let memory = s.memory.as_ref();
     vec![
-        json!({"id":"cpu","label":tr("bead.dashboard.gauge-cpu", &[]),"icon":"developer_board","value":percent(s.cpu_percent),
+        json!({"id":"cpu","label":tr("bead.dashboard.gauge-cpu", &[]),"icon":"developer_board","value":percent(s.cpu_percent),"fraction":s.cpu_percent.map(|v| (v / 100.).clamp(0., 1.)),
             "detail":if s.cpu_percent.is_some() {tr("bead.dashboard.gauge-cpu-detail", &[])} else {unavailable()}}),
         json!({"id":"memory","label":tr("bead.dashboard.gauge-memory", &[]),"icon":"memory",
-            "value":percent(memory.map(|m| m.used as f64 * 100. / m.total as f64)),
+            "value":percent(memory.map(|m| m.used as f64 * 100. / m.total as f64)),"fraction":memory.map(|m| (m.used as f64 / m.total as f64).clamp(0.,1.)),
             "detail":memory.map_or_else(unavailable, |m| format!("{} / {}", bytes(m.used), bytes(m.total)))}),
-        json!({"id":"gpu","label":tr("bead.dashboard.gauge-gpu", &[]),"icon":"view_in_ar","value":percent(s.gpu.as_ref().and_then(|g| g.percent)),
+        json!({"id":"gpu","label":tr("bead.dashboard.gauge-gpu", &[]),"icon":"view_in_ar","value":percent(s.gpu.as_ref().and_then(|g| g.percent)),"fraction":s.gpu.as_ref().and_then(|g| g.percent).map(|v| (v / 100.).clamp(0.,1.)),
             "detail":gpu_detail}),
     ]
 }

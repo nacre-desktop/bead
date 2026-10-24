@@ -1035,6 +1035,68 @@ return function(p) count+=1; return ui.Button{id="tile",text=p.item.name..count}
 }
 
 #[test]
+fn arc_constructor_builds_thematic_signed_stroke_and_rejects_out_of_range_angles() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Box{id="root",width=120,height=120,
+ ui.Arc{id="track",position="absolute",left=4,top=4,width=112,height=112,
+   start_angle=-90,sweep_angle=-180,stroke_width=5,color="secondary",round_caps=true}}"#,
+    )
+    .unwrap();
+    let mut session = session(&f);
+    let arc = session
+        .current
+        .primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Arc {
+                rect,
+                start_angle,
+                sweep_angle,
+                stroke_width,
+                color,
+                round_caps,
+            } => Some((
+                *rect,
+                *start_angle,
+                *sweep_angle,
+                *stroke_width,
+                *color,
+                *round_caps,
+            )),
+            _ => None,
+        })
+        .expect("Arc constructor emits a render primitive");
+    assert_eq!(arc.0, Rect::new(4., 4., 112., 112.));
+    assert_eq!((arc.1, arc.2, arc.3), (-90., -180., 5.));
+    assert_eq!(
+        arc.4,
+        Palette::read(&f.0.join("palette.json"))
+            .unwrap()
+            .get("secondary")
+            .unwrap()
+    );
+    assert!(arc.5);
+
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Arc{id="invalid",width=20,height=20,sweep_angle=361}"#,
+    )
+    .unwrap();
+    assert!(
+        session
+            .reload()
+            .err()
+            .expect("out of range Arc angles are rejected")
+            .message
+            .contains("Arc angles")
+    );
+}
+
+#[test]
 fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
     for prepared in [false, true] {
         let f = fixture();

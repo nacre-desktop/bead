@@ -22,11 +22,12 @@ pub enum Widget {
     Button,
     TextInput,
     Image,
+    Arc,
     Group,
     Box,
 }
 impl Widget {
-    pub fn constructors() -> [(&'static str, Self); 11] {
+    pub fn constructors() -> [(&'static str, Self); 12] {
         [
             ("Panel", Self::Panel),
             ("Row", Self::Row),
@@ -37,6 +38,7 @@ impl Widget {
             ("Button", Self::Button),
             ("TextInput", Self::TextInput),
             ("Image", Self::Image),
+            ("Arc", Self::Arc),
             ("Group", Self::Group),
             ("Box", Self::Box),
         ]
@@ -130,6 +132,10 @@ pub const PROPERTIES: &[&str] = &[
     "direction",
     "drag",
     "blur",
+    "start_angle",
+    "sweep_angle",
+    "stroke_width",
+    "round_caps",
     "text_align",
     "position",
     "left",
@@ -184,6 +190,10 @@ pub struct ViewSpec {
     pub border_width: f32,
     pub radius: f32,
     pub blur: f32,
+    pub start_angle: f32,
+    pub sweep_angle: f32,
+    pub stroke_width: f32,
+    pub round_caps: bool,
     pub drag: bool,
     pub font_size: f32,
     pub font_weight: u16,
@@ -359,6 +369,18 @@ impl ViewSpec {
                 return Err(source.error("font_weight must be an integer 1..1000"));
             }
             let font_weight = font_weight as u16;
+            let start_angle = number(p, "start_angle", -90., source)?;
+            let sweep_angle = number(p, "sweep_angle", 360., source)?;
+            let stroke_width = number(p, "stroke_width", 4., source)?;
+            if raw.kind == Widget::Arc
+                && (!(-360. ..=360.).contains(&start_angle)
+                    || !(-360. ..=360.).contains(&sweep_angle)
+                    || !(0. ..=64.).contains(&stroke_width)
+                    || stroke_width == 0.)
+            {
+                return Err(source
+                    .error("Arc angles must be within -360..360 and stroke_width within 1..64"));
+            }
             let family = crate::text_style::family(&text(p, "family", "IBM Plex Sans", source)?);
             let font_size = crate::text_style::size(font_size, &family);
             let visible = boolean(p, "visible", true, source)?;
@@ -609,6 +631,10 @@ impl ViewSpec {
                 drag: boolean(p, "drag", false, source)?,
                 border_width: number(p, "border_width", 0., source)?,
                 blur: number(p, "blur", 0., source)?.clamp(0., 32.),
+                start_angle,
+                sweep_angle,
+                stroke_width,
+                round_caps: boolean(p, "round_caps", true, source)?,
                 radius: number(
                     p,
                     "radius",
@@ -982,6 +1008,17 @@ pub fn layout(
                 blur: view.blur,
                 rect: r,
                 path,
+            });
+        }
+        if view.kind == Widget::Arc {
+            let arc_color = color(view.color.as_ref(), accent, palette, source)?;
+            emit(Primitive::Arc {
+                rect: r,
+                start_angle: view.start_angle,
+                sweep_angle: view.sweep_angle,
+                stroke_width: view.stroke_width,
+                color: arc_color,
+                round_caps: view.round_caps,
             });
         }
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();

@@ -1241,6 +1241,16 @@ fn live_prefs() -> (
 }
 
 #[test]
+fn weather_rounds_half_degrees_like_the_reference() {
+    for (degrees, expected) in [(8.5, "9°"), (-8.5, "-8°"), (-8.6, "-9°")] {
+        let mut data = fixture("weather");
+        data["current"]["temperature"] = json!(degrees);
+        let shown = page_view(Page::Weather, data).project();
+        assert_eq!(text(&shown, "dashboard.metric"), expected);
+    }
+}
+
+#[test]
 fn weather_follows_the_fahrenheit_preference_live() {
     let (desktop, _dashboard, prefs, _service) = live_prefs();
     let mut data = fixture("weather");

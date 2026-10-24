@@ -277,6 +277,20 @@ impl Generation {
                 return Err(node.diagnostic(format!("invalid/duplicate view ID {}", node.id)));
             }
             let valid_shape = match &node.draw {
+                Primitive::Arc {
+                    start_angle,
+                    sweep_angle,
+                    stroke_width,
+                    ..
+                } => {
+                    start_angle.is_finite()
+                        && (-360. ..=360.).contains(start_angle)
+                        && sweep_angle.is_finite()
+                        && (-360. ..=360.).contains(sweep_angle)
+                        && stroke_width.is_finite()
+                        && (0. ..=64.).contains(stroke_width)
+                        && *stroke_width > 0.
+                }
                 Primitive::Rounded { radius, border, .. } => {
                     radius.is_finite()
                         && *radius >= 0.
