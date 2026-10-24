@@ -1542,7 +1542,11 @@ fn link_rows(state: &NetworkState) -> Vec<LinkRow> {
             },
             active: connection.active,
             secured: connection.security.as_deref().is_some_and(|s| s != "open"),
-            group: if connection.active { "connected" } else { "known" },
+            group: if connection.active {
+                "connected"
+            } else {
+                "known"
+            },
             strength: 0,
         });
     }
