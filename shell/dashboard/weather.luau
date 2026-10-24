@@ -1,13 +1,19 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
 local C=require("./components")
+local style=require("./weather-style")
+local sky=require("./weather-sky")
 return function()
     return ui.Box{id="weather",width=940,height=562,
-        ui.Column{id="hero",position="absolute",left=0,top=0,width=564,height=298,padding=22,gap=8,radius=20,fill="surfaceContainer",
-            C.title("location",ui.bind("dashboard.heading"),520),
-            ui.Text{id="temperature",text=ui.bind("dashboard.metric"),font_size=76,height=100,color="primary"},
-            ui.Text{id="condition",text=ui.bind("dashboard.summary"),font_size=20,height=52,width=520,color="onSurface"},
-            ui.Text{id="details",text=ui.bind("dashboard.detail"),font_size=14,height=48,width=520,color="onSurfaceVariant"},
+        ui.Box{id="hero",position="absolute",left=0,top=0,width=style.width,height=style.height,radius=style.radius,fill="surfaceContainer",
+            sky.background(),
+            ui.Box{id="border",position="absolute",left=0,top=0,width=style.width,height=style.height,radius=style.radius,fill="transparent",border_width=1,border_color=ui.alpha(style.accent,style.border_alpha)},
+            ui.Column{id="reading",position="absolute",left=style.padding,top=style.top,width=style.width*.55,height=240,gap=style.gap,
+                ui.Text{id="location",text=ui.bind("dashboard.heading"),width=style.width*.55,height=22,font_size=style.location_size,color=style.muted},
+                ui.Text{id="temperature",text=ui.bind("dashboard.metric"),font_size=style.temperature_size,height=82,color=style.ink},
+                ui.Text{id="condition",text=ui.bind("dashboard.summary"),font_size=style.condition_size,height=30,width=style.width*.55,color=style.accent},
+                ui.Text{id="details",text=ui.bind("dashboard.detail"),font_size=style.detail_size,height=36,width=style.width*.55,color=style.muted},
+            },
         },
         ui.Column{id="hourly",position="absolute",left=0,top=310,width=564,height=252,padding=16,gap=12,radius=16,fill="surfaceContainerLow",
             C.title("title",ui.tr("bead.dashboard.weather-hours"),532),

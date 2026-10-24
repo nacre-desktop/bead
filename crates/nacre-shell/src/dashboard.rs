@@ -763,6 +763,8 @@ impl Dashboard {
                     out.insert("dashboard.ready".into(), Value::Bool(false));
                     return out;
                 };
+                out.insert("dashboard.weather.code".into(), Value::Number(current.wmo.map_or(-1., f64::from)));
+                out.insert("dashboard.weather.day".into(), Value::Bool(current.is_day));
                 text(&mut out, "heading", &current.location, 24);
                 text(&mut out, "summary", &current.description, 48);
                 text(&mut out, "metric", &self.degrees(current.temperature), 24);

@@ -1360,3 +1360,21 @@ fn every_dashboard_page_loads_with_live_controls() -> Result<()> {
     assert!(bound > 0, "some page binds dashboard.do");
     Ok(())
 }
+
+#[test]
+fn weather_sky_uses_condition_and_daylight_and_draws_every_fallback() -> Result<()> {
+    for day in [true, false] {
+        for code in [None, Some(0), Some(2), Some(3), Some(45), Some(61), Some(73), Some(95)] {
+            let mut data = fixture("weather");
+            data["current"]["wmo"] = json!(code);
+            data["current"]["is_day"] = json!(day);
+            let model = page_view(Page::Weather, data).project();
+            assert_eq!(model["dashboard.weather.day"], Value::Bool(day));
+            assert_eq!(model["dashboard.weather.code"], Value::Number(code.map_or(-1., f64::from)));
+            let mut h = extra_harness(Page::Weather, model, 1.)?;
+            h.render()?;
+            assert!(h.scene().primitives.iter().any(|p| matches!(p, bead::render::Primitive::Image { .. })));
+        }
+    }
+    Ok(())
+}
