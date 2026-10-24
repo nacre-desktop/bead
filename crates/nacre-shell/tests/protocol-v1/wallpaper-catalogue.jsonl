@@ -1,0 +1,4 @@
+{"t":"call","id":1,"m":"wallpaper.catalogue","p":{}}
+{"t":"ret","id":1,"ok":{"entries":[{"id":"/pictures/lake.png","kind":"image","title":"Lake","thumbnail":"/cache/nacre/wallpaper-media/abc-thumbnail.jpg","preview":"/cache/nacre/wallpaper-media/abc-preview.jpg","active":true},{"id":"/videos/clip.mp4","kind":"video","title":"Clip","thumbnail":"","preview":"","active":false}]}}
+{"t":"call","id":2,"m":"wallpaper.activate","p":{"revision":0,"id":"/pictures/lake.png"}}
+{"t":"ret","id":2,"ok":{"revision":1,"palette_revision":1,"path":"/cache/nacre/wallpaper-media/lake.png","file_identity":{"device":"1","inode":"2","size":4,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},"presentation":"crop","palette":{"mode":"dark","colours":{"background":"#102030","onSurface":"#f0f0f0","primary":"#22aa88"}}}}

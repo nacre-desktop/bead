@@ -291,23 +291,29 @@ impl Extras {
                 && let Some(reply) = ticket.try_take()
             {
                 state.catalogue = None;
-                state.catalogue_result = reply
+                let catalogue = reply
                     .ok()
-                    .and_then(|value| value.get("entries").cloned())
-                    .and_then(|entries| entries.as_array().cloned())
-                    .unwrap_or_default()
-                    .into_iter()
-                    .take(2048)
-                    .filter(|entry| {
-                        entry["id"]
-                            .as_str()
-                            .is_some_and(|s| !s.is_empty() && s.len() <= 4096)
-                            && matches!(entry["kind"].as_str(), Some("image" | "video"))
-                            && entry["title"].as_str().is_some()
+                    .and_then(|reply| {
+                        serde_json::from_value::<nacre_protocol::wallpaper::WallpaperCatalogue>(
+                            reply,
+                        )
+                        .ok()
                     })
-                    .collect();
-                if state.catalogue_result.is_empty() {
-                    state.message = "No wallpapers available".into();
+                    .filter(|catalogue| catalogue.validate().is_ok());
+                if let Some(catalogue) = catalogue {
+                    let mut seen = std::collections::BTreeSet::new();
+                    state.catalogue_result = catalogue
+                        .entries
+                        .into_iter()
+                        .filter(|entry| seen.insert(entry.id.clone()))
+                        .map(|entry| {
+                            serde_json::to_value(entry).expect("validated wallpaper entry")
+                        })
+                        .collect();
+                    state.message.clear();
+                } else {
+                    state.catalogue_result.clear();
+                    state.message = "Wallpaper catalogue unavailable".into();
                 }
             }
             if let Some(topic) = &self.topic {

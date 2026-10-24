@@ -47,6 +47,9 @@ fn text(name: &str) -> &'static str {
         "menu-groups" => include_str!("../../tests/protocol-v1/menu-groups.jsonl"),
         "menu-palette" => include_str!("../../tests/protocol-v1/menu-palette.jsonl"),
         "wallpaper-active" => include_str!("../../tests/protocol-v1/wallpaper-active.jsonl"),
+        "wallpaper-catalogue" => {
+            include_str!("../../tests/protocol-v1/wallpaper-catalogue.jsonl")
+        }
         _ => panic!("unknown fixture"),
     }
 }
@@ -83,23 +86,25 @@ fn committed_transcripts_match_the_pinned_rust_exports() {
 }
 
 #[test]
-fn wallpaper_active_transcript_matches_the_pinned_export_and_replays() {
-    let path = "protocol/fixtures/wallpaper-active.jsonl";
-    let actual = fixture("wallpaper-active");
-    let actual_json = actual
-        .iter()
-        .map(|message| serde_json::to_value(message).unwrap())
-        .collect::<Vec<_>>();
-    let generated = nacre_protocol::artifacts::generate();
-    let expected_json = generated[path]
-        .lines()
-        .map(serde_json::from_str::<Value>)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    assert_eq!(actual_json, expected_json);
-    for message in actual {
-        let encoded = framing::encode(&message).unwrap();
-        assert_eq!(framing::decode(&encoded).unwrap(), message);
+fn wallpaper_transcripts_match_the_pinned_export_and_replay() {
+    for name in ["wallpaper-active", "wallpaper-catalogue"] {
+        let path = format!("protocol/fixtures/{name}.jsonl");
+        let actual = fixture(name);
+        let actual_json = actual
+            .iter()
+            .map(|message| serde_json::to_value(message).unwrap())
+            .collect::<Vec<_>>();
+        let generated = nacre_protocol::artifacts::generate();
+        let expected_json = generated[&path]
+            .lines()
+            .map(serde_json::from_str::<Value>)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(actual_json, expected_json);
+        for message in actual {
+            let encoded = framing::encode(&message).unwrap();
+            assert_eq!(framing::decode(&encoded).unwrap(), message);
+        }
     }
 }
 

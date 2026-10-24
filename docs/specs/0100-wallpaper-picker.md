@@ -57,12 +57,15 @@ hit region), `image_fit="cover"`, and signed edge insets for clipped offscreen c
 The shell edge resolves only advertised thumbnail/preview handles; encoded assets have a
 16 MiB byte budget, individual files at most 2 MiB and dimensions at most 1600×1000.
 Closing clears this cache; closing-frame rasters retire with the existing panel worker after idle.
-No new dependencies or duplicate implementations were added.
+No product dependencies or duplicate implementations were added. The Arch CI container needs
+`swaybg` for the video smoke fallback, and removes Sway’s packaged file capability inside
+the container because Docker does not grant that capability.
 
 Remote workspace/all-target clippy with warnings denied and 13 wallpaper tests pass.
 They cover real keyboard input, pointer navigation, revision-fenced calls, stable filtered
 selection, cache bounds/close release and static/dynamic layouts at 1×/1.5×.
-Full CI on the final protocol pin and paired captures at 2880×1800, scale 1.5 are pending.
+The protocol pin is Nacre `bdc7c2ff` (N0070); both wallpaper transcripts are mirrored.
+Full CI on this pin and paired captures at 2880×1800, scale 1.5 are pending.
 Evidence belongs in `evidence/0100/`; missing measurements are not zeros.
 
 ## Known gaps
