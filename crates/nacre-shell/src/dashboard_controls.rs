@@ -418,11 +418,15 @@ impl Dashboard {
             },
             64,
         );
-        let who = [p.artist.as_str(), p.album.as_str()]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(" · ");
+        let who = if self.page == Page::Today {
+            p.artist.clone()
+        } else {
+            [p.artist.as_str(), p.album.as_str()]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ")
+        };
         text(
             out,
             "track_detail",
@@ -500,6 +504,15 @@ impl Dashboard {
             let Some(name) = path.to_str().and_then(|s| s.strip_prefix("@icon:")) else {
                 continue;
             };
+            if name == "today-wallpaper" {
+                if let Some((pair, _, _, Some(bytes))) = &*self.poster.borrow() {
+                    let key =
+                        std::path::PathBuf::from(format!("@today-wallpaper/{}", pair.revision));
+                    scene.asset_data.insert(key.clone(), bytes.clone());
+                    *path = key;
+                }
+                continue;
+            }
             if name == "weather-photo" {
                 if let Some((_, version, Some((bytes, _, _)))) = &*self.photo.borrow() {
                     let key = std::path::PathBuf::from(format!("@weather-photo/{version}"));

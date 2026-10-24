@@ -281,7 +281,11 @@ pub(crate) fn decode(
     decode_pair(pair, width, height)
 }
 
-fn decode_pair(pair: ActiveWallpaper, width: u32, height: u32) -> Result<Decoded, String> {
+pub(crate) fn decode_pair(
+    pair: ActiveWallpaper,
+    width: u32,
+    height: u32,
+) -> Result<Decoded, String> {
     #[cfg(test)]
     let rgba = crate::wallpaper_decode::decode_pair(pair.clone(), width, height)?;
     #[cfg(not(test))]

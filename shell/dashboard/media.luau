@@ -1,6 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
+local kit=require("bead.kit")
 local C=require("./components")
+local function transportButton(id,glyph,label,action)
+    return kit.Button{id=id,width=34,height=34,padding=0,radius=17,justify="center",align="center",
+        fill="transparent",hover_fill=ui.alpha("onSurface",.08),aria_label=label,on_activate=action,
+        ui.Text{text=glyph,family="Material Symbols Rounded",font_size=20,width=24,height=24,
+            text_align="center",color=action and "onSurface" or "onSurfaceVariant"}}
+end
 return function()
     local rows=ui.resolve_for_check(ui.bind("dashboard.rows"))
     local lyrics
@@ -22,10 +29,11 @@ return function()
     if live then
         local function op(name,can) return control and ui.resolve_for_check(ui.bind(can)) and ui.action("dashboard.do",name) or nil end
         transport=ui.Column{id="transport",width=520,height=146,gap=10,
-            ui.Row{id="buttons",width=520,height=40,gap=12,
-                C.button("previous",ui.tr("bead.dashboard.media-previous"),op("player.previous","dashboard.can_previous"),110),
-                C.button("toggle",state=="playing" and ui.tr("bead.dashboard.pause") or ui.tr("bead.dashboard.media-play"),op("player.play_pause","dashboard.can_toggle"),110),
-                C.button("next",ui.tr("bead.dashboard.media-next"),op("player.next","dashboard.can_next"),110),
+            ui.Row{id="buttons",width=520,height=40,gap=8,
+                transportButton("previous","skip_previous",ui.tr("bead.dashboard.media-previous"),op("player.previous","dashboard.can_previous")),
+                transportButton("toggle",state=="playing" and "pause" or "play_arrow",
+                    state=="playing" and ui.tr("bead.dashboard.pause") or ui.tr("bead.dashboard.media-play"),op("player.play_pause","dashboard.can_toggle")),
+                transportButton("next","skip_next",ui.tr("bead.dashboard.media-next"),op("player.next","dashboard.can_next")),
                 ui.Text{id="position",text=ui.bind("dashboard.metric"),width=170,height=24,font_size=14,text_align="right",color="onSurfaceVariant"},
             },
             ui.Box{id="track",width=520,height=6,radius=3,fill=ui.alpha("primary",0.16),

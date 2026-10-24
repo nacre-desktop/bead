@@ -458,78 +458,6 @@ fn dashboard_disconnect_keeps_last_good_stale() -> Result<()> {
 
 #[test]
 fn dashboard_long_rows_scroll_without_clipping() -> Result<()> {
-    use bead_test::Input;
-
-    let mut calendar = fixture("calendar");
-    calendar["events"]["items"] = json!({});
-    calendar["events"]["order"] = json!([]);
-    for index in 0..24 {
-        let id = format!("event-{index}");
-        calendar["events"]["items"][&id] = json!({
-            "title": format!("Event {index}"),
-            "start": 1_800_000_000 + index,
-            "time": "08:00",
-            "date": "2027-01-15"
-        });
-        calendar["events"]["order"]
-            .as_array_mut()
-            .ok_or("calendar event order must be an array")?
-            .push(json!(id));
-    }
-    let mut model = view(Page::Today, calendar, Some(fixture("weather"))).project();
-    model.extend(BTreeMap::from([
-        ("calendar.initialized".into(), Value::Bool(true)),
-        ("calendar.ready".into(), Value::Bool(true)),
-        ("calendar.today".into(), Value::Text("2024-02-29".into())),
-        ("calendar.year".into(), Value::Number(2024.)),
-        ("calendar.month".into(), Value::Number(2.)),
-    ]));
-    let mut today = Harness::load(
-        &root(),
-        Path::new("dashboard/today/main.luau"),
-        &root().join("palette.json"),
-        model,
-        Config {
-            width: 1048,
-            height: 714,
-            scale: 1.,
-        },
-    )?;
-    today.render()?;
-    let scroll = today
-        .session
-        .view_nodes()
-        .iter()
-        .find(|node| node.scroll_store.as_deref() == Some("dashboard.agenda.scroll.y"))
-        .ok_or("Today agenda scroll region missing")?;
-    let rect = bead::ui::rect(&scroll.draw);
-    today.script((0..3).map(|_| Input::Scroll {
-        x: rect.x + rect.w / 2.,
-        y: rect.y + rect.h / 2.,
-        delta: 400.,
-    }))?;
-    let (event_index, event_rect) = today
-        .scene()
-        .primitives
-        .iter()
-        .enumerate()
-        .find_map(|(index, primitive)| match primitive {
-            bead::render::Primitive::Text { text, rect, .. } if text == "Event 23" => {
-                Some((index, rect))
-            }
-            _ => None,
-        })
-        .ok_or("last bounded agenda event is not rendered after scrolling")?;
-    let clip = *today
-        .scene()
-        .clips
-        .get(&event_index)
-        .ok_or("agenda row must carry its viewport clip")?;
-    assert!(
-        event_rect.y < clip.y + clip.h && event_rect.y + event_rect.h > clip.y,
-        "last agenda event must intersect the scrolled viewport"
-    );
-
     let mut system_data = fixture("system");
     for index in 0..5 {
         system_data["processes"]["items"][format!("process-{index}")]["name"] =
@@ -764,15 +692,23 @@ fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Re
                     .split_whitespace()
                     .any(|part| part
                         == if page == Page::Today {
-                            "sources=7"
+                            "sources=11"
                         } else if page == Page::Weather {
                             "sources=26"
                         } else {
                             "sources=6"
                         }),
-                "selected-page modules and image snapshots remain lazy"
+                "selected-page modules and image snapshots remain lazy: {}",
+                h.session.resource_counts()
             );
             let frame = h.render()?;
+            if page == Page::Today {
+                assert!(
+                    h.scene().primitives.iter().any(|p| matches!(p,
+                    bead::render::Primitive::Text { text, .. } if text == "10:00")),
+                    "the wallpaper fallback must retain the clock content"
+                );
+            }
             let rect = h
                 .scene()
                 .primitives
@@ -954,7 +890,7 @@ fn today_clock_and_secondary_source_drop_with_page_and_preserve_browsed_month() 
 }
 
 #[test]
-fn today_calendar_navigation_and_agenda_scrolling_use_real_input() -> Result<()> {
+fn today_calendar_navigation_uses_real_input() -> Result<()> {
     let mut data = fixture("calendar");
     use bead_test::Input;
     data["events"]["items"] = json!({});
@@ -1020,21 +956,6 @@ fn today_calendar_navigation_and_agenda_scrolling_use_real_input() -> Result<()>
     assert_eq!(
         h.session.stores.get("calendar.month"),
         Some(&Value::Number(2.))
-    );
-    let scroll = h
-        .session
-        .view_nodes()
-        .iter()
-        .find(|n| n.scroll_store.as_deref() == Some("dashboard.agenda.scroll.y"))
-        .ok_or("agenda scrolling")?;
-    let r = bead::ui::rect(&scroll.draw);
-    h.script([Input::Scroll {
-        x: r.x + r.w / 2.,
-        y: r.y + r.h / 2.,
-        delta: 200.,
-    }])?;
-    assert!(
-        matches!(h.session.stores.get("dashboard.agenda.scroll.y"),Some(Value::Number(value)) if *value>0.)
     );
     // Calendar/date/palette is presentation only; events cannot execute labels.
     assert!(

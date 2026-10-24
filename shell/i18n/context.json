@@ -192,7 +192,6 @@
   "bead.dashboard.media-lyrics": "Dashboard panel: heading of the lyrics card of the media page.",
   "bead.dashboard.media-next": "Dashboard panel: button that plays the next track.",
   "bead.dashboard.media-play": "Dashboard panel: button that starts or resumes playback.",
-  "bead.dashboard.media-prev": "Dashboard panel: short label of the button on the small Today player that plays the previous track; the tile is narrow, keep it very short.",
   "bead.dashboard.media-previous": "Dashboard panel: button that plays the previous track.",
   "bead.dashboard.media-seek-back": "Dashboard panel: button that jumps 10 seconds back in the track; \"s\" means seconds.",
   "bead.dashboard.media-seek-forward": "Dashboard panel: button that jumps 10 seconds ahead in the track; \"s\" means seconds.",

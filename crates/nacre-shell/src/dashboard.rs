@@ -271,6 +271,15 @@ pub fn spec(
             } else {
                 None
             };
+            let system = (page == Page::Today)
+                .then(|| choice.open_named("dashboard.system", "system").ok())
+                .flatten();
+            let wallpaper = (page == Page::Today)
+                .then(|| choice.open_named("wallpaper.active", "wallpaper").ok())
+                .flatten();
+            let summary_updates = (page == Page::Today)
+                .then(|| choice.open_named("dashboard.updates", "updates").ok())
+                .flatten();
             // Tab visibility and the customization page read the revisioned store.
             let settings = choice.open_named(SETTINGS, "settings").ok();
             let controls = choice.client.clone().map(controls::Controls::new);
@@ -298,6 +307,7 @@ pub fn spec(
                         Dashboard::new(page, source, secondary, choice.fixtures.is_some())
                             .with_clock(clock)
                             .with_player(player)
+                            .with_overview(system, wallpaper, summary_updates)
                             .with_controls(settings, controls, choice.client.clone())
                             .with_prefs(choice.prefs.clone()),
                     )
@@ -336,6 +346,12 @@ impl ReadOnly {
             }
             weather_photo::TOPIC => {
                 serde_json::from_value::<weather_photo::State>(data.clone())
+                    .map_err(|_| invalid())?;
+            }
+            "wallpaper.active" => {
+                serde_json::from_value::<nacre_protocol::wallpaper::WallpaperActive>(data.clone())
+                    .map_err(|_| invalid())?
+                    .validate()
                     .map_err(|_| invalid())?;
             }
             _ if extra(topic, &data).is_some() => {}
@@ -439,6 +455,12 @@ struct Ticker {
 type Art = (String, Option<Arc<[u8]>>);
 /// A published city photo: path, version (`checked`) and its bytes and size (`None` when refused).
 type Photo = (String, u64, Option<(Arc<[u8]>, u32, u32)>);
+type Poster = (
+    nacre_protocol::wallpaper::ActiveWallpaper,
+    u32,
+    u32,
+    Option<Arc<[u8]>>,
+);
 type Notify = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
 
 #[path = "dashboard_controls.rs"]
@@ -450,6 +472,10 @@ pub struct Dashboard {
     secondary: Option<Arc<dyn Source>>,
     /// Today's mini player (the Media page reads its player through `secondary`).
     player: Option<Arc<dyn Source>>,
+    system: Option<Arc<dyn Source>>,
+    wallpaper: Option<Arc<dyn Source>>,
+    summary_updates: Option<Arc<dyn Source>>,
+    poster: std::cell::RefCell<Option<Poster>>,
     /// Thumbnail of the active player's art, decoded once per path while visible.
     art: std::cell::RefCell<Option<Art>>,
     /// The Weather page's daemon city photo, held only while the page is shown.
@@ -479,6 +505,10 @@ impl Dashboard {
             source,
             secondary: updates,
             player: None,
+            system: None,
+            wallpaper: None,
+            summary_updates: None,
+            poster: Default::default(),
             art: Default::default(),
             photo: Default::default(),
             shots: Default::default(),
@@ -530,12 +560,26 @@ impl Dashboard {
         self.player = player;
         self
     }
+    pub fn with_overview(
+        mut self,
+        system: Option<Arc<dyn Source>>,
+        wallpaper: Option<Arc<dyn Source>>,
+        updates: Option<Arc<dyn Source>>,
+    ) -> Self {
+        self.system = system;
+        self.wallpaper = wallpaper;
+        self.summary_updates = updates;
+        self
+    }
     pub fn with_clock(mut self, clock: Option<Arc<dyn Source>>) -> Self {
         self.clock = clock;
         self
     }
     pub fn project_with_stores(&self, stores: &bead::core::Stores) -> BTreeMap<String, Value> {
         let mut values = self.project();
+        if self.page == Page::Today {
+            self.project_wallpaper(stores, &mut values);
+        }
         // The countdown redraws once a second only while a session runs in an open panel;
         // the mini player on Today shows no position and needs no wake.
         let open = stores.get("panel.open") != Some(&Value::Bool(false));
@@ -591,6 +635,12 @@ impl Dashboard {
         if let Some(player) = &self.player {
             subscriptions.push(player.subscribe(callback.clone())?);
         }
+        for source in [&self.system, &self.wallpaper, &self.summary_updates]
+            .into_iter()
+            .flatten()
+        {
+            subscriptions.push(source.subscribe(callback.clone())?);
+        }
         if let Some(clock) = &self.clock {
             subscriptions.push(clock.subscribe(callback)?);
         }
@@ -636,9 +686,11 @@ impl Dashboard {
                 Value::Text(String::new()),
             ),
         ]);
-        if self.page == Page::System
-            && let Some(updates) = &self.secondary
-        {
+        if let Some(updates) = if self.page == Page::System {
+            self.secondary.as_ref()
+        } else {
+            self.summary_updates.as_ref()
+        } {
             let update = updates.snapshot();
             if let Ok(CoreSnapshot::Updates(s)) = checked("dashboard.updates", &update.data) {
                 if s.health.available
@@ -671,6 +723,21 @@ impl Dashboard {
             self.project_player(&mut out);
         }
         if self.page == Page::Today {
+            out.insert("dashboard.wallpaper".into(), Value::Bool(false));
+            out.insert("dashboard.host".into(), Value::list(Vec::new()));
+            if let Some(source) = &self.system
+                && let Ok(CoreSnapshot::System(s)) =
+                    checked("dashboard.system", &source.snapshot().data)
+                && s.health.available
+            {
+                controls::host(&s, self.now, &mut out);
+                let mut gauges = controls::gauges(&s);
+                let disk = s.disks.order.iter().find_map(|id| s.disks.items.get(id));
+                gauges[2] = json!({"id":"storage","label":tr("bead.dashboard.system-drives", &[]),"icon":"storage",
+                    "value":disk.map_or("—".into(), |d| format!("{:.0}%", d.used as f64 * 100. / d.total as f64)),
+                    "detail":disk.map_or(String::new(), |d| format!("{} / {}", bytes(d.used), bytes(d.total)))});
+                out.insert("dashboard.gauges".into(), Value::list(gauges));
+            }
             text(&mut out, "clock", "—", 16);
             if let Some(source) = &self.secondary {
                 let weather = source.snapshot();
@@ -1101,9 +1168,51 @@ fn now_ms() -> u64 {
         .map_or(0, |d| d.as_millis() as u64)
 }
 impl Dashboard {
-    /// N0056: the leased city photo, shown only while consent is on and the daemon reports it ready.
-    /// The file is read once per published version and dropped with the page; `photo_link` is set
-    /// only for an HTTPS Commons file page, the one URL the credit may open.
+    /// Today's bounded still poster, retained only while its page is alive.
+    fn project_wallpaper(&self, stores: &bead::core::Stores, out: &mut BTreeMap<String, Value>) {
+        let pair = self.wallpaper.as_ref().and_then(|source| {
+            let snapshot = source.snapshot();
+            let state: nacre_protocol::wallpaper::WallpaperActive =
+                serde_json::from_value((*snapshot.data).clone()).ok()?;
+            (snapshot.connected && state.available && !state.stale && state.validate().is_ok())
+                .then_some(state.current)
+                .flatten()
+        });
+        // Geometry belongs to the shell's theme. Decode with the existing short-lived,
+        // descriptor-pinned worker; never retain a source-sized bitmap in the UI.
+        let dimension = |key| match stores.get(key) {
+            Some(Value::Number(n)) if n.is_finite() && *n > 0. => (*n * 2.).min(4096.) as u32,
+            _ => 0,
+        };
+        let (w, h) = (
+            dimension("dashboard.hero.width"),
+            dimension("dashboard.hero.height"),
+        );
+        let mut held = self.poster.borrow_mut();
+        if let Some(pair) = pair.filter(|_| w > 0 && h > 0) {
+            if held
+                .as_ref()
+                .is_none_or(|(old, ow, oh, _)| old != &pair || *ow != w || *oh != h)
+            {
+                let bytes = crate::wallpaper::decode_pair(pair.clone(), w, h)
+                    .ok()
+                    .and_then(|decoded| image::RgbaImage::from_raw(w, h, decoded.rgba))
+                    .and_then(|image| crate::player_art::encode(&image));
+                *held = Some((pair, w, h, bytes));
+            }
+        } else {
+            *held = None;
+        }
+        out.insert(
+            "dashboard.wallpaper".into(),
+            Value::Bool(
+                held.as_ref()
+                    .is_some_and(|(_, _, _, bytes)| bytes.is_some()),
+            ),
+        );
+    }
+
+    /// N0056: the leased city photo, shown only with consent and a ready daemon asset.
     fn project_photo(&self, out: &mut BTreeMap<String, Value>, enabled: bool) {
         let asset = enabled
             .then_some(self.secondary.as_ref())
@@ -1214,6 +1323,10 @@ mod tests;
 #[cfg(test)]
 #[path = "dashboard_more_tests.rs"]
 mod more_tests;
+
+#[cfg(test)]
+#[path = "dashboard_overview_tests.rs"]
+mod overview_tests;
 
 /// `desktop.clockFormat`: the daemon clock is "HH:MM"; 12-hour reads "h:MM AM/PM".
 fn clock_text(clock: &str, twelve: bool) -> String {
