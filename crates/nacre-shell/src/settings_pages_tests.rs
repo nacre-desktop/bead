@@ -280,10 +280,19 @@ async fn weather_location_is_a_city_field_with_a_hint_and_no_automatic_lookup() 
     .await;
     let rows = items(&model);
     assert_eq!(row(&rows, city)["kind"], "text");
-    assert_eq!(row(&rows, city)["description"], "Set a city to show weather.");
+    assert_eq!(
+        row(&rows, city)["description"],
+        "Set a city to show weather."
+    );
     // No consent switch and no wording about locating by IP address.
-    assert!(rows.iter().all(|r| !r.to_string().contains("weatherIpLookup")));
-    assert!(rows.iter().all(|r| !r.to_string().to_lowercase().contains("ipinfo")));
+    assert!(
+        rows.iter()
+            .all(|r| !r.to_string().contains("weatherIpLookup"))
+    );
+    assert!(
+        rows.iter()
+            .all(|r| !r.to_string().to_lowercase().contains("ipinfo"))
+    );
     assert_eq!(
         row(&rows, "date-time-language.locale.weatherFahrenheit")["kind"],
         "toggle"
