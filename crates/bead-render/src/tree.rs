@@ -858,6 +858,12 @@ struct RepairScratch {
 impl RepairScratch {
     const CAP: usize = 16 * bead_core::cache::MIB;
     const IDLE: std::time::Duration = std::time::Duration::from_millis(500);
+    fn charge_mask(&mut self, bytes: usize) -> Result<bead_core::cache::Charge> {
+        Ok(self
+            .budget
+            .get_or_insert_with(|| bead_core::cache::Budget::new("cpu-repair-scratch", Self::CAP))
+            .reserve(bytes)?)
+    }
     fn obtain(&mut self, w: u32, h: u32) -> Result<(&mut Pixmap, &mut Mask)> {
         let size = tiny_skia::IntSize::from_wh(w, h).ok_or("empty repair scratch")?;
         let len = (w as usize)
@@ -945,6 +951,12 @@ fn paint_with_scratch(
     if damage.w == 0 || damage.h == 0 {
         return Ok(());
     }
+    let damage_mask_bytes = (width as usize)
+        .checked_mul(damage.h as usize)
+        .ok_or("repair mask overflow")?;
+    if damage_mask_bytes > RepairScratch::CAP {
+        return Err("repair mask exceeds budget".into());
+    }
     let start = opaque_start(frame, offset, scale, damage, width, height);
     if start.is_none() {
         let clear_profile = bead_core::profile::Span::new("paint_clear");
@@ -956,8 +968,6 @@ fn paint_with_scratch(
     }
     let begin = damage.y as usize * width as usize * 4;
     let end = (damage.y + damage.h) as usize * width as usize * 4;
-    let mut target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
-        .ok_or("invalid SHM strip")?;
     let mut mask = Mask::new(width, damage.h).ok_or("damage mask")?;
     let mut mask_clip = None;
     let mut painted = false;
@@ -1050,9 +1060,11 @@ fn paint_with_scratch(
             && fill[3] == 255
             && fill_covers(&item.primitive, offset, scale, clip)
         {
+            let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
+                .ok_or("invalid SHM strip")?;
             for row in clip.y..clip.y + clip.h {
                 let start = ((row - damage.y) * width + clip.x) as usize * 4;
-                for pixel in target.data_mut()[start..start + clip.w as usize * 4]
+                for pixel in strip.data_mut()[start..start + clip.w as usize * 4]
                     .as_chunks_mut::<4>()
                     .0
                 {
@@ -1065,6 +1077,8 @@ fn paint_with_scratch(
         if !painted && let Some(raster) = &item.raster {
             // Damage was cleared above. Source-over onto zero is an exact copy,
             // including partial alpha; avoid blending a full shadow-sized image.
+            let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
+                .ok_or("invalid SHM strip")?;
             let r = rect(&item.primitive);
             let dx = ((r.x + offset.0) * scale).round() as i32 + raster.origin.0 as i32;
             let dy = ((r.y + offset.1) * scale).round() as i32 + raster.origin.1 as i32;
@@ -1082,7 +1096,7 @@ fn paint_with_scratch(
                         * 4;
                     let dst = ((row - damage.y) * width + x) as usize * 4;
                     let len = (right - x) as usize * 4;
-                    target.data_mut()[dst..dst + len]
+                    strip.data_mut()[dst..dst + len]
                         .copy_from_slice(&raster.pixels.data()[src..src + len]);
                 }
                 painted = true;
@@ -1116,7 +1130,9 @@ fn paint_with_scratch(
         let r = rect(&item.primitive);
         if let Some(raster) = &item.raster {
             painted = true;
-            target.draw_pixmap(
+            let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
+                .ok_or("invalid SHM strip")?;
+            strip.draw_pixmap(
                 ((r.x + offset.0) * scale).round() as i32 + raster.origin.0 as i32,
                 ((r.y + offset.1) * scale).round() as i32 + raster.origin.1 as i32
                     - damage.y as i32,
@@ -1226,7 +1242,10 @@ fn paint_with_scratch(
                     );
                 }
             } else {
-                let padding = ((*radius * scale).ceil() as u32)
+                // Match `crate::rounded`: the effective corner radius cannot exceed
+                // either half-dimension, even when a theme uses a pill radius like 9999.
+                let radius = radius.min(r.w * 0.5).min(r.h * 0.5).max(0.);
+                let padding = ((radius * scale).ceil() as u32)
                     .saturating_add(
                         border
                             .as_ref()
@@ -1238,50 +1257,106 @@ fn paint_with_scratch(
                 let right = (clip.x + clip.w).saturating_add(padding).min(width);
                 let bottom = (clip.y + clip.h).saturating_add(padding).min(height);
                 let (w, h) = (right - x, bottom - y);
-                let (scratch, scratch_mask) = repair_scratch.obtain(w, h)?;
-                for row in y..bottom {
-                    let source = ((row * width + x) * 4) as usize;
-                    let dest = ((row - y) * w * 4) as usize;
-                    scratch.data_mut()[dest..dest + w as usize * 4]
-                        .copy_from_slice(&bytes[source..source + w as usize * 4]);
-                }
-                for row in clip.y..clip.y + clip.h {
-                    let start = ((row - y) * w + clip.x - x) as usize;
-                    scratch_mask.data_mut()[start..start + clip.w as usize].fill(255);
-                }
-                let transform = Transform::from_scale(scale, scale)
-                    .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
-                let mut color = Paint::default();
-                color.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
-                scratch.fill_path(
-                    &path,
-                    &color,
-                    FillRule::Winding,
-                    transform,
-                    Some(&*scratch_mask),
-                );
-                if let Some((rgba, line)) = border {
-                    color.set_color_rgba8(rgba[0], rgba[1], rgba[2], rgba[3]);
-                    scratch.stroke_path(
-                        &path,
-                        &color,
-                        &Stroke {
-                            width: *line,
-                            ..Stroke::default()
-                        },
-                        transform,
-                        Some(&*scratch_mask),
-                    );
-                }
-                for row in clip.y..clip.y + clip.h {
-                    let source = (((row - y) * w + clip.x - x) * 4) as usize;
-                    let dest = ((row * width + clip.x) * 4) as usize;
-                    bytes[dest..dest + clip.w as usize * 4]
-                        .copy_from_slice(&scratch.data()[source..source + clip.w as usize * 4]);
+                match repair_scratch.obtain(w, h) {
+                    Ok((scratch, scratch_mask)) => {
+                        for row in y..bottom {
+                            let source = ((row * width + x) * 4) as usize;
+                            let dest = ((row - y) * w * 4) as usize;
+                            scratch.data_mut()[dest..dest + w as usize * 4]
+                                .copy_from_slice(&bytes[source..source + w as usize * 4]);
+                        }
+                        for row in clip.y..clip.y + clip.h {
+                            let start = ((row - y) * w + clip.x - x) as usize;
+                            scratch_mask.data_mut()[start..start + clip.w as usize].fill(255);
+                        }
+                        let transform = Transform::from_scale(scale, scale).post_translate(
+                            offset.0 * scale - x as f32,
+                            offset.1 * scale - y as f32,
+                        );
+                        let mut color = Paint::default();
+                        color.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
+                        scratch.fill_path(
+                            &path,
+                            &color,
+                            FillRule::Winding,
+                            transform,
+                            Some(&*scratch_mask),
+                        );
+                        if let Some((rgba, line)) = border {
+                            color.set_color_rgba8(rgba[0], rgba[1], rgba[2], rgba[3]);
+                            scratch.stroke_path(
+                                &path,
+                                &color,
+                                &Stroke {
+                                    width: *line,
+                                    ..Stroke::default()
+                                },
+                                transform,
+                                Some(&*scratch_mask),
+                            );
+                        }
+                        for row in clip.y..clip.y + clip.h {
+                            let source = (((row - y) * w + clip.x - x) * 4) as usize;
+                            let dest = ((row * width + clip.x) * 4) as usize;
+                            bytes[dest..dest + clip.w as usize * 4].copy_from_slice(
+                                &scratch.data()[source..source + clip.w as usize * 4],
+                            );
+                        }
+                    }
+                    Err(_) => {
+                        // A curve guard can span most of the surface. Drop both the
+                        // reusable RGBA scratch and strip mask, then paint directly into
+                        // SHM with a charged full-canvas mask so tiny-skia sees the full
+                        // curve while writes remain restricted to this clip.
+                        drop(std::mem::replace(
+                            &mut mask,
+                            Mask::new(1, 1).ok_or("repair mask placeholder")?,
+                        ));
+                        repair_scratch.release();
+                        let full_mask_bytes = (width as usize)
+                            .checked_mul(height as usize)
+                            .ok_or("repair mask overflow")?;
+                        let mask_charge = repair_scratch.charge_mask(full_mask_bytes)?;
+                        let mut full_mask = Mask::new(width, height).ok_or("full repair mask")?;
+                        for row in clip.y..clip.y + clip.h {
+                            let start = (row * width + clip.x) as usize;
+                            full_mask.data_mut()[start..start + clip.w as usize].fill(255);
+                        }
+                        {
+                            let mut full = PixmapMut::from_bytes(bytes, width, height)
+                                .ok_or("full SHM repair target")?;
+                            let transform = Transform::from_scale(scale, scale)
+                                .post_translate(offset.0 * scale, offset.1 * scale);
+                            let mut color = Paint::default();
+                            color.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
+                            full.fill_path(
+                                &path,
+                                &color,
+                                FillRule::Winding,
+                                transform,
+                                Some(&full_mask),
+                            );
+                            if let Some((rgba, line)) = border {
+                                color.set_color_rgba8(rgba[0], rgba[1], rgba[2], rgba[3]);
+                                full.stroke_path(
+                                    &path,
+                                    &color,
+                                    &Stroke {
+                                        width: *line,
+                                        ..Stroke::default()
+                                    },
+                                    transform,
+                                    Some(&full_mask),
+                                );
+                            }
+                        }
+                        drop(full_mask);
+                        drop(mask_charge);
+                        mask = Mask::new(width, damage.h).ok_or("restored damage mask")?;
+                        mask_clip = None;
+                    }
                 }
             }
-            target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
-                .ok_or("invalid restored SHM strip")?;
         }
     }
     let _format_profile = bead_core::profile::Span::new("paint_format");
@@ -1491,6 +1566,106 @@ mod tests {
         );
         assert!(scratch.obtain(4096, 4096).is_err());
         assert!(scratch.pixels.is_none() && scratch.mask.is_none());
+    }
+
+    #[test]
+    fn fullscreen_translucent_repair_matches_full_canvas_with_bounded_mask() {
+        let (width, height, scale) = (2880, 1800, 1.5_f32);
+        let mut scene = scene();
+        scene.width = 1920.;
+        scene.bounds = Rect::new(0., 0., 1920., 1200.);
+        scene.layers.clear();
+        scene.asset_data.clear();
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(0., 0., 1920., 1200.),
+                radius: 12.,
+                fill: [25, 40, 70, 112],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(80., 100., 260., 34.),
+                radius: 9999.,
+                fill: [210, 40, 70, 220],
+                border: Some(([255, 255, 255, 180], 2.)),
+            },
+        ];
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene, scale).unwrap();
+        let frame = cache.frame.as_ref().unwrap();
+        let damage = Damage {
+            x: 3,
+            y: 2,
+            w: width - 6,
+            h: height - 4,
+        };
+        let full_scratch = width as usize * height as usize * 5;
+        let mask_only = width as usize * damage.h as usize;
+        assert!(full_scratch > RepairScratch::CAP);
+        assert!(mask_only <= RepairScratch::CAP);
+
+        let mut full = vec![0; width as usize * height as usize * 4];
+        paint(
+            frame,
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut full,
+                width,
+                height,
+                scale,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        let outside = [17_u8, 29, 41, 233];
+        let mut partial = outside.repeat(width as usize * height as usize);
+        let mut scratch = RepairScratch::default();
+        paint_with_scratch(
+            frame,
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut partial,
+                width,
+                height,
+                scale,
+                format: PixelFormat::Rgba,
+            },
+            damage,
+            &mut scratch,
+        )
+        .unwrap();
+        for y in 0..height {
+            for x in 0..width {
+                let at = ((y * width + x) * 4) as usize;
+                let inside = x >= damage.x
+                    && x < damage.x + damage.w
+                    && y >= damage.y
+                    && y < damage.y + damage.h;
+                if inside {
+                    assert_eq!(
+                        &partial[at..at + 4],
+                        &full[at..at + 4],
+                        "partial pixel differs at ({x},{y})"
+                    );
+                } else {
+                    assert_eq!(
+                        &partial[at..at + 4],
+                        &outside,
+                        "pixels outside damage must remain untouched"
+                    );
+                }
+            }
+        }
+        assert!(
+            scratch
+                .charge
+                .as_ref()
+                .is_some_and(|charge| charge.bytes() < bead_core::cache::MIB)
+        );
+        let used = scratch.used.unwrap();
+        assert_eq!(scratch.trim_idle(used + RepairScratch::IDLE), None);
+        assert!(scratch.pixels.is_none() && scratch.mask.is_none() && scratch.charge.is_none());
     }
 
     #[test]
