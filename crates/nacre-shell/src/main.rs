@@ -748,15 +748,18 @@ fn start(
             );
         }
         if let Some(client) = &_ui_provider {
-            let capture = options.capture.get_or_insert_with(|| {
-                bead::wayland::CaptureHub::new(
-                    std::path::PathBuf::from(
-                        std::env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()),
+            // BEAD_CAPTURE=off keeps the icon tiles (a control for measurements).
+            if std::env::var("BEAD_CAPTURE").as_deref() != Ok("off") {
+                options.capture.get_or_insert_with(|| {
+                    bead::wayland::CaptureHub::new(
+                        std::path::PathBuf::from(
+                            std::env::var_os("XDG_RUNTIME_DIR").unwrap_or_else(|| "/tmp".into()),
+                        )
+                        .join(format!("bead-capture-{}", std::process::id())),
                     )
-                    .join(format!("bead-capture-{}", std::process::id())),
-                )
-            });
-            let capture = Some(capture.clone());
+                });
+            }
+            let capture = options.capture.clone();
             for kind in extras::Kind::ALL {
                 views.insert(
                     kind.name().into(),

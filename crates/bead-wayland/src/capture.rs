@@ -563,9 +563,9 @@ fn thumbnail(
                 let mut sx = x0;
                 while sx < x1 {
                     let i = ((sy * sw + sx) * 4) as usize;
-                    acc[0] += u32::from(src[i + usize::from(!bgr) * 2]);
+                    acc[0] += u32::from(src[i + usize::from(bgr) * 2]);
                     acc[1] += u32::from(src[i + 1]);
-                    acc[2] += u32::from(src[i + usize::from(bgr) * 2]);
+                    acc[2] += u32::from(src[i + usize::from(!bgr) * 2]);
                     n += 1;
                     sx += xstep;
                 }
