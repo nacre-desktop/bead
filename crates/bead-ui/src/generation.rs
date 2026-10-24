@@ -161,16 +161,6 @@ impl Loader {
     }
 }
 impl Generation {
-    pub(super) fn defer_markup_cleanup(&self, enabled: bool) {
-        if let Some(frontend) = &self.markup_frontend {
-            frontend.defer_cleanup(enabled);
-        }
-    }
-    pub(super) fn finish_frame(&self) {
-        if let Some(frontend) = &self.markup_frontend {
-            frontend.finish_frame();
-        }
-    }
     pub(super) fn markup_resource_bytes(&self) -> (usize, usize, usize) {
         self.markup_frontend
             .as_ref()

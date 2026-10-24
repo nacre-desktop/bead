@@ -118,9 +118,6 @@ pub struct LuauFrontEnd {
     _compiled_charge: bead_core::cache::Charge,
     values_budget: bead_core::cache::Budget,
     vm_build_bytes: std::cell::Cell<usize>,
-    defer_cleanup: std::cell::Cell<bool>,
-    finished_vm: RefCell<Option<(Lua, bead_core::cache::Charge)>>,
-    vm_budget: bead_core::cache::Budget,
 }
 impl LuauFrontEnd {
     pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
@@ -166,33 +163,10 @@ impl LuauFrontEnd {
             ),
             compiled,
             vm_build_bytes: std::cell::Cell::new(0),
-            defer_cleanup: std::cell::Cell::new(false),
-            finished_vm: RefCell::new(None),
-            vm_budget: bead_core::cache::Budget::new(
-                "finished-markup-vm",
-                8 * bead_core::cache::MIB,
-            ),
             materialized: RefCell::new(None),
             kit,
             install,
         })
-    }
-    pub(super) fn defer_cleanup(&self, enabled: bool) {
-        self.defer_cleanup.set(enabled);
-        if !enabled {
-            self.finish_frame();
-        }
-    }
-    pub(super) fn finish_frame(&self) {
-        let finished = self.finished_vm.borrow_mut().take();
-        if let Some(finished) = finished {
-            let _profile = bead_core::profile::Span::new("markup_cleanup");
-            drop(finished);
-        }
-    }
-    #[cfg(test)]
-    pub(super) fn retained_vm_bytes(&self) -> usize {
-        self.vm_budget.used()
     }
     pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
         (
@@ -215,8 +189,6 @@ impl FrontEnd for LuauFrontEnd {
         {
             return Ok(raw.clone());
         }
-        // Retain at most one finished sandbox; never reuse its lexical state.
-        self.finish_frame();
         let reads = RefCell::new(BTreeMap::new());
         let upstream = resolve;
         let record = |name: &str| {
@@ -392,13 +364,9 @@ impl FrontEnd for LuauFrontEnd {
                 lua.from_value(node)
             })
         })();
+        // The markup sandbox is temporary; this is its end-of-build allocation,
+        // not a retained VM or an allocator high-water estimate.
         self.vm_build_bytes.set(lua.used_memory());
-        if self.defer_cleanup.get()
-            && result.is_ok()
-            && let Ok(charge) = self.vm_budget.reserve(lua.used_memory() + 256)
-        {
-            *self.finished_vm.borrow_mut() = Some((lua, charge));
-        }
         let result = result
             .map(std::rc::Rc::new)
             .map_err(|error| diagnostic(entry, error));

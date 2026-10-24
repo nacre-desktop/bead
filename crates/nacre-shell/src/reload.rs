@@ -522,7 +522,6 @@ impl Runtime {
         self.session
             .set_projector(Box::new(move |stores| projector.project(stores)));
         self.session.set_projection_coalescing(true);
-        self.session.set_deferred_markup_cleanup(true);
         self.session.stores = self
             .session
             .stores
@@ -3759,9 +3758,6 @@ impl SceneSource for Runtime {
                 .session
                 .focused_action()
                 .is_some_and(|(_, name, _)| name == "close")
-    }
-    fn frame_presented(&mut self) {
-        self.session.finish_frame();
     }
     fn presented(&mut self, revision: u64) {
         if self.session.presented(revision).is_err() {

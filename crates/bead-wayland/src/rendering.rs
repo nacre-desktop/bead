@@ -90,9 +90,10 @@ fn copy_adopted_span(source: &[u8], target: &mut [u8], zero_target: bool) {
     }
 }
 
-/// Best-effort huge-page advice on complete base pages inside an existing frame.
-/// Keep partial edge pages outside the advised range.
-fn advise_frame_pages(bytes: &mut [u8]) {
+/// Best-effort huge-page advice on the mapped pages touched by an existing frame.
+/// Adjacent slots must share advice on their boundary page, so the kernel can
+/// merge their VMAs and use huge pages across slot boundaries.
+fn advise_frame_pages(bytes: &mut [u8], include_edges: bool) {
     #[cfg(target_os = "linux")]
     {
         // SAFETY: sysconf has no pointer or process-state preconditions.
@@ -101,10 +102,17 @@ fn advise_frame_pages(bytes: &mut [u8]) {
             return;
         }
         let page = page as usize;
-        let begin = (bytes.as_mut_ptr() as usize).next_multiple_of(page);
-        let end = (bytes.as_mut_ptr() as usize + bytes.len()) / page * page;
+        let start = bytes.as_mut_ptr() as usize;
+        let end = start + bytes.len();
+        let (begin, end) = if include_edges {
+            (start / page * page, end.next_multiple_of(page))
+        } else {
+            (start.next_multiple_of(page), end / page * page)
+        };
         if end > begin {
-            // SAFETY: page-aligned subrange of this live, writable SHM mapping.
+            // SAFETY: SlotPool maps whole OS pages. Rounding a live slot to
+            // its containing pages stays in that mapping; advice does not
+            // read or write other slots sharing the first/last page.
             // Failure merely retains ordinary small-page allocation behavior.
             unsafe {
                 libc::madvise(begin as *mut _, end - begin, libc::MADV_HUGEPAGE);
@@ -112,7 +120,7 @@ fn advise_frame_pages(bytes: &mut [u8]) {
         }
     }
     #[cfg(not(target_os = "linux"))]
-    let _ = bytes;
+    let _ = (bytes, include_edges);
 }
 
 /// Quiet time before an idle SHM pool is compacted. A surface that holds keyboard
@@ -946,7 +954,7 @@ impl App {
                         },
                     )?;
                     if scene.motion.is_some() {
-                        advise_frame_pages(canvas);
+                        advise_frame_pages(canvas, false);
                     }
                     s.buffers.push(Reusable {
                         buffer,
@@ -1016,6 +1024,11 @@ impl App {
                     (data.as_ptr(), data.len())
                 };
                 if let Some(target) = s.buffers[slot].buffer.canvas(&mut s.pool) {
+                    if zero_target && scene.motion.is_some() {
+                        // Join boundary-page advice only when the spare is used,
+                        // keeping untouched spare pages out of settled residency.
+                        advise_frame_pages(target, true);
+                    }
                     // SAFETY: distinct slots in the same live, unmoved pool mapping.
                     // Repairs fully replace their pixels, so only their complement
                     // needs the adopted contents. The source is never written.

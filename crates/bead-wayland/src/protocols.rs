@@ -230,10 +230,11 @@ impl App {
             return;
         };
         let companion = self.surfaces[index].companion;
-        if companion && epoch != self.panel_epoch {
+        if (companion && epoch != self.panel_epoch)
+            || self.surfaces[index].recovered_generation == Some((epoch, revision))
+        {
             return;
         }
-        let recovered = self.surfaces[index].recovered_generation == Some((epoch, revision));
         if !companion && self.options.primary_factory.is_some() {
             let output = self.surfaces[index].output_name.clone();
             let source = if self.active_output.as_deref() == Some(output.as_str()) {
@@ -244,11 +245,8 @@ impl App {
                     .and_then(|session| session.source.as_mut())
             };
             if let Some(source) = source {
-                source.frame_presented();
-                if !recovered {
-                    source.presented(revision);
-                    self.surfaces[index].recovered_generation = Some((epoch, revision));
-                }
+                source.presented(revision);
+                self.surfaces[index].recovered_generation = Some((epoch, revision));
             }
             return;
         }
@@ -258,11 +256,8 @@ impl App {
             &mut self.runtime
         };
         if let Some(source) = source {
-            source.frame_presented();
-            if !recovered {
-                source.presented(revision);
-                self.surfaces[index].recovered_generation = Some((epoch, revision));
-            }
+            source.presented(revision);
+            self.surfaces[index].recovered_generation = Some((epoch, revision));
         }
     }
 }

@@ -407,8 +407,6 @@ pub trait SceneSource {
         String::new()
     }
     fn commit(&mut self) -> bool;
-    /// After each completed frame; may release transient preparation scratch.
-    fn frame_presented(&mut self) {}
     /// Delivered once per generation after successful presentation, off-thread for worker sources.
     fn presented(&mut self, _revision: u64) {}
     fn error_scene(&mut self, error: String) -> Scene;

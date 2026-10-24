@@ -18,7 +18,6 @@ pub type Projector = Box<dyn Fn(&Stores) -> Result<BTreeMap<String, Value>, Diag
 pub struct Session {
     projector: Option<Projector>,
     coalesce_projection: bool,
-    defer_markup_cleanup: bool,
     recovery_path: Option<PathBuf>,
     recovered: Option<bead_core::recovery::Restored>,
     recorded_revision: Option<u64>,
@@ -60,25 +59,6 @@ impl Session {
     pub fn set_projection_coalescing(&mut self, enabled: bool) {
         self.coalesce_projection = enabled;
     }
-    /// Keep one finished sandbox until frame completion, then release it.
-    pub fn set_deferred_markup_cleanup(&mut self, enabled: bool) {
-        self.defer_markup_cleanup = enabled;
-        if let Some(generation) = &self.generation {
-            generation.defer_markup_cleanup(enabled);
-        }
-    }
-    pub fn finish_frame(&self) {
-        if let Some(generation) = &self.generation {
-            generation.finish_frame();
-        }
-        if let Some(generation) = self
-            .pending
-            .as_ref()
-            .and_then(|pending| pending.generation.as_ref())
-        {
-            generation.finish_frame();
-        }
-    }
     pub fn new(
         root: PathBuf,
         entry: PathBuf,
@@ -89,7 +69,6 @@ impl Session {
         Self {
             projector: None,
             coalesce_projection: false,
-            defer_markup_cleanup: false,
             recovery_path: None,
             recovered: None,
             recorded_revision: None,
@@ -278,7 +257,6 @@ impl Session {
         let palette = merged_palette(&base_palette, self.runtime_palette.as_ref());
         let (generation, mut stores) =
             Generation::load(&self.root, &self.entry, &self.stores, self.attempts)?;
-        generation.defer_markup_cleanup(self.defer_markup_cleanup);
         bead_core::profile::mark("generation_ready");
         if self.generation.is_none()
             && let Some(saved) = &self.restore
