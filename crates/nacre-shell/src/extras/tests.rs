@@ -39,6 +39,12 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
     let socket = dir.join("daemon.sock");
     let listener = UnixListener::bind(&socket).unwrap();
+    let fixture_image = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../shell/sample.png")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
     std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
     let (tx, calls) = mpsc::unbounded_channel();
     let mut offered_topics = BTreeMap::from([("compositor".into(), 1), ("shortcuts".into(), 1)]);
@@ -156,11 +162,31 @@ async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
                     } else if m == "menu.activate" {
                         json!({"keep_open":true,"view":{"route":"actions.windows","query":"edited"}})
                     } else if m == "wallpaper.catalogue" {
-                        json!({"entries":[
-                            {"id":"/fixture/current.jpg","kind":"image","title":"Current","thumbnail":"","preview":"","active":true},
-                            {"id":"/fixture/next.jpg","kind":"image","title":"Next","thumbnail":"","preview":"","active":false},
-                            {"id":"/fixture/next.mp4","kind":"video","title":"Moving","thumbnail":"","preview":"","active":false}
-                        ]})
+                        let entries = json!([
+                            {"id":"/fixture/current.jpg","kind":"image","animated":false,"title":"Current","thumbnail":"","preview":"","active":true},
+                            {"id":"/fixture/next.jpg","kind":"image","animated":false,"title":"Next","thumbnail":"","preview":"","active":false},
+                            {"id":"/fixture/next.mp4","kind":"video","animated":false,"title":"Moving","thumbnail":"","preview":"","active":false},
+                            {"id":"/fixture/animated.gif","kind":"image","animated":true,"title":"Animated","thumbnail":"","preview":"","active":false}
+                        ]);
+                        let ids = p["ids"].as_array().cloned().unwrap_or_default();
+                        let entries: Vec<Json> = entries
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|entry| {
+                                let mut entry = entry.clone();
+                                if !ids.is_empty()
+                                    && ids.iter().any(|id| id.as_str() == entry["id"].as_str())
+                                {
+                                    entry["thumbnail"] = fixture_image.clone().into();
+                                    if entry["id"] != "/fixture/next.jpg" {
+                                        entry["preview"] = fixture_image.clone().into();
+                                    }
+                                }
+                                entry
+                            })
+                            .collect();
+                        json!({"entries":entries})
                     } else if m == "wallpaper.activate" {
                         let revision = p["revision"].as_u64().unwrap_or(17) + 1;
                         json!({"revision":revision,"palette_revision":revision,"path":p["id"],
@@ -356,19 +382,28 @@ async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activa
             .await
             .unwrap()
             .unwrap(),
-        ("wallpaper.catalogue".into(), json!({}))
+        ("wallpaper.catalogue".into(), json!({"ids":[]}))
     );
     let mut rows = Value::list(Vec::new());
     for _ in 0..200 {
         let model = wallpaper.project(&stores, Some(wake.clone()));
         rows = model["extras.rows"].clone();
-        if matches!(&rows,Value::List(entries) if entries.len()==2) {
+        if matches!(&rows,Value::List(entries) if entries.len()==4) {
             break;
         }
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
+    assert!(matches!(&rows,Value::List(entries) if entries.len()==4
+            && entries.iter().any(|entry| entry["id"]=="/fixture/animated.gif" && entry["animated"]==true)
+            && entries.iter().any(|entry| entry["id"]=="/fixture/next.mp4")));
     assert!(
-        matches!(&rows,Value::List(entries) if entries.len()==3 && entries[2]["id"]=="/fixture/next.mp4")
+        wallpaper
+            .state
+            .borrow()
+            .catalogue_result
+            .iter()
+            .all(|entry| entry["thumbnail"] == "" && entry["preview"] == ""),
+        "ids:[] provides all metadata without materializing cache paths"
     );
     wallpaper.act("wallpaper:activate:/fixture/next.mp4", &stores, wake);
     assert_eq!(
@@ -380,6 +415,337 @@ async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activa
             "wallpaper.activate".into(),
             json!({"revision":17,"id":"/fixture/next.mp4"})
         )
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_preview_retries() {
+    use bead::render::{ImageFit, Primitive, Rect, Scene};
+    let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let open = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.kind".into(), Value::Text("wallpaper".into())),
+        ]))
+        .unwrap();
+    let wake: CallWake = Arc::new(|| {});
+    wallpaper.project(&open, Some(wake.clone()));
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        ("wallpaper.catalogue".into(), json!({"ids":[]}))
+    );
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+
+    let mut scene = Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: Vec::new(),
+        width: 8.,
+        slide: None,
+        primitives: vec![Primitive::Image {
+            blur: 0.,
+            fit: ImageFit::Fill,
+            clip_polygon: None,
+            rect: Rect::new(0., 0., 8., 6.),
+            path: std::path::PathBuf::from("@icon:wallpaper:preview:/fixture/next.jpg"),
+        }],
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 8., 6.),
+    };
+    wallpaper.attach_images(&mut scene, Some(wake.clone()));
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.catalogue".into(),
+            json!({"ids":["/fixture/next.jpg"]})
+        )
+    );
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    {
+        let state = wallpaper.state.borrow();
+        assert_eq!(
+            state.catalogue_result.len(),
+            4,
+            "hydration retains the full catalogue"
+        );
+        let next = state
+            .catalogue_result
+            .iter()
+            .find(|entry| entry["id"] == "/fixture/next.jpg")
+            .unwrap();
+        let expected = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../shell/sample.png")
+            .canonicalize()
+            .unwrap();
+        let expected = expected.to_string_lossy();
+        assert_eq!(next["thumbnail"].as_str(), Some(expected.as_ref()));
+        assert_eq!(
+            next["preview"], "",
+            "the fake hydrates only the requested ID's advertised thumbnail"
+        );
+        assert!(
+            state
+                .catalogue_result
+                .iter()
+                .filter(|entry| entry["id"] != "/fixture/next.jpg")
+                .all(|entry| entry["thumbnail"] == "" && entry["preview"] == "")
+        );
+    }
+    let mut repeated = Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: Vec::new(),
+        width: 8.,
+        slide: None,
+        primitives: vec![Primitive::Image {
+            blur: 0.,
+            fit: ImageFit::Fill,
+            clip_polygon: None,
+            rect: Rect::new(0., 0., 8., 6.),
+            path: std::path::PathBuf::from("@icon:wallpaper:preview:/fixture/next.jpg"),
+        }],
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 8., 6.),
+    };
+    wallpaper.attach_images(&mut repeated, Some(wake.clone()));
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "a missing preview must not cause an automatic retry loop"
+    );
+    assert!(
+        repeated.asset_data.values().any(|bytes| !bytes.is_empty()),
+        "the advertised thumbnail remains a fallback"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_close_discards_an_inflight_hydration_ticket_and_cache() {
+    use bead::render::{ImageFit, Primitive, Rect, Scene};
+    let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let open = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.kind".into(), Value::Text("wallpaper".into())),
+        ]))
+        .unwrap();
+    let wake: CallWake = Arc::new(|| {});
+    wallpaper.project(&open, Some(wake.clone()));
+    let _ = lab.calls.recv().await.unwrap();
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let mut scene = Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: Vec::new(),
+        width: 8.,
+        slide: None,
+        primitives: vec![Primitive::Image {
+            blur: 0.,
+            fit: ImageFit::Fill,
+            clip_polygon: None,
+            rect: Rect::new(0., 0., 8., 6.),
+            path: std::path::PathBuf::from("@icon:wallpaper:thumbnail:/fixture/current.jpg"),
+        }],
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 8., 6.),
+    };
+    wallpaper.attach_images(&mut scene, Some(wake.clone()));
+    let call = lab.calls.recv().await.unwrap();
+    assert_eq!(call.0, "wallpaper.catalogue");
+    assert!(!wallpaper.state.borrow().catalogue_request_ids.is_empty());
+    let closed = Stores::default()
+        .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(false))]))
+        .unwrap();
+    wallpaper.project(&closed, Some(wake));
+    let state = wallpaper.state.borrow();
+    assert!(state.catalogue.is_none());
+    assert!(state.catalogue_request_ids.is_empty());
+    assert!(state.catalogue_pending_handles.is_empty());
+    assert_eq!(state.image_bytes, 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_refreshes_deleted_cache_paths_and_settles_still_broken_paths() {
+    use bead::render::{ImageFit, Primitive, Rect, Scene};
+    let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let wake: CallWake = Arc::new(|| {});
+    let stale = lab.dir.join("deleted-cache.png");
+    image::RgbaImage::from_pixel(8, 6, image::Rgba([40, 70, 90, 255]))
+        .save(&stale)
+        .unwrap();
+    std::fs::remove_file(&stale).unwrap();
+    {
+        let mut state = wallpaper.state.borrow_mut();
+        state.wallpaper_open = true;
+        state.wallpaper_boot = Some("extras-boot".into());
+        state.catalogue_boot = Some("extras-boot".into());
+        state.catalogue_result = vec![json!({
+            "id":"/fixture/current.jpg","kind":"image","title":"Current",
+            "thumbnail":stale.to_string_lossy(),"preview":"","active":true
+        })];
+    }
+    let scene_for = |id: &str| Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: Vec::new(),
+        width: 8.,
+        slide: None,
+        primitives: vec![Primitive::Image {
+            blur: 0.,
+            fit: ImageFit::Fill,
+            clip_polygon: None,
+            rect: Rect::new(0., 0., 8., 6.),
+            path: std::path::PathBuf::from(format!("@icon:wallpaper:thumbnail:0:{id}")),
+        }],
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 8., 6.),
+    };
+
+    let mut scene = scene_for("/fixture/current.jpg");
+    wallpaper.attach_images(&mut scene, Some(wake.clone()));
+    assert!(
+        scene.primitives.is_empty(),
+        "deleted cache bytes are deferred while hydration runs"
+    );
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.catalogue".into(),
+            json!({"ids":["/fixture/current.jpg"]})
+        )
+    );
+    let open = Stores::default()
+        .reconcile(&BTreeMap::from([
+            ("panel.open".into(), Value::Bool(true)),
+            ("extras.kind".into(), Value::Text("wallpaper".into())),
+        ]))
+        .unwrap();
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let expected = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../shell/sample.png")
+        .canonicalize()
+        .unwrap();
+    let mut refreshed = scene_for("/fixture/current.jpg");
+    wallpaper.attach_images(&mut refreshed, Some(wake.clone()));
+    assert!(
+        refreshed.asset_data.contains_key(&expected),
+        "hydration restores an evicted/deleted thumbnail path"
+    );
+
+    let broken = lab.dir.join("still-broken.png");
+    {
+        let mut state = wallpaper.state.borrow_mut();
+        state.catalogue_result.push(json!({
+            "id":"/fixture/broken.jpg","kind":"image","title":"Broken",
+            "thumbnail":broken.to_string_lossy(),"preview":"","active":false
+        }));
+    }
+    let mut broken_scene = scene_for("/fixture/broken.jpg");
+    wallpaper.attach_images(&mut broken_scene, Some(wake.clone()));
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.catalogue".into(),
+            json!({"ids":["/fixture/broken.jpg"]})
+        )
+    );
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let mut repeated = scene_for("/fixture/broken.jpg");
+    wallpaper.attach_images(&mut repeated, Some(wake.clone()));
+    assert!(repeated.primitives.is_empty());
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "a broken path returned by hydration is settled for the current visible set"
+    );
+
+    let mut changed_set = scene_for("/fixture/broken.jpg");
+    changed_set.primitives.push(Primitive::Image {
+        blur: 0.,
+        fit: ImageFit::Fill,
+        clip_polygon: None,
+        rect: Rect::new(0., 0., 8., 6.),
+        path: std::path::PathBuf::from("@icon:wallpaper:thumbnail:0:/fixture/current.jpg"),
+    });
+    wallpaper.attach_images(&mut changed_set, Some(wake.clone()));
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.catalogue".into(),
+            json!({"ids":["/fixture/broken.jpg"]})
+        ),
+        "a changed visible set gets one fresh attempt for its still-broken item"
+    );
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let mut stable_changed = scene_for("/fixture/broken.jpg");
+    stable_changed.primitives.push(Primitive::Image {
+        blur: 0.,
+        fit: ImageFit::Fill,
+        clip_polygon: None,
+        rect: Rect::new(0., 0., 8., 6.),
+        path: std::path::PathBuf::from("@icon:wallpaper:thumbnail:0:/fixture/current.jpg"),
+    });
+    wallpaper.attach_images(&mut stable_changed, Some(wake));
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "the unchanged new visible set remains settled"
     );
 }
 
@@ -412,13 +778,13 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
             .await
             .unwrap()
             .unwrap(),
-        ("wallpaper.catalogue".into(), json!({}))
+        ("wallpaper.catalogue".into(), json!({"ids":[]}))
     );
     let mut loaded = false;
     for _ in 0..200 {
         runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
         runtime.commit();
-        loaded = matches!(runtime.session.stores.get("extras.rows"),Some(Value::List(rows)) if rows.len()==3);
+        loaded = matches!(runtime.session.stores.get("extras.rows"),Some(Value::List(rows)) if rows.len()==4);
         if loaded {
             break;
         }
@@ -428,6 +794,40 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         loaded,
         "the real picker must receive the asynchronous catalogue"
     );
+    let (method, params) = tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(method, "wallpaper.catalogue");
+    assert!(!params["ids"].as_array().unwrap().is_empty());
+    assert!(params["ids"].as_array().unwrap().len() <= 128);
+    let fixture_image = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../shell/sample.png")
+        .canonicalize()
+        .unwrap();
+    let mut hydrated_scene = None;
+    for _ in 0..200 {
+        let scene = runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        runtime.commit();
+        if scene
+            .as_ref()
+            .is_some_and(|scene| scene.asset_data.contains_key(&fixture_image))
+        {
+            hydrated_scene = scene;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(
+        hydrated_scene.is_some(),
+        "hydration must invalidate the Luau scene and attach bytes to a fresh runtime scene"
+    );
+    while let Ok((method, _)) = lab.calls.try_recv() {
+        assert_eq!(
+            method, "wallpaper.catalogue",
+            "all catalogue hydration calls are settled before activation assertions"
+        );
+    }
 
     runtime
         .stage(UiEvent::Key {
@@ -538,6 +938,41 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         )),
         "positive Wayland wheel distance moves to the next wallpaper"
     );
+    let root_node = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.action.as_deref() == Some("close"))
+        .expect("wallpaper root uses the generic host close action");
+    let root_rect = bead::ui::rect(&root_node.draw);
+    let point = [(0.05, 0.15), (0.95, 0.15), (0.05, 0.85), (0.95, 0.85)]
+        .into_iter()
+        .map(|(x, y)| (root_rect.x + root_rect.w * x, root_rect.y + root_rect.h * y))
+        .find(|(x, y)| {
+            runtime
+                .session
+                .view_nodes()
+                .iter()
+                .filter(|node| node.action.is_some() && node.action.as_deref() != Some("close"))
+                .all(|node| {
+                    let rect = bead::ui::rect(&node.draw);
+                    *x < rect.x || *x > rect.x + rect.w || *y < rect.y || *y > rect.y + rect.h
+                })
+        })
+        .expect("picker has a background point outside child actions");
+    runtime
+        .stage(UiEvent::Click {
+            x: point.0,
+            y: point.1,
+        })
+        .unwrap();
+    runtime.commit();
+    runtime.stage(UiEvent::Release).unwrap();
+    runtime.commit();
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&Value::Bool(false))
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -567,10 +1002,10 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
             "thumbnail":oversized.to_string_lossy(),"preview":"","active":false
         }),
     ];
+    extras.state.borrow_mut().wallpaper_open = true;
 
-    let logical = |path: &std::path::Path| {
-        std::path::PathBuf::from(format!("@icon:wallpaper:{}", path.display()))
-    };
+    let logical =
+        |field: &str, id: &str| std::path::PathBuf::from(format!("@icon:wallpaper:{field}:{id}"));
     let mut scene = Scene {
         opacity: 1.,
         motion: None,
@@ -588,47 +1023,38 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
                 fit: ImageFit::Fill,
                 clip_polygon: None,
                 rect: Rect::new(0., 0., 8., 6.),
-                path: logical(&thumbnail),
+                path: logical("thumbnail", "/fixture/advertised.jpg"),
             },
             Primitive::Image {
                 blur: 0.,
                 fit: ImageFit::Fill,
                 clip_polygon: None,
                 rect: Rect::new(10., 0., 8., 6.),
-                path: logical(&unadvertised),
+                path: logical("thumbnail", "/fixture/unadvertised.jpg"),
             },
             Primitive::Image {
                 blur: 0.,
                 fit: ImageFit::Fill,
                 clip_polygon: None,
                 rect: Rect::new(20., 0., 8., 6.),
-                path: logical(&oversized),
+                path: logical("thumbnail", "/fixture/oversized.jpg"),
             },
         ],
         offset: (0., 0.),
         bounds: Rect::new(0., 0., 32., 8.),
     };
-    extras.attach_images(&mut scene);
+    extras.attach_images(&mut scene, None);
     assert!(scene.asset_data.contains_key(&thumbnail));
     assert!(extras.image_bytes() > 0 && extras.image_bytes() <= 16 * bead::core::cache::MIB);
     let bead::render::Primitive::Image { path: loaded, .. } = &scene.primitives[0] else {
         panic!("image primitive")
     };
     assert_eq!(loaded, &thumbnail);
-    let bead::render::Primitive::Image {
-        path: unresolved, ..
-    } = &scene.primitives[1]
-    else {
-        panic!("image primitive")
-    };
-    assert_eq!(unresolved, &logical(&unadvertised));
-    let bead::render::Primitive::Image {
-        path: too_large, ..
-    } = &scene.primitives[2]
-    else {
-        panic!("image primitive")
-    };
-    assert_eq!(too_large, &logical(&oversized));
+    assert_eq!(
+        scene.primitives.len(),
+        1,
+        "unadvertised and invalid images are deferred out of the scene"
+    );
 
     let closed = Stores::default()
         .reconcile(&BTreeMap::from([
@@ -642,6 +1068,67 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
         extras.image_bytes(),
         0,
         "closing the picker releases encoded thumbnail bytes"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wallpaper_scene_attachment_bytes_stay_within_the_cache_budget() {
+    use bead::render::{ImageFit, Primitive, Rect, Scene};
+    let lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let shared: Arc<[u8]> = Arc::from(vec![0u8; 9 * bead::core::cache::MIB]);
+    let entries: Vec<Json> = (0..3)
+        .map(|index| {
+            json!({
+                "id":format!("/fixture/large-{index}.png"),"kind":"image",
+                "title":format!("Large {index}"),"thumbnail":format!("/cache/thumb-{index}.png"),
+                "preview":"","active":false
+            })
+        })
+        .collect();
+    {
+        let mut state = extras.state.borrow_mut();
+        state.wallpaper_open = true;
+        state.catalogue_result = entries;
+        for index in 0..3 {
+            state.images.insert(
+                std::path::PathBuf::from(format!("/cache/thumb-{index}.png")),
+                shared.clone(),
+            );
+        }
+    }
+    let mut scene = Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: Vec::new(),
+        width: 24.,
+        slide: None,
+        primitives: (0..3)
+            .map(|index| Primitive::Image {
+                blur: 0.,
+                fit: ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(index as f32 * 8., 0., 8., 6.),
+                path: std::path::PathBuf::from(format!(
+                    "@icon:wallpaper:thumbnail:/fixture/large-{index}.png"
+                )),
+            })
+            .collect(),
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 24., 8.),
+    };
+    extras.attach_images(&mut scene, None);
+    let attached_bytes: usize = scene.asset_data.values().map(|bytes| bytes.len()).sum();
+    assert!(attached_bytes <= 16 * bead::core::cache::MIB);
+    assert_eq!(
+        scene.asset_data.len(),
+        1,
+        "the second shared large image would exceed the per-scene byte budget"
     );
 }
 #[test]
@@ -708,7 +1195,7 @@ fn extras_goldens() -> bead_test::Result<()> {
 fn wallpaper_picker_goldens() -> bead_test::Result<()> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
     let palette = root.join("palette.json");
-    let thumbnail = root.join("sample.png").to_string_lossy().into_owned();
+    let thumbnail = "wallpaper:thumbnail:0:/fixture/sample.png".to_owned();
     for (kind, layout) in [
         ("static", "carousel"),
         ("dynamic", "carousel"),
@@ -751,7 +1238,7 @@ fn wallpaper_picker_goldens() -> bead_test::Result<()> {
                     height: 1000,
                     scale,
                 },
-                BTreeMap::from([(format!("wallpaper:{thumbnail}"), root.join("sample.png"))]),
+                BTreeMap::from([(thumbnail.clone(), root.join("sample.png"))]),
             )?;
             assert!(harness.scene().primitives.iter().any(|primitive|
                 matches!(primitive, bead::render::Primitive::Text { text, .. } if text == "Static")),
@@ -797,6 +1284,8 @@ fn wallpaper_picker_uses_active_middle_then_visible_query_and_pointer_selection(
         json!({"id":"/wallpapers/current.jpg","kind":"image","title":"Current middle","thumbnail":"","preview":"","active":true}),
         json!({"id":"/wallpapers/garden.jpg","kind":"image","title":"Garden path","thumbnail":"","preview":"","active":false}),
         json!({"id":"/wallpapers/last.jpg","kind":"image","title":"Last","thumbnail":"","preview":"","active":false}),
+        json!({"id":"/wallpapers/animated.gif","kind":"image","animated":true,"title":"Animated image","thumbnail":"","preview":"","active":false}),
+        json!({"id":"/wallpapers/movie.mp4","kind":"video","animated":false,"title":"Movie","thumbnail":"","preview":"","active":false}),
     ]);
     let view = session
         .update(BTreeMap::from([
@@ -853,15 +1342,41 @@ fn wallpaper_picker_uses_active_middle_then_visible_query_and_pointer_selection(
         Value::Text("wallpaper:activate:/wallpapers/last.jpg".into()),
         "pointer selection controls the next keyboard activation"
     );
+    let dynamic = session
+        .update(BTreeMap::from([(
+            "extras.wallpaper.kind".into(),
+            Value::Text("dynamic".into()),
+        )]))?
+        .expect("dynamic filter update");
+    session.commit(dynamic);
+    let dynamic_ids: std::collections::BTreeSet<&str> = session
+        .view_nodes()
+        .iter()
+        .filter_map(|node| match &node.action_arg {
+            Some(Value::Text(argument)) => argument.strip_prefix("wallpaper:select:"),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        dynamic_ids,
+        std::collections::BTreeSet::from(["/wallpapers/animated.gif", "/wallpapers/movie.mp4"])
+    );
     Ok(())
 }
 
 #[cfg(feature = "trace")]
 pub(crate) async fn retirement() {
-    let lab = lab().await;
-    for kind in [Kind::Overview, Kind::Keybindings] {
+    let lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
+    for kind in [Kind::Overview, Kind::Keybindings, Kind::Wallpaper] {
         let extras = Extras::new(kind, lab.client.clone()).unwrap();
-        ready(&extras, &stores("")).await;
+        if kind == Kind::Wallpaper {
+            let open = Stores::default()
+                .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(true))]))
+                .unwrap();
+            extras.project(&open, Some(Arc::new(|| {})));
+        } else {
+            ready(&extras, &stores("")).await;
+        }
         let subscriptions = extras.subscribe(Arc::new(|| {})).unwrap();
         let snapshot = extras.topic.as_ref().unwrap().snapshot();
         let payload = Arc::downgrade(&snapshot.data);

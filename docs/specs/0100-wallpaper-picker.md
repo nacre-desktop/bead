@@ -55,8 +55,13 @@ Only the latest selection waits behind an admitted call; revision-only backgroun
 
 Generic additions: normalized `clip_polygon` (3–32 vertices, even-odd image mask and matching
 hit region), `image_fit="cover"`, and signed edge insets for clipped offscreen content.
-The shell edge resolves only advertised thumbnail/preview handles; encoded assets have a
-16 MiB byte budget, individual files at most 2 MiB and dimensions at most 1600×1000.
+The shell edge first requests metadata (`ids:[]`), then hydrates only IDs used by the
+current Luau scene (at most 128 per call). Logical image handles carry a resource
+generation so newly hydrated bytes trigger a fresh scene. Animated images join videos
+in Dynamic. Missing/evicted advertised paths refresh on demand; a failed or still-missing
+resource is attempted once per visible set, then retries after that set changes or reopening.
+Encoded cache and scene attachments each have a 16 MiB byte budget, individual files
+are at most 2 MiB and dimensions at most 1600×1000.
 Closing clears this cache; closing-frame rasters retire with the existing panel worker after idle.
 No product dependencies or duplicate implementations were added. The Arch CI container needs
 `swaybg` for the video smoke fallback, and removes Sway’s packaged file capability inside
@@ -65,7 +70,7 @@ the container because Docker does not grant that capability.
 Remote workspace/all-target clippy with warnings denied and 13 wallpaper tests pass.
 They cover real keyboard input, pointer navigation, revision-fenced calls, stable filtered
 selection, cache bounds/close release and static/dynamic layouts at 1×/1.5×.
-The protocol pin is Nacre `bdc7c2ff` (N0070); both wallpaper transcripts are mirrored.
+The protocol pin is Nacre `34e81afd` (N0070 bounded hydration); both wallpaper transcripts are mirrored.
 Full remote Arch CI passes at `9920e2a` after the final theme-token pass and rebase
 onto B0102. This includes the video renderer smoke (12/12 checks),
 private service and tray lifecycles, Luau/generated schemas and independent license graphs.
@@ -73,6 +78,8 @@ Paired captures at 2880×1800, scale 1.5 are pending. The lead clarified that B0
 owns the shared desktop slot; this continuation waits without a timeout and takes the
 lock separately for the parity script and each memory arm. The harness also rejects
 any host swap-in during an arm, alongside its existing swap-used and process SwapPss gates.
+Transition sequences use grim process-spawn timestamps relative to the trigger; they are
+image-capture proxies with scheduling uncertainty, not physical presentation timings.
 The prepared fixture is ten images plus two short videos, covering every layout/media
 kind, hover/pressed, search/empty and image/video activation; memory uses five alternating
 same-host CPU control/candidate pairs at idle and after close+idle. This is not acceptance evidence.

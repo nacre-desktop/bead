@@ -7,6 +7,7 @@ local viewport_w=ui.resolve_for_check(ui.bind("extras.viewport.width")) or T.wal
 local viewport_h=ui.resolve_for_check(ui.bind("extras.viewport.height")) or T.wallpaper.viewport_fallback_height
 local layout=ui.resolve_for_check(ui.bind("extras.wallpaper.layout")) or "carousel"
 local kind=ui.resolve_for_check(ui.bind("extras.wallpaper.kind")) or "static"
+local resource_revision=ui.resolve_for_check(ui.bind("extras.wallpaper.resource_revision")) or 0
 local carousel=layout=="carousel"
 local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or viewport_w
 local height=carousel and T.wallpaper.carousel_height or viewport_h
@@ -74,8 +75,8 @@ local function card(item, card_w, card_h, x, y, selected_card, clip)
   local kids={}
   local path=selected_card and not carousel and item.preview~="" and item.preview or item.thumbnail
   if path and path~="" then
-    kids[#kids+1]=ui.Image{id="thumbnail",position="absolute",left=image_inset,top=image_inset,width=card_w-image_inset*2,height=image_h,
-      icon="wallpaper:"..path,image_fit="cover",clip_polygon=hex and hex_clip or rounded_clip(card_w-image_inset*2,image_h),aria_label=item.title or "Wallpaper"}
+    kids[#kids+1]=ui.Image{id="thumbnail-"..tostring(resource_revision),position="absolute",left=image_inset,top=image_inset,width=card_w-image_inset*2,height=image_h,
+      icon=path,image_fit="cover",clip_polygon=hex and hex_clip or rounded_clip(card_w-image_inset*2,image_h),aria_label=item.title or "Wallpaper"}
   else
     kids[#kids+1]=ui.Text{id="missing-thumbnail",position="absolute",left=0,top=0,width=card_w,height=image_h,
       text=item.kind=="video" and "movie" or "image",family="Material Symbols Rounded",font_size=T.wallpaper.thumbnail_fallback_icon,
@@ -180,7 +181,7 @@ local nav=ui.Row{id="wallpaper-navigation",position="absolute",left=0,
     font_size=T.wallpaper.nav_font,text_align="center",color=carousel and "onSurface" or T.wallpaper.photo_ink},
   nav_button("next","Next wallpaper","chevron_right","extras.next")}
 
-local backdrop=not carousel and ui.Image{id="gallery-backdrop",position="absolute",left=0,top=0,width=width,height=height,
+local backdrop=not carousel and ui.Image{id="gallery-backdrop-"..tostring(resource_revision),position="absolute",left=0,top=0,width=width,height=height,
   visible=ui.bind("extras.wallpaper.backdrop_visible"),icon=ui.bind("extras.wallpaper.backdrop"),image_fit="cover",aria_label="Selected wallpaper preview"} or nil
 local scrim=not carousel and ui.Box{id="gallery-scrim",position="absolute",left=0,top=0,width=width,height=height,
   fill=ui.alpha("shadow",T.wallpaper.scrim_alpha)} or nil
@@ -202,4 +203,5 @@ if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop
 return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=width,height=height,
   duration=T.panel.duration,transition=T.panel.transition,reveal=true,fade=false,radius=T.panel.radius,
   fill=carousel and "surface" or "transparent",border_width=carousel and T.panel.border or 0,
-  border_color="outlineVariant",padding=0,gap=0,table.unpack(children)}
+  border_color="outlineVariant",padding=0,gap=0,
+  on_activate=ui.action("close"),aria_label="Close wallpaper picker",table.unpack(children)}

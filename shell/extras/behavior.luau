@@ -4,8 +4,11 @@ local function body_height(s)
 end
 
 local function wallpaper_item_matches(item,s)
-  local wanted = (s["extras.wallpaper.kind"] or "static") == "dynamic" and "video" or "image"
-  if item.kind~=wanted then return false end
+  local animated=item.animated==true
+  local dynamic=(s["extras.wallpaper.kind"] or "static") == "dynamic"
+  if dynamic then
+    if item.kind~="video" and not animated then return false end
+  elseif item.kind~="image" or animated then return false end
   local text=(tostring(item.title or "").." "..tostring(item.id or "")):lower()
   for word in tostring(s["extras.query"] or ""):lower():gmatch("%S+") do if not text:find(word,1,true) then return false end end
   return true
@@ -157,6 +160,7 @@ local exports = {
     ["extras.message"] = "", ["extras.query"] = "", ["extras.scroll"] = 0,
     ["extras.wallpaper.kind"] = "static", ["extras.wallpaper.layout"] = "carousel",
     ["extras.wallpaper.revision"] = 0,
+    ["extras.wallpaper.resource_revision"] = 0,
     ["extras.wallpaper.loading"] = false,
     ["extras.wallpaper.selection_id"] = "",
     ["extras.wallpaper.carousel_scroll"] = 0,
@@ -173,7 +177,7 @@ local exports = {
       for _, item in ipairs(filtered(s)) do
         if item.selected then
           local path=item.preview and item.preview~="" and item.preview or item.thumbnail or ""
-          return path~="" and "wallpaper:"..path or ""
+          return path or ""
         end
       end
       return ""
@@ -217,6 +221,7 @@ local exports = {
     ["extras.prev"] = function(s) step(s,-1) end,
     ["extras.choose"] = choose,
     ["extras.close"] = function(s) s["panel.open"] = false end,
+    ["close"] = function(s) s["panel.open"] = false end,
     ["extras.select"] = function(s, id)
       local query = s["extras.query"] or ""
       s["extras.selection_query"] = query

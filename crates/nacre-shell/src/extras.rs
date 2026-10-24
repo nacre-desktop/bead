@@ -62,12 +62,19 @@ struct State {
     catalogue: Option<CallTicket>,
     catalogue_boot: Option<String>,
     catalogue_result: Vec<Json>,
+    catalogue_request_ids: Vec<String>,
+    catalogue_request_handles: Vec<String>,
+    catalogue_pending_handles: std::collections::BTreeSet<String>,
+    catalogue_visible_handles: std::collections::BTreeSet<String>,
+    catalogue_settled_handles: std::collections::BTreeSet<String>,
+    wallpaper_open: bool,
     wallpaper_activation: bool,
     wallpaper_pending: Option<String>,
     wallpaper_revision: Option<u64>,
     wallpaper_boot: Option<String>,
     images: BTreeMap<std::path::PathBuf, Arc<[u8]>>,
     image_bytes: usize,
+    image_revision: u64,
 }
 pub struct Extras {
     pub kind: Kind,
@@ -241,10 +248,22 @@ impl Extras {
         let mut wallpaper_kind = "static";
         let mut wallpaper_layout = "carousel";
         if self.kind == Kind::Wallpaper {
+            state.wallpaper_open = open;
             if state.wallpaper_boot != boot {
                 state.wallpaper_boot = boot.clone();
                 state.wallpaper_revision = None;
                 state.wallpaper_pending = None;
+                state.catalogue = None;
+                state.catalogue_boot = None;
+                state.catalogue_result.clear();
+                state.catalogue_request_ids.clear();
+                state.catalogue_request_handles.clear();
+                state.catalogue_pending_handles.clear();
+                state.catalogue_visible_handles.clear();
+                state.catalogue_settled_handles.clear();
+                state.images.clear();
+                state.image_bytes = 0;
+                state.image_revision = state.image_revision.wrapping_add(1);
             }
             if let Some(topic) = &self.topic {
                 let active = topic.snapshot();
@@ -268,7 +287,10 @@ impl Extras {
             }
             if open && boot.is_some() && state.catalogue_boot != boot {
                 state.catalogue_result.clear();
-                state.catalogue = self.begin("wallpaper.catalogue", json!({}), wake.clone());
+                state.catalogue_request_ids.clear();
+                state.catalogue_request_handles.clear();
+                state.catalogue =
+                    self.begin("wallpaper.catalogue", json!({"ids": []}), wake.clone());
                 // A missing capability can be retried on the next registry wake. An admitted
                 // request (including an error reply) is attempted once per opening/daemon boot.
                 state.catalogue_boot = state.catalogue.as_ref().and(boot.clone());
@@ -279,18 +301,35 @@ impl Extras {
                 };
             }
             if !open {
+                let had_resources = state.catalogue.is_some()
+                    || !state.catalogue_result.is_empty()
+                    || !state.catalogue_request_ids.is_empty()
+                    || !state.catalogue_pending_handles.is_empty()
+                    || !state.catalogue_visible_handles.is_empty()
+                    || !state.images.is_empty()
+                    || state.image_bytes != 0;
                 state.catalogue = None;
                 state.catalogue_result.clear();
                 state.catalogue_boot = None;
+                state.catalogue_request_ids.clear();
+                state.catalogue_request_handles.clear();
+                state.catalogue_pending_handles.clear();
+                state.catalogue_visible_handles.clear();
+                state.catalogue_settled_handles.clear();
                 state.message.clear();
                 state.wallpaper_pending = None;
                 state.images.clear();
                 state.image_bytes = 0;
+                if had_resources {
+                    state.image_revision = state.image_revision.wrapping_add(1);
+                }
             }
             if let Some(ticket) = &mut state.catalogue
                 && let Some(reply) = ticket.try_take()
             {
                 state.catalogue = None;
+                let request_ids = std::mem::take(&mut state.catalogue_request_ids);
+                let request_handles = std::mem::take(&mut state.catalogue_request_handles);
                 let catalogue = reply
                     .ok()
                     .and_then(|reply| {
@@ -302,7 +341,7 @@ impl Extras {
                     .filter(|catalogue| catalogue.validate().is_ok());
                 if let Some(catalogue) = catalogue {
                     let mut seen = std::collections::BTreeSet::new();
-                    state.catalogue_result = catalogue
+                    let incoming: Vec<Json> = catalogue
                         .entries
                         .into_iter()
                         .filter(|entry| seen.insert(entry.id.clone()))
@@ -310,9 +349,37 @@ impl Extras {
                             serde_json::to_value(entry).expect("validated wallpaper entry")
                         })
                         .collect();
+                    if request_ids.is_empty() {
+                        state.catalogue_result = incoming;
+                    } else {
+                        for entry in incoming {
+                            let Some(id) = entry["id"].as_str() else {
+                                continue;
+                            };
+                            if let Some(existing) = state
+                                .catalogue_result
+                                .iter_mut()
+                                .find(|row| row["id"].as_str() == Some(id))
+                            {
+                                for field in ["thumbnail", "preview"] {
+                                    if entry[field].as_str().is_some_and(|path| !path.is_empty()) {
+                                        existing[field] = entry[field].clone();
+                                    }
+                                }
+                                existing["active"] = entry["active"].clone();
+                            }
+                        }
+                        state.catalogue_settled_handles.extend(request_handles);
+                    }
+                    state.image_revision = state.image_revision.wrapping_add(1);
                     state.message.clear();
                 } else {
-                    state.catalogue_result.clear();
+                    for handle in request_handles {
+                        state.catalogue_settled_handles.insert(handle);
+                    }
+                    if request_ids.is_empty() {
+                        state.catalogue_result.clear();
+                    }
                     state.message = "Wallpaper catalogue unavailable".into();
                 }
             }
@@ -329,7 +396,25 @@ impl Extras {
                 }
             }
             if open {
-                rows = state.catalogue_result.clone();
+                rows = state
+                    .catalogue_result
+                    .iter()
+                    .cloned()
+                    .map(|mut entry| {
+                        if let Some(id) = entry["id"]
+                            .as_str()
+                            .filter(|id| !id.is_empty())
+                            .map(str::to_owned)
+                        {
+                            for field in ["thumbnail", "preview"] {
+                                entry[field] =
+                                    format!("wallpaper:{field}:{}:{id}", state.image_revision)
+                                        .into();
+                            }
+                        }
+                        entry
+                    })
+                    .collect();
                 available = boot.is_some() && state.catalogue_boot == boot;
             }
         }
@@ -520,6 +605,10 @@ impl Extras {
                 "extras.wallpaper.loading".into(),
                 Value::Bool(open && state.catalogue.is_some()),
             );
+            values.insert(
+                "extras.wallpaper.resource_revision".into(),
+                Value::Number(state.image_revision as f64),
+            );
         }
         // QML builds its search surface per opening, so a closed panel forgets the typed text.
         if matches!(stores.get("panel.open"), Some(Value::Bool(false))) && !text.is_empty() {
@@ -694,51 +783,128 @@ impl Extras {
         }
     }
     /// Resolve only advertised cache paths; the byte-accounted cache dies with this open panel.
-    pub fn attach_images(&self, scene: &mut bead::render::Scene) {
+    pub fn attach_images(&self, scene: &mut bead::render::Scene, wake: Option<CallWake>) {
         const LIMIT: usize = 16 * bead::core::cache::MIB;
         let mut state = self.state.borrow_mut();
+        let mut visible_handles = std::collections::BTreeSet::new();
+        let mut attached_bytes = 0usize;
+        let scene_handles: std::collections::BTreeSet<String> = scene
+            .primitives
+            .iter()
+            .filter_map(|primitive| match primitive {
+                bead::render::Primitive::Image { path, .. } => path
+                    .to_str()
+                    .and_then(|name| name.strip_prefix("@icon:wallpaper:")),
+                _ => None,
+            })
+            .filter_map(parse_wallpaper_handle)
+            .map(|(id, field)| format!("{field}:{id}"))
+            .collect();
+        if scene_handles != state.catalogue_visible_handles {
+            state.catalogue_settled_handles.clear();
+            state.catalogue_visible_handles = scene_handles;
+        }
         for primitive in &mut scene.primitives {
             let bead::render::Primitive::Image { path, .. } = primitive else {
                 continue;
             };
-            let Some(file) = path
+            let Some(handle) = path
                 .to_str()
                 .and_then(|name| name.strip_prefix("@icon:wallpaper:"))
             else {
                 continue;
             };
-            if !state.catalogue_result.iter().any(|entry| {
-                ["thumbnail", "preview"]
-                    .iter()
-                    .any(|field| entry[*field].as_str() == Some(file))
-            }) {
+            let Some((id, field)) = parse_wallpaper_handle(handle) else {
                 continue;
+            };
+            let Some(entry) = state
+                .catalogue_result
+                .iter()
+                .find(|entry| entry["id"].as_str() == Some(id))
+            else {
+                continue;
+            };
+            let logical = format!("{field}:{id}");
+            let primary_file = entry[field]
+                .as_str()
+                .filter(|path| !path.is_empty())
+                .map(std::path::PathBuf::from);
+            let fallback_file = (field == "preview")
+                .then(|| {
+                    entry["thumbnail"]
+                        .as_str()
+                        .filter(|path| !path.is_empty())
+                        .map(std::path::PathBuf::from)
+                })
+                .flatten()
+                .filter(|file| Some(file) != primary_file.as_ref());
+            let primary_image = primary_file
+                .as_ref()
+                .and_then(|file| cached_wallpaper_image(&mut state, file, LIMIT));
+            let fallback_image = fallback_file
+                .as_ref()
+                .and_then(|file| cached_wallpaper_image(&mut state, file, LIMIT));
+            if primary_image.is_none() && !state.catalogue_settled_handles.contains(&logical) {
+                visible_handles.insert(logical.clone());
             }
-            let file = std::path::PathBuf::from(file);
-            if !state.images.contains_key(&file) {
-                let Ok(bytes) =
-                    crate::desktop::read_icon_file(&file, 2 * bead::core::cache::MIB as u64)
-                else {
-                    continue;
-                };
-                let dimensions = image::ImageReader::new(std::io::Cursor::new(&bytes))
-                    .with_guessed_format()
-                    .ok()
-                    .and_then(|reader| reader.into_dimensions().ok());
-                if !dimensions.is_some_and(|(w, h)| w > 0 && h > 0 && w <= 1600 && h <= 1000) {
-                    continue;
-                }
+            let loaded = primary_image
+                .zip(primary_file)
+                .or_else(|| fallback_image.zip(fallback_file));
+            let Some((bytes, file)) = loaded else {
+                continue;
+            };
+            if !scene.asset_data.contains_key(&file) {
                 let cost = bytes.len() + file.capacity() + 128;
-                if state.image_bytes + cost > LIMIT {
-                    state.images.clear();
-                    state.image_bytes = 0;
+                if attached_bytes + cost > LIMIT {
+                    continue;
                 }
-                state.image_bytes += cost;
-                state.images.insert(file.clone(), Arc::from(bytes));
+                attached_bytes += cost;
+                scene.asset_data.insert(file.clone(), bytes);
             }
-            if let Some(bytes) = state.images.get(&file) {
-                scene.asset_data.insert(file.clone(), bytes.clone());
-                *path = file;
+            *path = file;
+        }
+        scene.primitives.retain(|primitive| {
+            !matches!(primitive, bead::render::Primitive::Image { path, .. }
+                if path.to_str().is_some_and(|name| name.starts_with("@icon:wallpaper:")))
+        });
+        state.catalogue_pending_handles = visible_handles;
+        if self.kind == Kind::Wallpaper
+            && state.wallpaper_open
+            && state.catalogue.is_none()
+            && let Some(wake) = wake
+            && !state.catalogue_pending_handles.is_empty()
+        {
+            let mut ids = Vec::new();
+            for handle in &state.catalogue_pending_handles {
+                if let Some((id, _)) = parse_wallpaper_handle(handle)
+                    && !ids.iter().any(|known: &String| known == id)
+                {
+                    ids.push(id.to_owned());
+                    if ids.len() == 128 {
+                        break;
+                    }
+                }
+            }
+            let requested_handles: Vec<String> = state
+                .catalogue_pending_handles
+                .iter()
+                .filter(|handle| {
+                    parse_wallpaper_handle(handle)
+                        .is_some_and(|(id, _)| ids.iter().any(|known| known == id))
+                })
+                .cloned()
+                .collect();
+            if !ids.is_empty() {
+                state.catalogue = self.begin("wallpaper.catalogue", json!({"ids":ids}), Some(wake));
+                state.catalogue_request_ids = ids;
+                state.catalogue_request_handles = requested_handles;
+                if state.catalogue.is_none() {
+                    for handle in std::mem::take(&mut state.catalogue_request_handles) {
+                        state.catalogue_settled_handles.insert(handle);
+                    }
+                    state.catalogue_request_ids.clear();
+                    state.message = "Wallpaper catalogue unavailable".into();
+                }
             }
         }
     }
@@ -761,6 +927,48 @@ fn ordered<'a>(items: &'a Json, order: &'a Json) -> impl Iterator<Item = (&'a st
         .flatten()
         .take(2048)
         .filter_map(move |id| Some((id.as_str()?, items.get(id.as_str()?)?)))
+}
+fn parse_wallpaper_handle(handle: &str) -> Option<(&str, &str)> {
+    let (field, rest) = handle.split_once(':')?;
+    if !matches!(field, "thumbnail" | "preview") {
+        return None;
+    }
+    let id = if let Some((generation, id)) = rest.split_once(':')
+        && !generation.is_empty()
+        && generation.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        id
+    } else {
+        rest
+    };
+    (!id.is_empty()).then_some((id, field))
+}
+fn cached_wallpaper_image(
+    state: &mut State,
+    file: &std::path::PathBuf,
+    limit: usize,
+) -> Option<Arc<[u8]>> {
+    if let Some(bytes) = state.images.get(file) {
+        return Some(bytes.clone());
+    }
+    let bytes = crate::desktop::read_icon_file(file, 2 * bead::core::cache::MIB as u64).ok()?;
+    let dimensions = image::ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()?;
+    if dimensions.0 == 0 || dimensions.1 == 0 || dimensions.0 > 1600 || dimensions.1 > 1000 {
+        return None;
+    }
+    let cost = bytes.len() + file.capacity() + 128;
+    if state.image_bytes + cost > limit {
+        state.images.clear();
+        state.image_bytes = 0;
+    }
+    let bytes: Arc<[u8]> = Arc::from(bytes);
+    state.image_bytes += cost;
+    state.images.insert(file.clone(), bytes.clone());
+    Some(bytes)
 }
 fn compositor_rows(data: &Json) -> (Vec<Json>, Vec<Json>) {
     let local = data["capabilities"]["perOutputWorkspaces"] == true;

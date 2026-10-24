@@ -1824,7 +1824,11 @@ impl Runtime {
                 colors.attach_images(scene);
             }
             if let Some(extras) = &self.extras {
-                extras.attach_images(scene);
+                let wake = self
+                    .extras_wake
+                    .as_ref()
+                    .and_then(|slot| slot.lock().ok().and_then(|wake| wake.clone()));
+                extras.attach_images(scene, wake);
             }
             if let Some(welcome) = &self.welcome {
                 welcome.attach_images(scene);
