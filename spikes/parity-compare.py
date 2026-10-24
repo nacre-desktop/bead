@@ -853,11 +853,19 @@ os.execv(real, [real, *args])
         self.pointer(1100, 600)
         before = position()
         measurements = {'before': before}
-        for kind, delta in [('pixel', 10), ('wheel', 1)]:
+        for kind, delta in [('pixel', 10), ('wheel', 1), ('wheel-angle', 1)]:
             self.release_pointer()
             scale = self.geometry['scale']
             command = [self.args.pointer_tool, str(round(1100*scale)), str(round(600*scale)),
                        str(self.args.size[0]), str(self.args.size[1]), kind, str(delta)]
+            if kind == 'wheel-angle':
+                # A pure discrete notch exercises Qt's angle path without a pixel payload.
+                reset = command[:-2] + ['pixel', '-10000']
+                result = self.run(reset, env=self.env, check=False)
+                if result.returncode:
+                    self.run(reset, env=dict(self.env, WAYLAND_DISPLAY=self.env['BEAD_PARENT']))
+                time.sleep(.2)
+                before = position()
             # Prefer the nested compositor itself; winit may turn parent wheel notches into pixels.
             result = self.run(command, env=self.env, check=False)
             path = 'direct'
