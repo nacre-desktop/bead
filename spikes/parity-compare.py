@@ -363,7 +363,9 @@ class Arm:
                 (tools / entry.name).symlink_to(entry)
             for name in ['nacre-helper', 'nacre-daemon']:
                 (tools / name).symlink_to(Path(a.bead_bin).resolve() / 'nacre-helper')
-            self.install_fake_light_devices(tools / 'nacre-helper')
+            # OSD-only descriptors must not invent controls in unrelated dock captures.
+            if any(state in a.states for state in ('osd-brightness', 'osd-keyboard')):
+                self.install_fake_light_devices(tools / 'nacre-helper')
             (base / 'bin').mkdir()
             (base / 'bin/qs').symlink_to(shutil.which('quickshell'))
             local_bin = Path(self.env['HOME']) / '.local/bin'
