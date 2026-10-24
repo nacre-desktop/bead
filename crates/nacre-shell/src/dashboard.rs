@@ -220,6 +220,7 @@ pub fn spec(
     // Match the joined top frame's two-pixel upper inset, avoiding a second
     // full panel SHM geometry when the prepared scene becomes available.
     fallback.bounds = Rect::new(-32., -2., 1048., 684.);
+    fallback.offset = (32., 2.);
     fallback.primitives = vec![Primitive::Rounded {
         rect: Rect::new(0., 0., 984., 650.),
         radius: 18.,

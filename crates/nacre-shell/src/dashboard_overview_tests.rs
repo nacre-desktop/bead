@@ -4,6 +4,42 @@ use super::*;
 use bead_test::{Config, Harness, Result, source::FakeSource};
 
 #[test]
+fn today_companion_fallback_surface_matches_joined_frame_geometry() -> Result<()> {
+    use bead::render::{Palette, Primitive};
+
+    let palette = Arc::new(root().join("palette.json"));
+    let colors = Arc::new(Palette::read(&palette)?);
+    let spec = super::spec(
+        Page::Today,
+        palette,
+        colors,
+        Choice {
+            client: None,
+            fixtures: None,
+            prefs: None,
+        },
+        Arc::new(std::sync::OnceLock::new()),
+        false,
+    )?;
+
+    let fallback = &spec.fallback;
+    assert_eq!(fallback.bounds.x + fallback.offset.0, 0.);
+    assert_eq!(fallback.bounds.y + fallback.offset.1, 0.);
+    assert_eq!(fallback.bounds.h, 684.);
+    let companion_height = fallback.bounds.y + fallback.bounds.h + fallback.offset.1;
+    assert_eq!(companion_height, 684.);
+    let visible_body_height = fallback
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Rounded { rect, .. } if rect.x == 0. && rect.y == 0. => Some(rect.h),
+            _ => None,
+        });
+    assert_eq!(visible_body_height, Some(650.));
+    Ok(())
+}
+
+#[test]
 fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Result<()> {
     use nacre_protocol::wallpaper::{ActiveWallpaper, WallpaperFileIdentity};
     let dir = std::env::temp_dir().join(format!("bead-today-poster-{}", std::process::id()));
