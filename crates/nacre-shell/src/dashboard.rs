@@ -733,7 +733,7 @@ impl Dashboard {
                 controls::host(&s, self.now, &mut out);
                 let mut gauges = controls::gauges(&s);
                 let disk = s.disks.order.iter().find_map(|id| s.disks.items.get(id));
-                gauges[2] = json!({"id":"storage","label":tr("bead.dashboard.system-drives", &[]),"icon":"storage",
+                gauges[2] = json!({"id":"storage","label":tr("bead.dashboard.gauge-storage", &[]),"icon":"storage",
                     "value":disk.map_or("—".into(), |d| format!("{:.0}%", d.used as f64 * 100. / d.total as f64)),
                     "fraction":disk.map(|d| (d.used as f64 / d.total as f64).clamp(0.,1.)),
                     "detail":disk.map_or(String::new(), |d| format!("{} / {}", bytes(d.used), bytes(d.total)))});

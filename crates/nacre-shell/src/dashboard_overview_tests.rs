@@ -37,7 +37,7 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
         Some(wallpaper.clone()),
         Some(updates.clone()),
     );
-    let h = Harness::load(
+    let mut h = Harness::load(
         &root(),
         Path::new("dashboard/today/main.luau"),
         &root().join("palette.json"),
@@ -71,6 +71,28 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
         panic!("gauges")
     };
     assert_eq!(gauges[2]["id"], "storage");
+    assert_eq!(gauges[2]["label"], "Storage");
+    let mut visible = values.clone();
+    visible.insert("dashboard.wallpaper".into(), Value::Bool(false));
+    let scene = h.session.update_model(visible)?.ok_or("Today projection")?;
+    let text_y = |wanted: &str| {
+        scene
+            .primitives
+            .iter()
+            .find_map(|p| match p {
+                bead::render::Primitive::Text { text, rect, .. } if text == wanted => Some(rect.y),
+                _ => None,
+            })
+            .expect("host text in layout")
+    };
+    let Value::Text(update_text) = &values["dashboard.updates"] else {
+        panic!("updates text")
+    };
+    assert!(
+        text_y(update_text) < text_y("6.10"),
+        "updates precede the kernel in the QML host card"
+    );
+
     let bytes = Arc::downgrade(
         dashboard
             .poster

@@ -98,7 +98,7 @@ local dashboard={stores={
     ["dashboard.control"]=false,["dashboard.busy"]=false,["dashboard.message"]="",["dashboard.confirm"]=false,
         ["dashboard.track"]=tr("bead.dashboard.playback-unavailable"),["dashboard.track_detail"]=tr("bead.dashboard.playback-unavailable-detail"),
     ["dashboard.can_previous"]=false,["dashboard.can_toggle"]=false,["dashboard.can_next"]=false,
-    ["dashboard.gauges"]={{id="cpu",label=tr("bead.dashboard.gauge-cpu"),icon="developer_board",value="—",detail=tr("bead.dashboard.gauge-unavailable")},{id="memory",label=tr("bead.dashboard.gauge-memory"),icon="memory",value="—",detail=tr("bead.dashboard.gauge-unavailable")},{id="storage",label=tr("bead.dashboard.system-drives"),icon="storage",value="—",detail=tr("bead.dashboard.gauge-unavailable")}},
+    ["dashboard.gauges"]={{id="cpu",label=tr("bead.dashboard.gauge-cpu"),icon="developer_board",value="—",detail=tr("bead.dashboard.gauge-unavailable")},{id="memory",label=tr("bead.dashboard.gauge-memory"),icon="memory",value="—",detail=tr("bead.dashboard.gauge-unavailable")},{id="storage",label=tr("bead.dashboard.gauge-storage"),icon="storage",value="—",detail=tr("bead.dashboard.gauge-unavailable")}},
     ["dashboard.can_seek"]=false,["dashboard.art"]=false,
     ["dashboard.net_down"]={},["dashboard.net_up"]={},["dashboard.net_rate"]="—",["dashboard.net_up_rate"]="—",["dashboard.net_peak"]="",
     ["dashboard.customize"]=false,["dashboard.state"]="unavailable",["dashboard.progress"]=0,["dashboard.minutes"]=25,

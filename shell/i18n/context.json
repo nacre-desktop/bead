@@ -184,6 +184,7 @@
   "bead.dashboard.gauge-cpu-detail": "Dashboard panel: detail under the CPU percentage: share of time the processor is busy.",
   "bead.dashboard.gauge-gpu": "Dashboard panel: name of the graphics processor gauge card.",
   "bead.dashboard.gauge-memory": "Dashboard panel: name of the memory gauge card and the label next to the top process list. Means RAM.",
+  "bead.dashboard.gauge-storage": "Today dashboard: label of the storage usage ring.",
   "bead.dashboard.gauge-unavailable": "Dashboard panel: detail of a gauge whose value could not be read.",
   "bead.dashboard.host-compositor": "Dashboard System page, host card: name of the compositor the desktop runs on. A product name; keep it as is.",
   "bead.dashboard.host-uptime": "Dashboard System page, host card: time since boot under one day; {hours} and {minutes} are numbers.",

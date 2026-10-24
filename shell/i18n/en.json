@@ -184,6 +184,7 @@
   "bead.dashboard.gauge-cpu-detail": "Busy share",
   "bead.dashboard.gauge-gpu": "GPU",
   "bead.dashboard.gauge-memory": "Memory",
+  "bead.dashboard.gauge-storage": "Storage",
   "bead.dashboard.gauge-unavailable": "Metric unavailable",
   "bead.dashboard.host-compositor": "Hyprland",
   "bead.dashboard.host-uptime": "Up {hours}h {minutes}m",

@@ -86,12 +86,13 @@ return function()
                 color=i%2==0 and "onSurfaceVariant" or "primary"},
             ui.Text{text=item.text,width=l.hostInfo-26,height=20,font_size=l.hostTextSize,color="onSurface"}}
     end
-    table.insert(hostRows,ui.Row{id="updates",width=l.hostInfo,height=hostRowHeight,gap=6,align="center",
+    local updateIndex=host[#host] and host[#host].id=="memory" and #hostRows or #hostRows+1
+    table.insert(hostRows,updateIndex,ui.Row{id="updates",width=l.hostInfo,height=hostRowHeight,gap=6,align="center",
         ui.Text{text="system_update",family="Material Symbols Rounded",font_size=l.hostIconSize,width=20,height=20,color="primary"},
         ui.Text{text=ui.bind("dashboard.updates"),width=l.hostInfo-26,height=20,font_size=l.hostTextSize,color="onSurface"}})
     local hostRowsHeight=#hostRows*hostRowHeight+(#hostRows-1)*hostRowGap
     local hostCard=ui.Row{id="host",width=l.host,height=l.hostBody,padding_left=18,padding_right=14,gap=16,
-        radius=l.cardRadius,fill="surfaceContainerLow",align="center",
+        radius=l.cardRadius,fill="transparent",align="center",
         ui.Row{id="distro-mark",width=l.logoSize,height=l.logoSize,radius=l.logoSize/2,fill="surfaceContainer",
             align="center",justify="center",ui.Image{path="dashboard/today/assets/nacre-logo.themed.svg",
                 width=l.logoSize*l.logoContent,height=l.logoSize*l.logoContent,shrink=0,aria_label="Nacre"}},
@@ -101,13 +102,14 @@ return function()
     for i,metric in ipairs(gauges) do
         local w=l.host/3
         local diameter=math.min(w-12,l.metrics-28,64)
+        local fraction=type(metric.fraction)=="number" and metric.fraction or 0
         gaugeRow[i]=ui.Box{id=metric.id,width=w,height=l.metrics,fill="transparent",
             ui.Arc{id="track",position="absolute",left=(w-diameter)/2+2,top=2,
                 width=diameter-4,height=diameter-4,start_angle=-90,sweep_angle=360,
                 stroke_width=4,color=ui.alpha("onSurface",.15),round_caps=true},
             ui.Arc{id="value",position="absolute",left=(w-diameter)/2+2,top=2,
                 width=diameter-4,height=diameter-4,start_angle=-90,
-                sweep_angle=math.max(0,math.min(1,metric.fraction or 0))*360,
+                sweep_angle=math.max(0,math.min(1,fraction))*360,
                 stroke_width=4,color="primary",round_caps=true},
             ui.Text{id="reading",position="absolute",left=0,top=(diameter-24)/2,width=w,height=24,
                 text=metric.value,font_size=14*4/3,text_align="center",color="onSurface"},
@@ -118,8 +120,8 @@ return function()
         ui.Box{id="month",position="absolute",left=0,top=0,width=l.calendar,height=l.summary,
             radius=l.cardRadius,fill="surfaceContainerLow",calendarReady and calendar(l.calendar,l.summary) or ui.Text{id="unavailable",
                 text=ui.tr("bead.panel.calendar-unavailable"),width=l.calendar-24,height=40,font_size=14,color="onSurfaceVariant"}},
-        ui.Column{id="host-and-gauges",position="absolute",left=l.calendar+l.summaryGap,top=0,width=l.host,height=l.summary,gap=l.hostGap,
-            hostCard,ui.Row{id="gauges",width=l.host,height=l.metrics,gap=0,radius=14,fill="surfaceContainerLow",table.unpack(gaugeRow)}},
+        ui.Column{id="host-and-gauges",position="absolute",left=l.calendar+l.summaryGap,top=0,width=l.host,height=l.summary,gap=l.hostGap,radius=l.cardRadius,fill="surfaceContainerLow",
+            hostCard,ui.Row{id="gauges",width=l.host,height=l.metrics,gap=0,fill="transparent",table.unpack(gaugeRow)}},
         media(l),
     }
     return ui.Box{id="today",width=l.width,height=l.height,hero,summary}
