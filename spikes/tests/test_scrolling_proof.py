@@ -186,6 +186,14 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(second.read_text(), "second spawn\n")
         self.assertFalse(current.exists())
 
+    def test_bead_app_processes_inherit_trace_log_directory(self):
+        env = pacing.shell_trace_env("bead", self.root / "logs", {"KEEP": "value"})
+        self.assertEqual(env["BEAD_APP_LOG_DIR"], str(self.root / "logs"))
+        self.assertEqual(env["WAYLAND_DEBUG"], "client")
+        self.assertEqual(env["BEAD_FRAME_TRACE"], "1")
+        self.assertEqual(env["KEEP"], "value")
+        self.assertNotIn("BEAD_APP_LOG_DIR", pacing.shell_trace_env("qml", self.root / "logs"))
+
     def test_scroll_notification_fixture_uses_long_ttl_and_closes_exact_ids(self):
         calls = []
 

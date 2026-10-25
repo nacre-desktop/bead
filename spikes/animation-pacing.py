@@ -211,7 +211,7 @@ _orig_steps = m.Arm.steps
 
 def spawn(self, command, name, env=None, cwd=None):
     if name == 'shell':  # only the shell: niri/labwc must not trace as clients
-        env = dict(env or self.env, WAYLAND_DEBUG='client', BEAD_FRAME_TRACE='1', BEAD_VERBOSE_LOG='1')
+        env = shell_trace_env(self.name, self.logs, env or self.env)
         if os.environ.get('PACING_PANEL_RENDERER') and self.name == 'bead':
             command = [*command, '--panel-renderer', os.environ['PACING_PANEL_RENDERER']]
         if os.environ.get('PACING_TRACE_STATE') == '1' and self.name == 'bead':
@@ -307,6 +307,14 @@ def archive_app_logs(log_dir, scene, repeat):
         source.rename(target)
         archived.append(target)
     return archived
+
+
+def shell_trace_env(arm_name, log_dir, env=None):
+    result = dict(env or {})
+    result.update(WAYLAND_DEBUG='client', BEAD_FRAME_TRACE='1', BEAD_VERBOSE_LOG='1')
+    if arm_name == 'bead':
+        result['BEAD_APP_LOG_DIR'] = str(log_dir)
+    return result
 
 
 def percentile(values, p):
