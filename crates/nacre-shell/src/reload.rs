@@ -4417,6 +4417,12 @@ impl SceneSource for Runtime {
                 eprintln!("STATE_ERROR save: {error}");
             }
             if let Some(view) = self.pending_panel_navigation.take() {
+                // Baking the next body must not consume the indicator's visible motion.
+                if let Some(animation) = &mut self.dashboard_pearl_animation {
+                    animation.started = std::time::Instant::now();
+                    self.dashboard_pearl_deadline =
+                        Some(animation.started + std::time::Duration::from_millis(16));
+                }
                 scope_recovery(&mut self.session, self.output.as_deref());
                 if let Some(wakeup) = &self.wakeup {
                     wakeup(UiEvent::PanelNavigated(view));

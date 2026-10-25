@@ -235,6 +235,7 @@ impl SceneSource for Source {
                 let mut idle = false;
                 let mut needs_trim = false;
                 let mut active_scales = vec![1.];
+                let mut accepted_resource_revision = None;
                 'actor: loop {
                     for job in receiver.try_iter() {
                         match job {
@@ -357,6 +358,10 @@ impl SceneSource for Source {
                                     (source.error_scene(error.clone()), Some(error))
                                 }
                             };
+                            let resource_revision = scene.resource_revision;
+                            let look_change = look_change
+                                || accepted_resource_revision
+                                    .is_some_and(|revision| revision != resource_revision);
                             bead_core::profile::mark("worker_layout_ready");
                             needs_trim = true;
                             let bake_profile = bead_core::profile::Span::new("bake");
@@ -404,6 +409,8 @@ impl SceneSource for Source {
                                             Ok(()) => {
                                                 if fault.is_none() {
                                                     source.commit();
+                                                    accepted_resource_revision =
+                                                        Some(resource_revision);
                                                 }
                                                 if look_change {
                                                     cache.drop_unused_since(baked_after);
