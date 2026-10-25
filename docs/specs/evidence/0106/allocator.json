@@ -1,0 +1,1051 @@
+{
+  "method": "mallinfo2 process allocator and existing cache byte counters, sampled at the memory phases. Missing older counters remain null. These are allocation counters, not resident-memory gates.",
+  "runs": [
+    {
+      "variant": "original",
+      "pair": 2,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24981504,
+            "free": 8675952,
+            "live": 16305552,
+            "mapped": 0
+          },
+          "cache_used_bytes": 354817
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24981504,
+            "free": 8663328,
+            "live": 16318176,
+            "mapped": 0
+          },
+          "cache_used_bytes": 354817
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 29401088,
+            "free": 10397296,
+            "live": 19003792,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 8036286
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 29274112,
+            "free": 12932784,
+            "live": 16341328,
+            "mapped": 16
+          },
+          "cache_used_bytes": 330949
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 35950592,
+            "free": 17595968,
+            "live": 18354624,
+            "mapped": 6455344
+          },
+          "cache_used_bytes": 7755914
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 35819520,
+            "free": 19447728,
+            "live": 16371792,
+            "mapped": 48
+          },
+          "cache_used_bytes": 330949
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 44687360,
+            "free": 23216000,
+            "live": 21471360,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 10657206
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 44273664,
+            "free": 27808544,
+            "live": 16465120,
+            "mapped": 80
+          },
+          "cache_used_bytes": 333363
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 49397760,
+            "free": 30700848,
+            "live": 18696912,
+            "mapped": 6455408
+          },
+          "cache_used_bytes": 7952304
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 48816128,
+            "free": 32373664,
+            "live": 16442464,
+            "mapped": 112
+          },
+          "cache_used_bytes": 330949
+        }
+      }
+    },
+    {
+      "variant": "original",
+      "pair": 3,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24924160,
+            "free": 8582144,
+            "live": 16342016,
+            "mapped": 0
+          },
+          "cache_used_bytes": 358032
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24924160,
+            "free": 8569552,
+            "live": 16354608,
+            "mapped": 0
+          },
+          "cache_used_bytes": 358032
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 29343744,
+            "free": 10312832,
+            "live": 19030912,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 8039501
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 29171712,
+            "free": 12792880,
+            "live": 16378832,
+            "mapped": 16
+          },
+          "cache_used_bytes": 334351
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 35876864,
+            "free": 17478432,
+            "live": 18398432,
+            "mapped": 6455344
+          },
+          "cache_used_bytes": 7759316
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 35536896,
+            "free": 19127072,
+            "live": 16409824,
+            "mapped": 48
+          },
+          "cache_used_bytes": 334351
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 45174784,
+            "free": 23668752,
+            "live": 21506032,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 10660608
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 44761088,
+            "free": 28261760,
+            "live": 16499328,
+            "mapped": 80
+          },
+          "cache_used_bytes": 336765
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 50192384,
+            "free": 31461040,
+            "live": 18731344,
+            "mapped": 6455408
+          },
+          "cache_used_bytes": 7955706
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 49676288,
+            "free": 33201600,
+            "live": 16474688,
+            "mapped": 112
+          },
+          "cache_used_bytes": 334351
+        }
+      }
+    },
+    {
+      "variant": "original",
+      "pair": 4,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24928256,
+            "free": 8585440,
+            "live": 16342816,
+            "mapped": 0
+          },
+          "cache_used_bytes": 358321
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24928256,
+            "free": 8571392,
+            "live": 16356864,
+            "mapped": 0
+          },
+          "cache_used_bytes": 358321
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 29343744,
+            "free": 10304080,
+            "live": 19039664,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 8039790
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 29167616,
+            "free": 12784576,
+            "live": 16383040,
+            "mapped": 16
+          },
+          "cache_used_bytes": 334419
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 36151296,
+            "free": 17754608,
+            "live": 18396688,
+            "mapped": 6455344
+          },
+          "cache_used_bytes": 7759384
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 35971072,
+            "free": 19557968,
+            "live": 16413104,
+            "mapped": 48
+          },
+          "cache_used_bytes": 334419
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 47165440,
+            "free": 25630432,
+            "live": 21535008,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 10663357
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 46825472,
+            "free": 30295136,
+            "live": 16530336,
+            "mapped": 80
+          },
+          "cache_used_bytes": 336833
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 52084736,
+            "free": 33316368,
+            "live": 18768368,
+            "mapped": 6455408
+          },
+          "cache_used_bytes": 7955774
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 52002816,
+            "free": 35488160,
+            "live": 16514656,
+            "mapped": 112
+          },
+          "cache_used_bytes": 334419
+        }
+      }
+    },
+    {
+      "variant": "original",
+      "pair": 5,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24993792,
+            "free": 8682064,
+            "live": 16311728,
+            "mapped": 0
+          },
+          "cache_used_bytes": 354817
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24993792,
+            "free": 8669168,
+            "live": 16324624,
+            "mapped": 0
+          },
+          "cache_used_bytes": 354817
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 29368320,
+            "free": 10359120,
+            "live": 19009200,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 8036286
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 29245440,
+            "free": 12897648,
+            "live": 16347792,
+            "mapped": 16
+          },
+          "cache_used_bytes": 330949
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 37175296,
+            "free": 18814144,
+            "live": 18361152,
+            "mapped": 6455344
+          },
+          "cache_used_bytes": 7755914
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 37056512,
+            "free": 20652112,
+            "live": 16404400,
+            "mapped": 48
+          },
+          "cache_used_bytes": 331017
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 46804992,
+            "free": 25309344,
+            "live": 21495648,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 10657274
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 45539328,
+            "free": 29049520,
+            "live": 16489808,
+            "mapped": 80
+          },
+          "cache_used_bytes": 333431
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 50626560,
+            "free": 31903328,
+            "live": 18723232,
+            "mapped": 6455408
+          },
+          "cache_used_bytes": 7952372
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 50184192,
+            "free": 33717632,
+            "live": 16466560,
+            "mapped": 112
+          },
+          "cache_used_bytes": 331017
+        }
+      }
+    },
+    {
+      "variant": "original",
+      "pair": 6,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24920064,
+            "free": 8583984,
+            "live": 16336080,
+            "mapped": 0
+          },
+          "cache_used_bytes": 358281
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24920064,
+            "free": 8572000,
+            "live": 16348064,
+            "mapped": 0
+          },
+          "cache_used_bytes": 358281
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 29335552,
+            "free": 10315776,
+            "live": 19019776,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 8039750
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 29212672,
+            "free": 12844992,
+            "live": 16367680,
+            "mapped": 16
+          },
+          "cache_used_bytes": 334379
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 36786176,
+            "free": 18390880,
+            "live": 18395296,
+            "mapped": 6455344
+          },
+          "cache_used_bytes": 7759344
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 36655104,
+            "free": 20217136,
+            "live": 16437968,
+            "mapped": 48
+          },
+          "cache_used_bytes": 334379
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 47460352,
+            "free": 25925008,
+            "live": 21535344,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 10660636
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 46833664,
+            "free": 30299712,
+            "live": 16533952,
+            "mapped": 80
+          },
+          "cache_used_bytes": 336793
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 52498432,
+            "free": 33738064,
+            "live": 18760368,
+            "mapped": 6455408
+          },
+          "cache_used_bytes": 7955734
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 52051968,
+            "free": 35550336,
+            "live": 16501632,
+            "mapped": 112
+          },
+          "cache_used_bytes": 334379
+        }
+      }
+    },
+    {
+      "variant": "final",
+      "pair": 2,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24805376,
+            "free": 8573216,
+            "live": 16232160,
+            "mapped": 0
+          },
+          "cache_used_bytes": 369692
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24809472,
+            "free": 8565840,
+            "live": 16243632,
+            "mapped": 0
+          },
+          "cache_used_bytes": 369692
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 39723008,
+            "free": 14491056,
+            "live": 25231952,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 12779952
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 31928320,
+            "free": 15622848,
+            "live": 16305472,
+            "mapped": 16
+          },
+          "cache_used_bytes": 346148
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 46051328,
+            "free": 27393024,
+            "live": 18658304,
+            "mapped": 6455328
+          },
+          "cache_used_bytes": 8064324
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 41684992,
+            "free": 25367216,
+            "live": 16317776,
+            "mapped": 48
+          },
+          "cache_used_bytes": 345790
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 53514240,
+            "free": 33482528,
+            "live": 20031712,
+            "mapped": 6455360
+          },
+          "cache_used_bytes": 9258370
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 53252096,
+            "free": 36825328,
+            "live": 16426768,
+            "mapped": 64
+          },
+          "cache_used_bytes": 348073
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 59953152,
+            "free": 41588768,
+            "live": 18364384,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 7753526
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 59867136,
+            "free": 43474560,
+            "live": 16392576,
+            "mapped": 80
+          },
+          "cache_used_bytes": 345790
+        }
+      }
+    },
+    {
+      "variant": "final",
+      "pair": 3,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24768512,
+            "free": 8514464,
+            "live": 16254048,
+            "mapped": 0
+          },
+          "cache_used_bytes": 371027
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24772608,
+            "free": 8506528,
+            "live": 16266080,
+            "mapped": 0
+          },
+          "cache_used_bytes": 371027
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 39690240,
+            "free": 14428656,
+            "live": 25261584,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 12781287
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 31899648,
+            "free": 15549056,
+            "live": 16350592,
+            "mapped": 16
+          },
+          "cache_used_bytes": 347789
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 45785088,
+            "free": 26885600,
+            "live": 18899488,
+            "mapped": 6455328
+          },
+          "cache_used_bytes": 8266224
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 41480192,
+            "free": 25113264,
+            "live": 16366928,
+            "mapped": 48
+          },
+          "cache_used_bytes": 347431
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 52822016,
+            "free": 32739392,
+            "live": 20082624,
+            "mapped": 6455360
+          },
+          "cache_used_bytes": 9260011
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 50888704,
+            "free": 34425072,
+            "live": 16463632,
+            "mapped": 64
+          },
+          "cache_used_bytes": 349714
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 59432960,
+            "free": 41029088,
+            "live": 18403872,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 7755167
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 59064320,
+            "free": 42641312,
+            "live": 16423008,
+            "mapped": 80
+          },
+          "cache_used_bytes": 347431
+        }
+      }
+    },
+    {
+      "variant": "final",
+      "pair": 4,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24772608,
+            "free": 8499552,
+            "live": 16273056,
+            "mapped": 0
+          },
+          "cache_used_bytes": 371469
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24776704,
+            "free": 8490688,
+            "live": 16286016,
+            "mapped": 0
+          },
+          "cache_used_bytes": 371469
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 39690240,
+            "free": 14412096,
+            "live": 25278144,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 12781729
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 31592448,
+            "free": 15250560,
+            "live": 16341888,
+            "mapped": 16
+          },
+          "cache_used_bytes": 347721
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 45752320,
+            "free": 26862976,
+            "live": 18889344,
+            "mapped": 6455328
+          },
+          "cache_used_bytes": 8263947
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 41652224,
+            "free": 25287184,
+            "live": 16365040,
+            "mapped": 48
+          },
+          "cache_used_bytes": 347363
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 53604352,
+            "free": 33534848,
+            "live": 20069504,
+            "mapped": 6455360
+          },
+          "cache_used_bytes": 9259943
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 51867648,
+            "free": 35413408,
+            "live": 16454240,
+            "mapped": 64
+          },
+          "cache_used_bytes": 349646
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 59891712,
+            "free": 41462064,
+            "live": 18429648,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 7755167
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 59224064,
+            "free": 42774832,
+            "live": 16449232,
+            "mapped": 80
+          },
+          "cache_used_bytes": 347431
+        }
+      }
+    },
+    {
+      "variant": "final",
+      "pair": 5,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24838144,
+            "free": 8628448,
+            "live": 16209696,
+            "mapped": 0
+          },
+          "cache_used_bytes": 367886
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24842240,
+            "free": 8618144,
+            "live": 16224096,
+            "mapped": 0
+          },
+          "cache_used_bytes": 367886
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 39755776,
+            "free": 14534800,
+            "live": 25220976,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 12778146
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 31719424,
+            "free": 15409840,
+            "live": 16309584,
+            "mapped": 16
+          },
+          "cache_used_bytes": 346268
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 45879296,
+            "free": 27023056,
+            "live": 18856240,
+            "mapped": 6455328
+          },
+          "cache_used_bytes": 8264703
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 42012672,
+            "free": 25686016,
+            "live": 16326656,
+            "mapped": 48
+          },
+          "cache_used_bytes": 345910
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 55320576,
+            "free": 35282000,
+            "live": 20038576,
+            "mapped": 6455360
+          },
+          "cache_used_bytes": 9258490
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 54349824,
+            "free": 37925264,
+            "live": 16424560,
+            "mapped": 64
+          },
+          "cache_used_bytes": 348193
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 63082496,
+            "free": 44713744,
+            "live": 18368752,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 7753646
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 63139840,
+            "free": 46749360,
+            "live": 16390480,
+            "mapped": 80
+          },
+          "cache_used_bytes": 345910
+        }
+      }
+    },
+    {
+      "variant": "final",
+      "pair": 6,
+      "phases": {
+        "idle-before": {
+          "heap_bytes": {
+            "arena": 24768512,
+            "free": 8515984,
+            "live": 16252528,
+            "mapped": 0
+          },
+          "cache_used_bytes": 371208
+        },
+        "idle-after": {
+          "heap_bytes": {
+            "arena": 24768512,
+            "free": 8502064,
+            "live": 16266448,
+            "mapped": 0
+          },
+          "cache_used_bytes": 371208
+        },
+        "today-open": {
+          "heap_bytes": {
+            "arena": 39682048,
+            "free": 14386480,
+            "live": 25295568,
+            "mapped": 6455312
+          },
+          "cache_used_bytes": 12781757
+        },
+        "today-closed": {
+          "heap_bytes": {
+            "arena": 31899648,
+            "free": 15546560,
+            "live": 16353088,
+            "mapped": 16
+          },
+          "cache_used_bytes": 347749
+        },
+        "media-open": {
+          "heap_bytes": {
+            "arena": 45719552,
+            "free": 26820512,
+            "live": 18899040,
+            "mapped": 6455328
+          },
+          "cache_used_bytes": 8263975
+        },
+        "media-closed": {
+          "heap_bytes": {
+            "arena": 41279488,
+            "free": 24910896,
+            "live": 16368592,
+            "mapped": 48
+          },
+          "cache_used_bytes": 347391
+        },
+        "weather-open": {
+          "heap_bytes": {
+            "arena": 54427648,
+            "free": 34340576,
+            "live": 20087072,
+            "mapped": 6455360
+          },
+          "cache_used_bytes": 9259971
+        },
+        "weather-closed": {
+          "heap_bytes": {
+            "arena": 51335168,
+            "free": 34867184,
+            "live": 16467984,
+            "mapped": 64
+          },
+          "cache_used_bytes": 349674
+        },
+        "system-open": {
+          "heap_bytes": {
+            "arena": 59772928,
+            "free": 41365120,
+            "live": 18407808,
+            "mapped": 6455376
+          },
+          "cache_used_bytes": 7755127
+        },
+        "system-closed": {
+          "heap_bytes": {
+            "arena": 59604992,
+            "free": 43138144,
+            "live": 16466848,
+            "mapped": 80
+          },
+          "cache_used_bytes": 349124
+        }
+      }
+    }
+  ],
+  "summary": {
+    "original": {
+      "idle-before": {
+        "live_heap_median_bytes": 16336080,
+        "cache_used_median_bytes": 358032
+      },
+      "idle-after": {
+        "live_heap_median_bytes": 16348064,
+        "cache_used_median_bytes": 358032
+      },
+      "today-open": {
+        "live_heap_median_bytes": 19019776,
+        "cache_used_median_bytes": 8039501
+      },
+      "today-closed": {
+        "live_heap_median_bytes": 16367680,
+        "cache_used_median_bytes": 334351
+      },
+      "media-open": {
+        "live_heap_median_bytes": 18395296,
+        "cache_used_median_bytes": 7759316
+      },
+      "media-closed": {
+        "live_heap_median_bytes": 16409824,
+        "cache_used_median_bytes": 334351
+      },
+      "weather-open": {
+        "live_heap_median_bytes": 21506032,
+        "cache_used_median_bytes": 10660608
+      },
+      "weather-closed": {
+        "live_heap_median_bytes": 16499328,
+        "cache_used_median_bytes": 336765
+      },
+      "system-open": {
+        "live_heap_median_bytes": 18731344,
+        "cache_used_median_bytes": 7955706
+      },
+      "system-closed": {
+        "live_heap_median_bytes": 16474688,
+        "cache_used_median_bytes": 334351
+      }
+    },
+    "final": {
+      "idle-before": {
+        "live_heap_median_bytes": 16252528,
+        "cache_used_median_bytes": 371027
+      },
+      "idle-after": {
+        "live_heap_median_bytes": 16266080,
+        "cache_used_median_bytes": 371027
+      },
+      "today-open": {
+        "live_heap_median_bytes": 25261584,
+        "cache_used_median_bytes": 12781287
+      },
+      "today-closed": {
+        "live_heap_median_bytes": 16341888,
+        "cache_used_median_bytes": 347721
+      },
+      "media-open": {
+        "live_heap_median_bytes": 18889344,
+        "cache_used_median_bytes": 8263975
+      },
+      "media-closed": {
+        "live_heap_median_bytes": 16365040,
+        "cache_used_median_bytes": 347363
+      },
+      "weather-open": {
+        "live_heap_median_bytes": 20069504,
+        "cache_used_median_bytes": 9259943
+      },
+      "weather-closed": {
+        "live_heap_median_bytes": 16454240,
+        "cache_used_median_bytes": 349646
+      },
+      "system-open": {
+        "live_heap_median_bytes": 18403872,
+        "cache_used_median_bytes": 7755127
+      },
+      "system-closed": {
+        "live_heap_median_bytes": 16423008,
+        "cache_used_median_bytes": 347431
+      }
+    }
+  }
+}

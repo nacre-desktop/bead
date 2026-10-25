@@ -1,0 +1,799 @@
+{
+  "runs": [
+    {
+      "pair": 1,
+      "arm": "qml",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 119.75006551597413,
+      "t50": 192.98660409072525,
+      "t90": 232.27176786373454
+    },
+    {
+      "pair": 1,
+      "arm": "qml",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 642.250273899307,
+      "t50": 685.5017425169787,
+      "t90": 747.2384480190119
+    },
+    {
+      "pair": 1,
+      "arm": "qml",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 110.272430544434,
+      "t50": 177.78358275180813,
+      "t90": 222.74014034015735
+    },
+    {
+      "pair": 1,
+      "arm": "qml",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 643.3774949381963,
+      "t50": 686.6601505883943,
+      "t90": 748.0744791096372
+    },
+    {
+      "pair": 1,
+      "arm": "base",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 154.3950241871362,
+      "t50": 234.63592776428345,
+      "t90": 371.0976504286442
+    },
+    {
+      "pair": 1,
+      "arm": "base",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 676.4490530569444,
+      "t50": 706.1856378447336,
+      "t90": 761.9367378316108
+    },
+    {
+      "pair": 1,
+      "arm": "base",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 171.94290366241205,
+      "t50": 246.82743740310633,
+      "t90": 291.67242153155945
+    },
+    {
+      "pair": 1,
+      "arm": "base",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 676.1361393716393,
+      "t50": 706.2481447250906,
+      "t90": 762.6394924332272
+    },
+    {
+      "pair": 1,
+      "arm": "final",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 169.973097831331,
+      "t50": 246.47093032932074,
+      "t90": 322.0271729481075
+    },
+    {
+      "pair": 1,
+      "arm": "final",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 668.4950143372382,
+      "t50": 719.6221908491174,
+      "t90": 757.1328490736472
+    },
+    {
+      "pair": 1,
+      "arm": "final",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 147.4562662948822,
+      "t50": 205.43673834732266,
+      "t90": 307.55521160034874
+    },
+    {
+      "pair": 1,
+      "arm": "final",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 667.9223921536076,
+      "t50": 718.8235631208687,
+      "t90": 770.9801597058677
+    },
+    {
+      "pair": 2,
+      "arm": "qml",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 133.0988537205276,
+      "t50": 205.46483494091478,
+      "t90": 266.76676846129254
+    },
+    {
+      "pair": 2,
+      "arm": "qml",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 644.4903469453056,
+      "t50": 688.6876406927428,
+      "t90": 750.0822946997004
+    },
+    {
+      "pair": 2,
+      "arm": "qml",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 110.27240575930207,
+      "t50": 178.78352164747804,
+      "t90": 233.31759827632627
+    },
+    {
+      "pair": 2,
+      "arm": "qml",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 644.672594735724,
+      "t50": 688.3986350480606,
+      "t90": 750.0744791096372
+    },
+    {
+      "pair": 2,
+      "arm": "base",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 153.94669410475825,
+      "t50": 234.5483218258922,
+      "t90": 395.70219758943057
+    },
+    {
+      "pair": 2,
+      "arm": "base",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 677.0871537251717,
+      "t50": 706.6796664512696,
+      "t90": 763.2723804547873
+    },
+    {
+      "pair": 2,
+      "arm": "base",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 164.0608097394771,
+      "t50": 241.34305131384977,
+      "t90": 292.7739243830158
+    },
+    {
+      "pair": 2,
+      "arm": "base",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 676.4099549235426,
+      "t50": 720.0907561333253,
+      "t90": 770.1805470767634
+    },
+    {
+      "pair": 2,
+      "arm": "final",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 113.57410222634743,
+      "t50": 144.52898570250073,
+      "t90": 207.21395839829694
+    },
+    {
+      "pair": 2,
+      "arm": "final",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 666.6942440716576,
+      "t50": 718.1901454049947,
+      "t90": 770.2964243050963
+    },
+    {
+      "pair": 2,
+      "arm": "final",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 147.1141701741421,
+      "t50": 203.3040734854505,
+      "t90": 308.47869989806236
+    },
+    {
+      "pair": 2,
+      "arm": "final",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 678.8471822232366,
+      "t50": 720.5821085978085,
+      "t90": 761.842960111735
+    },
+    {
+      "pair": 3,
+      "arm": "qml",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 109.61104225132978,
+      "t50": 191.23412096491506,
+      "t90": 220.66604126984132
+    },
+    {
+      "pair": 3,
+      "arm": "qml",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 643.5002848552792,
+      "t50": 687.5017425169787,
+      "t90": 749.2384480190119
+    },
+    {
+      "pair": 3,
+      "arm": "qml",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 120.75770094209923,
+      "t50": 181.32507753516896,
+      "t90": 242.8981487848573
+    },
+    {
+      "pair": 3,
+      "arm": "qml",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 650.6261577020174,
+      "t50": 687.489553610713,
+      "t90": 749.230459772412
+    },
+    {
+      "pair": 3,
+      "arm": "base",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 154.95367080556096,
+      "t50": 235.9814113892005,
+      "t90": 396.6989453181326
+    },
+    {
+      "pair": 3,
+      "arm": "base",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 675.9093958033018,
+      "t50": 706.3538875377708,
+      "t90": 762.8981578843205
+    },
+    {
+      "pair": 3,
+      "arm": "base",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 145.67412033268968,
+      "t50": 231.60548733154457,
+      "t90": 299.5782474412733
+    },
+    {
+      "pair": 3,
+      "arm": "base",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 676.138636440557,
+      "t50": 706.251973800614,
+      "t90": 762.1282136607869
+    },
+    {
+      "pair": 3,
+      "arm": "final",
+      "state": "dashboard-0",
+      "direction": "open",
+      "t10": 98.50287088858533,
+      "t50": 145.6625226182224,
+      "t90": 207.87507910565213
+    },
+    {
+      "pair": 3,
+      "arm": "final",
+      "state": "dashboard-0",
+      "direction": "close",
+      "t10": 679.0555642624925,
+      "t50": 719.9933081294643,
+      "t90": 770.4826712696287
+    },
+    {
+      "pair": 3,
+      "arm": "final",
+      "state": "dashboard-warm",
+      "direction": "open",
+      "t10": 157.9554227390207,
+      "t50": 227.32318000180757,
+      "t90": 309.12457586619996
+    },
+    {
+      "pair": 3,
+      "arm": "final",
+      "state": "dashboard-warm",
+      "direction": "close",
+      "t10": 667.4988067668708,
+      "t50": 718.4127515797344,
+      "t90": 770.4411439184805
+    }
+  ],
+  "timeline": [
+    {
+      "pair": 1,
+      "arm": "base",
+      "state": "cold",
+      "worker_spawn": 4.932896,
+      "runtime_ready": 5.086845,
+      "vm_ready": 10.239371,
+      "generation_ready": 16.589025,
+      "worker_layout_ready": 209.007401,
+      "worker_paint_ready": 266.946072,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 270.886838,
+      "first_content_buffer_commit": 312.799653,
+      "first_content_present": 313.797061
+    },
+    {
+      "pair": 1,
+      "arm": "base",
+      "state": "warm",
+      "worker_spawn": null,
+      "runtime_ready": null,
+      "vm_ready": null,
+      "generation_ready": null,
+      "worker_layout_ready": 24.374489,
+      "worker_paint_ready": 31.616503,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 32.401012,
+      "first_content_buffer_commit": 37.645028,
+      "first_content_present": 38.337557
+    },
+    {
+      "pair": 1,
+      "arm": "final",
+      "state": "cold",
+      "worker_spawn": 4.674456,
+      "runtime_ready": 4.826856,
+      "vm_ready": 9.689362,
+      "generation_ready": 17.180445,
+      "worker_layout_ready": 24.547489,
+      "worker_paint_ready": 58.195191,
+      "dashboard_poster_start": 19.271884,
+      "dashboard_poster_decoded": 159.750863,
+      "dashboard_poster_ready": 166.027768,
+      "dashboard_poster_trimmed": 185.200532,
+      "first_content_commit": 58.96741,
+      "first_content_buffer_commit": 80.539031,
+      "first_content_present": 93.04569
+    },
+    {
+      "pair": 1,
+      "arm": "final",
+      "state": "warm",
+      "worker_spawn": null,
+      "runtime_ready": null,
+      "vm_ready": null,
+      "generation_ready": null,
+      "worker_layout_ready": 10.014081,
+      "worker_paint_ready": 10.699271,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 26.212487,
+      "first_content_buffer_commit": 32.987862,
+      "first_content_present": 37.245208
+    },
+    {
+      "pair": 2,
+      "arm": "base",
+      "state": "cold",
+      "worker_spawn": 3.765927,
+      "runtime_ready": 3.904606,
+      "vm_ready": 9.486492,
+      "generation_ready": 17.676914,
+      "worker_layout_ready": 211.446449,
+      "worker_paint_ready": 280.924359,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 281.554169,
+      "first_content_buffer_commit": 318.194478,
+      "first_content_present": 335.109643
+    },
+    {
+      "pair": 2,
+      "arm": "base",
+      "state": "warm",
+      "worker_spawn": null,
+      "runtime_ready": null,
+      "vm_ready": null,
+      "generation_ready": null,
+      "worker_layout_ready": 17.666895,
+      "worker_paint_ready": 22.372311,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 28.916485,
+      "first_content_buffer_commit": 33.463371,
+      "first_content_present": 39.662046
+    },
+    {
+      "pair": 2,
+      "arm": "final",
+      "state": "cold",
+      "worker_spawn": 3.871327,
+      "runtime_ready": 4.009117,
+      "vm_ready": 9.274112,
+      "generation_ready": 15.886047,
+      "worker_layout_ready": 23.316631,
+      "worker_paint_ready": 55.137883,
+      "dashboard_poster_start": 18.051095,
+      "dashboard_poster_decoded": 156.038437,
+      "dashboard_poster_ready": 159.526074,
+      "dashboard_poster_trimmed": 162.308562,
+      "first_content_commit": 55.780663,
+      "first_content_buffer_commit": 77.197334,
+      "first_content_present": 103.423862
+    },
+    {
+      "pair": 2,
+      "arm": "final",
+      "state": "warm",
+      "worker_spawn": null,
+      "runtime_ready": null,
+      "vm_ready": null,
+      "generation_ready": null,
+      "worker_layout_ready": 10.419101,
+      "worker_paint_ready": 11.32506,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 24.18591,
+      "first_content_buffer_commit": 29.753285,
+      "first_content_present": 35.658579
+    },
+    {
+      "pair": 3,
+      "arm": "base",
+      "state": "cold",
+      "worker_spawn": 3.549903,
+      "runtime_ready": 3.679492,
+      "vm_ready": 9.3532,
+      "generation_ready": 17.936472,
+      "worker_layout_ready": 214.303461,
+      "worker_paint_ready": 269.531782,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 270.982019,
+      "first_content_buffer_commit": 323.392686,
+      "first_content_present": 338.697963
+    },
+    {
+      "pair": 3,
+      "arm": "base",
+      "state": "warm",
+      "worker_spawn": null,
+      "runtime_ready": null,
+      "vm_ready": null,
+      "generation_ready": null,
+      "worker_layout_ready": 17.557303,
+      "worker_paint_ready": 22.479443,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 29.817807,
+      "first_content_buffer_commit": 35.230365,
+      "first_content_present": 36.549973
+    },
+    {
+      "pair": 3,
+      "arm": "final",
+      "state": "cold",
+      "worker_spawn": 3.769573,
+      "runtime_ready": 3.889072,
+      "vm_ready": 9.66552,
+      "generation_ready": 16.666766,
+      "worker_layout_ready": 24.041441,
+      "worker_paint_ready": 56.457935,
+      "dashboard_poster_start": 19.002272,
+      "dashboard_poster_decoded": 161.089941,
+      "dashboard_poster_ready": 164.597364,
+      "dashboard_poster_trimmed": 168.067567,
+      "first_content_commit": 57.247873,
+      "first_content_buffer_commit": 76.724393,
+      "first_content_present": 101.798182
+    },
+    {
+      "pair": 3,
+      "arm": "final",
+      "state": "warm",
+      "worker_spawn": null,
+      "runtime_ready": null,
+      "vm_ready": null,
+      "generation_ready": null,
+      "worker_layout_ready": 11.148478,
+      "worker_paint_ready": 12.569475,
+      "dashboard_poster_start": null,
+      "dashboard_poster_decoded": null,
+      "dashboard_poster_ready": null,
+      "dashboard_poster_trimmed": null,
+      "first_content_commit": 26.229198,
+      "first_content_buffer_commit": 31.422687,
+      "first_content_present": 36.104008
+    }
+  ],
+  "summary": {
+    "dashboard-0": {
+      "qml": {
+        "open": {
+          "t10": 119.75006551597413,
+          "t50": 192.98660409072525,
+          "t90": 232.27176786373454
+        },
+        "close": {
+          "t10": 643.5002848552792,
+          "t50": 687.5017425169787,
+          "t90": 749.2384480190119
+        }
+      },
+      "base": {
+        "open": {
+          "t10": 154.3950241871362,
+          "t50": 234.63592776428345,
+          "t90": 395.70219758943057
+        },
+        "close": {
+          "t10": 676.4490530569444,
+          "t50": 706.3538875377708,
+          "t90": 762.8981578843205
+        }
+      },
+      "final": {
+        "open": {
+          "t10": 113.57410222634743,
+          "t50": 145.6625226182224,
+          "t90": 207.87507910565213
+        },
+        "close": {
+          "t10": 668.4950143372382,
+          "t50": 719.6221908491174,
+          "t90": 770.2964243050963
+        }
+      }
+    },
+    "dashboard-warm": {
+      "qml": {
+        "open": {
+          "t10": 110.272430544434,
+          "t50": 178.78352164747804,
+          "t90": 233.31759827632627
+        },
+        "close": {
+          "t10": 644.672594735724,
+          "t50": 687.489553610713,
+          "t90": 749.230459772412
+        }
+      },
+      "base": {
+        "open": {
+          "t10": 164.0608097394771,
+          "t50": 241.34305131384977,
+          "t90": 292.7739243830158
+        },
+        "close": {
+          "t10": 676.138636440557,
+          "t50": 706.251973800614,
+          "t90": 762.6394924332272
+        }
+      },
+      "final": {
+        "open": {
+          "t10": 147.4562662948822,
+          "t50": 205.43673834732266,
+          "t90": 308.47869989806236
+        },
+        "close": {
+          "t10": 667.9223921536076,
+          "t50": 718.8235631208687,
+          "t90": 770.4411439184805
+        }
+      }
+    }
+  },
+  "provenance": {
+    "base": {
+      "binary_sha256": "cc8f348091aa6e3b3f27330fd038f7411583475a61a64776a2bea1e7269f9353",
+      "ui_sha256": {
+        "dashboard/main.luau": "6a8b6a7d1822b0def41f3e20bc1202310c69d1efa0034f0800d999ab1ed2cd7a",
+        "dashboard/media.luau": "a296177bfaa2d75d74431940c2b86a6cec35ffa7e4bc876f432eb8cc53fcc653",
+        "dashboard/today/page.luau": "99b8f01c579d18677882d00652e6b37cf55ddfcbdfff286e1c35df50b461160a",
+        "dashboard/weather-sky.luau": "bff290ddfd79ebf66be62ae75d2f95243b4b776da1a73f48e22c4ab304eaf0fd",
+        "dashboard/weather-style.luau": "4619042a6f09325c65e0ab2a846118ce834a0fa7b7791bfd6f21c73c4dae20da"
+      }
+    },
+    "final": {
+      "binary_sha256": "2f7a8b9e5d3f88dfb515d7f365f0f4c4ee5fd4631533bf3f34de3a00d7062cf0",
+      "ui_sha256": {
+        "dashboard/main.luau": "a3c634a3c242485aaabbe0a513d4b3910cee5120cdf86165280bcfef2fef9cf0",
+        "dashboard/media.luau": "5168d7d880d44107d7b55ce35077ffb52dbb2388d97eb0946b3d6ec6a00a2d08",
+        "dashboard/today/page.luau": "99b8f01c579d18677882d00652e6b37cf55ddfcbdfff286e1c35df50b461160a",
+        "dashboard/weather-sky.luau": "4104fb3bbcaac8c8563766376a01139d6e49ad6afcb383186e7b88e5fd167f28",
+        "dashboard/weather-style.luau": "46156645e184736f61f3d97039bc237edf5c565d8e2c71d51e392d2b15b29dd0"
+      }
+    }
+  },
+  "method": {
+    "backend": "CPU",
+    "build": "matched release --no-default-features; stripped",
+    "camera": "25 ms screencopy cadence, 250 ms pre-roll; interpolated image-distance progress; not physical scanout",
+    "cold_definition": "first dashboard open in a fresh shell; host page cache retained",
+    "stage_origin": "panel admission",
+    "reveal_origin": "trigger start; close includes pointer/dispatch sequence delay"
+  },
+  "paired_deltas_ms": {
+    "dashboard-0": {
+      "open": {
+        "base": {
+          "runs": [
+            34.64495867116206,
+            20.847840384230665,
+            45.34262855423118
+          ],
+          "median": 34.64495867116206
+        },
+        "final": {
+          "runs": [
+            50.22303231535686,
+            -19.52475149418015,
+            -11.108171362744443
+          ],
+          "median": -11.108171362744443
+        }
+      },
+      "close": {
+        "base": {
+          "runs": [
+            34.19877915763743,
+            32.59680677986603,
+            32.409110948022544
+          ],
+          "median": 32.59680677986603
+        },
+        "final": {
+          "runs": [
+            26.244740437931227,
+            22.20389712635199,
+            35.55527940721322
+          ],
+          "median": 26.244740437931227
+        }
+      }
+    },
+    "dashboard-warm": {
+      "open": {
+        "base": {
+          "runs": [
+            61.67047311797805,
+            53.78840398017502,
+            24.91641939059045
+          ],
+          "median": 53.78840398017502
+        },
+        "final": {
+          "runs": [
+            37.183835750448196,
+            36.841764414840014,
+            37.197721796921456
+          ],
+          "median": 37.183835750448196
+        }
+      },
+      "close": {
+        "base": {
+          "runs": [
+            32.75864443344301,
+            31.73736018781858,
+            25.512478738539585
+          ],
+          "median": 31.73736018781858
+        },
+        "final": {
+          "runs": [
+            24.54489721541131,
+            34.174587487512554,
+            16.872649064853363
+          ],
+          "median": 24.54489721541131
+        }
+      }
+    }
+  },
+  "cold_t10_within_20ms": true,
+  "stage_medians_ms": {
+    "base": {
+      "cold": {
+        "worker_spawn": 3.765927,
+        "runtime_ready": 3.904606,
+        "vm_ready": 9.486492,
+        "generation_ready": 17.676914,
+        "worker_layout_ready": 211.446449,
+        "worker_paint_ready": 269.531782,
+        "dashboard_poster_start": null,
+        "dashboard_poster_decoded": null,
+        "dashboard_poster_ready": null,
+        "dashboard_poster_trimmed": null,
+        "first_content_commit": 270.982019,
+        "first_content_buffer_commit": 318.194478,
+        "first_content_present": 335.109643
+      },
+      "warm": {
+        "worker_spawn": null,
+        "runtime_ready": null,
+        "vm_ready": null,
+        "generation_ready": null,
+        "worker_layout_ready": 17.666895,
+        "worker_paint_ready": 22.479443,
+        "dashboard_poster_start": null,
+        "dashboard_poster_decoded": null,
+        "dashboard_poster_ready": null,
+        "dashboard_poster_trimmed": null,
+        "first_content_commit": 29.817807,
+        "first_content_buffer_commit": 35.230365,
+        "first_content_present": 38.337557
+      }
+    },
+    "final": {
+      "cold": {
+        "worker_spawn": 3.871327,
+        "runtime_ready": 4.009117,
+        "vm_ready": 9.66552,
+        "generation_ready": 16.666766,
+        "worker_layout_ready": 24.041441,
+        "worker_paint_ready": 56.457935,
+        "dashboard_poster_start": 19.002272,
+        "dashboard_poster_decoded": 159.750863,
+        "dashboard_poster_ready": 164.597364,
+        "dashboard_poster_trimmed": 168.067567,
+        "first_content_commit": 57.247873,
+        "first_content_buffer_commit": 77.197334,
+        "first_content_present": 101.798182
+      },
+      "warm": {
+        "worker_spawn": null,
+        "runtime_ready": null,
+        "vm_ready": null,
+        "generation_ready": null,
+        "worker_layout_ready": 10.419101,
+        "worker_paint_ready": 11.32506,
+        "dashboard_poster_start": null,
+        "dashboard_poster_decoded": null,
+        "dashboard_poster_ready": null,
+        "dashboard_poster_trimmed": null,
+        "first_content_commit": 26.212487,
+        "first_content_buffer_commit": 31.422687,
+        "first_content_present": 36.104008
+      }
+    }
+  }
+}

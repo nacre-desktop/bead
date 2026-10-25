@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-25 — B0106 dashboard follow-up, review candidate
+
+First prepared content commits at 57.2 ms instead of 271.0 ms in matched release CPU runs.
+Five alternating pairs pass closed unreclaimable recovery: Today/Media/Weather/System
++0.160/−0.039/+0.059/−0.125 MiB. Open growth is not fully isolated to image bytes and remains unaccepted.
+Cold image-distance t10 median is 113.6 ms versus QML 119.8 ms, but one pair is +50.2 ms late;
+warm/close motion remains late. Media, Weather and System RMSE improve; Today is unchanged.
+Full remote Arch CI passes; source-pinned evidence and remaining gaps are in
+[B0106](specs/0106-dashboard-followup.md). No live change or laptop-cap acceptance.
+
 ## 2026-10-25 — B0107 slider tracking accepted
 
 Continuous kit arguments and staged release handling remove hit-cell snapping and late-echo

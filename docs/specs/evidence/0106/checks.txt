@@ -1,0 +1,18 @@
+Runtime source: 0387de0, integrated on 14a19be. Later task edits are evidence/docs only.
+Remote Arch container, nice priority 10, Cargo -j2; full CI-equivalent exit 0: CI_ALL_OK.
+Command: nice -n 10 bash /w/check-integrated.sh
+Mirrors .github/workflows/ci.yml: fmt, warning-denied workspace Clippy, workspace + trace tests,
+CPU + all-features checks, facade/UI/generated Luau (143 modules), spike/packaging suites,
+private services/tray, wallpaper-video smoke, workspace and independent framework cargo-deny.
+Focused command: BEAD_UPDATE_GOLDENS=1 nice -n 10 cargo test -p nacre-shell --no-default-features --locked -j2 dashboard
+Result: 64 passed; generated page goldens inspected at scale 1.5.
+Focused commands: nice -n 10 cargo test -p bead-render --locked -j2 polyline
+                  nice -n 10 cargo test -p bead-ui --locked -j2 polyline
+Result: 1 passed each, including fractional-scale partial repair and bounded parser rejection.
+Capture receipts: 10 matched memory arms, 9 release timing arms, 1 selected 13-state parity arm, all exit 0.
+All arms retain per-command lock/swap/containment/watchdog/source/geometry/window gates.
+The missing-helper startup arm and pre-integration memory pair are excluded and preserved privately.
+Memory analysis validates five matching binary/UI provenance pairs and native parity PNG hashes.
+Timing analysis validates 36 measurements, 12 stage timelines, matching release sources and 250 ms pre-roll.
+Closed half-MiB median gate passes; image-only open allowance and consistent warm/close motion remain unaccepted.
+Product-source diff: +950 / -130 lines (dedicated tests, docs and goldens excluded; inline tests included).

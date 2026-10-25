@@ -1,0 +1,935 @@
+{
+  "method": "One smaps snapshot per phase; secondary arenas inferred only from anonymous RW segments aligned to 64 MiB plus reserved PROT_NONE tail. Not a libc arena census or gated median. Addresses omitted. Other includes thread stacks, file private data and non-arena anonymous mappings.",
+  "snapshots": [
+    {
+      "phase": "idle-before",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 15120,
+          "huge_kib": 0,
+          "rss_kib": 15120
+        },
+        "main_heap": {
+          "anonymous_kib": 1444,
+          "huge_kib": 0,
+          "rss_kib": 1444
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 4312,
+          "huge_kib": 0,
+          "rss_kib": 88756
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 3016,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 152,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 68,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 184,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 172,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5576,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 128,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5712,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        }
+      ]
+    },
+    {
+      "phase": "idle-after",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 15120,
+          "huge_kib": 0,
+          "rss_kib": 15120
+        },
+        "main_heap": {
+          "anonymous_kib": 1444,
+          "huge_kib": 0,
+          "rss_kib": 1444
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 4312,
+          "huge_kib": 0,
+          "rss_kib": 88756
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 3016,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 152,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 68,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 184,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 172,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5576,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 128,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5712,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        }
+      ]
+    },
+    {
+      "phase": "today-open",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 27524,
+          "huge_kib": 0,
+          "rss_kib": 27524
+        },
+        "main_heap": {
+          "anonymous_kib": 2256,
+          "huge_kib": 0,
+          "rss_kib": 2256
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 11192,
+          "huge_kib": 4096,
+          "rss_kib": 110424
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 3016,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 152,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 72,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 9064,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 8892
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5576,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 3420,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 3392
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 128,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5824,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 112
+        }
+      ]
+    },
+    {
+      "phase": "today-closed",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 16060,
+          "huge_kib": 0,
+          "rss_kib": 16060
+        },
+        "main_heap": {
+          "anonymous_kib": 1292,
+          "huge_kib": 0,
+          "rss_kib": 1292
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 4336,
+          "huge_kib": 0,
+          "rss_kib": 87764
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 2984,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": -32
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 152,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 68,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 1036,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 864
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5576,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 128,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5816,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 104
+        }
+      ]
+    },
+    {
+      "phase": "media-open",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 24356,
+          "huge_kib": 6144,
+          "rss_kib": 24356
+        },
+        "main_heap": {
+          "anonymous_kib": 2348,
+          "huge_kib": 2048,
+          "rss_kib": 2348
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 15740,
+          "huge_kib": 6144,
+          "rss_kib": 114484
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 4108,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 1092
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 152,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 76,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 8
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 2504,
+          "huge_kib": 2048,
+          "anonymous_delta_from_idle_kib": 2332
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 6152,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 576
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 5236,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 5108
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5828,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 116
+        }
+      ]
+    },
+    {
+      "phase": "media-closed",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 18304,
+          "huge_kib": 6144,
+          "rss_kib": 18304
+        },
+        "main_heap": {
+          "anonymous_kib": 1272,
+          "huge_kib": 0,
+          "rss_kib": 1272
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 4348,
+          "huge_kib": 0,
+          "rss_kib": 87776
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 3044,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 28
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 152,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 68,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 876,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 704
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 6488,
+          "huge_kib": 6144,
+          "anonymous_delta_from_idle_kib": 912
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 1556,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 1428
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5820,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 108
+        }
+      ]
+    },
+    {
+      "phase": "weather-open",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 26304,
+          "huge_kib": 10240,
+          "rss_kib": 26304
+        },
+        "main_heap": {
+          "anonymous_kib": 1520,
+          "huge_kib": 0,
+          "rss_kib": 1520
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 11156,
+          "huge_kib": 4096,
+          "rss_kib": 109944
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 4100,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 1084
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 6816,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 6664
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 12
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 836,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 664
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5892,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 316
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 2340,
+          "huge_kib": 2048,
+          "anonymous_delta_from_idle_kib": 2212
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5940,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 228
+        }
+      ]
+    },
+    {
+      "phase": "weather-closed",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 19132,
+          "huge_kib": 10240,
+          "rss_kib": 19132
+        },
+        "main_heap": {
+          "anonymous_kib": 1276,
+          "huge_kib": 0,
+          "rss_kib": 1276
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 4372,
+          "huge_kib": 0,
+          "rss_kib": 87864
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 3216,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 200
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 588,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 436
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 76,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 8
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 836,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 664
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5888,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 312
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 2288,
+          "huge_kib": 2048,
+          "anonymous_delta_from_idle_kib": 2160
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5940,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 228
+        }
+      ]
+    },
+    {
+      "phase": "system-open",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 26020,
+          "huge_kib": 10240,
+          "rss_kib": 26020
+        },
+        "main_heap": {
+          "anonymous_kib": 1536,
+          "huge_kib": 0,
+          "rss_kib": 1536
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 11156,
+          "huge_kib": 4096,
+          "rss_kib": 110328
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 3156,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 140
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 404,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 252
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 84,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 16
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 4388,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4308
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 3800,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 3628
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5748,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 172
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 2280,
+          "huge_kib": 2048,
+          "anonymous_delta_from_idle_kib": 2152
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5940,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 228
+        }
+      ]
+    },
+    {
+      "phase": "system-closed",
+      "groups": {
+        "aligned_secondary_arena_candidates": {
+          "anonymous_kib": 19188,
+          "huge_kib": 10240,
+          "rss_kib": 19188
+        },
+        "main_heap": {
+          "anonymous_kib": 1276,
+          "huge_kib": 0,
+          "rss_kib": 1276
+        },
+        "main_stack": {
+          "anonymous_kib": 236,
+          "huge_kib": 0,
+          "rss_kib": 236
+        },
+        "other": {
+          "anonymous_kib": 4372,
+          "huge_kib": 0,
+          "rss_kib": 87928
+        }
+      },
+      "arena_candidates": [
+        {
+          "id": "arena-0",
+          "anonymous_kib": 3120,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 104
+        },
+        {
+          "id": "arena-1",
+          "anonymous_kib": 336,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 184
+        },
+        {
+          "id": "arena-2",
+          "anonymous_kib": 80,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 12
+        },
+        {
+          "id": "arena-3",
+          "anonymous_kib": 188,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 4
+        },
+        {
+          "id": "arena-4",
+          "anonymous_kib": 456,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 376
+        },
+        {
+          "id": "arena-5",
+          "anonymous_kib": 1048,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 876
+        },
+        {
+          "id": "arena-6",
+          "anonymous_kib": 5720,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 144
+        },
+        {
+          "id": "arena-7",
+          "anonymous_kib": 28,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-8",
+          "anonymous_kib": 2272,
+          "huge_kib": 2048,
+          "anonymous_delta_from_idle_kib": 2144
+        },
+        {
+          "id": "arena-9",
+          "anonymous_kib": 4,
+          "huge_kib": 0,
+          "anonymous_delta_from_idle_kib": 0
+        },
+        {
+          "id": "arena-10",
+          "anonymous_kib": 5936,
+          "huge_kib": 4096,
+          "anonymous_delta_from_idle_kib": 224
+        }
+      ]
+    }
+  ]
+}

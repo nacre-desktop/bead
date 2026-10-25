@@ -1,0 +1,812 @@
+{
+  "method": {
+    "resolution": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "backend": "CPU",
+    "rmse_units": "RGB 0..255; native source PNGs",
+    "panel_crop": [
+      702,
+      75,
+      2178,
+      1050
+    ],
+    "memory_pairs": [
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "unreclaimable": "Pss_Anon + Pss_Shmem + DRM + SwapPss",
+    "gate_scope": "Closed recovery uses the half-MiB median gate. Open deltas are unadjusted and require separate image/cache attribution."
+  },
+  "parity": {
+    "idle": {
+      "raw_png_sha256": {
+        "qml": "82d316054363b0f30d019dd73b615cb2bdd32cad2725141f555826174b38e723",
+        "before": "dca1721cf41550954ce4d418bc7325ad707e033da54bd4daf562744dbfd389f2",
+        "after": "55e5ed782dcc0551c4e0e63d101c0c0143f40743fa257bbe4eae1a7016173349"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 9.581446519839863,
+        "after": 9.594049838815243
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 5.819368853501437,
+        "after": 5.819368853501437
+      }
+    },
+    "dashboard-0": {
+      "raw_png_sha256": {
+        "qml": "28c03feb932e4d9b1fa4a8e7789777328b945686ae0fd145aab3f18e673f2bab",
+        "before": "93384752a3fafe74b49ff6e4efad5683339a220016aa6e108e10102bf0ca7825",
+        "after": "99d9d852cb33865f0b70e68601d991dadfa7578eb1b906f1ae1be3cfb22f8b21"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 15.14326342887274,
+        "after": 15.152099059297948
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 23.00295063849503,
+        "after": 22.992125121821434
+      }
+    },
+    "dashboard-0-hover": {
+      "raw_png_sha256": {
+        "qml": "95fd8b232a53b4edfd27f9670b2456fe1b26d1460a35ddca1bcebc0a48dfe942",
+        "before": "776c6315975dac02a83ef5484758e2cbe054077cf12bf29d883d15749bbce8d5",
+        "after": "a3e922352bfeaa8221b810f40029b6499413dce46695bfe23e2df1f3f4e197e6"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 15.184286176244795,
+        "after": 15.184529638063147
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 23.100038458949534,
+        "after": 23.0689454551355
+      }
+    },
+    "dashboard-0-pressed": {
+      "raw_png_sha256": {
+        "qml": "ae999086ce4dd263a8c2973ca4c9519a9e13a6c6a854cc8cb2a5c98df318a18f",
+        "before": "ff15cc7103b513a8deee44ba004b4b43b805e580cc2cfae29341abba76b0a5b4",
+        "after": "7cc5001c3ec5ff13977fa2d22b666682a5c138b322b50852d4a3cf5e776732fb"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 15.24159921120214,
+        "after": 15.240625145819674
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 23.235605914339132,
+        "after": 23.201815858752223
+      }
+    },
+    "dashboard-1": {
+      "raw_png_sha256": {
+        "qml": "dce719e06736a13570a5e5982071b0ef2e90be5250f3888db866535c32a8656d",
+        "before": "a72d342fcdfa8457af975163fe2d7d61ba9176daca0a14899219ea8c79245565",
+        "after": "34b0b2c6171025579d8116e01393e165c3caf1a4c8b999b7804e6a1e60279e8f"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 15.512781070562747,
+        "after": 13.927208302762585
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 23.873455117847765,
+        "after": 20.008231194796743
+      }
+    },
+    "dashboard-1-hover": {
+      "raw_png_sha256": {
+        "qml": "703f6e022c93e207e4b128fd6ba8cb761120ac934c8cd088403ec462fdbda99f",
+        "before": "03770d9d5b95e5b00938aebf4e38c43d075a03c3173d6ccfc9c2308bd7d828c8",
+        "after": "4f2e2ea828e9ded8c43d5ffb98f4e30ee1f33a112fd0db8aecd1ac97189a84f9"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 15.67470102382224,
+        "after": 13.944890643222712
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 24.258280379206592,
+        "after": 20.05240811420778
+      }
+    },
+    "dashboard-1-pressed": {
+      "raw_png_sha256": {
+        "qml": "c1d4693b2acd50c50e18920a16e9fd175697dbc8edd16361cfdf20f9d6d73f2f",
+        "before": "2cf7eb233fbd55812a7e23f26c2cf465f4e65a3fdcd4d12b2ccf101a34bc7bea",
+        "after": "18ebd67b19e2812f80b0ec129af0624147e47a8c068036f3aa3ab66745ba8426"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 15.742675796772414,
+        "after": 14.004550624968461
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 24.401464052299723,
+        "after": 20.18404128673513
+      }
+    },
+    "dashboard-2": {
+      "raw_png_sha256": {
+        "qml": "0cce4c410bfeced5919f63108bd51914c4f6c88efeb046ce568ef81b1ce5586e",
+        "before": "7ee9bac41ea7d1026d9c77dec46e30ba8e462042f5833b0cb78ae73786dc4987",
+        "after": "65fcfbc6c35e3317d646b7708ec7ab9377d059496ffd72bc49aaad4aaa2c8be2"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 17.317581950481006,
+        "after": 14.973650841448285
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 27.989735851609495,
+        "after": 22.567995282928095
+      }
+    },
+    "dashboard-2-hover": {
+      "raw_png_sha256": {
+        "qml": "edb7f9f4893aa50030375a060b668c290c6806a40d923530b264fc8bcbcd8240",
+        "before": "f093970a70310f114ec0ca356ebf2ba6b4ca6722d546cf1ac3f3a636d8fd787c",
+        "after": "3024ae34e38d229167e392af36925300b576341b40ce634518c5caded2579ba3"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 17.321071155674474,
+        "after": 14.97768691501041
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 27.98972198203639,
+        "after": 22.567980031386416
+      }
+    },
+    "dashboard-2-pressed": {
+      "raw_png_sha256": {
+        "qml": "f95bbc356171f8a53de07f4dc43be4aba75b318d1c92a435ab414c2028103737",
+        "before": "f093970a70310f114ec0ca356ebf2ba6b4ca6722d546cf1ac3f3a636d8fd787c",
+        "after": "3024ae34e38d229167e392af36925300b576341b40ce634518c5caded2579ba3"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 17.362908173658973,
+        "after": 15.026051714644565
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 28.082942704633933,
+        "after": 22.6834970645037
+      }
+    },
+    "dashboard-3": {
+      "raw_png_sha256": {
+        "qml": "8975a264e1a46c54b8086b6626186e249a7042e1aa0f98422e4560930d1d061a",
+        "before": "880f014226a52d16b2387bda241d22928897fc0ddada6c8cdda0223f4f27addc",
+        "after": "265ee0af5a03cbd6fd187102d9cf4e9cf4f8f399938402127044cc3dfdb094be"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 19.822425374078353,
+        "after": 16.18290110761185
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 33.443907254998614,
+        "after": 25.397501505339715
+      }
+    },
+    "dashboard-3-hover": {
+      "raw_png_sha256": {
+        "qml": "7bf06d06bab3455bbd7e01e27f9713115e05c05cbb366b33bd1f768b7914a05c",
+        "before": "1fb8e2ec684e6a5073d4fa54d3461794d5e5b99028f8ce9c2df4c95aad74cb0f",
+        "after": "e4fb59955d38c75d22ce0646433feacf035bde128373c95eec23edbd1332f292"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 19.823699092691875,
+        "after": 16.18664424664954
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 33.44390965825564,
+        "after": 25.397507661366454
+      }
+    },
+    "dashboard-3-pressed": {
+      "raw_png_sha256": {
+        "qml": "1b0a53c9ea0c061f0be6144121c15fc67e660fa9ca4ea6492e30a1eeec94ad29",
+        "before": "1fb8e2ec684e6a5073d4fa54d3461794d5e5b99028f8ce9c2df4c95aad74cb0f",
+        "after": "e4fb59955d38c75d22ce0646433feacf035bde128373c95eec23edbd1332f292"
+      },
+      "whole_rmse_rgb_0_255": {
+        "before": 19.81731178830564,
+        "after": 16.190294229893244
+      },
+      "panel_rmse_rgb_0_255": {
+        "before": 33.441812719669365,
+        "after": 25.415484619680182
+      }
+    }
+  },
+  "memory": {
+    "idle": {
+      "open": {
+        "original": {
+          "unreclaimable_median_mib": 31.29296875,
+          "unreclaimable_runs_mib": [
+            31.29296875,
+            31.25,
+            31.23828125,
+            31.29296875,
+            31.30078125
+          ],
+          "components_median_mib": {
+            "Pss": 81.9794921875,
+            "Pss_Anon": 20.7109375,
+            "Pss_File": 50.712890625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 31.24609375,
+          "unreclaimable_runs_mib": [
+            31.24609375,
+            31.1953125,
+            30.9765625,
+            31.3359375,
+            31.2578125
+          ],
+          "components_median_mib": {
+            "Pss": 84.9873046875,
+            "Pss_Anon": 20.6640625,
+            "Pss_File": 53.8046875,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          -0.046875,
+          -0.0546875,
+          -0.26171875,
+          0.04296875,
+          -0.04296875
+        ],
+        "paired_delta_median_mib": -0.046875,
+        "within_unadjusted_half_mib": true
+      },
+      "closed": {
+        "original": {
+          "unreclaimable_median_mib": 31.29296875,
+          "unreclaimable_runs_mib": [
+            31.29296875,
+            31.25390625,
+            31.2421875,
+            31.296875,
+            31.30859375
+          ],
+          "components_median_mib": {
+            "Pss": 81.982421875,
+            "Pss_Anon": 20.7109375,
+            "Pss_File": 50.7119140625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 31.25390625,
+          "unreclaimable_runs_mib": [
+            31.25390625,
+            31.20703125,
+            31.0078125,
+            31.33984375,
+            31.265625
+          ],
+          "components_median_mib": {
+            "Pss": 84.994140625,
+            "Pss_Anon": 20.671875,
+            "Pss_File": 53.8037109375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          -0.0390625,
+          -0.046875,
+          -0.234375,
+          0.04296875,
+          -0.04296875
+        ],
+        "paired_delta_median_mib": -0.04296875,
+        "within_unadjusted_half_mib": true,
+        "closed_gate_pass": true
+      }
+    },
+    "dashboard-0": {
+      "open": {
+        "original": {
+          "unreclaimable_median_mib": 49.57421875,
+          "unreclaimable_runs_mib": [
+            49.62109375,
+            49.57421875,
+            49.57421875,
+            49.5390625,
+            49.578125
+          ],
+          "components_median_mib": {
+            "Pss": 100.7158203125,
+            "Pss_Anon": 31.859375,
+            "Pss_File": 51.1416015625,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 57.53515625,
+          "unreclaimable_runs_mib": [
+            57.5703125,
+            57.49609375,
+            57.53515625,
+            57.65234375,
+            56.25
+          ],
+          "components_median_mib": {
+            "Pss": 111.935546875,
+            "Pss_Anon": 39.8203125,
+            "Pss_File": 54.365234375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          7.94921875,
+          7.921875,
+          7.9609375,
+          8.11328125,
+          6.671875
+        ],
+        "paired_delta_median_mib": 7.94921875,
+        "within_unadjusted_half_mib": false
+      },
+      "closed": {
+        "original": {
+          "unreclaimable_median_mib": 31.6953125,
+          "unreclaimable_runs_mib": [
+            31.6953125,
+            31.640625,
+            31.60546875,
+            31.69921875,
+            31.6953125
+          ],
+          "components_median_mib": {
+            "Pss": 81.5478515625,
+            "Pss_Anon": 21.11328125,
+            "Pss_File": 49.9072265625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 31.8046875,
+          "unreclaimable_runs_mib": [
+            31.8046875,
+            31.796875,
+            31.765625,
+            32.08203125,
+            31.859375
+          ],
+          "components_median_mib": {
+            "Pss": 84.7431640625,
+            "Pss_Anon": 21.22265625,
+            "Pss_File": 52.9384765625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          0.109375,
+          0.15625,
+          0.16015625,
+          0.3828125,
+          0.1640625
+        ],
+        "paired_delta_median_mib": 0.16015625,
+        "within_unadjusted_half_mib": true,
+        "closed_gate_pass": true
+      }
+    },
+    "dashboard-1": {
+      "open": {
+        "original": {
+          "unreclaimable_median_mib": 50.06640625,
+          "unreclaimable_runs_mib": [
+            50.06640625,
+            49.95703125,
+            50.07421875,
+            50.23828125,
+            50.06640625
+          ],
+          "components_median_mib": {
+            "Pss": 100.8896484375,
+            "Pss_Anon": 32.3515625,
+            "Pss_File": 50.72265625,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 56.44921875,
+          "unreclaimable_runs_mib": [
+            53.359375,
+            53.3671875,
+            56.44921875,
+            56.75390625,
+            56.53125
+          ],
+          "components_median_mib": {
+            "Pss": 108.390625,
+            "Pss_Anon": 38.734375,
+            "Pss_File": 53.94140625,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          3.29296875,
+          3.41015625,
+          6.375,
+          6.515625,
+          6.46484375
+        ],
+        "paired_delta_median_mib": 6.375,
+        "within_unadjusted_half_mib": false
+      },
+      "closed": {
+        "original": {
+          "unreclaimable_median_mib": 32.11328125,
+          "unreclaimable_runs_mib": [
+            32.11328125,
+            32.03125,
+            32.0546875,
+            32.25390625,
+            32.2578125
+          ],
+          "components_median_mib": {
+            "Pss": 82.0478515625,
+            "Pss_Anon": 21.53125,
+            "Pss_File": 49.90625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 32.0703125,
+          "unreclaimable_runs_mib": [
+            31.91796875,
+            32.0703125,
+            32.015625,
+            32.3046875,
+            32.078125
+          ],
+          "components_median_mib": {
+            "Pss": 84.8564453125,
+            "Pss_Anon": 21.48828125,
+            "Pss_File": 52.9384765625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          -0.1953125,
+          0.0390625,
+          -0.0390625,
+          0.05078125,
+          -0.1796875
+        ],
+        "paired_delta_median_mib": -0.0390625,
+        "within_unadjusted_half_mib": true,
+        "closed_gate_pass": true
+      }
+    },
+    "dashboard-2": {
+      "open": {
+        "original": {
+          "unreclaimable_median_mib": 53.3203125,
+          "unreclaimable_runs_mib": [
+            53.966796875,
+            53.1328125,
+            51.0,
+            53.3203125,
+            53.4765625
+          ],
+          "components_median_mib": {
+            "Pss": 103.9755859375,
+            "Pss_Anon": 35.60546875,
+            "Pss_File": 50.7841796875,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 55.7890625,
+          "unreclaimable_runs_mib": [
+            55.76171875,
+            55.7890625,
+            54.80078125,
+            57.69921875,
+            56.3203125
+          ],
+          "components_median_mib": {
+            "Pss": 109.6572265625,
+            "Pss_Anon": 38.07421875,
+            "Pss_File": 53.8955078125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          1.794921875,
+          2.65625,
+          3.80078125,
+          4.37890625,
+          2.84375
+        ],
+        "paired_delta_median_mib": 2.84375,
+        "within_unadjusted_half_mib": false
+      },
+      "closed": {
+        "original": {
+          "unreclaimable_median_mib": 32.45703125,
+          "unreclaimable_runs_mib": [
+            32.390625,
+            32.32421875,
+            32.5234375,
+            32.46484375,
+            32.45703125
+          ],
+          "components_median_mib": {
+            "Pss": 82.2724609375,
+            "Pss_Anon": 21.875,
+            "Pss_File": 49.90625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 32.4453125,
+          "unreclaimable_runs_mib": [
+            32.4375,
+            32.4453125,
+            32.4140625,
+            32.62109375,
+            32.515625
+          ],
+          "components_median_mib": {
+            "Pss": 85.3935546875,
+            "Pss_Anon": 21.86328125,
+            "Pss_File": 52.9560546875,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          0.046875,
+          0.12109375,
+          -0.109375,
+          0.15625,
+          0.05859375
+        ],
+        "paired_delta_median_mib": 0.05859375,
+        "within_unadjusted_half_mib": true,
+        "closed_gate_pass": true
+      }
+    },
+    "dashboard-3": {
+      "open": {
+        "original": {
+          "unreclaimable_median_mib": 51.67578125,
+          "unreclaimable_runs_mib": [
+            51.78515625,
+            51.58984375,
+            51.67578125,
+            51.328125,
+            51.82421875
+          ],
+          "components_median_mib": {
+            "Pss": 102.8115234375,
+            "Pss_Anon": 33.9609375,
+            "Pss_File": 51.2216796875,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 56.6796875,
+          "unreclaimable_runs_mib": [
+            56.99609375,
+            53.734375,
+            56.6796875,
+            56.9140625,
+            54.03515625
+          ],
+          "components_median_mib": {
+            "Pss": 110.8056640625,
+            "Pss_Anon": 38.96484375,
+            "Pss_File": 54.3837890625,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          5.2109375,
+          2.14453125,
+          5.00390625,
+          5.5859375,
+          2.2109375
+        ],
+        "paired_delta_median_mib": 5.00390625,
+        "within_unadjusted_half_mib": false
+      },
+      "closed": {
+        "original": {
+          "unreclaimable_median_mib": 32.58203125,
+          "unreclaimable_runs_mib": [
+            33.04296875,
+            32.55859375,
+            32.58203125,
+            32.578125,
+            32.640625
+          ],
+          "components_median_mib": {
+            "Pss": 82.46484375,
+            "Pss_Anon": 22.0,
+            "Pss_File": 49.90625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "final": {
+          "unreclaimable_median_mib": 32.48828125,
+          "unreclaimable_runs_mib": [
+            32.48828125,
+            32.56640625,
+            32.45703125,
+            32.6875,
+            32.4140625
+          ],
+          "components_median_mib": {
+            "Pss": 85.556640625,
+            "Pss_Anon": 21.90625,
+            "Pss_File": 53.068359375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0
+          }
+        },
+        "paired_deltas_mib": [
+          -0.5546875,
+          0.0078125,
+          -0.125,
+          0.109375,
+          -0.2265625
+        ],
+        "paired_delta_median_mib": -0.125,
+        "within_unadjusted_half_mib": true,
+        "closed_gate_pass": true
+      }
+    }
+  },
+  "provenance": {
+    "original-2": {
+      "binary_sha256": "fc20fd7e4eda499a51a777c557e14398472ae442ca5d9274437cc90bdc2f92b3",
+      "ui_sha256": {
+        "dashboard/main.luau": "6a8b6a7d1822b0def41f3e20bc1202310c69d1efa0034f0800d999ab1ed2cd7a",
+        "dashboard/media.luau": "c3c8244b5eb0f62eae9163f1ba0982e13a3bb83dcfe0a5d82d3222e5b9d2d465",
+        "dashboard/today/page.luau": "8424f2cc7683285e88c888913e650fa9dc9ee3fcfd0266a5949981585d147ab3",
+        "dashboard/weather-sky.luau": "bff290ddfd79ebf66be62ae75d2f95243b4b776da1a73f48e22c4ab304eaf0fd",
+        "dashboard/weather-style.luau": "4619042a6f09325c65e0ab2a846118ce834a0fa7b7791bfd6f21c73c4dae20da"
+      }
+    },
+    "original-3": {
+      "binary_sha256": "fc20fd7e4eda499a51a777c557e14398472ae442ca5d9274437cc90bdc2f92b3",
+      "ui_sha256": {
+        "dashboard/main.luau": "6a8b6a7d1822b0def41f3e20bc1202310c69d1efa0034f0800d999ab1ed2cd7a",
+        "dashboard/media.luau": "c3c8244b5eb0f62eae9163f1ba0982e13a3bb83dcfe0a5d82d3222e5b9d2d465",
+        "dashboard/today/page.luau": "8424f2cc7683285e88c888913e650fa9dc9ee3fcfd0266a5949981585d147ab3",
+        "dashboard/weather-sky.luau": "bff290ddfd79ebf66be62ae75d2f95243b4b776da1a73f48e22c4ab304eaf0fd",
+        "dashboard/weather-style.luau": "4619042a6f09325c65e0ab2a846118ce834a0fa7b7791bfd6f21c73c4dae20da"
+      }
+    },
+    "original-4": {
+      "binary_sha256": "fc20fd7e4eda499a51a777c557e14398472ae442ca5d9274437cc90bdc2f92b3",
+      "ui_sha256": {
+        "dashboard/main.luau": "6a8b6a7d1822b0def41f3e20bc1202310c69d1efa0034f0800d999ab1ed2cd7a",
+        "dashboard/media.luau": "c3c8244b5eb0f62eae9163f1ba0982e13a3bb83dcfe0a5d82d3222e5b9d2d465",
+        "dashboard/today/page.luau": "8424f2cc7683285e88c888913e650fa9dc9ee3fcfd0266a5949981585d147ab3",
+        "dashboard/weather-sky.luau": "bff290ddfd79ebf66be62ae75d2f95243b4b776da1a73f48e22c4ab304eaf0fd",
+        "dashboard/weather-style.luau": "4619042a6f09325c65e0ab2a846118ce834a0fa7b7791bfd6f21c73c4dae20da"
+      }
+    },
+    "original-5": {
+      "binary_sha256": "fc20fd7e4eda499a51a777c557e14398472ae442ca5d9274437cc90bdc2f92b3",
+      "ui_sha256": {
+        "dashboard/main.luau": "6a8b6a7d1822b0def41f3e20bc1202310c69d1efa0034f0800d999ab1ed2cd7a",
+        "dashboard/media.luau": "c3c8244b5eb0f62eae9163f1ba0982e13a3bb83dcfe0a5d82d3222e5b9d2d465",
+        "dashboard/today/page.luau": "8424f2cc7683285e88c888913e650fa9dc9ee3fcfd0266a5949981585d147ab3",
+        "dashboard/weather-sky.luau": "bff290ddfd79ebf66be62ae75d2f95243b4b776da1a73f48e22c4ab304eaf0fd",
+        "dashboard/weather-style.luau": "4619042a6f09325c65e0ab2a846118ce834a0fa7b7791bfd6f21c73c4dae20da"
+      }
+    },
+    "original-6": {
+      "binary_sha256": "fc20fd7e4eda499a51a777c557e14398472ae442ca5d9274437cc90bdc2f92b3",
+      "ui_sha256": {
+        "dashboard/main.luau": "6a8b6a7d1822b0def41f3e20bc1202310c69d1efa0034f0800d999ab1ed2cd7a",
+        "dashboard/media.luau": "c3c8244b5eb0f62eae9163f1ba0982e13a3bb83dcfe0a5d82d3222e5b9d2d465",
+        "dashboard/today/page.luau": "8424f2cc7683285e88c888913e650fa9dc9ee3fcfd0266a5949981585d147ab3",
+        "dashboard/weather-sky.luau": "bff290ddfd79ebf66be62ae75d2f95243b4b776da1a73f48e22c4ab304eaf0fd",
+        "dashboard/weather-style.luau": "4619042a6f09325c65e0ab2a846118ce834a0fa7b7791bfd6f21c73c4dae20da"
+      }
+    },
+    "final-2": {
+      "binary_sha256": "261fbc03dfcadd9969cb9296455b8ca6a97ce246dbed7250bb21777da171bede",
+      "ui_sha256": {
+        "dashboard/main.luau": "a3c634a3c242485aaabbe0a513d4b3910cee5120cdf86165280bcfef2fef9cf0",
+        "dashboard/media.luau": "5168d7d880d44107d7b55ce35077ffb52dbb2388d97eb0946b3d6ec6a00a2d08",
+        "dashboard/today/page.luau": "99b8f01c579d18677882d00652e6b37cf55ddfcbdfff286e1c35df50b461160a",
+        "dashboard/weather-sky.luau": "4104fb3bbcaac8c8563766376a01139d6e49ad6afcb383186e7b88e5fd167f28",
+        "dashboard/weather-style.luau": "46156645e184736f61f3d97039bc237edf5c565d8e2c71d51e392d2b15b29dd0"
+      }
+    },
+    "final-3": {
+      "binary_sha256": "261fbc03dfcadd9969cb9296455b8ca6a97ce246dbed7250bb21777da171bede",
+      "ui_sha256": {
+        "dashboard/main.luau": "a3c634a3c242485aaabbe0a513d4b3910cee5120cdf86165280bcfef2fef9cf0",
+        "dashboard/media.luau": "5168d7d880d44107d7b55ce35077ffb52dbb2388d97eb0946b3d6ec6a00a2d08",
+        "dashboard/today/page.luau": "99b8f01c579d18677882d00652e6b37cf55ddfcbdfff286e1c35df50b461160a",
+        "dashboard/weather-sky.luau": "4104fb3bbcaac8c8563766376a01139d6e49ad6afcb383186e7b88e5fd167f28",
+        "dashboard/weather-style.luau": "46156645e184736f61f3d97039bc237edf5c565d8e2c71d51e392d2b15b29dd0"
+      }
+    },
+    "final-4": {
+      "binary_sha256": "261fbc03dfcadd9969cb9296455b8ca6a97ce246dbed7250bb21777da171bede",
+      "ui_sha256": {
+        "dashboard/main.luau": "a3c634a3c242485aaabbe0a513d4b3910cee5120cdf86165280bcfef2fef9cf0",
+        "dashboard/media.luau": "5168d7d880d44107d7b55ce35077ffb52dbb2388d97eb0946b3d6ec6a00a2d08",
+        "dashboard/today/page.luau": "99b8f01c579d18677882d00652e6b37cf55ddfcbdfff286e1c35df50b461160a",
+        "dashboard/weather-sky.luau": "4104fb3bbcaac8c8563766376a01139d6e49ad6afcb383186e7b88e5fd167f28",
+        "dashboard/weather-style.luau": "46156645e184736f61f3d97039bc237edf5c565d8e2c71d51e392d2b15b29dd0"
+      }
+    },
+    "final-5": {
+      "binary_sha256": "261fbc03dfcadd9969cb9296455b8ca6a97ce246dbed7250bb21777da171bede",
+      "ui_sha256": {
+        "dashboard/main.luau": "a3c634a3c242485aaabbe0a513d4b3910cee5120cdf86165280bcfef2fef9cf0",
+        "dashboard/media.luau": "5168d7d880d44107d7b55ce35077ffb52dbb2388d97eb0946b3d6ec6a00a2d08",
+        "dashboard/today/page.luau": "99b8f01c579d18677882d00652e6b37cf55ddfcbdfff286e1c35df50b461160a",
+        "dashboard/weather-sky.luau": "4104fb3bbcaac8c8563766376a01139d6e49ad6afcb383186e7b88e5fd167f28",
+        "dashboard/weather-style.luau": "46156645e184736f61f3d97039bc237edf5c565d8e2c71d51e392d2b15b29dd0"
+      }
+    },
+    "final-6": {
+      "binary_sha256": "261fbc03dfcadd9969cb9296455b8ca6a97ce246dbed7250bb21777da171bede",
+      "ui_sha256": {
+        "dashboard/main.luau": "a3c634a3c242485aaabbe0a513d4b3910cee5120cdf86165280bcfef2fef9cf0",
+        "dashboard/media.luau": "5168d7d880d44107d7b55ce35077ffb52dbb2388d97eb0946b3d6ec6a00a2d08",
+        "dashboard/today/page.luau": "99b8f01c579d18677882d00652e6b37cf55ddfcbdfff286e1c35df50b461160a",
+        "dashboard/weather-sky.luau": "4104fb3bbcaac8c8563766376a01139d6e49ad6afcb383186e7b88e5fd167f28",
+        "dashboard/weather-style.luau": "46156645e184736f61f3d97039bc237edf5c565d8e2c71d51e392d2b15b29dd0"
+      }
+    }
+  }
+}

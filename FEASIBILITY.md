@@ -1,5 +1,26 @@
 # Feasibility
 
+## 2026-10-25 — B0106 dashboard review candidate
+
+Asynchronous poster preparation removes the long first-content wait.
+Five alternating CPU pairs pass closed recovery; open growth is not fully isolated to image bytes.
+Three cold image-distance pairs meet the median target, with one late outlier; warm/close still differ.
+Media, Weather and System look closer; Today is unchanged in whole-output RMSE.
+Full remote Arch CI passes. No allocator environment or frame-pacing change ships.
+
+| Matched private CPU measurement | Before | Selected |
+| --- | ---: | ---: |
+| First content commit / presentation, ms | 271.0 / 335.1 | 57.2 / 101.8 |
+| Cold image-distance t10 median, ms (QML 119.8) | 154.4 | 113.6 |
+| Closed paired Δ Today / Media, MiB | historical B0102 +0.36 / +1.05 | +0.160 / −0.039 |
+| Closed paired Δ Weather / System, MiB | historical B0102 +0.95 / +1.20 | +0.059 / −0.125 |
+| RGB RMSE Today / Media, 0–255 | 15.143 / 15.513 | 15.152 / 13.927 |
+| RGB RMSE Weather / System, 0–255 | 17.318 / 19.822 | 14.974 / 16.183 |
+
+Historical B0102 deltas are not a new matched series; selected deltas use the original control in five pairs.
+Open image-only acceptance and consistent motion remain unresolved; no laptop-cap claim.
+[Stages, per-page components, rejected experiments and all 13 visual states](docs/specs/0106-dashboard-followup.md).
+
 ## 2026-10-25 — B0105 rejected callback replacement
 
 An extra pending-frame replacement increases matched updates but leaves CPU latency above target.
