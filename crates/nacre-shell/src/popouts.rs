@@ -341,6 +341,8 @@ fn status_at_root_mode(
                     "status/network.luau"
                 } else if controlled_bluetooth {
                     "status/bluetooth.luau"
+                } else if matches!(kind, crate::status_views::Kind::Updates) && !peek {
+                    "status/updates.luau"
                 } else if matches!(kind, crate::status_views::Kind::Battery) {
                     "status/battery.luau"
                 } else {
@@ -356,6 +358,7 @@ fn status_at_root_mode(
                 crate::status_views::Kind::Bluetooth => Some("bluetooth"),
                 crate::status_views::Kind::Battery => Some("battery"),
                 crate::status_views::Kind::Audio => Some("audio"),
+                crate::status_views::Kind::Updates => Some("dashboard.updates"),
             }
             .filter(|_| client.is_some());
             let source: Arc<dyn bead::core::source::Source> = if let Some(topic) = typed_topic {
@@ -407,6 +410,10 @@ fn status_at_root_mode(
                             )
                     }
                     Some("audio") => runtime.with_core_audio_status(source, client.clone()),
+                    Some("dashboard.updates") => runtime.with_core_updates_status(
+                        source,
+                        client.as_ref().ok_or("daemon client unavailable")?.clone(),
+                    ),
                     _ => runtime.with_status(kind, source),
                 })
                 .map(|mut runtime| {

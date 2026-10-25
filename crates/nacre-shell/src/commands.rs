@@ -261,6 +261,16 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     // which selects the dock and sends the page through CompanionModel.
     if call.target == "nacre"
         && call.method == "controls"
+        && call.args.first().and_then(Value::as_str) == Some("updates")
+    {
+        validate(&call)?;
+        call.target = "bead.panel".into();
+        call.method = "open".into();
+        call.args = vec![Value::String("updates".into())];
+        return Ok(call);
+    }
+    if call.target == "nacre"
+        && call.method == "controls"
         && call
             .args
             .first()
@@ -276,19 +286,11 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
         return Ok(call);
     }
     // B0068: `nacre controls` sections the control centre does not own: `session` is the session view,
-    // `notifications` the dashboard's notification page; `updates` has no Bead view.
+    // `notifications` the dashboard's notification page.
     if call.target == "nacre" && call.method == "controls" {
         let view = match call.args.first().and_then(Value::as_str) {
             Some("session") => Some("session".to_owned()),
             Some("notifications") => Some("dashboard-notifications".to_owned()),
-            Some("updates") => {
-                validate(&call)?;
-                return Err(Reply::error(
-                    call.id,
-                    "unavailable",
-                    "there is no updates view in this shell",
-                ));
-            }
             _ => None,
         };
         if let Some(view) = view {
@@ -556,6 +558,16 @@ mod tests {
             map_views(open).unwrap_err().error.unwrap().code,
             "unavailable"
         );
+    }
+    #[test]
+    fn updates_control_route_opens_the_status_popout() {
+        let call = from_strings("nacre".into(), "controls".into(), &["updates".into()]).unwrap();
+        let mapped = map_views(call).unwrap();
+        assert_eq!(
+            (mapped.target.as_str(), mapped.method.as_str()),
+            ("bead.panel", "open")
+        );
+        assert_eq!(mapped.args, vec![Value::String("updates".into())]);
     }
     #[test]
     fn core_dashboard_tab_routes_keep_canonical_indices_and_refuse_extras() {

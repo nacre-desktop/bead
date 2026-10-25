@@ -1167,6 +1167,21 @@ impl Runtime {
         self.session.stores = self.session.stores.reconcile(&status.project())?;
         self.with_status_projector(status)
     }
+    pub fn with_core_updates_status(
+        mut self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+        client: crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        self = self.with_status_projector(crate::status_views::Status::core_updates(
+            source,
+            Some(client),
+        ))?;
+        for action in ["updates.refresh", "updates.open"] {
+            self.actions.register(action, "updates.control")?;
+        }
+        self.actions.grant("updates.control");
+        Ok(self)
+    }
     fn with_status_projector(
         mut self,
         status: crate::status_views::Status,
@@ -2762,6 +2777,25 @@ impl SceneSource for Runtime {
             let scene = self.publish_status_pill()?;
             self.actions.authorize(name)?;
             self.sync_status_peek_route()?;
+            return self.finish_scene(scene, false);
+        }
+        if let Some((_, name, _)) = &host_action
+            && matches!(name.as_str(), "updates.refresh" | "updates.open")
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wakeup = self
+                .wakeup
+                .clone()
+                .ok_or("updates completion event channel unavailable")?;
+            let callback: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
+                wakeup(UiEvent::Model(BTreeMap::new()));
+            });
+            if let Some(status) = self.active_status() {
+                status.updates_action(name, callback);
+            }
+            let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }
         if let Some((id, name, bead::core::Value::Text(view))) = &host_action

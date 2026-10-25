@@ -9,10 +9,13 @@ return {stores={
     -- Typed Bluetooth PIN or passkey (same convention); the host clears it after use.
     ["bluetooth.secret"]="",["bluetooth.reveal"]=false,
     ["status.secondary"]=tr("bead.panel.status-data-unavailable"),["status.detail"]="",
+    ["status.updates_summary"]=tr("bead.dashboard.updates-unavailable"),["status.updates_detail"]="",
     ["status.peek.title"]="",["status.peek.summary"]="",["status.peek.detail"]="",["status.peek.devices"]={},
     ["battery.level"]=0,["cc.src"]={},["cc.audio_devices"]={},["cc.streams"]={},["network.scan_enabled"]=false,["network.scanning"]=false,["network.scan_label"]="",["audio.peak"]=0,["audio.peak_on"]=false,["cc.message"]="",
 },actions={
     ["cc.do"]=function(_) end,
+    ["updates.refresh"]=function(_) end,
+    ["updates.open"]=function(_) end,
     close=function(s) s["panel.open"]=false;s["network.secret"]="";s["bluetooth.secret"]="" end,
     -- The controlled Runtime authorizes and handles this host action.
     ["network.toggle_wifi"]=function(_) end,

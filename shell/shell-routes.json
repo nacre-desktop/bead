@@ -138,7 +138,7 @@
    "qml": "NacreShellIpc.qml",
    "bead": "partial",
    "spec": "B0049, B0068",
-   "note": "home/edit open the control centre; calendar/network/bluetooth/battery/sound open their panel; session and notifications open the session view and the Notices page; `updates` is refused (no Bead updates view)."
+   "note": "home/edit open the control centre; calendar/network/bluetooth/battery/sound open their panel; session and notifications open their panel views; updates opens its status popout and updater route."
   },
   {
    "id": "nacre.session",

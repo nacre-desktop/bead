@@ -146,7 +146,6 @@ fn every_nacre_route_has_a_bead_handler_or_a_stated_refusal() {
 #[test]
 fn unsupported_arguments_are_refused_explicitly_not_dropped() {
     for (target, method, args) in [
-        ("nacre", "controls", &["updates"][..]),
         ("drawers", "toggle", &["osd"][..]),
         ("drawers", "toggle", &["leftPinned"][..]),
         ("drawers", "toggle", &["dashboardPinned"][..]),

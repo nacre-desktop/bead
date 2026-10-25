@@ -826,6 +826,36 @@ fn start(
                 )?,
             );
         }
+        if let Some(client) = &_ui_provider {
+            for (name, spec) in [
+                (
+                    "updates",
+                    popouts::status(
+                        status_views::Kind::Updates,
+                        status_palette.clone(),
+                        status_colors.clone(),
+                        desktop_owner.clone(),
+                        Some(client.clone()),
+                        status_radius,
+                        panel_trace,
+                    )?,
+                ),
+                (
+                    "peek-updates",
+                    popouts::status_peek(
+                        status_views::Kind::Updates,
+                        status_palette.clone(),
+                        status_colors.clone(),
+                        desktop_owner.clone(),
+                        Some(client.clone()),
+                        status_radius,
+                        panel_trace,
+                    )?,
+                ),
+            ] {
+                views.insert(name.into(), spec);
+            }
+        }
         for page in dashboard::Page::ALL
             .into_iter()
             .chain(dashboard::Page::EXTRAS)

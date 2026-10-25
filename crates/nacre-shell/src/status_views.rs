@@ -25,6 +25,7 @@ pub enum Kind {
     Battery,
     /// Dedicated Sound route; intentionally absent from the three bar status popouts.
     Audio,
+    Updates,
 }
 impl Kind {
     pub const ALL: [Self; 3] = [Self::Network, Self::Bluetooth, Self::Battery];
@@ -34,6 +35,7 @@ impl Kind {
             Self::Bluetooth => "bluetooth",
             Self::Battery => "battery",
             Self::Audio => "audio",
+            Self::Updates => "updates",
         }
     }
     pub fn projection(self) -> fn(&bead::services::Snapshot) -> serde_json::Value {
@@ -42,6 +44,7 @@ impl Kind {
             Self::Bluetooth => |s| serde_json::json!({"bluetooth":s.bluetooth}),
             Self::Battery => |s| serde_json::json!({"battery":s.battery}),
             Self::Audio => |s| serde_json::json!({"audio":s.audio}),
+            Self::Updates => |_| serde_json::json!({"updates":serde_json::Value::Null}),
         }
     }
     fn title(self) -> String {
@@ -51,6 +54,7 @@ impl Kind {
                 Self::Bluetooth => "bead.panel.bluetooth",
                 Self::Battery => "bead.panel.battery-title",
                 Self::Audio => "bead.panel.sound-title",
+                Self::Updates => "bead.panel.updates-title",
             },
             &[],
         )
@@ -61,6 +65,7 @@ impl Kind {
             Self::Bluetooth => "bluetooth",
             Self::Battery => "battery_full",
             Self::Audio => "volume_up",
+            Self::Updates => "package_2",
         }
     }
 }
@@ -74,6 +79,8 @@ pub struct Status {
     bluetooth_control: Option<RefCell<BluetoothControl>>,
     /// The microphone meter's lease (audio view only), see [`Peak`].
     peak: Option<Peak>,
+    updates_client: Option<crate::nacre_source::Client>,
+    updates_pending: RefCell<Option<crate::nacre_source::CallTicket>>,
 }
 type Wake = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
 /// B0086: the `audio.peak` lease (N0061). The daemon captures the microphone for as long as it
@@ -169,6 +176,7 @@ enum Mode {
     CoreBluetoothControl,
     CoreBattery,
     CoreAudio,
+    CoreUpdates,
 }
 impl Status {
     pub fn new(kind: Kind, source: Arc<dyn Source>) -> Self {
@@ -180,6 +188,8 @@ impl Status {
             wifi_control: None,
             bluetooth_control: None,
             peak: None,
+            updates_client: None,
+            updates_pending: RefCell::new(None),
         }
     }
     pub fn core_network(source: Arc<dyn Source>) -> Self {
@@ -191,7 +201,18 @@ impl Status {
             wifi_control: None,
             bluetooth_control: None,
             peak: None,
+            updates_client: None,
+            updates_pending: RefCell::new(None),
         }
+    }
+    pub fn core_updates(
+        source: Arc<dyn Source>,
+        client: Option<crate::nacre_source::Client>,
+    ) -> Self {
+        let mut status = Self::new(Kind::Updates, source);
+        status.mode = Mode::CoreUpdates;
+        status.updates_client = client;
+        status
     }
     pub fn core_network_control(
         source: Arc<dyn Source>,
@@ -219,6 +240,8 @@ impl Status {
             })),
             bluetooth_control: None,
             peak: None,
+            updates_client: None,
+            updates_pending: RefCell::new(None),
         }
     }
     pub fn core_bluetooth(source: Arc<dyn Source>) -> Self {
@@ -230,6 +253,8 @@ impl Status {
             wifi_control: None,
             bluetooth_control: None,
             peak: None,
+            updates_client: None,
+            updates_pending: RefCell::new(None),
         }
     }
     pub fn core_bluetooth_control(
@@ -255,6 +280,8 @@ impl Status {
                 link: None,
             })),
             peak: None,
+            updates_client: None,
+            updates_pending: RefCell::new(None),
         }
     }
     pub fn core_battery(source: Arc<dyn Source>) -> Self {
@@ -266,6 +293,8 @@ impl Status {
             wifi_control: None,
             bluetooth_control: None,
             peak: None,
+            updates_client: None,
+            updates_pending: RefCell::new(None),
         }
     }
     /// The audio view with the microphone meter: `client` leases `audio.peak` while it is shown.
@@ -330,6 +359,8 @@ impl Status {
             wifi_control: None,
             bluetooth_control: None,
             peak: None,
+            updates_client: None,
+            updates_pending: RefCell::new(None),
         }
     }
     pub fn subscribe(
@@ -509,6 +540,7 @@ impl Status {
     }
     pub fn project(&self) -> BTreeMap<String, Value> {
         match self.mode {
+            Mode::CoreUpdates => return self.project_core_updates(),
             Mode::CoreNetwork => return self.project_core_network(),
             Mode::CoreNetworkControl => return self.project_core_network_control(),
             Mode::CoreBluetooth => return self.project_core_bluetooth(),
@@ -675,6 +707,76 @@ impl Status {
             Vec::new()
         };
         insert_peek(&mut values, self.kind, &peek_summary, &peek_detail, devices);
+        values
+    }
+
+    pub fn updates_action(&self, method: &str, wake: crate::nacre_source::CallWake) {
+        let Some(client) = &self.updates_client else {
+            return;
+        };
+        let Some((method, params)) = updates_route(method) else {
+            return;
+        };
+        let status = client.status();
+        let Some(boot) = status.boot else {
+            return;
+        };
+        if let Ok(ticket) = client.begin_call(
+            method.into(),
+            params,
+            Duration::from_secs(15),
+            crate::nacre_source::CallGuard { boot, version: 1 },
+            Some(wake),
+        ) {
+            *self.updates_pending.borrow_mut() = Some(ticket);
+        }
+    }
+
+    fn project_core_updates(&self) -> BTreeMap<String, Value> {
+        let completed = self
+            .updates_pending
+            .borrow_mut()
+            .as_mut()
+            .is_some_and(|ticket| ticket.try_take().is_some());
+        if completed {
+            self.updates_pending.borrow_mut().take();
+        }
+        let snapshot = self.source.snapshot();
+        let state = serde_json::from_value::<nacre_protocol::core_services::UpdatesState>(
+            snapshot.data.as_ref().clone(),
+        )
+        .ok()
+        .filter(|state| CoreSnapshot::Updates(state.clone()).valid());
+        let fresh = snapshot.connected
+            && state
+                .as_ref()
+                .is_some_and(|s| s.health.available && !s.health.stale);
+        let summary = state.as_ref().and_then(|s| s.count).map_or_else(
+            || tr("bead.dashboard.updates-unavailable", &[]),
+            |count| {
+                if count == 0 {
+                    tr("bead.dashboard.updates-current", &[])
+                } else {
+                    tr_n("bead.panel.updates-available", u64::from(count), &[])
+                }
+            },
+        );
+        // `Updates.message` is the local Qt preflight warning. The published core
+        // snapshot has no such field, so do not reuse its count text as a message.
+        let detail = String::new();
+        let mut values = BTreeMap::from([
+            ("status.ready".into(), Value::Bool(fresh)),
+            ("status.active".into(), Value::Bool(fresh)),
+            ("status.heading".into(), Value::Text(self.kind.title())),
+            ("status.icon".into(), Value::Text(self.kind.icon().into())),
+            ("status.kind".into(), Value::Text(self.kind.name().into())),
+            (
+                "status.updates_summary".into(),
+                Value::Text(summary.clone()),
+            ),
+            ("status.updates_detail".into(), Value::Text(detail.clone())),
+        ]);
+        insert_peek(&mut values, self.kind, &summary, &detail, Vec::new());
         values
     }
 
@@ -1317,6 +1419,14 @@ impl Status {
     }
 }
 
+fn updates_route(action: &str) -> Option<(&'static str, serde_json::Value)> {
+    match action {
+        "updates.refresh" => Some(("dashboard.updates.refresh", serde_json::json!({}))),
+        "updates.open" => Some(("tools.launch", serde_json::json!({"tool": "updates"}))),
+        _ => None,
+    }
+}
+
 struct WifiCandidate {
     topic_boot: Option<String>,
     eligible_identity: Option<String>,
@@ -1762,6 +1872,7 @@ fn insert_peek(
         Kind::Bluetooth => tr("bead.panel.bluetooth", &[]),
         Kind::Battery => tr("bead.panel.battery-title", &[]),
         Kind::Audio => tr("bead.panel.control-sound", &[]),
+        Kind::Updates => tr("bead.panel.updates-title", &[]),
     };
     let bluetooth_off =
         matches!(kind, Kind::Bluetooth) && values.get("status.active") == Some(&Value::Bool(false));
@@ -2145,4 +2256,22 @@ pub(crate) fn resolve_link_for_test(
     key: &str,
 ) -> Option<(&'static str, serde_json::Value)> {
     resolve_link(state, key).map(|target| (target.method, target.params))
+}
+
+#[cfg(test)]
+mod updates_route_tests {
+    use super::updates_route;
+
+    #[test]
+    fn updates_actions_use_the_existing_daemon_routes() {
+        assert_eq!(
+            updates_route("updates.refresh"),
+            Some(("dashboard.updates.refresh", serde_json::json!({})))
+        );
+        assert_eq!(
+            updates_route("updates.open"),
+            Some(("tools.launch", serde_json::json!({"tool": "updates"})))
+        );
+        assert_eq!(updates_route("updates.run"), None);
+    }
 }

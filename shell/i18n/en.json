@@ -460,6 +460,13 @@
   "bead.panel.control-awake": "Stay awake",
   "bead.panel.control-back": "Back",
   "bead.panel.control-sound": "Sound",
+  "bead.panel.updates-title": "Updates",
+  "bead.panel.updates-check": "Check for updates",
+  "bead.panel.updates-open": "Open updater",
+  "bead.panel.updates-available": {
+    "one": "{count} update available",
+    "other": "{count} updates available"
+  },
   "bead.panel.control-power-brightness": "Power & brightness",
   "bead.panel.control-battery": "Power mode",
   "bead.panel.control-battery-details": "Open power and battery details",

@@ -96,11 +96,33 @@ fn core_audio() -> serde_json::Value {
         },"order":["mic","play","out"]}
     })
 }
+fn core_updates() -> serde_json::Value {
+    include_str!("../tests/protocol-v1/core-dashboard-updates.jsonl")
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find_map(|value| value.get("data").cloned())
+        .expect("dashboard updates fixture snapshot")
+}
 fn text_value<'a>(values: &'a BTreeMap<String, Value>, key: &str) -> &'a str {
     let Value::Text(value) = &values[key] else {
         panic!("{key} must be text")
     };
     value
+}
+#[test]
+fn updates_popout_projects_the_existing_daemon_topic() -> Result<()> {
+    let status = Status::core_updates(Arc::new(FakeSource::new(core_updates())?), None);
+    let values = status.project();
+    assert_eq!(
+        text_value(&values, "status.updates_summary"),
+        "3 updates available"
+    );
+    assert_eq!(text_value(&values, "status.updates_detail"), "");
+    assert_eq!(
+        text_value(&values, "status.peek.summary"),
+        "3 updates available"
+    );
+    Ok(())
 }
 fn harness(scale: f32) -> Result<Harness> {
     Harness::load(

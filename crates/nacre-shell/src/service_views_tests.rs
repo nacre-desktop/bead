@@ -416,7 +416,7 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
             },
         )?;
         for (suffix, action) in [
-            ("updates.count", "view.open"),
+            ("updates.count", "status.pill.open"),
             ("battery.battery-value", "status.pill.open"),
             ("notifications.notifications-count", "status.pill.open"),
         ] {

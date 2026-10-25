@@ -158,7 +158,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
         ui.Row{id="system-pill",height=34,gap=1,shrink=0,padding_left=6,padding_right=6,align="center",fill="surfaceContainer",radius=17,
             on_activate=popouts and ui.action("view.open","control") or nil,
             -- Optional item: unavailable and zero counts occupy no space.
-            updates_on and updates_n>0 and kit.Button{id="updates",direction="row",padding=0,fill="transparent",hover_fill="surfaceContainerHigh",on_activate=popouts and ui.action("view.open","dashboard-system") or nil,height=30,gap=4,shrink=0,padding_left=3,padding_right=3,align="center",
+            updates_on and updates_n>0 and kit.Button{id="updates",direction="row",padding=0,fill="transparent",hover_fill="surfaceContainerHigh",on_activate=popouts and ui.action("status.pill.open","updates") or nil,height=30,gap=4,shrink=0,padding_left=3,padding_right=3,align="center",
                 glyph("package","package_2","primary"),
                 centered_text{id="count",text=ui.bind("bar.updates.text"),width=t.update_digit_width*#tostring(updates_n)+t.update_text_inset,height=24,font_size=16,color="primary"},
             } or ui.Box{id="updates",width=0,height=0,shrink=0,visible=false},
