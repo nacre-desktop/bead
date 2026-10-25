@@ -144,50 +144,69 @@ custom icon path; actions select launcher, dashboard, or a custom view route.
 
 ## Phase 1 evidence — 2026-10-25
 
-Candidate `af5615d`, control `bf1f097`, QML/daemon `713d38b3`; Rust 1.99.0,
-checked-in release profile, separate target directories. Native bar `--check`
-and the complete remote Arch CI-equivalent pass. Four regenerated bar goldens
-are byte-identical and inspected. Captures are private nested CPU at
-2880×1800/1.5, with a generated wallpaper/palette and twelve fixture updates.
+Candidate `a9c2f75`, control `2e523f2` (B0118 daemon/bar recovery retained),
+QML/daemon `421da0f`, Orient `3efe8d1`; Rust 1.99.0 and the checked-in release
+profile. Full remote Arch CI, both isolated release bar `--check` commands and
+four byte-identical regenerated/inspected bar goldens pass.
 
-| Bar header RMSE % | Control | Widgets |
+Captures are private nested CPU at 2880×1800/1.5, with matching generated
+wallpaper/palette and twelve fixture updates. Parity uses a `12:34` display-input
+fixture in private QML time-service and Bead behavior snapshots; drawing code,
+wall/monotonic clocks and timers stay unchanged. Memory and key arms use the
+unmodified snapshots. Exact fixture patches and binary hashes are in the data.
+
+| Raw bar header RMSE % | Control | Widgets |
 | --- | ---: | ---: |
-| Idle | 5.926469 | 5.724581 |
-| Title hover | 5.914455 | 5.676418 |
-| Title active | 5.899686 | 5.896304 |
-| Audio open (clock minute changed) | 5.777256 | 5.853190 |
+| Idle | 5.726269 | 5.726269 |
+| Title hover | 5.713135 | 5.713005 |
+| Title active | 5.897943 | 5.897943 |
+| Audio open | 5.775475 | 5.775475 |
 
-All three required raw gates pass. The additional audio variation is clock text:
-excluding only its physical x=2730..2799 diagnostic strip gives exactly
-5.826433% for both. Direct Bead control/candidate pixels outside that strip are
-identical for idle, active and audio. Hover differences occupy only the cue
-(physical bbox 1317,12–1564,63), sampled at different animation phases; its raw
-and clock-neutral QML RMSE both improve. Dwell/peek/anchor and hit-rectangle
-regressions pass with the original timings and IDs. The native title trace loses
-its focused title zero times after fixture readiness.
+All required original raw gates pass without masking any pixels. Direct native
+control/candidate pixels are identical in all four states, including hover.
+Against one common QML reference each state's RMSE is exactly equal; the tiny
+per-run hover difference above comes from QML animation sampling. Dwell/peek,
+anchor and hit-rectangle regressions retain the original timings and IDs. The
+native title trace changes its focused title zero times in 73 post-focus states.
 
-| Five alternating pairs, median Δ MiB | Idle | Launcher | Typed | Closed |
+Earlier 180 ms hover samples varied in both directions (about ±0.036 percentage
+points); all five are retained as superseded data. A further lossless burst uses
+predeclared 75/125/175/225/275 ms offsets after recorded pointer dispatch, the same
+nearest-time rule for every arm, one common QML reference and the full header.
+Pooled RMSE is 5.708657% control / 5.699952% widgets. Every offset is reported;
+there is no best-frame selection. Estimated selected times miss targets by
+8–10 ms, but screencopy latency is 98–99 ms: half-latency frame-clock estimates
+are coarse and do not establish precise dwell or physical scanout timing.
+
+| Five alternating pairs, median Δ MiB | Idle | Launcher | Typed | Closed (2.5 s) |
 | --- | ---: | ---: | ---: | ---: |
-| Unreclaimable (candidate − control) | +0.191406 | +0.183594 | +0.148438 | +0.210938 |
+| Unreclaimable (candidate − control) | +0.132812 | +0.113281 | −0.492188 | +0.121094 |
 
-All are below +0.5 MiB. The increase is anonymous residency from the additional
-widget source/bytecode and VM/build bookkeeping; SHM is identical and DRM and
-SwapPss are zero. Clean file PSS is informational: idle control/widgets
-20.290/18.747 MiB, closed 19.517/18.083 MiB. Pair 1 has a typed control anonymous
-outlier (−1.926 MiB paired delta); it remains in the five-pair median.
-First-key UI CPU is 3.797 ms median / 3.988 ms max; nested first presentation is
-4.197 / 4.503 ms. These are private nested timings; the laptop absolute cap is
-left to the lead's reference capture. Twelve containment reports pass with no
-OOM, host swap-in or process SwapPss; the active batch lasts 381 seconds.
+All are below +0.5 MiB. All paired deltas are anonymous; SHM is identical and
+DRM/SwapPss are zero. Small persistent growth is consistent with the extra Luau,
+VM and watcher bookkeeping, without a per-allocation attribution claim.
+Pair 4 has a +1.090 MiB open anonymous step; it is not a majority pattern. Pair 5
+has a −2.223 MiB typed delta from higher control residency. Both remain in the
+median calculation; the negative typed result is not claimed as an optimization.
+File-backed PSS is informational: idle control/widgets 20.261/20.472 MiB, closed
+20.914/21.060 MiB. Closed is the early 2.5 s sample, not a settled-idle/laptop proof.
+First-key UI CPU is 3.819 ms median / 3.857 ms max; nested first presentation is
+4.119 / 4.386 ms. The laptop absolute cap remains for the lead's reference run.
+Twelve containment reports pass with no OOM, host swap-in or process SwapPss;
+the complete active batch takes 382 seconds, under its 13-minute bound.
 
-[Full components, paired deltas, timing samples and source/binary hashes](evidence/0113/summary.json).
-Paired crops are QML, Bead, then amplified diff:
+[Components, all paired deltas, timing samples, hashes and excluded attempts](evidence/0113/summary.json).
+Paired crops (QML, Bead, amplified diff) are
 [idle](evidence/0113/idle-pair.png), [hover](evidence/0113/hover-pair.png),
 [active](evidence/0113/active-pair.png), [audio](evidence/0113/audio-pair.png).
+Timed groups follow the five offsets above:
+[control burst](evidence/0113/hover-control-burst.png),
+[widget burst](evidence/0113/hover-candidate-burst.png).
 
-Earlier native attempts are excluded: a legacy guard wrapper duplicated the
-current driver's containment, and a shared Cargo target reused a control SDK
-without `ui.Host`. Owned aborted scopes were cleaned; isolated release targets,
-native bar admission and explicit fixture readiness now precede measurement.
+Excluded attempts include a redundant legacy containment wrapper, a shared-target
+stale SDK, QML-incompatible clock overlays and a private GVFS cleanup race. Owned
+aborted resources were cleaned; separate targets, native admission, fixture
+readiness and private local VFS now precede measurement. Earlier-source results
+were superseded after integrating B0110/B0118 and refreshing QML/daemon main.
 Nacre store registration remains the one-line request above. Phase 2 owns the
 edit/menu/settings UI, content-preset grid editing policy and canvas host.

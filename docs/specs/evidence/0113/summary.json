@@ -12,236 +12,236 @@
     "control": [
       {
         "pair": 1,
-        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "source_revision": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
         "first_key": {
-          "ui_cpu_ms": 3.723267,
-          "presented_ms": 4.222546,
+          "ui_cpu_ms": 3.778838,
+          "presented_ms": 4.337988,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 50589,
-            "Pss_Anon": 18956,
-            "Pss_File": 20797,
+            "Pss": 51356,
+            "Pss_Anon": 19760,
+            "Pss_File": 20760,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29792
+            "unreclaimable_kib": 30596
           },
           "launcher": {
-            "Pss": 68809,
-            "Pss_Anon": 27872,
-            "Pss_File": 21387,
-            "Pss_Shmem": 19550,
+            "Pss": 68152,
+            "Pss_Anon": 28848,
+            "Pss_File": 21298,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47422
+            "unreclaimable_kib": 46854
           },
           "typed": {
-            "Pss": 71708,
-            "Pss_Anon": 30772,
-            "Pss_File": 21386,
-            "Pss_Shmem": 19550,
+            "Pss": 71591,
+            "Pss_Anon": 32288,
+            "Pss_File": 21297,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50322
+            "unreclaimable_kib": 50294
           },
           "closed": {
-            "Pss": 50662,
-            "Pss_Anon": 19840,
-            "Pss_File": 19986,
-            "Pss_Shmem": 10836,
+            "Pss": 66847,
+            "Pss_Anon": 31480,
+            "Pss_File": 21297,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30676
+            "unreclaimable_kib": 45550
           }
         }
       },
       {
         "pair": 2,
-        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "source_revision": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
         "first_key": {
-          "ui_cpu_ms": 4.189129,
-          "presented_ms": 4.670886,
+          "ui_cpu_ms": 3.864857,
+          "presented_ms": 4.399979,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 50357,
-            "Pss_Anon": 18564,
-            "Pss_File": 20957,
+            "Pss": 51395,
+            "Pss_Anon": 19832,
+            "Pss_File": 20727,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29400
+            "unreclaimable_kib": 30668
           },
           "launcher": {
-            "Pss": 68689,
-            "Pss_Anon": 27524,
-            "Pss_File": 21615,
-            "Pss_Shmem": 19550,
+            "Pss": 68390,
+            "Pss_Anon": 28968,
+            "Pss_File": 21416,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47074
+            "unreclaimable_kib": 46974
           },
           "typed": {
-            "Pss": 71649,
-            "Pss_Anon": 30472,
-            "Pss_File": 21627,
-            "Pss_Shmem": 19550,
+            "Pss": 71030,
+            "Pss_Anon": 31608,
+            "Pss_File": 21416,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50022
+            "unreclaimable_kib": 49614
           },
           "closed": {
-            "Pss": 50415,
-            "Pss_Anon": 19360,
-            "Pss_File": 20219,
-            "Pss_Shmem": 10836,
+            "Pss": 67298,
+            "Pss_Anon": 31812,
+            "Pss_File": 21416,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30196
+            "unreclaimable_kib": 45882
           }
         }
       },
       {
         "pair": 3,
-        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "source_revision": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
         "first_key": {
-          "ui_cpu_ms": 3.764488,
-          "presented_ms": 4.261636,
+          "ui_cpu_ms": 3.828678,
+          "presented_ms": 4.336488,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 49937,
-            "Pss_Anon": 18504,
-            "Pss_File": 20597,
+            "Pss": 51524,
+            "Pss_Anon": 19856,
+            "Pss_File": 20832,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29340
+            "unreclaimable_kib": 30692
           },
           "launcher": {
-            "Pss": 68324,
-            "Pss_Anon": 27580,
-            "Pss_File": 21194,
-            "Pss_Shmem": 19550,
+            "Pss": 68423,
+            "Pss_Anon": 28964,
+            "Pss_File": 21453,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47130
+            "unreclaimable_kib": 46970
           },
           "typed": {
-            "Pss": 71232,
-            "Pss_Anon": 30488,
-            "Pss_File": 21194,
-            "Pss_Shmem": 19550,
+            "Pss": 71896,
+            "Pss_Anon": 32416,
+            "Pss_File": 21474,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50038
+            "unreclaimable_kib": 50422
           },
           "closed": {
-            "Pss": 49962,
-            "Pss_Anon": 19368,
-            "Pss_File": 19758,
-            "Pss_Shmem": 10836,
+            "Pss": 67616,
+            "Pss_Anon": 32072,
+            "Pss_File": 21474,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30204
+            "unreclaimable_kib": 46142
           }
         }
       },
       {
         "pair": 4,
-        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "source_revision": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
         "first_key": {
-          "ui_cpu_ms": 3.687617,
-          "presented_ms": 4.133977,
+          "ui_cpu_ms": 3.786848,
+          "presented_ms": 4.246537,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 49840,
-            "Pss_Anon": 18564,
-            "Pss_File": 20440,
+            "Pss": 51279,
+            "Pss_Anon": 19696,
+            "Pss_File": 20747,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29400
+            "unreclaimable_kib": 30532
           },
           "launcher": {
-            "Pss": 68117,
-            "Pss_Anon": 27532,
-            "Pss_File": 21035,
-            "Pss_Shmem": 19550,
+            "Pss": 68226,
+            "Pss_Anon": 28768,
+            "Pss_File": 21452,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47082
+            "unreclaimable_kib": 46774
           },
           "typed": {
-            "Pss": 71092,
-            "Pss_Anon": 30508,
-            "Pss_File": 21034,
-            "Pss_Shmem": 19550,
+            "Pss": 71553,
+            "Pss_Anon": 32096,
+            "Pss_File": 21451,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50058
+            "unreclaimable_kib": 50102
           },
           "closed": {
-            "Pss": 49866,
-            "Pss_Anon": 19340,
-            "Pss_File": 19690,
-            "Pss_Shmem": 10836,
+            "Pss": 66465,
+            "Pss_Anon": 30944,
+            "Pss_File": 21451,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30176
+            "unreclaimable_kib": 45014
           }
         }
       },
       {
         "pair": 5,
-        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "source_revision": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
         "first_key": {
-          "ui_cpu_ms": 3.681847,
-          "presented_ms": 4.170736,
+          "ui_cpu_ms": 3.826927,
+          "presented_ms": 4.293187,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 50205,
-            "Pss_Anon": 18592,
-            "Pss_File": 20777,
+            "Pss": 51336,
+            "Pss_Anon": 19784,
+            "Pss_File": 20716,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29428
+            "unreclaimable_kib": 30620
           },
           "launcher": {
-            "Pss": 68449,
-            "Pss_Anon": 27528,
-            "Pss_File": 21371,
-            "Pss_Shmem": 19550,
+            "Pss": 68126,
+            "Pss_Anon": 28852,
+            "Pss_File": 21268,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47078
+            "unreclaimable_kib": 46858
           },
           "typed": {
-            "Pss": 71376,
-            "Pss_Anon": 30456,
-            "Pss_File": 21370,
-            "Pss_Shmem": 19550,
+            "Pss": 71589,
+            "Pss_Anon": 32316,
+            "Pss_File": 21267,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50006
+            "unreclaimable_kib": 50322
           },
           "closed": {
-            "Pss": 50173,
-            "Pss_Anon": 19352,
-            "Pss_File": 19985,
-            "Pss_Shmem": 10836,
+            "Pss": 67280,
+            "Pss_Anon": 31944,
+            "Pss_File": 21266,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30188
+            "unreclaimable_kib": 46014
           }
         }
       }
@@ -249,236 +249,236 @@
     "candidate": [
       {
         "pair": 1,
-        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "source_revision": "a9c2f75d8c89af1d2155f3622a05d56eb8764961",
         "first_key": {
-          "ui_cpu_ms": 3.797107,
-          "presented_ms": 4.111117,
+          "ui_cpu_ms": 3.81898,
+          "presented_ms": 4.311608,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 48841,
-            "Pss_Anon": 18728,
-            "Pss_File": 19277,
+            "Pss": 51626,
+            "Pss_Anon": 19896,
+            "Pss_File": 20894,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29564
+            "unreclaimable_kib": 30732
           },
           "launcher": {
-            "Pss": 67326,
-            "Pss_Anon": 27704,
-            "Pss_File": 20072,
-            "Pss_Shmem": 19550,
+            "Pss": 68293,
+            "Pss_Anon": 28720,
+            "Pss_File": 21567,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47254
+            "unreclaimable_kib": 46726
           },
           "typed": {
-            "Pss": 68420,
-            "Pss_Anon": 28800,
-            "Pss_File": 20070,
-            "Pss_Shmem": 19550,
+            "Pss": 71187,
+            "Pss_Anon": 31616,
+            "Pss_File": 21565,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 48350
+            "unreclaimable_kib": 49622
           },
           "closed": {
-            "Pss": 49058,
-            "Pss_Anon": 19560,
-            "Pss_File": 18662,
-            "Pss_Shmem": 10836,
+            "Pss": 67287,
+            "Pss_Anon": 31652,
+            "Pss_File": 21565,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30396
+            "unreclaimable_kib": 45722
           }
         }
       },
       {
         "pair": 2,
-        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "source_revision": "a9c2f75d8c89af1d2155f3622a05d56eb8764961",
         "first_key": {
-          "ui_cpu_ms": 3.741067,
-          "presented_ms": 4.197107,
+          "ui_cpu_ms": 3.490317,
+          "presented_ms": 3.973218,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 48777,
-            "Pss_Anon": 18744,
-            "Pss_File": 19197,
+            "Pss": 51788,
+            "Pss_Anon": 19936,
+            "Pss_File": 21016,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29580
+            "unreclaimable_kib": 30772
           },
           "launcher": {
-            "Pss": 67184,
-            "Pss_Anon": 27720,
-            "Pss_File": 19914,
-            "Pss_Shmem": 19550,
+            "Pss": 68523,
+            "Pss_Anon": 28952,
+            "Pss_File": 21565,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47270
+            "unreclaimable_kib": 46958
           },
           "typed": {
-            "Pss": 70103,
-            "Pss_Anon": 30640,
-            "Pss_File": 19913,
-            "Pss_Shmem": 19550,
+            "Pss": 71163,
+            "Pss_Anon": 31592,
+            "Pss_File": 21565,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50190
+            "unreclaimable_kib": 49598
           },
           "closed": {
-            "Pss": 48945,
-            "Pss_Anon": 19592,
-            "Pss_File": 18517,
-            "Pss_Shmem": 10836,
+            "Pss": 67571,
+            "Pss_Anon": 31936,
+            "Pss_File": 21565,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30428
+            "unreclaimable_kib": 46006
           }
         }
       },
       {
         "pair": 3,
-        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "source_revision": "a9c2f75d8c89af1d2155f3622a05d56eb8764961",
         "first_key": {
-          "ui_cpu_ms": 3.681987,
-          "presented_ms": 4.169736,
+          "ui_cpu_ms": 3.857178,
+          "presented_ms": 4.385699,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 48935,
-            "Pss_Anon": 18756,
-            "Pss_File": 19343,
+            "Pss": 51845,
+            "Pss_Anon": 19988,
+            "Pss_File": 21021,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29592
+            "unreclaimable_kib": 30824
           },
           "launcher": {
-            "Pss": 67321,
-            "Pss_Anon": 27708,
-            "Pss_File": 20063,
-            "Pss_Shmem": 19550,
+            "Pss": 68723,
+            "Pss_Anon": 29080,
+            "Pss_File": 21637,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47258
+            "unreclaimable_kib": 47086
           },
           "typed": {
-            "Pss": 70089,
-            "Pss_Anon": 30476,
-            "Pss_File": 20063,
-            "Pss_Shmem": 19550,
+            "Pss": 72134,
+            "Pss_Anon": 32492,
+            "Pss_File": 21636,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50026
+            "unreclaimable_kib": 50498
           },
           "closed": {
-            "Pss": 49071,
-            "Pss_Anon": 19520,
-            "Pss_File": 18715,
-            "Pss_Shmem": 10836,
+            "Pss": 67803,
+            "Pss_Anon": 32096,
+            "Pss_File": 21637,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30356
+            "unreclaimable_kib": 46166
           }
         }
       },
       {
         "pair": 4,
-        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "source_revision": "a9c2f75d8c89af1d2155f3622a05d56eb8764961",
         "first_key": {
-          "ui_cpu_ms": 3.880889,
-          "presented_ms": 4.361106,
+          "ui_cpu_ms": 3.340395,
+          "presented_ms": 3.798449,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 48590,
-            "Pss_Anon": 18780,
-            "Pss_File": 18974,
+            "Pss": 51652,
+            "Pss_Anon": 19972,
+            "Pss_File": 20844,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29616
+            "unreclaimable_kib": 30808
           },
           "launcher": {
-            "Pss": 67114,
-            "Pss_Anon": 27740,
-            "Pss_File": 19824,
-            "Pss_Shmem": 19550,
+            "Pss": 69310,
+            "Pss_Anon": 29884,
+            "Pss_File": 21420,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47290
+            "unreclaimable_kib": 47890
           },
           "typed": {
-            "Pss": 70097,
-            "Pss_Anon": 30660,
-            "Pss_File": 19887,
-            "Pss_Shmem": 19550,
+            "Pss": 71081,
+            "Pss_Anon": 31592,
+            "Pss_File": 21483,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50210
+            "unreclaimable_kib": 49598
           },
           "closed": {
-            "Pss": 48883,
-            "Pss_Anon": 19596,
-            "Pss_File": 18451,
-            "Pss_Shmem": 10836,
+            "Pss": 67401,
+            "Pss_Anon": 31848,
+            "Pss_File": 21483,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30432
+            "unreclaimable_kib": 45918
           }
         }
       },
       {
         "pair": 5,
-        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "source_revision": "a9c2f75d8c89af1d2155f3622a05d56eb8764961",
         "first_key": {
-          "ui_cpu_ms": 3.988039,
-          "presented_ms": 4.503235,
+          "ui_cpu_ms": 3.833748,
+          "presented_ms": 4.118958,
           "source": "real daemon menu.query; first committed key presentation"
         },
         "phases_kib": {
           "idle": {
-            "Pss": 48566,
-            "Pss_Anon": 18788,
-            "Pss_File": 18942,
+            "Pss": 51795,
+            "Pss_Anon": 19996,
+            "Pss_File": 20963,
             "Pss_Shmem": 10836,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 29624
+            "unreclaimable_kib": 30832
           },
           "launcher": {
-            "Pss": 67057,
-            "Pss_Anon": 27716,
-            "Pss_File": 19791,
-            "Pss_Shmem": 19550,
+            "Pss": 68651,
+            "Pss_Anon": 29064,
+            "Pss_File": 21581,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 47266
+            "unreclaimable_kib": 47070
           },
           "typed": {
-            "Pss": 70028,
-            "Pss_Anon": 30624,
-            "Pss_File": 19854,
-            "Pss_Shmem": 19550,
+            "Pss": 69626,
+            "Pss_Anon": 30040,
+            "Pss_File": 21580,
+            "Pss_Shmem": 18006,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 50174
+            "unreclaimable_kib": 48046
           },
           "closed": {
-            "Pss": 48879,
-            "Pss_Anon": 19568,
-            "Pss_File": 18475,
-            "Pss_Shmem": 10836,
+            "Pss": 67298,
+            "Pss_Anon": 31648,
+            "Pss_File": 21580,
+            "Pss_Shmem": 14070,
             "DRM": 0,
             "SwapPss": 0,
-            "unreclaimable_kib": 30404
+            "unreclaimable_kib": 45718
           }
         }
       }
@@ -486,145 +486,145 @@
   },
   "memory": {
     "idle": {
-      "median_delta_mib": 0.19140625,
+      "median_delta_mib": 0.1328125,
       "pair_deltas_mib": [
-        -0.22265625,
-        0.17578125,
-        0.24609375,
-        0.2109375,
-        0.19140625
+        0.1328125,
+        0.1015625,
+        0.12890625,
+        0.26953125,
+        0.20703125
       ],
       "anon_pair_deltas_mib": [
-        -0.22265625,
-        0.17578125,
-        0.24609375,
-        0.2109375,
-        0.19140625
+        0.1328125,
+        0.1015625,
+        0.12890625,
+        0.26953125,
+        0.20703125
       ],
       "pass": true,
       "control": {
-        "unreclaimable_mib": 28.7109375,
-        "pss_mib": 49.0283203125,
-        "anon_mib": 18.12890625,
+        "unreclaimable_mib": 29.90234375,
+        "pss_mib": 50.15234375,
+        "anon_mib": 19.3203125,
         "shmem_mib": 10.58203125,
-        "file_pss_mib": 20.2900390625,
+        "file_pss_mib": 20.2607421875,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       },
       "candidate": {
-        "unreclaimable_mib": 28.8984375,
-        "pss_mib": 47.6337890625,
-        "anon_mib": 18.31640625,
+        "unreclaimable_mib": 30.0859375,
+        "pss_mib": 50.57421875,
+        "anon_mib": 19.50390625,
         "shmem_mib": 10.58203125,
-        "file_pss_mib": 18.7470703125,
+        "file_pss_mib": 20.4716796875,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       }
     },
     "launcher": {
-      "median_delta_mib": 0.18359375,
+      "median_delta_mib": 0.11328125,
       "pair_deltas_mib": [
-        -0.1640625,
-        0.19140625,
-        0.125,
-        0.203125,
-        0.18359375
+        -0.125,
+        -0.015625,
+        0.11328125,
+        1.08984375,
+        0.20703125
       ],
       "anon_pair_deltas_mib": [
-        -0.1640625,
-        0.19140625,
-        0.125,
-        0.203125,
-        0.18359375
+        -0.125,
+        -0.015625,
+        0.11328125,
+        1.08984375,
+        0.20703125
       ],
       "pass": true,
       "control": {
-        "unreclaimable_mib": 45.978515625,
-        "pss_mib": 66.8447265625,
-        "anon_mib": 26.88671875,
-        "shmem_mib": 19.091796875,
-        "file_pss_mib": 20.8701171875,
+        "unreclaimable_mib": 45.759765625,
+        "pss_mib": 66.626953125,
+        "anon_mib": 28.17578125,
+        "shmem_mib": 17.583984375,
+        "file_pss_mib": 20.9140625,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       },
       "candidate": {
-        "unreclaimable_mib": 46.158203125,
-        "pss_mib": 65.609375,
-        "anon_mib": 27.06640625,
-        "shmem_mib": 19.091796875,
-        "file_pss_mib": 19.447265625,
+        "unreclaimable_mib": 45.966796875,
+        "pss_mib": 67.0419921875,
+        "anon_mib": 28.3828125,
+        "shmem_mib": 17.583984375,
+        "file_pss_mib": 21.0615234375,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       }
     },
     "typed": {
-      "median_delta_mib": 0.1484375,
+      "median_delta_mib": -0.4921875,
       "pair_deltas_mib": [
-        -1.92578125,
-        0.1640625,
-        -0.01171875,
-        0.1484375,
-        0.1640625
+        -0.65625,
+        -0.015625,
+        0.07421875,
+        -0.4921875,
+        -2.22265625
       ],
       "anon_pair_deltas_mib": [
-        -1.92578125,
-        0.1640625,
-        -0.01171875,
-        0.1484375,
-        0.1640625
+        -0.65625,
+        -0.015625,
+        0.07421875,
+        -0.4921875,
+        -2.22265625
       ],
       "pass": true,
       "control": {
-        "unreclaimable_mib": 48.865234375,
-        "pss_mib": 69.703125,
-        "anon_mib": 29.7734375,
-        "shmem_mib": 19.091796875,
-        "file_pss_mib": 20.869140625,
+        "unreclaimable_mib": 49.115234375,
+        "pss_mib": 69.9111328125,
+        "anon_mib": 31.53125,
+        "shmem_mib": 17.583984375,
+        "file_pss_mib": 20.9140625,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       },
       "candidate": {
-        "unreclaimable_mib": 48.998046875,
-        "pss_mib": 68.4462890625,
-        "anon_mib": 29.90625,
-        "shmem_mib": 19.091796875,
-        "file_pss_mib": 19.4462890625,
+        "unreclaimable_mib": 48.435546875,
+        "pss_mib": 69.4951171875,
+        "anon_mib": 30.8515625,
+        "shmem_mib": 17.583984375,
+        "file_pss_mib": 21.0595703125,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       }
     },
     "closed": {
-      "median_delta_mib": 0.2109375,
+      "median_delta_mib": 0.12109375,
       "pair_deltas_mib": [
-        -0.2734375,
-        0.2265625,
-        0.1484375,
-        0.25,
-        0.2109375
+        0.16796875,
+        0.12109375,
+        0.0234375,
+        0.8828125,
+        -0.2890625
       ],
       "anon_pair_deltas_mib": [
-        -0.2734375,
-        0.2265625,
-        0.1484375,
-        0.25,
-        0.2109375
+        0.16796875,
+        0.12109375,
+        0.0234375,
+        0.8828125,
+        -0.2890625
       ],
       "pass": true,
       "control": {
-        "unreclaimable_mib": 29.48828125,
-        "pss_mib": 48.9970703125,
-        "anon_mib": 18.90625,
-        "shmem_mib": 10.58203125,
-        "file_pss_mib": 19.5166015625,
+        "unreclaimable_mib": 44.806640625,
+        "pss_mib": 65.703125,
+        "anon_mib": 31.06640625,
+        "shmem_mib": 13.740234375,
+        "file_pss_mib": 20.9140625,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       },
       "candidate": {
-        "unreclaimable_mib": 29.69140625,
-        "pss_mib": 47.7978515625,
-        "anon_mib": 19.109375,
-        "shmem_mib": 10.58203125,
-        "file_pss_mib": 18.0830078125,
+        "unreclaimable_mib": 44.841796875,
+        "pss_mib": 65.8212890625,
+        "anon_mib": 31.1015625,
+        "shmem_mib": 13.740234375,
+        "file_pss_mib": 21.0595703125,
         "drm_mib": 0.0,
         "swap_pss_mib": 0.0
       }
@@ -633,81 +633,69 @@
   "first_key": {
     "control": {
       "ui_cpu_ms": [
-        3.723267,
-        4.189129,
-        3.764488,
-        3.687617,
-        3.681847
+        3.778838,
+        3.864857,
+        3.828678,
+        3.786848,
+        3.826927
       ],
-      "median_ui_cpu_ms": 3.723267,
-      "max_ui_cpu_ms": 4.189129,
-      "median_presented_ms": 4.222546,
-      "max_presented_ms": 4.670886,
+      "median_ui_cpu_ms": 3.826927,
+      "max_ui_cpu_ms": 3.864857,
+      "median_presented_ms": 4.336488,
+      "max_presented_ms": 4.399979,
       "pass": true
     },
     "candidate": {
       "ui_cpu_ms": [
-        3.797107,
-        3.741067,
-        3.681987,
-        3.880889,
-        3.988039
+        3.81898,
+        3.490317,
+        3.857178,
+        3.340395,
+        3.833748
       ],
-      "median_ui_cpu_ms": 3.797107,
-      "max_ui_cpu_ms": 3.988039,
-      "median_presented_ms": 4.197107,
-      "max_presented_ms": 4.503235,
+      "median_ui_cpu_ms": 3.81898,
+      "max_ui_cpu_ms": 3.857178,
+      "median_presented_ms": 4.118958,
+      "max_presented_ms": 4.385699,
       "pass": true
     }
   },
   "parity": {
     "idle": {
       "control": {
-        "bar_rmse_pct": 5.926469041496249,
-        "clock_neutral_diagnostic_rmse_pct": 5.778019125296477
+        "bar_rmse_pct": 5.726269374928049
       },
       "candidate": {
-        "bar_rmse_pct": 5.724581296427581,
-        "clock_neutral_diagnostic_rmse_pct": 5.778019125296477
+        "bar_rmse_pct": 5.726269374928049
       },
-      "raw_pass": true,
-      "clock_neutral_diagnostic_pass": true
+      "raw_pass": true
     },
     "bar-title-hover": {
       "control": {
-        "bar_rmse_pct": 5.914454868121796,
-        "clock_neutral_diagnostic_rmse_pct": 5.765388302898238
+        "bar_rmse_pct": 5.7131351243394155
       },
       "candidate": {
-        "bar_rmse_pct": 5.676417700034865,
-        "clock_neutral_diagnostic_rmse_pct": 5.729111006410934
+        "bar_rmse_pct": 5.713005060027256
       },
-      "raw_pass": true,
-      "clock_neutral_diagnostic_pass": true
+      "raw_pass": true
     },
     "bar-title-open": {
       "control": {
-        "bar_rmse_pct": 5.899686496587598,
-        "clock_neutral_diagnostic_rmse_pct": 5.950844687254517
+        "bar_rmse_pct": 5.897943049975203
       },
       "candidate": {
-        "bar_rmse_pct": 5.896304120881183,
-        "clock_neutral_diagnostic_rmse_pct": 5.950844687254517
+        "bar_rmse_pct": 5.897943049975203
       },
-      "raw_pass": true,
-      "clock_neutral_diagnostic_pass": true
+      "raw_pass": true
     },
     "popout-audio": {
       "control": {
-        "bar_rmse_pct": 5.777255703993109,
-        "clock_neutral_diagnostic_rmse_pct": 5.826433039266906
+        "bar_rmse_pct": 5.775475299233274
       },
       "candidate": {
-        "bar_rmse_pct": 5.853189872938239,
-        "clock_neutral_diagnostic_rmse_pct": 5.826433039266906
+        "bar_rmse_pct": 5.775475299233274
       },
-      "raw_pass": false,
-      "clock_neutral_diagnostic_pass": true
+      "raw_pass": true
     }
   },
   "safety": {
@@ -718,51 +706,311 @@
     "containment_verified": true
   },
   "gate_pass": true,
-  "render_difference": {
+  "common_reference_parity": {
     "idle": {
-      "clock_excluded_changed_pixels": 0,
-      "clock_excluded_bbox": null,
-      "clock_excluded_rmse_pct": 0.0
+      "control": 5.726269374928049,
+      "candidate": 5.726269374928049,
+      "pass": true
     },
     "bar-title-hover": {
-      "clock_excluded_changed_pixels": 10759,
-      "clock_excluded_bbox": [
-        1317,
-        12,
-        1564,
-        63
-      ],
-      "clock_excluded_rmse_pct": 0.6360014113545219
+      "control": 5.7131351243394155,
+      "candidate": 5.7131351243394155,
+      "pass": true
     },
     "bar-title-open": {
-      "clock_excluded_changed_pixels": 0,
-      "clock_excluded_bbox": null,
-      "clock_excluded_rmse_pct": 0.0
+      "control": 5.897943049975203,
+      "candidate": 5.897943049975203,
+      "pass": true
     },
     "popout-audio": {
-      "clock_excluded_changed_pixels": 0,
-      "clock_excluded_bbox": null,
-      "clock_excluded_rmse_pct": 0.0
+      "control": 5.775475299233274,
+      "candidate": 5.775475299233274,
+      "pass": true
     }
   },
+  "render_difference": {
+    "idle": {
+      "changed_pixels": 0,
+      "bbox": null,
+      "rmse_pct": 0.0
+    },
+    "bar-title-hover": {
+      "changed_pixels": 0,
+      "bbox": null,
+      "rmse_pct": 0.0
+    },
+    "bar-title-open": {
+      "changed_pixels": 0,
+      "bbox": null,
+      "rmse_pct": 0.0
+    },
+    "popout-audio": {
+      "changed_pixels": 0,
+      "bbox": null,
+      "rmse_pct": 0.0
+    }
+  },
+  "hover_burst": {
+    "method": "nearest estimated capture time to each predefined offset after recorded virtual-pointer dispatch; one common control-QML frame per offset; entire lossless header; all offsets equally weighted",
+    "offsets_ms": [
+      75,
+      125,
+      175,
+      225,
+      275
+    ],
+    "samples": [
+      {
+        "target_ms": 75,
+        "frames": {
+          "control_qml": {
+            "target_ms": 75,
+            "index": 2,
+            "estimated_elapsed_ms": 83.01555800437927,
+            "offset_error_ms": 8.015558004379272
+          },
+          "control_bead": {
+            "target_ms": 75,
+            "index": 2,
+            "estimated_elapsed_ms": 83.77433896064758,
+            "offset_error_ms": 8.774338960647583
+          },
+          "candidate_qml": {
+            "target_ms": 75,
+            "index": 2,
+            "estimated_elapsed_ms": 84.34335899353027,
+            "offset_error_ms": 9.343358993530273
+          },
+          "candidate_bead": {
+            "target_ms": 75,
+            "index": 2,
+            "estimated_elapsed_ms": 83.97100007534027,
+            "offset_error_ms": 8.971000075340271
+          }
+        },
+        "rmse_pct": {
+          "control": 5.73022468667445,
+          "candidate": 5.73022468667445
+        }
+      },
+      {
+        "target_ms": 125,
+        "frames": {
+          "control_qml": {
+            "target_ms": 125,
+            "index": 4,
+            "estimated_elapsed_ms": 133.01555800437927,
+            "offset_error_ms": 8.015558004379272
+          },
+          "control_bead": {
+            "target_ms": 125,
+            "index": 4,
+            "estimated_elapsed_ms": 133.77433896064758,
+            "offset_error_ms": 8.774338960647583
+          },
+          "candidate_qml": {
+            "target_ms": 125,
+            "index": 4,
+            "estimated_elapsed_ms": 134.34335899353027,
+            "offset_error_ms": 9.343358993530273
+          },
+          "candidate_bead": {
+            "target_ms": 125,
+            "index": 4,
+            "estimated_elapsed_ms": 133.97100007534027,
+            "offset_error_ms": 8.971000075340271
+          }
+        },
+        "rmse_pct": {
+          "control": 5.722105781712662,
+          "candidate": 5.722105781712662
+        }
+      },
+      {
+        "target_ms": 175,
+        "frames": {
+          "control_qml": {
+            "target_ms": 175,
+            "index": 6,
+            "estimated_elapsed_ms": 184.01555800437927,
+            "offset_error_ms": 9.015558004379272
+          },
+          "control_bead": {
+            "target_ms": 175,
+            "index": 6,
+            "estimated_elapsed_ms": 183.77433896064758,
+            "offset_error_ms": 8.774338960647583
+          },
+          "candidate_qml": {
+            "target_ms": 175,
+            "index": 6,
+            "estimated_elapsed_ms": 184.34335899353027,
+            "offset_error_ms": 9.343358993530273
+          },
+          "candidate_bead": {
+            "target_ms": 175,
+            "index": 6,
+            "estimated_elapsed_ms": 183.97100007534027,
+            "offset_error_ms": 8.971000075340271
+          }
+        },
+        "rmse_pct": {
+          "control": 5.7091341978697345,
+          "candidate": 5.680652652095235
+        }
+      },
+      {
+        "target_ms": 225,
+        "frames": {
+          "control_qml": {
+            "target_ms": 225,
+            "index": 8,
+            "estimated_elapsed_ms": 234.01555800437927,
+            "offset_error_ms": 9.015558004379272
+          },
+          "control_bead": {
+            "target_ms": 225,
+            "index": 8,
+            "estimated_elapsed_ms": 233.77433896064758,
+            "offset_error_ms": 8.774338960647583
+          },
+          "candidate_qml": {
+            "target_ms": 225,
+            "index": 8,
+            "estimated_elapsed_ms": 234.34335899353027,
+            "offset_error_ms": 9.343358993530273
+          },
+          "candidate_bead": {
+            "target_ms": 225,
+            "index": 8,
+            "estimated_elapsed_ms": 233.97100007534027,
+            "offset_error_ms": 8.971000075340271
+          }
+        },
+        "rmse_pct": {
+          "control": 5.698226614424253,
+          "candidate": 5.683103732856614
+        }
+      },
+      {
+        "target_ms": 275,
+        "frames": {
+          "control_qml": {
+            "target_ms": 275,
+            "index": 10,
+            "estimated_elapsed_ms": 284.0155580043793,
+            "offset_error_ms": 9.015558004379272
+          },
+          "control_bead": {
+            "target_ms": 275,
+            "index": 10,
+            "estimated_elapsed_ms": 284.7743389606476,
+            "offset_error_ms": 9.774338960647583
+          },
+          "candidate_qml": {
+            "target_ms": 275,
+            "index": 10,
+            "estimated_elapsed_ms": 284.3433589935303,
+            "offset_error_ms": 9.343358993530273
+          },
+          "candidate_bead": {
+            "target_ms": 275,
+            "index": 10,
+            "estimated_elapsed_ms": 284.97100007534027,
+            "offset_error_ms": 9.971000075340271
+          }
+        },
+        "rmse_pct": {
+          "control": 5.683470539642897,
+          "candidate": 5.683470539642897
+        }
+      }
+    ],
+    "capture_latency_ms": {
+      "control_qml": 98.0719462580358,
+      "control_bead": 99.16186772170477,
+      "candidate_qml": 99.18427283021931,
+      "candidate_bead": 99.18122241894405
+    },
+    "pooled_rmse_pct": {
+      "control": 5.708656702771504,
+      "candidate": 5.699952447240888
+    },
+    "pass": true,
+    "timing_limit": "Capture times use half the fast-quartile screencopy latency; total latency is about 98\u201399 ms. These estimates are not precise dwell or physical scanout measurements. Required original single-frame raw gates also pass."
+  },
   "sources": {
-    "candidate": "af5615d561c1138076a9df4e98f7a423c6daa739",
-    "control": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
-    "qml_and_daemon": "713d38b3a0421b42da995f6cc562650510807e88",
-    "candidate_binary_sha256": "c69556f473a25c649a8d89acf8eff79f3e306e3536692dbadef2ba15b98b42ae",
-    "control_binary_sha256": "f2e61cedfc88e0b1c744dd0ced51838aaf96be09ef47971f35bc50a008403b76",
-    "build": "Rust 1.99.0; checked-in release profile; separate target directories; native bar --check passed"
+    "candidate": "a9c2f75d8c89af1d2155f3622a05d56eb8764961",
+    "control": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
+    "qml_and_daemon": "421da0fb924bf4fff7d9fdf70a8a11357def36d7",
+    "orient": "3efe8d1e7fb50200d74a3e0193ad63699cb8ebe8",
+    "candidate_binary_sha256": "adfc4beda0917ddb116b8e5532663d6a971e7f8f2bf7a7815215db9531081a68",
+    "control_binary_sha256": "42f6036ae9a718d2d69e6f73c3326eb2cf3699871d39b07e33d3a29714f5b02e",
+    "helper_binary_sha256": "147871e188f31a19656493f5cbc69afa0dee7a63c476cfcc3278b1cec826f2d2",
+    "build": "Rust 1.99.0; checked-in release profile; separate targets; native bar --check passed"
   },
   "fixtures": {
     "updates": 12,
-    "wallpaper": "generated gradient 1; palette from the matching daemon",
-    "clock_exclusion_physical": [
-      2730,
-      0,
-      2800,
-      75
+    "wallpaper": "generated gradient 1 with matched palette",
+    "clock": "12:34 display-input fixture only in parity snapshots; normal wall/monotonic clocks and timers; memory/key arms unmodified",
+    "clock_patches": [
+      {
+        "file": "nacre/nacre/shell/services/NacreTime.qml",
+        "before": "readonly property date date: clock.date",
+        "after": "readonly property date date: new Date(2026, 9, 25, 12, 34, 0)",
+        "original_sha256": "c92f2d7d737e6f0991ff8620e61b6079ed52032f05a543059bc2a61c106f90aa",
+        "fixture_sha256": "321b1fd8276d3bd2f936166bde3f25df86cbfb20a0a8895e73726df4b646e7be"
+      },
+      {
+        "file": "control/shell/bar/behavior.luau",
+        "before": "local c=s[\"bead.desktop.clock\"]",
+        "after": "local c=\"12:34\"",
+        "original_sha256": "ff073f11e9ba9e07407bd2ab2fcdf8f72575dc88d7c4b940f5aa04426e25fede",
+        "fixture_sha256": "73eeb9528f9e7d32be7956bf5ebf3778c60154b9266fc1f7931edf83d8ed78cd"
+      },
+      {
+        "file": "candidate/shell/bar/behavior.luau",
+        "before": "local c=s[\"bead.desktop.clock\"]",
+        "after": "local c=\"12:34\"",
+        "original_sha256": "f37f250f7db8ac431f93f52a2637cde4a46bf71a77dc4aa7ccfa1c9245bc4bcd",
+        "fixture_sha256": "d4442acc3559052d87e1fe58ac5acc45f1aaaf5144419048203b68e23f8e235a"
+      }
     ],
-    "clock_exclusion_usage": "secondary diagnostic only; core-state raw RMSE gates passed without it"
+    "private_gio_vfs": "local"
   },
-  "batch_elapsed_seconds": 381
+  "batch_elapsed_seconds": 382,
+  "previous_base_hover_samples": {
+    "control": "2331552",
+    "candidate": "5d3aaa2 (before B0118 rebase)",
+    "status": "superseded; all five retained to show unsynchronised 180 ms sampling variation",
+    "rmse_pct": [
+      [
+        5.713489888672362,
+        5.713886851343621
+      ],
+      [
+        5.713629578482933,
+        5.7138267085157155
+      ],
+      [
+        5.717001222698418,
+        5.683128621679592
+      ],
+      [
+        5.6781535971719155,
+        5.71397951491745
+      ],
+      [
+        5.714121975481774,
+        5.713157078371499
+      ]
+    ]
+  },
+  "excluded_attempts": [
+    "Legacy wrapper duplicated containment; owned aborted scopes cleaned.",
+    "Shared Cargo target reused control SDK; rebuilt with separate targets and native admission checks.",
+    "Clock library overlays prevented QML provider startup; no measurement accepted.",
+    "A private GVFS mount raced temporary-directory cleanup; failed arm excluded and owned directory removed.",
+    "Measurements before the B0110/B0118 integrations were superseded by the complete current-source batch."
+  ]
 }
