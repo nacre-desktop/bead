@@ -14,11 +14,6 @@ use std::{
 };
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
-static FONT_PICKER: std::sync::OnceLock<crate::transcript::Picker> = std::sync::OnceLock::new();
-/// Use the host's font policy for intrinsic label measurements. Set before loading views.
-pub fn set_font_picker(picker: crate::transcript::Picker) {
-    let _ = FONT_PICKER.set(picker);
-}
 pub trait FrontEnd {
     fn build(
         &self,
@@ -153,6 +148,8 @@ fn expand_fragments(
 }
 pub struct LuauFrontEnd {
     text_meters: RefCell<BTreeMap<String, crate::transcript::Meter>>,
+    /// Generation-owned selector, so sessions never depend on process-global init order.
+    font_picker: Option<crate::transcript::Picker>,
     compiled: Sources,
     fragments: RefCell<bead_core::cache::Lru<(String, String), std::rc::Rc<Fragment>>>,
     fragment_budget: bead_core::cache::Budget,
@@ -165,6 +162,13 @@ pub struct LuauFrontEnd {
 }
 impl LuauFrontEnd {
     pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
+        Self::new_with_picker(entry, sources, None)
+    }
+    pub(super) fn new_with_picker(
+        entry: &Path,
+        sources: &Sources,
+        font_picker: Option<crate::transcript::Picker>,
+    ) -> Result<Self, Diagnostic> {
         let compiler = mlua::chunk::Compiler::new();
         let mut compiled = Sources::new();
         let mut size = 0;
@@ -201,6 +205,7 @@ impl LuauFrontEnd {
             .map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
         Ok(Self {
             text_meters: Default::default(),
+            font_picker,
             _compiled_charge: charge,
             values_budget: bead_core::cache::Budget::new(
                 "markup-values",
@@ -288,7 +293,7 @@ impl FrontEnd for LuauFrontEnd {
                             meters.clear();
                         }
                         let meter = meters.entry(family.clone()).or_insert_with(|| {
-                            FONT_PICKER.get().map_or_else(
+                            self.font_picker.as_ref().map_or_else(
                                 || crate::transcript::Meter::fixed(vec![]),
                                 |picker| crate::transcript::Meter::new(picker.clone()),
                             )

@@ -159,6 +159,14 @@ impl Harness {
             })?,
             fallback.clone(),
         );
+        // Text measured by Luau must use the same bundled files as the renderer
+        // below; install this before the first generation is materialized.
+        let fonts = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fonts");
+        let measurement_fonts = vec![
+            fonts.join("IBMPlexSans.ttf"),
+            fonts.join("FixtureSymbols.ttf"),
+        ];
+        session.set_font_picker_if_missing(std::sync::Arc::new(move |_| measurement_fonts.clone()));
         if let Some(path) = recovery {
             session.enable_recovery(path);
         }

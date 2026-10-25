@@ -173,13 +173,22 @@ impl Generation {
         stores: &Stores,
         revision: u64,
     ) -> Result<(Self, Stores), Diagnostic> {
+        Self::load_with_picker(root, entry, stores, revision, None)
+    }
+    pub(super) fn load_with_picker(
+        root: &Path,
+        entry: &Path,
+        stores: &Stores,
+        revision: u64,
+        font_picker: Option<crate::transcript::Picker>,
+    ) -> Result<(Self, Stores), Diagnostic> {
         let normalized_entry = entry
             .components()
             .filter(|component| !matches!(component, std::path::Component::CurDir))
             .collect::<PathBuf>();
         let entry = normalized_entry.as_path();
         if entry.extension().is_some_and(|ext| ext == "luau") {
-            return Self::load_markup(root, entry, stores, revision);
+            return Self::load_markup(root, entry, stores, revision, font_picker);
         }
         let mut loader = Loader {
             root: root
@@ -375,6 +384,7 @@ impl Generation {
         entry: &Path,
         stores: &Stores,
         revision: u64,
+        font_picker: Option<crate::transcript::Picker>,
     ) -> Result<(Self, Stores), Diagnostic> {
         let mut loader = Loader {
             root: root
@@ -522,7 +532,11 @@ impl Generation {
                 (full.clone(), intern_asset(&full, data.clone()))
             })
             .collect();
-        let markup_frontend = Some(frontend::LuauFrontEnd::new(entry, &loader.sources)?);
+        let markup_frontend = Some(frontend::LuauFrontEnd::new_with_picker(
+            entry,
+            &loader.sources,
+            font_picker,
+        )?);
         let generation = Self {
             script,
             nodes: vec![],

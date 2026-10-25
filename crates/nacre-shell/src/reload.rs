@@ -302,7 +302,7 @@ impl Runtime {
     }
     pub fn for_output(mut session: bead::ui::Session, output: Option<String>) -> Self {
         crate::i18n::init();
-        bead::ui::frontend::set_font_picker(std::sync::Arc::new(|scene| {
+        session.set_font_picker_if_missing(std::sync::Arc::new(|scene| {
             crate::font_sources::select(scene).unwrap_or_default()
         }));
         if let Some(name) = &output {

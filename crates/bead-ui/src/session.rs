@@ -27,6 +27,7 @@ impl Drop for PointerInput {
 }
 /// The state owner survives every view/script replacement.
 pub struct Session {
+    font_picker: Option<crate::transcript::Picker>,
     projector: Option<Projector>,
     pointer_input: std::rc::Rc<std::cell::Cell<bool>>,
     pub(super) preview_deadline: Option<std::time::Instant>,
@@ -75,6 +76,13 @@ impl Session {
     pub fn set_projector(&mut self, projector: Projector) {
         self.projector = Some(projector);
     }
+    /// Set this session's intrinsic text measurement policy if none was supplied.
+    /// Hosts call this before the first load; explicit test policies remain intact.
+    pub fn set_font_picker_if_missing(&mut self, picker: crate::transcript::Picker) {
+        if self.font_picker.is_none() {
+            self.font_picker = Some(picker);
+        }
+    }
     /// Run host-selected presentation feedback without consulting the external projector.
     ///
     /// The closure should change only pure local presentation input state, such as hover or
@@ -102,6 +110,7 @@ impl Session {
         fallback: Scene,
     ) -> Self {
         Self {
+            font_picker: None,
             projector: None,
             pointer_input: Default::default(),
             preview_deadline: None,
@@ -312,8 +321,13 @@ impl Session {
         let base_palette = Palette::parse(&palette_bytes)
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
         let palette = merged_palette(&base_palette, self.runtime_palette.as_ref());
-        let (generation, mut stores) =
-            Generation::load(&self.root, &self.entry, &self.stores, self.attempts)?;
+        let (generation, mut stores) = Generation::load_with_picker(
+            &self.root,
+            &self.entry,
+            &self.stores,
+            self.attempts,
+            self.font_picker.clone(),
+        )?;
         bead_core::profile::mark("generation_ready");
         if self.generation.is_none()
             && let Some(saved) = &self.restore

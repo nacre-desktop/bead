@@ -149,6 +149,51 @@ return ui.Row{id="row",width=400,height=40,justify="center",
 }
 
 #[test]
+fn text_measurement_uses_each_sessions_own_font_picker() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    let make_session = |calls: Arc<AtomicUsize>| {
+        let f = fixture();
+        fs::write(
+            f.0.join("ui/main.luau"),
+            "local ui=require('bead.ui')\nreturn ui.Panel{id='root',width=ui.text_width('A','IBM Plex Sans',16),height=40}",
+        )
+        .unwrap();
+        let mut session = f.session();
+        session.entry = "ui/main.luau".into();
+        session.set_font_picker_if_missing(Arc::new(move |_| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Vec::new()
+        }));
+        let scene = session.reload().unwrap();
+        session.commit(scene);
+        (f, session)
+    };
+
+    let first_calls = Arc::new(AtomicUsize::new(0));
+    let second_calls = Arc::new(AtomicUsize::new(0));
+    let (_first_fixture, mut first) = make_session(first_calls.clone());
+    let (_second_fixture, _second) = make_session(second_calls.clone());
+    assert_eq!(first_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(second_calls.load(Ordering::SeqCst), 1);
+
+    let replacement_calls = Arc::new(AtomicUsize::new(0));
+    let replacement_counter = replacement_calls.clone();
+    first.set_font_picker_if_missing(Arc::new(move |_| {
+        replacement_counter.fetch_add(1, Ordering::SeqCst);
+        Vec::new()
+    }));
+    let reloaded = first.reload().unwrap();
+    first.commit(reloaded);
+    assert_eq!(first_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(second_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(replacement_calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
 fn navigation_loads_the_new_schema_atomically_and_keeps_the_last_good_entry() {
     let f = fixture();
     fs::create_dir_all(f.0.join("other")).unwrap();
