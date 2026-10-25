@@ -11,6 +11,7 @@ pub fn fallback(fill: [u8; 4]) -> Scene {
             id: "sound".into(),
             open: true,
             duration: 0.2,
+            return_duration: None,
             spring: false,
             curve: None,
             edge: Edge::Right,

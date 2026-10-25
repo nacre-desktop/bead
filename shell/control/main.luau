@@ -375,5 +375,5 @@ local inner=body
 if content+TOP+PAD>max then
     inner=ui.Scroll{id="scroll",scroll=ui.bind("cc.scroll"),width=INNER,height=height-TOP-PAD,body}
 end
-return kit.Panel{id="control-center",edge=get("view.edge"),open=ui.bind("panel.open"),duration=popup and .23 or .28,transition=popup and "ease-in-out" or "ease",fade=false,reveal=true,slide_distance=not popup and W or nil,width=W,height=height,padding=PAD,padding_top=TOP,
+return kit.Panel{id="control-center",edge=get("view.edge"),open=ui.bind("panel.open"),duration=popup and .23 or .28,return_duration=.18,transition=popup and "ease-in-out" or "ease",fade=false,reveal=true,slide_distance=not popup and W or nil,width=W,height=height,padding=PAD,padding_top=TOP,
     gap=GAP,radius=T.radii.medium,fill="surface",inner}

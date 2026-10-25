@@ -364,6 +364,8 @@ pub struct Motion {
     pub id: String,
     pub open: bool,
     pub duration: f64,
+    /// Optional host-authored return-to-dock duration in seconds.
+    pub return_duration: Option<f64>,
     pub spring: bool,
     /// Explicit easing overrides the legacy spring/ease-out selection.
     pub curve: Option<bead_core::animation::Curve>,
@@ -2185,6 +2187,7 @@ mod tests {
             id: "reveal".into(),
             open: true,
             duration: 0.3,
+            return_duration: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -2517,6 +2520,7 @@ mod tests {
             id: "m".into(),
             open: true,
             duration: 0.36,
+            return_duration: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -2588,6 +2592,7 @@ mod tests {
             id: "slide-reveal".into(),
             open: true,
             duration: 0.3,
+            return_duration: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Bottom,

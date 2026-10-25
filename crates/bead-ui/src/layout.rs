@@ -134,6 +134,7 @@ pub const PROPERTIES: &[&str] = &[
     "open",
     "transition",
     "duration",
+    "return_duration",
     "slide_distance",
     "fade",
     "reveal",
@@ -861,6 +862,15 @@ impl ViewSpec {
                         art: None,
                         open: boolean(p, "open", true, source)?,
                         duration: f64::from(number(p, "duration", 0.2, source)?),
+                        return_duration: if p.contains_key("return_duration") {
+                            let value = number(p, "return_duration", 0., source)?;
+                            if !(0. ..=60.).contains(&value) {
+                                return Err(source.error("return_duration needs0..60 seconds"));
+                            }
+                            Some(f64::from(value))
+                        } else {
+                            None
+                        },
                         spring: text(p, "transition", "ease", source)? == "spring",
                         curve: (text(p, "transition", "ease", source)? == "ease-in-out")
                             .then_some(bead_core::animation::Curve::EaseInOut),

@@ -383,6 +383,7 @@ fn start(
             id: "companion".into(),
             open: true,
             duration: 0.2,
+            return_duration: None,
             spring: false,
             curve: None,
             edge: panel_edge,

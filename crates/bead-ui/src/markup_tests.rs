@@ -673,6 +673,45 @@ fn panel_transition_selects_cubic_in_out_without_changing_legacy_curves() {
         assert_eq!(motion.curve, curve);
         assert_eq!(motion.spring, spring);
         assert_eq!(motion.duration, 0.5);
+        assert_eq!(motion.return_duration, None);
+    }
+}
+
+#[test]
+fn panel_return_duration_is_optional_and_bounded() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui"); return ui.Panel{id="preview",width=200,height=100,open=true}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    assert_eq!(s.current.motion.as_ref().unwrap().return_duration, None);
+
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui"); return ui.Panel{id="preview",width=200,height=100,open=true,return_duration=.18}"#,
+    )
+    .unwrap();
+    s.reload().unwrap();
+    assert!(
+        (s.current.motion.as_ref().unwrap().return_duration.unwrap() - 0.18).abs() < 1e-6
+    );
+
+    for invalid in ["-0.01", "60.01"] {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require(\"bead.ui\"); return ui.Panel{{id=\"preview\",width=200,height=100,open=true,return_duration={invalid}}}"
+            ),
+        )
+        .unwrap();
+        assert!(
+            s.reload()
+                .unwrap_err()
+                .message
+                .contains("return_duration needs0..60 seconds")
+        );
     }
 }
 
@@ -1461,6 +1500,7 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
             id: "panel".into(),
             open: false,
             duration: 0.2,
+            return_duration: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Right,

@@ -58,6 +58,7 @@ export type Props = {
     open:any?,
     transition:any?,
     duration:any?,
+    return_duration:any?,
     slide_distance:any?,
     fade:any?,
     reveal:any?,
