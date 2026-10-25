@@ -316,6 +316,7 @@ dependencies = [
  "bead-services",
  "bead-ui",
  "bead-wayland",
+ "futures-util",
  "serde_json",
  "tokio",
  "zbus",

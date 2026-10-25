@@ -19,7 +19,7 @@ Audit date: 2026-10-25. Scope: Bead and the Nacre `origin/main` worktree. Only e
 
 | Area | Files touched / deleted | Lines removed |
 | --- | --- | --- |
-| Bead Rust wrapper, unused dev dependency; test-only wallpaper accessor | 4 / 0 | 6 (1 added) |
+| Bead Rust wrapper; test-only wallpaper accessor | 2 / 0 | 4 (1 added) |
 | Unused kit SectionHeader; two protocol copies with no test readers | 3 / 2 | 44 |
 | Retired B0030/B0048/B0052/B0059 experiments | 4 / 4 | 1,074 |
 | Nacre writer/menu helpers | 2 / 0 | 9 |
@@ -28,7 +28,7 @@ Audit date: 2026-10-25. Scope: Bead and the Nacre `origin/main` worktree. Only e
 
 The four scripts have no code/CI/harness callers outside the retired app/welcome pair. Their historical specs remain, with retirement notes. Current composition, pearl release, app lifecycle and packaging coverage replace those experiments.
 
-Tool evidence: remote `cargo clippy --workspace --all-targets --locked -j2 -- -W dead_code` passed for both baselines; no crate-wide dead-code allowances exist. `cargo machete --with-metadata` found Bead's unused futures-util dev dependency; Nacre's only finding belongs to read-only Orient. Workspace-wide public-symbol reference searches identified the three removed Rust helpers. No unused Luau entry module was established: dashboard pages use symlinked shared files and popout/peek routes still have Rust callers. Current B0122/B0124/B0127 routes and the B0114 editor remain active.
+Tool evidence: remote `cargo clippy --workspace --all-targets --locked -j2 -- -W dead_code` passed for both baselines; no crate-wide dead-code allowances exist. `cargo machete --with-metadata` flagged Bead's futures-util dev dependency, but integration-test compilation proved it is used and it was retained; Nacre's only finding belongs to read-only Orient. Workspace-wide public-symbol reference searches identified the three removed Rust helpers. No unused Luau entry module was established: dashboard pages use symlinked shared files and popout/peek routes still have Rust callers. Current B0122/B0124/B0127 routes and the B0114 editor remain active.
 
 Asset and translation scans account for dynamic weather names and widget bundle manifests. Unreferenced pearl SVG source paths are still named by B0114 widget bundles, so B0130 owns that decision. Bead's catalog IDs all have source or settings-registry references. Nacre's four removed IDs have none in either repo. A remote file-open trace read 280 golden images; the remaining 11 pair images are generated placement comparison evidence, retained under the evidence rule. Protocol fixtures read through generated enumeration remain. No evidence images were deleted.
 
@@ -55,4 +55,4 @@ No evidence was deleted. Bead has 75 files over 1 MiB; Nacre has no `docs/specs/
 
 Proposal for lead: retain paired original captures as the audit source, but use lossless thumbnails for routine Markdown previews; store any future raw series outside Git with a stable checksum/manifest and keep only the manifest plus representative samples in the repository. No bulk recompression/deletion was authorized here.
 
-Deleted 10 files across both repos. Non-document changes remove 1,180 lines and add 1 conditional-compilation line; historical notes and this inventory are additional documentation.
+Deleted 10 files across both repos. Non-document changes remove 1,178 lines and add 1 conditional-compilation line; historical notes and this inventory are additional documentation.
