@@ -290,7 +290,7 @@ impl Runtime {
     /// Compile and decorate the first app frame before its window is mapped.
     pub(crate) fn warm_frame(&mut self) -> Result<Scene, Box<dyn Error>> {
         let scene = self.session.reload()?;
-        let Some(scene) = self.finish_scene(Some(scene), true)? else {
+        let Some(scene) = self.finish_scene(Some(scene))? else {
             return Err("Widgets app did not produce an initial scene".into());
         };
         self.pending = None;
