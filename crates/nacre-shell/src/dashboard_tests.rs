@@ -740,7 +740,7 @@ fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Re
                         == if page == Page::Today {
                             "sources=11"
                         } else if page == Page::Weather {
-                            "sources=26"
+                            "sources=25"
                         } else {
                             "sources=6"
                         }),

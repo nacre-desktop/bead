@@ -50,9 +50,12 @@ function M.background()
     end
     local scene=M.scene(code)
     if code==2 then scene="partly" end
+    local shade = style.overlay
+        and ui.Image{id="shade",position="absolute",left=0,top=0,width=style.width,height=style.height,path=style.overlay}
+        or ui.Group{id="shade",width=0,height=0}
     return ui.Box{id="sky",position="absolute",left=0,top=0,width=style.width,height=style.height,
         ui.Image{id="illustration",width=style.width,height=style.height,path=style.sky..scene..(day and "-day" or "-night")..".themed.svg"},
-        ui.Image{id="shade",position="absolute",left=0,top=0,width=style.width,height=style.height,path=style.overlay},
+        shade,
     }
 end
 return M

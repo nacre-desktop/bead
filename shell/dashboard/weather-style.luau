@@ -5,7 +5,9 @@ return {
     width=564,height=298,radius=20,padding=20,top=16,gap=4,
     location_size=14.667,temperature_size=61.333,condition_size=18.667,detail_size=12,
     ink="onSurface",accent="primary",muted="onSurfaceVariant",border_alpha=.4,
-    sky="dashboard/weather/assets/weather/",overlay="dashboard/weather/assets/weather/overlay.themed.svg",
+    sky="dashboard/weather/assets/weather/",
+    -- Optional for custom unshaded illustration sets; bundled skies already include this shade.
+    overlay=nil,
     photo_overlay="dashboard/weather/assets/weather/photo-overlay.themed.svg",
     photos={enabled=false,city={},fallback=nil},
 }

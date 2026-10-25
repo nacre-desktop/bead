@@ -82,23 +82,21 @@ return function()
     local hasLyrics=#rows>0 or ui.resolve_for_check(ui.bind("dashboard.detail"))~=""
     local clock=ui.resolve_for_check(ui.bind("dashboard.metric"))
     local duration=string.match(clock,"/ (.+)$") or "—"
-    local details=ui.Column{id="track-details",width=303,height=348,gap=20,
-        ui.Text{text=ui.bind("dashboard.album"),width=303,font_size=24,font_weight=600,color="onSurface"},
-        ui.Text{text=ui.bind("dashboard.artist"),width=303,font_size=12,color="onSurfaceVariant"},
-        ui.Text{text=ui.tr("bead.dashboard.media-duration",{value=duration}),width=303,font_size=12,color="onSurfaceVariant"},
+    local album=ui.resolve_for_check(ui.bind("dashboard.album"))
+    local detailsTitle=album~="" and album or ui.resolve_for_check(ui.bind("dashboard.track"))
+    local details=ui.Column{id="track-details",position="absolute",left=16,top=40,width=303,height=348,gap=22,
+        ui.Text{text=detailsTitle,width=303,font_size=25.333,font_weight=600,color="onSurface"},
+        ui.Text{text=ui.bind("dashboard.artist"),width=303,font_size=13.333,color=ui.alpha("onSurface",.65)},
+        ui.Text{text=ui.tr("bead.dashboard.media-duration",{value=duration}),width=303,font_size=13.333,color=ui.alpha("onSurface",.65)},
         ui.Text{text=player,width=303,font_size=12,color="onSurfaceVariant"}}
     return ui.Box{id="media",width=940,height=562,radius=20,fill="surfaceContainer",
-        art and ui.Group{id="backdrop",position="absolute",left=0,top=0,width=940,height=562,
-            ui.Image{position="absolute",left=0,top=0,width=940,height=562,icon="player-art",blur=32},
-            ui.Box{position="absolute",left=0,top=0,width=940,height=562,radius=20,fill=ui.alpha("surfaceContainer",.9)}}
-            or ui.Group{id="backdrop",position="absolute",width=0,height=0},
         ui.Box{id="rim",position="absolute",left=0,top=0,width=940,height=562,radius=20,fill="transparent",
             border_width=1,border_color=ui.alpha("primary",.25)},
         identity,
         ui.Box{id="player",position="absolute",left=22,top=60,width=538.8,height=480,
             artwork,metadata,seeking,seekDuration,transport},
         ui.Column{id="lyrics",position="absolute",left=583,top=60,width=335,height=480,
-            padding=16,gap=12,radius=16,fill="surfaceContainerLow",
+            padding=16,gap=12,radius=16,fill=ui.alpha("surfaceContainer",.6),
             ui.Text{id="heading",text=hasLyrics and ui.bind("dashboard.heading") or ui.tr("bead.dashboard.media-track-details"),width=303,height=28,font_size=10*4/3,
                 color="onSurfaceVariant"},
             ui.Text{id="message",visible=hasLyrics,text=ui.bind("dashboard.summary"),width=303,height=48,font_size=12*4/3,

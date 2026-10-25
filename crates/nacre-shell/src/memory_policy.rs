@@ -120,8 +120,8 @@ mod tests {
                 .map(|pixels| pixels.data().len())
                 .sum::<usize>()
         };
-        assert_eq!(images.len(), 2, "both hero layers must have decoded pixels");
-        assert_eq!(live_bytes(), 2 * 846 * 447 * 4);
+        assert_eq!(images.len(), 1, "the shaded illustration is one raster");
+        assert_eq!(live_bytes(), 846 * 447 * 4);
         // release_panel drops the source/scene and the companion renderer; prepared
         // frames share the pixels, so neither cache eviction nor hiding is enough.
         drop(panel);
@@ -136,7 +136,7 @@ mod tests {
             0,
             "image bytes retained after panel retirement"
         );
-        println!("MEMORY_POLICY_WEATHER_IMAGE_RELEASE open_bytes=3025296 closed_bytes=0");
+        println!("MEMORY_POLICY_WEATHER_IMAGE_RELEASE open_bytes=1512648 closed_bytes=0");
         Ok(())
     }
 

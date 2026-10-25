@@ -471,6 +471,15 @@ impl Drop for PosterJob {
     fn drop(&mut self) {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
+            // The encoded poster remains live, but the decoder/encoder scratch
+            // has gone. Reclaim its arena pages once, after the job's thread cache
+            // is gone; the ticking open page may never reach the UI idle trim.
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            {
+                // SAFETY: process-local allocator trim after the job has joined.
+                unsafe { nix::libc::malloc_trim(0) };
+                bead::core::profile::mark("dashboard_poster_trimmed");
+            }
         }
     }
 }
