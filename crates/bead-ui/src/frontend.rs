@@ -14,6 +14,11 @@ use std::{
 };
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
+static FONT_PICKER: std::sync::OnceLock<crate::transcript::Picker> = std::sync::OnceLock::new();
+/// Use the host's font policy for intrinsic label measurements. Set before loading views.
+pub fn set_font_picker(picker: crate::transcript::Picker) {
+    let _ = FONT_PICKER.set(picker);
+}
 pub trait FrontEnd {
     fn build(
         &self,
@@ -147,6 +152,7 @@ fn expand_fragments(
     Ok(())
 }
 pub struct LuauFrontEnd {
+    text_meter: crate::transcript::Meter,
     compiled: Sources,
     fragments: RefCell<bead_core::cache::Lru<(String, String), std::rc::Rc<Fragment>>>,
     fragment_budget: bead_core::cache::Budget,
@@ -194,6 +200,10 @@ impl LuauFrontEnd {
             .reserve(bytes)
             .map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
         Ok(Self {
+            text_meter: FONT_PICKER.get().map_or_else(
+                || crate::transcript::Meter::fixed(vec![]),
+                |picker| crate::transcript::Meter::new(picker.clone()),
+            ),
             _compiled_charge: charge,
             values_budget: bead_core::cache::Budget::new(
                 "markup-values",
@@ -252,8 +262,10 @@ impl FrontEnd for LuauFrontEnd {
         let sources = &self.compiled;
         let lua = Lua::new();
         let deadline = Instant::now() + Duration::from_millis(50);
+        let native_time = std::rc::Rc::new(std::cell::Cell::new(Duration::ZERO));
+        let spent = native_time.clone();
         lua.set_interrupt(move |_| {
-            if Instant::now() > deadline {
+            if Instant::now() > deadline + spent.get() {
                 Err(mlua::Error::runtime("markup exceeded 50 ms limit"))
             } else {
                 Ok(VmState::Continue)
@@ -264,6 +276,21 @@ impl FrontEnd for LuauFrontEnd {
             lua.sandbox(true)?;
             lua.scope(|scope| {
                 let sdk = lua.create_table()?;
+                sdk.set(
+                    "text_width",
+                    scope.create_function(|_, (text, family, size): (String, String, f32)| {
+                        if text.len() > 16 * 1024
+                            || family.len() > 128
+                            || !(1. ..=256.).contains(&size)
+                        {
+                            return Err(mlua::Error::runtime("invalid text measurement"));
+                        }
+                        let started = Instant::now();
+                        let width = self.text_meter.width(&text, &family, size);
+                        native_time.set(native_time.get() + started.elapsed());
+                        Ok(width)
+                    })?,
+                )?;
                 let constructors = lua.create_table()?;
                 for (name, kind) in Widget::constructors() {
                     constructors.set(name, lua.to_value(&kind)?)?;

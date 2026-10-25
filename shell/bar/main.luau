@@ -17,6 +17,10 @@ local focus_on=ui.resolve_for_check(ui.bind("bar.window.focus.enabled"))
 local updates_on=ui.resolve_for_check(ui.bind("bar.updates.enabled"))
 local updates_n=ui.resolve_for_check(ui.bind("bar.updates.count"))
 local header=ui.resolve_for_check(ui.bind("bar.height"))
+local title=ui.resolve_for_check(ui.bind("bar.title"))
+local title_width=math.min(t.title_max_width,ui.text_width(title,"IBM Plex Sans",t.title_font))
+local cue_extent=math.min(t.title_cue_max,title_width+t.icon_width+t.title_gap+10)
+local dwell=ui.resolve_for_check(ui.bind("bead.edge.dwell"))
 local ws_count=ui.resolve_for_check(ui.bind("bar.workspace.count"))
 local ws_icons=ui.resolve_for_check(ui.bind("bar.workspace.icons"))
 local thread=true
@@ -127,14 +131,14 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
     -- outline and tint fade in (`bead.edge.fade`, 120 ms) and a 2 px trace grows from the centre to both ends.
     -- The 2 px halo margin is part of the box, so everything stays at non-negative offsets.
     ui.Row{id="title-cue",position="absolute",left="28%",right="28%",top=7,height=36,justify="center",visible=ui.bind("bar.title.cue.visible"),
-        ui.Box{id="cue",width=ui.bind("bar.title.cue.halo.width"),height=36,radius=18,fill=ui.alpha("primary",ui.bind("bar.title.cue.halo")),
-            ui.Box{id="body",position="absolute",left=2,top=2,width=ui.bind("bar.title.cue.extent"),height=32,radius=16,fill=ui.alpha("primary",ui.bind("bar.title.cue.body")),border_width=1,border_color=ui.alpha("primary",ui.bind("bar.title.cue.border"))},
-            ui.Box{id="title-trace",position="absolute",left=ui.bind("bar.title.trace.left"),top=31,width=ui.bind("bar.title.trace.width"),height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))},
+        ui.Box{id="cue",width=cue_extent+4,height=36,radius=18,fill=ui.alpha("primary",ui.bind("bar.title.cue.halo")),
+            ui.Box{id="body",position="absolute",left=2,top=2,width=cue_extent,height=32,radius=16,fill=ui.alpha("primary",ui.bind("bar.title.cue.body")),border_width=1,border_color=ui.alpha("primary",ui.bind("bar.title.cue.border"))},
+            ui.Box{id="title-trace",position="absolute",left=7+(cue_extent-10)*(1-dwell)/2,top=31,width=(cue_extent-10)*dwell,height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))},
         },
     },
-    ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=t.title_top,height=t.title_height,justify="center",align="center",gap=7,fill="transparent",hover_fill="transparent",focus_ring=false,edge_hover=true,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
+    ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=(header-t.title_height)/2,height=t.title_height,justify="center",align="center",gap=t.title_gap,fill="transparent",hover_fill="transparent",focus_ring=false,edge_hover=true,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
         centered_text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
-        centered_text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=ui.bind("bar.title"),height=24,width=ui.bind("bar.title.width"),max_width=550,family="IBM Plex Sans",font_size=16,color="primary"},
+        centered_text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=title,height=24,width=title_width,max_width=t.title_max_width,family="IBM Plex Sans",font_size=t.title_font,color="primary"},
         kit.Tooltip{id="tray-tooltip",edge="top",bar_size=-8,left=0,width="100%",height=30,padding=3,visible=ui.bind("bead.desktop.tray.tooltip.visible"),
             ui.Text{text=ui.bind("bead.desktop.tray.tooltip"),height=24,width="100%",font_size=13,color="onSurface"},
         },

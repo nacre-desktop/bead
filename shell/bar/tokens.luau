@@ -9,5 +9,5 @@ return {
     pearl_current=22, pearl_occupied=20, pearl_empty=18,
     pearl_current_border=1, pearl_empty_border=1.5,
     pearl_cream={255,249,241,255}, pearl_dark={48,48,54,255}, pearl_light={245,242,238,255},
-    title_height=30, title_top=10, title_trace_height=2, title_trace_inset=5,
+    title_height=30, title_font=16, title_max_width=550, title_cue_max=560, title_gap=7, title_trace_height=2, title_trace_inset=5,
 }

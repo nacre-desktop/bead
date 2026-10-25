@@ -85,6 +85,7 @@ pub struct Meter {
     fixed: Option<Vec<PathBuf>>,
     scene: RefCell<Option<Scene>>,
     covered: RefCell<BTreeSet<char>>,
+    families: RefCell<[String; 2]>,
     lines: RefCell<HashMap<u64, usize>>,
     widths: RefCell<bead_core::cache::Lru<u64, f32>>,
 }
@@ -95,6 +96,7 @@ impl Meter {
             fixed: None,
             scene: Default::default(),
             covered: RefCell::new((' '..='~').collect()),
+            families: Default::default(),
             lines: Default::default(),
             widths: RefCell::new(bead_core::cache::Lru::new("text-widths", 32 * 1024)),
         }
@@ -106,6 +108,7 @@ impl Meter {
             fixed: Some(fonts),
             scene: Default::default(),
             covered: RefCell::new((' '..='~').collect()),
+            families: Default::default(),
             lines: Default::default(),
             widths: RefCell::new(bead_core::cache::Lru::new("text-widths", 32 * 1024)),
         }
@@ -118,7 +121,8 @@ impl Meter {
                 fresh = true;
             }
         }
-        let built = self.scene.borrow().is_some();
+        let resolved = families.map(crate::text_style::family);
+        let built = self.scene.borrow().is_some() && *self.families.borrow() == resolved;
         if built && (self.fixed.is_some() || !fresh) {
             return;
         }
@@ -157,6 +161,7 @@ impl Meter {
         };
         self.lines.borrow_mut().clear();
         self.widths.borrow_mut().clear();
+        *self.families.borrow_mut() = resolved;
         *self.scene.borrow_mut() = Some(scene);
     }
     /// Drawn lines for `text` at `width`. Measured slightly narrower than painted so a

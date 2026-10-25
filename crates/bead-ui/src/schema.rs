@@ -21,6 +21,7 @@ pub fn luau() -> String {
         ("memo", "(string,any,any)->Node"),
         ("resolve_for_check", "(any)->any"),
         ("preview_value", "(string,number)->number"),
+        ("text_width", "(string,string,number)->number"),
         ("model_count", "(any)->number"),
         ("tr", "(string,any?)->string"),
     ] {

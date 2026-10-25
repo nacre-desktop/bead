@@ -114,6 +114,41 @@ fn node_center(s: &Session, id: &str) -> (f32, f32) {
 }
 
 #[test]
+fn measured_labels_center_the_shaped_advance_and_react_to_text_changes() {
+    let f = fixture();
+    fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")
+local text=ui.resolve_for_check(ui.bind("query"))
+return ui.Row{id="row",width=400,height=40,justify="center",
+ ui.Text{id="label",text=text,width=ui.text_width(text,"DejaVu Sans",16),height=24,font_size=16,family="DejaVu Sans"}}"#).unwrap();
+    let mut s = session(&f);
+    let mut widths = Vec::new();
+    for text in ["WWW", "iii", "Café 世界"] {
+        let scene = s
+            .update(BTreeMap::from([("query".into(), Value::Text(text.into()))]))
+            .unwrap()
+            .unwrap();
+        let rect = scene
+            .primitives
+            .iter()
+            .find_map(|p| match p {
+                Primitive::Text {
+                    rect, text: drawn, ..
+                } if drawn == text => Some(*rect),
+                _ => None,
+            })
+            .unwrap();
+        assert!((rect.x + rect.w / 2. - 200.).abs() < 0.1);
+        assert!(rect.w > 0.);
+        widths.push(rect.w);
+        s.commit(scene);
+    }
+    assert!(
+        widths[0] > widths[1] * 2.,
+        "equal byte counts have different advances"
+    );
+}
+
+#[test]
 fn clickable_region_can_opt_into_edge_hover() {
     let f = fixture();
     fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")

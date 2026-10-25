@@ -183,6 +183,10 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Housekeeping (later)
 
+- B0108: `ui.text_width(text, family, size)` measures regular-weight labels with the
+  renderer's shaper and a host-supplied font picker; the frontend owns the bounded
+  width cache. Shell markup chooses which labels to measure and their geometry.
+
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a
   natural boundary, not mid-feature, so Bead's repository is purely permissive.
 - Before accepting outside contributions, require DCO sign-off in CONTRIBUTING
