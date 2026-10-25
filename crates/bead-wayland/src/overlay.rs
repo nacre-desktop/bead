@@ -107,6 +107,9 @@ impl App {
                         o.epoch, data.update, data.generation, refresh
                     );
                 }
+                if let Some(revision) = o.damage.presented(data.update) {
+                    o.source.presented(revision);
+                }
                 if o.presented_update.is_none_or(|last| data.update > last) {
                     o.source.presented(data.generation);
                     o.presented_update = Some(data.update);
@@ -622,6 +625,9 @@ impl App {
             h as u32,
         )?;
         if o.damage.surface.w == 0 || o.damage.surface.h == 0 {
+            if let Some(revision) = o.damage.identical_generation(scene.resource_revision) {
+                o.source.presented(revision);
+            }
             return Ok(animating);
         }
         let pool = o.pool.as_mut().ok_or("overlay pool missing")?;
@@ -675,7 +681,7 @@ impl App {
         }
         o.buffers[slot].attach_to(surface)?;
         o.layer.commit();
-        o.damage.committed(slot);
+        o.damage.committed(slot, o.ui_serial);
         o.last_draw = Some(frame_started);
         if bead_core::profile::frame_trace() {
             println!(

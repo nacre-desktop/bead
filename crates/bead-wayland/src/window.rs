@@ -208,6 +208,9 @@ impl App {
                         win.epoch, data.update, data.generation, refresh
                     );
                 }
+                if let Some(revision) = win.damage.presented(data.update) {
+                    win.source.presented(revision);
+                }
                 if win.presented_update.is_none_or(|last| data.update > last) {
                     win.source.presented(data.generation);
                     win.presented_update = Some(data.update);
@@ -626,6 +629,9 @@ impl App {
             h as u32,
         )?;
         if win.damage.surface.w == 0 || win.damage.surface.h == 0 {
+            if let Some(revision) = win.damage.identical_generation(scene.resource_revision) {
+                win.source.presented(revision);
+            }
             return Ok(());
         }
         let Some(slot) = win
@@ -700,7 +706,7 @@ impl App {
         }
         win.buffers[slot].attach_to(surface)?;
         win.window.commit();
-        win.damage.committed(slot);
+        win.damage.committed(slot, win.ui_serial);
         // Pace render starts: measuring from completion adds the render cost
         // to every refresh interval and steadily undershoots the output rate.
         win.last_draw = Some(frame_started);
