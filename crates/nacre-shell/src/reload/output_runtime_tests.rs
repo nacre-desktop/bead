@@ -109,7 +109,7 @@ fn title_survives_transient_focus_clear_only_while_its_window_stays_active() {
     assert_eq!(remembered, Some(previous.clone()));
 
     snapshot.windows.remove(0);
-    snapshot.windows[1].focused = false;
+    snapshot.windows[0].focused = false;
     let (title, remembered) = focused_title(&snapshot, Some("left"), Some(&previous));
     assert!(title.is_empty(), "a workspace with no window shows Desktop");
     assert_eq!(remembered, None);
