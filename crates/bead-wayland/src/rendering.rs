@@ -1243,6 +1243,35 @@ impl App {
         }
         if result.is_ok() {
             self.trim_idle_shm(index);
+            if self.surfaces[index].frames > previous_frames {
+                let revision = if companion {
+                    self.companion
+                        .as_ref()
+                        .map(|(scene, _, _)| scene.resource_revision)
+                } else {
+                    Some(self.scene.resource_revision)
+                };
+                let generation = revision
+                    .map(|revision| (if companion { self.panel_epoch } else { 0 }, revision));
+                if self.surfaces[index].heap_trim_generation != generation {
+                    self.surfaces[index].heap_trim_generation = generation;
+                    // Acceptance precedes presenting the replacement. Wait until
+                    // old frame references and reveal scratch have been released;
+                    // this heap-only trim does not retire or repaint SHM buffers.
+                    if let Err(error) = self.loop_handle.insert_source(
+                        Timer::from_duration(Duration::from_millis(500)),
+                        |_, _, _| {
+                            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                            unsafe {
+                                libc::malloc_trim(0);
+                            }
+                            TimeoutAction::Drop
+                        },
+                    ) {
+                        self.fail(error);
+                    }
+                }
+            }
         }
         if let Err(e) = result {
             #[cfg(any(feature = "native-gl", feature = "wgpu"))]

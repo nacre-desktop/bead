@@ -684,6 +684,7 @@ struct Surface {
     allocations: usize,
     shm_trim_pending: bool,
     heap_trimmed_ui_serial: u64,
+    heap_trim_generation: Option<(u64, u64)>,
     frames: usize,
     render_ms: Vec<f64>,
     frame_ms: Vec<f64>,

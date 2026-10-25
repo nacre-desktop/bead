@@ -1614,6 +1614,7 @@ impl App {
                 allocations: 0,
                 shm_trim_pending: false,
                 heap_trimmed_ui_serial: u64::MAX,
+                heap_trim_generation: None,
                 frames: 0,
                 render_ms: Vec::new(),
                 frame_ms: Vec::new(),
