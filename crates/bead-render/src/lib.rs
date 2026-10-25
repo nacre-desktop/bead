@@ -1511,8 +1511,8 @@ fn load_image(
     };
     for pixel in raw.as_mut().as_chunks_mut::<4>().0 {
         let a = u16::from(pixel[3]);
-        for i in 0..3 {
-            pixel[i] = ((u16::from(pixel[i]) * a + 127) / 255) as u8;
+        for channel in pixel.iter_mut().take(3) {
+            *channel = ((u16::from(*channel) * a + 127) / 255) as u8;
         }
     }
     let size = tiny_skia::IntSize::from_wh(w, h).ok_or("image allocation")?;
@@ -1750,8 +1750,8 @@ mod tests {
             3,
             2,
             vec![
-                255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0, 20, 40, 60, 32, 90, 80, 70, 192,
-                200, 180, 160, 255,
+                255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0, 20, 40, 60, 32, 90, 80, 70, 192, 200,
+                180, 160, 255,
             ],
         )
         .unwrap();
