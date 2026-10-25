@@ -97,7 +97,7 @@ SCROLL_SCENES = {
     # Populate the private daemon's notification list before opening its panel.
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                             for i in range(20)] + [('sleep', 2.0), ('close-fixture-notices',),
-                                                   ('ui', 'nacre', 'controls', 'notifications')],
+                                                   ('ui', 'nacre', 'controls', 'notifications'), ('sleep', 2.0)],
                            1600, 650, 80, 1.6),
     'notifications-popup': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                              for i in range(20)] + [('sleep', 2.0)], 1715, 650, 80, 1.6),
@@ -309,7 +309,7 @@ SCROLL_STORE_KEYS = {
     'welcome-shortcuts': 'welcome.scroll', 'welcome-apps': 'welcome.scroll',
     'welcome-ready': 'welcome.scroll', 'welcome-help': 'welcome.scroll',
     'ai-chat': 'chat.scroll', 'wallpaper-picker': 'extras.scroll',
-    'notifications-list': 'cc.scroll', 'notifications-popup': 'notifications.scroll.y',
+    'notifications-list': 'notifications.scroll.y', 'notifications-popup': 'notifications.scroll.y',
     'updates-popout': 'status.updates_scroll',
 }
 
@@ -333,6 +333,8 @@ def shell_trace_env(arm_name, log_dir, env=None):
     result.update(WAYLAND_DEBUG='client', BEAD_FRAME_TRACE='1', BEAD_VERBOSE_LOG='1')
     if arm_name == 'bead':
         result['BEAD_APP_LOG_DIR'] = str(log_dir)
+        if os.environ.get('PACING_PROFILE_INPUT') == '1':
+            result['BEAD_PROFILE_INPUT'] = '1'
     return result
 
 
@@ -586,6 +588,53 @@ def input_cadence(path, start_ns, end_ns):
         'max': round(max(intervals), 2)} if intervals else None}
 
 
+def trace_profile_metrics(log_paths):
+    worker_ms = []
+    worker_builds = []
+    patch_misses = {}
+    profile_wall_ms = {}
+    profile_cpu_ms = {}
+    timeline_marks = {}
+    for path in log_paths:
+        for line in path.read_text(errors='replace').splitlines():
+            fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+            if line.startswith('WORKER_PREPARE '):
+                if fields.get('total_ms', '').replace('.', '', 1).isdigit():
+                    worker_ms.append(float(fields['total_ms']))
+                if fields.get('builds', '').isdigit():
+                    worker_builds.append(int(fields['builds']))
+            elif line.startswith('INPUT_PATCH_MISS '):
+                kind = fields.get('kind', 'unknown')
+                patch_misses[kind] = patch_misses.get(kind, 0) + 1
+            elif line.startswith('INPUT_PROFILE '):
+                stage = fields.get('stage', 'unknown')
+                value = fields.get('wall_ms', '')
+                if value.replace('.', '', 1).isdigit():
+                    profile_wall_ms.setdefault(stage, []).append(float(value))
+                value = fields.get('cpu_ms', '')
+                if value.replace('.', '', 1).isdigit():
+                    profile_cpu_ms.setdefault(stage, []).append(float(value))
+            elif line.startswith(('UI_TIMELINE ', 'UI_POINTER ')):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                stage = fields.get('stage', 'unknown')
+                timeline_marks[stage] = timeline_marks.get(stage, 0) + 1
+    return {
+        'worker_prepare_count': len(worker_ms),
+        'worker_prepare_ms': ({key: round(percentile(worker_ms, p), 3)
+                               for key, p in (('p50', .5), ('p95', .95), ('p99', .99))}
+                              | {'max': round(max(worker_ms), 3)} if worker_ms else None),
+        'worker_builds_max': max(worker_builds) if worker_builds else None,
+        'input_patch_misses': patch_misses,
+        'input_profile_wall_ms_by_stage': {stage: {'count': len(values), 'p95': round(percentile(values, .95), 3),
+                                                   'max': round(max(values), 3)}
+                                           for stage, values in profile_wall_ms.items()},
+        'input_profile_cpu_ms_by_stage': {stage: {'count': len(values), 'p95': round(percentile(values, .95), 3),
+                                                  'max': round(max(values), 3)}
+                                          for stage, values in profile_cpu_ms.items()},
+        'timeline_marks_by_stage': timeline_marks,
+    }
+
+
 STAMP = re.compile(r'^\[(\d\d):(\d\d):(\d\d)\.(\d{6})\]\s+(?:\{[^}]*\}\s+)?(->\s+)?(\S+?)#(\d+)\.(\w+)\((.*)\)')
 
 
@@ -773,13 +822,20 @@ def pace_drive(self, names):
     frames = []
     trace_paths = []
     trace_dir = self.out / 'scroll-traces'
+    if os.environ.get('PACING_KEEP_RAW_APP_LOGS') == '1':
+        raw_app_dir = self.out / 'raw-app-logs'
+        for source in trace_logs:
+            if source.name.startswith('app-'):
+                raw_app_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, raw_app_dir / source.name)
     for source in trace_logs:
         lines = source.read_text(errors='replace').splitlines()
         selected = [line for line in lines if line.startswith((
             'UI_STATE ', 'UI_COMMIT ', 'UI_PRESENTED ', 'AXIS_DELIVER ', 'UI_FRAME ',
             'WINDOW_STATE ', 'WINDOW_COMMIT ', 'WINDOW_FRAME ', 'WINDOW_PRESENTED ',
             'WINDOW_DISCARDED ', 'UI_DISCARDED ', 'PRESENTATION clock_id=',
-            'QML_PRESENTATION clock_id='))]
+            'QML_PRESENTATION clock_id=', 'WORKER_PREPARE ', 'INPUT_PATCH_MISS ',
+            'INPUT_PROFILE ', 'UI_TIMELINE ', 'UI_POINTER '))]
         if selected:
             trace_dir.mkdir(parents=True, exist_ok=True)
             target = trace_dir / source.name
@@ -832,6 +888,7 @@ def pace_drive(self, names):
                 if fields.get('refresh_ns', '').isdigit():
                     refresh_values.append(int(fields['refresh_ns']))
     presented_refresh_ns = percentile(refresh_values, .5) if refresh_values else None
+    trace_profile = trace_profile_metrics(trace_paths)
     (self.out / 'pacing.json').write_text(json.dumps({'arm': self.name, 'hz': HZ, 'real_ref': real_ref, 'vsync_ms': VSYNC_MS,
                                                       'backend': 'cpu' if self.args.cpu else 'default',
                                                       'presentation_clock_ids': presentation_clock_ids,
@@ -843,6 +900,7 @@ def pace_drive(self, names):
                                                                         if os.environ.get('PACING_OSCILLATE') == '1'
                                                                         else 'single-midpoint-reversal'),
                                                       'input_oscillation_period': int(os.environ.get('PACING_OSCILLATE_PERIOD', '3')) if os.environ.get('PACING_OSCILLATE') == '1' else None,
+                                                      'trace_profile': trace_profile,
                                                       'presentation_discarded': presentation_discarded if discarded_trace_collected else None,
                                                       'presentation_discarded_trace_collected': discarded_trace_collected,
                                                       'errors': self.errors, 'memory_kib': memory,

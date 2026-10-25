@@ -199,6 +199,29 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(pacing.scroll_stream_mode("wheel", True, True), "stream-reverse")
         self.assertEqual(pacing.scroll_stream_mode("pixel", True, False), "stream-reverse")
 
+    def test_trace_profile_keeps_worker_and_patch_miss_diagnostics(self):
+        log = self.root / "profile.log"
+        log.write_text(
+            "\n".join(
+                [
+                    "WORKER_PREPARE token=3 reload=false total_ms=278.4 builds=1",
+                    "WORKER_PREPARE token=4 reload=false total_ms=16.0 builds=0",
+                    "INPUT_PATCH_MISS kind=budget bytes=512",
+                    "INPUT_PROFILE stage=project wall_ms=278.4 cpu_ms=40.5",
+                    "UI_TIMELINE stage=worker_paint_ready monotonic_ns=1000000000 thread=ThreadId(3)",
+                ]
+            )
+            + "\n"
+        )
+        metrics = pacing.trace_profile_metrics([log])
+        self.assertEqual(metrics["worker_prepare_count"], 2)
+        self.assertEqual(metrics["worker_prepare_ms"]["max"], 278.4)
+        self.assertEqual(metrics["worker_builds_max"], 1)
+        self.assertEqual(metrics["input_patch_misses"], {"budget": 1})
+        self.assertEqual(metrics["input_profile_wall_ms_by_stage"]["project"]["max"], 278.4)
+        self.assertEqual(metrics["input_profile_cpu_ms_by_stage"]["project"]["max"], 40.5)
+        self.assertEqual(metrics["timeline_marks_by_stage"]["worker_paint_ready"], 1)
+
     def test_native_scroll_scenes_close_the_app_they_open(self):
         for scene in ("colors-app", "colors-rail"):
             for device in ("touchpad", "wheel"):
@@ -210,6 +233,8 @@ class ScrollReversalProofTests(unittest.TestCase):
     def test_notification_history_closes_active_fixture_rows_before_open(self):
         prepare = pacing.SCROLL_SCENES["notifications-list"][0]
         self.assertLess(prepare.index(("close-fixture-notices",)), prepare.index(("ui", "nacre", "controls", "notifications")))
+        self.assertEqual(prepare[-1], ("sleep", 2.0))
+        self.assertEqual(pacing.SCROLL_STORE_KEYS["notifications-list"], "notifications.scroll.y")
         calls = []
 
         def run(command, check=False):
