@@ -37,6 +37,8 @@ def spawn(self, command, name, env=None, cwd=None):
         env = dict(env or self.env, WAYLAND_DEBUG='client', BEAD_VERBOSE_LOG='1',
                    BEAD_FRAME_TRACE='1', BEAD_PRIVATE_INPUT_PROOF='1')
         command += ['--trace-state']
+        if not self.args.cpu:
+            command += ['--panel-renderer', 'femtovg-gl']
     return _spawn(self, command, name, env, cwd)
 
 
@@ -348,8 +350,6 @@ def drive(self, _names):
         raise RuntimeError('pearl-release-proof requires --arms bead')
     if not self.args.pointer_tool:
         raise RuntimeError('--pointer-tool is required')
-    if not self.args.cpu:
-        raise RuntimeError('release proof requires --cpu so memory and pacing have a known backend')
     if tuple(self.args.size) != (2880, 1800) or self.geometry['scale'] != 1.5:
         raise RuntimeError('release proof requires 2880x1800 at scale 1.5')
     if TRIALS < 20:
@@ -357,7 +357,8 @@ def drive(self, _names):
     out = self.out / 'release-proof'
     out.mkdir(parents=True, exist_ok=True)
     report = {'method': '25ms cropped screencopy-ready PNG series, black-padded to output coordinates; not physical scanout',
-              'renderer': 'cpu', 'idle_memory_kib': self.rss(),
+              'renderer': 'cpu' if self.args.cpu else 'femtovg-gl with idle CPU fallback',
+              'idle_memory_kib': self.rss(),
               'scale': 1.5, 'size': [2880, 1800], 'trials': [], 'required_trials': 20,
               'timing_method': 'release uses POINTER_RELEASE monotonic_ns to product PEARL_HANDOFF_COMMITTED monotonic_ns after native-content and source-cover commits; UI_FRAME callbacks overlapping pointer-tool launch through that marker include prewarm; not presentation timing',
               'timing_gates': {'release_to_covered_handoff_commit_p95_ms': RELEASE_TO_HANDOFF_P95_LIMIT_MS,
@@ -461,6 +462,9 @@ def drive(self, _names):
             try:
                 release_ns = parse_pointer_release_ns(marks.get('pointer_stdout'))
                 handoff_ns = covered_handoff_commit_ns(trace, pearl['id'])
+                backend_match = re.search(
+                    rf'PEARL_HANDOFF_COMMITTED id={pearl["id"]}\b[^\n]*\bbackend=(\w+)', trace)
+                handoff_backend = backend_match.group(1) if backend_match else None
                 if handoff_ns < release_ns:
                     raise RuntimeError('native handoff commit timestamp precedes pointer release')
                 release_ms = (release_ns - marks['capture_start_monotonic_ns']) / 1_000_000
@@ -482,6 +486,7 @@ def drive(self, _names):
                       'capture_region_logical': capture_region,
                       'pointer_release_monotonic_ns': release_ns,
                       'covered_handoff_commit_monotonic_ns': handoff_ns,
+                      'handoff_backend': handoff_backend,
                       'release_to_covered_handoff_commit_ms': release_to_handoff_ms,
                       'pointer_trigger_start_monotonic_ns': marks['pointer_trigger_start_monotonic_ns'],
                       'drag_to_handoff_ui_frame_render_ms': frame_samples,
@@ -499,6 +504,9 @@ def drive(self, _names):
                 raise RuntimeError(f"trial {trial + 1}: only {analysis['post_release_frame_count']} "
                                    'post-release proxy frames; at least 8 required')
             failures = handoff_gate_failures(analysis)
+            expected_backend = 'shm' if self.args.cpu else 'gl'
+            if handoff_backend != expected_backend:
+                failures.append(f'prewarmed {expected_backend} frame was not used: {handoff_backend}')
             if failures:
                 raise RuntimeError(f'trial {trial + 1}: post-release handoff failure: '
                                    + '; '.join(failures)

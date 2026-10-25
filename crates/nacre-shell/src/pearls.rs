@@ -8,7 +8,8 @@ use bead::{
     render::{Palette, Primitive, Rect, Scene},
     wayland::{
         Guide, NativePearlComplete, NativePearlMotion, NativePearlOptions, NativePearlPlacement,
-        PanelSpec, PearlOptions, SceneSource, UiEvent,
+        NativePearlPrewarm, NativePearlPrewarmComplete, PanelSpec, PearlOptions, SceneSource,
+        UiEvent,
     },
 };
 use std::{
@@ -91,11 +92,45 @@ fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOpt
     }
     let queue = Arc::new(std::sync::Mutex::new(Queue::default()));
     NativePearlOptions {
-        surface_offset_positioning: match std::env::var("NACRE_COMPOSITOR").as_deref() {
+        prewarm: match std::env::var("NACRE_COMPOSITOR").as_deref() {
             Ok("niri") => true,
             Ok(_) => false,
             Err(_) => std::env::var_os("NIRI_SOCKET").is_some(),
-        },
+        }
+        .then(|| {
+            Arc::new(
+                |placement: NativePearlPlacement, complete: NativePearlPrewarmComplete| {
+                    std::thread::spawn(move || {
+                        let rect = (|| {
+                            let output = std::process::Command::new(crate::prompt::helper_binary())
+                                .args([
+                                    "pearl-window",
+                                    "geometry",
+                                    &placement.title,
+                                    &std::process::id().to_string(),
+                                ])
+                                .output()
+                                .ok()?;
+                            if !output.status.success() {
+                                return None;
+                            }
+                            let value: serde_json::Value =
+                                serde_json::from_slice(&output.stdout).ok()?;
+                            let rect = bead::core::pearl::Rect::new(
+                                value["x"].as_f64()?,
+                                value["y"].as_f64()?,
+                                value["width"].as_f64()?,
+                                value["height"].as_f64()?,
+                            );
+                            ((rect.w - placement.rect.w).abs() <= 0.5
+                                && (rect.h - placement.rect.h).abs() <= 0.5)
+                                .then_some(rect)
+                        })();
+                        complete(rect);
+                    });
+                },
+            ) as NativePearlPrewarm
+        }),
         watch: client.map(|client| {
             Arc::new(move |send: Box<dyn Fn(NativePearlMotion) + Send + Sync>| {
                 use bead::core::source::Source;

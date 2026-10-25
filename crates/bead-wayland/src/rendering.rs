@@ -306,7 +306,12 @@ impl App {
             return Ok(());
         }
         let now = self.started.elapsed().as_secs_f64();
-        let animated = self.options.animate || self.animations.active(now);
+        let animated = self.options.animate
+            || self.animations.active(now)
+            || self
+                .surfaces
+                .iter()
+                .any(|surface| surface.prepared_native.is_some());
         if self.companion_policy.frame(now, animated) {
             if let Some((_, renderer, kind)) = &mut self.companion {
                 *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
@@ -337,6 +342,9 @@ impl App {
                         return TimeoutAction::ToDuration(Duration::from_secs_f64(
                             app.companion_policy.remaining(now),
                         ));
+                    }
+                    if app.surfaces.iter().any(|surface| surface.prepared_native.is_some()) {
+                        app.companion_policy.frame(now, true);
                     }
                     if app.companion_policy.expire(now) {
                         if let Some((_, renderer, kind)) = &mut app.companion {
@@ -2141,6 +2149,7 @@ mod input_tests {
             open: true,
             duration: 0.5,
             return_duration: None,
+            return_curve: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,

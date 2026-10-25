@@ -366,6 +366,8 @@ pub struct Motion {
     pub duration: f64,
     /// Optional host-authored return-to-dock duration in seconds.
     pub return_duration: Option<f64>,
+    /// Optional curve for returning to the attached pose.
+    pub return_curve: Option<bead_core::animation::Curve>,
     pub spring: bool,
     /// Explicit easing overrides the legacy spring/ease-out selection.
     pub curve: Option<bead_core::animation::Curve>,
@@ -2188,6 +2190,7 @@ mod tests {
             open: true,
             duration: 0.3,
             return_duration: None,
+            return_curve: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -2521,6 +2524,7 @@ mod tests {
             open: true,
             duration: 0.36,
             return_duration: None,
+            return_curve: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -2593,6 +2597,7 @@ mod tests {
             open: true,
             duration: 0.3,
             return_duration: None,
+            return_curve: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Bottom,

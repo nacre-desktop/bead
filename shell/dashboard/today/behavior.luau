@@ -21,6 +21,7 @@ local function shifted(y,m,delta)
 end
 local base = {
     stores={
+        ["view.detached"]=false,
         ["panel.open"]=true,["view.edge"]="top",
         ["calendar.ready"]=false,["calendar.initialized"]=false,["calendar.follow_today"]=false,["calendar.year"]=1970,["calendar.month"]=1,
         ["calendar.first_weekday"]=0,["calendar.today"]="",

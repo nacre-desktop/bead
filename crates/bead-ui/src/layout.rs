@@ -135,6 +135,7 @@ pub const PROPERTIES: &[&str] = &[
     "transition",
     "duration",
     "return_duration",
+    "return_transition",
     "slide_distance",
     "fade",
     "reveal",
@@ -868,6 +869,22 @@ impl ViewSpec {
                                 return Err(source.error("return_duration needs0..60 seconds"));
                             }
                             Some(f64::from(value))
+                        } else {
+                            None
+                        },
+                        return_curve: if p.contains_key("return_transition") {
+                            Some(
+                                match text(p, "return_transition", "ease", source)?.as_str() {
+                                    "ease" => bead_core::animation::Curve::EaseOut,
+                                    "ease-in-out" => bead_core::animation::Curve::EaseInOut,
+                                    "spring" => bead_core::animation::Curve::Spring,
+                                    _ => {
+                                        return Err(source.error(
+                                            "return_transition needs ease/ease-in-out/spring",
+                                        ));
+                                    }
+                                },
+                            )
                         } else {
                             None
                         },

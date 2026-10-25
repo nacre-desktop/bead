@@ -690,11 +690,19 @@ fn panel_return_duration_is_optional_and_bounded() {
 
     fs::write(
         f.0.join("ui/main.luau"),
-        r#"local ui=require("bead.ui"); return ui.Panel{id="preview",width=200,height=100,open=true,return_duration=.18}"#,
+        r#"local ui=require("bead.ui"); return ui.Panel{id="preview",width=200,height=100,open=true,return_duration=.18,transition="ease-in-out",return_transition="ease"}"#,
     )
     .unwrap();
-    s.reload().unwrap();
-    assert!((s.current.motion.as_ref().unwrap().return_duration.unwrap() - 0.18).abs() < 1e-6);
+    let scene = s.reload().unwrap();
+    assert!((scene.motion.as_ref().unwrap().return_duration.unwrap() - 0.18).abs() < 1e-6);
+    assert_eq!(
+        scene.motion.as_ref().unwrap().return_curve,
+        Some(bead_core::animation::Curve::EaseOut)
+    );
+    assert_eq!(
+        scene.motion.as_ref().unwrap().curve,
+        Some(bead_core::animation::Curve::EaseInOut)
+    );
 
     for invalid in ["-0.01", "60.01"] {
         fs::write(
@@ -706,7 +714,8 @@ fn panel_return_duration_is_optional_and_bounded() {
         .unwrap();
         assert!(
             s.reload()
-                .unwrap_err()
+                .err()
+                .unwrap()
                 .message
                 .contains("return_duration needs0..60 seconds")
         );
@@ -1499,6 +1508,7 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
             open: false,
             duration: 0.2,
             return_duration: None,
+            return_curve: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Right,

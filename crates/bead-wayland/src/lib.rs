@@ -21,7 +21,8 @@ mod pearls;
 pub use panels::Panels;
 pub use pearls::{
     Film, Guide, NativePearlComplete, NativePearlMotion, NativePearlOptions, NativePearlPlacement,
-    NativePearlTitle, NativePearlWatch, PearlOptions,
+    NativePearlPrewarm, NativePearlPrewarmComplete, NativePearlTitle, NativePearlWatch,
+    PearlOptions,
 };
 mod overlay;
 mod policy;
@@ -260,7 +261,7 @@ pub enum UiEvent {
         epoch: u64,
         generation: u64,
         rect: bead_core::pearl::Rect,
-        success: bool,
+        anchor: Option<bead_core::pearl::Rect>,
     },
     CompanionVisibility(bool),
     /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.

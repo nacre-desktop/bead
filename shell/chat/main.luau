@@ -118,5 +118,5 @@ else
         ui.Text{id="hint",text=ui.tr("bead.panel.chat-default-hint"),width=INNER,height=3*T.spacing.md+T.spacing.xs,font_size=CAPTION+T.spacing.xs/3,color="onSurfaceVariant"},
         button("new",nil,nil,nil,BTN,ui.tr("bead.panel.chat-new"),"add_comment",get("chat.can_new") and ui.action("chat.do","new") or nil,false,BODY)})
 end
-return kit.Panel{id="chat",edge=get("view.edge"),open=ui.bind("panel.open"),duration=kit.motion.text,return_duration=.18,transition="ease-in-out",fade=false,reveal=true,
+return kit.Panel{id="chat",edge=get("view.edge"),open=ui.bind("panel.open"),duration=kit.motion.text,return_duration=.18,return_transition="ease",transition="ease-in-out",fade=false,reveal=not ui.resolve_for_check(ui.bind("view.detached")),
     width=W,height=H,padding=0,radius=T.radii.medium+2,fill="surface",table.unpack(kids)}

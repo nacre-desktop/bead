@@ -36,11 +36,11 @@ impl App {
             epoch,
             generation,
             rect,
-            success,
+            anchor,
         } = event
         {
             self.in_slot(id, |app| {
-                app.native_pearl_prewarmed(epoch, generation, rect, success)
+                app.native_pearl_prewarmed(epoch, generation, rect, anchor)
             });
             return;
         }

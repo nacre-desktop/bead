@@ -36,6 +36,9 @@ pub type NativePearlWatch = std::sync::Arc<
 >;
 pub type NativePearlTitle = std::sync::Arc<dyn Fn(u32, &str) -> String + Send + Sync>;
 pub type NativePearlComplete = Box<dyn FnOnce(bool) + Send>;
+pub type NativePearlPrewarmComplete = Box<dyn FnOnce(Option<pearl::Rect>) + Send>;
+pub type NativePearlPrewarm =
+    std::sync::Arc<dyn Fn(NativePearlPlacement, NativePearlPrewarmComplete) + Send + Sync>;
 
 /// Product supplied identity and asynchronous placement for native pearl windows.
 #[derive(Clone)]
@@ -44,9 +47,9 @@ pub struct NativePearlOptions {
     /// Complete only once the compositor has applied and settled the requested geometry.
     pub place: std::sync::Arc<dyn Fn(NativePearlPlacement, NativePearlComplete) + Send + Sync>,
     pub watch: Option<NativePearlWatch>,
-    /// The host can move floating toplevels with `wl_surface.offset` on release.
-    /// Opt in only when this backend behavior has been verified.
-    pub surface_offset_positioning: bool,
+    /// Query the hidden window's initial global body pose. Opt in only if the
+    /// host supports commit-time `wl_surface.offset` placement from that pose.
+    pub prewarm: Option<NativePearlPrewarm>,
 }
 
 /// Pins the old layer's last frame, including fractional viewport and renderer
@@ -408,11 +411,14 @@ impl App {
             .as_ref()
             .and_then(|(scene, _, _)| scene.motion.as_ref())
         {
-            let curve = motion.curve.unwrap_or(if motion.spring {
-                bead_core::animation::Curve::Spring
-            } else {
-                bead_core::animation::Curve::EaseOut
-            });
+            let curve = motion
+                .return_curve
+                .or(motion.curve)
+                .unwrap_or(if motion.spring {
+                    bead_core::animation::Curve::Spring
+                } else {
+                    bead_core::animation::Curve::EaseOut
+                });
             let duration = motion.return_duration.unwrap_or(motion.duration);
             self.animations
                 .target(&transition.animation_id, 0., now, duration, curve);
@@ -701,7 +707,7 @@ impl App {
         ) else {
             return Ok(());
         };
-        if !native.surface_offset_positioning {
+        if native.prewarm.is_none() {
             return Ok(());
         }
         let id = info.id;
@@ -998,18 +1004,18 @@ impl App {
             if let Some(viewport) = &surface.viewport {
                 viewport.set_destination(width as i32, height as i32);
             }
-            if let Some(window) = surface.native.as_ref() {
-                if let Some([x, y, w, h]) = body {
-                    smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
-                        window,
-                        x.max(0) as u32,
-                        y.max(0) as u32,
-                        w.max(1) as u32,
-                        h.max(1) as u32,
-                    );
-                    window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
-                    window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
-                }
+            if let Some(window) = surface.native.as_ref()
+                && let Some([x, y, w, h]) = body
+            {
+                smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
+                    window,
+                    x.max(0) as u32,
+                    y.max(0) as u32,
+                    w.max(1) as u32,
+                    h.max(1) as u32,
+                );
+                window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
+                window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
             }
             if let Some(prepared) = surface.prepared_native.as_mut()
                 && (size_changed
@@ -1357,7 +1363,10 @@ impl App {
         let epoch = prepared.epoch;
         let generation = prepared.size_generation;
         let sender = self.event_sender.clone();
-        (native.place)(
+        let Some(prewarm) = native.prewarm else {
+            return;
+        };
+        prewarm(
             NativePearlPlacement {
                 id: info.id,
                 view: name.clone(),
@@ -1365,14 +1374,14 @@ impl App {
                 rect,
                 first: true,
             },
-            Box::new(move |success| {
+            Box::new(move |anchor| {
                 if let Some(sender) = sender {
                     let _ = sender.send(UiEvent::NativePearlPrewarmed {
                         id: info.id,
                         epoch,
                         generation,
                         rect,
-                        success,
+                        anchor,
                     });
                 }
             }),
@@ -1384,7 +1393,7 @@ impl App {
         epoch: u64,
         generation: u64,
         rect: pearl::Rect,
-        success: bool,
+        anchor: Option<pearl::Rect>,
     ) {
         if self.panel_epoch != epoch {
             return;
@@ -1400,7 +1409,8 @@ impl App {
             {
                 return false;
             }
-            if success {
+            if let Some(anchor) = anchor {
+                prepared.anchor = anchor;
                 prepared.placed = true;
             }
             true
@@ -1408,7 +1418,7 @@ impl App {
         let Some(index) = index else {
             return;
         };
-        if !success {
+        if anchor.is_none() {
             for surface in &mut self.surfaces {
                 if surface.prepared_native.as_ref().is_some_and(|prepared| {
                     prepared.epoch == epoch && prepared.size_generation == generation
@@ -1463,7 +1473,7 @@ impl App {
         let Some(native) = self.options.pearls.as_ref().and_then(|p| p.native.as_ref()) else {
             return false;
         };
-        if !native.surface_offset_positioning {
+        if native.prewarm.is_none() {
             return false;
         }
         let indices: Vec<_> = self
@@ -1520,12 +1530,29 @@ impl App {
                 surface.set_input_region(Some(empty.wl_region()));
             }
             let snapshot = prepared.snapshot.take();
+            let bootstrap_pool = prepared.pool.take().unwrap();
+            let bootstrap_buffers = std::mem::take(&mut prepared.buffers);
+            #[cfg(feature = "native-gl")]
+            let use_gl = prepared.gl_ready;
+            #[cfg(not(feature = "native-gl"))]
+            let use_gl = false;
+            let (cover_pool, cover_buffers) = if use_gl {
+                // A prepared EGL backbuffer needs no source SHM residency.
+                // Preserve that pool only for the CPU alias handoff.
+                s.geometry = (0, 0);
+                (
+                    std::mem::replace(&mut s.pool, bootstrap_pool),
+                    std::mem::replace(&mut s.buffers, bootstrap_buffers),
+                )
+            } else {
+                (bootstrap_pool, bootstrap_buffers)
+            };
             let mut handoff = Handoff {
                 gate: Default::default(),
                 fractional: s.fractional.take(),
                 viewport: s.viewport.take(),
-                pool: prepared.pool.take().unwrap(),
-                buffers: std::mem::take(&mut prepared.buffers),
+                pool: cover_pool,
+                buffers: cover_buffers,
                 first_frame: snapshot,
                 #[cfg(feature = "native-gl")]
                 first_gl_frame: prepared.gl_ready,
@@ -1618,9 +1645,15 @@ impl App {
             let s = &mut self.surfaces[i];
             let mut h = s.handoff.take().unwrap();
             #[cfg(feature = "wgpu")]
-            std::mem::swap(&mut s.gpu, &mut h.gpu);
+            {
+                std::mem::swap(&mut s.gpu, &mut h.gpu);
+                drop(h.gpu.take());
+            }
             #[cfg(feature = "native-gl")]
-            std::mem::swap(&mut s.gl, &mut h.gl);
+            {
+                std::mem::swap(&mut s.gl, &mut h.gl);
+                drop(h.gl.take());
+            }
             s.native = None;
             if let Some(f) = s.fractional.take() {
                 f.destroy();
@@ -1668,6 +1701,17 @@ impl App {
             s.layer.wl_surface().attach(None, 0, 0);
             s.layer.commit();
             let mut handoff = s.handoff.take().unwrap();
+            let backend = if handoff.first_frame.is_some() {
+                "shm"
+            } else {
+                "rendered"
+            };
+            #[cfg(feature = "native-gl")]
+            let backend = if handoff.first_gl_frame {
+                "gl"
+            } else {
+                backend
+            };
             if let Some(buffer) = handoff.first_frame.take() {
                 // The first native frame aliases the active source SlotPool. Keep
                 // its distinct wl_buffer in the active vector until compositor release.
@@ -1679,10 +1723,11 @@ impl App {
             }
             drop(handoff);
             bead_core::vprintln!(
-                "PEARL_HANDOFF_COMMITTED id={} rect={:?} monotonic_ns={}",
+                "PEARL_HANDOFF_COMMITTED id={} rect={:?} monotonic_ns={} backend={}",
                 self.pearl.map_or(0, |info| info.id),
                 self.pearl.map(|info| info.rect),
-                bead_core::profile::monotonic_ns()
+                bead_core::profile::monotonic_ns(),
+                backend
             );
         }
     }
@@ -1788,11 +1833,15 @@ impl App {
         self.slots.iter().position(|group| group.id() == Some(id))
     }
     fn release_pearl_watch_if_idle(&mut self) {
-        if !self.surfaces.iter().any(|s| s.native.is_some())
-            && !self
-                .slots
-                .iter()
-                .any(|g| g.surfaces.iter().any(|s| s.native.is_some()))
+        if !self
+            .surfaces
+            .iter()
+            .any(|s| s.native.is_some() || s.prepared_native.is_some())
+            && !self.slots.iter().any(|g| {
+                g.surfaces
+                    .iter()
+                    .any(|s| s.native.is_some() || s.prepared_native.is_some())
+            })
         {
             self.pearl_watch = None;
         }

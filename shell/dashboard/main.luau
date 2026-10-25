@@ -42,7 +42,7 @@ if pearl_left then
     nav[#nav+1]=ui.Box{id="tab-halo",position="absolute",left=pearl_left,top=29,width=12,height=12,radius=6,fill=ui.alpha("primary",0.12),
         ui.Box{id="tab-pearl",position="absolute",left=2,top=2,width=8,height=8,radius=4,fill="primary"}}
 end
-return kit.Panel{id="dashboard",edge="top",open=ui.bind("panel.open"),duration=.36,return_duration=.18,transition="ease-in-out",fade=false,reveal=true,
+return kit.Panel{id="dashboard",edge="top",open=ui.bind("panel.open"),duration=.36,return_duration=.18,return_transition="ease",transition="ease-in-out",fade=false,reveal=not ui.resolve_for_check(ui.bind("view.detached")),
     width=984,height=650,padding=0,radius=18,fill="surface",
     ui.Row{id="navigation",position="absolute",left=24,top=12,width=936,height=44,table.unpack(nav)},
     ui.Box{id="stage",position="absolute",left=22,top=68,width=940,height=562,content()},

@@ -9,7 +9,7 @@ local function index(list,id) for i,v in ipairs(list) do if v==id then return i 
 local function store(order) local out={} for i,id in ipairs(order) do out[i]={id=id} end return out end
 local function edit(s,order) s["cc.order"]=store(order) s["cc.edited"]=true end
 local behavior={stores={
-    ["panel.open"]=true,["view.edge"]="right",
+    ["view.detached"]=false,["panel.open"]=true,["view.edge"]="right",
     ["cc.back_focus"]="control-center.detail.header.back",["cc.detail_focus_prefix"]="control-center.detail.",
     ["cc.page"]="home",["cc.detail"]="",["cc.scroll"]=0,["cc.max_height"]=800,
     ["cc.src"]={},["cc.views"]={},["cc.saved"]={},["cc.saved_known"]=false,["cc.writable"]=false,["cc.message"]="",
