@@ -397,11 +397,6 @@ return function(ui, tokens)
     -- ready-made actions, so no product or setting id lives here. Sizes and colours are tokens.
     local sp,tx=tokens.spacing,tokens.text
     local function maybe(action,enabled) if enabled then return action end return nil end
-    function kit.SectionHeader(p)
-        return ui.Column{id=p.id,width="fill",height=46,shrink=0,gap=sp.hairline,padding_top=sp.lg,
-            ui.Text{id="title",text=p.label,font_size=tx.title*4/3,height=24,color="primary"},
-            ui.Text{id="detail",text=p.description or "",visible=(p.description or "")~="",font_size=tx.caption*4/3,height=16,color="onSurfaceVariant"}}
-    end
     function kit.HelpText(p)
         return ui.Text{id=p.id,text=p.text,width="fill",height=20,shrink=0,font_size=tx.caption*4/3,color="onSurfaceVariant"}
     end
