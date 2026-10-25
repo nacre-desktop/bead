@@ -1,6 +1,12 @@
 # B0104 — Pearl drag, dock and close
 
-Status: blocked by the owner memory gate; unpublished candidate. B0048/B0054 drag and native-close repairs are implemented, but not accepted or integrated.
+Status: lead-accepted for integration on 2026-10-25; rebased validation in progress.
+
+Decision: **lead-accepted 2026-10-25, follow-up memory attribution**. The lead
+prioritizes fixing an unclosable live pearl over the measured detached/closed
++0.891/+0.828 MiB deltas for this unit. This accepts the recorded memory failure,
+including its +2.133 MiB anon outlier; it does not raise the general memory budget.
+The measurements and remaining proof gaps below are unchanged.
 
 ## Reference and design
 
@@ -118,8 +124,9 @@ motion without relative-pointer events, so earlier held-pull probes used private
 headless Labwc at the same scale with `--backend none` and the private any-press flag.
 All input is synthetic; physical scanout timing is unmeasured.
 
-No integration or push is attempted after the owner stop line. No live session,
-installation or configuration is changed by this unit.
+The original stop was lifted by the lead decision above for integration and a
+bounded memory-attribution follow-up. No live session, installation or configuration
+is changed by this unit.
 
 ## Remaining parity scope
 
