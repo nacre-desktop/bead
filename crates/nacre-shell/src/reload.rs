@@ -665,6 +665,11 @@ impl Runtime {
     }
     pub fn with_widget_file(mut self) -> Self {
         self.widgets_file = crate::widgets::file_path();
+        // File watchers can publish before the first Luau generation exists.
+        self.session.stores = self.session.stores.reconcile(&BTreeMap::from([
+            ("widgets.layout".into(), bead::core::Value::list(Vec::new())),
+            ("widgets.rev".into(), bead::core::Value::Number(0.)),
+        ])).expect("widget transport schema is stable");
         self
     }
     pub fn with_widget_editor(
