@@ -75,6 +75,7 @@ local function label(id,value,size,color,props)
     props.id=id
     props.text=value or ""
     props.font_size=size or text.body*4/3
+    props.width=props.width or (props.grow and 0 or math.ceil(ui.text_width(props.text,"IBM Plex Sans",props.font_size))+spacing.hairline)
     props.color=color or "onSurface"
     return ui.Text(props)
 end
@@ -83,6 +84,7 @@ local function button(id,value,action,props)
     props.id=id
     props.text=value
     props.height=props.height or spacing.huge+spacing.xs
+    props.width=props.width or math.ceil(ui.text_width(value,props.family or "IBM Plex Sans",props.font_size or text.body*4/3))+2*(props.padding or spacing.sm)
     props.padding=props.padding or spacing.sm
     props.radius=props.radius or kit.tokens.radii.small
     props.fill=props.fill or "surfaceContainerHigh"
@@ -217,9 +219,9 @@ local function gallery()
                         width=(RAIL-2*spacing.md-spacing.sm)/2,selected=doc.dropdown_trigger=="hover"})}}},
         ui.Column{id="gallery-content",width="fill",height="fill",grow=1,gap=spacing.md,
             ui.Row{id="gallery-title-row",width="fill",height=54,shrink=0,align="center",
-                ui.Column{id="gallery-title-copy",grow=1,gap=spacing.xs,
-                    label("gallery-title","Choose a widget",text.headline*4/3,"onSurface",{height=28}),
-                    label("gallery-subtitle","Preview a style, then choose where it belongs.",text.caption*4/3,"onSurfaceVariant",{height=18})},
+                ui.Column{id="gallery-title-copy",width=0,grow=1,gap=spacing.xs,
+                    label("gallery-title","Choose a widget",text.headline*4/3,"onSurface",{width="fill",height=28}),
+                    label("gallery-subtitle","Preview a style, then choose where it belongs.",text.caption*4/3,"onSurfaceVariant",{width="fill",height=18})},
                 label("widget-count",tostring(#rows).." widgets",text.caption*4/3,"onSurfaceVariant",{height=18})},
             #rows==0 and ui.Box{id="gallery-empty",grow=1,width="fill",radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("gallery-empty-text","No widgets match this search.",text.body*4/3,"onSurfaceVariant",{width="fill",height=24,text_align="center"})}
@@ -347,8 +349,8 @@ local function detail()
         ui.Row{id="detail-heading",width="fill",height=54,shrink=0,gap=spacing.md,align="center",
             button("back","arrow_back",navigate("back",selected),{width=spacing.huge+spacing.md,fill="transparent",font_size=kit.tokens.icons.medium,family="Material Symbols Rounded"}),
             ui.Text{id="detail-icon",text=package.icon or "widgets",family="Material Symbols Rounded",font_size=kit.tokens.icons.large,width=36,height=36,color="primary"},
-            ui.Column{id="detail-title-copy",grow=1,gap=spacing.xs,
-                label("detail-title",package.title,text.headline*4/3,"onSurface",{height=28}),
+            ui.Column{id="detail-title-copy",width=0,grow=1,gap=spacing.xs,
+                label("detail-title",package.title,text.headline*4/3,"onSurface",{width="fill",height=28}),
                 label("detail-description","Choose a style for each place this widget can appear.",text.caption*4/3,"onSurfaceVariant",{height=18})}},
         ui.Scroll{id="detail-scroll",width="fill",grow=1,scroll=ui.bind("widgets.scroll"),
             ui.Column{id="detail-content",width="fill",gap=spacing.md,
