@@ -654,8 +654,7 @@ mod tests {
             assert_eq!(error.code, "unavailable");
             assert_eq!(error.message, "Widgets app is not available yet");
         }
-        let launcher =
-            from_strings("nacre".into(), "menu".into(), &["widgets".into()]).unwrap();
+        let launcher = from_strings("nacre".into(), "menu".into(), &["widgets".into()]).unwrap();
         let error = map_views(launcher).unwrap_err().error.unwrap();
         assert_eq!(error.code, "unavailable");
         assert_eq!(error.message, "Widgets app is not available yet");

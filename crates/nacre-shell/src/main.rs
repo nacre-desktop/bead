@@ -944,12 +944,7 @@ fn start(
             "widgets-canvas".into(),
             std::collections::BTreeMap::from([(
                 "widgets-canvas".into(),
-                widgets::canvas(
-                    palette.clone(),
-                    colors.clone(),
-                    widget_inputs,
-                    panel_trace,
-                )?,
+                widgets::canvas(palette.clone(), colors.clone(), widget_inputs, panel_trace)?,
             )]),
         )?);
         frame_gate.configure_frame(
