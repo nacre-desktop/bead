@@ -9,14 +9,16 @@ local function settings(schema,values)
     assert(type(values)=="table","widget settings must be an object")
     for key,value in values do
         local field=schema[key]
-        assert(field,"unknown widget setting: "..tostring(key))
-        local kind=field.type
-        if kind=="choice" then
-            assert(table.find(field.options,value),"invalid widget choice: "..key)
-        elseif kind=="toggle" then assert(type(value)=="boolean","invalid widget toggle: "..key)
-        elseif kind=="number" or kind=="slider" then
-            assert(type(value)=="number" and value==value and value>=field.min and value<=field.max,"invalid widget number: "..key)
-        else assert(type(value)=="string" and #value<=4096,"invalid widget text: "..key) end
+        -- A newer package may add keys; preserve them without interpreting them.
+        if field then
+            local kind=field.type
+            if kind=="choice" then
+                assert(table.find(field.options,value),"invalid widget choice: "..key)
+            elseif kind=="toggle" then assert(type(value)=="boolean","invalid widget toggle: "..key)
+            elseif kind=="number" or kind=="slider" then
+                assert(type(value)=="number" and value==value and value>=field.min and value<=field.max,"invalid widget number: "..key)
+            else assert(type(value)=="string" and #value<=4096,"invalid widget text: "..key) end
+        end
     end
 end
 for _,id in ids do

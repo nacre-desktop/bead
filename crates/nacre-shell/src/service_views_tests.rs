@@ -1137,6 +1137,8 @@ fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection()
         "explicit preset must reproduce the implicit preset"
     );
     let mut edited = preset.clone();
+    edited["hosts"]["top_bar"]["instances"][0]["settings"]["future_setting"] =
+        json!({"opaque": [1, 2]});
     let instances = edited["hosts"]["top_bar"]["instances"]
         .as_array_mut()
         .unwrap();
