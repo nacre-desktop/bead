@@ -42,6 +42,13 @@ Builds on: ROADMAP "widget hosts and movable widgets" (2026-10-23), pearls (B004
 - In edit mode, tiles show faintly. Drag shows the drop slot and a variant preview, plus a resize handle on span-capable widgets (e.g. music line length).
 - Overflow: a widget that does not fit shows a compact variant or moves to an overflow pill. Nothing is ever lost from the layout.
 
+### Flexible widgets (owner discussion, 2026-10-25)
+- Variable-width widgets (the window title, the music line, the clock with optional seconds/date, counts such as updates) declare min/max spans.
+- The host RESERVES the max span, so neighbours never move when the content changes. Inside the reservation, the visible widget renders at its NATURAL content width (not snapped to tiles), stays centred or anchored per its region, and ANIMATES width changes like QML.
+- Long content is truncated with an ellipsis at max.
+- The title widget's settings: min/max width, what it shows (window title / app + title / app only / icon), and its behaviour (hover opens the dashboard, which is the current default; click; or none).
+- Multiple monitors (proposal, pending owner confirmation): one shared layout by default (region-relative slots keep it right on any width; tile count = width_dp/32), plus an optional per-monitor layout override chosen in edit mode.
+
 ## Widget menu and settings
 
 - Opened from the bar's right-click menu "Edit widgets", the launcher route `widgets`, `nacrectl ui widgets open`, and Settings → Panels.
