@@ -23,7 +23,7 @@ end
 local clock_font="IBM Plex Sans"
 local time_max=math.max(t.clock_min_width,ui.text_width("23:59",clock_font,t.clock_font),ui.text_width("12:59 PM",clock_font,t.clock_font))
 local seconds_max=math.max(ui.text_width("23:59:59",clock_font,t.clock_font),ui.text_width("12:59:59 PM",clock_font,t.clock_font))
-local date_max=ui.text_width("9999-12-31",clock_font,t.detail_font)
+local date_max=math.max(ui.text_width("9999-12-31",clock_font,t.detail_font),ui.text_width("8888-88-88",clock_font,t.detail_font),ui.text_width("0000-00-00",clock_font,t.detail_font))+kit.tokens.spacing.hairline
 local date_content_max=time_max+t.item_gap+date_max
 local seconds_content_max=seconds_max
 local function clock_with_seconds(time,seconds)
