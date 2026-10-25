@@ -78,7 +78,7 @@ CLOSE_APPS = {'settings-wheel': 'settings', 'settings-touchpad': 'settings'}
 # B0135 scroll matrix: these scenes already have private QML/Bead fixtures in
 # parity-compare. Coordinates are logical pixels in its 1920x1200 scene.
 SCROLL_SCENES = {
-    'settings-content': (m.STATES['settings'][0], 1100, 600, 80, 1.6),
+    'settings-content': (m.STATES['settings'][0], 500, 600, 80, 1.6),
     'settings-nav': (m.STATES['settings'][0], 150, 600, 80, 1.6),
     'launcher': (m.STATES['launcher'][0], 960, 600, 80, 1.6),
     'keybindings': (m.STATES['keybindings'][0], 960, 600, 80, 1.6),
@@ -518,7 +518,7 @@ def presented_cadence(log_paths, rows, start_ns, end_ns, start_rel, end_rel):
                 'presented_drop_rate': None, 'presented_discarded': chosen['discarded'] if chosen else None,
                 'presented_refresh_ns': percentile(chosen['refresh_ns'], .5) if chosen and chosen['refresh_ns'] else None}
     stamps = sorted(chosen['stamps'])
-    intervals = [(b - a) / 1e6 for a, b in zip(stamps, stamps[1:]) if (b - a) / 1e6 < IDLE_GAP_MS]
+    intervals = [(b - a) / 1e6 for a, b in zip(stamps, stamps[1:])]
     if not intervals:
         return {'presentation_source': source, 'presented_frames': len(stamps),
                 'presentation_interval_ms': None, 'presented_dropped': None,
@@ -526,11 +526,14 @@ def presented_cadence(log_paths, rows, start_ns, end_ns, start_rel, end_rel):
                 'presented_refresh_ns': percentile(chosen['refresh_ns'], .5) if chosen['refresh_ns'] else None}
     dropped = sum(max(0, round(interval / VSYNC_MS) - 1)
                   for interval in intervals if interval > 1.5 * VSYNC_MS)
+    long_gaps = [interval for interval in intervals if interval >= IDLE_GAP_MS]
     return {'presentation_source': source, 'presented_frames': len(stamps),
             'presentation_interval_ms': {key: round(percentile(intervals, p), 2)
                                          for key, p in (('p50', .5), ('p95', .95), ('p99', .99))},
             'presented_dropped': dropped,
             'presented_drop_rate': round(dropped / max(1, dropped + len(intervals)), 3),
+            'presented_long_gaps': len(long_gaps),
+            'presented_max_gap_ms': round(max(intervals), 2),
             'presented_discarded': chosen['discarded'],
             'presented_refresh_ns': percentile(chosen['refresh_ns'], .5) if chosen['refresh_ns'] else None}
 
@@ -838,6 +841,8 @@ def summarize(args, names):
                    'commit_drop_rate': med('drop_rate'), 'commit_p99': med('interval_ms', 'p99'),
                    'commit_p95': med('interval_ms', 'p95'), 'commit_p50': med('interval_ms', 'p50'),
                    'presented_dropped': med('presented_dropped'),
+                   'presented_long_gaps': med('presented_long_gaps'),
+                   'presented_max_gap_ms': med('presented_max_gap_ms'),
                    'presented_discarded': med('presented_discarded'),
                    'presented_drop_rate': med('presented_drop_rate'),
                    'presented_p95': med('presentation_interval_ms', 'p95'),
@@ -905,7 +910,7 @@ def report(specs):
                 return '-' if v is None else f'{v:.1f}'
             rate = med('presented_drop_rate')
             clean_render = med('render_ms', 'p95', clean) if clean else None
-            cells.append(f"{fmt(None if rate is None else rate * 100)} {fmt(med('presented_dropped'))} {fmt(med('presentation_interval_ms', 'p95'))} {fmt(med('presentation_interval_ms', 'p99'))} {fmt(med('interval_ms', 'p95'))} {fmt(med('interval_ms', 'p99'))} {fmt(med('longest_gap_ms'))} {fmt(med('first_frame_ms'))} {fmt(med('content_commit_ms'))} {fmt(med('render_ms', 'p95'))}/{fmt(clean_render)} {fmt(med('reversal', 'delivery_to_visible_ms'))}".ljust(100))
+            cells.append(f"{fmt(None if rate is None else rate * 100)} {fmt(med('presented_dropped'))} {fmt(med('presented_long_gaps'))}/{fmt(med('presented_max_gap_ms'))} {fmt(med('presentation_interval_ms', 'p95'))} {fmt(med('presentation_interval_ms', 'p99'))} {fmt(med('interval_ms', 'p95'))} {fmt(med('interval_ms', 'p99'))} {fmt(med('longest_gap_ms'))} {fmt(med('first_frame_ms'))} {fmt(med('content_commit_ms'))} {fmt(med('render_ms', 'p95'))}/{fmt(clean_render)} {fmt(med('reversal', 'delivery_to_visible_ms'))}".ljust(100))
         print('/'.join(key).ljust(26) + ''.join(cells))
 
 

@@ -154,6 +154,23 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(metrics["presented_dropped"], 0)
         self.assertEqual(metrics["presented_discarded"], 1)
 
+    def test_presented_cadence_keeps_long_jank_gap_in_drop_metrics(self):
+        log = self.root / "presentation-long-gap.log"
+        log.write_text(
+            "\n".join(
+                [
+                    "WINDOW_PRESENTED monotonic_ns=100000000 refresh_ns=8333333 epoch=3 update=1 generation=9",
+                    "WINDOW_PRESENTED monotonic_ns=108333333 refresh_ns=8333333 epoch=3 update=2 generation=9",
+                    "WINDOW_PRESENTED monotonic_ns=608333333 refresh_ns=8333333 epoch=3 update=3 generation=9",
+                ]
+            )
+            + "\n"
+        )
+        metrics = pacing.presented_cadence([log], [], 90_000_000, 625_000_000, 0.09, 0.625)
+        self.assertEqual(metrics["presented_long_gaps"], 1)
+        self.assertEqual(metrics["presented_max_gap_ms"], 500.0)
+        self.assertEqual(metrics["presented_dropped"], 29)
+
     def test_app_log_archiving_preserves_each_spawn_and_open_writer(self):
         log_dir = self.root / "logs"
         log_dir.mkdir()
