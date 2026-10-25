@@ -1,0 +1,401 @@
+{
+  "layout": "QML left, Bead right; rows ordered by target progress",
+  "roi_physical_px": [
+    1800,
+    55,
+    2880,
+    650
+  ],
+  "levels": [
+    0.0,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    0.9,
+    1.0
+  ],
+  "timestamp_origin": "monotonic sequence start before trigger worker; not compositor presentation time",
+  "frames": {
+    "audio": {
+      "qml": [
+        {
+          "index": 0,
+          "stamp_ms": 104,
+          "progress": 0.0
+        },
+        {
+          "index": 20,
+          "stamp_ms": 609,
+          "progress": 0.106
+        },
+        {
+          "index": 21,
+          "stamp_ms": 634,
+          "progress": 0.315
+        },
+        {
+          "index": 22,
+          "stamp_ms": 659,
+          "progress": 0.591
+        },
+        {
+          "index": 23,
+          "stamp_ms": 685,
+          "progress": 0.719
+        },
+        {
+          "index": 24,
+          "stamp_ms": 710,
+          "progress": 0.929
+        },
+        {
+          "index": 26,
+          "stamp_ms": 760,
+          "progress": 1.0
+        }
+      ],
+      "bead": [
+        {
+          "index": 0,
+          "stamp_ms": 112,
+          "progress": 0.0
+        },
+        {
+          "index": 26,
+          "stamp_ms": 769,
+          "progress": 0.026
+        },
+        {
+          "index": 29,
+          "stamp_ms": 845,
+          "progress": 0.436
+        },
+        {
+          "index": 30,
+          "stamp_ms": 870,
+          "progress": 0.436
+        },
+        {
+          "index": 32,
+          "stamp_ms": 921,
+          "progress": 1.0
+        },
+        {
+          "index": 33,
+          "stamp_ms": 946,
+          "progress": 1.0
+        },
+        {
+          "index": 34,
+          "stamp_ms": 971,
+          "progress": 1.0
+        }
+      ]
+    },
+    "network": {
+      "qml": [
+        {
+          "index": 0,
+          "stamp_ms": 112,
+          "progress": 0.0
+        },
+        {
+          "index": 19,
+          "stamp_ms": 589,
+          "progress": 0.053
+        },
+        {
+          "index": 20,
+          "stamp_ms": 614,
+          "progress": 0.186
+        },
+        {
+          "index": 22,
+          "stamp_ms": 664,
+          "progress": 0.463
+        },
+        {
+          "index": 23,
+          "stamp_ms": 690,
+          "progress": 0.718
+        },
+        {
+          "index": 24,
+          "stamp_ms": 715,
+          "progress": 0.925
+        },
+        {
+          "index": 26,
+          "stamp_ms": 765,
+          "progress": 1.0
+        }
+      ],
+      "bead": [
+        {
+          "index": 0,
+          "stamp_ms": 114,
+          "progress": 0.0
+        },
+        {
+          "index": 26,
+          "stamp_ms": 770,
+          "progress": 0.018
+        },
+        {
+          "index": 28,
+          "stamp_ms": 821,
+          "progress": 0.331
+        },
+        {
+          "index": 29,
+          "stamp_ms": 847,
+          "progress": 0.331
+        },
+        {
+          "index": 31,
+          "stamp_ms": 898,
+          "progress": 1.0
+        },
+        {
+          "index": 32,
+          "stamp_ms": 923,
+          "progress": 1.0
+        },
+        {
+          "index": 33,
+          "stamp_ms": 948,
+          "progress": 1.0
+        }
+      ]
+    },
+    "bluetooth": {
+      "qml": [
+        {
+          "index": 0,
+          "stamp_ms": 112,
+          "progress": 0.0
+        },
+        {
+          "index": 20,
+          "stamp_ms": 614,
+          "progress": 0.108
+        },
+        {
+          "index": 19,
+          "stamp_ms": 589,
+          "progress": 0.054
+        },
+        {
+          "index": 21,
+          "stamp_ms": 639,
+          "progress": 0.467
+        },
+        {
+          "index": 23,
+          "stamp_ms": 689,
+          "progress": 0.714
+        },
+        {
+          "index": 24,
+          "stamp_ms": 714,
+          "progress": 0.924
+        },
+        {
+          "index": 26,
+          "stamp_ms": 764,
+          "progress": 1.0
+        }
+      ],
+      "bead": [
+        {
+          "index": 0,
+          "stamp_ms": 116,
+          "progress": 0.0
+        },
+        {
+          "index": 26,
+          "stamp_ms": 771,
+          "progress": 0.025
+        },
+        {
+          "index": 29,
+          "stamp_ms": 848,
+          "progress": 0.304
+        },
+        {
+          "index": 30,
+          "stamp_ms": 874,
+          "progress": 0.304
+        },
+        {
+          "index": 32,
+          "stamp_ms": 925,
+          "progress": 0.95
+        },
+        {
+          "index": 33,
+          "stamp_ms": 951,
+          "progress": 1.0
+        },
+        {
+          "index": 34,
+          "stamp_ms": 976,
+          "progress": 1.0
+        }
+      ]
+    },
+    "battery": {
+      "qml": [
+        {
+          "index": 0,
+          "stamp_ms": 110,
+          "progress": 0.0
+        },
+        {
+          "index": 20,
+          "stamp_ms": 614,
+          "progress": 0.107
+        },
+        {
+          "index": 21,
+          "stamp_ms": 640,
+          "progress": 0.317
+        },
+        {
+          "index": 22,
+          "stamp_ms": 665,
+          "progress": 0.471
+        },
+        {
+          "index": 23,
+          "stamp_ms": 690,
+          "progress": 0.831
+        },
+        {
+          "index": 24,
+          "stamp_ms": 715,
+          "progress": 0.928
+        },
+        {
+          "index": 26,
+          "stamp_ms": 766,
+          "progress": 1.0
+        }
+      ],
+      "bead": [
+        {
+          "index": 0,
+          "stamp_ms": 113,
+          "progress": 0.0
+        },
+        {
+          "index": 26,
+          "stamp_ms": 770,
+          "progress": 0.022
+        },
+        {
+          "index": 28,
+          "stamp_ms": 821,
+          "progress": 0.34
+        },
+        {
+          "index": 29,
+          "stamp_ms": 846,
+          "progress": 0.34
+        },
+        {
+          "index": 31,
+          "stamp_ms": 898,
+          "progress": 0.812
+        },
+        {
+          "index": 32,
+          "stamp_ms": 923,
+          "progress": 1.0
+        },
+        {
+          "index": 33,
+          "stamp_ms": 948,
+          "progress": 1.0
+        }
+      ]
+    },
+    "notifications": {
+      "qml": [
+        {
+          "index": 0,
+          "stamp_ms": 109,
+          "progress": 0.0
+        },
+        {
+          "index": 20,
+          "stamp_ms": 611,
+          "progress": 0.107
+        },
+        {
+          "index": 21,
+          "stamp_ms": 636,
+          "progress": 0.184
+        },
+        {
+          "index": 22,
+          "stamp_ms": 661,
+          "progress": 0.46
+        },
+        {
+          "index": 24,
+          "stamp_ms": 711,
+          "progress": 0.833
+        },
+        {
+          "index": 25,
+          "stamp_ms": 736,
+          "progress": 0.993
+        },
+        {
+          "index": 26,
+          "stamp_ms": 762,
+          "progress": 1.0
+        }
+      ],
+      "bead": [
+        {
+          "index": 0,
+          "stamp_ms": 121,
+          "progress": 0.0
+        },
+        {
+          "index": 20,
+          "stamp_ms": 627,
+          "progress": 0.028
+        },
+        {
+          "index": 21,
+          "stamp_ms": 652,
+          "progress": 0.028
+        },
+        {
+          "index": 24,
+          "stamp_ms": 727,
+          "progress": 0.648
+        },
+        {
+          "index": 25,
+          "stamp_ms": 752,
+          "progress": 0.944
+        },
+        {
+          "index": 26,
+          "stamp_ms": 778,
+          "progress": 1.0
+        },
+        {
+          "index": 27,
+          "stamp_ms": 803,
+          "progress": 1.0
+        }
+      ]
+    }
+  }
+}

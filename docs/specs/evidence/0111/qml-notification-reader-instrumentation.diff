@@ -1,0 +1,11 @@
+--- a/shell/services/NacreNotifs.qml
++++ b/shell/services/NacreNotifs.qml
+@@ -207,7 +207,7 @@
+         id: reader
+         objectName: "noticeHistoryReader"
+         command: [NacrePaths.helperBinary, root.helper, "load"]
+-        running: true
++        running: NacreHelpers.ready
+         onOutput: text => root.restore(text)
+         onExited: (exitCode, exitStatus) => {
+             if (exitCode !== 0)

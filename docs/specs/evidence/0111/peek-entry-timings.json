@@ -1,0 +1,91 @@
+{
+  "source_capture": "Control 4f8db4cf; 2880x1800 scale1.5 CPU; 25ms screenshot sampling. Initial nominal icon labels were corrected after inspecting actual pane contents.",
+  "method": "ROI physical px [1800,0,2880,650], progress proxy from first frame to last frame; first visible at >=5% image progress; t10/t50/t90 by threshold interpolation as available; screencopy timestamps, not scanout.",
+  "valid_direction": "entry only. Existing exit strips begin before native panels reach fully open after .65s dwell; exclude exit durations.",
+  "rows": [
+    {
+      "kind": "audio",
+      "verified_contents": "contact-sheet pane labels/status traces; notifications deferred",
+      "qml": {
+        "progress_10_ms": 609,
+        "progress_50_ms": 659,
+        "progress_90_ms": 710,
+        "transition_10_to_90_ms": 101,
+        "first_5pct_image_progress_ms": 584
+      },
+      "bead": {
+        "progress_10_ms": 845,
+        "progress_50_ms": 921,
+        "progress_90_ms": 921,
+        "transition_10_to_90_ms": 76,
+        "first_5pct_image_progress_ms": 845
+      },
+      "bead_minus_qml_transition_ms": -25,
+      "bead_minus_qml_5pct_proxy_ms": 261
+    },
+    {
+      "kind": "network",
+      "verified_contents": "contact-sheet pane labels/status traces; notifications deferred",
+      "qml": {
+        "progress_10_ms": 614,
+        "progress_50_ms": 690,
+        "progress_90_ms": 715,
+        "transition_10_to_90_ms": 101,
+        "first_5pct_image_progress_ms": 589
+      },
+      "bead": {
+        "progress_10_ms": 821,
+        "progress_50_ms": 898,
+        "progress_90_ms": 898,
+        "transition_10_to_90_ms": 77,
+        "first_5pct_image_progress_ms": 821
+      },
+      "bead_minus_qml_transition_ms": -24,
+      "bead_minus_qml_5pct_proxy_ms": 232
+    },
+    {
+      "kind": "bluetooth",
+      "verified_contents": "contact-sheet pane labels/status traces; notifications deferred",
+      "qml": {
+        "progress_10_ms": 614,
+        "progress_50_ms": 664,
+        "progress_90_ms": 714,
+        "transition_10_to_90_ms": 100,
+        "first_5pct_image_progress_ms": 589
+      },
+      "bead": {
+        "progress_10_ms": 848,
+        "progress_50_ms": 925,
+        "progress_90_ms": 925,
+        "transition_10_to_90_ms": 77,
+        "first_5pct_image_progress_ms": 848
+      },
+      "bead_minus_qml_transition_ms": -23,
+      "bead_minus_qml_5pct_proxy_ms": 259
+    },
+    {
+      "kind": "battery",
+      "verified_contents": "contact-sheet pane labels/status traces; notifications deferred",
+      "qml": {
+        "progress_10_ms": 614,
+        "progress_50_ms": 690,
+        "progress_90_ms": 715,
+        "transition_10_to_90_ms": 101,
+        "first_5pct_image_progress_ms": 587
+      },
+      "bead": {
+        "progress_10_ms": 821,
+        "progress_50_ms": 898,
+        "progress_90_ms": 923,
+        "transition_10_to_90_ms": 102,
+        "first_5pct_image_progress_ms": 821
+      },
+      "bead_minus_qml_transition_ms": 1,
+      "bead_minus_qml_5pct_proxy_ms": 234
+    }
+  ],
+  "median_qml_entry_10_90_ms": 101.0,
+  "median_bead_entry_10_90_ms": 77.0,
+  "conclusion": "All four verified status panes height-reveal in both shells. The native 5% image-progress threshold is a median 246.5 ms later; a few edge pixels can appear earlier. This measures coarse captured progress, not exact first-pixel, input-to-present or physical-scanout latency. Visible 10-90% progress spans are 76-102 ms native versus 100-101 ms QML. Motion is present; smooth-motion parity is not established.",
+  "median_native_extra_5pct_proxy_ms": 246.5
+}

@@ -1,0 +1,17 @@
+{
+  "left": "QML 713d38b, capture-only fixture-readiness instrumentation",
+  "right": "Bead eb64fe6 candidate",
+  "crop_roi_physical_px": [
+    2200,
+    75,
+    2880,
+    440
+  ],
+  "crop_output_px_per_arm": [
+    680,
+    365
+  ],
+  "synthetic_saved_history_row": true,
+  "gap_between_panels_px": 24,
+  "file": "notifications-paired-instrumented-qml-left-bead-right.png"
+}

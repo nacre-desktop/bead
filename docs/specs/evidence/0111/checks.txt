@@ -1,0 +1,18 @@
+B0111 remote Arch CI-equivalent
+Source: eb64fe6 code, 355342a dashboard goldens; private exact-tree snapshot f78dcde
+Command: nice -n 10 bash docs/specs/evidence/0108/check.sh
+Result: exit 0, CI_ALL_OK
+Includes fmt, clippy -D warnings, workspace tests, renderer feature configurations,
+headless dependency boundary, facade checks, Luau analysis (144 modules), capture
+window regressions, packaging, wallpaper smoke, private service/SNI/DBusMenu
+lifecycles, and cargo-deny for the workspace and independent bead graphs.
+
+Focused remote checks:
+nice -n 10 cargo test -p nacre-shell --locked -j2 dashboard_pearl_centers_under_each_caption_at_fractional_scale
+PASS 1/1
+nice -n 10 cargo test -p nacre-shell --locked -j2 tab_navigation_keeps_runtime_open_and_releases_previous_page_sources
+PASS 1/1
+BEAD_UPDATE_GOLDENS=1 nice -n 10 cargo test -p nacre-shell --locked -j2 dashboard::
+PASS 63/63
+36 regenerated dashboard goldens visually reviewed; all changed pixels confined
+to pearl strip y73..85 at1x / y109..128 at1.5x. No non-dashboard goldens changed.

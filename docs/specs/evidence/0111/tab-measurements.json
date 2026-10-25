@@ -1,0 +1,27 @@
+{
+  "qml_reference_revision": "713d38b3a0421b42da995f6cc562650510807e88",
+  "bead_source_revision": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+  "bead_shell_sha256": "39b993cd89df87c2d50ca6c96c615aaab0b42f7c84a91dc7f24c6f560bb6f24d",
+  "geometry": {
+    "output_px": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "fonts": "real desktop fonts"
+  },
+  "method": "Largest saturated turquoise component in native pixels y=138..165 gives pearl center; brightness-weighted near-neutral ink centroid in y=92..132 gives visible text ink center. Bead layout regression independently checks the caption advance-box center within 1 physical pixel.",
+  "bead_pearl_minus_text_ink_centroid_physical_px": {
+    "Today": 0.36,
+    "Media": 0.4,
+    "Weather": 2.1,
+    "System": 1.01
+  },
+  "qml_pearl_minus_text_ink_centroid_physical_px": {
+    "Today": -17.72,
+    "Media": -18.16,
+    "Weather": -15.97,
+    "System": -16.99
+  },
+  "interpretation": "Bead pearls follow each caption's advance-box center. Positive offsets put the pearl right of the brightness-weighted visible ink centroid; asymmetric glyph ink leaves Weather at +2.10 px while the caption-box regression stays within 1 physical pixel. QML centers the icon-plus-caption group; this difference follows B0111's explicit text placement request."
+}

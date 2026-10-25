@@ -1,0 +1,41 @@
+{
+  "baseline": {
+    "revision": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+    "native_notifications_service": {
+      "status": "running",
+      "failures": 0
+    },
+    "native_notifications_topic_advertised": true,
+    "bead_bar_notification_count": 1,
+    "bead_panel_fixture_visible": false,
+    "bead_panel_loading_text_visible": true,
+    "qml_panel_loading_text_visible": true
+  },
+  "candidate": {
+    "revision": "17f8ecc",
+    "native_notifications_service": {
+      "status": "running",
+      "failures": 0
+    },
+    "native_notifications_topic_advertised": true,
+    "bead_bar_notification_count": 1,
+    "bead_panel_fixture_visible": true,
+    "bead_panel_loading_text_visible": false,
+    "launcher.quick_error": "",
+    "launcher.quick_item_count": 3,
+    "qml_bar_status_noticeCount": 0,
+    "qml_panel_loading_text_visible": true
+  },
+  "fixture": "One synthetic QML-shaped saved-history row. No owner notification contents were captured.",
+  "visual_method": "Manual inspection of QML and Bead 2880x1800 screenshots at scale 1.5; Bead candidate row title/body are synthetic fixture text.",
+  "limitation": "The unmodified QML daemon-helper arm failed its one-shot startup history read. The successful QML content reference uses a documented private-copy reader readiness gate; it is not an unmodified-reference pass.",
+  "instrumented_qml_reference": {
+    "source_revision": "713d38b3a0421b42da995f6cc562650510807e88",
+    "capture_only_reader_gate": "NacreHelpers.ready",
+    "historyReady": true,
+    "retained": 1,
+    "error": "",
+    "fixture_visible": true,
+    "loading_visible": false
+  }
+}

@@ -37,6 +37,18 @@ and nested; the laptop absolute cap remains for the lead.
 Bar status now follows reconnecting daemon sources; workspace origins reuse the
 notifications compositor subscription. Wallpaper consumers survive a late daemon.
 Full remote Arch CI passes. [Scope and recovery proof](specs/0118-daemon-reconnect.md).
+## 2026-10-25 — B0111 daily-use fixes, validation in progress
+
+The notification panel now shares the permanent daemon source and renders
+persisted history; its standalone fix is on main. The sidebar candidate preserves
+hover ownership across cold app startup, with QML's leave grace and explicit
+click/key/pin semantics. Dashboard pearls now follow caption centres as requested,
+with the intentional difference from QML's icon-plus-caption centre documented.
+All 36 refreshed dashboard goldens change only pearl pixels; full remote Arch CI
+passes. Peek entry already height-reveals; coarse captured progress remains a
+B0110 gap. Final nested semantics, 4× tab crops and five-pair CPU memory acceptance
+are in progress. [Evidence and proof limits](specs/0111-live-bugs.md).
+No live desktop, installed software or laptop-cap acceptance.
 
 ## 2026-10-25 — B0108 title/tabs, lead-accepted
 

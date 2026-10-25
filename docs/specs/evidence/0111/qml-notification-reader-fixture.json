@@ -1,0 +1,8 @@
+{
+  "capture_only": true,
+  "reader_gate": "NacreHelpers.ready",
+  "source_revision": "713d38b3a0421b42da995f6cc562650510807e88",
+  "original_sha256": "e46df4a3222f810e3e0a4b71ae304b2230b7da8b36d2b001658cf7ef1d5debf9",
+  "modified_sha256": "b4a22b74e90782270d99a963550e63a5232ff2c5701beb270cef6802e8e6f805",
+  "instrumentation_diff": "--- a/shell/services/NacreNotifs.qml\n+++ b/shell/services/NacreNotifs.qml\n@@ -207,7 +207,7 @@\n         id: reader\n         objectName: \"noticeHistoryReader\"\n         command: [NacrePaths.helperBinary, root.helper, \"load\"]\n-        running: true\n+        running: NacreHelpers.ready\n         onOutput: text => root.restore(text)\n         onExited: (exitCode, exitStatus) => {\n             if (exitCode !== 0)\n"
+}

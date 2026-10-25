@@ -1,0 +1,59 @@
+{
+  "left": "QML origin/main 713d38b",
+  "right": "Bead candidate eb64fe6",
+  "crop": "same absolute physical-pixel ROI in both arms, 351x100, upscaled nearest-neighbor 4x",
+  "slots": {
+    "today": {
+      "roi_physical_px": [
+        738,
+        75,
+        1089,
+        175
+      ],
+      "output_px": [
+        2808,
+        400
+      ],
+      "file": "today-selected-4x-qml-left-bead-right.png"
+    },
+    "media": {
+      "roi_physical_px": [
+        1089,
+        75,
+        1440,
+        175
+      ],
+      "output_px": [
+        2808,
+        400
+      ],
+      "file": "media-selected-4x-qml-left-bead-right.png"
+    },
+    "weather": {
+      "roi_physical_px": [
+        1440,
+        75,
+        1791,
+        175
+      ],
+      "output_px": [
+        2808,
+        400
+      ],
+      "file": "weather-selected-4x-qml-left-bead-right.png"
+    },
+    "system": {
+      "roi_physical_px": [
+        1791,
+        75,
+        2142,
+        175
+      ],
+      "output_px": [
+        2808,
+        400
+      ],
+      "file": "system-selected-4x-qml-left-bead-right.png"
+    }
+  }
+}
