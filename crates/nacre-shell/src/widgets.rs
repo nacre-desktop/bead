@@ -4,6 +4,112 @@ use bead::core::{Value, source::Snapshot};
 use std::collections::BTreeMap;
 
 pub const TOPIC: &str = "settings.store.widgets";
+
+/// The catalogue and the user's canonical layout share the standalone app's warm first frame.
+pub fn window_spec(
+    root: std::path::PathBuf,
+    palette: std::path::PathBuf,
+    colors: bead::render::Palette,
+    client: Option<crate::nacre_source::Client>,
+    trace: bool,
+) -> Result<bead::wayland::WindowSpec, Box<dyn std::error::Error>> {
+    use std::sync::Arc;
+    let behavior = root.join("widgets/app/behavior.luau");
+    let schema = bead::ui::script::Script::load(&std::fs::read(&behavior)?, &behavior)?.schema()?;
+    let number = |key: &str| -> Result<u32, Box<dyn std::error::Error>> {
+        match schema.get(key) {
+            Some(Value::Number(value)) if value.is_finite() && *value > 0. && *value <= 4096. => {
+                Ok(*value as u32)
+            }
+            _ => Err(format!("invalid Widgets app dimension: {key}").into()),
+        }
+    };
+    let size = (number("window.width")?, number("window.height")?);
+    let min_size = (number("window.min_width")?, number("window.min_height")?);
+    let preferred_min = (
+        number("window.preferred_min_width")?,
+        number("window.preferred_min_height")?,
+    );
+    let fraction = match (
+        schema.get("window.width_fraction"),
+        schema.get("window.height_fraction"),
+    ) {
+        (Some(Value::Number(width)), Some(Value::Number(height)))
+            if width.is_finite()
+                && height.is_finite()
+                && (0.1..=1.).contains(width)
+                && (0.1..=1.).contains(height) =>
+        {
+            (*width, *height)
+        }
+        _ => return Err("invalid Widgets app output size fraction".into()),
+    };
+    let mut blank = crate::sound::fallback(colors.get("surface")?);
+    blank.motion = None;
+    blank.primitives.clear();
+    blank.offset = (0., 0.);
+    blank.width = size.0 as f32;
+    blank.bounds = bead::render::Rect::new(0., 0., size.0 as f32, size.1 as f32);
+    let mut warm = bead::ui::Session::new(
+        root.clone(),
+        "widgets/app/main.luau".into(),
+        palette.clone(),
+        colors.clone(),
+        blank.clone(),
+    );
+    warm.set_viewport(size.0, size.1);
+    let warm_runtime = crate::reload::Runtime::new(warm)
+        .with_trace(trace)
+        .with_shared_desktop(bead::services::Desktop::start(), false)?
+        .with_widget_app(client.clone().as_ref(), &root)?;
+    let mut warm_runtime = warm_runtime;
+    let fallback = warm_runtime
+        .warm_frame()
+        .map_err(|error| format!("Widgets app first-frame compile failed: {error}"))?;
+    drop(warm_runtime);
+    let cold = blank;
+    let app_root = root.clone();
+    let app_palette = palette.clone();
+    let app_colors = colors.clone();
+    let factory: bead::wayland::WindowFactory = Arc::new(move |_: &[serde_json::Value]| {
+        let mut session = bead::ui::Session::new(
+            app_root.clone(),
+            "widgets/app/main.luau".into(),
+            app_palette.clone(),
+            app_colors.clone(),
+            cold.clone(),
+        );
+        session.set_viewport(size.0, size.1);
+        crate::reload::Runtime::new(session)
+            .with_trace(trace)
+            .with_shared_desktop(bead::services::Desktop::start(), false)
+            .and_then(|runtime| runtime.with_widget_app(client.as_ref(), &app_root))
+            .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
+            .map_err(|error| error.to_string())
+    });
+    Ok(bead::wayland::WindowSpec {
+        app_id: "nacre-widgets".into(),
+        title: "Widgets".into(),
+        size,
+        min_size,
+        size_for_output: Some(Arc::new(move |output| {
+            (
+                ((f64::from(output.0) * fraction.0) as u32)
+                    .max(preferred_min.0)
+                    .min(size.0),
+                ((f64::from(output.1) * fraction.1) as u32)
+                    .max(preferred_min.1)
+                    .min(size.1),
+            )
+        })),
+        fallback,
+        factory,
+        model: Arc::new(|args| {
+            let query = args.first().and_then(serde_json::Value::as_str).unwrap_or_default();
+            BTreeMap::from([("widgets.search".into(), Value::Text(query.into()))])
+        }),
+    })
+}
 /// Compatibility with the original bar's string arguments and instance-owned dropdowns.
 pub fn dropdown_view(argument: &Value) -> Option<&str> {
     match argument {

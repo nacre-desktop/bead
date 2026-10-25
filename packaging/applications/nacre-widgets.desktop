@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Nacre Widgets
+Comment=Customize widgets in your bar and on your desktop
+TryExec=bead-shell
+Exec=bead-shell widgets
+Icon=preferences-desktop
+StartupWMClass=nacre-widgets
+Categories=Settings;Utility;
+Terminal=false

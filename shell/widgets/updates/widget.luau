@@ -32,7 +32,7 @@ end
 local function style(title,preferred,render)
     return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render}
 end
-return {id="updates",title="Updates",icon="widgets",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
+return {id="updates",title="Updates",icon="package_2",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="icon+value",styles={
         icon=style("Icon",1,bar),["icon+value"]=style("Icon + value",2,bar),["icon+text"]=style("Icon + text",3,bar),
     }},desktop={default_style="summary",styles={summary={title="Summary",min_span=1,max_span=1200,preferred_span=280,render=desktop}}},

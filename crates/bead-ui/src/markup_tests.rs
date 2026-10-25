@@ -2843,3 +2843,31 @@ return ui.Host{id="host",shape="strip-h",width=600,height=50,grid={tiles=12,regi
     let r = rect(&s.view_nodes()[0].draw);
     assert!((r.x - 150.).abs() < 1. && (r.w - 100.).abs() < 1., "{r:?}");
 }
+
+#[test]
+fn clipped_preview_descendants_paint_and_hit_only_inside_the_parent() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Box{id="root",width=120,height=120,
+ ui.Box{id="preview",position="absolute",left=20,top=20,width=40,height=40,clip_children=true,
+  ui.Button{id="oversized",position="absolute",left=0,top=0,width=100,height=100,
+   fill="surface",text="Preview",on_activate=ui.action("select","preview")}}}"#,
+    )
+    .unwrap();
+    let s = session(&f);
+    let node = s
+        .current_nodes
+        .iter()
+        .find(|n| n.id.ends_with("oversized"))
+        .unwrap();
+    assert!(node.contains(30., 30.));
+    assert!(!node.contains(80., 80.));
+    assert!(
+        s.current
+            .clips
+            .values()
+            .any(|clip| *clip == Rect::new(20., 20., 40., 40.))
+    );
+}

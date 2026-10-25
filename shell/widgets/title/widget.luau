@@ -33,7 +33,7 @@ local function ellipsize(text,width)
     end
     return table.concat(points,"",1,best).."…"
 end
-return {id="title",title="Title",icon="widgets",category="bar",data={topics={},actions={}},
+return {id="title",title="Title",icon="title",category="bar",data={topics={},actions={}},
     settings={
         min_width={type="number",min=0,max=t.title_max_width,step=8},
         max_width={type="number",min=128,max=t.title_max_width,step=8},

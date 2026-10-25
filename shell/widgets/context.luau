@@ -1,5 +1,21 @@
 -- SPDX-License-Identifier: GPL-3.0-only
-local ui=require("bead.ui")
+local base_ui=require("bead.ui")
+local ui=base_ui
+local samples=base_ui.resolve_for_check(base_ui.bind("widgets.preview"))
+local sample=samples and samples[1]
+if sample then
+    ui={}
+    for key,value in base_ui do ui[key]=value end
+    ui.bind=function(key)
+        local value=sample[key]
+        if type(value)=="table" and value.fallback then
+            local binding=base_ui.bind(key)
+            local current=base_ui.resolve_for_check(binding)
+            return current~=nil and current~="" and binding or value.fallback
+        end
+        return value~=nil and value or base_ui.bind(key)
+    end
+end
 local kit=require("bead.kit")
 local t=require("../bar/tokens")
 local function centered_text(p)

@@ -150,6 +150,7 @@ pub const PROPERTIES: &[&str] = &[
     "round_caps",
     "image_fit",
     "clip_polygon",
+    "clip_children",
     "points",
     "closed",
     "text_align",
@@ -217,6 +218,7 @@ pub struct ViewSpec {
     pub round_caps: bool,
     pub image_fit: bead_render::ImageFit,
     pub clip_polygon: Option<Vec<[f32; 2]>>,
+    pub clip_children: bool,
     pub points: Vec<[f32; 2]>,
     pub closed: bool,
     pub drag: bool,
@@ -817,6 +819,7 @@ impl ViewSpec {
                     _ => return Err(source.error("image_fit must be fill or cover")),
                 },
                 clip_polygon: polygon(p.get("clip_polygon"), source)?,
+                clip_children: boolean(p, "clip_children", false, source)?,
                 points,
                 closed,
                 radius: number(
@@ -1294,14 +1297,20 @@ pub fn layout(
             });
         }
         let mut children_pos = (r.x, r.y);
-        let mut child_clip = clip;
+        let mut child_clip = if view.clip_children {
+            Some(clip.map_or(r, |clip| {
+                intersect(clip, r).unwrap_or(Rect::new(0., 0., 0., 0.))
+            }))
+        } else {
+            clip
+        };
         if let Some(store) = &view.scroll {
             let Value::Number(offset) = resolve(store)? else {
                 return Err(source.error("scroll must bind a number"));
             };
             children_pos.1 -= offset.clamp(0., scroll_limit.unwrap_or(f64::MAX)) as f32;
-            child_clip = Some(if let Some(c) = clip {
-                intersect(c, r).unwrap_or(r)
+            child_clip = Some(if let Some(c) = child_clip {
+                intersect(c, r).unwrap_or(Rect::new(0., 0., 0., 0.))
             } else {
                 r
             });

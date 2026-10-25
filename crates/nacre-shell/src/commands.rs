@@ -219,22 +219,16 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     }
     if call.target == "widgets" && matches!(call.method.as_str(), "open" | "edit") {
         validate(&call)?;
-        return Err(Reply::error(
-            call.id,
-            "unavailable",
-            "Widgets app is not available yet",
-        ));
+        return Err(crate::app::route(call.id, "widgets", "open", &call.args));
     }
     if call.target == "nacre"
         && call.method == "menu"
         && call.args.first().and_then(Value::as_str) == Some("widgets")
     {
         validate(&call)?;
-        return Err(Reply::error(
-            call.id,
-            "unavailable",
-            "Widgets app is not available yet",
-        ));
+        // The menu signature has a route and a query; the query starts the gallery filtered.
+        let args = call.args.get(1).cloned().into_iter().collect::<Vec<_>>();
+        return Err(crate::app::route(call.id, "widgets", "open", &args));
     }
     // Native extras have their own lazy surfaces; menu routes remain engine-owned.
     if call.target == "nacre"
@@ -647,12 +641,12 @@ mod tests {
         );
     }
     #[test]
-    fn widget_editor_routes_report_the_replacement_app_is_not_available_yet() {
+    fn widgets_routes_open_the_on_demand_app() {
         for method in ["open", "edit"] {
             let call = from_strings("widgets".into(), method.into(), &[]).unwrap();
             let error = map_views(call).unwrap_err().error.unwrap();
             assert_eq!(error.code, "unavailable");
-            assert_eq!(error.message, "Widgets app is not available yet");
+            assert_eq!(error.message, "apps are not configured in this shell");
         }
         let launcher = from_strings(
             "nacre".into(),
@@ -662,7 +656,7 @@ mod tests {
         .unwrap();
         let error = map_views(launcher).unwrap_err().error.unwrap();
         assert_eq!(error.code, "unavailable");
-        assert_eq!(error.message, "Widgets app is not available yet");
+        assert_eq!(error.message, "apps are not configured in this shell");
     }
     #[test]
     fn updates_control_route_opens_the_status_popout() {

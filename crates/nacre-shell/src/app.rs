@@ -8,6 +8,7 @@
 //! state beyond one path; everything an app allocates dies with its process.
 use crate::{
     chat, colors as colors_app, nacre_source, placement, popouts, prefs, prompt, settings, welcome,
+    widgets,
 };
 use bead::{
     render::Palette,
@@ -26,7 +27,7 @@ use std::{
 
 /// Apps the shell can start. A third-party app adds a branch to [`run`] and a route in
 /// `commands::map_views`; the launch, single-instance and exit rules are shared.
-pub const APPS: [&str; 5] = ["settings", "chat", "colors", "welcome", "prompt"];
+pub const APPS: [&str; 6] = ["settings", "chat", "colors", "welcome", "prompt", "widgets"];
 
 /// Topics every app follows: Nacre's text catalog and the settings that shape the look.
 const TOPICS: [&str; 6] = [
@@ -259,7 +260,7 @@ impl Host {
         }
         // Windows take the open call (a second open deep-links the running one); panels the
         // given panel method (`toggle` closes the running sidebar).
-        let (target, method) = if matches!(name, "settings" | "colors" | "welcome") {
+        let (target, method) = if matches!(name, "settings" | "colors" | "welcome" | "widgets") {
             ("bead.window", "open")
         } else {
             ("bead.panel", method)
@@ -526,6 +527,10 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
                 // Every app wears the live palette (B0068): the wallpaper topic carries it.
                 topics.push(colors_app::ACTIVE.to_string());
             }
+            if name == "widgets" {
+                topics.push(crate::widgets::TOPIC.to_owned());
+                topics.push("displays".to_owned());
+            }
             let mut config = nacre_source::Config::new(socket, topics);
             config.client = format!("nacre-app-{name}");
             if name == "chat" {
@@ -605,6 +610,15 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
         }
         "colors" => {
             options.window = Some(colors_app::window_spec(
+                root,
+                palette,
+                colors,
+                client.clone(),
+                false,
+            )?);
+        }
+        "widgets" => {
+            options.window = Some(widgets::window_spec(
                 root,
                 palette,
                 colors,
@@ -757,6 +771,52 @@ mod tests {
         }
         let argv = std::fs::read_to_string(&out).unwrap();
         assert!(argv.lines().any(|arg| arg == "--hover-open"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn widgets_app_receives_its_initial_search_argument() {
+        assert!(APPS.contains(&"widgets"));
+        let dir = private_dir("widgets-window");
+        let out = dir.join("argv.txt");
+        let script = dir.join("fake-app.sh");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\n", out.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let reply = host(&dir, &script).route(3, "widgets", "open", &[json!("clock")]);
+        assert!(reply.error.is_none());
+        let started = std::time::Instant::now();
+        while !out.exists() && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let argv = std::fs::read_to_string(&out).unwrap();
+        let lines: Vec<_> = argv.lines().collect();
+        assert_eq!(&lines[..3], ["--app", "widgets", "clock"]);
+        assert!(lines.windows(2).any(|pair| pair
+            == [
+                "--command-socket",
+                dir.join("app-widgets.sock").to_str().unwrap()
+            ]));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn widgets_routes_to_the_running_window_instead_of_a_panel() {
+        let dir = private_dir("widgets-route");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _server = ipc::Server::bind(dir.join("app-widgets.sock"), move |call| {
+            let _ = tx.send((call.target.clone(), call.method.clone(), call.args.clone()));
+            Reply::ok(call.id, Value::Null)
+        })
+        .unwrap();
+        let reply = host(&dir, Path::new("/unused")).route(8, "widgets", "open", &[]);
+        assert!(reply.error.is_none());
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+            ("bead.window".into(), "open".into(), Vec::new())
+        );
+        drop(_server);
         let _ = std::fs::remove_dir_all(dir);
     }
     #[test]

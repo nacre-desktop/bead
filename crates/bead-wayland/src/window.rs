@@ -57,6 +57,7 @@ pub(super) struct Win {
     last_draw: Option<Instant>,
     timer: bool,
     drawn: u64,
+    first_frame_texts: Vec<String>,
 }
 impl Win {
     pub(super) fn scroll_regions(&self) -> Vec<Rect> {
@@ -177,6 +178,10 @@ impl App {
                 call.id,
                 serde_json::json!({
                     "size": self.window.as_ref().map(|w| w.size),
+                    "drawn": self.window.as_ref().map(|w| w.drawn),
+                    "first_frame_texts": self.window.as_ref().map(|w| &w.first_frame_texts),
+                    "regions": self.window.as_ref().map(|w| w.source.input_regions().into_iter().map(|r|
+                        serde_json::json!({"id":r.id,"rect":[r.rect.x,r.rect.y,r.rect.w,r.rect.h]})).collect::<Vec<_>>()),
                     "stores": self.window.as_ref().and_then(|w| serde_json::from_str::<serde_json::Value>(&w.source.state_summary()).ok())
                 }),
             );
@@ -295,6 +300,7 @@ impl App {
             last_draw: None,
             timer: false,
             drawn: 0,
+            first_frame_texts: Vec::new(),
         });
         self.window_ui(UiEvent::Reload);
         if let Some(palette) = self.wallpaper_palette.clone() {
@@ -566,6 +572,20 @@ impl App {
         win.buffers[slot].attach_to(surface)?;
         win.window.commit();
         win.last_draw = Some(Instant::now());
+        if win.drawn == 0 && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
+            win.first_frame_texts = win
+                .scene
+                .primitives
+                .iter()
+                .filter_map(|primitive| match primitive {
+                    bead_render::Primitive::Text { text, .. } if !text.is_empty() => {
+                        Some(text.clone())
+                    }
+                    _ => None,
+                })
+                .take(32)
+                .collect();
+        }
         win.drawn += 1;
         Ok(())
     }

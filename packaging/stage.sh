@@ -11,6 +11,7 @@ install -Dm755 "$build/nacre-shell" "$base/lib/bead/nacre-shell"
 install -Dm755 "$build/nacre-wallpaper-decode" "$base/lib/bead/nacre-wallpaper-decode"
 install -Dm755 "$build/bead-wallpaper-video" "$base/lib/bead/bead-wallpaper-video"
 install -Dm755 "$root/packaging/bin/bead-shell" "$base/bin/bead-shell"
+install -Dm644 "$root/packaging/applications/nacre-widgets.desktop" "$base/share/applications/nacre-widgets.desktop"
 # Test fixtures, goldens and the message tables (embedded in the binary) stay out of the install; the UI bundle is the Luau tree.
 (cd "$root/shell" && find . \( -path ./tests -o -path ./i18n \) -prune -o -type f -print) | while read -r file; do
 	install -Dm644 "$root/shell/$file" "$base/share/bead/shell/$file"

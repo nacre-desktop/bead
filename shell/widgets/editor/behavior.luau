@@ -221,6 +221,7 @@ end
 
 return {
     stores={
+        ["widgets.preview"]={},
         ["bead.surface.x"]=0,["bead.surface.y"]=0,
         ["widgets.layout"]={},["widgets.rev"]=0,["widgets.base_rev"]=0,["widgets.draft"]={},["widgets.geometry"]={},["widgets.undo"]={},
         ["widgets.write"]={},["widgets.error"]="",["widgets.selected"]="",["widgets.field"]="",

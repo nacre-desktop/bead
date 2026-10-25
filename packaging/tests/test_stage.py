@@ -1,6 +1,7 @@
 """Staging and launcher tests with stub binaries; no build, display or daemon."""
 
 import os
+import socket
 import subprocess
 import tempfile
 import unittest
@@ -58,6 +59,31 @@ class StageTests(unittest.TestCase):
         self.assertEqual(argv[:3], ["--bar", "--core-views", "--ui-provider"])
         self.assertIn("/run/user/1/nacre/daemon.sock", argv)
         self.assertIn("/run/user/1/nacre/bead-command.sock", argv)
+
+    def test_widgets_entry_launches_the_on_demand_app_from_a_relocatable_prefix(self):
+        base, _, installed = self.stage("/opt/bead")
+        desktop = (installed / "share/applications/nacre-widgets.desktop").read_text()
+        self.assertIn("Exec=bead-shell widgets", desktop)
+        self.assertIn("StartupWMClass=nacre-widgets", desktop)
+        runtime = str(base / "runtime")
+        self.assertEqual(self.run_launcher(installed, base, "widgets", XDG_RUNTIME_DIR=runtime).returncode, 0)
+        cwd, *argv = (base / "log").read_text().splitlines()
+        self.assertEqual(cwd, str(installed / "share/bead"))
+        self.assertEqual(argv[:2], ["--app", "widgets"])
+        self.assertIn(runtime + "/nacre/daemon.sock", argv)
+        self.assertIn(runtime + "/nacre/app-widgets.sock", argv)
+        self.assertIn(runtime + "/nacre/bead-command.sock", argv)
+        self.assertIn(str(installed / "share/bead/shell/palette.json"), argv)
+
+    def test_widgets_entry_reuses_the_running_shell(self):
+        base, _, installed = self.stage("/usr")
+        runtime = base / "runtime"
+        (runtime / "nacre").mkdir(parents=True)
+        with socket.socket(socket.AF_UNIX) as server:
+            server.bind(str(runtime / "nacre/bead-command.sock"))
+            self.assertEqual(self.run_launcher(installed, base, "widgets", XDG_RUNTIME_DIR=str(runtime)).returncode, 0)
+        _, *argv = (base / "log").read_text().splitlines()
+        self.assertEqual(argv, ["--ipc", "--socket", str(runtime / "nacre/bead-command.sock"), "widgets", "open"])
 
     def test_start_needs_a_session_and_unknown_commands_fail(self):
         base, _, installed = self.stage("/usr")

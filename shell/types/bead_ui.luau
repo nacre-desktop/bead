@@ -74,6 +74,7 @@ export type Props = {
     round_caps:any?,
     image_fit:any?,
     clip_polygon:any?,
+    clip_children:any?,
     points:any?,
     closed:any?,
     text_align:any?,

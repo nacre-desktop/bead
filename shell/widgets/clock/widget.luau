@@ -85,7 +85,7 @@ local function desktop_style(title,style,preferred,requires)
         return desktop(props,settings,data)
     end}
 end
-return {id="clock",title="Clock",icon="widgets",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
+return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="time",styles={
         time=bar_style("Time","time",1),["time+date"]=bar_style("Time + date","time+date",6,{"bead.desktop.clock.date"}),
         seconds=bar_style("Seconds","seconds",2,{"bead.desktop.clock.seconds"}),

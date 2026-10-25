@@ -36,7 +36,7 @@ local icon_styles={
 local desktop_styles={
     nacre=desktop_style("Nacre"),arch=desktop_style("Arch"),cachyos=desktop_style("CachyOS"),custom=desktop_style("Custom icon"),
 }
-return {id="launcher",title="Launcher",icon="widgets",category="bar",data={topics={},actions={}},
+return {id="launcher",title="Launcher",icon="apps",category="bar",data={topics={},actions={}},
     settings={icon={type="choice",hidden=true,options={"nacre","arch","cachyos","custom"}},custom_path={type="text"},action={type="choice",options={"launcher","dashboard","custom"}},route={type="text"}},
     defaults={icon="nacre",custom_path="",action="launcher",route=""},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="nacre",styles=icon_styles},desktop={default_style="nacre",styles=desktop_styles}}

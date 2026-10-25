@@ -1,6 +1,7 @@
 #!/bin/sh
 # Bead launcher (GPL-3.0-only). Relocatable: finds its binaries and bundle from its own prefix.
 #   bead-shell start   run the always-on UI against the Nacre daemon (what nacre-shell.service runs)
+#   bead-shell widgets open the Widgets app
 #   bead-shell check   verify the install without a display or a daemon
 set -eu
 self=$(readlink -f -- "$0")
@@ -12,11 +13,29 @@ check)
 	for file in "$lib/nacre-shell" "$lib/nacre-wallpaper-decode" "$lib/bead-wallpaper-video"; do
 		[ -x "$file" ] || { echo "bead-shell: missing executable $file" >&2; exit 1; }
 	done
-	for entry in ui bar popouts sound status; do
+	for entry in ui bar popouts sound status widgets/app; do
 		[ -f "$share/shell/$entry/main.luau" ] || { echo "bead-shell: missing bundle entry $entry" >&2; exit 1; }
 	done
+	[ -f "$prefix/share/applications/nacre-widgets.desktop" ] || { echo "bead-shell: missing Widgets launcher entry" >&2; exit 1; }
 	[ -f "$share/shell/palette.json" ] || { echo "bead-shell: missing palette" >&2; exit 1; }
 	exec "$lib/nacre-shell" --help >/dev/null
+	;;
+widgets)
+	: "${XDG_RUNTIME_DIR:?bead-shell widgets needs a user session}"
+	cd "$share"
+	command_socket=$XDG_RUNTIME_DIR/nacre/bead-command.sock
+	if [ -S "$command_socket" ]; then
+		exec "$lib/nacre-shell" --ipc --socket "$command_socket" widgets open
+	fi
+	if [ -S "$XDG_RUNTIME_DIR/nacre/app-widgets.sock" ]; then
+		exec "$lib/nacre-shell" --ipc --socket "$XDG_RUNTIME_DIR/nacre/app-widgets.sock" widgets open
+	fi
+	palette=$share/shell/palette.json
+	[ ! -f "$XDG_RUNTIME_DIR/nacre/palette-live.json" ] || palette=$XDG_RUNTIME_DIR/nacre/palette-live.json
+	exec "$lib/nacre-shell" --app widgets \
+		--daemon-socket "$XDG_RUNTIME_DIR/nacre/daemon.sock" \
+		--command-socket "$XDG_RUNTIME_DIR/nacre/app-widgets.sock" \
+		--host-socket "$command_socket" --palette "$palette"
 	;;
 start)
 	: "${XDG_RUNTIME_DIR:?bead-shell start needs a user session}"
@@ -26,7 +45,7 @@ start)
 		--command-socket "$XDG_RUNTIME_DIR/nacre/bead-command.sock"
 	;;
 *)
-	echo "usage: bead-shell start|check" >&2
+	echo "usage: bead-shell start|widgets|check" >&2
 	exit 2
 	;;
 esac
