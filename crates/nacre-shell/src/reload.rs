@@ -5733,3 +5733,6 @@ mod prompt_runtime_tests;
 mod session_menu_runtime_tests;
 #[cfg(test)]
 mod wifi_runtime_tests;
+
+#[cfg(test)]
+mod widget_startup_tests;
