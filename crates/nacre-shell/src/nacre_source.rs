@@ -486,6 +486,14 @@ impl Client {
                 .clone(),
         })
     }
+    /// Share an always-on subscription when present, otherwise hold a view-scoped lease.
+    pub fn view_topic(&self, name: &str) -> source::Result<Arc<dyn Source>> {
+        match self.topic(name) {
+            Ok(topic) => Ok(Arc::new(topic)),
+            Err(error) if error.code == "unknown_topic" => Ok(Arc::new(self.lease_topic(name)?)),
+            Err(error) => Err(error),
+        }
+    }
     pub fn status(&self) -> Status {
         self.0
             .shared

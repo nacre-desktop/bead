@@ -48,14 +48,7 @@ impl Quick {
         let topics = ["controls", "notifications", "dashboard.updates"]
             .into_iter()
             .map(|name| {
-                // UI-provider starts notifications permanently for notice service; share that source when present.
-                let topic: Arc<dyn Source> = match client.topic(name) {
-                    Ok(topic) => Arc::new(topic),
-                    Err(error) if error.code == "unknown_topic" => {
-                        Arc::new(client.lease_topic(name)?)
-                    }
-                    Err(error) => return Err(error),
-                };
+                let topic = client.view_topic(name)?;
                 Ok((name, topic))
             })
             .collect::<source::Result<Vec<_>>>()?;

@@ -535,14 +535,7 @@ pub fn control_center(
         factory: Arc::new(move |open| {
             let topics = crate::control_center::TOPICS
                 .iter()
-                .filter_map(|name| {
-                    client.lease_topic(name).ok().map(|topic| {
-                        (
-                            *name,
-                            Arc::new(topic) as Arc<dyn bead::core::source::Source>,
-                        )
-                    })
-                })
+                .filter_map(|name| client.view_topic(name).ok().map(|topic| (*name, topic)))
                 .collect();
             let store = client
                 .lease_topic(crate::control_center::STORE_TOPIC)
@@ -634,14 +627,7 @@ fn notification_panel(
             let topics = ["notifications", "controls"]
                 .iter()
                 .filter(|name| !peek || **name == "notifications")
-                .filter_map(|name| {
-                    client.lease_topic(name).ok().map(|topic| {
-                        (
-                            *name,
-                            Arc::new(topic) as Arc<dyn bead::core::source::Source>,
-                        )
-                    })
-                })
+                .filter_map(|name| client.view_topic(name).ok().map(|topic| (*name, topic)))
                 .collect();
             let control = crate::control_center::ControlCenter::new(
                 Some(client.clone()),

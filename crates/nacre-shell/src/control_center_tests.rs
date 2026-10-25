@@ -703,6 +703,61 @@ async fn launcher_quick_reuses_permanent_notifications_subscription() {
     );
 }
 
+/// The UI provider owns a permanent notifications subscription in daemon mode.
+/// Opening and closing either control view must share it and retain history.
+#[tokio::test(flavor = "current_thread")]
+async fn notification_views_share_permanent_history_and_release_only_their_leases() {
+    let notices = json!({"health": health(), "do_not_disturb": false,
+        "history_count": 1, "history_more": false, "history_storage": {"ready": true, "writable": true},
+        "history": {"order": ["saved"], "items": {"saved": {"app_name": "Fixture", "summary": "Saved notification", "body": "From disk"}}}});
+    let mut lab = lab_with_payloads(
+        &["notifications.clear"],
+        controls(),
+        vec!["notifications".into()],
+        notices,
+    )
+    .await;
+    let control = ControlCenter::new(
+        Some(lab.client.clone()),
+        ["notifications", "controls"]
+            .into_iter()
+            .map(|name| (name, lab.client.view_topic(name).unwrap()))
+            .collect(),
+        None,
+        Vec::new(),
+    );
+    let mut projected = BTreeMap::new();
+    for _ in 0..500 {
+        projected = control.project(&Stores::default());
+        if projected.get("cc.notice_ready") == Some(&Value::Bool(true)) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(projected["cc.notice_ready"], Value::Bool(true));
+    assert_eq!(projected["cc.notice_count"], Value::Number(1.));
+    let Value::List(rows) = &projected["cc.notices"] else {
+        panic!("history rows")
+    };
+    assert_eq!(rows[0]["summary"], "Saved notification");
+    assert_eq!(projected["cc.notice_clear"], Value::Bool(true));
+    drop(control);
+    let mut released = Vec::new();
+    for _ in 0..500 {
+        while let Ok(topics) = lab.unsubs.try_recv() {
+            released.extend(topics);
+        }
+        if released.contains(&"controls".into()) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(released.contains(&"controls".into()));
+    assert!(!released.contains(&"notifications".into()));
+    let reopened = lab.client.view_topic("notifications").unwrap();
+    assert_eq!(reopened.snapshot().data["history_count"], 1);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn tiles_call_only_published_methods_with_the_current_state() {
     let mut lab = lab(&ALL).await;
