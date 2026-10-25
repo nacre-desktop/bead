@@ -138,7 +138,11 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
     assert_eq!(values["dashboard.wallpaper"], Value::Bool(true));
     let held = dashboard.poster.borrow();
     let poster = held.as_ref().unwrap();
-    assert_eq!((poster.1, poster.2), (1410, 384), "decode at the effective raster scale");
+    assert_eq!(
+        (poster.1, poster.2),
+        (1410, 384),
+        "decode at the effective raster scale"
+    );
     assert_eq!(
         poster.0.presentation,
         nacre_protocol::wallpaper::Presentation::Fit
@@ -217,8 +221,11 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
     );
     let closed = bead::core::Stores::default()
         .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(false))]))?;
-    assert_eq!(dashboard.project_with_stores(&closed)["dashboard.wallpaper"], Value::Bool(true),
-        "the ready poster remains visible during the closing reveal");
+    assert_eq!(
+        dashboard.project_with_stores(&closed)["dashboard.wallpaper"],
+        Value::Bool(true),
+        "the ready poster remains visible during the closing reveal"
+    );
     drop(dashboard);
     assert!(
         closing.upgrade().is_none(),

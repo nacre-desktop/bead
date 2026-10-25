@@ -2253,7 +2253,9 @@ impl SceneSource for Runtime {
     }
     fn scales(&mut self, scales: Vec<f32>) {
         if let Some(dashboard) = &self.dashboard
-            && let Some(scale) = scales.into_iter().filter(|scale| scale.is_finite() && *scale > 0.)
+            && let Some(scale) = scales
+                .into_iter()
+                .filter(|scale| scale.is_finite() && *scale > 0.)
                 .max_by(f32::total_cmp)
         {
             dashboard.set_raster_scale(scale);

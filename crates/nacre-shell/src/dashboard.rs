@@ -605,9 +605,15 @@ impl Dashboard {
         } else if self.page == Page::Today {
             // Preserve the visible poster through the closing reveal. The existing
             // panel retirement drops it and joins any pending job after the grace.
-            values.insert("dashboard.wallpaper".into(), Value::Bool(
-                self.poster.borrow().as_ref().is_some_and(|(_, _, _, bytes)| bytes.is_some()),
-            ));
+            values.insert(
+                "dashboard.wallpaper".into(),
+                Value::Bool(
+                    self.poster
+                        .borrow()
+                        .as_ref()
+                        .is_some_and(|(_, _, _, bytes)| bytes.is_some()),
+                ),
+            );
         }
         // The countdown redraws once a second only while a session runs in an open panel;
         // the mini player on Today shows no position and needs no wake.
@@ -924,11 +930,36 @@ impl Dashboard {
                     .and_then(|id| current.hours.items.get(id));
                 let metrics = [
                     ("wind", "bead.dashboard.weather-wind", current.wind, " km/h"),
-                    ("humidity", "bead.dashboard.weather-humidity", current.humidity, "%"),
-                    ("uv", "bead.dashboard.weather-uv", day.and_then(|d| d.uv), ""),
-                    ("rain", "bead.dashboard.weather-rain", hour.and_then(|h| h.rain), "%"),
-                    ("air-quality", "bead.dashboard.weather-air-quality", current.aqi, " AQI"),
-                    ("pressure", "bead.dashboard.weather-pressure", current.pressure, " hPa"),
+                    (
+                        "humidity",
+                        "bead.dashboard.weather-humidity",
+                        current.humidity,
+                        "%",
+                    ),
+                    (
+                        "uv",
+                        "bead.dashboard.weather-uv",
+                        day.and_then(|d| d.uv),
+                        "",
+                    ),
+                    (
+                        "rain",
+                        "bead.dashboard.weather-rain",
+                        hour.and_then(|h| h.rain),
+                        "%",
+                    ),
+                    (
+                        "air-quality",
+                        "bead.dashboard.weather-air-quality",
+                        current.aqi,
+                        " AQI",
+                    ),
+                    (
+                        "pressure",
+                        "bead.dashboard.weather-pressure",
+                        current.pressure,
+                        " hPa",
+                    ),
                 ]
                 .into_iter()
                 .map(|(id, label, value, suffix)| {
@@ -1266,7 +1297,9 @@ impl Dashboard {
         // Geometry belongs to the shell's theme. Decode with the existing short-lived,
         // descriptor-pinned worker; never retain a source-sized bitmap in the UI.
         let dimension = |key| match stores.get(key) {
-            Some(Value::Number(n)) if n.is_finite() && *n > 0. => (*n * self.raster_scale.get()).ceil().min(4096.) as u32,
+            Some(Value::Number(n)) if n.is_finite() && *n > 0. => {
+                (*n * self.raster_scale.get()).ceil().min(4096.) as u32
+            }
             _ => 0,
         };
         let (w, h) = (
@@ -1309,6 +1342,10 @@ impl Dashboard {
                             let bytes = decoded.and_then(|decoded| image::RgbaImage::from_raw(w, h, decoded.rgba))
                                 .and_then(|image| crate::player_art::encode(&image));
                             bead::core::profile::mark("dashboard_poster_ready");
+                            if bead::core::profile::enabled() {
+                                println!("DASHBOARD_POSTER_BYTES width={w} height={h} requested_rgba_bytes={} encoded_bytes={}",
+                                    w as usize*h as usize*4, bytes.as_ref().map_or(0, |bytes| bytes.len()));
+                            }
                             if send.send((pair, w, h, bytes)).is_ok()
                                 && let Some(notify) = notify
                             {

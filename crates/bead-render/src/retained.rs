@@ -139,7 +139,8 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
     for p in &scene.primitives {
         std::mem::discriminant(p).hash(&mut h);
         let r = match p {
-            Primitive::Arc { rect, .. } | Primitive::Polyline { rect, .. }
+            Primitive::Arc { rect, .. }
+            | Primitive::Polyline { rect, .. }
             | Primitive::Rounded { rect, .. }
             | Primitive::Text { rect, .. }
             | Primitive::Image { rect, .. }
@@ -163,9 +164,23 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                 color.hash(&mut h);
                 round_caps.hash(&mut h);
             }
-            Primitive::Polyline { points, closed, stroke_width, color, round_caps, fill, .. } => {
-                for point in points { (point[0].to_bits(), point[1].to_bits()).hash(&mut h); }
-                closed.hash(&mut h); stroke_width.to_bits().hash(&mut h); color.hash(&mut h); round_caps.hash(&mut h); fill.hash(&mut h);
+            Primitive::Polyline {
+                points,
+                closed,
+                stroke_width,
+                color,
+                round_caps,
+                fill,
+                ..
+            } => {
+                for point in points {
+                    (point[0].to_bits(), point[1].to_bits()).hash(&mut h);
+                }
+                closed.hash(&mut h);
+                stroke_width.to_bits().hash(&mut h);
+                color.hash(&mut h);
+                round_caps.hash(&mut h);
+                fill.hash(&mut h);
             }
             Primitive::Rounded {
                 radius,

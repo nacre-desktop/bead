@@ -88,9 +88,10 @@ return function()
         ui.Text{text=ui.tr("bead.dashboard.media-duration",{value=duration}),width=303,font_size=12,color="onSurfaceVariant"},
         ui.Text{text=player,width=303,font_size=12,color="onSurfaceVariant"}}
     return ui.Box{id="media",width=940,height=562,radius=20,fill="surfaceContainer",
-        ui.Group{id="backdrop",visible=art,position="absolute",left=0,top=0,width=940,height=562,
+        art and ui.Group{id="backdrop",position="absolute",left=0,top=0,width=940,height=562,
             ui.Image{position="absolute",left=0,top=0,width=940,height=562,icon="player-art",blur=32},
-            ui.Box{position="absolute",left=0,top=0,width=940,height=562,radius=20,fill=ui.alpha("surfaceContainer",.9)}},
+            ui.Box{position="absolute",left=0,top=0,width=940,height=562,radius=20,fill=ui.alpha("surfaceContainer",.9)}}
+            or ui.Group{id="backdrop",position="absolute",width=0,height=0},
         ui.Box{id="rim",position="absolute",left=0,top=0,width=940,height=562,radius=20,fill="transparent",
             border_width=1,border_color=ui.alpha("primary",.25)},
         identity,

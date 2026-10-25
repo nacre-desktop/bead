@@ -73,7 +73,8 @@ pub struct TreeCache {
 }
 pub fn rect(primitive: &Primitive) -> Rect {
     match primitive {
-        Primitive::Arc { rect, .. } | Primitive::Polyline { rect, .. }
+        Primitive::Arc { rect, .. }
+        | Primitive::Polyline { rect, .. }
         | Primitive::Rounded { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
@@ -83,7 +84,8 @@ pub fn rect(primitive: &Primitive) -> Rect {
 fn local(primitive: &Primitive) -> Primitive {
     let mut p = primitive.clone();
     match &mut p {
-        Primitive::Arc { rect, .. } | Primitive::Polyline { rect, .. }
+        Primitive::Arc { rect, .. }
+        | Primitive::Polyline { rect, .. }
         | Primitive::Rounded { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
@@ -122,9 +124,19 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             )
                 .hash(hash);
         }
-        Primitive::Polyline { rect: r, points, closed, stroke_width, color, round_caps, fill } => {
+        Primitive::Polyline {
+            rect: r,
+            points,
+            closed,
+            stroke_width,
+            color,
+            round_caps,
+            fill,
+        } => {
             rect(r, hash);
-            for point in points { (point[0].to_bits(), point[1].to_bits()).hash(hash); }
+            for point in points {
+                (point[0].to_bits(), point[1].to_bits()).hash(hash);
+            }
             (closed, stroke_width.to_bits(), color, round_caps, fill).hash(hash);
         }
         Primitive::Rounded {
@@ -994,7 +1006,10 @@ fn paint_with_scratch(
         if matches!(&item.primitive, Primitive::Arc { color, .. } if color[3] == 0) {
             continue;
         }
-        if matches!(&item.primitive, Primitive::Polyline { color, fill, .. } if color[3] == 0 && fill.is_none_or(|c| c[3] == 0)) { continue; }
+        if matches!(&item.primitive, Primitive::Polyline { color, fill, .. } if color[3] == 0 && fill.is_none_or(|c| c[3] == 0))
+        {
+            continue;
+        }
 
         let mut clip = item.clip.map_or(damage, |r| {
             intersection(
@@ -1213,42 +1228,75 @@ fn paint_with_scratch(
                 );
                 painted = true;
             }
-        } else if let Primitive::Polyline { points, closed, stroke_width, color, round_caps, fill, .. } = &item.primitive
+        } else if let Primitive::Polyline {
+            points,
+            closed,
+            stroke_width,
+            color,
+            round_caps,
+            fill,
+            ..
+        } = &item.primitive
             && let Some(points) = crate::polyline_points(r, *stroke_width, points)
         {
             let mut path = PathBuilder::new();
             path.move_to(points[0].0, points[0].1);
-            for &(x,y) in &points[1..] { path.line_to(x,y); }
-            if *closed { path.close(); }
-            if let Some(path)=path.finish() {
+            for &(x, y) in &points[1..] {
+                path.line_to(x, y);
+            }
+            if *closed {
+                path.close();
+            }
+            if let Some(path) = path.finish() {
                 // As with arcs, paint the complete vector into a deterministic
                 // scratch bound before clipping a partial repair strip.
-                let bounds = r.translated(offset.0, offset.1).pixels(scale,width,height);
+                let bounds = r
+                    .translated(offset.0, offset.1)
+                    .pixels(scale, width, height);
                 let x = bounds.x.saturating_sub(2);
                 let y = bounds.y.saturating_sub(2);
                 let right = (bounds.x + bounds.w).saturating_add(2).min(width);
                 let bottom = (bounds.y + bounds.h).saturating_add(2).min(height);
-                let (scratch, _) = repair_scratch.obtain(right-x,bottom-y)?;
+                let (scratch, _) = repair_scratch.obtain(right - x, bottom - y)?;
                 scratch.data_mut().fill(0);
-                let transform=Transform::from_scale(scale,scale)
-                    .post_translate(offset.0*scale-x as f32,offset.1*scale-y as f32);
-                if let Some(fill)=fill.filter(|c| *closed && c[3] != 0) {
-                    let mut paint=Paint::default();
-                    paint.set_color_rgba8(fill[0],fill[1],fill[2],fill[3]);
-                    scratch.fill_path(&path,&paint,FillRule::Winding,transform,None);
+                let transform = Transform::from_scale(scale, scale)
+                    .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
+                if let Some(fill) = fill.filter(|c| *closed && c[3] != 0) {
+                    let mut paint = Paint::default();
+                    paint.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
+                    scratch.fill_path(&path, &paint, FillRule::Winding, transform, None);
                 }
                 if *stroke_width > 0. && color[3] != 0 {
-                    let mut paint=Paint::default();
-                    paint.set_color_rgba8(color[0],color[1],color[2],color[3]);
-                    scratch.stroke_path(&path,&paint,&Stroke { width:*stroke_width,
-                        line_cap:if *round_caps { tiny_skia::LineCap::Round } else { tiny_skia::LineCap::Butt },
-                        line_join:tiny_skia::LineJoin::Round,..Stroke::default() },transform,None);
+                    let mut paint = Paint::default();
+                    paint.set_color_rgba8(color[0], color[1], color[2], color[3]);
+                    scratch.stroke_path(
+                        &path,
+                        &paint,
+                        &Stroke {
+                            width: *stroke_width,
+                            line_cap: if *round_caps {
+                                tiny_skia::LineCap::Round
+                            } else {
+                                tiny_skia::LineCap::Butt
+                            },
+                            line_join: tiny_skia::LineJoin::Round,
+                            ..Stroke::default()
+                        },
+                        transform,
+                        None,
+                    );
                 }
-                target.draw_pixmap(x as i32,y as i32-damage.y as i32,scratch.as_ref(),
-                    &PixmapPaint::default(),Transform::identity(),Some(&mask));
-                target=PixmapMut::from_bytes(&mut bytes[begin..end],width,damage.h)
+                target.draw_pixmap(
+                    x as i32,
+                    y as i32 - damage.y as i32,
+                    scratch.as_ref(),
+                    &PixmapPaint::default(),
+                    Transform::identity(),
+                    Some(&mask),
+                );
+                target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
                     .ok_or("invalid restored SHM strip")?;
-                painted=true;
+                painted = true;
             }
         } else if let Primitive::Rounded {
             radius,
@@ -2704,28 +2752,80 @@ mod tests {
         }];
         scene.clips.insert(0, Rect::new(9., 8., 25., 20.));
         let (w, h, scale) = (90, 75, 1.5);
-        let damage = Damage { x: 16, y: 14, w: 34, h: 30 };
+        let damage = Damage {
+            x: 16,
+            y: 14,
+            w: 34,
+            h: 30,
+        };
         let mut direct = vec![0; (w * h * 4) as usize];
         let mut retained = direct.clone();
         let mut cpu = CpuRenderer::default();
         cpu.prepare(&scene, scale).unwrap();
-        cpu.render(&scene, ShmTarget { bytes: &mut direct, width: w, height: h, scale, format: PixelFormat::Rgba }, damage).unwrap();
+        cpu.render(
+            &scene,
+            ShmTarget {
+                bytes: &mut direct,
+                width: w,
+                height: h,
+                scale,
+                format: PixelFormat::Rgba,
+            },
+            damage,
+        )
+        .unwrap();
         let mut tree = TreeCpuRenderer::default();
         tree.prepare(&scene, scale).unwrap();
-        tree.render(&scene, ShmTarget { bytes: &mut retained, width: w, height: h, scale, format: PixelFormat::Rgba }, damage).unwrap();
-        let max_error = direct.iter().zip(&retained).map(|(a,b)| a.abs_diff(*b)).max().unwrap();
-        assert!(max_error <= 1, "direct/vector composite differs by {max_error}/255");
+        tree.render(
+            &scene,
+            ShmTarget {
+                bytes: &mut retained,
+                width: w,
+                height: h,
+                scale,
+                format: PixelFormat::Rgba,
+            },
+            damage,
+        )
+        .unwrap();
+        let max_error = direct
+            .iter()
+            .zip(&retained)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap();
+        assert!(
+            max_error <= 1,
+            "direct/vector composite differs by {max_error}/255"
+        );
         let mut full = vec![0; direct.len()];
-        tree.render(&scene, ShmTarget { bytes: &mut full, width:w, height:h, scale, format:PixelFormat::Rgba }, Damage::full(w,h)).unwrap();
+        tree.render(
+            &scene,
+            ShmTarget {
+                bytes: &mut full,
+                width: w,
+                height: h,
+                scale,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(w, h),
+        )
+        .unwrap();
         for y in 0..h {
             for x in 0..w {
-                let i=((y*w+x)*4) as usize;
-                if x<damage.x || x>=damage.x+damage.w || y<damage.y || y>=damage.y+damage.h {
-                    full[i..i+4].fill(0);
+                let i = ((y * w + x) * 4) as usize;
+                if x < damage.x
+                    || x >= damage.x + damage.w
+                    || y < damage.y
+                    || y >= damage.y + damage.h
+                {
+                    full[i..i + 4].fill(0);
                 }
             }
         }
-        assert!(retained == full, "partial repair must exactly match the clipped full frame");
-
+        assert!(
+            retained == full,
+            "partial repair must exactly match the clipped full frame"
+        );
     }
 }

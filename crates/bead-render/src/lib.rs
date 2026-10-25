@@ -193,7 +193,8 @@ pub enum Primitive {
 impl Primitive {
     fn translated(&self, x: f32, y: f32) -> Self {
         let mut primitive = self.clone();
-        let (Self::Arc { rect, .. } | Self::Polyline { rect, .. }
+        let (Self::Arc { rect, .. }
+        | Self::Polyline { rect, .. }
         | Self::Rounded { rect, .. }
         | Self::Text { rect, .. }
         | Self::Image { rect, .. }
@@ -202,16 +203,38 @@ impl Primitive {
         primitive
     }
 }
-pub(crate) fn polyline_points(rect: Rect, stroke: f32, points: &[[f32; 2]]) -> Option<Vec<(f32, f32)>> {
-    if ![rect.x, rect.y, rect.w, rect.h, stroke].iter().all(|v| v.is_finite())
-        || rect.w <= 0. || rect.h <= 0. || stroke < 0. || stroke > rect.w.min(rect.h)
+pub(crate) fn polyline_points(
+    rect: Rect,
+    stroke: f32,
+    points: &[[f32; 2]],
+) -> Option<Vec<(f32, f32)>> {
+    if ![rect.x, rect.y, rect.w, rect.h, stroke]
+        .iter()
+        .all(|v| v.is_finite())
+        || rect.w <= 0.
+        || rect.h <= 0.
+        || stroke < 0.
+        || stroke > rect.w.min(rect.h)
         || points.len() > 256
-        || points.iter().flatten().any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
-        || points.len() < 2 { return None; }
+        || points
+            .iter()
+            .flatten()
+            .any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
+        || points.len() < 2
+    {
+        return None;
+    }
     let inset = stroke * 0.5;
     let (w, h) = (rect.w - stroke, rect.h - stroke);
-    if w <= 0. || h <= 0. { return None; }
-    Some(points.iter().map(|p| (rect.x + inset + p[0] * w, rect.y + inset + p[1] * h)).collect())
+    if w <= 0. || h <= 0. {
+        return None;
+    }
+    Some(
+        points
+            .iter()
+            .map(|p| (rect.x + inset + p[0] * w, rect.y + inset + p[1] * h))
+            .collect(),
+    )
 }
 /// Build a directly painted arc path. Segment density is fixed in angular space, so
 /// dynamic progress changes never create retained raster entries or asset data.
@@ -987,7 +1010,10 @@ impl Renderer for CpuRenderer {
         let before = self.textures.len();
         let mut stages = [0f64; 3];
         for p in &scene.primitives {
-            if matches!(p, Primitive::Rounded { .. } | Primitive::Arc { .. } | Primitive::Polyline { .. }) {
+            if matches!(
+                p,
+                Primitive::Rounded { .. } | Primitive::Arc { .. } | Primitive::Polyline { .. }
+            ) {
                 continue;
             }
             let k = key(p, scale);
@@ -1134,7 +1160,12 @@ impl Renderer for CpuRenderer {
         if scene
             .primitives
             .iter()
-            .filter(|p| !matches!(p, Primitive::Rounded { .. } | Primitive::Arc { .. } | Primitive::Polyline { .. }))
+            .filter(|p| {
+                !matches!(
+                    p,
+                    Primitive::Rounded { .. } | Primitive::Arc { .. } | Primitive::Polyline { .. }
+                )
+            })
             .any(|p| !self.textures.contains_key(&key(p, scale)))
         {
             return Err("active CPU textures exceed cache budget".into());
@@ -1306,14 +1337,56 @@ impl Renderer for CpuRenderer {
                         }
                     }
                 }
-                Primitive::Polyline { rect, points, closed, stroke_width, color, round_caps, fill } => {
-                    if let Some(points)=polyline_points(*rect,*stroke_width,points) {
-                        let mut path=PathBuilder::new(); path.move_to(points[0].0,points[0].1);
-                        for &(x,y) in &points[1..] { path.line_to(x,y); }
-                        if *closed { path.close(); }
-                        if let Some(path)=path.finish() {
-                            if let Some(c)=fill.filter(|c| *closed && c[3]!=0) { let mut paint=Paint::default(); paint.set_color_rgba8(c[0],c[1],c[2],c[3]); pix.fill_path(&path,&paint,FillRule::Winding,transform,Some(mask)); }
-                            if *stroke_width>0. && color[3]!=0 { let mut paint=Paint::default(); paint.set_color_rgba8(color[0],color[1],color[2],color[3]); pix.stroke_path(&path,&paint,&Stroke { width:*stroke_width,line_cap:if *round_caps { tiny_skia::LineCap::Round } else { tiny_skia::LineCap::Butt },line_join:tiny_skia::LineJoin::Round,..Stroke::default() },transform,Some(mask)); }
+                Primitive::Polyline {
+                    rect,
+                    points,
+                    closed,
+                    stroke_width,
+                    color,
+                    round_caps,
+                    fill,
+                } => {
+                    if let Some(points) = polyline_points(*rect, *stroke_width, points) {
+                        let mut path = PathBuilder::new();
+                        path.move_to(points[0].0, points[0].1);
+                        for &(x, y) in &points[1..] {
+                            path.line_to(x, y);
+                        }
+                        if *closed {
+                            path.close();
+                        }
+                        if let Some(path) = path.finish() {
+                            if let Some(c) = fill.filter(|c| *closed && c[3] != 0) {
+                                let mut paint = Paint::default();
+                                paint.set_color_rgba8(c[0], c[1], c[2], c[3]);
+                                pix.fill_path(
+                                    &path,
+                                    &paint,
+                                    FillRule::Winding,
+                                    transform,
+                                    Some(mask),
+                                );
+                            }
+                            if *stroke_width > 0. && color[3] != 0 {
+                                let mut paint = Paint::default();
+                                paint.set_color_rgba8(color[0], color[1], color[2], color[3]);
+                                pix.stroke_path(
+                                    &path,
+                                    &paint,
+                                    &Stroke {
+                                        width: *stroke_width,
+                                        line_cap: if *round_caps {
+                                            tiny_skia::LineCap::Round
+                                        } else {
+                                            tiny_skia::LineCap::Butt
+                                        },
+                                        line_join: tiny_skia::LineJoin::Round,
+                                        ..Stroke::default()
+                                    },
+                                    transform,
+                                    Some(mask),
+                                );
+                            }
                         }
                     }
                 }

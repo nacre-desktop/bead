@@ -173,6 +173,20 @@ fn bake(
     for &scale in scales {
         cache.prepare(scene, scale).map_err(|e| e.to_string())?;
         if let Some(frame) = cache.frame.clone() {
+            if bead_core::profile::enabled() {
+                let image_bytes: usize = frame
+                    .items
+                    .iter()
+                    .filter(|item| matches!(item.primitive, bead_render::Primitive::Image { .. }))
+                    .filter_map(|item| item.raster.as_ref())
+                    .map(|raster| raster.pixels.data().len())
+                    .sum();
+                let encoded_bytes: usize = scene.asset_data.values().map(|bytes| bytes.len()).sum();
+                println!(
+                    "UI_IMAGE_BYTES scale={scale} raster_bytes={image_bytes} encoded_bytes={encoded_bytes} thread={:?}",
+                    std::thread::current().id()
+                );
+            }
             scene.prepared.insert(scale.to_bits(), frame);
         }
     }
@@ -642,6 +656,7 @@ mod tests {
         commits: Arc<AtomicUsize>,
         panic: bool,
         scales: Vec<f32>,
+        expected_scales: Option<Vec<f32>>,
     }
     impl SceneSource for Mock {
         fn scales(&mut self, scales: Vec<f32>) {
@@ -671,7 +686,9 @@ mod tests {
             if self.panic {
                 panic!("worker proof panic");
             }
-            assert_eq!(self.scales, vec![1.5], "scale hint must precede projection");
+            if let Some(expected) = &self.expected_scales {
+                assert_eq!(&self.scales, expected, "scale hint must precede projection");
+            }
             Ok(Some(scene()))
         }
         fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -743,6 +760,7 @@ mod tests {
                     commits: count,
                     panic: false,
                     scales: Vec::new(),
+                    expected_scales: Some(vec![1.5]),
                 }))
             }),
             scene(),
@@ -781,6 +799,8 @@ mod tests {
                 Ok(Box::new(Mock {
                     commits: Arc::new(AtomicUsize::new(0)),
                     panic: false,
+                    scales: Vec::new(),
+                    expected_scales: None,
                 }) as Box<dyn SceneSource>)
             }),
             scene(),
@@ -821,6 +841,7 @@ mod tests {
                     commits: Arc::new(AtomicUsize::new(0)),
                     panic: true,
                     scales: Vec::new(),
+                    expected_scales: None,
                 }))
             }),
             scene(),

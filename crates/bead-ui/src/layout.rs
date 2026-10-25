@@ -425,14 +425,25 @@ impl ViewSpec {
             let points: Vec<[f32; 2]> = if raw.kind == Widget::Polyline {
                 let value = p.get("points").cloned().unwrap_or(Json::Array(Vec::new()));
                 if !value.as_array().is_some_and(|items| items.len() <= 256) {
-                    return Err(source.error("Polyline points must be an array of at most 256 pairs"));
+                    return Err(
+                        source.error("Polyline points must be an array of at most 256 pairs")
+                    );
                 }
-                let parsed: Vec<[f32; 2]> = serde_json::from_value(value).map_err(|_| source.error("Polyline points must be [x,y] pairs"))?;
-                if parsed.iter().flatten().any(|v| !v.is_finite() || !(0. ..=1.).contains(v)) {
-                    return Err(source.error("Polyline points must contain at most 256 finite normalized pairs"));
+                let parsed: Vec<[f32; 2]> = serde_json::from_value(value)
+                    .map_err(|_| source.error("Polyline points must be [x,y] pairs"))?;
+                if parsed
+                    .iter()
+                    .flatten()
+                    .any(|v| !v.is_finite() || !(0. ..=1.).contains(v))
+                {
+                    return Err(source.error(
+                        "Polyline points must contain at most 256 finite normalized pairs",
+                    ));
                 }
                 parsed
-            } else { Vec::new() };
+            } else {
+                Vec::new()
+            };
             let closed = boolean(p, "closed", false, source)?;
             if raw.kind == Widget::Polyline && !(0. ..=64.).contains(&stroke_width) {
                 return Err(source.error("Polyline stroke_width must be within 0..64"));
@@ -1113,8 +1124,20 @@ pub fn layout(
         }
         if view.kind == Widget::Polyline {
             let line_color = color(view.color.as_ref(), accent, palette, source)?;
-            let fill = view.fill.as_ref().map(|v| color(Some(v), accent, palette, source)).transpose()?;
-            emit(Primitive::Polyline { rect: r, points: view.points.clone(), closed: view.closed, stroke_width: view.stroke_width, color: line_color, round_caps: view.round_caps, fill });
+            let fill = view
+                .fill
+                .as_ref()
+                .map(|v| color(Some(v), accent, palette, source))
+                .transpose()?;
+            emit(Primitive::Polyline {
+                rect: r,
+                points: view.points.clone(),
+                closed: view.closed,
+                stroke_width: view.stroke_width,
+                color: line_color,
+                round_caps: view.round_caps,
+                fill,
+            });
         }
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);

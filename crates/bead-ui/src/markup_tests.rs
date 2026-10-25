@@ -30,11 +30,17 @@ return ui.Panel {id="panel",width=400,height=240,padding=12,
 
 #[test]
 fn polyline_parser_rejects_out_of_range_and_oversized_points() {
-    let invalid = ["{{-0.1,0.5},{1,1}}".to_string(), format!("{{{}}}", (0..257).map(|_| "{0.5,0.5}").collect::<Vec<_>>().join(","))];
+    let invalid = [
+        "{{-0.1,0.5},{1,1}}".to_string(),
+        format!(
+            "{{{}}}",
+            (0..257).map(|_| "{0.5,0.5}").collect::<Vec<_>>().join(",")
+        ),
+    ];
     for points in invalid {
-        let f=fixture();
+        let f = fixture();
         fs::write(f.0.join("ui/main.luau"), format!("local ui=require('bead.ui')\nreturn ui.Polyline{{id='chart',width=100,height=40,points={points}}}" )).unwrap();
-        let mut session=f.session();
+        let mut session = f.session();
         session.entry = "ui/main.luau".into();
         assert!(session.reload().is_err());
     }
@@ -45,7 +51,6 @@ fn polyline_parser_rejects_out_of_range_and_oversized_points() {
         session.entry = "ui/main.luau".into();
         assert!(session.reload().is_ok());
     }
-
 }
 fn session(f: &Fixture) -> Session {
     let mut session = f.session();
