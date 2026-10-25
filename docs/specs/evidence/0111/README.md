@@ -57,3 +57,6 @@ series is predeclared in the spec and does not erase this failure.
 
 The final integrated-renderer peek/keybind-action refresh was stopped at the
 memory gate. Earlier motion contacts remain source-pinned control evidence.
+
+Lead integration decision: lead-accepted 2026-10-25: Today/Quick closed deltas +0.6..+2.6 MiB; consolidated memory review follows
+Earlier failed data and capture limits remain unchanged.

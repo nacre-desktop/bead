@@ -7,6 +7,14 @@ niri runs deliver keyboard input 100/100 times versus control 0/10; the 4 Hz tit
 spinner costs 0.400% core, with no per-title backend log or same-width title layout.
 Full remote CI passes; widget-host and B0120 changes are preserved. No live change.
 [Cause, measurements and traces](specs/0119-click-focus.md).
+## 2026-10-25 — B0111 lead-accepted integration
+
+Notifications share the permanent daemon source; sidebar hover/cached visibility
+and caption-centred dashboard pearls are accepted for integration with B0113 widgets
+and B0120 spacing. Full remote CI is being rerun on the integrated tree.
+lead-accepted 2026-10-25: Today/Quick closed deltas +0.6..+2.6 MiB; consolidated memory review follows
+Failed measurements and keybind/peek proof limits remain in the
+[spec and evidence](specs/0111-live-bugs.md). No live deployment.
 
 ## 2026-10-25 — B0120 pill spacing and wallpaper backdrop
 
@@ -31,19 +39,6 @@ The QML/daemon reference is refreshed to `421da0f`. Nacre opaque `widgets` store
 registration is requested; phase 2 remains separate. All captures are private
 and nested; the laptop absolute cap remains for the lead.
 [API, full measurements, fixture details and paired crops](specs/0113-widget-system.md).
-## 2026-10-25 — B0111 code candidate, memory acceptance blocked
-
-Notifications now share their permanent daemon source; the standalone fix is on main.
-The unpublished candidate fixes sidebar hover ownership/cached visibility and centres
-pearls under captions. Full remote Arch CI passes; 36 goldens and real-font paired
-crops were reviewed. Seven sidebar states pass; physical Super+A injection did not
-reach the private binding, so key delivery remains unvalidated. Existing 230ms peek
-motion was confirmed in the reported control; final renderer refresh was stopped.
-Five snapshot pairs fail Today/Quick memory medians. A fixed-delay follow-up stopped
-after three Quick increases (+1.508/+2.504/+1.086 MiB shell) made a passing planned
-five-pair median impossible. No smoothness exception or remaining-fix push is claimed.
-[Source pins, failed measurements and proof limits](specs/0111-live-bugs.md).
-No live change or laptop-cap acceptance; owned remote jobs and artifacts cleaned up.
 
 ## 2026-10-25 — B0118 daemon recovery
 

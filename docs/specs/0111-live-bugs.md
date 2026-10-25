@@ -1,7 +1,13 @@
 # B0111 — Daily-use sidebar, tabs and notification bugs
 
-Acceptance is blocked by repeated anonymous-memory growth. The notification fix
-is on main; the remaining source/test/evidence commits stay unpublished for review.
+Lead accepted integration under SMOOTHNESS FIRST on 2026-10-25.
+
+> lead-accepted 2026-10-25: Today/Quick closed deltas +0.6..+2.6 MiB; consolidated memory review follows
+
+The failed measurements and original open/closed phase labels remain recorded.
+The notification fix is already on main; the remaining patches are rebased onto
+B0113 widgets, B0118 daemon recovery, B0120 pill spacing and B0119 focus fixes
+for integration.
 No live shell, installed configuration or daemon contract changes are included.
 
 ## Notifications
@@ -182,8 +188,9 @@ Today control pair 3 still varies by 1,956 KiB inside its delayed window.
 [summary](evidence/0111/memory-warm-delayed-table.md) retain these limits.
 The extra Quick cost is shell anonymous memory; file PSS, DRM and SwapPss do not
 explain it. Its cause is not isolated. Both roles already use B0110's 120-second
-cache, so this is not attributed to a new cache policy or accepted as a measured
-smoothness tradeoff. The earlier failed five-pair snapshot remains recorded.
+cache, so the measurements do not isolate a new cache-policy cost. The lead
+accepted integration despite the deltas; the consolidated review will investigate
+them. The earlier failed five-pair snapshot remains recorded.
 The follow-up's third candidate arm hit a UI command deadline while closing Today;
 its log records a 1,013 ms panel-frame processing interval and no OOM. It produced
 no memory record. The whole matched pair was retried once with identical settings,
@@ -199,3 +206,14 @@ behavior-controlled pointer-leave deadline; Nacre app IPC remains at the GPL edg
 Private capture harness/source copies are temporary: delete 7 days after the
 replacement is trusted. Remote copies were removed after evidence transfer; owned jobs, scopes and
 containers were cleaned up. No live session or installed configuration changed.
+
+## Integration review — 2026-10-25
+
+Rebased onto `a396a83`, retaining the B0113 widget port, B0120 spacing and
+B0119 keyboard-focus fixes. The only rebase conflict was appended ADR notes;
+both the text-width and pointer-region generalization entries are retained.
+The sidebar runtime/edge routes and all three caption-pearl calculations carry
+over unchanged; status widgets keep their stable peek kinds and shared reveal
+configuration. Existing evidence remains pinned to its measured source revisions.
+Fresh full remote CI is required for this integrated tree; no new desktop capture
+or live-session change is part of the lead integration decision.

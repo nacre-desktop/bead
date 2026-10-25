@@ -41,11 +41,13 @@
   "build": "Rust 1.99.0, default debug features, GNU stripped; same build flags for controls and candidate",
   "final_ci_source": "4f9590bbb7820cf3dee795599cb1d56cbfebeeb4",
   "final_binary_source_limit": "Built from 6e054307; 4f9590b changes only a test assertion to isolate settings rebuild counts from the shared external-panel revision.",
-  "acceptance_status": "blocked by repeated anonymous-memory growth; remaining candidate commits unpublished",
+  "acceptance_status": "lead-accepted 2026-10-25: Today/Quick closed deltas +0.6..+2.6 MiB; consolidated memory review follows",
   "final_capture_scope": "Seven sidebar states pass. Physical key delivery unvalidated. Final integrated-renderer peek refresh stopped at memory gate.",
   "memory_evidence": [
     "memory-before-b0110.json",
     "memory-warm-snapshot.json",
     "memory-warm-delayed.json"
-  ]
+  ],
+  "integration_base": "a396a830d5bb0aec3bcfd371b30761691959d65a",
+  "integration_limit": "Earlier captures remain source-pinned; integrated widget/spacing tree receives fresh full remote CI."
 }
