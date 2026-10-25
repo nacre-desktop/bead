@@ -20,10 +20,25 @@ and launches the existing updater via `tools.launch` with the fixed `updates` to
 Fake topic projection and route-mapping tests assert the published update values and fixed calls.
 Tests never execute `tools.launch`, `nacre-shell updates`, `updates.sh`, or any package command.
 No Nacre source or update command changes; no dependencies or temporary duplicate implementations.
-Paired QML/Bead captures and full Bead CI results are recorded here after remote validation.
+
+Private labwc→niri parity capture: 2880×1800, scale 1.5, private homes/bus, fake count 3;
+updater actions were not activated. QML-left/Bead-right crops: [idle](evidence/0112/bar-idle.png),
+[hover](evidence/0112/updates-hover.png), [pressed](evidence/0112/updates-pressed.png),
+[open](evidence/0112/updates-open.png).
+
+| State | Full-frame RMSE % | Bar RMSE % |
+| --- | ---: | ---: |
+| Idle | 2.237 | 4.969 |
+| Hover | 2.746 | 5.144 |
+| Pressed | 14.121 | 8.418 |
+| Open | 14.011 | 12.701 |
+
+Full Bead CI-equivalent passed on pushed `bf1f097`; GitHub Rust checks run 40174548582 passed.
 
 ## Known gap
 
 QML's `Updates.message` can show the Qt preflight warning. The published `dashboard.updates`
 contract has no preflight-message field, so Bead shows the count and leaves the message line
-empty; adding that warning waits for a published schema field.
+empty; adding that warning waits for a published schema field. QML also offers “Full panel”
+and aligns its wider dropdown to the right edge; Bead's status popout omits that control and
+centres on the bar item. The capture records this remaining placement/affordance difference.
