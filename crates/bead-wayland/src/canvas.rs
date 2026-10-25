@@ -279,7 +279,6 @@ impl App {
             self.canvas_ui(&key, UiEvent::WallpaperPalette(palette));
         }
         self.canvas_ui(&key, UiEvent::OutputName(key.0.clone()));
-        self.canvas_ui(&key, UiEvent::PanelVisibility(true));
         self.canvas_ui(&key, UiEvent::Reload);
     }
     pub(super) fn canvas_ui(&mut self, key: &(String, String), event: UiEvent) {
