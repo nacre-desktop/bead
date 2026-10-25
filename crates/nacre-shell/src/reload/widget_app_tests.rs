@@ -311,7 +311,10 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
             |primitive| matches!(primitive,bead::render::Primitive::Text{text,..} if text==expected),
         )
     };
-    assert!(text("Your screen"), "clock detail stage caption was omitted");
+    assert!(
+        text("Your screen"),
+        "clock detail stage caption was omitted"
+    );
     assert!(
         text("calendar_month"),
         "the mini bar did not render its clock/calendar glyph"
@@ -323,11 +326,9 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
             .iter()
             .enumerate()
             .filter_map(|(index, primitive)| match primitive {
-                bead::render::Primitive::Text {
-                    rect,
-                    text,
-                    ..
-                } if text == expected => Some((index, *rect)),
+                bead::render::Primitive::Text { rect, text, .. } if text == expected => {
+                    Some((index, *rect))
+                }
                 _ => None,
             })
             .collect();
