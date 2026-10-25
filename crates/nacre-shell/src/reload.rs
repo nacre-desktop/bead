@@ -4734,6 +4734,11 @@ impl SceneSource for Runtime {
         let reload = matches!(event, UiEvent::Reload);
         if reload {
             self.fonts.clear();
+            if self.launcher_initial_projection.get()
+                && let Some(menu) = &self.launcher
+            {
+                menu.prime_initial(&self.session.stores)?;
+            }
         }
         let mut scene = match event {
             UiEvent::WallpaperPalette(values) => {

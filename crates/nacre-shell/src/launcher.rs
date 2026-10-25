@@ -1577,6 +1577,9 @@ impl Menu {
     /// Start the initial query while markup loads. Keep first-projection route
     /// restoration enabled; a different restored route supersedes this request.
     pub fn prime_initial(&self, stores: &Stores) -> Result<(), bead::ui::Diagnostic> {
+        if self.view.borrow().query_generation != 0 {
+            return Ok(());
+        }
         let request = self.view.borrow().request.clone();
         let result = self.project(stores);
         self.view.borrow_mut().request = request;
@@ -1709,11 +1712,45 @@ mod tests {
         let menu = Menu::new(Some(source.clone())).unwrap();
         let mut stores = prefix_stores();
         menu.prime_initial(&stores).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while menu
+            .query_actor
+            .as_ref()
+            .unwrap()
+            .completion
+            .lock()
+            .unwrap()
+            .is_none()
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "initial query timed out"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        menu.prime_initial(&stores).unwrap();
         assert!(menu.view.borrow().request.is_none());
         apply_projection(&menu, &mut stores);
         assert_eq!(source.calls.lock().unwrap().len(), 1);
 
         let menu = Menu::new(Some(prefix_source(false, false))).unwrap();
+        menu.prime_initial(&prefix_stores()).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while menu
+            .query_actor
+            .as_ref()
+            .unwrap()
+            .completion
+            .lock()
+            .unwrap()
+            .is_none()
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "initial query timed out"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
         menu.prime_initial(&prefix_stores()).unwrap();
         let restored = BTreeMap::from([
             ("launcher.mode".into(), Value::Text("apps".into())),
