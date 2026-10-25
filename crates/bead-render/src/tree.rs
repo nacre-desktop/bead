@@ -1286,16 +1286,16 @@ fn paint_with_scratch(
                         None,
                     );
                 }
-                target.draw_pixmap(
+                let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
+                    .ok_or("invalid polyline SHM strip")?;
+                strip.draw_pixmap(
                     x as i32,
                     y as i32 - damage.y as i32,
                     scratch.as_ref(),
                     &PixmapPaint::default(),
                     Transform::identity(),
-                    Some(&mask),
+                    mask_needed.then_some(&mask),
                 );
-                target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
-                    .ok_or("invalid restored SHM strip")?;
                 painted = true;
             }
         } else if let Primitive::Rounded {
