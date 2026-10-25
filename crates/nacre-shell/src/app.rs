@@ -426,10 +426,10 @@ fn describe_panel_state(app: &str, socket: &Path) {
                 .and_then(Value::as_str)
                 .and_then(|t| serde_json::from_str::<Value>(t).ok())
                 .or(reply.result);
-            if let Some(state) = state.as_ref() {
-                if apply_panel_geometry(app, state) {
-                    return;
-                }
+            if let Some(state) = state.as_ref()
+                && apply_panel_geometry(app, state)
+            {
+                return;
             }
         }
         std::thread::sleep(Duration::from_millis(50));
