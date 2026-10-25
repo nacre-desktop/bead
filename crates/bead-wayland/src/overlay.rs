@@ -134,6 +134,12 @@ impl App {
         }
     }
     fn open_overlay(&mut self, view: &str, output: Option<&str>) -> Result<(), String> {
+        let layer_kind = self
+            .options
+            .overlays
+            .as_ref()
+            .ok_or("overlay views are not configured")?
+            .layer(view);
         let spec = self
             .options
             .overlays
@@ -167,7 +173,7 @@ impl App {
         let layer = self.layers.create_layer_surface(
             &qh,
             surface,
-            Layer::Overlay,
+            layer_kind,
             Some(&self.options.namespace),
             Some(&output),
         );
@@ -659,6 +665,7 @@ impl App {
 #[derive(Clone)]
 pub struct Overlays {
     views: std::collections::BTreeMap<String, PanelSpec>,
+    fullscreen_covered: std::collections::BTreeSet<String>,
 }
 impl Overlays {
     pub fn new(views: std::collections::BTreeMap<String, PanelSpec>) -> Result<Self, String> {
@@ -668,7 +675,28 @@ impl Overlays {
         if views.keys().any(|name| name.is_empty() || name.len() > 64) {
             return Err("invalid overlay view name".into());
         }
-        Ok(Self { views })
+        Ok(Self {
+            views,
+            fullscreen_covered: Default::default(),
+        })
+    }
+    /// Put selected views with desktop chrome (Top), below fullscreen clients.
+    /// Other views retain Overlay, e.g. a level indicator explicitly shown over video.
+    pub fn with_fullscreen_covered(mut self, views: &[String]) -> Result<Self, String> {
+        for view in views {
+            if !self.contains(view) {
+                return Err(format!("unknown fullscreen-covered overlay {view}"));
+            }
+            self.fullscreen_covered.insert(view.clone());
+        }
+        Ok(self)
+    }
+    pub(super) fn layer(&self, view: &str) -> Layer {
+        if self.fullscreen_covered.contains(view) {
+            Layer::Top
+        } else {
+            Layer::Overlay
+        }
     }
     pub fn contains(&self, view: &str) -> bool {
         self.views.contains_key(view)

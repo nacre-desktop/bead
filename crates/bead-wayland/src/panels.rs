@@ -190,6 +190,30 @@ mod tests {
         }
     }
     #[test]
+    fn overlay_fullscreen_coverage_is_per_view_and_keeps_factories_cold() {
+        use smithay_client_toolkit::shell::wlr_layer::Layer;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let catalog = crate::overlay::Overlays::new(BTreeMap::from([
+            ("cards".into(), spec(calls.clone())),
+            ("level".into(), spec(calls.clone())),
+        ]))
+        .unwrap();
+        assert_eq!(catalog.layer("cards"), Layer::Overlay);
+        let catalog = catalog.with_fullscreen_covered(&["cards".into()]).unwrap();
+        assert_eq!(catalog.layer("cards"), Layer::Top);
+        assert_eq!(catalog.layer("level"), Layer::Overlay);
+        assert!(
+            catalog
+                .with_fullscreen_covered(&["missing".into()])
+                .is_err()
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+    #[test]
     fn named_lookup_keeps_factories_cold_and_rejects_unknown_views() {
         use std::sync::{
             Arc,

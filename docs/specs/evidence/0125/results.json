@@ -1,0 +1,392 @@
+{
+  "qml_source": "836df1a643eae6e2f54ec86967a83d2f27561d3d",
+  "bead_binary_sha256": "6ae4ad1aed3d3ca73a7995649c285ecbb4fef4b574626f2130256c88d762beac",
+  "helper_binary_sha256": "c6c9c062ce9a9c8c3b2de3baa4eccff72a03329b2c3099da5fa9f7261eab9dd5",
+  "arms": {
+    "qml": {
+      "renderer": "qml-default",
+      "checks": {
+        "normal_hover": true,
+        "normal_click": true,
+        "fullscreen_pixels_clear": true,
+        "fullscreen_edges_deliver_input": true,
+        "fullscreen_notification_covered": true,
+        "fullscreen_osd_visible": true,
+        "chrome_restored": true,
+        "restored_hover": true
+      },
+      "geometry": {
+        "name": "winit",
+        "mode": [
+          2880,
+          1800
+        ],
+        "scale": 1.5,
+        "logical": [
+          1920,
+          1200
+        ]
+      },
+      "host_swap": {
+        "swap_used_before_kib": 0,
+        "pswpin_before": 4593526,
+        "pswpin_after": 4593526,
+        "pswpin_delta": 0
+      },
+      "guard": {
+        "status": "complete",
+        "capture_returncode": 0,
+        "scope_runner_returncode": 0,
+        "child_membership_verified": true,
+        "oom_delta": {
+          "oom": 0,
+          "oom_kill": 0
+        }
+      },
+      "input_received": "\u001b[<0;1;29M\u001b[<0;1;29mLEFT\u001b[<0;205;29M\u001b[<0;205;29mRIGHT\u001b[<0;103;1M\u001b[<0;103;1mTOP",
+      "layers": [
+        {
+          "namespace": "nacre-background",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-drawers",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        }
+      ],
+      "notification_layers": [
+        {
+          "namespace": "nacre-background",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-drawers",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        }
+      ],
+      "osd_layers": [
+        {
+          "namespace": "nacre-background",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-border-exclusion",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-drawers",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "nacre-level-feedback",
+          "output": "winit",
+          "layer": "Overlay",
+          "keyboard_interactivity": "None"
+        }
+      ]
+    },
+    "bead": {
+      "renderer": "cpu",
+      "checks": {
+        "normal_hover": true,
+        "normal_click": true,
+        "edges_top_keyboard_none": true,
+        "fullscreen_pixels_clear": true,
+        "fullscreen_edges_deliver_input": true,
+        "fullscreen_notification_covered": true,
+        "fullscreen_osd_visible": true,
+        "chrome_restored": true,
+        "restored_hover": true
+      },
+      "geometry": {
+        "name": "winit",
+        "mode": [
+          2880,
+          1800
+        ],
+        "scale": 1.5,
+        "logical": [
+          1920,
+          1200
+        ]
+      },
+      "host_swap": {
+        "swap_used_before_kib": 0,
+        "pswpin_before": 4593526,
+        "pswpin_after": 4593526,
+        "pswpin_delta": 0
+      },
+      "guard": {
+        "status": "complete",
+        "capture_returncode": 0,
+        "scope_runner_returncode": 0,
+        "child_membership_verified": true,
+        "oom_delta": {
+          "oom": 0,
+          "oom_kill": 0
+        }
+      },
+      "input_received": "\u001b[<0;1;29M\u001b[<0;1;29mLEFT\u001b[<0;205;29M\u001b[<0;205;29mRIGHT\u001b[<0;103;1M\u001b[<0;103;1mTOP",
+      "layers": [
+        {
+          "namespace": "wallpaper",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-wallpaper",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        }
+      ],
+      "notification_layers": [
+        {
+          "namespace": "wallpaper",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-wallpaper",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        }
+      ],
+      "osd_layers": [
+        {
+          "namespace": "wallpaper",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-wallpaper",
+          "output": "winit",
+          "layer": "Background",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev-edge",
+          "output": "winit",
+          "layer": "Top",
+          "keyboard_interactivity": "None"
+        },
+        {
+          "namespace": "bead-dev",
+          "output": "winit",
+          "layer": "Overlay",
+          "keyboard_interactivity": "None"
+        }
+      ]
+    }
+  }
+}

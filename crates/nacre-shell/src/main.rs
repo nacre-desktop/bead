@@ -635,6 +635,7 @@ fn start(
     // daemon, older daemon) every default is Nacre's, so nothing changes.
     let gate = shell_control::Gate::new();
     let frame_gate = gate.clone();
+    let frame_config = frame_config::load(Path::new("shell"));
     {
         let gate = gate.clone();
         placement::on_external_change(Box::new(move || gate.notify()));
@@ -890,8 +891,8 @@ fn start(
                 trace: panel_trace,
             };
             // B0053: own overlay slot, so they show beside any panel view.
-            options.overlays = Some(bead::wayland::Overlays::new(
-                std::collections::BTreeMap::from([
+            options.overlays = Some(
+                bead::wayland::Overlays::new(std::collections::BTreeMap::from([
                     (
                         notice_service::VIEW_NOTICES.into(),
                         notice_views::notices(owner.clone(), style.clone()),
@@ -900,8 +901,9 @@ fn start(
                         notice_service::VIEW_OSD.into(),
                         notice_views::osd(owner, style, true),
                     ),
-                ]),
-            )?);
+                ]))?
+                .with_fullscreen_covered(&frame_config.fullscreen_covered_overlays)?,
+            );
         }
         if let Some(client) = &_ui_provider {
             views.insert(
@@ -947,10 +949,7 @@ fn start(
                 widgets::canvas(palette.clone(), colors.clone(), widget_inputs, panel_trace)?,
             )]),
         )?);
-        frame_gate.configure_frame(
-            frame_config::load(Path::new("shell")),
-            views.keys().cloned(),
-        );
+        frame_gate.configure_frame(frame_config, views.keys().cloned());
         // B0048: detachable panels, remembered beside the other durable panel state.
         views.insert(pearls::GUIDE_VIEW.into(), pearls::guide_spec(&colors)?);
         options.pearls = Some(pearls::options(

@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-25 — B0125 fullscreen edge lips
+
+Edge lips now share the bar/frame's Top layer, so niri fullscreen clients cover
+their artwork and pointer regions. Notification cards follow the chrome through
+a Luau per-view policy; explicit level OSD retains Overlay, matching QML.
+Matched private QML/Bead captures verify normal hover/click, fullscreen pixels,
+mouse and keyboard delivery at all three edges, restoration and overlay policy.
+Full remote Arch CI passes, including all renderer, lifecycle and license graphs.
+[Evidence and limits](specs/0125-lips-fullscreen.md). No live deployment.
+
 ## 2026-10-25 — B0124 pill clicks and compact updates
 
 The status pill background and gaps are inert; widget-owned targets retain the

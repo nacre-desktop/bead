@@ -21,6 +21,8 @@ pub struct FrameConfig {
     pub lips: Vec<LipConfig>,
     /// Open panels that stop hover from opening a lip's panel (QML: launcher, session).
     pub blocked_by: Vec<String>,
+    /// Companion views that share chrome's Top layer rather than Overlay.
+    pub fullscreen_covered_overlays: Vec<String>,
 }
 fn name(value: &serde_json::Value, key: &str) -> Option<String> {
     value
@@ -75,6 +77,11 @@ pub fn parse(source: &[u8], path: &Path) -> Result<FrameConfig, String> {
         .take(MAX_LIPS)
         .filter_map(|v| name(v, "id"))
         .collect();
+    config.fullscreen_covered_overlays = list(&stores, "frame.fullscreen_covered_overlays")
+        .iter()
+        .take(MAX_LIPS)
+        .filter_map(|v| name(v, "id"))
+        .collect();
     Ok(config)
 }
 /// The bundle's `frame/behavior.luau` under `root`, else the built-in copy. A broken file
@@ -108,6 +115,7 @@ mod tests {
         assert_eq!(config.lips[2].opens, "control");
         assert!(config.lips[1..].iter().all(|l| l.length == 144.));
         assert_eq!(config.blocked_by, ["launcher", "session"]);
+        assert_eq!(config.fullscreen_covered_overlays, ["notices"]);
     }
     #[test]
     fn a_different_layout_is_pure_configuration() {

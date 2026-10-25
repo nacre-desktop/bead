@@ -13,4 +13,6 @@ return {stores={
         {id="controls",edge="right",length=144,opens="control"},
     },
     ["frame.lips.blocked_by"]={{id="launcher"},{id="session"}},
+    -- Notification cards follow the chrome; level OSD stays above fullscreen.
+    ["frame.fullscreen_covered_overlays"]={{id="notices"}},
 }}

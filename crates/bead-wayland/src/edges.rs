@@ -246,11 +246,10 @@ impl App {
         let layer = self.layers.create_layer_surface(
             &self.qh,
             surface,
-            if geometry.input {
-                Layer::Overlay
-            } else {
-                Layer::Top
-            },
+            // Keep lips with the bar/frame: normal windows sit below Top, while
+            // fullscreen windows cover it (including pointer hit testing). Overlay
+            // would leave the arrows interactive above fullscreen content.
+            Layer::Top,
             Some(&self.edge_namespace()),
             Some(output),
         );

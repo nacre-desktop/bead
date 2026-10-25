@@ -68,8 +68,7 @@ dwell timer exists only during a dwell). Measured result below.
 
 - `NacreFrameBarrier` (two-frame commit barrier for panel hand-off) and keyboard focus on lips (Tab/Enter/Space,
   `keyboardFocused`) are not ported; lips are pointer-only.
-- Fullscreen suppression (`fullscreenFor`) is not applied: niri covers Top surfaces with fullscreen windows; on
-  Hyprland a lip could open over a fullscreen window.
+- Fullscreen follow-up: [B0125](0125-lips-fullscreen.md) moves lips to Top so fullscreen covers their artwork and input, with matched QML/niri proof.
 - The left (assistant) lip is configured but hidden: Bead has no AI sidebar view (B0026 blocker C).
 - The right lip opens the `sound` panel; Nacre's control-center sidebar has no Bead view. Retarget in Luau.
 - Frame and lip colours are fixed at start (as the static tiles already were); a wallpaper palette change does not
