@@ -217,6 +217,8 @@ After Bead's core switch on Nacre, plan support for:
 - B0129: the renderer's shared small-image raster LRU is keyed by immutable
   contents, physical dimensions, fit and path; shell Luau selects icon sizes,
   while the shell adapter owns menu queries and warming policy.
+  Embedded markup support bytecode is weakly shared across frontends; Lua VMs,
+  caller sources and values remain private, with the same 8 MiB frontend cap.
 
 ## Housekeeping (later)
 

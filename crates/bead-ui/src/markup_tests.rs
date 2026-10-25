@@ -1907,6 +1907,46 @@ return ui.Panel{id="panel",width=300,height=80,
 }
 
 #[test]
+fn frontends_share_only_compiled_prelude_and_keep_sources_and_values_independent() {
+    use crate::frontend::{FrontEnd, LuauFrontEnd};
+    let first_entry = PathBuf::from("launcher/main.luau");
+    let second_entry = PathBuf::from("bar/main.luau");
+    let source = |id: &str| {
+        BTreeMap::from([(
+            PathBuf::from(if id == "launcher" {
+                "launcher/main.luau"
+            } else {
+                "bar/main.luau"
+            }),
+            format!(
+                "local ui=require('bead.ui')\nreturn ui.Text{{id='{id}',text=ui.resolve_for_check(ui.bind('title'))}}"
+            )
+            .into_bytes(),
+        )])
+    };
+    let first = LuauFrontEnd::new(&first_entry, &source("launcher")).unwrap();
+    let second = LuauFrontEnd::new(&second_entry, &source("bar")).unwrap();
+    assert!(first.shares_compiled_prelude_with(&second));
+
+    let first_raw = first
+        .build(&first_entry, &|name| {
+            assert_eq!(name, "title");
+            Ok(Value::Text("Launcher title".into()))
+        })
+        .unwrap();
+    let second_raw = second
+        .build(&second_entry, &|name| {
+            assert_eq!(name, "title");
+            Ok(Value::Text("Bar title".into()))
+        })
+        .unwrap();
+    assert_eq!(first_raw.props["id"], "launcher");
+    assert_eq!(first_raw.props["text"], "Launcher title");
+    assert_eq!(second_raw.props["id"], "bar");
+    assert_eq!(second_raw.props["text"], "Bar title");
+}
+
+#[test]
 fn memo_invalidates_bound_text_measurement_when_another_store_rebuilds_outer_markup() {
     use crate::frontend::{FrontEnd, LuauFrontEnd};
     use std::cell::RefCell;

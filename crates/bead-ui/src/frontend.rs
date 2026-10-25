@@ -10,10 +10,49 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex, Weak},
     time::{Duration, Instant},
 };
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
+
+/// Fixed embedded compiler inputs shared while at least one frontend is alive.
+struct CompiledPrelude {
+    kit: Vec<u8>,
+    install: Vec<u8>,
+    _charge: bead_core::cache::Charge,
+}
+static COMPILED_PRELUDE: Mutex<Weak<CompiledPrelude>> = Mutex::new(Weak::new());
+
+fn compiled_prelude(
+    compiler: &mlua::chunk::Compiler,
+    entry: &Path,
+) -> Result<Arc<CompiledPrelude>, Diagnostic> {
+    let mut slot = COMPILED_PRELUDE.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(prelude) = slot.upgrade() {
+        return Ok(prelude);
+    }
+    let kit = compiler
+        .compile(include_str!("../assets/kit.luau"))
+        .map_err(|e| diagnostic(entry, e))?;
+    let install = compiler
+        .compile(INSTALL)
+        .map_err(|e| diagnostic(entry, e))?;
+    let bytes = kit.capacity() + install.capacity();
+    let budget =
+        bead_core::cache::Budget::new("compiled-markup-prelude", 8 * bead_core::cache::MIB);
+    let charge = budget
+        .reserve(bytes)
+        .map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
+    let prelude = Arc::new(CompiledPrelude {
+        kit,
+        install,
+        _charge: charge,
+    });
+    *slot = Arc::downgrade(&prelude);
+    Ok(prelude)
+}
+
 pub trait FrontEnd {
     fn build(
         &self,
@@ -165,8 +204,7 @@ pub struct LuauFrontEnd {
     fragments: RefCell<bead_core::cache::Lru<(String, String), std::rc::Rc<Fragment>>>,
     fragment_budget: bead_core::cache::Budget,
     materialized: RefCell<Option<Materialized>>,
-    kit: Vec<u8>,
-    install: Vec<u8>,
+    prelude: Arc<CompiledPrelude>,
     _compiled_charge: bead_core::cache::Charge,
     values_budget: bead_core::cache::Budget,
     vm_build_bytes: std::cell::Cell<usize>,
@@ -318,21 +356,24 @@ impl LuauFrontEnd {
                 compiled.insert(path.clone(), code);
             }
         }
-        let kit = compiler
-            .compile(include_str!("../assets/kit.luau"))
-            .map_err(|e| diagnostic(entry, e))?;
-        let install = compiler
-            .compile(INSTALL)
-            .map_err(|e| diagnostic(entry, e))?;
-        let bytes = compiled
+        let prelude = compiled_prelude(&compiler, entry)?;
+        let source_bytes = compiled
             .iter()
             .map(|(p, b)| p.as_os_str().len() + b.capacity() + 96)
-            .sum::<usize>()
-            + kit.capacity()
-            + install.capacity();
+            .sum::<usize>();
+        if source_bytes.saturating_add(prelude.kit.capacity() + prelude.install.capacity())
+            > 8 * 1024 * 1024
+        {
+            return Err(Diagnostic::new(
+                entry,
+                1,
+                1,
+                "compiled markup exceeds 8 MiB cache budget",
+            ));
+        }
         let budget = bead_core::cache::Budget::new("compiled-markup", 8 * bead_core::cache::MIB);
         let charge = budget
-            .reserve(bytes)
+            .reserve(source_bytes)
             .map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
         Ok(Self {
             text_meters: Default::default(),
@@ -350,8 +391,7 @@ impl LuauFrontEnd {
             compiled,
             vm_build_bytes: std::cell::Cell::new(0),
             materialized: RefCell::new(None),
-            kit,
-            install,
+            prelude,
             animations: Default::default(),
         })
     }
@@ -370,12 +410,16 @@ impl LuauFrontEnd {
     }
     pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
         (
-            self._compiled_charge.bytes(),
+            self._compiled_charge.bytes() + self.prelude._charge.bytes(),
             self.values_budget.used()
                 + self.fragment_budget.used()
                 + self.fragments.borrow().bytes(),
             self.vm_build_bytes.get(),
         )
+    }
+    #[cfg(test)]
+    pub(super) fn shares_compiled_prelude_with(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.prelude, &other.prelude)
     }
     pub(super) fn animation_deadline(&self) -> Option<Instant> {
         self.animations.borrow().next_frame
@@ -659,7 +703,7 @@ impl FrontEnd for LuauFrontEnd {
                     })?,
                 )?;
                 let install: Function = lua
-                    .load(self.install.as_slice())
+                    .load(self.prelude.install.as_slice())
                     .set_name("@bead.ui")
                     .eval()?;
                 install.call::<()>((sdk.clone(), constructors, allowed, lua.array_metatable()))?;
@@ -727,8 +771,10 @@ impl FrontEnd for LuauFrontEnd {
                 let loading = RefCell::new(BTreeSet::<PathBuf>::new());
                 let entry_parent = entry.parent().unwrap_or(Path::new("")).to_path_buf();
                 let sdk_copy = sdk.clone();
-                let kit_factory: Function =
-                    lua.load(self.kit.as_slice()).set_name("@bead.kit").eval()?;
+                let kit_factory: Function = lua
+                    .load(self.prelude.kit.as_slice())
+                    .set_name("@bead.kit")
+                    .eval()?;
                 let mut tokens: serde_json::Value =
                     serde_json::from_str(include_str!("../assets/size-scale.json"))
                         .map_err(mlua::Error::external)?;

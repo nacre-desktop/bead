@@ -105,6 +105,12 @@ impl IconWarmer {
                         f32::from_bits(scale.load(Ordering::Relaxed)),
                         &stop,
                     );
+                    // Return temporary catalog/markup/decoder pages before sleeping;
+                    // the shared raster cache keeps only its bounded live pixels.
+                    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                    unsafe {
+                        libc::malloc_trim(0);
+                    }
                 }
                 drop(subscription);
             })
