@@ -1751,11 +1751,11 @@ impl Runtime {
         mut self,
         backend: std::sync::Arc<crate::backends::Native>,
     ) -> Result<Self, Box<dyn Error>> {
-        let values = backend_values(
-            &backend.snapshot(),
-            self.output.as_deref(),
-            &self.workspaces,
-        )?;
+        let snapshot = backend.snapshot();
+        let mut values = backend_values(&snapshot, self.output.as_deref(), &self.workspaces)?;
+        let (title, focused_window) = focused_title(&snapshot, self.output.as_deref(), None);
+        self.last_focused_window = focused_window;
+        values.insert("bead.focused_title".into(), bead::core::Value::Text(title));
         self.session.stores = self.session.stores.reconcile(&values)?;
         for name in [
             "backend.workspace.switch",
@@ -3482,7 +3482,17 @@ impl SceneSource for Runtime {
                 self.output = Some(name.clone());
                 scope_recovery(&mut self.session, Some(&name));
                 let values = if let Some(backend) = &self.backend {
-                    backend_values(&backend.snapshot(), Some(&name), &self.workspaces)?
+                    let snapshot = backend.snapshot();
+                    let mut values =
+                        backend_values(&snapshot, Some(&name), &self.workspaces)?;
+                    let (title, focused_window) = focused_title(
+                        &snapshot,
+                        Some(&name),
+                        self.last_focused_window.as_ref(),
+                    );
+                    self.last_focused_window = focused_window;
+                    values.insert("bead.focused_title".into(), bead::core::Value::Text(title));
+                    values
                 } else {
                     BTreeMap::from([("bead.output.name".into(), bead::core::Value::Text(name))])
                 };
@@ -4490,6 +4500,9 @@ fn focused_title(
     output: Option<&str>,
     previous: Option<&bead::backends::Id>,
 ) -> (String, Option<bead::backends::Id>) {
+    if !snapshot.connected {
+        return (String::new(), None);
+    }
     let output_id = output.and_then(|name| {
         snapshot
             .outputs
@@ -4497,6 +4510,9 @@ fn focused_title(
             .find(|candidate| candidate.name == name)
             .map(|candidate| &candidate.id)
     });
+    if output.is_some() && output_id.is_none() {
+        return (String::new(), None);
+    }
     let window_matches = |window: &&bead::backends::Window| {
         output.is_none()
             || output_id.is_some_and(|id| {

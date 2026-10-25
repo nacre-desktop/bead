@@ -118,6 +118,19 @@ fn title_survives_transient_focus_clear_only_while_its_window_stays_active() {
     let (title, remembered) = focused_title(&snapshot, Some("right"), Some(&previous));
     assert_eq!(title, "Title 1", "a real focus change wins over retention");
     assert_eq!(remembered, Some(snapshot.windows[0].id.clone()));
+
+    snapshot.windows[0].focused = false;
+    let (title, remembered) = focused_title(&snapshot, Some("left"), remembered.as_ref());
+    assert!(title.is_empty(), "changing outputs cannot retain another output's title");
+    assert_eq!(remembered, None);
+    let (title, remembered) = focused_title(&snapshot, Some("removed"), Some(&previous));
+    assert!(title.is_empty(), "unknown outputs fail closed");
+    assert_eq!(remembered, None);
+
+    snapshot.connected = false;
+    let (title, remembered) = focused_title(&snapshot, Some("right"), Some(&previous));
+    assert!(title.is_empty(), "a disconnected backend shows no stale title");
+    assert_eq!(remembered, None);
 }
 
 #[test]
