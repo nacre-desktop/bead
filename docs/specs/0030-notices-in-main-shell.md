@@ -1,5 +1,7 @@
 # B0030 — Notices and OSD inside the main shell process
 
+> B0128 retired the standalone `b0030-memory.py` experiment after B0053 replaced its notice composition path. Current notification smoke and capture-safety/memory harnesses remain.
+
 Status: **Implemented; review.** Replaces the separate notice process of
 [B0020](0020-notifications-osd-product.md). No live ownership or switch authorization.
 

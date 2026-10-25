@@ -1,5 +1,7 @@
 # B0052 - On-demand app mode (Settings and the AI sidebar as separate short-lived processes)
 
+> B0128 retired `b0052-app.py` and its only importing script, `b0059-welcome.py`. Current Rust app lifecycle/Welcome tests and packaging CI remain; historical measurements below are preserved.
+
 Status: **Review** (Claude worker, branch `task/b0052-app-mode-20261023`). Lead decision 2026-10-23: ADR 0005 says on-demand
 windows stay separate apps. B0045 (Settings) and B0043 (sidebar) were first built inside the shell; B0045 measured +0.69 to
 +0.92 MiB PSS left behind after one open/close (gate +0.5). A process returns all of it.

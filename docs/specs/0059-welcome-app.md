@@ -1,5 +1,7 @@
 # B0059 - Welcome app (the first-run tour as an on-demand Bead app)
 
+> B0128 retired the standalone `b0059-welcome.py` experiment and its B0052-only arm. Current Welcome lifecycle tests and packaging CI remain.
+
 Status: **Review** (Claude worker, branch `task/b0059-welcome-20261023`). Owner 2026-10-23: no QML after the switch and every
 feature looks and feels the same. Reference: Nacre `origin/main` `nacre/shell/modules/welcome/*`
 (`NacreWelcomeHost/Window/View/Row/Demo`, `welcome-catalog.js`), `services/NacreWelcomeApp.qml`, `bin/nacre-welcome`,

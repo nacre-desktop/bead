@@ -1,5 +1,7 @@
 # B0054 - Pearl memory and drag cadence
 
+> B0128 retired the historical B0048 measurement script named below; current pearl-release/pacing harnesses remain. The measurements remain historical evidence.
+
 Status: **Review** (Claude worker, branch `task/b0054-pearl-memory-20261023`). Follows B0048 (`0048-pearls.md`), whose memory gates failed.
 Harness: `spikes/b0048-pearls.py` (`probe`, `memory`, `drag`, `smoke`); numbers are desktop nested niri in headless labwc, CPU renderer
 (tiny-skia), no daemon, launcher from fixture, release builds with line tables, PSS in MiB.

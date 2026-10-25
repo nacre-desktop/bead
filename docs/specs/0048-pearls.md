@@ -1,5 +1,7 @@
 # B0048 - Pearls: detachable panels with dock guides
 
+> B0128 retired the standalone `b0048-pearls.py` experiment. Current `pearl-release-proof.py`, pacing checks and Rust pearl tests remain; historical measurements below are preserved.
+
 Status: **Review** (Claude worker, branch `task/b0048-pearls-20261023`). Owner 2026-10-23: pearls are crucial; Bead is a framework, so the
 mechanics are general and the Nacre look and policy sit in one adapter. Reference: QML `NacrePearlWindow`, `NacreDockGuide`, `geometry.js`,
 `NacrePearls`, `NacrePearlBorder`, `NacreDockFilm`, `NacreDockTarget`, `NacreWorkspacePearl`; Rust `pearl_state.rs`, `pearl_window.rs`.
