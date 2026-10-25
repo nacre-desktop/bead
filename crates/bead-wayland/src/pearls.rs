@@ -685,6 +685,9 @@ impl App {
     }
     /// With the slot swapped in: reposition, hand focus to click, tell the view.
     fn become_pearl(&mut self, native: bool) {
+        if let Err(error) = self.set_dismiss_enabled(false) {
+            eprintln!("PEARL_DISMISS_ERROR {error}");
+        }
         self.panel_ui(UiEvent::PanelDetached(true));
         if self.native_pearls_enabled() {
             if native {
@@ -1507,6 +1510,7 @@ impl App {
                     surface.prepared_native = None;
                 }
             }
+            self.release_pearl_watch_if_idle();
             eprintln!("PEARL_PREWARM_FAILED; release will use covered fallback");
         } else {
             self.log_prepared_native_ready(index);
@@ -1548,6 +1552,7 @@ impl App {
         for surface in &mut self.surfaces {
             surface.prepared_native = None;
         }
+        self.release_pearl_watch_if_idle();
     }
 
     pub(super) fn cancel_prepared_window(
@@ -1577,6 +1582,7 @@ impl App {
             self.reserved_pearl_id = None;
             self.prewarm_attempted = true;
         }
+        self.release_pearl_watch_if_idle();
         true
     }
 
