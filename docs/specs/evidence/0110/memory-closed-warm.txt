@@ -1,0 +1,4 @@
+idle Pss_Anon base 17.6 MiB (n=3) cand 17.6 MiB (n=3) delta +0.0|Pss_Shmem base 0.7 MiB (n=3) cand 0.7 MiB (n=3) delta +0.0
+launcher Pss_Anon base 18.0 MiB (n=3) cand 32.0 MiB (n=3) delta +14.0|Pss_Shmem base 0.7 MiB (n=3) cand 7.7 MiB (n=3) delta +7.0
+dashboard Pss_Anon base 18.6 MiB (n=3) cand 31.5 MiB (n=3) delta +12.9|Pss_Shmem base 0.7 MiB (n=3) cand 7.7 MiB (n=3) delta +7.0
+control-centre Pss_Anon base 19.3 MiB (n=3) cand 29.2 MiB (n=3) delta +9.9|Pss_Shmem base 0.7 MiB (n=3) cand 5.7 MiB (n=3) delta +5.0

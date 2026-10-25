@@ -12,6 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
+| 0 | [B0110 Animation smoothness](0110-animation-smoothness.md) | Review candidate — panels show prepared content on their first frame, per-frame diagnostics off in production, reveal/fade/icon/scroll costs reduced; dashboard open/close and hover-peek drop rate still above QML | Reveal artwork pre-rasterisation, Intel GL panel measurement, 120 Hz frame-cost budget |
 | 0 | [B0106 Dashboard follow-up](0106-dashboard-followup.md) | Review candidate — async first content, closed five-pair recovery and three-page RMSE improvement | Cold median meets target with an outlier; warm/close motion and image-only open budget remain unaccepted. Full remote Arch CI passes. |
 | 0 | [B0105 Present latency](0105-present-latency.md) | Blocked — CPU latency gates unmet; unexplained +1.516 MiB anonymous outlier stops the rejected scheduling candidate | Probe and frozen-source evidence only. GL candidate stopped before execution; needs a verified capture cadence and a live-equivalent lag reproduction. |
 | 0 | [B0098 Sidebar and Settings](0098-sidebar-settings-owner.md) | Review candidate — Pin/outside/unpin pointer proof, QML controls/lip, output-aware Settings size, shared scroll conversion/bounds | Full remote Arch CI; paired evidence and explicit physical-wheel, kinetic-scroll and integration gaps. No live change. |

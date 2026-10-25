@@ -74,7 +74,71 @@ Caveat that applies to every number: niri 26.04 nested advertises 60 Hz to clien
 
 ## Results
 
-RESULTS_PLACEHOLDER
+Private nested session on the desktop (12 cores), 2880×1800 at 1.5, CPU renderers for Bead (QML on its own
+threaded OpenGL), desktop lock held per run, swap 0. Medians of 3 repeats; full tables in
+[evidence/0110](evidence/0110/): `pacing-60hz.txt`, `pacing-120hz.txt`, `first-visible-vs-content.txt`.
+Before = origin/main + instrumentation only; after = this change. `drop%` = missed vsyncs / expected frames,
+`p99` = commit-interval p99 (ms), `slow%` = Bead frames whose render cost exceeds one vsync (Bead only).
+
+**First visible frame versus first content-bearing frame** (ms after the trigger, 60 Hz; first buffer-bearing commit
+and first panel-scene commit). Before: the panel was shown 13–35 ms before its content existed.
+
+| Panel open | before: visible / content | after: visible / content |
+| --- | ---: | ---: |
+| control centre | 14.5 / 49.3 | 18.6 / 19.7 |
+| dashboard | 18.2 / 61.1 | 21.8 / 22.5 |
+| launcher | 14.8 / 48.8 | 19.8 / 20.3 |
+| popout network | 14.4 / 36.2 | 17.3 / 17.5 |
+
+After the change a panel's first visible frame is its first content frame (within 1.1 ms), so no dark or empty
+frame and no re-open. Popout audio (first visible 62.8 ms) and the sidebar (no panel scene commit: the sidebar is a
+separate app process) were not brought to the same bound; see gaps.
+
+**60 Hz, QML versus Bead before / after** (drop% / p99 ms):
+
+| Animation | QML | Bead before | Bead after |
+| --- | ---: | ---: | ---: |
+| control centre open | 11.1 / 32.1 | 9.1 / 36.4 | **5.3 / 34.9** |
+| control centre close | 5.6 / 26.0 | 0 / 21.6 | 0 / 17.4 |
+| dashboard open | 4.3 / 29.7 | 32.5 / 122.6 | 26.1 / 32.1 |
+| dashboard close | 4.3 / 27.2 | 22.6 / 45.0 | 28.6 / 48.4 |
+| launcher open | 28.1 / 137.4 | 7.7 / 36.9 | **6.2 / 37.5** |
+| launcher close | 4.8 / 25.1 | 0 / 24.2 | 4.8 / 26.2 |
+| popout network open | 6.2 / 18.2 | 4.0 / 31.9 | 6.2 / 32.3 |
+| popout audio open | 0 / 18.2 | 7.4 / 31.7 | 6.2 / 32.0 |
+| sidebar open | 4.2 / 31.9 | 2.6 / 35.4 | 11.5 / 22.3 |
+| hover peek open / close | 2.2 / 4.3 | 0 / 19.2 | 4.2 / 24.0 |
+
+Dashboard open: the 122 ms gap is gone (p99 32 ms) and the rate fell from 32.5 % to 26.1 % but is still
+above QML's 4.3 %; dashboard close and the hover-peek close are unchanged or slightly worse (noise ±5 %).
+**The "Bead drop rate ≤ QML for every animation" gate is NOT met** for dashboard open/close, hover-peek close and
+the sidebar open; it is met for control centre, launcher, popout network and audio. At 120 Hz the nested niri
+still paces clients at ~60 fps for both shells (QML drops ≈45 % of 120 Hz vsyncs everywhere); Bead's frame cost
+is the limit there: dashboard/hover-peek frames cost ≈30 ms (`slow%` 36–52 %), control centre 13 ms, launcher 23 ms.
+The 8.3 ms 120 Hz budget is not met by the CPU renderer for any large panel; closing that needs the residual in
+finding 8 (or the GL panel path on the owner's Intel GPU, which could not be measured here).
+
+Settings scroll (open window included): wheel and touchpad drive 20–50 % missed vsyncs in the first second because
+the Settings window itself opens (first frame 119–135 ms); the scroll cadence after the change follows the output
+refresh. A QML scroll comparison was not obtained (the QML arm ran before the stream injector existed).
+
+**Memory cost of keeping panels warm** (shell process, closed state 0.8 s after close, 3 runs each, median):
+
+| Phase | Anon before → after | Shmem before → after |
+| --- | ---: | ---: |
+| idle | 17.6 → 17.6 MiB | 0.7 → 0.7 |
+| after launcher | 18.0 → 32.0 (+14.0) | 0.7 → 7.7 (+7.0) |
+| after dashboard | 18.6 → 31.5 (+12.9) | 0.7 → 7.7 (+7.0) |
+| after control centre | 19.3 → 29.2 (+9.9) | 0.7 → 5.7 (+5.0) |
+
+That is +10–14 MiB anonymous and +5–7 MiB shared memory while a panel is held warm (120 s after the last close),
+well above the old +0.5 MiB median gate; accepted under SMOOTHNESS FIRST and recorded for the lead. Lowering
+`PANEL_KEEP_ALIVE` trades it back. Idle (never opened) memory is unchanged.
+
+**Log spam:** all per-frame/per-commit print sites (`PROFILE`, `UI_COMMIT`, `UI_RESOURCES`, `UI_PLATFORM`, `UI_PRESENTED`,
+`BUFFER`, `RESOURCES`, `DAMAGE`, `UI_STATE`, `UI_EVENT`, `PANEL_FRAME`, …) go through `vprintln!`; one-shot `READY`/`STOP`/error lines
+remain. Verified by reading the sites and by the harnesses still working with the variable set; a quiet run of the
+released binary was not separately counted.
 
 ## Temporary duplicates and expiry
 
