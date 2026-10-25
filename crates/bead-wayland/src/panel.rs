@@ -498,7 +498,21 @@ impl App {
         {
             let target = self.dock_target_body(output, scene);
             let rect = pearls::interpolate_dock_rect(transition.from, target, progress);
-            let (x, y) = self.pearl_margins(output, scene, rect);
+            let body = rendering::content_input_rect(scene).unwrap_or([0; 4]);
+            let origin = self.output_origin(output);
+            let output_size = self.output.info(output).and_then(|info| info.logical_size)
+                .unwrap_or((i32::MAX / 2, i32::MAX / 2));
+            let (extent, (x, y)) = panels::dock_geometry(
+                (body[0], body[1]),
+                (scene.bounds.w.ceil().max(1.) as u32,
+                 (scene.bounds.y + scene.bounds.h + scene.offset.1).ceil().max(1.) as u32),
+                output_size,
+                (rect.x - origin.0, rect.y - origin.1),
+                (target.x - origin.0, target.y - origin.1),
+            );
+            if !transition.started {
+                layer.set_size(extent.0, extent.1);
+            }
             if !transition.started {
                 self.notify_panel_origin(scene, x, y);
             }
