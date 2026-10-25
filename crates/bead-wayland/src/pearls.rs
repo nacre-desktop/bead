@@ -724,7 +724,9 @@ impl App {
             || !self.pearls_on()
             || !self.panel_target
             || !self.panel_ready
-            || self.panel_animations.active(self.started.elapsed().as_secs_f64())
+            || self
+                .panel_animations
+                .active(self.started.elapsed().as_secs_f64())
             || self.panel_runtime.is_none()
             || self.prewarm_attempted
             || !self
