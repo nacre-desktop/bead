@@ -2451,13 +2451,14 @@ fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
         return path;
     }
     let direct = std::path::PathBuf::from(icon);
-    let theme = freedesktop_icons::default_theme_gtk().unwrap_or_else(|| "Papirus".into());
+    static THEME: OnceLock<String> = OnceLock::new();
+    let theme = THEME.get_or_init(|| freedesktop_icons::default_theme_gtk().unwrap_or_else(|| "Papirus".into()));
     let path = direct
         .is_absolute()
         .then_some(direct)
         .filter(|path| path.is_file())
         .or_else(|| {
-            [theme.as_str(), "hicolor", "Adwaita"]
+            [theme.as_str(), "Papirus", "hicolor", "Adwaita"]
                 .into_iter()
                 .find_map(|theme| {
                     freedesktop_icons::lookup(icon)
