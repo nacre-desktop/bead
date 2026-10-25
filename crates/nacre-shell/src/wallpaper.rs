@@ -204,16 +204,21 @@ impl Consumer {
         {
             return None;
         }
-        let state = self.state().ok()?;
+        let state: WallpaperActive = serde_json::from_value((*snapshot.data).clone()).ok()?;
+        state.validate().ok()?;
         let current = state.current.as_ref()?;
         let displayed = self.displayed.lock().ok()?;
         // One shared motion source: every output using it must first commit its
         // corresponding poster/palette pair. Other outputs do not hold it back.
-        if !state
+        let mut matching = state
             .outputs
             .iter()
             .filter(|(_, pair)| pair.motion == current.motion)
-            .all(|(output, pair)| displayed.get(output) == Some(pair))
+            .peekable();
+        if matching.peek().is_none()
+            || !matching.all(|(output, pair)| displayed.get(output) == Some(pair))
+            || status.boot.is_none()
+            || self.client.status().boot != status.boot
         {
             return None;
         }
@@ -235,6 +240,18 @@ impl Consumer {
             .ok()?;
         let active = Source::subscribe(&self.topic, Arc::new(move |_| changed())).ok()?;
         Some(vec![committed, active])
+    }
+
+    #[cfg(test)]
+    pub(crate) fn commit_token_for_test(
+        &self,
+        output: &str,
+    ) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
+        let state = self.state().ok()?;
+        Some(Arc::new(PairToken {
+            boot: self.client.status().boot?,
+            pair: state.outputs.get(output)?.clone(),
+        }))
     }
 
     /// Palette is deliberately committed from the matching activation pair only
@@ -879,22 +896,24 @@ mod tests {
             )
             .await
             .unwrap();
-            let Message::Call { id, m, p, .. } = reader.next().await.unwrap().unwrap() else {
-                panic!("wallpaper.activate call expected");
-            };
-            assert_eq!(m, "wallpaper.activate");
-            assert_eq!(p, serde_json::json!({"revision":1}));
-            framing::write(
-                &mut write,
-                &Message::Ret {
-                    id,
-                    reply: Reply::Ok {
-                        ok: serde_json::to_value(&pair).unwrap(),
+            for _ in 0..2 {
+                let Message::Call { id, m, p, .. } = reader.next().await.unwrap().unwrap() else {
+                    panic!("wallpaper.activate call expected");
+                };
+                assert_eq!(m, "wallpaper.activate");
+                assert_eq!(p, serde_json::json!({"revision":1}));
+                framing::write(
+                    &mut write,
+                    &Message::Ret {
+                        id,
+                        reply: Reply::Ok {
+                            ok: serde_json::to_value(&pair).unwrap(),
+                        },
                     },
-                },
-            )
-            .await
-            .unwrap();
+                )
+                .await
+                .unwrap();
+            }
             let _ = release_rx.await;
         });
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -961,11 +980,22 @@ mod tests {
         assert!(bead::wayland::WallpaperProvider::is_current(
             &*consumer, &confirmed
         ));
+        preview.select(
+            "00000000-0000-4000-8000-000000000021".into(),
+            expected_pair.path.clone(),
+            preview_path.to_string_lossy().into_owned(),
+            "image".into(),
+            false,
+        );
         bead::wayland::WallpaperProvider::committed(
             &*consumer,
             "DP-1",
             confirmed.revision,
             &confirmed.commit_token,
+        );
+        assert!(
+            preview.selected().is_none(),
+            "a successful commit releases the selection fence for future external updates"
         );
         assert_eq!(consumer.displayed("DP-1"), Some(expected_pair));
         drop(confirmed);

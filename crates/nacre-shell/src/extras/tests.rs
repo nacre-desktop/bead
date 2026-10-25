@@ -1177,8 +1177,12 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         .join("../../shell/sample.png")
         .canonicalize()
         .unwrap();
-    let mut hydrated_scene = None;
+    let mut hydrated_scene =
+        Some(initial_scene).filter(|scene| scene.asset_data.contains_key(&fixture_image));
     for _ in 0..200 {
+        if hydrated_scene.is_some() {
+            break;
+        }
         let scene = runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
         runtime.commit();
         if scene

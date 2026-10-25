@@ -412,14 +412,19 @@ mod tests {
         let identity = nacre_protocol::wallpaper::WallpaperFileIdentity::from_metadata(
             &std::fs::metadata(&clip).unwrap(),
         );
-        let with_motion = json!({"available": true, "stale": false, "revision": 1, "outputs": {},
-            "current": {"revision": 1, "motion": {"kind": "video", "path": clip, "file_identity": identity}}});
+        let pair = json!({"revision":1,"palette_revision":1,"path":clip,"file_identity":identity,
+            "presentation":"crop","motion":{"kind":"video","path":clip,"file_identity":identity},
+            "palette":{"mode":"dark","colours":{"background":"#101820","onSurface":"#f0f4f8","primary":"#22aa88"}}});
+        let with_motion = json!({"available":true,"stale":false,"revision":1,
+            "outputs":{"DP-1":pair.clone(),"DP-2":pair.clone()},"current":pair});
         // Patches are merge patches: null removes the member.
         let without = json!({"current": {"motion": null}});
         let socket = dir.join("daemon.sock");
         let listener = UnixListener::bind(&socket).unwrap();
         std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
         let (clear_tx, clear_rx) = tokio::sync::oneshot::channel::<()>();
+        let (snapshot_tx, snapshot_rx) = tokio::sync::oneshot::channel::<()>();
+        let (outputs_tx, outputs_rx) = tokio::sync::oneshot::channel::<()>();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let (read, mut write) = stream.into_split();
@@ -461,7 +466,24 @@ mod tests {
                 &Message::Snap {
                     topic: "wallpaper.active".into(),
                     seq: 0,
-                    data: with_motion,
+                    data: {
+                        let mut initial = with_motion.clone();
+                        initial["outputs"] = json!({});
+                        initial
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            snapshot_tx.send(()).unwrap();
+            let _ = outputs_rx.await;
+            framing::write(
+                &mut write,
+                &Message::Patch {
+                    topic: "wallpaper.active".into(),
+                    base: 0,
+                    seq: 1,
+                    data: json!({"outputs":with_motion["outputs"]}),
                 },
             )
             .await
@@ -471,8 +493,8 @@ mod tests {
                 &mut write,
                 &Message::Patch {
                     topic: "wallpaper.active".into(),
-                    base: 0,
-                    seq: 1,
+                    base: 1,
+                    seq: 2,
                     data: without,
                 },
             )
@@ -490,7 +512,7 @@ mod tests {
         let log_for_command = log.clone();
         let controller = Controller::start_with(
             Deps {
-                wallpaper,
+                wallpaper: wallpaper.clone(),
                 picker: None,
                 backend: None,
                 desktop: None,
@@ -517,6 +539,43 @@ mod tests {
                 false
             }
         };
+        snapshot_rx.await.unwrap();
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(
+            wallpaper.motion().is_none(),
+            "a published source without known outputs is not ready"
+        );
+        assert!(
+            !std::fs::read_to_string(&log)
+                .unwrap_or_default()
+                .contains("\"kind\":\"video\""),
+            "startup cannot play before any poster/palette commit"
+        );
+        outputs_tx.send(()).unwrap();
+        let mut token = None;
+        for _ in 0..200 {
+            token = wallpaper.commit_token_for_test("DP-1");
+            if token.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let token = token.expect("published pair reached the consumer");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            !std::fs::read_to_string(&log)
+                .unwrap_or_default()
+                .contains("\"kind\":\"video\""),
+            "publishing a motion topic must not bypass the poster/palette commit"
+        );
+        bead::wayland::WallpaperProvider::committed(&*wallpaper, "DP-1", 1, &token);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            wallpaper.motion().is_none(),
+            "the shared source waits for every output using it"
+        );
+        let second = wallpaper.commit_token_for_test("DP-2").unwrap();
+        bead::wayland::WallpaperProvider::committed(&*wallpaper, "DP-2", 1, &second);
         assert!(
             seen("\"kind\":\"video\"").await,
             "source reached the renderer"

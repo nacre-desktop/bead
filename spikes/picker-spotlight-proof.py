@@ -55,11 +55,18 @@ m.Arm.run = run
 original_sequence = m.Arm.sequence
 
 def sequence(self, name, trigger, seconds):
+    panel_before = self.socket_call(self.runtime / "bead-command.sock", "bead.panel", "state", []).get("result") if self.name == "bead" else None
     real, mono = time.time(), time.monotonic()
-    result = original_sequence(self, name, trigger, seconds)
+    if os.environ.get("PICKER_PACING_ONLY") == "1":
+        trigger()
+        time.sleep(max(0, seconds-(time.monotonic()-mono)))
+        result = []
+    else:
+        result = original_sequence(self, name, trigger, seconds)
     path = self.out / "sequence-clocks.json"
-    clocks = json.loads(path.read_text())
-    clocks[name].update(real_start=real, mono_start=mono, seconds=seconds)
+    clocks = json.loads(path.read_text()) if path.exists() else {}
+    clocks.setdefault(name, {})
+    clocks[name].update(real_start=real, mono_start=mono, seconds=seconds, panel_before=panel_before)
     path.write_text(json.dumps(clocks))
     return result
 
