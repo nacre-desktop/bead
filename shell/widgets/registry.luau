@@ -67,7 +67,10 @@ function M.validate(document)
             local package=registry[item.widget]
             if package then
                 local variant=package.variants.bar
-                assert(slot.span>=variant.min_span and slot.span<=variant.max_span,"widget span outside variant contract")
+                local compact=package.variants.compact
+                local fits=slot.span>=variant.min_span and slot.span<=variant.max_span
+                local compact_fits=compact and slot.span>=compact.min_span and slot.span<=compact.max_span
+                assert(fits or compact_fits,"widget span outside variant contract")
                 settings(package.settings,item.settings or {})
                 assert(not item.children or item.widget=="pill","only a pill accepts children")
             end

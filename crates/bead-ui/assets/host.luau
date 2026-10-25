@@ -12,6 +12,8 @@ return function(ui)
     end
     return function(p)
         assert(p.shape=="strip-h", "Host: only strip-h is supported")
+        local layout=ui.resolve_for_check(p.layout)
+        assert(type(layout)=="table","Host: layout must be a list")
         local grid=p.grid or {}
         local derived
         if grid.tile_size then
@@ -28,7 +30,7 @@ return function(ui)
         local regions=grid.regions or {left={start=0,span=tiles},centre={start=0,span=tiles},right={start=0,span=tiles}}
         local groups={left={},centre={},right={}}
         local occupied={left={},centre={},right={}}
-        for _,instance in p.layout do
+        for _,instance in layout do
             local slot=instance.slot
             local region=slot.region
             assert(groups[region] and regions[region],"Host: invalid region")
@@ -37,7 +39,14 @@ return function(ui)
             if def then
                 local variant=def.variants.bar
                 assert(variant,"Host: missing bar variant")
-                local span=integer(slot.span or variant.preferred_span,variant.min_span,variant.max_span,"span")
+                local span=integer(slot.span or variant.preferred_span,1,4096,"span")
+                local compact=def.variants.compact
+                local chosen=variant
+                if compact and span>=compact.min_span and span<=compact.max_span
+                    and (span<variant.preferred_span or span>variant.max_span) then
+                    chosen=compact
+                end
+                integer(span,chosen.min_span,chosen.max_span,"variant span")
                 local r=regions[region]
                 local capacity=integer(r.span or tiles,1,tiles,"region span")
                 local start=integer(slot.start or 0,0,capacity-1,"start")
@@ -45,10 +54,6 @@ return function(ui)
                 for tile=start,start+span-1 do
                     assert(not occupied[region][tile],"Host: overlapping slots")
                     occupied[region][tile]=true
-                end
-                local chosen=variant
-                if slot.span and slot.span<variant.preferred_span and def.variants.compact then
-                    chosen=def.variants.compact
                 end
                 local node=p.render(instance,chosen)
                 if node then

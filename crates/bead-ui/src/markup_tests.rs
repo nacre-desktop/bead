@@ -2445,7 +2445,7 @@ fn strip_host_regions_spans_and_compact_variants_scale_with_width() {
         let f = fixture();
         fs::write(f.0.join("ui/main.luau"),format!(r#"
 local ui=require("bead.ui")
-local normal={{min_span=1,max_span=6,preferred_span=3,render=function() return ui.Button{{id="tile",text="normal",on_activate=ui.action("select","a"),width="100%",height=30}} end}}
+local normal={{min_span=3,max_span=6,preferred_span=3,render=function() return ui.Button{{id="tile",text="normal",on_activate=ui.action("select","a"),width="100%",height=30}} end}}
 local compact={{min_span=1,max_span=2,preferred_span=1,render=function() return ui.Button{{id="tile",text="compact",on_activate=ui.action("select","a"),width="100%",height=30}} end}}
 return ui.Host{{id="host",shape="strip-h",width={width},height=50,
  grid={{tiles=12,regions={{left={{start=0,span=4}},centre={{start=4,span=4}},right={{start=8,span=4}}}}}},
@@ -2486,4 +2486,22 @@ layout={{{{iid="a",widget="sample",slot={{region="left",start=0,span=2}}}},{{iid
         s.entry = "ui/main.luau".into();
         assert!(s.reload().is_err());
     }
+}
+
+#[test]
+fn strip_host_layout_binding_reacts_to_model_slot_edits() {
+    let f = fixture();
+    fs::write(f.0.join("ui/behavior.luau"),r#"return {stores={placements={{iid="a",widget="sample",slot={region="left",start=0,span=1}}}},actions={select=function(_) end},computed={}}"#).unwrap();
+    fs::write(f.0.join("ui/main.luau"),r#"
+local ui=require("bead.ui")
+return ui.Host{id="host",shape="strip-h",width=600,height=50,grid={tiles=12,regions={left={start=0,span=12}}},layout=ui.bind("placements"),
+ catalogue={sample={variants={bar={min_span=1,max_span=3,preferred_span=1}}}},
+ render=function() return ui.Button{id="tile",text="bound",width="100%",height=30,on_activate=ui.action("select")} end}
+"#).unwrap();
+    let mut s = session(&f);
+    assert_eq!(rect(&s.view_nodes()[0].draw).x, 0.);
+    let scene=s.update_model(BTreeMap::from([("placements".into(),Value::list(vec![serde_json::json!({"iid":"a","widget":"sample","slot":{"region":"left","start":3,"span":2}})]))])).unwrap().expect("layout binding must invalidate the view");
+    s.commit(scene);
+    let r = rect(&s.view_nodes()[0].draw);
+    assert!((r.x - 150.).abs() < 1. && (r.w - 100.).abs() < 1., "{r:?}");
 }
