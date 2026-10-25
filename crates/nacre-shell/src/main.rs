@@ -151,6 +151,7 @@ fn start(
         bead::render::RendererKind::Cpu
     };
     let mut panel_renderer = None;
+    let wallpaper_preview = std::sync::Arc::new(wallpaper::Preview::default());
     let mut options = Options {
         command_map: Some(std::sync::Arc::new(commands::map)),
         ..Options::default()
@@ -779,6 +780,7 @@ fn start(
                         colors.clone(),
                         panel_trace,
                         capture.clone(),
+                        Some(wallpaper_preview.clone()),
                     )?,
                 );
             }
@@ -981,7 +983,7 @@ fn start(
     let mut wallpaper_consumer = None;
     let mut _motion_wallpaper = None;
     if let Some(socket) = daemon_socket.clone() {
-        match wallpaper::Consumer::start(socket) {
+        match wallpaper::Consumer::start_with_preview(socket, wallpaper_preview.clone()) {
             Ok(provider) => {
                 wallpaper_consumer = Some(provider.clone());
                 options.wallpaper = Some(provider);

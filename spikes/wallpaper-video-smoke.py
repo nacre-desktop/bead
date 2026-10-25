@@ -149,14 +149,18 @@ try:
     image = shot("crop")
     check("crop_keeps_centre", args.perf or near(image.getpixel((54, 54)), (0, 128, 0), 40) and near(image.getpixel((30, 54)), (0, 128, 0), 40) and near(image.getpixel((2, 54)), (255, 0, 0), 40) and near(image.getpixel((105, 54)), (0, 0, 255), 40))
     # 2. Switch to the moving clip.
+    switched = time.monotonic()
     send(proc, {"cmd": "source", "source": {"kind": "video", "path": str(motion), "fit": "crop", "loop": True}})
     send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
     events = read_events(proc, "first-frame")
+    result["switch_first_frame_ms"] = round((time.monotonic() - switched) * 1000, 2)
+    check("replacement_first_frame", any(e.get("event") == "first-frame" for e in events))
     result["hwdec"] = next((e["mode"] for e in events if e.get("event") == "hwdec"), None)
     time.sleep(1.0)
     # Which presentation path the renderer picked: EGL (GPU) or shared memory. A headless
     # pixman sway has no GPU, so the fallback must take over without any intervention.
     log = err_path.read_text()
+    check("render_context_reused", "reusing mpv render context" in log)
     result["presentation"] = "shm" if "shared-memory presentation" in log else "egl" if "EGL presentation" in log else "shm-forced-or-unknown"
     if args.expect_presentation:
         check("presentation_" + args.expect_presentation, result["presentation"].startswith(args.expect_presentation))
@@ -166,6 +170,24 @@ try:
     time.sleep(0.35)
     second = shot("play2")
     check("frames_advance", list(first.getdata()) != list(second.getdata()))
+    # The picker accepts these containers. Replacing on the same engine must
+    # report a new frame and display its content, including after an error.
+    result["format_switch_ms"] = {}
+    for extension, codec in [("webm", "libvpx-vp9"), ("mkv", "libx264"), ("mov", "libx264"), ("m4v", "libx264")]:
+        path = root / ("replacement." + extension)
+        subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i",
+                        "color=yellow:s=192x108:r=15", "-t", "1", "-c:v", codec,
+                        "-threads", "1", "-pix_fmt", "yuv420p", str(path)], check=True)
+        started = time.monotonic()
+        send(proc, {"cmd": "source", "source": {"kind": "video", "path": str(path), "loop": True}})
+        send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
+        events = read_events(proc, "first-frame")
+        result["format_switch_ms"][extension] = round((time.monotonic() - started) * 1000, 2)
+        check("replacement_" + extension, any(e.get("event") == "first-frame" for e in events)
+              and near(shot("format-" + extension).getpixel((54, 54)), (255, 255, 0), 20))
+    send(proc, {"cmd": "source", "source": {"kind": "video", "path": str(motion), "loop": True}})
+    send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
+    check("resume_motion_after_formats", any(e.get("event") == "first-frame" for e in read_events(proc, "first-frame")))
     # 3. Pause: frozen picture, ~zero CPU.
     send(proc, {"cmd": "state", "decoder": "pause", "render": []})
     time.sleep(0.5)

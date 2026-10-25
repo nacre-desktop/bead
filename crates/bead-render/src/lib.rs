@@ -413,6 +413,62 @@ pub struct Scene {
     pub bounds: Rect,
 }
 impl Scene {
+    /// Remove resources while preserving primitive-indexed clips, layers and reveal metadata.
+    pub fn retain_primitives(&mut self, mut keep: impl FnMut(&Primitive) -> bool) {
+        let Some(first_removed) = self
+            .primitives
+            .iter()
+            .position(|primitive| !keep(primitive))
+        else {
+            return;
+        };
+        let mut positions = Vec::with_capacity(self.primitives.len() + 1);
+        positions.extend(0..=first_removed);
+        positions.push(first_removed);
+        for primitive in self.primitives.iter().skip(first_removed + 1) {
+            positions.push(positions.last().copied().unwrap() + usize::from(keep(primitive)));
+        }
+        let retained = |index: usize| {
+            positions
+                .get(index)
+                .zip(positions.get(index + 1))
+                .is_some_and(|(before, after)| after > before)
+        };
+        let remap = |index: usize| positions.get(index).copied().unwrap_or(index);
+        let mut index = 0;
+        self.primitives.retain(|_| {
+            let keep = retained(index);
+            index += 1;
+            keep
+        });
+        self.clips = std::mem::take(&mut self.clips)
+            .into_iter()
+            .filter(|(index, _)| retained(*index))
+            .map(|(index, clip)| (remap(index), clip))
+            .collect();
+        for layer in &mut self.layers {
+            layer.own = remap(layer.own.start)..remap(layer.own.end);
+            layer.subtree_end = remap(layer.subtree_end);
+        }
+        if let Some(motion) = &mut self.motion {
+            motion.parts.retain_mut(|(index, _)| {
+                if !retained(*index) {
+                    return false;
+                }
+                *index = remap(*index);
+                true
+            });
+            if let Some(art) = &mut motion.art {
+                if retained(art.index) {
+                    art.index = remap(art.index);
+                } else {
+                    motion.art = None;
+                }
+            }
+        }
+        self.prepared.clear();
+    }
+
     /// Content can slide behind a stationary reveal contour without moving the edge join.
     fn content_offset(&self, index: usize) -> (f32, f32) {
         self.motion
@@ -1905,6 +1961,80 @@ fn boundary_x(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn resource_pruning_remaps_retained_layers_clips_and_reveal_parts() {
+        let mut scene = font_pool_scene();
+        scene.primitives = (0..3)
+            .map(|index| Primitive::Rounded {
+                rect: Rect::new(index as f32 * 20., 0., 20., 20.),
+                radius: 2.,
+                fill: [30, 40, 50, 255],
+                border: None,
+            })
+            .collect();
+        let clip = Rect::new(40., 0., 20., 20.);
+        scene.clips = [(1, Rect::new(20., 0., 20., 20.)), (2, clip)].into();
+        scene.layers = vec![
+            SceneLayer {
+                id: "root".into(),
+                parent: None,
+                own: 0..1,
+                subtree_end: 3,
+                bounds: Rect::new(0., 0., 60., 20.),
+            },
+            SceneLayer {
+                id: "child".into(),
+                parent: Some("root".into()),
+                own: 1..3,
+                subtree_end: 3,
+                bounds: Rect::new(20., 0., 40., 20.),
+            },
+        ];
+        scene.motion = Some(Motion {
+            id: "reveal".into(),
+            open: true,
+            duration: 0.3,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![
+                (0, scene.primitives[0].clone()),
+                (2, scene.primitives[2].clone()),
+            ],
+            art: None,
+        });
+        scene.retain_primitives(
+            |primitive| !matches!(primitive, Primitive::Rounded { rect, .. } if rect.x == 20.),
+        );
+        assert_eq!(scene.primitives.len(), 2);
+        assert_eq!(scene.layers[0].own, 0..1);
+        assert_eq!(scene.layers[0].subtree_end, 2);
+        assert_eq!(scene.layers[1].own, 1..2);
+        assert_eq!(scene.layers[1].subtree_end, 2);
+        assert_eq!(scene.clips.len(), 1);
+        assert_eq!(scene.clip_at(1), Some(clip));
+        assert_eq!(
+            scene
+                .motion
+                .as_ref()
+                .unwrap()
+                .parts
+                .iter()
+                .map(|(i, _)| *i)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+        // The formerly stale child range ended beyond the pruned primitive list.
+        renderer(RendererKind::Cpu)
+            .unwrap()
+            .prepare(&scene, 1.)
+            .unwrap();
+    }
+
     use super::*;
     #[test]
     fn fill_image_premultiplication_preserves_exact_lanczos_pixels() {

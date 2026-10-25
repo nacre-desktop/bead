@@ -191,6 +191,17 @@ async fn lab(topics: Vec<(&str, Json)>, methods: &[&str]) -> Lab {
                         None if m == "daemon.status" => Reply::Ok {
                             ok: json!({"boot":"pages-boot","topics":registry_topics,"methods":registry_methods}),
                         },
+                        None if m == "wallpaper.catalogue" => Reply::Ok {
+                            ok: {
+                                let id = published
+                                    .get("wallpaper.active")
+                                    .and_then(|active| active["current"]["path"].as_str())
+                                    .unwrap_or("/wallpapers/photo-4k.jpg");
+                                json!({"entries": [{"id":id, "kind":"image",
+                                "animated":false, "title":"Photo", "thumbnail":"/cache/nacre/wallpaper-media/photo.jpg",
+                                "preview":"", "active":true}]})
+                            },
+                        },
                         None => Reply::Ok {
                             ok: json!({"changed": true}),
                         },
@@ -267,6 +278,101 @@ fn desktop() -> Json {
 }
 fn caps(flags: Json) -> Json {
     json!({"health": health(), "flags": flags})
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn current_scene_uses_bounded_catalogue_thumbnail_for_large_original() {
+    let dir = std::env::temp_dir().join(format!("settings-wallpaper-large-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let original = dir.join("photo-4k.jpg");
+    image::DynamicImage::new_rgb8(1601, 1001)
+        .save(&original)
+        .unwrap();
+    let original = original.to_string_lossy().into_owned();
+    let mut l = lab(
+        vec![(
+            "wallpaper.active",
+            json!({"available":true,"stale":false,"revision":1,
+                "current":{"path":original,"motion":null},"outputs":{}}),
+        )],
+        &["wallpaper.catalogue", "ui.dispatch"],
+    )
+    .await;
+    let settings = Settings::new(Some(l.client.clone()), &root()).unwrap();
+    settings.subscribe(wake());
+    let at = stores("wallpaper");
+    let model = until(&settings, &at, |model| {
+        items(model).iter().any(|item| {
+            item["id"] == "wallpaper-scene"
+                && item["preview"] == "wallpaper:current:/cache/nacre/wallpaper-media/photo.jpg"
+        })
+    })
+    .await;
+    assert_eq!(
+        l.call().await,
+        ("wallpaper.catalogue".into(), json!({"ids":[original]}))
+    );
+    let model_items = items(&model);
+    let scene = row(&model_items, "wallpaper-scene");
+    assert_eq!(scene["name"], "photo-4k.jpg");
+    assert_eq!(scene["scene_kind"], "Still");
+    assert_eq!(
+        scene["preview"],
+        "wallpaper:current:/cache/nacre/wallpaper-media/photo.jpg"
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn current_scene_attaches_bounded_catalogue_thumbnail_bytes() {
+    use bead::render::{ImageFit, Primitive, Rect, Scene};
+    let dir = std::env::temp_dir().join(format!("settings-wallpaper-thumb-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let thumbnail = dir.join("photo.jpg");
+    image::RgbImage::from_fn(32, 24, |x, y| image::Rgb([x as u8, y as u8, 80]))
+        .save(&thumbnail)
+        .unwrap();
+    let settings = Settings::new(None, &root()).unwrap();
+    let scene_with_preview = || Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: vec![],
+        prepared: Default::default(),
+        font_files: vec![],
+        width: 320.,
+        slide: None,
+        primitives: vec![Primitive::Image {
+            blur: 0.,
+            fit: ImageFit::Cover,
+            clip_polygon: None,
+            rect: Rect::new(0., 0., 320., 180.),
+            path: format!("@icon:wallpaper:current:{}", thumbnail.display()).into(),
+        }],
+        offset: (0., 0.),
+        bounds: Rect::new(0., 0., 320., 180.),
+    };
+    let mut scene = scene_with_preview();
+    settings.attach_images(&mut scene);
+    assert!(scene.asset_data.contains_key(&thumbnail));
+    assert!(matches!(
+        &scene.primitives[0],
+        Primitive::Image { path, .. } if path == &thumbnail
+    ));
+    std::fs::remove_file(&thumbnail).unwrap();
+    let mut closed = scene_with_preview();
+    closed.primitives.clear();
+    settings.attach_images(&mut closed);
+    let mut reopened = scene_with_preview();
+    settings.attach_images(&mut reopened);
+    assert!(reopened.primitives.is_empty());
+    drop(scene);
+    drop(closed);
+    drop(reopened);
+    drop(settings);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 // ---- weather location (B0083) ---------------------------------------------------------------
@@ -1999,4 +2105,106 @@ fn search_finds_the_new_pages_and_their_actions() {
     );
     assert!(find("profile").iter().any(|r| r["page"] == "power"));
     assert!(find("clipboard").iter().any(|r| r["page"] == "privacy"));
+}
+
+#[test]
+fn current_scene_goldens() {
+    crate::i18n::init();
+    use super::settings_tests::golden;
+    let settings = Settings::new(None, &root()).unwrap();
+    let mut model = settings.project(&stores("wallpaper"));
+    let mut sections = nested_items(&model);
+    for section in &mut sections {
+        if let Some(rows) = section["rows"].as_array_mut() {
+            for row in rows {
+                if row["kind"] == "wallpaper-scene" {
+                    row["preview"] = json!("wallpaper:current:fixture");
+                    row["name"] = json!("Generated landscape.jpg");
+                    row["scene_kind"] = json!("Still");
+                    row["enabled"] = json!(true);
+                }
+            }
+        }
+    }
+    model.insert("settings.items".into(), Value::list(sections));
+    model.insert("settings.writable".into(), Value::Bool(true));
+    for scale in [1., 1.5] {
+        let mut h = bead_test::Harness::load_with_icons(
+            &root(),
+            std::path::Path::new("settings/main.luau"),
+            &root().join("palette.json"),
+            model.clone(),
+            bead_test::Config {
+                width: 960,
+                height: 760,
+                scale,
+            },
+            BTreeMap::from([(
+                "wallpaper:current:fixture".into(),
+                root().join("sample.png"),
+            )]),
+        )
+        .unwrap();
+        golden(&format!("settings-wallpaper-scene-{scale}"), &mut h);
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn current_scene_picker_dispatches_once_on_pointer_release() {
+    use bead::wayland::{SceneSource, UiEvent};
+    crate::i18n::init();
+    let mut l = lab(vec![], &["ui.dispatch"]).await;
+    let palette = root().join("palette.json");
+    let colors = bead::render::Palette::read(&palette).unwrap();
+    let cold = crate::sound::fallback(colors.get("surface").unwrap());
+    let session =
+        bead::ui::Session::new(root(), "settings/main.luau".into(), palette, colors, cold);
+    let mut runtime = crate::reload::Runtime::new(session)
+        .with_settings(Some(l.client.clone()), &root())
+        .unwrap();
+    runtime.services(Box::new(|_| {}));
+    runtime.viewport(960, 760);
+    runtime.stage(UiEvent::Reload).unwrap();
+    runtime.commit();
+    runtime
+        .stage(UiEvent::Model(BTreeMap::from([(
+            "settings.page".into(),
+            Value::Text("wallpaper".into()),
+        )])))
+        .unwrap();
+    runtime.commit();
+    let button = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.action_arg == Some(Value::Text("do:open|wallpaper".into())))
+        .expect("Current scene offers its picker action");
+    let rect = bead::ui::rect(&button.draw);
+    runtime
+        .stage(UiEvent::Click {
+            x: rect.x + rect.w / 2.,
+            y: rect.y + rect.h / 2.,
+        })
+        .unwrap();
+    runtime.commit();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(
+        l.calls.try_recv().is_err(),
+        "pressing must not activate a release button"
+    );
+    runtime.stage(UiEvent::Release).unwrap();
+    runtime.commit();
+    assert_eq!(
+        l.call().await,
+        (
+            "ui.dispatch".into(),
+            json!({"target":"nacre","method":"mode","args":["wallpaper"]})
+        )
+    );
+    assert_eq!(
+        runtime.session.stores.get("bead.pressed"),
+        Some(&Value::Bool(false))
+    );
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(l.calls.try_recv().is_err(), "release dispatches once");
 }

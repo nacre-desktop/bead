@@ -579,6 +579,83 @@ fn panel_transition_selects_cubic_in_out_without_changing_legacy_curves() {
         assert_eq!(motion.duration, 0.5);
     }
 }
+
+#[test]
+fn scalar_animation_wakeup_moves_painted_and_hit_node_geometry_together() {
+    use std::{thread, time::Duration};
+
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={position=20},actions={select=function(_) end},computed={}}"#,
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=300,height=80,
+ ui.Button{id="moving",text="Move",position="absolute",left=ui.animate("moving-x",ui.resolve_for_check(ui.bind("position")),.3,"out-cubic"),top=0,width=30,height=30,on_activate=ui.action("select","moving")}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let node_x = |s: &Session| {
+        let node = s
+            .current_nodes
+            .iter()
+            .find(|node| node.id.ends_with("moving"))
+            .unwrap();
+        let Primitive::Rounded { rect, .. } = &node.draw else {
+            panic!("button node geometry")
+        };
+        rect.x
+    };
+    let start = node_x(&s);
+    let target = s
+        .update(BTreeMap::from([("position".into(), Value::Number(180.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(target);
+    assert!(s.preview_deadline().is_some());
+
+    thread::sleep(Duration::from_millis(50));
+    let frame = s.update_model(BTreeMap::new()).unwrap().unwrap();
+    s.commit(frame);
+    let midpoint = node_x(&s);
+    assert!(
+        midpoint > start + 5.,
+        "animation did not advance: {start} -> {midpoint}"
+    );
+    assert!(
+        midpoint < start + 160.,
+        "animation jumped to its target: {start} -> {midpoint}"
+    );
+    let node = s
+        .current_nodes
+        .iter()
+        .find(|node| node.id.ends_with("moving"))
+        .unwrap();
+    let Primitive::Rounded { rect, .. } = &node.draw else {
+        panic!("button node geometry")
+    };
+    assert!(node.contains(rect.x + rect.w / 2., rect.y + rect.h / 2.));
+
+    // A renderer rejection must not leave a cached pose without its animation.
+    thread::sleep(Duration::from_millis(350));
+    let settled = s.update_model(BTreeMap::new()).unwrap().unwrap();
+    s.commit(settled);
+    assert!(s.preview_deadline().is_none());
+    s.update(BTreeMap::from([("position".into(), Value::Number(260.))]))
+        .unwrap()
+        .unwrap();
+    s.reject("fixture renderer failure".into());
+    let retry = s
+        .update(BTreeMap::from([("position".into(), Value::Number(260.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(retry);
+    assert!(s.preview_deadline().is_some());
+}
+
 #[test]
 fn sdk_brush_helpers_preserve_values_coercion_and_reject_bad_arguments() {
     use crate::frontend::{FrontEnd, LuauFrontEnd, Sources};

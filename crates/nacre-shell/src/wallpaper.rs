@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Secure, descriptor-pinned decoding for the published wallpaper contract.
-use bead::core::source::{Source, Subscription};
-use nacre_protocol::wallpaper::{ActiveWallpaper, WallpaperActive};
+use bead::core::source::{Publisher, Source, Subscription};
+use nacre_protocol::wallpaper::{ActiveWallpaper, WallpaperActive, WallpaperFileIdentity};
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -16,18 +16,165 @@ fn supports_wallpaper_v1(status: &crate::nacre_source::Status) -> bool {
             .is_some_and(|method| method.v == 1)
 }
 
+#[derive(Clone)]
+struct PreviewSelection {
+    boot: String,
+    id: String,
+    preview: String,
+    kind: String,
+    animated: bool,
+    generation: u64,
+    video_identity: Option<WallpaperFileIdentity>,
+}
+#[derive(Default)]
+struct PreviewState {
+    generation: u64,
+    selected: Option<PreviewSelection>,
+}
+
+/// One shared, short-lived selection preview. It carries only bounded path and identity metadata;
+/// raster bytes are decoded for a single output frame and then released.
+pub(crate) struct Preview {
+    publisher: Publisher,
+    state: Mutex<PreviewState>,
+    publish_order: Mutex<()>,
+}
+impl Default for Preview {
+    fn default() -> Self {
+        Self {
+            publisher: Publisher::new(
+                "wallpaper-preview".into(),
+                serde_json::json!({"generation":0,"selected":null}),
+            )
+            .expect("static wallpaper preview source is valid"),
+            state: Mutex::new(PreviewState::default()),
+            publish_order: Mutex::new(()),
+        }
+    }
+}
+impl Preview {
+    pub(crate) fn select(
+        &self,
+        boot: String,
+        id: String,
+        preview: String,
+        kind: String,
+        animated: bool,
+    ) -> u64 {
+        let _publish_order = self.publish_order.lock().unwrap_or_else(|p| p.into_inner());
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        state.generation = state.generation.saturating_add(1).max(1);
+        let generation = state.generation;
+        let video_identity = (kind == "video" || animated)
+            .then(|| local_file_identity(&id, 64 * 1024 * 1024 * 1024))
+            .flatten();
+        let selected = (boot.len() <= 128
+            && !boot.is_empty()
+            && valid_local_path(&id)
+            && valid_local_path(&preview)
+            && matches!(kind.as_str(), "image" | "video"))
+        .then(|| PreviewSelection {
+            boot: boot.clone(),
+            id: id.clone(),
+            preview: preview.clone(),
+            kind: kind.clone(),
+            animated,
+            generation,
+            video_identity,
+        });
+        let published = selected.as_ref().map(|selection| {
+            serde_json::json!({
+                "boot":selection.boot,"id":selection.id,"preview":selection.preview,
+                "kind":selection.kind,"animated":selection.animated
+            })
+        });
+        state.selected = selected;
+        drop(state);
+        let _ = self
+            .publisher
+            .publish(serde_json::json!({"generation":generation,"selected":published}));
+        generation
+    }
+    pub(crate) fn cancel(&self, generation: u64) -> bool {
+        let _publish_order = self.publish_order.lock().unwrap_or_else(|p| p.into_inner());
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        if !state
+            .selected
+            .as_ref()
+            .is_some_and(|selected| selected.generation == generation)
+        {
+            return false;
+        }
+        state.selected = None;
+        drop(state);
+        let _ = self.publisher.publish(serde_json::json!({
+            "generation":generation,"selected":null
+        }));
+        true
+    }
+    pub(crate) fn generation_for(&self, boot: &str, id: &str) -> Option<u64> {
+        self.state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .selected
+            .as_ref()
+            .filter(|selected| selected.boot == boot && selected.id == id)
+            .map(|selected| selected.generation)
+    }
+    fn selected(&self) -> Option<PreviewSelection> {
+        self.state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .selected
+            .clone()
+    }
+}
+fn valid_local_path(path: &str) -> bool {
+    path.len() <= 4096
+        && !path.is_empty()
+        && !path.contains(['\0', '\n', '\r'])
+        && !path.contains("://")
+        && std::path::Path::new(path).is_absolute()
+        && !std::path::Path::new(path)
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+}
+fn local_file_identity(path: &str, limit: u64) -> Option<WallpaperFileIdentity> {
+    if !valid_local_path(path) {
+        return None;
+    }
+    let metadata = std::fs::symlink_metadata(path).ok()?;
+    (metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() <= limit)
+        .then(|| WallpaperFileIdentity::from_metadata(&metadata))
+}
+
 pub(crate) struct Consumer {
     client: crate::nacre_source::Client,
     topic: crate::nacre_source::Topic,
+    preview: Arc<Preview>,
     subscriptions: Mutex<Vec<Subscription>>,
     displayed: Mutex<BTreeMap<String, ActiveWallpaper>>,
+    preview_visual: Mutex<BTreeMap<String, ActiveWallpaper>>,
 }
 struct PairToken {
     boot: String,
     pair: ActiveWallpaper,
 }
+struct PreviewToken {
+    boot: String,
+    id: String,
+    generation: u64,
+    pair: ActiveWallpaper,
+}
 impl Consumer {
+    #[cfg(test)]
     pub(crate) fn start(socket: std::path::PathBuf) -> Result<Arc<Self>, String> {
+        Self::start_with_preview(socket, Arc::new(Preview::default()))
+    }
+    pub(crate) fn start_with_preview(
+        socket: std::path::PathBuf,
+        preview: Arc<Preview>,
+    ) -> Result<Arc<Self>, String> {
         let client = crate::nacre_source::Client::start(crate::nacre_source::Config::new(
             socket,
             // The picker settings drive motion pause rules; a daemon without the topic is
@@ -45,8 +192,10 @@ impl Consumer {
         let consumer = Arc::new(Self {
             client,
             topic,
+            preview,
             subscriptions: Mutex::new(Vec::new()),
             displayed: Mutex::new(BTreeMap::new()),
+            preview_visual: Mutex::new(BTreeMap::new()),
         });
         // Retain the reconnecting client even when the daemon starts later.
         // Contract checks belong to state/activation, never startup admission.
@@ -68,8 +217,25 @@ impl Consumer {
     /// published `current` pair (a video or animation file for the poster being shown).
     /// `None` for a still wallpaper, an older daemon, or an unavailable/stale state.
     pub(crate) fn motion(&self) -> Option<bead_wallpaper::protocol::Source> {
+        let status = self.client.status();
+        if !supports_wallpaper_v1(&status) {
+            return None;
+        }
         let snapshot = Source::snapshot(&self.topic);
-        snapshot.connected.then(|| parse_motion(&snapshot.data))?
+        if !snapshot.connected
+            || snapshot.data["available"] != true
+            || snapshot.data["stale"] == true
+        {
+            return None;
+        }
+        let selected = self.preview.selected();
+        if let Some(selected) = selected.filter(|selected| {
+            status.boot.as_deref() == Some(&selected.boot)
+                && !active_matches_id(&snapshot.data, &selected.id)
+        }) {
+            return pending_motion_source(&selected);
+        }
+        parse_motion(&snapshot.data)
     }
     /// `settings.store.wallpaper-picker` on this connection (motion mode, pause, cover rule).
     pub(crate) fn picker(&self) -> Option<Arc<dyn Source>> {
@@ -79,8 +245,15 @@ impl Consumer {
     pub(crate) fn watch_motion(
         &self,
         changed: Arc<dyn Fn() + Send + Sync>,
-    ) -> Option<Subscription> {
-        Source::subscribe(&self.topic, Arc::new(move |_| changed())).ok()
+    ) -> Option<Vec<Subscription>> {
+        let preview_changed = changed.clone();
+        let preview = self
+            .preview
+            .publisher
+            .subscribe(Arc::new(move |_| preview_changed()))
+            .ok()?;
+        let active = Source::subscribe(&self.topic, Arc::new(move |_| changed())).ok()?;
+        Some(vec![preview, active])
     }
 
     /// Palette is deliberately committed from the matching activation pair only
@@ -92,12 +265,23 @@ impl Consumer {
 }
 impl bead::wayland::WallpaperProvider for Consumer {
     fn watch(&self, changed: Box<dyn Fn() + Send + Sync>) -> Result<(), String> {
-        let subscription = Source::subscribe(&self.topic, Arc::new(move |_| changed()))
+        let changed: Arc<dyn Fn() + Send + Sync> = Arc::from(changed);
+        let active_changed = changed.clone();
+        let subscription = Source::subscribe(&self.topic, Arc::new(move |_| active_changed()))
             .map_err(|_| "wallpaper subscription failed")?;
         self.subscriptions
             .lock()
             .map_err(|_| "wallpaper subscription lock failed")?
             .push(subscription);
+        let preview_subscription = self
+            .preview
+            .publisher
+            .subscribe(Arc::new(move |_| changed()))
+            .map_err(|_| "wallpaper preview subscription failed")?;
+        self.subscriptions
+            .lock()
+            .map_err(|_| "wallpaper subscription lock failed")?
+            .push(preview_subscription);
         Ok(())
     }
     fn prepare(
@@ -114,8 +298,54 @@ impl bead::wayland::WallpaperProvider for Consumer {
         if !state.available || state.stale {
             return Err("wallpaper is stale".into());
         }
-        let decoded = decode(&state, &output, width, height)?;
         let boot = status.boot.ok_or("wallpaper daemon boot unavailable")?;
+        if let Some(selection) = self.preview.selected()
+            && selection.boot == boot
+        {
+            if state
+                .current
+                .as_ref()
+                .is_some_and(|pair| pair_matches_id(pair, &selection.id))
+                || state
+                    .outputs
+                    .values()
+                    .any(|pair| pair_matches_id(pair, &selection.id))
+            {
+                self.preview.cancel(selection.generation);
+            } else if let Some(previous) = self
+                .displayed
+                .lock()
+                .ok()
+                .and_then(|displayed| displayed.get(&output).cloned())
+                .or_else(|| state.outputs.get(&output).cloned())
+                && let Some(pair) = preview_pair(&selection, &previous)
+            {
+                bead::core::profile::mark("wallpaper_decode_started");
+                let decoded = decode_pair(pair, width, height)?;
+                bead::core::profile::mark("wallpaper_decode_finished");
+                let preview_pair = decoded.pair;
+                return Ok(bead::wayland::WallpaperFrame {
+                    output,
+                    revision: preview_pair.revision.max(1),
+                    width: decoded.width,
+                    height: decoded.height,
+                    rgba: decoded.rgba,
+                    previous_rgba: None,
+                    // A pending selection never advances the palette. This stays on the last
+                    // frame the compositor actually confirmed, even during queued activations.
+                    palette: palette(&previous),
+                    commit_token: Arc::new(PreviewToken {
+                        boot,
+                        id: selection.id,
+                        generation: selection.generation,
+                        pair: preview_pair,
+                    }),
+                });
+            }
+        }
+        bead::core::profile::mark("wallpaper_decode_started");
+        let decoded = decode(&state, &output, width, height)?;
+        bead::core::profile::mark("wallpaper_decode_finished");
         let request = serde_json::json!({"revision": decoded.pair.revision});
         let reply = tokio::runtime::Builder::new_current_thread()
             .enable_time()
@@ -160,22 +390,71 @@ impl bead::wayland::WallpaperProvider for Consumer {
         })
     }
     fn prepare_transition(&self, output: &str, width: u32, height: u32) -> Option<Vec<u8>> {
-        let previous = self.displayed.lock().ok()?.get(output)?.clone();
-        let current = self.state().ok()?.outputs.get(output)?.clone();
-        if previous == current {
+        let previous = self
+            .preview_visual
+            .lock()
+            .ok()?
+            .get(output)
+            .cloned()
+            .or_else(|| self.displayed.lock().ok()?.get(output).cloned())?;
+        let state = self.state().ok()?;
+        let current = state.outputs.get(output)?.clone();
+        let status = self.client.status();
+        let preview_pending = self.preview.selected().is_some_and(|selection| {
+            status.boot.as_deref() == Some(&selection.boot)
+                && !pair_matches_id(&current, &selection.id)
+        });
+        if previous == current && !preview_pending {
             return None;
         }
+        let fallback = self
+            .displayed
+            .lock()
+            .ok()?
+            .get(output)
+            .filter(|confirmed| **confirmed != previous)
+            .cloned();
         decode_pair(previous, width, height)
+            .or_else(|_| {
+                fallback.map_or_else(
+                    || Err("wallpaper unavailable".into()),
+                    |p| decode_pair(p, width, height),
+                )
+            })
             .ok()
             .map(|decoded| decoded.rgba)
     }
     fn is_current(&self, frame: &bead::wayland::WallpaperFrame) -> bool {
+        let status = self.client.status();
+        if let Some(token) = frame.commit_token.downcast_ref::<PreviewToken>() {
+            if status.boot.as_deref() != Some(&token.boot)
+                || !supports_wallpaper_v1(&status)
+                || self.preview.generation_for(&token.boot, &token.id) != Some(token.generation)
+            {
+                return false;
+            }
+            return self.state().is_ok_and(|state| {
+                if !state.available || state.stale {
+                    return false;
+                }
+                let matches = state
+                    .outputs
+                    .get(&frame.output)
+                    .is_some_and(|pair| pair_matches_id(pair, &token.id));
+                if matches {
+                    self.preview.cancel(token.generation);
+                }
+                !matches
+            });
+        }
         let Some(token) = frame.commit_token.downcast_ref::<PairToken>() else {
             return false;
         };
-        let status = self.client.status();
         status.boot.as_deref() == Some(&token.boot)
             && supports_wallpaper_v1(&status)
+            && self.preview.selected().is_none_or(|selection| {
+                selection.boot != token.boot || pair_matches_id(&token.pair, &selection.id)
+            })
             && self.state().is_ok_and(|state| {
                 state.available
                     && !state.stale
@@ -183,12 +462,40 @@ impl bead::wayland::WallpaperProvider for Consumer {
             })
     }
     fn committed(&self, output: &str, revision: u64, token: &Arc<dyn std::any::Any + Send + Sync>) {
+        if let Some(preview) = token.downcast_ref::<PreviewToken>() {
+            let status = self.client.status();
+            let active_pending = self.state().ok().is_some_and(|state| {
+                state.available
+                    && !state.stale
+                    && state
+                        .outputs
+                        .get(output)
+                        .is_some_and(|pair| !pair_matches_id(pair, &preview.id))
+            });
+            if preview.pair.revision.max(1) != revision
+                || status.boot.as_deref() != Some(&preview.boot)
+                || !supports_wallpaper_v1(&status)
+                || self.preview.generation_for(&preview.boot, &preview.id)
+                    != Some(preview.generation)
+                || !active_pending
+            {
+                return;
+            }
+            if let Ok(mut visual) = self.preview_visual.lock() {
+                visual.insert(output.into(), preview.pair.clone());
+            }
+            return;
+        }
         let Some(pair) = token.downcast_ref::<PairToken>() else {
             return;
         };
         let status = self.client.status();
         if pair.pair.revision != revision
             || status.boot.as_deref() != Some(&pair.boot)
+            || !supports_wallpaper_v1(&status)
+            || self.preview.selected().is_some_and(|selection| {
+                selection.boot == pair.boot && !pair_matches_id(&pair.pair, &selection.id)
+            })
             || status.topics.get("wallpaper.active") != Some(&1)
             || !status
                 .methods
@@ -200,11 +507,17 @@ impl bead::wayland::WallpaperProvider for Consumer {
         if let Ok(mut displayed) = self.displayed.lock() {
             displayed.insert(output.into(), pair.pair.clone());
         }
+        if let Ok(mut visual) = self.preview_visual.lock() {
+            visual.remove(output);
+        }
     }
     fn discarded(&self, _output: &str, _revision: u64) {}
     fn output_removed(&self, output: &str) {
         if let Ok(mut displayed) = self.displayed.lock() {
             displayed.remove(output);
+        }
+        if let Ok(mut visual) = self.preview_visual.lock() {
+            visual.remove(output);
         }
     }
 }
@@ -241,6 +554,68 @@ pub(crate) fn parse_motion(state: &serde_json::Value) -> Option<bead_wallpaper::
         fit: bead_wallpaper::protocol::Fit::Crop,
         looped: true,
     })
+}
+
+fn pair_matches_id(pair: &ActiveWallpaper, id: &str) -> bool {
+    pair.path == id || pair.motion.as_ref().is_some_and(|motion| motion.path == id)
+}
+fn active_matches_id(state: &serde_json::Value, id: &str) -> bool {
+    state.get("available") == Some(&serde_json::Value::Bool(true))
+        && state.get("stale") == Some(&serde_json::Value::Bool(false))
+        && (state
+            .get("current")
+            .and_then(|pair| serde_json::from_value::<ActiveWallpaper>(pair.clone()).ok())
+            .is_some_and(|pair| pair_matches_id(&pair, id))
+            || state["outputs"].as_object().is_some_and(|outputs| {
+                outputs.values().any(|value| {
+                    serde_json::from_value::<ActiveWallpaper>(value.clone())
+                        .is_ok_and(|pair| pair_matches_id(&pair, id))
+                })
+            }))
+}
+fn pending_motion_source(selected: &PreviewSelection) -> Option<bead_wallpaper::protocol::Source> {
+    if selected.kind != "video" && !selected.animated {
+        return None;
+    }
+    let identity = selected.video_identity.as_ref()?;
+    let metadata = std::fs::symlink_metadata(&selected.id).ok()?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || !identity.matches(&metadata) {
+        return None;
+    }
+    Some(bead_wallpaper::protocol::Source::Video {
+        path: selected.id.clone(),
+        fit: bead_wallpaper::protocol::Fit::Crop,
+        looped: true,
+    })
+}
+
+/// Replace only the image source on a confirmed pair, retaining its published palette and
+/// presentation. The normal descriptor-pinned decoder then scales the bounded preview.
+fn preview_pair(
+    selection: &PreviewSelection,
+    confirmed: &ActiveWallpaper,
+) -> Option<ActiveWallpaper> {
+    const PREVIEW_LIMIT: u64 = 2 * 1024 * 1024;
+    let identity = local_file_identity(&selection.preview, PREVIEW_LIMIT)?;
+    let reader = image::ImageReader::open(&selection.preview)
+        .ok()?
+        .with_guessed_format()
+        .ok()?;
+    if reader.format() != Some(image::ImageFormat::Jpeg) {
+        return None;
+    }
+    let (width, height) = reader.into_dimensions().ok()?;
+    if width == 0 || height == 0 || width > 1600 || height > 1000 {
+        return None;
+    }
+    if local_file_identity(&selection.preview, PREVIEW_LIMIT).as_ref() != Some(&identity) {
+        return None;
+    }
+    let mut pair = confirmed.clone();
+    pair.path = selection.preview.clone();
+    pair.file_identity = identity;
+    pair.motion = None;
+    Some(pair)
 }
 
 pub(crate) struct Decoded {
@@ -546,6 +921,43 @@ mod tests {
     }
 
     #[test]
+    fn pending_motion_is_video_only_and_source_identity_fenced() {
+        let root =
+            std::env::temp_dir().join(format!("bead-wallpaper-preview-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir(&root).unwrap();
+        let video = root.join("selected.mp4");
+        std::fs::write(&video, b"video source").unwrap();
+        let preview = Preview::default();
+        let generation = preview.select(
+            "boot-preview".into(),
+            video.to_string_lossy().into_owned(),
+            root.join("preview.jpg").to_string_lossy().into_owned(),
+            "video".into(),
+            false,
+        );
+        let selected = preview.selected().unwrap();
+        assert!(matches!(
+            pending_motion_source(&selected),
+            Some(bead_wallpaper::protocol::Source::Video { ref path, .. }) if path == video.to_str().unwrap()
+        ));
+        let mut animated_still = selected.clone();
+        animated_still.kind = "image".into();
+        animated_still.animated = true;
+        assert!(matches!(
+            pending_motion_source(&animated_still),
+            Some(bead_wallpaper::protocol::Source::Video { .. })
+        ));
+        let mut still = animated_still.clone();
+        still.animated = false;
+        assert!(pending_motion_source(&still).is_none());
+        std::fs::write(&video, b"replacement source").unwrap();
+        assert!(pending_motion_source(&selected).is_none());
+        assert!(preview.cancel(generation));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn decoder_rejects_malformed_bytes_identity_mismatch_and_symlink_paths() {
         use std::os::unix::fs::symlink;
         let root =
@@ -599,6 +1011,10 @@ mod tests {
             .unwrap();
         std::fs::write(&path, png).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let preview_path = root.join("selection-preview.jpg");
+        image::DynamicImage::new_rgb8(1, 1)
+            .save(&preview_path)
+            .unwrap();
         let identity = nacre_protocol::wallpaper::WallpaperFileIdentity::from_metadata(
             &std::fs::metadata(&path).unwrap(),
         );
@@ -629,10 +1045,13 @@ mod tests {
         let expected_pair = pair.clone();
         let socket = root.join("daemon.sock");
         let socket_for_client = socket.clone();
-        let consumer =
-            tokio::task::spawn_blocking(move || Consumer::start(socket_for_client).unwrap())
-                .await
-                .unwrap();
+        let preview = Arc::new(Preview::default());
+        let preview_for_client = preview.clone();
+        let consumer = tokio::task::spawn_blocking(move || {
+            Consumer::start_with_preview(socket_for_client, preview_for_client).unwrap()
+        })
+        .await
+        .unwrap();
         assert!(!consumer.topic.snapshot().connected);
         tokio::time::sleep(Duration::from_millis(250)).await;
         let listener = UnixListener::bind(&socket).unwrap();
@@ -711,6 +1130,14 @@ mod tests {
         })
         .await
         .unwrap();
+        let selected_id = root.join("selected.jpg").to_string_lossy().into_owned();
+        let generation = preview.select(
+            "00000000-0000-4000-8000-000000000021".into(),
+            selected_id.clone(),
+            preview_path.to_string_lossy().into_owned(),
+            "image".into(),
+            false,
+        );
         let prepare_consumer = consumer.clone();
         let frame = tokio::task::spawn_blocking(move || {
             prepare_consumer.prepare("DP-1".into(), 2, 1).unwrap()
@@ -720,6 +1147,7 @@ mod tests {
         let token = Arc::downgrade(&frame.commit_token);
         assert_eq!(frame.revision, 1);
         assert_eq!(frame.rgba.len(), 8);
+        assert!(frame.commit_token.is::<PreviewToken>());
         assert!(bead::wayland::WallpaperProvider::is_current(
             &*consumer, &frame
         ));
@@ -729,7 +1157,43 @@ mod tests {
             frame.revision,
             &frame.commit_token,
         );
+        assert!(consumer.displayed("DP-1").is_none());
+        assert_eq!(
+            preview.generation_for("00000000-0000-4000-8000-000000000021", &selected_id),
+            Some(generation)
+        );
+        let superseding = preview.select(
+            "00000000-0000-4000-8000-000000000021".into(),
+            root.join("second-selection.jpg")
+                .to_string_lossy()
+                .into_owned(),
+            preview_path.to_string_lossy().into_owned(),
+            "image".into(),
+            false,
+        );
+        assert!(superseding > generation);
+        assert!(!bead::wayland::WallpaperProvider::is_current(
+            &*consumer, &frame
+        ));
+        assert!(preview.cancel(superseding));
+        let prepare_consumer = consumer.clone();
+        let confirmed = tokio::task::spawn_blocking(move || {
+            prepare_consumer.prepare("DP-1".into(), 2, 1).unwrap()
+        })
+        .await
+        .unwrap();
+        assert!(confirmed.commit_token.is::<PairToken>());
+        assert!(bead::wayland::WallpaperProvider::is_current(
+            &*consumer, &confirmed
+        ));
+        bead::wayland::WallpaperProvider::committed(
+            &*consumer,
+            "DP-1",
+            confirmed.revision,
+            &confirmed.commit_token,
+        );
         assert_eq!(consumer.displayed("DP-1"), Some(expected_pair));
+        drop(confirmed);
         drop(frame);
         assert!(
             token.upgrade().is_none(),

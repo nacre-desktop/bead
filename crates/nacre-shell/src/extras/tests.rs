@@ -98,6 +98,7 @@ async fn lab_with_activation_behavior(
             "wallpaper.catalogue",
             "wallpaper.activate",
             "settings.set",
+            "settings.provider",
         ] {
             methods.insert(
                 name.into(),
@@ -139,7 +140,7 @@ async fn lab_with_activation_behavior(
                                 "outputs":{}})
                             }
                             "settings.store.wallpaper-picker" => {
-                                json!({"store":"wallpaper-picker","rev":3,"data":{"kind":"static","layout":"carousel"}})
+                                json!({"store":"wallpaper-picker","rev":3,"data":{"kind":"static","layout":"carousel","paused":true,"future":"preserve"}})
                             }
                             _ => {
                                 json!({"health":{"available":true,"stale":false},"items":{"order":["k1"],"items":{"k1":{"key":"Super+K","description":"Shortcuts"}}}})
@@ -1267,9 +1268,11 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
             json!({"revision":18,"id":"/fixture/current.jpg"})
         )
     );
-    let card = runtime.session.view_nodes().iter().find(|node|
-        matches!(&node.action_arg, Some(Value::Text(argument)) if argument.starts_with("wallpaper:select:")))
-        .expect("a visible wallpaper card");
+    let card = runtime.session.view_nodes().iter().find(|node| {
+        let rect = bead::ui::rect(&node.draw);
+        matches!(&node.action_arg, Some(Value::Text(argument)) if argument.starts_with("wallpaper:select:"))
+            && node.contains(rect.x + rect.w / 2., rect.y + rect.h / 2.)
+    }).expect("a visible wallpaper card during selection travel");
     let card = bead::ui::rect(&card.draw);
     runtime
         .stage(UiEvent::Scroll {
@@ -1811,6 +1814,47 @@ fn wallpaper_picker_uses_active_middle_then_visible_query_and_pointer_selection(
         Value::Text("wallpaper:activate:/wallpapers/movie.mp4".into()),
         "a media filter clamps the prior ordinal when its selected/active ID is absent"
     );
+    // Opening on the final item must take one forward step across the seam.
+    let reset = session
+        .update(BTreeMap::from([
+            ("extras.wallpaper.kind".into(), Value::Text("static".into())),
+            (
+                "extras.wallpaper.selection_id".into(),
+                Value::Text("/wallpapers/last.jpg".into()),
+            ),
+            (
+                "extras.wallpaper.carousel_position".into(),
+                Value::Number(1.),
+            ),
+        ]))?
+        .unwrap();
+    session.commit(reset);
+    let next = session.action_values("extras.next", Value::Bool(true))?;
+    assert_eq!(
+        next["extras.wallpaper.carousel_position"],
+        Value::Number(5.)
+    );
+    let next = session.update(next)?.unwrap();
+    session.commit(next);
+    let reset = session
+        .update(BTreeMap::from([
+            (
+                "extras.wallpaper.selection_id".into(),
+                Value::Text("/wallpapers/first.jpg".into()),
+            ),
+            (
+                "extras.wallpaper.carousel_position".into(),
+                Value::Number(1.),
+            ),
+        ]))?
+        .unwrap();
+    session.commit(reset);
+    let previous = session.action_values("extras.prev", Value::Bool(true))?;
+    assert_eq!(
+        previous["extras.wallpaper.carousel_position"],
+        Value::Number(0.),
+        "zero is a valid unwrapped position when moving left across the seam"
+    );
     Ok(())
 }
 
@@ -2224,5 +2268,90 @@ async fn previews_lease_only_while_open_and_with_the_setting_and_attach_the_newe
     assert!(
         hub.preview("win1").is_none() && !path.exists(),
         "thumbnails go with it"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn picker_preferences_use_provider_lane_and_preserve_the_document() {
+    let mut lab = lab_with_topics(vec![crate::prefs::WALLPAPER_PICKER.into()]).await;
+    let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    let wake: CallWake = Arc::new(|| {});
+    for _ in 0..200 {
+        if wallpaper.wallpaper_preference("kind", "dynamic").is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    for (key, value) in [
+        ("layout", "spotlight"),
+        ("layout", "hexagons"),
+        ("kind", "dynamic"),
+    ] {
+        wallpaper.act(
+            &format!("wallpaper:{key}:{value}"),
+            &Stores::default(),
+            wake.clone(),
+        );
+        let (method, params) = tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(method, "settings.provider");
+        assert_eq!(params["store"], "wallpaper-picker");
+        assert_eq!(params["rev"], 3);
+        assert_eq!(params["value"]["version"], 1);
+        assert_eq!(params["value"][key], value);
+        assert_eq!(params["value"]["paused"], true);
+        assert_eq!(params["value"]["future"], "preserve");
+        wallpaper.state.borrow_mut().action = None;
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn failed_activation_retires_its_early_preview_outside_the_view() {
+    let mut lab = lab_with_activation_behavior(vec!["wallpaper.active".into()], false, true).await;
+    let preview = Arc::new(crate::wallpaper::Preview::default());
+    let generation = preview.select(
+        "extras-boot".into(),
+        "/fixture/next.jpg".into(),
+        "/fixture/next-preview.jpg".into(),
+        "image".into(),
+        false,
+    );
+    let mut admission = WallpaperActivationQueue::new(lab.client.clone());
+    admission.preview = Some(preview.clone());
+    let queue = Arc::new(std::sync::Mutex::new(admission));
+    let wake: CallWake = Arc::new(|| {});
+    assert!(WallpaperActivationQueue::submit(
+        &queue,
+        WallpaperSelection {
+            id: "/fixture/next.jpg".into(),
+            boot: "extras-boot".into(),
+            revision: 17,
+        },
+        &wake
+    ));
+    assert_eq!(
+        preview.generation_for("extras-boot", "/fixture/next.jpg"),
+        Some(generation)
+    );
+    let (method, _) = lab.calls.recv().await.unwrap();
+    assert_eq!(method, "wallpaper.activate");
+    for _ in 0..200 {
+        if preview
+            .generation_for("extras-boot", "/fixture/next.jpg")
+            .is_none()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(
+        preview.generation_for("extras-boot", "/fixture/next.jpg"),
+        None
+    );
+    assert_eq!(
+        queue.lock().unwrap().error(),
+        Some("Wallpaper selection failed".into())
     );
 }

@@ -84,10 +84,12 @@ struct WallpaperSelection {
 struct WallpaperActivationInFlight {
     ticket: CallTicket,
     boot: String,
+    preview_generation: Option<u64>,
 }
 /// Panel-factory-owned activation admission survives lazy view retirement without retaining its UI.
 struct WallpaperActivationQueue {
     client: Client,
+    preview: Option<Arc<crate::wallpaper::Preview>>,
     inflight: Option<WallpaperActivationInFlight>,
     pending: Option<WallpaperSelection>,
     confirmed: Option<(String, u64)>,
@@ -98,6 +100,7 @@ impl WallpaperActivationQueue {
     fn new(client: Client) -> Self {
         Self {
             client,
+            preview: None,
             inflight: None,
             pending: None,
             confirmed: None,
@@ -197,6 +200,7 @@ impl WallpaperActivationQueue {
             .max(selection.revision);
         let weak_queue = Arc::downgrade(queue);
         let wake: CallWake = Arc::new(move || Self::completed(weak_queue.clone()));
+        bead::core::profile::mark("wallpaper_selection_admitted");
         match state.client.begin_call(
             "wallpaper.activate".into(),
             json!({"revision":revision,"id":selection.id}),
@@ -210,6 +214,10 @@ impl WallpaperActivationQueue {
             Ok(ticket) => {
                 state.inflight = Some(WallpaperActivationInFlight {
                     ticket,
+                    preview_generation: state
+                        .preview
+                        .as_ref()
+                        .and_then(|preview| preview.generation_for(&selection.boot, &selection.id)),
                     boot: selection.boot,
                 });
                 true
@@ -231,6 +239,10 @@ impl WallpaperActivationQueue {
             return;
         };
         let boot = inflight.boot.clone();
+        let preview_generation = inflight.preview_generation;
+        let preview = state.preview.clone();
+        let mut cancel_preview = Vec::new();
+        let mut confirmed = false;
         state.inflight = None;
         if state.client.status().boot.as_deref() == Some(boot.as_str()) {
             match reply {
@@ -239,17 +251,22 @@ impl WallpaperActivationQueue {
                 >(reply)
                 {
                     Ok(active) if active.validate().is_ok() => {
+                        bead::core::profile::mark("wallpaper_selection_confirmed");
                         let revision = state
                             .confirmed_revision(&boot)
                             .unwrap_or_default()
                             .max(active.revision);
                         state.confirmed = Some((boot, revision));
                         state.error = None;
+                        confirmed = true;
                     }
                     _ => state.error = Some("Wallpaper selection response was invalid".into()),
                 },
                 Err(_) => state.error = Some("Wallpaper selection failed".into()),
             }
+        }
+        if !confirmed && let Some(generation) = preview_generation {
+            cancel_preview.push(generation);
         }
         let current_boot = state.client.status().boot;
         let next = state.pending.take().filter(|pending| {
@@ -257,14 +274,25 @@ impl WallpaperActivationQueue {
                 && current_boot.as_deref() == Some(pending.boot.as_str())
         });
         if let Some(selection) = next {
+            let generation = preview
+                .as_ref()
+                .and_then(|preview| preview.generation_for(&selection.boot, &selection.id));
             if Self::start(&queue, &mut state, selection) {
                 state.error = None;
             } else {
                 state.error = Some("Wallpaper action unavailable".into());
+                if let Some(generation) = generation {
+                    cancel_preview.push(generation);
+                }
             }
         }
         let wake = state.wake.as_ref().and_then(std::sync::Weak::upgrade);
         drop(state);
+        if let Some(preview) = preview {
+            for generation in cancel_preview {
+                preview.cancel(generation);
+            }
+        }
         if let Some(wake) = wake {
             wake();
         }
@@ -277,7 +305,7 @@ pub struct Extras {
     state: RefCell<State>,
     glyphs: crate::workspace_rows::Rows,
     previews: Option<Previews>,
-    wallpaper_settings: Option<crate::nacre_source::LeasedTopic>,
+    wallpaper_settings: Option<Arc<dyn Source>>,
     wallpaper_actions: Option<Arc<std::sync::Mutex<WallpaperActivationQueue>>>,
 }
 /// B0090 live previews: the leased capture exists only while the view is open and the
@@ -303,7 +331,15 @@ impl Extras {
             })
             .transpose()?;
         let wallpaper_settings = if kind == Kind::Wallpaper {
-            client.lease_topic(crate::prefs::WALLPAPER_PICKER).ok()
+            client
+                .topic(crate::prefs::WALLPAPER_PICKER)
+                .map(|topic| Arc::new(topic) as Arc<dyn Source>)
+                .or_else(|_| {
+                    client
+                        .lease_topic(crate::prefs::WALLPAPER_PICKER)
+                        .map(|topic| Arc::new(topic) as Arc<dyn Source>)
+                })
+                .ok()
         } else {
             None
         };
@@ -810,14 +846,17 @@ impl Extras {
         {
             let boot = self.client.status().boot;
             let state = self.state.borrow();
-            if state.catalogue_boot != boot
-                || !state
-                    .catalogue_result
-                    .iter()
-                    .any(|entry| entry["id"].as_str() == Some(id))
-            {
+            if state.catalogue_boot != boot {
                 return;
             }
+            let Some(entry) = state
+                .catalogue_result
+                .iter()
+                .find(|entry| entry["id"].as_str() == Some(id))
+                .cloned()
+            else {
+                return;
+            };
             drop(state);
             let Some(boot) = boot else { return };
             let Some(topic) = &self.topic else { return };
@@ -839,7 +878,26 @@ impl Extras {
             let Some(queue) = &self.wallpaper_actions else {
                 return;
             };
-            WallpaperActivationQueue::submit(
+            let preview = queue
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .preview
+                .clone();
+            let generation = preview.as_ref().map(|preview| {
+                let path = entry["preview"]
+                    .as_str()
+                    .filter(|path| !path.is_empty())
+                    .or_else(|| entry["thumbnail"].as_str())
+                    .unwrap_or_default();
+                preview.select(
+                    boot.clone(),
+                    id.into(),
+                    path.into(),
+                    entry["kind"].as_str().unwrap_or("image").into(),
+                    entry["animated"] == true,
+                )
+            });
+            let admitted = WallpaperActivationQueue::submit(
                 queue,
                 WallpaperSelection {
                     id: id.into(),
@@ -848,6 +906,9 @@ impl Extras {
                 },
                 &wake,
             );
+            if !admitted && let (Some(preview), Some(generation)) = (preview, generation) {
+                preview.cancel(generation);
+            }
             return;
         }
         let mut state = self.state.borrow_mut();
@@ -855,32 +916,26 @@ impl Extras {
             return;
         }
         if self.kind == Kind::Wallpaper {
-            let (method, params) = if let Some(value) = request.strip_prefix("wallpaper:kind:") {
+            let (key, value) = if let Some(value) = request.strip_prefix("wallpaper:kind:") {
                 if !matches!(value, "static" | "dynamic") {
                     return;
                 }
-                let Some(rev) = self.wallpaper_settings_revision() else {
-                    return;
-                };
-                (
-                    "settings.set",
-                    json!({"store":"wallpaper-picker","key":["kind"],"value":value,"rev":rev}),
-                )
+                ("kind", value)
             } else if let Some(value) = request.strip_prefix("wallpaper:layout:") {
                 if !matches!(value, "carousel" | "spotlight" | "hexagons") {
                     return;
                 }
-                let Some(rev) = self.wallpaper_settings_revision() else {
-                    return;
-                };
-                (
-                    "settings.set",
-                    json!({"store":"wallpaper-picker","key":["layout"],"value":value,"rev":rev}),
-                )
+                ("layout", value)
             } else {
                 return;
             };
-            state.action = self.begin(method, params, Some(wake));
+            let Some(params) = self.wallpaper_preference(key, value) else {
+                return;
+            };
+            // Picker-only fields are helper-owned, not Settings registry descriptors.
+            // Publish the revision-fenced document through the same lane as QML;
+            // preserving every field avoids deleting unrelated provider preferences.
+            state.action = self.begin("settings.provider", params, Some(wake));
             if state.action.is_none() {
                 state.message = "Wallpaper action unavailable".into();
             }
@@ -1048,7 +1103,7 @@ impl Extras {
             }
             *path = file;
         }
-        scene.primitives.retain(|primitive| {
+        scene.retain_primitives(|primitive| {
             !matches!(primitive, bead::render::Primitive::Image { path, .. }
                 if path.to_str().is_some_and(|name| name.starts_with("@icon:wallpaper:")))
         });
@@ -1100,12 +1155,19 @@ impl Extras {
         self.state.borrow().image_bytes
     }
 
-    fn wallpaper_settings_revision(&self) -> Option<u64> {
+    fn wallpaper_preference(&self, key: &str, value: &str) -> Option<Json> {
         let snapshot = self.wallpaper_settings.as_ref()?.snapshot();
-        snapshot
-            .connected
-            .then(|| snapshot.data["rev"].as_u64())
-            .flatten()
+        if !snapshot.connected || snapshot.data.get("error").is_some_and(|e| !e.is_null()) {
+            return None;
+        }
+        let rev = snapshot.data["rev"].as_u64()?;
+        let mut data = snapshot.data["data"].clone();
+        let document = data.as_object_mut()?;
+        // The published wallpaper-picker v1 state schema has keepVersion=false:
+        // snapshots omit it, but settings.provider requires it on every write.
+        document.insert("version".into(), json!(1));
+        document.insert(key.into(), json!(value));
+        Some(json!({"store":"wallpaper-picker","value":data,"rev":rev}))
     }
 }
 fn ordered<'a>(items: &'a Json, order: &'a Json) -> impl Iterator<Item = (&'a str, &'a Json)> {
@@ -1179,11 +1241,12 @@ pub fn panel(
     colors: bead::render::Palette,
     trace: bool,
     capture: Option<Arc<bead::wayland::CaptureHub>>,
+    preview: Option<Arc<crate::wallpaper::Preview>>,
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
     let wallpaper_actions = (kind == Kind::Wallpaper).then(|| {
-        Arc::new(std::sync::Mutex::new(WallpaperActivationQueue::new(
-            client.clone(),
-        )))
+        let mut queue = WallpaperActivationQueue::new(client.clone());
+        queue.preview = preview;
+        Arc::new(std::sync::Mutex::new(queue))
     });
     let mut cold = crate::sound::fallback(colors.get("surface")?);
     if let Some(motion) = &mut cold.motion {

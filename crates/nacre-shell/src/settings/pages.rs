@@ -80,6 +80,11 @@ fn launch(key: &str) -> Option<Launch> {
             dispatch("colorsApp", "open", json!([])),
             None,
         ),
+        "wallpaper" => (
+            "ui.dispatch",
+            dispatch("nacre", "mode", json!(["wallpaper"])),
+            None,
+        ),
         "brain" => ("brain.open", json!({}), None),
         "power-service" => (
             "tools.launch",
@@ -248,6 +253,48 @@ impl Settings {
         let sid = section["id"].as_str().unwrap_or("");
         let topic = |name: &str| vec![name.to_owned()];
         Some(match sid {
+            "wallpaper.scene" => {
+                let active = self.topic("wallpaper.active").unwrap_or(Json::Null);
+                let current = if active["available"] == true && active["stale"] != true {
+                    active.get("current").filter(|current| current.is_object())
+                } else {
+                    None
+                };
+                let path = current
+                    .and_then(|current| current["motion"]["path"].as_str())
+                    .or_else(|| current.and_then(|current| current["path"].as_str()))
+                    .unwrap_or("");
+                let wallpaper_id = path;
+                let poster = state
+                    .wallpaper_thumbnail
+                    .as_ref()
+                    .filter(|(id, _)| id == wallpaper_id)
+                    .map(|(_, thumbnail)| format!("wallpaper:current:{thumbnail}"))
+                    .unwrap_or_default();
+                let name = std::path::Path::new(path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| short(name, 96))
+                    .unwrap_or_default();
+                let kind = if current.is_some_and(|current| !current["motion"].is_null()) {
+                    self.registry
+                        .label("settings.registry.wallpaper.kind.dynamic")
+                } else if current.is_some() {
+                    self.registry
+                        .label("settings.registry.wallpaper.kind.static")
+                } else {
+                    String::new()
+                };
+                (
+                    vec![
+                        json!({"id":"wallpaper-scene", "kind":"wallpaper-scene", "name":name,
+                        "scene_kind":kind, "preview":poster,
+                        "open_label":self.registry.label("settings.registry.wallpaper.label"),
+                        "enabled":self.can("ui.dispatch"), "own":true}),
+                    ],
+                    topic("wallpaper.active"),
+                )
+            }
             "date-time-language.clock" => (
                 self.time_rows(editable, state),
                 vec!["time".into(), "settings.store.desktop".into()],

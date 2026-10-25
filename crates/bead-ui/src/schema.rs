@@ -16,6 +16,7 @@ pub fn luau() -> String {
         ("Host", "(any)->Node"),
         ("bind", "(string)->any"),
         ("action", "(string,any?)->any"),
+        ("animate", "(string,number,number,string)->number"),
         ("alpha", "(string,number)->any"),
         ("tint", "(string,string,number)->any"),
         ("component", "(string,any,any)->any"),

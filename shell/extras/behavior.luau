@@ -39,6 +39,16 @@ local function normalized_selection(s)
   return math.max(1,s["extras.selection"] or 1)
 end
 
+local function unwrapped_selection(s, target, count, current)
+  if count == 0 then return target end
+  local position=s["extras.wallpaper.carousel_position"] or current
+  local represented=((math.floor(position-1)%count)+1)
+  if represented~=current then position=current end
+  local delta=target-current
+  if delta>count/2 then delta-=count elseif delta< -count/2 then delta+=count end
+  return position+delta
+end
+
 local function filtered(s)
   local kind, query = s["extras.kind"], tostring(s["extras.query"] or ""):lower()
   local source = kind == "overview" and (s["extras.windows"] or {}) or (s["extras.rows"] or {})
@@ -119,7 +129,9 @@ local function step(s, delta)
     return
   end
   local count = #filtered(s)
-  local index = count == 0 and 1 or (kind == "wallpaper" and ((normalized_selection(s)-1+delta)%count)+1 or math.clamp(normalized_selection(s)+delta,1,count))
+  local current=normalized_selection(s)
+  local index = count == 0 and 1 or (kind == "wallpaper" and ((current-1+delta)%count)+1 or math.clamp(current+delta,1,count))
+  if kind=="wallpaper" then s["extras.wallpaper.carousel_position"]=unwrapped_selection(s,index,count,current) end
   s["extras.selection"] = index
   if kind == "wallpaper" then
     local item=filtered(s)[index]
@@ -163,7 +175,7 @@ local exports = {
     ["extras.wallpaper.resource_revision"] = 0,
     ["extras.wallpaper.loading"] = false,
     ["extras.wallpaper.selection_id"] = "",
-    ["extras.wallpaper.carousel_scroll"] = 0,
+    ["extras.wallpaper.carousel_scroll"] = 0, ["extras.wallpaper.carousel_position"] = 1,
     ["extras.viewport.width"] = 1440, ["extras.viewport.height"] = 900,
     ["extras.body_height"] = 424, ["extras.palette_row_pitch"] = 64,
     ["extras.palette_row_height"] = 58, ["extras.scroll_step"] = 47,
@@ -224,10 +236,17 @@ local exports = {
     ["close"] = function(s) s["panel.open"] = false end,
     ["extras.select"] = function(s, id)
       local query = s["extras.query"] or ""
+      local previous=normalized_selection(s)
       s["extras.selection_query"] = query
       if s["extras.kind"] == "wallpaper" then s["extras.wallpaper.selection_id"] = id end
       for index, item in ipairs(filtered(s)) do
-        if item.id == id then s["extras.selection"] = index; return end
+        if item.id == id then
+          s["extras.selection"] = index
+          if s["extras.kind"]=="wallpaper" then
+            s["extras.wallpaper.carousel_position"]=unwrapped_selection(s,index,#filtered(s),previous)
+          end
+          return
+        end
       end
     end,
     -- Runtime intercepts this registered daemon action argument and calls Extras::act.

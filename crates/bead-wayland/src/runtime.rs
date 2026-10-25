@@ -706,7 +706,14 @@ impl App {
             return;
         };
         let failed_name = name.clone();
-        let animate = self.options.animate;
+        // A previous raster is needed only after idle released it. During rapid
+        // navigation the surface already owns the transition pixels.
+        let animate = self.options.animate
+            && self
+                .wallpaper_surfaces
+                .iter()
+                .find(|surface| surface.name == name)
+                .is_none_or(|surface| surface.pixels.is_none() && surface.transition.is_none());
         std::thread::spawn(
             move || match provider.prepare(name.clone(), width, height) {
                 Ok(mut frame) => {
@@ -762,6 +769,9 @@ impl App {
             && !provider.is_current(&frame)
         {
             provider.discarded(&frame.output, frame.revision);
+            // A newer request may have arrived while this superseded frame was
+            // decoding. Retain coalescing, but do not strand that latest request.
+            self.request_dirty_wallpaper(&output_name);
             return;
         }
         let palette_key: std::collections::BTreeMap<String, [u8; 4]> = frame
@@ -1132,6 +1142,7 @@ impl App {
         if let Some(provider) = &self.options.wallpaper {
             provider.committed(&output, revision, &frame.commit_token);
         }
+        bead_core::profile::mark("wallpaper_surface_committed");
         println!(
             "WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}",
             frame.output, revision, frame.width, frame.height, transitioning

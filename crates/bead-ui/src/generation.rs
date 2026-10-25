@@ -161,6 +161,21 @@ impl Loader {
     }
 }
 impl Generation {
+    pub(super) fn animation_deadline(&self) -> Option<std::time::Instant> {
+        self.markup_frontend
+            .as_ref()
+            .and_then(frontend::LuauFrontEnd::animation_deadline)
+    }
+    pub(super) fn animation_snapshot(&self) -> Option<frontend::AnimationSnapshot> {
+        self.markup_frontend
+            .as_ref()
+            .map(frontend::LuauFrontEnd::animation_snapshot)
+    }
+    pub(super) fn restore_animations(&self, snapshot: frontend::AnimationSnapshot) {
+        if let Some(frontend) = &self.markup_frontend {
+            frontend.restore_animations(snapshot);
+        }
+    }
     pub(super) fn markup_resource_bytes(&self) -> (usize, usize, usize) {
         self.markup_frontend
             .as_ref()

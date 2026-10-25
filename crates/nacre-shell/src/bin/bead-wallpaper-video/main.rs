@@ -147,13 +147,16 @@ struct Engine {
     /// `--render=shm` never tries EGL.
     shm_only: bool,
     vaapi_device: Option<String>,
-    /// The decoder in use is reported once per player, after its first rendered frame.
+    /// The decoder in use is reported after each source's first rendered frame.
     hwdec_reported: bool,
     outs: Vec<Out>,
     source: Option<Source>,
     decoder: Decoder,
     render: BTreeSet<String>,
     player: Option<mpv::Player>,
+    /// Suppress the previous source frame until mpv confirms the replacement loaded.
+    source_loaded: bool,
+    frame_after_load: bool,
     /// Where to restart after the decoder was released.
     resume_s: f64,
     /// Failed to start or crashed; no retry until a new source.
@@ -167,7 +170,36 @@ impl Engine {
         match command {
             Command::Quit => self.signal.stop(),
             Command::Source { source } => {
-                self.drop_player();
+                // Keep the mpv render context, hardware device and output surfaces while
+                // browsing videos. `loadfile replace` releases the previous decoder.
+                let reuse = match (&source, self.player.as_ref()) {
+                    (Some(Source::Video { .. }), Some(player)) => {
+                        !player.is_gl() || self.bind_any()
+                    }
+                    _ => false,
+                };
+                let loaded = if reuse {
+                    let player = self.player.as_ref().unwrap();
+                    player.set_paused(true);
+                    let _ = player.notices();
+                    if player.frame_ready() {
+                        player.skip();
+                    }
+                    let Some(Source::Video { path, fit, looped }) = &source else {
+                        unreachable!()
+                    };
+                    player.load(path, *fit, *looped, 0.).is_ok()
+                } else {
+                    false
+                };
+                if !loaded {
+                    self.drop_player();
+                } else {
+                    eprintln!("bead-wallpaper-video: reusing mpv render context");
+                }
+                self.source_loaded = false;
+                self.frame_after_load = false;
+                self.hwdec_reported = false;
                 self.resume_s = 0.0;
                 self.failed = false;
                 self.starved = false;
@@ -315,6 +347,8 @@ impl Engine {
         });
         match result {
             Ok(player) => {
+                self.source_loaded = false;
+                self.frame_after_load = false;
                 self.hwdec_reported = false;
                 self.player = Some(player);
             }
@@ -337,7 +371,7 @@ impl Engine {
         let mut failure = None;
         for notice in player.notices() {
             match notice {
-                mpv::Notice::Loaded => {}
+                mpv::Notice::Loaded => self.source_loaded = true,
                 mpv::Notice::Failed(message) => failure = Some(message),
             }
         }
@@ -348,6 +382,11 @@ impl Engine {
             return;
         }
         if player.frame_ready() {
+            if !self.source_loaded {
+                player.skip();
+                return;
+            }
+            self.frame_after_load = true;
             for out in &mut self.outs {
                 if wants(&self.render, &out.name) {
                     out.stale = true;
@@ -365,6 +404,9 @@ impl Engine {
     }
 
     fn draw(&mut self, index: usize) -> bool {
+        if !self.frame_after_load {
+            return false;
+        }
         let Self {
             player,
             outs,
@@ -853,6 +895,8 @@ fn run(
         decoder: Decoder::Release,
         render: BTreeSet::new(),
         player: None,
+        source_loaded: false,
+        frame_after_load: false,
         resume_s: 0.0,
         failed: false,
         starved: false,

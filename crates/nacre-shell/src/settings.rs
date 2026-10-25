@@ -203,6 +203,11 @@ struct State {
     status_asked: bool,
     shortcuts_fetch: Option<CallTicket>,
     shortcuts_asked: bool,
+    /// The current wallpaper id being hydrated from the bounded catalogue.
+    wallpaper_catalogue: Option<(String, CallTicket)>,
+    wallpaper_thumbnail: Option<(String, String)>,
+    wallpaper_catalogue_attempted: Option<String>,
+    wallpaper_boot: Option<String>,
     /// What to ask instead when the call in flight is answered `unavailable`.
     fallback: Option<(String, Json)>,
     /// The text of the picker's filter field, as of the last projection.
@@ -234,6 +239,8 @@ pub struct Settings {
     state: RefCell<State>,
     /// The `capabilities` flags of the last projection (`None`: the daemon does not publish them).
     caps: RefCell<Option<Json>>,
+    /// One bounded catalogue thumbnail, retained only while its preview row is visible.
+    wallpaper_image: RefCell<Option<(std::path::PathBuf, Arc<[u8]>)>>,
 }
 
 impl Settings {
@@ -246,7 +253,70 @@ impl Settings {
             wake: Default::default(),
             state: Default::default(),
             caps: Default::default(),
+            wallpaper_image: Default::default(),
         })
+    }
+
+    /// Attach only the visible Current scene thumbnail. `wallpaper.catalogue` bounds it to
+    /// 640x420 and 256 KiB; the settings view cannot load arbitrary paths as bundled assets.
+    pub fn attach_images(&self, scene: &mut bead::render::Scene) {
+        const LIMIT: u64 = 256 * 1024;
+        let visible = scene
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                bead::render::Primitive::Image { path, .. } => path
+                    .to_str()?
+                    .strip_prefix("@icon:wallpaper:current:")
+                    .map(std::path::PathBuf::from),
+                _ => None,
+            });
+        let mut cached = self.wallpaper_image.borrow_mut();
+        if cached
+            .as_ref()
+            .is_some_and(|(path, _)| Some(path) != visible.as_ref())
+        {
+            *cached = None;
+        }
+        let Some(file) = visible.clone() else { return };
+        let bytes = if let Some((_, bytes)) = cached.as_ref().filter(|(path, _)| path == &file) {
+            Some(bytes.clone())
+        } else {
+            let loaded = crate::desktop::read_icon_file(&file, LIMIT)
+                .ok()
+                .and_then(|bytes| {
+                    let dimensions = image::ImageReader::new(std::io::Cursor::new(&bytes))
+                        .with_guessed_format()
+                        .ok()?
+                        .into_dimensions()
+                        .ok()?;
+                    (dimensions.0 > 0
+                        && dimensions.1 > 0
+                        && dimensions.0 <= 640
+                        && dimensions.1 <= 420)
+                        .then(|| Arc::<[u8]>::from(bytes))
+                });
+            if let Some(bytes) = &loaded {
+                *cached = Some((file.clone(), bytes.clone()));
+            }
+            loaded
+        };
+        let Some(bytes) = bytes else {
+            scene.retain_primitives(|primitive| !matches!(primitive,
+                bead::render::Primitive::Image { path, .. }
+                    if path.to_str().is_some_and(|path| path.starts_with("@icon:wallpaper:current:"))));
+            return;
+        };
+        scene.asset_data.insert(file.clone(), bytes);
+        for primitive in &mut scene.primitives {
+            if let bead::render::Primitive::Image { path, .. } = primitive
+                && path
+                    .to_str()
+                    .is_some_and(|path| path.starts_with("@icon:wallpaper:current:"))
+            {
+                *path = file.clone();
+            }
+        }
     }
     /// The time zone list the daemon would have returned (previews and tests).
     #[cfg(test)]
@@ -355,6 +425,102 @@ impl Settings {
         let source = self.open.borrow().get(name).map(|(s, _)| s.clone())?;
         let snapshot = source.snapshot();
         (snapshot.connected && snapshot.data.is_object()).then(|| (*snapshot.data).clone())
+    }
+    fn wallpaper_id(&self) -> Option<String> {
+        let active = self.topic("wallpaper.active")?;
+        if active["available"] != true || active["stale"] == true {
+            return None;
+        }
+        let current = active.get("current")?;
+        current["motion"]["path"]
+            .as_str()
+            .or_else(|| current["path"].as_str())
+            .filter(|path| {
+                path.starts_with('/')
+                    && path.len() <= 4096
+                    && !path.contains("://")
+                    && !path.chars().any(char::is_control)
+                    && !std::path::Path::new(path)
+                        .components()
+                        .any(|part| part == std::path::Component::ParentDir)
+            })
+            .map(str::to_owned)
+    }
+    fn fetch_wallpaper_thumbnail(&self, page: &str, searching: bool) {
+        let id = (page == "wallpaper" && !searching)
+            .then(|| self.wallpaper_id())
+            .flatten();
+        let mut state = self.state.borrow_mut();
+        let boot = self.client.as_ref().and_then(|client| {
+            let snapshot = client.snapshot();
+            snapshot.connected.then(|| client.status().boot).flatten()
+        });
+        if state.wallpaper_boot != boot {
+            state.wallpaper_catalogue = None;
+            state.wallpaper_thumbnail = None;
+            state.wallpaper_catalogue_attempted = None;
+            state.wallpaper_boot = boot;
+        }
+        if id.is_none() {
+            state.wallpaper_catalogue = None;
+            state.wallpaper_thumbnail = None;
+            state.wallpaper_catalogue_attempted = None;
+            return;
+        }
+        let Some(id) = id else { return };
+        if let Some((requested, ticket)) = &mut state.wallpaper_catalogue
+            && let Some(reply) = ticket.try_take()
+        {
+            let requested = requested.clone();
+            state.wallpaper_catalogue = None;
+            if requested == id {
+                state.wallpaper_thumbnail = reply
+                    .ok()
+                    .and_then(|reply| {
+                        serde_json::from_value::<nacre_protocol::wallpaper::WallpaperCatalogue>(
+                            reply,
+                        )
+                        .ok()
+                    })
+                    .filter(|catalogue| catalogue.validate().is_ok())
+                    .and_then(|catalogue| {
+                        catalogue.entries.into_iter().find(|entry| entry.id == id)
+                    })
+                    .and_then(|entry| {
+                        (!entry.thumbnail.is_empty()).then(|| (id.clone(), entry.thumbnail))
+                    });
+            }
+        }
+        if state
+            .wallpaper_thumbnail
+            .as_ref()
+            .is_some_and(|(known, _)| known != &id)
+        {
+            state.wallpaper_thumbnail = None;
+        }
+        if state.wallpaper_catalogue.is_some()
+            || state.wallpaper_thumbnail.is_some()
+            || state.wallpaper_catalogue_attempted.as_ref() == Some(&id)
+        {
+            return;
+        }
+        let (Some((boot, timeout)), Some(client), Some(wake)) = (
+            self.ready_for("wallpaper.catalogue"),
+            self.client.as_ref(),
+            self.wake.borrow().clone(),
+        ) else {
+            return;
+        };
+        if let Ok(ticket) = client.begin_call(
+            "wallpaper.catalogue".into(),
+            json!({"ids": [id.clone()]}),
+            timeout,
+            CallGuard { boot, version: 1 },
+            Some(wake),
+        ) {
+            state.wallpaper_catalogue_attempted = Some(id.clone());
+            state.wallpaper_catalogue = Some((id, ticket));
+        }
     }
     /// `(rev, data, readable)` of a store document.
     fn document(&self, store: &str) -> (u64, Json, bool) {
@@ -766,6 +932,7 @@ impl Settings {
         }
         self.retain(&wanted);
         self.refresh_caps();
+        self.fetch_wallpaper_thumbnail(&page, searching);
         let notice = self.settle();
         self.fetch(&page);
         let items = if searching {

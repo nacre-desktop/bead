@@ -9,6 +9,19 @@ local writable=ui.resolve_for_check(ui.bind("settings.writable"))
 local searching=ui.resolve_for_check(ui.bind("settings.searching"))
 local opened=ui.resolve_for_check(ui.bind("settings.select"))
 local function act(arg) return ui.action("settings.do",arg) end
+local function preview_clip(w,h)
+    local radius=math.min(kit.tokens.radii.medium,w/2,h/2)
+    local rx=radius/math.max(1,w)
+    local ry=radius/math.max(1,h)
+    local points={}
+    for corner,center in ipairs{{1-rx,ry},{1-rx,1-ry},{rx,1-ry},{rx,ry}} do
+        for step=0,7 do
+            local angle=(corner-2)*math.pi/2+step*math.pi/14
+            points[#points+1]={math.clamp(center[1]+rx*math.cos(angle),0,1),math.clamp(center[2]+ry*math.sin(angle),0,1)}
+        end
+    end
+    return points
+end
 -- B0067: the QML rail. Width huge*7+xl, group captions huge+hairline tall, items huge+compact tall with a caption-size
 -- label and an accent wash on the current page (SettingsView.qml).
 local RAIL=sp.huge*7+sp.xl
@@ -25,7 +38,8 @@ local function nav(item)
 end
 local row
 local function section(item)
-    local children={id="section",width="fill",shrink=0,padding=sp.xl,gap=sp.xs,radius=kit.tokens.radii.medium,fill="surfaceContainer"}
+    local padding=item.id=="section:wallpaper.scene" and sp.md or sp.xl
+    local children={id="section",width="fill",shrink=0,padding=padding,gap=sp.xs,radius=kit.tokens.radii.medium,fill="surfaceContainer"}
     children[1]=ui.Text{id="title",text=item.label,height=24,font_size=tx.title*4/3,color="onSurface"}
     children[2]=ui.Text{id="detail",text=item.description or "",visible=(item.description or "")~="",height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}
     -- Kit rows use fixed child ids, so each row sits in its own uniquely named wrapper.
@@ -57,6 +71,34 @@ function row(item)
                 ui.Text{id="detail",text=item.description,height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}}}
     elseif k=="info" then
         return kit.InfoRow{id="info",label=item.label,description=item.description,value=item.value}
+    elseif k=="wallpaper-scene" then
+        local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width")) or ui.resolve_for_check(ui.bind("window.width"))
+        local preview_w=math.max(1,viewport-2*sp.lg-RAIL-sp.xxl-2*sp.md)
+        local preview_h=math.min(preview_w*9/16,sp.huge*12)
+        local label_w=math.ceil(ui.text_width(item.open_label,"IBM Plex Sans",tx.body*4/3))+sp.hairline
+        local icon_w=kit.tokens.icons.medium*4/3
+        local picker_w=sp.huge+icon_w+sp.sm+label_w
+        local picker_h=math.max(sp.huge+sp.hairline,math.ceil(tx.body*4/3*1.35)+sp.md)
+        local preview=item.preview~="" and ui.Image{id="preview",width="fill",height=preview_h,shrink=0,
+            icon=item.preview,image_fit="cover",clip_polygon=preview_clip(preview_w,preview_h),aria_label=item.name} or
+            ui.Box{id="preview-empty",width="fill",height=preview_h,shrink=0,radius=kit.tokens.radii.medium,
+                fill="surfaceContainerHigh",
+                ui.Text{id="preview-icon",width="fill",height="fill",text="image",family="Material Symbols Rounded",
+                    font_size=kit.tokens.icons.large*2,color="onSurfaceVariant",text_align="center"}}
+        return ui.Column{id="wallpaper-scene",width="fill",shrink=0,gap=sp.sm,
+            preview,
+            ui.Row{id="scene-details",width="fill",height=sp.huge+sp.sm,align="center",gap=sp.md,
+                ui.Column{id="scene-text",grow=1,justify="center",gap=sp.hairline,
+                    ui.Text{id="scene-name",text=item.name,width="fill",height=20,font_size=tx.body*4/3,color="onSurface"},
+                    ui.Text{id="scene-kind",text=item.scene_kind,width="fill",height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}},
+                kit.Button{id="open-picker",width=picker_w,shrink=0,height=picker_h,padding_left=sp.huge/2,padding_right=sp.huge/2,
+                    radius=kit.tokens.radii.full,fill="surfaceContainerHigh",hover_fill="surfaceContainerHighest",
+                    aria_label="Open wallpaper picker",activate_on_release=true,on_activate=on and act("do:open|wallpaper") or nil,
+                    ui.Row{width=picker_w-sp.huge,height="fill",align="center",gap=sp.sm,
+                        ui.Text{id="picker-icon",text="wallpaper",family="Material Symbols Rounded",
+                            width=icon_w,height=icon_w,font_size=icon_w,color="onSurface"},
+                        ui.Text{id="picker-label",text=item.open_label,width=label_w,shrink=0,height=22,font_size=tx.body*4/3,color="onSurface"}}}}
+        }
     elseif k=="actions" then
         if #item.options>3 or item.chips then
             -- A row that is off offers dim chips (the kit builds every chip's action, so the name stays set).

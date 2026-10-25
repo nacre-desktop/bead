@@ -45,6 +45,10 @@ return function(ui, constructors, allowed, arrayMarker)
     ui.bind = function(name)
         return {__bind=string_arg(name, "bind name")}
     end
+    ui.animate = function(key, target, duration, transition)
+        return ui.__animate(string_arg(key, "animation key"), number_arg(target, "animation target"),
+            number_arg(duration, "animation duration"), string_arg(transition, "animation transition"))
+    end
     ui.action = function(name, argument)
         return {name=string_arg(name, "action name"), argument=argument}
     end
@@ -166,6 +170,126 @@ pub struct LuauFrontEnd {
     _compiled_charge: bead_core::cache::Charge,
     values_budget: bead_core::cache::Budget,
     vm_build_bytes: std::cell::Cell<usize>,
+    animations: std::rc::Rc<RefCell<Animations>>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AnimationCurve {
+    Linear,
+    OutCubic,
+    InOutCubic,
+}
+#[derive(Clone, Copy)]
+struct ScalarMotion {
+    from: f64,
+    to: f64,
+    started: Instant,
+    duration: Duration,
+    curve: AnimationCurve,
+}
+#[derive(Clone, Default)]
+struct Animations {
+    states: BTreeMap<String, ScalarMotion>,
+    seen: BTreeSet<String>,
+    next_frame: Option<Instant>,
+}
+#[derive(Clone)]
+pub(super) struct AnimationSnapshot(Animations);
+impl Animations {
+    fn begin_build(&mut self) {
+        self.seen.clear();
+        self.next_frame = None;
+    }
+    fn animate(
+        &mut self,
+        key: String,
+        target: f64,
+        duration: f64,
+        transition: &str,
+        now: Instant,
+    ) -> Result<f64, &'static str> {
+        self.animate_as(
+            key,
+            target,
+            duration,
+            transition,
+            now,
+            bead_core::animation::reduced_motion(),
+        )
+    }
+    fn animate_as(
+        &mut self,
+        key: String,
+        target: f64,
+        duration: f64,
+        transition: &str,
+        now: Instant,
+        reduced: bool,
+    ) -> Result<f64, &'static str> {
+        if key.is_empty() || key.len() > 256 || !target.is_finite() {
+            return Err("animation key or target is invalid");
+        }
+        if !duration.is_finite() || !(0. ..=60.).contains(&duration) {
+            return Err("animation duration must be between 0 and 60 seconds");
+        }
+        let curve = match transition {
+            "linear" => AnimationCurve::Linear,
+            "out-cubic" => AnimationCurve::OutCubic,
+            "in-out-cubic" => AnimationCurve::InOutCubic,
+            _ => return Err("animation transition must be linear, out-cubic, or in-out-cubic"),
+        };
+        if !self.states.contains_key(&key) && self.states.len() >= 1024 {
+            return Err("a view may animate at most 1024 scalar values");
+        }
+        self.seen.insert(key.clone());
+        let current = self.states.get(&key).map(|motion| motion.value(now));
+        if reduced
+            || duration == 0.
+            || self
+                .states
+                .get(&key)
+                .is_none_or(|motion| motion.to != target)
+        {
+            let from = if reduced || duration == 0. {
+                target
+            } else {
+                current.unwrap_or(target)
+            };
+            self.states.insert(
+                key.clone(),
+                ScalarMotion {
+                    from,
+                    to: target,
+                    started: now,
+                    duration: Duration::from_secs_f64(duration.max(0.001)),
+                    curve,
+                },
+            );
+        }
+        let motion = self.states.get(&key).expect("inserted animation");
+        let value = if reduced { target } else { motion.value(now) };
+        if !reduced && now < motion.started + motion.duration && motion.from != motion.to {
+            let deadline = (now + Duration::from_millis(16)).min(motion.started + motion.duration);
+            self.next_frame = Some(self.next_frame.map_or(deadline, |old| old.min(deadline)));
+        }
+        Ok(value)
+    }
+    fn finish_build(&mut self) {
+        self.states.retain(|key, _| self.seen.contains(key));
+    }
+}
+impl ScalarMotion {
+    fn value(self, now: Instant) -> f64 {
+        let t = (now.saturating_duration_since(self.started).as_secs_f64()
+            / self.duration.as_secs_f64())
+        .clamp(0., 1.);
+        let eased = match self.curve {
+            AnimationCurve::Linear => t,
+            AnimationCurve::OutCubic => 1. - (1. - t).powi(3),
+            AnimationCurve::InOutCubic if t < 0.5 => 4. * t.powi(3),
+            AnimationCurve::InOutCubic => 1. - (-2. * t + 2.).powi(3) / 2.,
+        };
+        self.from + (self.to - self.from) * eased
+    }
 }
 impl LuauFrontEnd {
     pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
@@ -228,6 +352,7 @@ impl LuauFrontEnd {
             materialized: RefCell::new(None),
             kit,
             install,
+            animations: Default::default(),
         })
     }
     fn measured_width(&self, text: &str, family: &str, size: f32) -> f32 {
@@ -252,6 +377,18 @@ impl LuauFrontEnd {
             self.vm_build_bytes.get(),
         )
     }
+    pub(super) fn animation_deadline(&self) -> Option<Instant> {
+        self.animations.borrow().next_frame
+    }
+    pub(super) fn animation_snapshot(&self) -> AnimationSnapshot {
+        AnimationSnapshot(self.animations.borrow().clone())
+    }
+    pub(super) fn restore_animations(&self, snapshot: AnimationSnapshot) {
+        *self.animations.borrow_mut() = snapshot.0;
+        // A rejected candidate may have populated the raw-view cache with its
+        // interpolated pose. Rebuild it against the restored animation state.
+        *self.materialized.borrow_mut() = None;
+    }
 }
 impl FrontEnd for LuauFrontEnd {
     fn build(
@@ -259,7 +396,8 @@ impl FrontEnd for LuauFrontEnd {
         entry: &Path,
         resolve: &Resolve<'_>,
     ) -> Result<std::rc::Rc<RawNode>, Diagnostic> {
-        if let Some(cached) = &*self.materialized.borrow()
+        if self.animation_deadline().is_none()
+            && let Some(cached) = &*self.materialized.borrow()
             && cached
                 .reads
                 .iter()
@@ -381,6 +519,19 @@ impl FrontEnd for LuauFrontEnd {
                 }
                 let allowed = lua.create_table_from(
                     crate::layout::PROPERTIES.iter().map(|name| (*name, true)),
+                )?;
+                self.animations.borrow_mut().begin_build();
+                let animations = self.animations.clone();
+                sdk.set(
+                    "__animate",
+                    scope.create_function(
+                        move |_, (key, target, duration, transition): (String, f64, f64, String)| {
+                            animations
+                                .borrow_mut()
+                                .animate(key, target, duration, &transition, Instant::now())
+                                .map_err(mlua::Error::runtime)
+                        },
+                    )?,
                 )?;
                 sdk.set(
                     "preview_value",
@@ -644,6 +795,7 @@ impl FrontEnd for LuauFrontEnd {
         let result = result
             .map(std::rc::Rc::new)
             .map_err(|error| diagnostic(entry, error));
+        self.animations.borrow_mut().finish_build();
         if let Ok(raw) = &result {
             let reads = reads.into_inner();
             let widths = widths.into_inner();
@@ -707,6 +859,7 @@ fn source(lua: &Lua, fallback: &Path) -> crate::layout::Source {
         line: 1,
     })
 }
+
 fn diagnostic(entry: &Path, error: mlua::Error) -> Diagnostic {
     let message = error.to_string();
     for line in message.lines() {
@@ -724,4 +877,89 @@ fn diagnostic(entry: &Path, error: mlua::Error) -> Diagnostic {
         }
     }
     Diagnostic::new(entry, 1, 1, message)
+}
+
+#[cfg(test)]
+mod animation_tests {
+    use super::*;
+
+    #[test]
+    fn scalar_animation_curves_reach_the_target_with_expected_easing() {
+        let start = Instant::now();
+        let out = ScalarMotion {
+            from: 0.,
+            to: 1.,
+            started: start,
+            duration: Duration::from_secs(1),
+            curve: AnimationCurve::OutCubic,
+        };
+        assert_eq!(out.value(start), 0.);
+        assert!((out.value(start + Duration::from_millis(250)) - 0.578125).abs() < 1e-9);
+        assert_eq!(out.value(start + Duration::from_secs(1)), 1.);
+
+        let in_out = ScalarMotion {
+            curve: AnimationCurve::InOutCubic,
+            ..out
+        };
+        assert!((in_out.value(start + Duration::from_millis(250)) - 0.0625).abs() < 1e-9);
+        assert_eq!(in_out.value(start + Duration::from_millis(500)), 0.5);
+    }
+
+    #[test]
+    fn animation_retargets_continuously_and_retires_missing_keys() {
+        let start = Instant::now();
+        let mut animations = Animations::default();
+        animations.begin_build();
+        assert_eq!(
+            animations.animate_as("x".into(), 0., 0.3, "out-cubic", start, false),
+            Ok(0.)
+        );
+        animations.finish_build();
+
+        animations.begin_build();
+        assert_eq!(
+            animations.animate_as("x".into(), 100., 0.3, "out-cubic", start, false),
+            Ok(0.)
+        );
+        animations.finish_build();
+        let midpoint = start + Duration::from_millis(150);
+        animations.begin_build();
+        let before_retarget = animations
+            .animate_as("x".into(), 100., 0.3, "out-cubic", midpoint, false)
+            .unwrap();
+        animations.finish_build();
+        assert!((before_retarget - 87.5).abs() < 1e-9);
+
+        animations.begin_build();
+        let after_retarget = animations
+            .animate_as("x".into(), 200., 0.3, "out-cubic", midpoint, false)
+            .unwrap();
+        animations.finish_build();
+        assert_eq!(after_retarget, before_retarget);
+        assert!(animations.next_frame.is_some());
+
+        animations.begin_build();
+        animations.finish_build();
+        assert!(animations.states.is_empty());
+        assert!(animations.next_frame.is_none());
+    }
+
+    #[test]
+    fn reduced_motion_snaps_and_does_not_arm_a_frame() {
+        let mut animations = Animations::default();
+        animations.begin_build();
+        assert_eq!(
+            animations.animate_as("x".into(), 42., 0.3, "out-cubic", Instant::now(), true),
+            Ok(42.)
+        );
+        animations.finish_build();
+        assert!(animations.next_frame.is_none());
+        animations.begin_build();
+        assert_eq!(
+            animations.animate_as("x".into(), 42., 0.3, "out-cubic", Instant::now(), false),
+            Ok(42.)
+        );
+        animations.finish_build();
+        assert!(animations.next_frame.is_none());
+    }
 }

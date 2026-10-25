@@ -16,9 +16,18 @@ local rows=ui.resolve_for_check(ui.bind("extras.filtered")) or {}
 local count=#rows
 local selected
 for _,item in ipairs(rows) do if item.selected then selected=item; break end end
+local selection_index=selected and selected.selection_index or 1
+local carousel_position=ui.resolve_for_check(ui.bind("extras.wallpaper.carousel_position")) or 1
+local position_index=math.floor(carousel_position-1)%math.max(1,count)+1
+if position_index~=selection_index then carousel_position=selection_index end
+local animation_query=tostring(ui.resolve_for_check(ui.bind("extras.query")) or "")
+local animation_key=2166136261
+for index=1,#animation_query do animation_key=(animation_key*33+string.byte(animation_query,index))%2147483647 end
+local animated_selection=carousel and ui.animate("wallpaper-carousel:"..kind..":"..tostring(count)..":"..tostring(animation_key),
+  carousel_position,.3,"out-cubic") or selection_index
 local function circular_rows(limit)
   local visible={}
-  local selection=selected and selected.selection_index or 1
+  local selection=carousel and animated_selection or selection_index
   for index,item in ipairs(rows) do
     local offset=((index-selection+count/2)%count)-count/2
     if math.abs(offset)<=limit then

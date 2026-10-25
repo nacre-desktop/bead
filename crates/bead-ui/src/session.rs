@@ -4,6 +4,7 @@ use super::*;
 pub(super) struct Pending {
     entry: PathBuf,
     pub(super) generation: Option<Generation>,
+    animation_checkpoint: Option<frontend::AnimationSnapshot>,
     pub(super) stores: Stores,
     pub(super) palette: Palette,
     pub(super) base_palette: Palette,
@@ -378,6 +379,7 @@ impl Session {
         self.pending = Some(Pending {
             entry: self.entry.clone(),
             generation: Some(generation),
+            animation_checkpoint: None,
             stores,
             palette,
             base_palette,
@@ -443,6 +445,15 @@ impl Session {
         }
     }
     pub fn reject(&mut self, message: String) -> Scene {
+        if let Some(Pending {
+            generation: None,
+            animation_checkpoint: Some(checkpoint),
+            ..
+        }) = self.pending.as_ref()
+            && let Some(generation) = &self.generation
+        {
+            generation.restore_animations(checkpoint.clone());
+        }
         self.pending = None;
         self.error = Some(message);
         self.editors = self.committed_editors.clone();
@@ -484,13 +495,27 @@ impl Session {
         }
         scene
     }
-    /// Deadline for legacy transient feedback; acknowledged ranges do not expire.
+    /// Earliest transient-feedback or Luau animation frame deadline.
     pub fn preview_deadline(&self) -> Option<std::time::Instant> {
-        if self.stores.get("bead.pressed") == Some(&Value::Bool(true)) {
-            None
-        } else {
-            self.preview_deadline
-        }
+        let preview = (self.stores.get("bead.pressed") != Some(&Value::Bool(true)))
+            .then_some(self.preview_deadline)
+            .flatten();
+        let animation = self
+            .generation
+            .as_ref()
+            .and_then(Generation::animation_deadline);
+        [preview, animation].into_iter().flatten().min()
+    }
+    fn animation_checkpoint(&self) -> Option<frontend::AnimationSnapshot> {
+        self.pending
+            .as_ref()
+            .filter(|pending| pending.generation.is_none())
+            .and_then(|pending| pending.animation_checkpoint.clone())
+            .or_else(|| {
+                self.generation
+                    .as_ref()
+                    .and_then(Generation::animation_snapshot)
+            })
     }
     /// Panels opt into leave dismissal in behavior with `panel.close_on_leave`
     /// and `panel.leave_delay` (seconds). Enter/reentry cancels the grace timer.
@@ -529,6 +554,21 @@ impl Session {
     }
     /// Stage `stores`; `base` is the revision they were derived from (nothing to paint when it is unchanged).
     fn stage_state_from(&mut self, stores: Stores, base: u64) -> Result<Option<Scene>, Diagnostic> {
+        let checkpoint = self.animation_checkpoint();
+        let result = self.stage_state_from_inner(stores, base, checkpoint.clone());
+        if result.is_err()
+            && let (Some(generation), Some(checkpoint)) = (&self.generation, checkpoint)
+        {
+            generation.restore_animations(checkpoint);
+        }
+        result
+    }
+    fn stage_state_from_inner(
+        &mut self,
+        stores: Stores,
+        base: u64,
+        animation_checkpoint: Option<frontend::AnimationSnapshot>,
+    ) -> Result<Option<Scene>, Diagnostic> {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
@@ -595,7 +635,10 @@ impl Session {
         }
         // A service notification may carry no local store edits. Consult the
         // external projector before deciding that its wakeup changed nothing.
-        if stores.revision() == base {
+        let animation_due = generation
+            .animation_deadline()
+            .is_some_and(|deadline| std::time::Instant::now() >= deadline);
+        if stores.revision() == base && !animation_due {
             return Ok(None);
         }
         let (mut scene, mut nodes) =
@@ -678,6 +721,7 @@ impl Session {
         self.pending = Some(Pending {
             entry: self.entry.clone(),
             generation: None,
+            animation_checkpoint,
             stores,
             palette: Palette(self.palette.0.clone()),
             base_palette: self.base_palette.clone(),
@@ -750,12 +794,22 @@ impl Session {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let (mut scene, nodes) =
-            generation.materialize(&self.stores, &self.palette, self.viewport)?;
+        let checkpoint = self.animation_checkpoint();
+        let materialized = generation.materialize(&self.stores, &self.palette, self.viewport);
+        let (mut scene, nodes) = match materialized {
+            Ok(result) => result,
+            Err(error) => {
+                if let Some(checkpoint) = checkpoint.clone() {
+                    generation.restore_animations(checkpoint);
+                }
+                return Err(error);
+            }
+        };
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
             entry: self.entry.clone(),
             generation: None,
+            animation_checkpoint: checkpoint,
             stores: self.stores.clone(),
             palette: Palette(self.palette.0.clone()),
             base_palette: self.base_palette.clone(),
@@ -776,11 +830,22 @@ impl Session {
             self.runtime_palette = Some(overlay);
             return Ok(None);
         };
-        let (mut scene, nodes) = generation.materialize(&self.stores, &palette, self.viewport)?;
+        let checkpoint = self.animation_checkpoint();
+        let materialized = generation.materialize(&self.stores, &palette, self.viewport);
+        let (mut scene, nodes) = match materialized {
+            Ok(result) => result,
+            Err(error) => {
+                if let Some(checkpoint) = checkpoint.clone() {
+                    generation.restore_animations(checkpoint);
+                }
+                return Err(error);
+            }
+        };
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
             entry: self.entry.clone(),
             generation: None,
+            animation_checkpoint: checkpoint,
             stores: self.stores.clone(),
             palette,
             base_palette: self.base_palette.clone(),

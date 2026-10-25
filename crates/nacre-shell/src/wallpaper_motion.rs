@@ -158,8 +158,10 @@ impl Controller {
             }) as Arc<dyn Fn() + Send + Sync>
         };
         let mut subscriptions: Vec<Box<dyn std::any::Any + Send>> = Vec::new();
-        if let Some(sub) = deps.wallpaper.watch_motion(poke.clone()) {
-            subscriptions.push(Box::new(sub));
+        if let Some(watched) = deps.wallpaper.watch_motion(poke.clone()) {
+            for sub in watched {
+                subscriptions.push(Box::new(sub));
+            }
         }
         if let Some(picker) = &deps.picker {
             let poke = poke.clone();
@@ -201,7 +203,10 @@ impl Drop for Controller {
 fn log_event(event: Event) {
     match event {
         Event::Ready { pid } => println!("WALLPAPER_VIDEO_READY pid={pid}"),
-        Event::FirstFrame { output } => println!("WALLPAPER_VIDEO_FIRST_FRAME output={output}"),
+        Event::FirstFrame { output } => {
+            bead::core::profile::mark("wallpaper_video_first_frame");
+            println!("WALLPAPER_VIDEO_FIRST_FRAME output={output}");
+        }
         Event::Hwdec { mode } => println!("WALLPAPER_VIDEO_HWDEC mode={mode}"),
         Event::Error { message } => eprintln!("WALLPAPER_VIDEO_ERROR {message}"),
     }

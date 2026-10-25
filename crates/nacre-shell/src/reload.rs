@@ -1930,6 +1930,9 @@ impl Runtime {
             if let Some(colors) = &self.colors {
                 colors.attach_images(scene);
             }
+            if let Some(settings) = &self.settings {
+                settings.attach_images(scene);
+            }
             if let Some(extras) = &self.extras {
                 let wake = self
                     .extras_wake
@@ -3127,8 +3130,10 @@ impl SceneSource for Runtime {
         if let (Some(settings), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.settings, &host_action)
             && name == "settings.do"
-            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-                || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
+            && (matches!(
+                &event,
+                UiEvent::Click { .. } | UiEvent::Drag { .. } | UiEvent::Release
+            ) || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
         {
             self.actions.authorize(name)?;
             let wakeup = self
@@ -3156,14 +3161,19 @@ impl SceneSource for Runtime {
                 );
             }
             // A slider step keeps the focus so the drag continues over the next step.
-            let scene = match arg.starts_with("do:vol|").then(|| {
-                pointer_scene.take().map_or_else(
-                    || self.pointer_feedback(id, &event, true),
-                    |scene| Ok(Some(scene)),
-                )
-            }) {
-                Some(Ok(scene)) => scene,
-                _ => self.session.update(changes)?,
+            let scene = if matches!(&event, UiEvent::Release) {
+                let updated = self.session.update(changes)?;
+                self.session.release()?.or(updated)
+            } else {
+                match arg.starts_with("do:vol|").then(|| {
+                    pointer_scene.take().map_or_else(
+                        || self.pointer_feedback(id, &event, true),
+                        |scene| Ok(Some(scene)),
+                    )
+                }) {
+                    Some(Ok(scene)) => scene,
+                    _ => self.session.update(changes)?,
+                }
             };
             return self.finish_scene(scene, false);
         }
