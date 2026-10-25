@@ -334,13 +334,26 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
         runtime.session.stores.get("dashboard.pearl.target"),
         Some(&Value::Number(345.))
     );
-    assert!(
-        runtime
-            .session
+    let weather = Harness::load(
+        &root(),
+        Path::new("dashboard/weather/main.luau"),
+        &root().join("palette.json"),
+        BTreeMap::new(),
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.5,
+        },
+    )?;
+    let source_count = |session: &bead::ui::Session| {
+        session
             .resource_counts()
             .split_whitespace()
-            .any(|part| part == "sources=26")
-    );
+            .find(|part| part.starts_with("sources="))
+            .unwrap()
+            .to_owned()
+    };
+    assert_eq!(source_count(&runtime.session), source_count(&weather.session));
     assert!(emitted.lock().unwrap().iter().any(|event| {
         matches!(event, UiEvent::PanelNavigated(view) if view == "dashboard-weather")
     }));
