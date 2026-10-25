@@ -12,6 +12,9 @@ Per animation window: commit-interval p50/p95/p99, dropped frames (interval > 1.
 missed vsyncs), longest gap, first-frame latency (trigger -> first commit; includes the IPC hop) and
 Bead render_ms p50/p99. Gaps longer than 250 ms are idle, not drops.
 
+  animation-pacing.py report label=DIR[:ARM] ...   comparison table (medians over repeats, zero-drop windows included)
+  animation-pacing.py rescore DIR ARM               recompute an earlier run's commit metrics from its shell.log
+  A commit whose only damage is one pixel, after 100 ms of quiet, is housekeeping and not an animation frame (B0117).
   PACING_HZ=60|120   private parent output refresh (the nested niri paces its clients from it)
   PACING_ANIMS=a,b   animations (default: all); PACING_REPEATS=N (default 3)
   animation-pacing.py --nacre N --bead-bin B --bead-shell S --out O --cpu --pointer-tool P ...
@@ -324,7 +327,8 @@ def report(specs):
                 cells.append('-'.ljust(40))
                 continue
             def med(field, sub=None):
-                values = [w[field][sub] if sub else w[field] for w in good if w.get(field) and (sub is None or w[field])]
+                # A window with no dropped frame is a zero, not a missing value: it belongs in the median.
+                values = [w[field][sub] if sub else w[field] for w in good if w.get(field) is not None]
                 return percentile(values, .5) if values else None
             def fmt(v):
                 return '-' if v is None else f'{v:.1f}'
@@ -333,11 +337,29 @@ def report(specs):
         print('/'.join(key).ljust(26) + ''.join(cells))
 
 
+def rescore(directory, arm):
+    """animation-pacing.py rescore DIR ARM: recompute the commit metrics of every window of an earlier run from its saved
+    shell.log (after a change of the metric). Windows, render times, memory and errors are kept."""
+    base = Path(directory) / arm
+    data = json.loads((base / 'pacing.json').read_text())
+    rows = parse_trace(base / 'shell.log', data['real_ref'])
+    for window in data['windows']:
+        fresh = window_metrics(rows, window['start'], window['end'], [])
+        for stale in ('surface', 'commits', 'active_ms', 'first_frame_ms', 'interval_ms', 'longest_gap_ms', 'housekeeping_commits',
+                      'dropped', 'slow_intervals', 'drop_rate', 'presented_interval_ms'):
+            window.pop(stale, None)
+        window.update(fresh)
+    (base / 'pacing.json').write_text(json.dumps(data, indent=1))
+
+
 m.Arm.drive = pace_drive
 m.build_gallery = lambda args, names: summarize(args, names) and {}
 if __name__ == '__main__':
     if sys.argv[1:2] == ['report']:
         report(sys.argv[2:])
+        sys.exit(0)
+    if sys.argv[1:2] == ['rescore']:
+        rescore(sys.argv[2], sys.argv[3])
         sys.exit(0)
     if '--states' not in sys.argv:
         sys.argv += ['--states', 'pace']

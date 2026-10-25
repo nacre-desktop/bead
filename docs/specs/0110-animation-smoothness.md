@@ -146,7 +146,7 @@ None added. `PANEL_KEEP_ALIVE` (120 s) is a tuning constant, not a legacy path.
 
 ## Known gaps / next
 
-- Reveal artwork raster per frame (finding 8).
+- Reveal artwork raster per frame (finding 8): closed by [B0117](0117-frame-cost.md).
 - GL panels on Intel not measurable here; opt-in `--panel-renderer femtovg-gl` kept.
 - Launcher first key ≤ 8 ms: not re-measured by this unit (B0039 baseline 12.8 ms UI CPU); the scene-prep
   savings above help it but the gate is unverified.

@@ -1,0 +1,16 @@
+B0117 launcher first key, UI CPU ms from input receipt to presentation (spikes/b0085-gate.py run 3, 40 keys per sample,
+alternating control = origin/main and candidate = B0117, full-LTO release, CPU renderer, private nested niri on the desktop).
+Gate: first key <= 8 ms. 'first' = first key, 'later' = median of the later keys.
+
+standalone 0 control first 5.70 later 6.54
+standalone 0 candidate first 5.76 later 6.16
+standalone 1 candidate first 5.66 later 6.16
+standalone 1 control first 5.90 later 6.71
+standalone 2 control first 5.80 later 6.51
+standalone 2 candidate first 5.74 later 6.39
+home 0 control first 6.65 later 7.09
+home 0 candidate first 6.59 later 6.60
+home 1 candidate first 6.36 later 6.76
+home 1 control first 6.53 later 6.84
+home 2 control first 6.17 later 7.12
+home 2 candidate first 6.50 later 6.78
