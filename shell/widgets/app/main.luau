@@ -88,7 +88,10 @@ local function button(id,value,action,props)
     props.fill=props.fill or "surfaceContainerHigh"
     props.hover_fill=props.hover_fill or "surfaceContainerHighest"
     props.focus_on_pointer=false
-    props.on_activate=action
+    local enabled=props.enabled~=false
+    props.enabled=nil
+    props.on_activate=enabled and action or nil
+    if not enabled then props.color="onSurfaceVariant"; props.fill=ui.alpha(props.fill,.45) end
     return kit.Button(props)
 end
 
@@ -200,7 +203,14 @@ local function gallery()
                 placeholder="Find a widget",fill="surface",border_width=1,border_color="outlineVariant",aria_label="Find a widget"},
             ui.Scroll{id="category-scroll",width="fill",grow=1,scroll=ui.bind("widgets.nav.scroll"),
                 ui.Column{id="category-list",width="fill",gap=spacing.xs,
-                    ui.Repeat{id="categories",model=categories,key="id",render=category_button}}}},
+                    ui.Repeat{id="categories",model=categories,key="id",render=category_button}}},
+            ui.Column{id="dropdown-default",width="fill",shrink=0,gap=spacing.sm,
+                label("trigger-label","Default dropdown trigger",text.caption*4/3,"onSurfaceVariant",{height=20}),
+                ui.Row{id="trigger-choices",width="fill",height=spacing.huge+spacing.xs,gap=spacing.sm,
+                    button("trigger-click","Click",edit({op="default-trigger",value="click"}),{
+                        width=(RAIL-2*spacing.md-spacing.sm)/2,selected=(doc.dropdown_trigger or "click")=="click"}),
+                    button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
+                        width=(RAIL-2*spacing.md-spacing.sm)/2,selected=doc.dropdown_trigger=="hover"})}}},
         ui.Column{id="gallery-content",width="fill",height="fill",grow=1,gap=spacing.md,
             ui.Row{id="gallery-title-row",width="fill",height=54,shrink=0,align="center",
                 ui.Column{id="gallery-title-copy",grow=1,gap=spacing.xs,

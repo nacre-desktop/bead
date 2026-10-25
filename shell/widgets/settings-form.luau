@@ -38,14 +38,14 @@ local function button(id,label,action,width)
 end
 
 function M.row(item,key,schema,value,action_factory)
-    local label=key:gsub("_"," ")
+    local label=(schema.label or key:gsub("_"," ")):gsub("^%l",string.upper)
     if schema.type=="toggle" then
         return kit.ToggleRow{id="field-"..key,label=label,checked=value==true,enabled=true,
             on_activate=action_factory("setting",{iid=item.iid,key=key,value=not value})}
     elseif schema.type=="choice" then
         local options={}
         for _,choice in schema.options do
-            table.insert(options,{id=choice,label=tostring(choice),selected=choice==value})
+            table.insert(options,{id=choice,label=tostring(choice):gsub("^%l",string.upper),selected=choice==value})
         end
         local control
         if #options<=3 then

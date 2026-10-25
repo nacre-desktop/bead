@@ -3483,7 +3483,7 @@ impl SceneSource for Runtime {
                         .unwrap_or_default(),
                     _ => "",
                 };
-                let persistent = matches!(operation, "toggle-form" | "style" | "setting" | "undo" | "reset");
+                let persistent = matches!(operation, "toggle-form" | "style" | "setting" | "undo" | "reset" | "default-trigger");
                 let old_layout = self
                     .session
                     .stores

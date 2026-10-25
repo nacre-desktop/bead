@@ -204,6 +204,11 @@ local function op(s,args)
     end
     if kind=="select" then s["widgets.selected"]=req.widget or req.iid or ""; s["widgets.select"]=""; return end
     local previous=clone(doc)
+    if kind=="default-trigger" then
+        if req.value~="click" and req.value~="hover" then s["widgets.error"]="invalid dropdown trigger"; return end
+        doc.dropdown_trigger=req.value
+        history(s,previous); finish(s,doc); return
+    end
     if kind=="undo" then
         local undo=clone(s["widgets.undo"] or {})
         local previous=table.remove(undo)
