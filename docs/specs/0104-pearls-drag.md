@@ -1,6 +1,6 @@
 # B0104 — Pearl drag, dock and close
 
-Status: lead-accepted for integration on 2026-10-25; full rebased remote CI passes.
+Status: integrated at `8a16336`; lead-accepted on 2026-10-25 with memory attribution follow-up.
 
 Decision: **lead-accepted 2026-10-25, follow-up memory attribution**. The lead
 prioritizes fixing an unclosable live pearl over the measured detached/closed
@@ -52,13 +52,17 @@ Output selection follows the released rectangle before falling back to its origi
 
 ## Validation and evidence
 
-Full `check` job replica passed on rebased code `11432cb` (base `ed9333b`) in a disposable Arch container:
+Full `check` job replica passed on rebased code `8a16336` (base `b41d636`) in a disposable Arch container:
 fmt, clippy with warnings denied, workspace/trace tests, both renderer feature
 configurations, facade/Luau checks, Python suites, packaging, wallpaper smoke,
 private services/tray lifecycle, and all dependency/license graphs. The archive
 was restored to an exact shallow checkout for the packaging revision checks.
+The priority-correct rerun (`nice -n 10`, Cargo `-j2`) also passes, and
+[GitHub CI on the integrated commit](https://github.com/nacre-desktop/bead/actions/runs/40151015954) is green.
 Arch needed its separate `swaybg` package and removal of Sway's unnecessary file
 capability inside the container; the container privilege policy stayed intact.
+The attribution tools additionally use Arch `wlr-randr`, copied privately from CI;
+no desktop package installation is needed.
 Geometry tests include scales 1, 1.25 and 1.5, output clipping and stale saved
 rectangles. State tests cover the view whitelist and owned compositor moves;
 native geometry stays full-sized when reveal hit regions have zero height.
@@ -67,7 +71,7 @@ retires GPU resources before replacing the native role with a fresh layer.
 
 The original memory/close cohort uses `19b529b`, whose runtime and shell bytes
 equal the original CI revision `2e7a824`. Later upstream UI/bar changes are included
-in rebased CI `11432cb`; that cohort is historical, not a measurement of the latest
+in rebased CI `8a16336`; that cohort is historical, not a measurement of the latest
 combined source. Both original measurement arms include the shared queued-worker
 shutdown fix on top of
 control `417ac32`. Stop preempts queued stages before joining the worker; its
@@ -129,6 +133,41 @@ All input is synthetic; physical scanout timing is unmeasured.
 The original stop was lifted by the lead decision above for integration and a
 bounded memory-attribution follow-up. No live session, installation or configuration
 is changed by this unit.
+
+## Memory attribution follow-up
+
+One diagnostic CPU pair compares control `b41d636` plus the shared Stop fix with
+integrated `8a16336`, using the same frontend, Rust 1.99.0 stripped debug build,
+20-second settles and `--trace-state`. Updates use 128 fictional rows. All 16
+smaps/allocator/cache snapshots pass source, priority, geometry, quiet and
+containment checks; DRM and SwapPss remain verified zero. This changed workload
+and instrumentation do not replace the original three-pair gate.
+
+| CPU phase | Unreclaimable Δ, KiB | Allocator in-use Δ, KiB | Arena Δ, KiB | Tracked cache Δ, KiB | Pathless anonymous Δ, KiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Detached | +544 | +295.4 | +8 | +62.8 | +500 |
+| Closed | +328 | +412.3 | +316 | +31.3 | +300 |
+
+Idle/docked deltas are +8/+284 KiB. Detached is 32 KiB above the nominal limit
+on this single pair, not a median. Detached/closed additionally have main-heap
+anonymous deltas +36/+20 KiB and file-associated anonymous deltas +8/+8 KiB;
+the main-stack category is unchanged. Pss_File deltas are informational:
++235/+298/+366/+362 KiB across idle/docked/detached/closed.
+Allocator in-use/free totals, tracked caches and resident pages are different
+measurements and are not additive. Pathless VMAs are not proven malloc arenas.
+Both closed states report no resident panel and an empty pearl listing.
+
+Across two closed samples in the same control process, Pss_Anon grows by
+1128 KiB while allocator in-use grows only 17376 bytes and cache bytes by 1773;
+arena size and 243 VMAs stay unchanged. AnonHugePages changes from 0 to 10240 KiB.
+The candidate changes by 4 KiB Pss_Anon and 688 allocator bytes, with cache/arena
+stable and AnonHugePages staying at 8192 KiB. This supports backing/residency
+variation as a contributor to sample spread. The [kernel THP documentation](https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html)
+describes automatic page promotion and the possible footprint cost of sparse ranges.
+It does not identify the original outlier's exact allocation or make the paired
+in-use increase free heap. No narrowly scoped reduction is justified by one pair;
+allocation-stack attribution and broader allocator-policy work remain open.
+No host tuning or further product code was changed. Raw maps and images stay private.
 
 ## Remaining parity scope
 

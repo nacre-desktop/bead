@@ -34,7 +34,10 @@ The +2.133 MiB detached anon outlier originally tripped the owner stop line; its
 | Closed | +0.828 | +0.992 | **fail** |
 
 DRM and SwapPss are verified zero; file-backed deltas are informational.
-[Components, close checks and remaining proofs](docs/specs/0104-pearls-drag.md).
+A current-base diagnostic pair gives detached/closed +0.531/+0.320 MiB, with
++295/+412 KiB allocator in-use and backing-granularity variation; this is not a new median.
+No further product change was justified by that pair.
+[Components, attribution, close checks and remaining proofs](docs/specs/0104-pearls-drag.md).
 
 ## 2026-10-25 — B0097 joined panel reveals and status anchors
 

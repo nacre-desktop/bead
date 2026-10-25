@@ -13,13 +13,16 @@ and [source-pinned measurements](specs/0105-present-latency.md) are integrated; 
 probe-only remote Arch CI passes. No live desktop or installed software changed.
 
 ## 2026-10-25 — B0104 pearl drag/close (lead-accepted)
+## 2026-10-25 — B0104 pearl drag/close (integrated, lead-accepted)
 
 Logical relative dragging, native close, bounded recovery and view-state persistence
 are implemented. **lead-accepted 2026-10-25, follow-up memory attribution**:
 the unclosable-pearl fix takes priority over detached/closed CPU deltas of
 +0.891/+0.828 MiB for this unit, including the +2.133 MiB anon outlier.
-Full remote Arch CI passes on rebased `11432cb` (base `ed9333b`). Ctrl+W/native close
+Full remote Arch CI and GitHub checks pass on integrated `8a16336` (base `b41d636`). Ctrl+W/native close
 requests pass; synthetic Super+Q and final move/dock/stale/GL refreshes remain gaps.
+One current-base diagnostic pair records detached/closed +0.531/+0.320 MiB,
+with allocator in-use growth and anonymous-backing variance; no new gate pass or code optimization is claimed.
 [B0104](specs/0104-pearls-drag.md) preserves failed gates and proof limits.
 No live change or laptop-cap claim; raw images stay private because updates were unstubbed.
 
