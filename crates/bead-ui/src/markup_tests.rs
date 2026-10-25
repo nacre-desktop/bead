@@ -124,6 +124,40 @@ fn session(f: &Fixture) -> Session {
 }
 
 #[test]
+fn host_policy_resolves_staged_computed_values_and_reject_keeps_previous_state() {
+    let f = fixture();
+    let path = f.0.join("ui/behavior.luau");
+    fs::write(
+        &path,
+        fs::read_to_string(&path).unwrap().replace(
+            "computed={}",
+            "computed={host_policy=function(s) return s.query end}",
+        ),
+    )
+    .unwrap();
+    let mut s = session(&f);
+    assert_eq!(
+        s.resolve("host_policy").unwrap(),
+        Value::Text(String::new())
+    );
+    s.update(BTreeMap::from([(
+        "query".into(),
+        Value::Text("next".into()),
+    )]))
+    .unwrap();
+    assert_eq!(s.stores.get("query"), Some(&Value::Text(String::new())));
+    assert_eq!(
+        s.resolve("host_policy").unwrap(),
+        Value::Text("next".into())
+    );
+    s.reject("test rejection".into());
+    assert_eq!(
+        s.resolve("host_policy").unwrap(),
+        Value::Text(String::new())
+    );
+}
+
+#[test]
 fn normalized_clip_polygon_masks_image_and_button_hit_region() {
     let f = fixture();
     fs::create_dir_all(f.0.join("ui/assets")).unwrap();

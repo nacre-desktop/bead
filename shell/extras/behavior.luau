@@ -184,6 +184,9 @@ local exports = {
     ["extras.do"] = "",
   },
   computed = {
+    ["view.frame"] = function(s)
+      return s["extras.kind"]~="wallpaper" or s["extras.wallpaper.layout"]~="spotlight"
+    end,
     ["extras.filtered"] = filtered,
     ["extras.wallpaper.backdrop"] = function(s)
       for _, item in ipairs(filtered(s)) do

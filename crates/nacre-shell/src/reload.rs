@@ -2243,13 +2243,9 @@ impl Runtime {
             } else {
                 self.chrome.as_ref()
             };
-            let spotlight = self
-                .extras
-                .as_ref()
-                .is_some_and(|extras| extras.kind == crate::extras::Kind::Wallpaper)
-                && self.session.stores.get("extras.wallpaper.layout")
-                    == Some(&bead::core::Value::Text("spotlight".into()));
-            if !spotlight && let Some(chrome) = chrome {
+            if let Some(chrome) = chrome
+                && self.session.resolve("view.frame").ok() != Some(bead::core::Value::Bool(false))
+            {
                 chrome.decorate(scene)?;
             }
         }

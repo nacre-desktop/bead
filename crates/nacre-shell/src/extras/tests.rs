@@ -607,6 +607,14 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         repeated.asset_data.values().any(|bytes| !bytes.is_empty()),
         "the advertised thumbnail remains a fallback"
     );
+    // A real refresh ticket may be pending while displayed paths remain hydrated.
+    wallpaper.state.borrow_mut().catalogue =
+        wallpaper.begin("wallpaper.catalogue", json!({"ids":[]}), Some(wake));
+    assert!(wallpaper.state.borrow().catalogue.is_some());
+    assert!(
+        wallpaper.content_ready(),
+        "same-boot hydrated content remains ready during refresh"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1081,6 +1089,11 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         .unwrap()
         .expect("fullscreen layout relayouts");
     runtime.session.commit(full_scene);
+    assert_eq!(
+        runtime.session.resolve("view.frame").unwrap(),
+        Value::Bool(false),
+        "Luau owns whether the spotlight joins the shell frame"
+    );
     let fullscreen_root = runtime
         .session
         .view_nodes()
@@ -1128,6 +1141,10 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         .unwrap()
         .expect("carousel relayouts");
     runtime.session.commit(carousel_scene);
+    assert_eq!(
+        runtime.session.resolve("view.frame").unwrap(),
+        Value::Bool(true)
+    );
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
             .await

@@ -95,6 +95,22 @@ impl Session {
             self.font_picker = Some(picker);
         }
     }
+    /// Resolve host policy from the staged transaction, including computed values.
+    pub fn resolve(&self, name: &str) -> Result<Value, Diagnostic> {
+        let (generation, stores) = if let Some(pending) = &self.pending {
+            (
+                pending.generation.as_ref().or(self.generation.as_ref()),
+                &pending.stores,
+            )
+        } else {
+            (self.generation.as_ref(), &self.stores)
+        };
+        generation
+            .ok_or_else(|| Diagnostic::new(&self.entry, 1, 1, "view is not loaded"))?
+            .script
+            .resolve(name, stores)
+    }
+
     /// Run host-selected presentation feedback without consulting the external projector.
     ///
     /// The closure should change only pure local presentation input state, such as hover or

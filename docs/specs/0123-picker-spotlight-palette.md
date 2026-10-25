@@ -22,6 +22,7 @@ explicitly a smoothness trade rather than an always-on feature allocation;
 its measured retained cost is reported separately (allowed by SMOOTHNESS FIRST).
 
 General framework primitives: `PanelSpec.overlay` and `retain_when_closed`.
+`Session::resolve` reads staged/computed host policy; the shell host's `view.frame` boolean lets Luau opt out of joined frame artwork.
 The latter retains only the existing single panel slot, not a pool of hidden VMs.
 
 ## Palette

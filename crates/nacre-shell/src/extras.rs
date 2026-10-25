@@ -1158,7 +1158,6 @@ impl Extras {
             || !state.message.is_empty()
             || (state.catalogue_boot == state.wallpaper_boot
                 && state.catalogue_boot.is_some()
-                && state.catalogue.is_none()
                 && state.catalogue_pending_handles.is_empty())
     }
 

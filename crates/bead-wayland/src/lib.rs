@@ -798,6 +798,7 @@ struct WallpaperSurface {
     transition: Option<WallpaperTransition>,
 }
 struct WallpaperTransition {
+    commit: Option<(u64, std::sync::Arc<dyn std::any::Any + Send + Sync>)>,
     pixels: Vec<u8>,
     target: Vec<u8>,
     remaining: u8,

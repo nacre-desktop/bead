@@ -35,6 +35,7 @@ for state, kind in [("spotlight-hover", "pointer"), ("spotlight-pressed", "press
 m.STATE_PREPARE["palette-sync"] = [("wallpaper-pref", "static", "carousel"), open_picker, ("sleep", 8)]
 m.STATES["palette-sync"] = ([("selection-key", "Right")], [close_picker], 3)
 m.STATE_SETTLE["palette-sync"] = 3
+m.STATE_CLEANUP["palette-sync"] = [("active-assert", "generated-2.jpg")]
 original_spawn = m.Arm.spawn
 
 def spawn(self, command, name, env=None, cwd=None):

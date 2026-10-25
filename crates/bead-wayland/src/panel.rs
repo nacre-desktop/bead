@@ -591,6 +591,18 @@ impl App {
                 }
             }
             self.sync_all_decorations()?;
+            if spec.retain_when_closed && open && self.panel_ready {
+                self.set_dismiss_enabled(
+                    self.panel_runtime
+                        .as_ref()
+                        .is_some_and(|source| source.outside_dismiss()),
+                )?;
+                for surface in self.surfaces.iter_mut().filter(|surface| surface.companion) {
+                    surface.callbacks.invalidate();
+                }
+            }
+            // PanelVisibility forces a draw of the last prepared scene even if
+            // its worker is still refreshing service data in the background.
             self.panel_ui(UiEvent::PanelVisibility(true));
             return Ok(());
         }
@@ -813,7 +825,20 @@ impl App {
         self.notify_panel_owner(UiEvent::PanelDismissed);
         self.panel_target = false;
         self.edges_panel_changed(true);
-        drop(self.dismiss.take());
+        if self
+            .options
+            .panel_spec
+            .as_ref()
+            .is_some_and(|spec| spec.retain_when_closed)
+        {
+            // Keep its stacking order below the prepared panel. Recreating the
+            // catcher on reopen would also recreate the panel surface/buffers.
+            if let Err(error) = self.set_dismiss_enabled(false) {
+                self.fail(error);
+            }
+        } else {
+            drop(self.dismiss.take());
+        }
         // Release the seat before waiting for a worker/animation frame. Closed
         // workers remain alive and may publish new models during keep-alive.
         for surface in self.surfaces.iter_mut().filter(|s| s.companion) {

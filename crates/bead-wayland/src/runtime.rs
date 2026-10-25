@@ -1125,6 +1125,7 @@ impl App {
                 .is_some_and(|palette| palette.0 == frame.palette.0);
         if transitioning {
             surface.transition = Some(WallpaperTransition {
+                commit: Some((frame.revision, frame.commit_token.clone())),
                 pixels: old_pixels.unwrap(),
                 target: frame.rgba,
                 remaining: 14,
@@ -1156,19 +1157,35 @@ impl App {
         let output = frame.output.clone();
         let revision = frame.revision;
         if transitioning {
-            // Attach the first target blend in this turn, before acknowledging
-            // the pair or allowing its motion source to start.
+            // A retry retains the notification until a target buffer really attaches.
             self.wallpaper_tick(&output);
+        } else {
+            self.wallpaper_committed(&output, revision, &frame.commit_token, false);
+            self.schedule_wallpaper_release_poll(output);
         }
+    }
+
+    fn wallpaper_committed(
+        &self,
+        output: &str,
+        revision: u64,
+        token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
+        transitioning: bool,
+    ) {
         if let Some(provider) = &self.options.wallpaper {
-            provider.committed(&output, revision, &frame.commit_token);
+            provider.committed(output, revision, token);
         }
         bead_core::profile::mark("wallpaper_surface_committed");
-        println!(
-            "WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}",
-            frame.output, revision, frame.width, frame.height, transitioning
-        );
-        self.schedule_wallpaper_release_poll(frame.output.clone());
+        if let Some(surface) = self
+            .wallpaper_surfaces
+            .iter()
+            .find(|surface| surface.name == output)
+        {
+            println!(
+                "WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}",
+                output, revision, surface.width, surface.height, transitioning
+            );
+        }
     }
 
     pub(super) fn wallpaper_tick(&mut self, output: &str) {
@@ -1184,7 +1201,7 @@ impl App {
             .output
             .info(&output_handle)
             .and_then(|info| info.logical_size);
-        let finished = {
+        let (finished, commit) = {
             let surface = &mut self.wallpaper_surfaces[index];
             let Some(transition) = surface.transition.as_mut() else {
                 return;
@@ -1212,16 +1229,21 @@ impl App {
             )
             .is_err()
             {
-                false
-            } else if transition.remaining == 0 {
-                let transition = surface.transition.take().unwrap();
-                surface.pixels = Some(transition.pixels);
-                drop(transition.target);
-                true
+                (false, None)
             } else {
-                false
+                let commit = transition.commit.take();
+                if transition.remaining == 0 {
+                    let transition = surface.transition.take().unwrap();
+                    surface.pixels = Some(transition.pixels);
+                    (true, commit)
+                } else {
+                    (false, commit)
+                }
             }
         };
+        if let Some((revision, token)) = commit {
+            self.wallpaper_committed(output, revision, &token, true);
+        }
         if !finished {
             self.schedule_wallpaper_tick(output.to_owned());
         }
