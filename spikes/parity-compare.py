@@ -469,7 +469,8 @@ class Arm:
         for name in ['home', 'data', 'config', 'state/nacre', 'cache']:
             (self.root / name).mkdir(mode=0o700, parents=True, exist_ok=True)
         (self.runtime / 'nacre').mkdir(mode=0o700, exist_ok=True)
-        (self.root / 'state/nacre/shell/notifications/images').mkdir(mode=0o700, parents=True, exist_ok=True)
+        for part in ['shell', 'shell/notifications', 'shell/notifications/images']:
+            (self.root / 'state/nacre' / part).mkdir(mode=0o700, exist_ok=True)
         self.endpoint = self.runtime / 'nacre/daemon.sock'
         self.nacrectl = str(self.root / 'nacrectl')
         os.symlink(Path(a.bead_bin).resolve() / 'nacre-helper', self.nacrectl)

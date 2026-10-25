@@ -441,11 +441,19 @@ fn publish(shared: &Shared) {
         };
         g.offered = want.or(g.offered);
         let values = models(&g);
-        // Every bar shows the retained count beside its bell; only a change is sent.
-        let retained = match values.get("notifications.history_count") {
-            Some(Value::Number(n)) => *n as u64,
-            _ => 0,
-        };
+        // Use the authoritative stored total when known. While storage is loading or
+        // unavailable, QML counts the retained rows it already has, rather than zero.
+        let retained = g.good.as_ref().map_or(0, |state| {
+            state.history_count.unwrap_or_else(|| {
+                (state.history.items.len()
+                    + state
+                        .active
+                        .items
+                        .values()
+                        .filter(|n| n.retained == Some(true))
+                        .count()) as u64
+            })
+        });
         let count = (g.bar_count != Some(retained)).then_some(retained);
         g.bar_count = Some(retained);
         (

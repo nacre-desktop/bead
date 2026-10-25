@@ -583,6 +583,7 @@
   "bead.panel.session-logout": "Log out",
   "bead.panel.session-reboot": "Restart",
   "bead.panel.session-shutdown": "Power off",
+  "bead.panel.session-suspend": "Suspend",
   "bead.panel.session-unavailable": "Session control unavailable",
   "bead.panel.signal-strength": "Signal strength {percent}%",
   "bead.panel.peek-ethernet": "Ethernet",

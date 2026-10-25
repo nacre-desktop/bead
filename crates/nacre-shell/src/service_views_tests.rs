@@ -1199,6 +1199,7 @@ fn calendar_old_bundle_without_follow_flag_keeps_its_navigation_behavior() -> Re
 /// B0042: session menu idle, inline confirmation, and disabled (route not advertised).
 #[test]
 fn session_menu_goldens_idle_confirming_and_disabled() -> Result<()> {
+    crate::i18n::init();
     let states = [
         ("idle", true, "", ""),
         ("confirm", true, "logout", "Confirm log out"),
@@ -1228,11 +1229,11 @@ fn session_menu_goldens_idle_confirming_and_disabled() -> Result<()> {
                 .iter()
                 .filter(|n| n.action.is_some())
                 .count();
-            // Four tiles and the back arrow; asking adds Cancel and the confirmation; disabled leaves only the back arrow.
+            // Five power actions; asking adds Cancel and confirmation; unavailable is inert.
             let expected = match (enabled, action) {
                 (true, "") => 5,
                 (true, _) => 7,
-                (false, _) => 1,
+                (false, _) => 0,
             };
             assert_eq!(acting, expected, "{name}");
             let frame = h.render()?;

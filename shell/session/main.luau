@@ -1,7 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-only
--- Power (B0023, B0067): the control sidebar's Power page as the QML draws it, a docked page with a back arrow, a
--- title and a two-column grid of tiles; choosing one asks in place (a card with Cancel and the action). Which actions
--- appear, their order and icons are the `entries` table; the host only reports which one is being confirmed.
+-- Power dropdown: ordered actions and inline confirmation on shared kit components.
+-- The session route and every power widget share this lazy, anchored view.
 local ui=require("bead.ui")
 local kit=require("bead.kit")
 local T=kit.tokens
@@ -9,13 +8,14 @@ local function get(name) return ui.resolve_for_check(ui.bind(name)) end
 local enabled=get("session.enabled") and not get("session.busy")
 local question=get("session.confirm")
 local asking=get("session.confirm_action")
-local W,H=get("view.width"),get("view.height")
-local PAD,GAP,HEAD=T.spacing.xl,T.spacing.compact,T.spacing.huge
+local W=get("view.width")
+local PAD,GAP,HEAD=T.spacing.panel,T.spacing.compact,T.spacing.huge
 local INNER=W-2*PAD
 local BODY,CAPTION=T.text.body*4/3,T.text.caption*4/3
-local TILE_H=66
+local TILE_H=T.spacing.huge+T.spacing.sm
 local entries={
     {"lock",ui.tr("bead.panel.session-lock"),"lock"},{"logout",ui.tr("bead.panel.session-logout"),"logout"},
+    {"suspend",ui.tr("bead.panel.session-suspend"),"bedtime"},
     {"reboot",ui.tr("bead.panel.session-reboot"),"restart_alt"},{"shutdown",ui.tr("bead.panel.session-shutdown"),"power_settings_new"},
 }
 -- Everything is placed absolutely in the panel, so the focusable tiles keep the stable ids `act-<key>.main`
@@ -23,17 +23,13 @@ local entries={
 local TOP=PAD
 local children={
     ui.Row{id="header",position="absolute",left=PAD,top=TOP,width=INNER,height=HEAD,gap=T.spacing.sm,align="center",
-        kit.IconButton{id="back",text="arrow_back",aria_label=ui.tr("bead.panel.control-back"),width=HEAD,height=HEAD,
-            on_activate=ui.action("view.open","control")},
-        ui.Text{id="title",text=ui.tr("bead.panel.control-power-title"),height=HEAD,grow=1,shrink=1,font_size=T.text.headline*4/3,color="onSurface"}},
+        ui.Text{id="title",text=ui.tr("bead.panel.control-power-title"),height=HEAD,grow=1,shrink=1,font_size=T.text.title*4/3,color="onSurface"}},
 }
-local cell=(INNER-GAP)/2
-local rows=math.ceil(#entries/2)
+local rows=#entries
 local y=TOP+HEAD+T.spacing.lg
 for i,entry in ipairs(entries) do
     local key,label,glyph=entry[1],entry[2],entry[3]
-    local r,c=math.floor((i-1)/2),(i-1)%2
-    children[#children+1]=kit.ToggleTile{id="act-"..key,position="absolute",left=PAD+c*(cell+GAP),top=y+r*(TILE_H+GAP),width=cell,height=TILE_H,
+    children[#children+1]=kit.ToggleTile{id="act-"..key,position="absolute",left=PAD,top=y+(i-1)*(TILE_H+GAP),width=INNER,height=TILE_H,
         icon=glyph,label=label,on=asking==key,available=enabled or asking==key,aria_label=label,
         on_activate=enabled and (asking==key and ui.action("session.confirm") or ui.action("session.select",key)) or nil}
 end
@@ -56,5 +52,5 @@ if question~="" and asking~="" then
     y=y+104+T.spacing.lg
 end
 children[#children+1]=ui.Text{id="message",position="absolute",left=PAD,top=y,width=INNER,height=CAPTION*3,font_size=CAPTION,color="error",text=ui.bind("session.message")}
-return kit.Panel{id="session-popout",edge=get("view.edge"),open=ui.bind("panel.open"),duration=get("view.duration"),
-    width=W,height=H,padding=0,radius=T.radii.medium,fill="surface",table.unpack(children)}
+return kit.Panel{id="session-popout",edge=get("view.edge"),open=ui.bind("panel.open"),duration=get("view.duration"),transition="ease-in-out",fade=false,reveal=true,
+    width=W,height=y+(get("session.message")~="" and CAPTION*3 or 0)+PAD,padding=0,radius=T.radii.medium,fill="surface",table.unpack(children)}

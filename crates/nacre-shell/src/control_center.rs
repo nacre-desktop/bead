@@ -920,24 +920,29 @@ impl ControlCenter {
             crate::app::command("clipboard");
         });
     }
-    /// B0067: the notification summary the dock shows under the tiles: the newest two history entries,
-    /// the stored count and whether the history has loaded (the QML `NacreControlNotices`).
+    /// All retained active records followed by the daemon's newest-first history window.
+    /// Only the home summary limits rows; the notification dropdown must scroll them all.
     fn notices(&self) -> Vec<(String, Value)> {
         let data = self.data("notifications").filter(|d| healthy(d));
-        let history = data.as_ref().map(|d| &d["history"]);
-        let rows: Vec<Json> = history
-            .and_then(|h| h["order"].as_array())
+        let rows: Vec<Json> = ["active", "history"]
             .into_iter()
-            .flatten()
-            .rev()
-            .filter_map(|id| {
-                let item = &history?["items"][id.as_str()?];
-                Some(json!({
-                    "id": id.as_str()?, "app": item["app_name"].as_str().unwrap_or(""),
-                    "summary": item["summary"].as_str().unwrap_or(""), "body": item["body"].as_str().unwrap_or(""),
-                }))
+            .flat_map(|kind| {
+                let entities = data.as_ref().map(|d| &d[kind]);
+                entities
+                    .and_then(|h| h["order"].as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(move |id| {
+                        let item = &entities?["items"][id.as_str()?];
+                        if !item.is_object() || (kind == "active" && item["retained"] != true) {
+                            return None;
+                        }
+                        Some(json!({
+                            "id": id.as_str()?, "app": item["app_name"].as_str().unwrap_or(""),
+                            "summary": item["summary"].as_str().unwrap_or(""), "body": item["body"].as_str().unwrap_or(""),
+                        }))
+                    })
             })
-            .take(2)
             .collect();
         let count = data
             .as_ref()
@@ -946,8 +951,22 @@ impl ControlCenter {
         let ready = data
             .as_ref()
             .is_some_and(|d| d["history_storage"]["ready"] == true);
+        let note = if data.as_ref().is_some_and(|d| d["history_more"] == true)
+            || count > rows.len() as u64
+        {
+            tr(
+                "bead.dashboard.notifications-shown",
+                &[
+                    ("shown", &rows.len().to_string()),
+                    ("total", &count.to_string()),
+                ],
+            )
+        } else {
+            String::new()
+        };
         vec![
             ("cc.notices".into(), Value::list(rows)),
+            ("cc.notice_note".into(), Value::Text(note)),
             ("cc.notice_count".into(), Value::Number(count as f64)),
             ("cc.notice_ready".into(), Value::Bool(ready)),
             (

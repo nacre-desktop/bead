@@ -1078,3 +1078,52 @@ mod daemon {
         let _ = close.send(());
     }
 }
+
+/// B0127: an unknown stored total must not turn available retained notices into a zero badge.
+#[test]
+fn bar_counts_available_retained_rows_until_storage_publishes_its_total() {
+    let shared = shared();
+    let (tx, rx) = std::sync::mpsc::channel();
+    shared.lock().drivers.insert(
+        1,
+        Arc::new(move |event| {
+            let _ = tx.send(event);
+        }),
+    );
+    let mut loading = state(json!({"history_count":null,"history_more":null,
+        "history_storage":{"ready":false,"writable":false}}));
+    let counts = || {
+        rx.try_iter()
+            .filter_map(|event| match event {
+                UiEvent::Model(values) => values.get("bar.notifications.count").cloned(),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    on_notifications(
+        &shared,
+        &snap(serde_json::to_value(&loading).unwrap(), true),
+    );
+    assert_eq!(counts(), [Value::Number(3.)]);
+    assert!(!flag(
+        &models(&shared.lock()),
+        "notifications.history_known"
+    ));
+    loading.active.items.values_mut().next().unwrap().retained = Some(false);
+    on_notifications(
+        &shared,
+        &snap(serde_json::to_value(&loading).unwrap(), true),
+    );
+    assert_eq!(
+        counts(),
+        [Value::Number(2.)],
+        "exclude non-retained active rows"
+    );
+    let ready = state(json!({}));
+    on_notifications(&shared, &snap(serde_json::to_value(ready).unwrap(), true));
+    assert_eq!(
+        counts(),
+        [Value::Number(9.)],
+        "known total includes the omitted history window"
+    );
+}

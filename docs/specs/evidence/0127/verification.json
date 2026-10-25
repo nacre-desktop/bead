@@ -1,0 +1,132 @@
+{
+  "qml_revision": "836df1a643eae6e2f54ec86967a83d2f27561d3d",
+  "bead_base": "61e73507",
+  "bead_crates_tree": "02883a2ea185145ef6d2a957bc6fa80441edad08",
+  "bead_shell_tree": "226a3095f07cd3173dbd6bed38a84a47df47f2f8",
+  "capture_size": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "renderer": "cpu",
+  "crop_physical": [
+    2175,
+    0,
+    2880,
+    930
+  ],
+  "notification": {
+    "history_count": 18,
+    "history_more": false,
+    "storage_ready": true,
+    "storage_writable": true,
+    "available_rows": 18,
+    "ui_rows": 18,
+    "bar_count": 18.0,
+    "newest_first": true,
+    "scroll_after": 1024.0
+  },
+  "power": {
+    "widget": {
+      "center": 1887.5,
+      "id": "bar.right.system-pill.power",
+      "rect": [
+        1876.0,
+        11.0,
+        23.0,
+        28.0
+      ],
+      "view": "session"
+    },
+    "view": "session",
+    "origin": [
+      1568,
+      18
+    ],
+    "size": [
+      352,
+      394
+    ],
+    "edge": "top",
+    "focused_before_enter": "session-popout.act-logout.main",
+    "unconfirmed_action": "logout",
+    "escape_cancels": true,
+    "confirmation_was_not_activated": true
+  },
+  "swap": {
+    "qml": {
+      "swap_used_before_kib": 0,
+      "pswpin_delta": 0
+    },
+    "bead": {
+      "swap_used_before_kib": 0,
+      "pswpin_delta": 0
+    }
+  },
+  "arm_errors": {
+    "qml": {
+      "idle": [],
+      "session": [],
+      "notif-history": [],
+      "power-hover": []
+    },
+    "bead": {
+      "idle": [],
+      "session": [],
+      "notif-history": [],
+      "power-hover": []
+    }
+  },
+  "hover_retake": {
+    "widget": {
+      "center": 1887.5,
+      "id": "bar.right.system-pill.power",
+      "rect": [
+        1876.0,
+        11.0,
+        23.0,
+        28.0
+      ],
+      "view": "session"
+    },
+    "view": "session",
+    "origin": [
+      1568,
+      18
+    ],
+    "size": [
+      352,
+      394
+    ],
+    "edge": "top",
+    "focused_before_enter": "session-popout.act-logout.main",
+    "unconfirmed_action": "logout",
+    "escape_cancels": true,
+    "confirmation_was_not_activated": true,
+    "hovered_before_keyboard": "session-popout.act-logout.main",
+    "escape_closes_view": true
+  },
+  "hover_retake_auxiliary_count_probe": "No snapshot was available; count acceptance uses the independently verified primary capture above.",
+  "capture_guards": {
+    "primary": {
+      "status": "complete",
+      "capture_returncode": 0,
+      "scope_runner_returncode": 0,
+      "child_membership_verified": true,
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      }
+    },
+    "hover": {
+      "status": "complete",
+      "capture_returncode": 0,
+      "scope_runner_returncode": 0,
+      "child_membership_verified": true,
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      }
+    }
+  }
+}

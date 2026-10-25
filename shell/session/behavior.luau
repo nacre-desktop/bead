@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 return {stores={
-    ["panel.open"]=true,["view.edge"]="right",["view.width"]=424,["view.height"]=420,["view.duration"]=0.18,
+    ["panel.open"]=true,["view.edge"]="top",["view.width"]=310,["view.height"]=332,["view.duration"]=0.23,
     ["session.enabled"]=false,["session.busy"]=false,["session.confirm"]="",["session.confirm_action"]="",
     ["session.message"]="",
 },actions={

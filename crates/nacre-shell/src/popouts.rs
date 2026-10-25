@@ -164,9 +164,7 @@ pub(crate) fn core_sound_with_root(
     })
 }
 
-/// Session menu (B0023), docked as the control sidebar's Power page (B0067): the control centre's width and, like it,
-/// as tall as the framed viewport. It leases nothing: the shared daemon client supplies the capability check and the
-/// single `session.request` call.
+/// Lazy power dropdown. Widget clicks and the session route share the existing guarded session controller.
 pub fn session(
     client: crate::nacre_source::Client,
     palette: PathBuf,
@@ -174,7 +172,7 @@ pub fn session(
     trace: bool,
 ) -> Result<PanelSpec, Box<dyn std::error::Error>> {
     let fill = colors.get("surface")?;
-    let (width, height) = (424., 300.);
+    let (width, height) = (310., 332.);
     let mut fallback = crate::sound::fallback(fill);
     fallback.width = width;
     fallback.bounds = Rect::new(-32., -32., width + 64., height + 64.);
@@ -186,14 +184,16 @@ pub fn session(
     }];
     if let Some(motion) = &mut fallback.motion {
         motion.id = "session".into();
-        motion.edge = bead::core::Edge::Right;
-        motion.duration = 0.18;
+        motion.edge = bead::core::Edge::Top;
+        motion.duration = 0.23;
+        motion.curve = Some(bead::core::animation::Curve::EaseInOut);
+        motion.fade = false;
+        motion.reveal = true;
     }
     let cold = fallback.clone();
     Ok(PanelSpec {
         position: Some(
-            crate::placement::Frame::default()
-                .positioner(crate::placement::Attachment::ControlCenter),
+            crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
         ),
         engages_decorations: true,
         overlay: false,
@@ -213,10 +213,10 @@ pub fn session(
             );
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
-                .with_view_edge("right")?
-                .with_panel_geometry(width as f64, height as f64, 0.18)
+                .with_view_edge("top")?
+                .with_panel_geometry(width as f64, height as f64, 0.23)
                 .map_err(|error| error.to_string())?
-                .with_frame(crate::placement::Attachment::ControlCenter, &colors)
+                .with_frame(crate::placement::Attachment::Popout, &colors)
                 .and_then(|runtime| runtime.with_session_menu(client.clone()))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())

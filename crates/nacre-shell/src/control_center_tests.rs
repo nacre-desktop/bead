@@ -2496,3 +2496,72 @@ async fn returning_to_origin_survives_a_reply_before_the_topic_echo() {
         );
     }
 }
+
+/// B0127: do not confuse the dock's two-row preview with the full retained list.
+#[test]
+fn notification_dropdown_projects_all_retained_rows_in_service_order() -> bead_test::Result<()> {
+    let source = Arc::new(FakeSource::new(json!({
+        "health": health(), "history_count": 4, "history_more": false,
+        "active": {"order": ["active", "transient", "feedback"], "items": {
+            "active": {"retained": true, "summary": "Active"},
+            "transient": {"retained": false}, "feedback": {"retained": false}}},
+        "history": {"order": ["new", "middle", "old"], "items": {
+            "new": {"summary": "Newest"}, "middle": {"summary": "Middle"},
+            "old": {"summary": "Oldest"}}},
+        "history_storage": {"ready": true, "writable": true}
+    }))?);
+    let control = ControlCenter::new(None, vec![("notifications", source.clone())], None, vec![]);
+    let out = control.project(&Stores::default());
+    let Value::List(rows) = &out["cc.notices"] else {
+        panic!("rows")
+    };
+    assert_eq!(
+        rows.iter()
+            .map(|r| r["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["active", "new", "middle", "old"]
+    );
+    assert_eq!(out["cc.notice_count"], Value::Number(rows.len() as f64));
+    assert_eq!(out["cc.notice_note"], Value::Text(String::new()));
+    let mut truncated = (*source.snapshot().data).clone();
+    truncated["history_more"] = json!(true);
+    truncated["history_count"] = json!(18);
+    source.publish(truncated)?;
+    let out = control.project(&Stores::default());
+    assert_eq!(out["cc.notice_count"], Value::Number(18.));
+    assert_eq!(
+        out["cc.notice_note"],
+        Value::Text("Newest 4 of 18 stored are shown".into())
+    );
+    Ok(())
+}
+
+#[test]
+fn notification_dropdown_scrolls_every_published_row() -> bead_test::Result<()> {
+    for scale in [1., 1.5] {
+        let mut out = base();
+        out.insert("view.edge".into(), Value::Text("top".into()));
+        out.insert("cc.max_height".into(), Value::Number(320.));
+        out.insert("cc.notice_ready".into(), Value::Bool(true));
+        out.insert("cc.notices".into(), Value::list((0..18).map(|i| json!({
+            "id": format!("n{i}"), "app": "Fixture", "summary": format!("Notification {}", i + 1), "body": "Retained"
+        })).collect()));
+        let mut h = harness(out, "home", scale)?;
+        assert_eq!(h.session.scroll_regions().len(), 1);
+        golden("notifications-full", &mut h, scale)?;
+        let toolbar = centre(&h, "notices-dnd");
+        h.script([Input::Scroll {
+            x: 100.,
+            y: 180.,
+            delta: 2000.,
+        }])?;
+        assert!(matches!(h.session.stores.get("cc.scroll"), Some(Value::Number(n)) if *n > 0.));
+        assert_eq!(
+            centre(&h, "notices-dnd"),
+            toolbar,
+            "toolbar stays visible while history scrolls"
+        );
+        golden("notifications-scrolled", &mut h, scale)?;
+    }
+    Ok(())
+}

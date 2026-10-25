@@ -568,6 +568,7 @@
   "bead.panel.session-logout": "Session menu entry: end the current login session.",
   "bead.panel.session-reboot": "Session menu entry: restart the computer.",
   "bead.panel.session-shutdown": "Session menu entry: shut the computer down.",
+  "bead.panel.session-suspend": "Bead power dropdown: suspend without a confirmation prompt.",
   "bead.panel.session-unavailable": "Session menu: error shown when the desktop daemon does not offer session control right now.",
   "bead.panel.signal-strength": "Status panel (network, Bluetooth, battery and sound popouts from the bar): detail line: Wi-Fi signal strength in percent.",
   "bead.panel.peek-ethernet": "Network hover preview title shown when a wired Ethernet device is connected.",

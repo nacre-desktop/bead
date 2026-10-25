@@ -179,6 +179,10 @@ local function notices(limit,page)
     row[#row+1]=pill("notices-clear",ui.tr("bead.panel.control-pill-clear"),nil,
         clear and ui.action("cc.do","clear:notifications") or nil,false)
     local items={{ui.Row(row),34}}
+    local note=get("cc.notice_note")
+    if note and note~="" then
+        table.insert(items,{kit.Paragraph{id="notices-window",text=note,width=INNER,font_size=CAPTION,color="onSurfaceVariant"},CAPTION*2})
+    end
     if #list==0 then table.insert(items,notices_empty()) end
     for i,n in ipairs(list) do
         if not limit or i<=limit then table.insert(items,{notice_card(n),NOTICE_H}) end
@@ -339,7 +343,19 @@ local function detail()
     return stack("detail",items)
 end
 local body,content
-if popup then body,content=stack("history",notices(nil,false),GAP)
+if popup then
+    local items=notices(nil,false)
+    local heading=items[1]
+    table.remove(items,1)
+    local list,list_height=stack("history",items,GAP)
+    -- QML's 440 px list ceiling at the default scale, expressed in shared row units.
+    -- Keep DND/Clear visible while every published notification remains scrollable.
+    local available=math.max(0,math.min(10*ROW,get("cc.max_height")-TOP-PAD-heading[2]-GAP))
+    local visible=math.min(available,list_height)
+    if list_height>visible then
+        list=ui.Scroll{id="scroll",scroll=ui.bind("cc.scroll"),width=INNER,height=visible,list}
+    end
+    body,content=stack("history-content",{heading,{list,visible}},GAP)
 elseif page=="edit" then body,content=edit()
 elseif page=="catalog" then body,content=catalog()
 elseif page=="detail" then body,content=detail()
