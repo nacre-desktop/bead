@@ -985,6 +985,11 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     let mut runtime = crate::reload::Runtime::panel_session(session, true)
         .with_extras(extras)
         .unwrap();
+    assert_eq!(
+        runtime.session.stores.get("bead.focused"),
+        Some(&Value::Text(String::new())),
+        "wallpaper picker opens without assigning focus to search"
+    );
     runtime.services(Box::new(|_| {}));
     assert!(runtime.viewport(1920, 1200));
     let initial_scene = runtime
@@ -1168,6 +1173,15 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
         .find(|node| node.id.ends_with(".search") && node.input.is_some())
         .expect("wallpaper search input is visible");
     let search_rect = bead::ui::rect(&search.draw);
+    runtime
+        .stage(UiEvent::Click {
+            x: search_rect.x + search_rect.w / 2.,
+            y: search_rect.y + search_rect.h / 2.,
+        })
+        .unwrap();
+    runtime.commit();
+    runtime.stage(UiEvent::Release).unwrap();
+    runtime.commit();
     runtime
         .stage(UiEvent::Scroll {
             x: search_rect.x + search_rect.w / 2.,

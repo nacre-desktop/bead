@@ -803,10 +803,15 @@ impl Runtime {
         }));
         self.actions.register("extras.do", "extras.control")?;
         self.actions.grant("extras.control");
+        let focus = if extras.kind == crate::extras::Kind::Wallpaper {
+            ""
+        } else {
+            "extras.search"
+        };
         self.extras = Some(extras);
         self.session.stores = self.session.stores.reconcile(&BTreeMap::from([(
             "bead.focused".into(),
-            bead::core::Value::Text("extras.search".into()),
+            bead::core::Value::Text(focus.into()),
         )]))?;
         Ok(self)
     }

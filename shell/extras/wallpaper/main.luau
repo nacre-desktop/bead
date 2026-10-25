@@ -9,6 +9,7 @@ local layout=ui.resolve_for_check(ui.bind("extras.wallpaper.layout")) or "carous
 local kind=ui.resolve_for_check(ui.bind("extras.wallpaper.kind")) or "static"
 local resource_revision=ui.resolve_for_check(ui.bind("extras.wallpaper.resource_revision")) or 0
 local carousel=layout=="carousel"
+local search_focused=ui.resolve_for_check(ui.bind("bead.focused"))=="extras.search"
 local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or viewport_w
 local height=carousel and T.wallpaper.carousel_height or viewport_h
 local rows=ui.resolve_for_check(ui.bind("extras.filtered")) or {}
@@ -55,16 +56,18 @@ local function button(id,label,active,request)
   local line_h=math.ceil(T.palette.description_font*1.4)
   return kit.Button{id=id,aria_label=label,width=T.wallpaper.choice_widths[id],shrink=0,height=toolbar_h,padding=0,
     radius=T.panel.close_radius,fill=active and "primary" or "surfaceContainerHigh",
-    hover_fill=active and "primary" or "surfaceContainerHigh",activate_on_release=true,on_activate=ui.action("extras.do",request),
+    hover_fill=active and "primary" or "surfaceContainerHigh",activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do",request),
     ui.Text{position="absolute",left=0,top=(toolbar_h-line_h)/2,width="fill",height=line_h,
       text=label,font_size=T.palette.description_font,text_align="center",color=active and "onPrimary" or "onSurface"}}
 end
 local function nav_button(id,label,glyph,action)
+  local fill=count>0 and "surfaceContainerHigh" or ui.alpha("surfaceContainerHigh",T.wallpaper.disabled_opacity)
+  local ink=count>0 and "onSurface" or ui.alpha("onSurface",T.wallpaper.disabled_opacity)
   return kit.Button{id=id,aria_label=label,width=T.wallpaper.nav_width,height=T.wallpaper.nav_height,padding=0,
-    radius=T.panel.close_radius,fill="surfaceContainerHigh",hover_fill="surfaceContainerHigh",
-    activate_on_release=true,on_activate=count>0 and ui.action(action) or nil,
+    radius=T.panel.close_radius,fill=fill,hover_fill=fill,
+    activate_on_release=true,focus_on_pointer=false,on_activate=count>0 and ui.action(action) or nil,
     ui.Row{width=T.wallpaper.nav_width,height=T.wallpaper.nav_height,align="center",justify="center",
-      ui.Text{text=glyph,width=T.wallpaper.nav_icon_width,height=T.wallpaper.nav_icon_height,family="Material Symbols Rounded",font_size=T.wallpaper.nav_icon_font,color="onSurface"}}}
+      ui.Text{text=glyph,width=T.wallpaper.nav_icon_width,height=T.wallpaper.nav_icon_height,family="Material Symbols Rounded",font_size=T.wallpaper.nav_icon_font,color=ink}}}
 end
 
 local function card(item, card_w, card_h, x, y, selected_card, clip)
@@ -192,9 +195,9 @@ local search_w=math.max(T.wallpaper.search_min_width,math.min(T.wallpaper.search
 
 local children={
   kit.TextInput{id="search",position="absolute",left=(width-search_w)/2,top=query_y,width=search_w,height=search_h,
-    focus_ring=false,text=ui.bind("extras.query"),placeholder="Search wallpapers",padding_left=T.wallpaper.search_padding,padding_right=T.wallpaper.search_padding,
-    padding_top=T.wallpaper.search_vertical,padding_bottom=T.wallpaper.search_vertical,radius=T.panel.search_radius,font_size=kit.tokens.text.body*4/3,
-    fill="surfaceContainerHigh"},
+    focus_ring=false,text=ui.bind("extras.query"),placeholder="Search wallpapers",padding_left=T.wallpaper.search_left_padding,padding_right=T.wallpaper.search_right_padding,
+    padding_top=T.wallpaper.search_vertical,padding_bottom=T.wallpaper.search_vertical,radius=T.wallpaper.search_radius,font_size=kit.tokens.text.body*4/3,
+    fill="surfaceContainer",border_width=search_focused and T.wallpaper.search_focus_border or 0,border_color="outline"},
   controls,body,nav,
   ui.Text{id="empty",position="absolute",left=T.wallpaper.content_inset,top=height/2-T.wallpaper.empty_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.empty_height,
     text=ui.bind("extras.empty_message"),visible=#rows==0 and not ui.resolve_for_check(ui.bind("extras.status_visible")),font_size=T.panel.empty_font,

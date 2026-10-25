@@ -43,7 +43,7 @@ return {
     content_inset=24, carousel_height=320,
     carousel_top=12, fullscreen_top=18, toolbar_height=34, toolbar_gap=8,
     search_height=40, search_min_width=160, search_max_width=640,
-    search_padding=12, search_vertical=8,
+    search_left_padding=16, search_right_padding=12, search_vertical=8, search_radius=16, search_focus_border=1,
     carousel_body_clearance=52, carousel_content_gap=10, fullscreen_nav_clearance=56,
     spotlight_body_clearance=74, spotlight_top_gap=24, hex_top_gap=22,
     carousel_slot_estimate=266, carousel_card_max_width=280,
