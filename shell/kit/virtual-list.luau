@@ -16,18 +16,22 @@ return function(p)
   local prefix = (p.before_height or 0)+(p.before_gap or 0)
   local extent = prefix+rows_extent
   local window_height=p.window_height or p.height
-  local scroll = math.max(0,math.clamp(ui.resolve_for_check(p.scroll),0,math.max(0,extent-window_height))-prefix)
+  -- Flex height is only an upper bound. Cover both possible clamped offsets
+  -- near the end, including when a model shrinks before its store is clamped.
+  local requested=ui.resolve_for_check(p.scroll)
+  local start=math.max(0,math.clamp(requested,0,math.max(0,extent-window_height))-prefix)
+  local scroll=math.max(0,math.clamp(requested,0,math.max(0,extent-(p.height or 0)))-prefix)
   local first = 0
   local count = total
   if variable then
-    while first<total and offset(first+1)<scroll do first+=1 end
+    while first<total and offset(first+1)<start do first+=1 end
     first=math.max(0,first-1)
     local last=first
     while last<total and offset(last)<scroll+window_height do last+=1 end
     count=math.min(total,last+1)-first
   else
-    first=math.max(0,math.floor(scroll/pitch)-1)
-    count=math.min(total-first,math.ceil(window_height/pitch)+2)
+    first=math.max(0,math.floor(start/pitch)-1)
+    count=math.min(total-first,math.ceil((scroll-start+window_height)/pitch)+2)
   end
   local children = {}
   local function space(prefix, height)

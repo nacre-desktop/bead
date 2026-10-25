@@ -658,6 +658,43 @@ mod tests {
     }
 
     #[test]
+    fn flex_virtual_list_reaches_last_row_with_conservative_window_height()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let fixture = std::env::temp_dir().join(format!("bead-flex-list-{}", std::process::id()));
+        std::fs::create_dir_all(fixture.join("ui"))?;
+        std::fs::copy(root().join("kit/virtual-list.luau"), fixture.join("ui/list.luau"))?;
+        std::fs::write(fixture.join("ui/behavior.luau"), r#"
+local rows={};for i=1,100 do rows[i]={id=tostring(i),name="Row "..i} end
+return {stores={scroll=0,rows=rows},actions={},computed={}}"#)?;
+        std::fs::write(fixture.join("ui/main.luau"), r#"
+local ui=require("bead.ui")
+return ui.Column{id="root",width=200,height=200,
+ ui.Box{id="header",height=40,shrink=0},
+ require("./list"){id="list",width="fill",grow=1,window_height=600,
+ scroll=ui.bind("scroll"),model=ui.bind("rows"),key="id",row_height=20,gap=0,
+ render=function(item)return ui.Text{id="row",text=item.name,height=20,shrink=0}end}}"#)?;
+        let mut h = bead_test::Harness::load(
+            &fixture, Path::new("ui/main.luau"), &root().join("palette.json"),
+            Default::default(), bead_test::Config { width: 200, height: 200, scale: 1. },
+        )?;
+        h.script([bead_test::Input::Scroll { x: 100., y: 100., delta: 1_000_000. }])?;
+        let last = h.scene().primitives.iter().find_map(|p| match p {
+            bead::render::Primitive::Text {text,rect,..} if text=="Row 100" => Some(*rect),
+            _ => None,
+        }).expect("flex viewport must materialize its last row");
+        assert!(last.y >= 40. && last.y + last.h <= 200., "last row must be visible: {last:?}");
+        assert!(h.scene().primitives.len() < 40, "row construction remains bounded");
+        let scene = h.session.update(std::collections::BTreeMap::from([(
+            "rows".into(), Value::list(vec![serde_json::json!({"id":"1","name":"Row 1"})]),
+        )]))?.expect("model replacement changes the scene");
+        assert!(scene.primitives.iter().any(|p| matches!(p,
+            bead::render::Primitive::Text {text,rect,..} if text=="Row 1" && rect.y==40.
+        )), "a shrunken model must cover its clamped viewport");
+        std::fs::remove_dir_all(fixture)?;
+        Ok(())
+    }
+
+    #[test]
     fn notification_stream_windows_variable_height_cards_and_reaches_both_edges()
     -> Result<(), Box<dyn std::error::Error>> {
         let rows: Vec<_> = (0..120)
