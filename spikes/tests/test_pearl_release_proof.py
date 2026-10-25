@@ -150,7 +150,7 @@ class PearlReleaseTimestampTests(unittest.TestCase):
         result = proof.timing_gate_result([10.0] * 18 + [34.0, 35.0], [8.0] * 98 + [17.0, 18.0])
         self.assertEqual(result['release_to_covered_handoff_commit']['sample_count'], 20)
         self.assertEqual(result['release_to_covered_handoff_commit']['p95_ms'], 34.0)
-        self.assertEqual(result['drag_to_handoff_ui_frame']['p99_ms'], 17.0)
+        self.assertEqual(result['drag_release_ui_frame']['p99_ms'], 17.0)
         self.assertFalse(result['passed'])
         self.assertEqual(len(result['failures']), 2)
 

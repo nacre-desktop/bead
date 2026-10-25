@@ -29,7 +29,7 @@ m.__file__ = __file__  # capture-safety re-execs must re-enter this wrapper
 m.STATES['release-proof'] = ([], [], 0)
 TRIALS = int(os.environ.get('PEARL_TRIALS', '20'))
 RELEASE_TO_HANDOFF_P95_LIMIT_MS = 33.0
-DRAG_TO_HANDOFF_UI_FRAME_P99_LIMIT_MS = 16.0
+DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS = 16.0
 
 
 def spawn(self, command, name, env=None, cwd=None):
@@ -280,7 +280,7 @@ def covered_handoff_commit_ns(trace, pearl_id):
 
 
 def ui_frame_render_ms(trace, start_ns, end_ns):
-    """Return full callback durations overlapping drag start through handoff."""
+    """Return full callback durations overlapping drag and the release observation window."""
     samples = []
     for line in trace.splitlines():
         if not line.startswith('UI_FRAME '):
@@ -323,14 +323,14 @@ def timing_gate_result(release_ms, frame_ms, expected_trials=20):
     if release['p95_ms'] > RELEASE_TO_HANDOFF_P95_LIMIT_MS:
         failures.append(f"release-to-covered-handoff p95 {release['p95_ms']:.3f} ms exceeds "
                         f'{RELEASE_TO_HANDOFF_P95_LIMIT_MS:.1f} ms')
-    if frames['p99_ms'] > DRAG_TO_HANDOFF_UI_FRAME_P99_LIMIT_MS:
-        failures.append(f"drag-to-handoff UI_FRAME p99 {frames['p99_ms']:.3f} ms exceeds "
-                        f'{DRAG_TO_HANDOFF_UI_FRAME_P99_LIMIT_MS:.1f} ms')
+    if frames['p99_ms'] > DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS:
+        failures.append(f"drag/release UI_FRAME p99 {frames['p99_ms']:.3f} ms exceeds "
+                        f'{DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS:.1f} ms')
     return {'release_to_covered_handoff_commit': release,
-            'drag_to_handoff_ui_frame': frames,
+            'drag_release_ui_frame': frames,
             'percentile_method': 'nearest-rank',
             'limits_ms': {'release_to_covered_handoff_commit_p95': RELEASE_TO_HANDOFF_P95_LIMIT_MS,
-                          'drag_to_handoff_ui_frame_p99': DRAG_TO_HANDOFF_UI_FRAME_P99_LIMIT_MS},
+                          'drag_release_ui_frame_p99': DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS},
             'passed': not failures, 'failures': failures}
 
 
@@ -360,9 +360,9 @@ def drive(self, _names):
               'renderer': 'cpu' if self.args.cpu else 'femtovg-gl with idle CPU fallback',
               'idle_memory_kib': self.rss(),
               'scale': 1.5, 'size': [2880, 1800], 'trials': [], 'required_trials': 20,
-              'timing_method': 'release uses POINTER_RELEASE monotonic_ns to product PEARL_HANDOFF_COMMITTED monotonic_ns after native-content and source-cover commits; UI_FRAME callbacks overlapping pointer-tool launch through that marker include prewarm; not presentation timing',
+              'timing_method': 'release uses POINTER_RELEASE monotonic_ns to product PEARL_HANDOFF_COMMITTED monotonic_ns after native-content and source-cover commits; UI_FRAME callbacks overlapping pointer-tool launch through 1.5s after release include prewarm and post-handoff setup; not presentation timing',
               'timing_gates': {'release_to_covered_handoff_commit_p95_ms': RELEASE_TO_HANDOFF_P95_LIMIT_MS,
-                               'drag_to_handoff_ui_frame_p99_ms': DRAG_TO_HANDOFF_UI_FRAME_P99_LIMIT_MS,
+                               'drag_release_ui_frame_p99_ms': DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS,
                                'percentile_method': 'nearest-rank'}}
     shell_log = self.logs / 'shell.log'
     logical_w, logical_h = self.geometry['logical']
@@ -471,7 +471,8 @@ def drive(self, _names):
                 handoff_ms = (handoff_ns - marks['capture_start_monotonic_ns']) / 1_000_000
                 release_to_handoff_ms = (handoff_ns - release_ns) / 1_000_000
                 frame_samples = ui_frame_render_ms(
-                    trace, marks['pointer_trigger_start_monotonic_ns'], handoff_ns)
+                    trace, marks['pointer_trigger_start_monotonic_ns'],
+                    max(handoff_ns, release_ns + 1_500_000_000))
                 if not frame_samples:
                     raise RuntimeError('no companion UI_FRAME samples overlap drag start through handoff')
                 analysis = analyze(directory, final_screen, stamps, rect, 1.5,
@@ -489,7 +490,7 @@ def drive(self, _names):
                       'handoff_backend': handoff_backend,
                       'release_to_covered_handoff_commit_ms': release_to_handoff_ms,
                       'pointer_trigger_start_monotonic_ns': marks['pointer_trigger_start_monotonic_ns'],
-                      'drag_to_handoff_ui_frame_render_ms': frame_samples,
+                      'drag_release_ui_frame_render_ms': frame_samples,
                       'pointer_start_px': start, 'pointer_end_px': end, 'delta_logical': [dx, dy],
                       'pearl': pearl, 'pointer_stdout': marks['pointer_stdout'],
                       'docked_memory_kib': docked_memory,
@@ -525,7 +526,7 @@ def drive(self, _names):
     release_latencies = [trial['release_to_covered_handoff_commit_ms'] for trial in report['trials']
                          if 'release_to_covered_handoff_commit_ms' in trial]
     frame_latencies = [sample for trial in report['trials']
-                       for sample in trial.get('drag_to_handoff_ui_frame_render_ms', [])]
+                       for sample in trial.get('drag_release_ui_frame_render_ms', [])]
     report['timing'] = timing_gate_result(release_latencies, frame_latencies)
     (out / 'release-proof.json').write_text(json.dumps(report, indent=2) + '\n')
     if not report['timing']['passed']:
