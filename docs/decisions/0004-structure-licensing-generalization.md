@@ -197,6 +197,10 @@ After Bead's core switch on Nacre, plan support for:
   equal-width text changes reuse markup and patch only the text primitive.
   Memoized fragments conservatively track the text value; all metrics remain shell-selected.
 
+- B0111: `Session::pointer_region` and a behavior-defined leave delay provide
+  optional panel hover dismissal. External lip observations and hover-open IPC
+  carry pointer ownership across app boundaries; shell Luau owns trigger/pin rules.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

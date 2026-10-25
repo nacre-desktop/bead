@@ -212,4 +212,147 @@ fn pin_controls_only_outside_dismissal() {
         runtime.session.stores.get("panel.open"),
         Some(&bead::core::Value::Bool(false))
     );
+    assert!(
+        runtime.outside_dismiss(),
+        "explicit close clears pin before reopening"
+    );
+}
+
+#[test]
+fn unpinned_sidebar_leaves_with_grace_reentry_and_detached_exemption() {
+    let _guard = serial();
+    let (_, chat) = crate::chat::tests::offline(json!({"available":true,"channels":{}}));
+    let mut runtime = runtime(chat);
+    // Explicit key/click opens stay open on leave; only hover opens auto-close.
+    step(&mut runtime, UiEvent::PointerRegion(false));
+    assert!(runtime.session.hover_close_deadline().is_none());
+    step(&mut runtime, UiEvent::PointerRegion(true));
+    step(&mut runtime, UiEvent::PointerRegion(false));
+    assert!(runtime.session.hover_close_deadline().is_none());
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "panel.hover_opened".into(),
+            bead::core::Value::Bool(true),
+        )])),
+    );
+    let deadline = runtime.session.hover_close_deadline().expect("leave grace");
+    assert!(deadline > std::time::Instant::now());
+    step(&mut runtime, UiEvent::PointerRegion(true));
+    assert!(
+        runtime.session.hover_close_deadline().is_none(),
+        "reenter cancels close"
+    );
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "chat.pinned".into(),
+            bead::core::Value::Bool(true),
+        )])),
+    );
+    step(&mut runtime, UiEvent::PointerRegion(false));
+    assert!(
+        runtime.session.hover_close_deadline().is_none(),
+        "pin prevents close"
+    );
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "chat.pinned".into(),
+            bead::core::Value::Bool(false),
+        )])),
+    );
+    assert!(
+        runtime.session.hover_close_deadline().is_some(),
+        "unpin outside starts grace"
+    );
+    step(&mut runtime, UiEvent::PanelDetached(true));
+    assert!(
+        runtime.session.hover_close_deadline().is_none(),
+        "detached panels stay open"
+    );
+    step(&mut runtime, UiEvent::PanelDetached(false));
+    let deadline = runtime
+        .session
+        .hover_close_deadline()
+        .expect("attached leave grace");
+    std::thread::sleep(
+        deadline.saturating_duration_since(std::time::Instant::now()) + Duration::from_millis(5),
+    );
+    step(&mut runtime, UiEvent::Model(BTreeMap::new()));
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&bead::core::Value::Bool(false))
+    );
+}
+
+#[test]
+fn hover_open_leaving_the_lip_without_visiting_the_body_still_closes() {
+    let _guard = serial();
+    let (_, chat) = crate::chat::tests::offline(json!({"available":true,"channels":{}}));
+    let mut runtime = runtime(chat);
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "panel.hover_opened".into(),
+            bead::core::Value::Bool(true),
+        )])),
+    );
+    assert!(
+        runtime.session.hover_close_deadline().is_none(),
+        "resting on lip stays open"
+    );
+    step(&mut runtime, UiEvent::PointerRegion(false));
+    let deadline = runtime
+        .session
+        .hover_close_deadline()
+        .expect("lip leave starts grace");
+    std::thread::sleep(
+        deadline.saturating_duration_since(std::time::Instant::now()) + Duration::from_millis(5),
+    );
+    step(&mut runtime, UiEvent::Model(BTreeMap::new()));
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&bead::core::Value::Bool(false))
+    );
+}
+
+#[test]
+fn lip_and_body_hover_are_a_union_even_when_startup_delays_lip_events() {
+    let _guard = serial();
+    let (_, chat) = crate::chat::tests::offline(json!({"available":true,"channels":{}}));
+    let mut runtime = runtime(chat);
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([
+            ("panel.hover_opened".into(), bead::core::Value::Bool(true)),
+            ("panel.anchor_hovered".into(), bead::core::Value::Bool(true)),
+        ])),
+    );
+    step(&mut runtime, UiEvent::PointerRegion(true));
+    // An earlier lip leave may be delivered after the body's Wayland enter.
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "panel.anchor_hovered".into(),
+            bead::core::Value::Bool(false),
+        )])),
+    );
+    assert!(
+        runtime.session.hover_close_deadline().is_none(),
+        "pointer remains in body"
+    );
+    step(&mut runtime, UiEvent::PointerRegion(false));
+    assert!(runtime.session.hover_close_deadline().is_some());
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "panel.anchor_hovered".into(),
+            bead::core::Value::Bool(true),
+        )])),
+    );
+    assert!(
+        runtime.session.hover_close_deadline().is_none(),
+        "lip reentry cancels grace"
+    );
 }

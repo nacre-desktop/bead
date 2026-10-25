@@ -205,6 +205,8 @@ pub trait ShellControl: Send + Sync {
     }
     /// Request an external target through its product adapter (open or toggle).
     fn external_panel_request(&self, _view: &str, _output: &str, _toggle: bool) {}
+    /// The lip participates in its external panel's hover region during grace.
+    fn external_panel_hover(&self, _view: &str, _output: &str, _inside: bool) {}
     /// Whether hovering may open a lip's panel now; `open_panel` is the open panel's name.
     fn edge_hover_allowed(&self, _open_panel: Option<&str>) -> bool {
         true

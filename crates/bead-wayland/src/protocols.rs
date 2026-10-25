@@ -870,6 +870,9 @@ impl App {
             .as_ref()
             .is_some_and(|d| d.layer.wl_surface() == &event.surface)
         {
+            if matches!(event.kind, PointerEventKind::Enter { .. }) {
+                self.view_event(true, UiEvent::PointerRegion(false));
+            }
             if matches!(event.kind, PointerEventKind::Press { button: 0x110, .. }) {
                 if self.options.trace_state {
                     println!("DISMISS_INPUT press=true");
@@ -910,10 +913,12 @@ impl App {
             match event.kind {
                 PointerEventKind::Enter { .. } => {
                     self.edge_panel_hover(true);
+                    self.view_event(true, UiEvent::PointerRegion(true));
                     self.view_event(false, UiEvent::PointerRegion(true))
                 }
                 PointerEventKind::Leave { .. } => {
                     self.edge_panel_hover(false);
+                    self.view_event(true, UiEvent::PointerRegion(false));
                     self.view_event(false, UiEvent::PointerRegion(false))
                 }
                 _ => {}

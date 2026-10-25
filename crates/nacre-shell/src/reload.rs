@@ -1984,6 +1984,15 @@ impl Runtime {
                 chrome.decorate(scene)?;
             }
         }
+        if scene
+            .as_ref()
+            .and_then(|scene| scene.motion.as_ref())
+            .is_some_and(|motion| !motion.open)
+            && self.session.stores.get("panel.open") == Some(&bead::core::Value::Bool(true))
+            && let Some(wakeup) = &self.wakeup
+        {
+            wakeup(UiEvent::CompanionVisibility(false));
+        }
         self.session.check_sources()?;
         self.pending = scene.clone();
         Ok(scene)
@@ -2178,6 +2187,7 @@ impl SceneSource for Runtime {
         [
             send,
             self.session.preview_deadline(),
+            self.session.hover_close_deadline(),
             self.dashboard_pearl_deadline,
         ]
         .into_iter()
@@ -3744,6 +3754,12 @@ impl SceneSource for Runtime {
                     self.tray_requested_close = false;
                 }
                 let mut values = panel_visibility_changes(open, self.launcher.is_some());
+                if !open && self.chat.is_some() {
+                    values.extend(
+                        self.session
+                            .action_values("close", bead::core::Value::Bool(true))?,
+                    );
+                }
                 if !open && !self.dock_status.is_empty() {
                     self.leave_docked_flow();
                     values.extend(Self::cleared_docked_secrets());
@@ -4130,6 +4146,9 @@ impl SceneSource for Runtime {
             // Notice and OSD sessions have no status-pill stores; their hover is the
             // card/OSD hover key above.
             UiEvent::PointerRegion(_) if self.notifications.is_some() => None,
+            UiEvent::PointerRegion(entered) if self.chat.is_some() => {
+                self.session.pointer_region(entered)?
+            }
             UiEvent::PointerRegion(entered) => {
                 let before = self.status_pill.clone();
                 if entered {
@@ -4405,6 +4424,12 @@ impl SceneSource for Runtime {
                         "panel.open".into(),
                         bead::core::Value::Bool(false),
                     )]);
+                    if self.chat.is_some() {
+                        values.extend(
+                            self.session
+                                .action_values("close", bead::core::Value::Bool(true))?,
+                        );
+                    }
                     if self
                         .session
                         .stores

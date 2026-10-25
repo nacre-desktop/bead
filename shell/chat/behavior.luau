@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Stores below are projected by `chat.rs`; the view only reads them.
 return {stores={
-    ["panel.open"]=true,["view.detached"]=false,["view.edge"]="left",
+    ["panel.open"]=true,["panel.hover_opened"]=false,["panel.anchor_hovered"]=false,["view.detached"]=false,["view.edge"]="left",
     ["chat.labels"]={},["chat.section"]="chat",["chat.pinned"]=false,["chat.height"]=650,["chat.edge"]=16,["chat.button"]=36,["chat.tabs"]=62,["chat.top"]=116,["chat.inner"]=438,
     ["chat.draft"]="",["chat.placeholder"]="",
     ["chat.scroll"]=0,["chat.extent"]=0,["chat.cells"]={},["chat.empty"]=true,
@@ -15,7 +15,10 @@ return {stores={
     ["chat.can_send"]=false,["chat.can_reply"]=false,["chat.can_stop"]=false,
     ["chat.provider"]="",["chat.saved"]={},["chat.saved_state"]="",
 },actions={
-    close=function(s) s["panel.open"]=false end,
+    close=function(s) s["panel.open"]=false s["chat.pinned"]=false s["panel.anchor_hovered"]=false end,
     -- The chat Runtime authorizes and handles this host action.
     ["chat.do"]=function(_) end,
-},computed={}}
+},computed={
+    ["panel.close_on_leave"]=function(s) return s["panel.hover_opened"] and not s["chat.pinned"] and not s["view.detached"] end,
+    ["panel.leave_delay"]=function(_) return .130 end,
+}}

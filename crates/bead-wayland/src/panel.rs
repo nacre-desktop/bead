@@ -187,7 +187,7 @@ impl App {
                 self.set_hidden(!self.hidden);
                 Ok(serde_json::Value::Null)
             }
-            "prepare" | "open" | "toggle" => {
+            "prepare" | "open" | "hover-open" | "toggle" => {
                 if call.method != "prepare" {
                     self.set_hidden(false);
                 }
@@ -211,11 +211,29 @@ impl App {
                                 self.close_panel();
                                 Ok(())
                             } else {
-                                self.request_panel_at(name, output, true, center)
+                                self.request_panel_at(name, output, true, center)?;
+                                self.panel_ui(UiEvent::Model(std::collections::BTreeMap::from([
+                                    (
+                                        "panel.hover_opened".into(),
+                                        bead_core::Value::Bool(call.method == "hover-open"),
+                                    ),
+                                    (
+                                        "panel.anchor_hovered".into(),
+                                        bead_core::Value::Bool(call.method == "hover-open"),
+                                    ),
+                                ])));
+                                Ok(())
                             }
                         })
                         .map(|()| serde_json::Value::Null)
                 }
+            }
+            "hover-enter" | "hover-leave" => {
+                self.panel_ui(UiEvent::Model(std::collections::BTreeMap::from([(
+                    "panel.anchor_hovered".into(),
+                    bead_core::Value::Bool(call.method == "hover-enter"),
+                )])));
+                Ok(serde_json::Value::Null)
             }
             "close" => {
                 self.close_panel();

@@ -17,8 +17,23 @@ count, clear availability, close/reopen and keeping the permanent subscription
 while releasing only the view's controls lease. It and the existing permanent
 Launcher Quick subscription regression passed in the private CI container.
 
+## Sidebar
+
+The external app route lost the hover-open origin, and panel pointer-region
+notifications went only to the bar runtime. The sidebar now receives those
+notifications and uses Luau-defined transient/pin/detached rules with QML's
+130 ms leave grace. Explicit click/key opens stay open; close/Escape clears pin.
+The lip and body are separate regions: either cancels the pending close.
+An ordered, small-stack adapter lane waits for the cold app's prepared scene
+before delivering queued lip observations. This avoids dropping a leave during
+startup or letting it overwrite a later body enter.
+
+Regression checks cover explicit opens, no-visit lip departure, reentry, pin and
+unpin, detached panels, close resetting pin, and both startup ordering races.
+Static layout is unchanged. No daemon schema changes or extra provider are added.
+
 ## Remaining acceptance work
 
-Sidebar hover/pin lifecycle, tab alignment at scale 1.5 and right-pill peek motion
-are under investigation. Paired QML/Bead evidence, daemon-mode reproduction,
-full CI, goldens and the final verdict will be added before closing this unit.
+Tab alignment at scale 1.5 and right-pill peek motion are under investigation.
+Paired QML/Bead evidence, daemon-mode reproduction, full CI, goldens and the final
+verdict will be added before closing this unit.

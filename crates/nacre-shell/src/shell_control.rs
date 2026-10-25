@@ -182,9 +182,12 @@ impl ShellControl for Gate {
     }
     fn external_panel_request(&self, view: &str, _output: &str, toggle: bool) {
         if view == "assistant" {
-            std::thread::spawn(move || {
-                crate::app::route(0, "chat", if toggle { "toggle" } else { "open" }, &[]);
-            });
+            crate::app::panel_request("chat", if toggle { "toggle" } else { "hover-open" });
+        }
+    }
+    fn external_panel_hover(&self, view: &str, _output: &str, inside: bool) {
+        if view == "assistant" {
+            crate::app::panel_request("chat", if inside { "hover-enter" } else { "hover-leave" });
         }
     }
     fn edge_chrome(&self) -> EdgeChrome {

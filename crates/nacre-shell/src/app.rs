@@ -114,6 +114,58 @@ pub fn route(id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
     }
 }
 
+/// Edge observations and opens share one ordered lane. In particular a leave
+/// cannot overtake startup or an earlier enter while the external app is cold.
+pub fn panel_request(name: &'static str, method: &'static str) {
+    let Some(host) = HOST.get() else { return };
+    type Request = (&'static str, &'static str);
+    static REQUESTS: OnceLock<std::sync::mpsc::Sender<Request>> = OnceLock::new();
+    let sender = REQUESTS.get_or_init(|| {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let _ = std::thread::Builder::new()
+            .name("panel-requests".into())
+            .stack_size(128 * 1024)
+            .spawn(move || panel_requests(host, receiver));
+        sender
+    });
+    if sender.send((name, method)).is_err() {
+        eprintln!("EXTERNAL_PANEL_ERROR request lane unavailable");
+    }
+}
+fn panel_requests(host: &Host, receiver: std::sync::mpsc::Receiver<(&str, &str)>) {
+    for (name, method) in receiver {
+        let reply = host.route(0, name, method, &[]);
+        if method == "hover-open" && reply.error.is_none() {
+            // The socket can precede the panel worker. Keep later observations
+            // queued until that worker can actually receive pointer events.
+            let _ = wait_panel_ready(&host.socket(name));
+        }
+    }
+}
+fn wait_panel_ready(socket: &Path) -> bool {
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "bead.panel".into(),
+        method: "state".into(),
+        args: vec![],
+        output: None,
+    };
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        if let Ok(reply) = ipc::call(socket, &call, Duration::from_millis(300))
+            && let Some(state) = reply.result
+            && state["target_open"] == true
+            && state["prepared"] == true
+        {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    eprintln!("EXTERNAL_PANEL_ERROR panel startup did not become ready");
+    false
+}
+
 /// The selector prompt route (`menuPrompt open|cancel ID`).
 pub fn prompt(id: u64, method: &str, ident: &str) -> Reply {
     match HOST.get() {
@@ -153,7 +205,15 @@ impl Host {
             }
             Err(_) => {}
         }
-        match self.spawn(name, args) {
+        // A lip observation never starts an app (the dwell owns startup).
+        if matches!(method, "hover-enter" | "hover-leave") {
+            return Reply::ok(id, Value::Null);
+        }
+        let mut spawn_args = args.to_vec();
+        if method == "hover-open" {
+            spawn_args.push(json!("--hover-open"));
+        }
+        match self.spawn(name, &spawn_args) {
             Ok(()) => Reply::ok(id, Value::Null),
             Err(error) => Reply::error(id, "spawn", error),
         }
@@ -295,6 +355,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let mut command_socket = None;
     let mut palette = PathBuf::from("shell/palette.json");
     let mut output = None;
+    let mut hover_open = false;
     let mut rest = cli[1..].iter();
     while let Some(arg) = rest.next() {
         let mut value = |what: &str| rest.next().cloned().ok_or(format!("{arg} needs {what}"));
@@ -303,6 +364,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
             "--command-socket" => command_socket = Some(PathBuf::from(value("a path")?)),
             "--palette" => palette = value("a path")?.into(),
             "--output" => output = Some(value("a name")?),
+            "--hover-open" => hover_open = true,
             flag if flag.starts_with("--") => {
                 return Err(format!("unknown argument: {flag}").into());
             }
@@ -439,7 +501,16 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
                 client.clone().ok_or("the sidebar needs the daemon")?,
                 palette,
                 colors,
-                Default::default(),
+                Arc::new(std::sync::Mutex::new(BTreeMap::from([
+                    (
+                        "panel.hover_opened".into(),
+                        bead::core::Value::Bool(hover_open),
+                    ),
+                    (
+                        "panel.anchor_hovered".into(),
+                        bead::core::Value::Bool(hover_open),
+                    ),
+                ]))),
                 false,
             )?;
             options.panels = Some(Panels::new(
@@ -516,6 +587,63 @@ mod tests {
                 "--daemon-socket",
                 "/run/fake/daemon.sock"
             ]
+        );
+        std::fs::remove_file(&out).unwrap();
+        let reply = host(&dir, &script).route(4, "chat", "hover-open", &[]);
+        assert!(reply.error.is_none());
+        let started = std::time::Instant::now();
+        while !out.exists() && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let argv = std::fs::read_to_string(&out).unwrap();
+        assert!(argv.lines().any(|arg| arg == "--hover-open"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn lip_observations_never_start_a_closed_app() {
+        let dir = private_dir("hover-observe");
+        for method in ["hover-enter", "hover-leave"] {
+            let reply = host(&dir, Path::new("/nonexistent/app")).route(5, "chat", method, &[]);
+            assert!(reply.error.is_none());
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn startup_queues_lip_leave_and_preserves_observation_order() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let dir = private_dir("hover-order");
+        let ready = Arc::new(AtomicBool::new(false));
+        let prepared = ready.clone();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let (polled, polling) = std::sync::mpsc::channel();
+        let _server = ipc::Server::bind(dir.join("app-chat.sock"), move |call| {
+            if call.method == "state" {
+                let _ = polled.send(());
+                Reply::ok(
+                    call.id,
+                    json!({"target_open":true,"prepared":prepared.load(Ordering::SeqCst)}),
+                )
+            } else {
+                log.lock().unwrap().push(call.method.clone());
+                Reply::ok(call.id, Value::Null)
+            }
+        })
+        .unwrap();
+        let host = host(&dir, Path::new("/nonexistent/app"));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || panel_requests(&host, rx));
+        for method in ["hover-open", "hover-leave", "hover-enter"] {
+            tx.send(("chat", method)).unwrap();
+        }
+        polling.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(*seen.lock().unwrap(), ["hover-open"]);
+        ready.store(true, Ordering::SeqCst);
+        drop(tx);
+        worker.join().unwrap();
+        assert_eq!(
+            *seen.lock().unwrap(),
+            ["hover-open", "hover-leave", "hover-enter"]
         );
         let _ = std::fs::remove_dir_all(dir);
     }

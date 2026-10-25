@@ -447,7 +447,11 @@ impl App {
     fn lip_approach(&mut self, output: &str, lip: &Lip, wl_output: Option<&wl_output::WlOutput>) {
         let k = key(output, &lip.id);
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
+        let entered = self.edge.hovered.as_deref() != Some(k.as_str());
         self.edge.hovered = Some(k.clone());
+        if entered && let Some(control) = &self.options.control {
+            control.external_panel_hover(&lip.opens, output, true);
+        }
         let active = wl_output.is_some_and(|o| self.lip_active(o, lip));
         let chrome = &self.edge.chrome;
         if active
@@ -635,6 +639,9 @@ impl App {
         }
     }
     fn lip_leave(&mut self, output: &str, lip: &Lip) {
+        if let Some(control) = &self.options.control {
+            control.external_panel_hover(&lip.opens, output, false);
+        }
         let k = key(output, &lip.id);
         if self.edge.dwelling.as_deref() == Some(k.as_str()) {
             self.edge.dwelling = None;
