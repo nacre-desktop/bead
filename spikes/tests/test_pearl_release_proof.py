@@ -126,18 +126,37 @@ class PearlReleaseTimestampTests(unittest.TestCase):
                 self.assertEqual(image.getpixel((4, 6)), (201, 211, 221))
                 self.assertEqual(image.getpixel((3, 6)), (0, 0, 0))
 
-    def test_handoff_uses_first_following_companion_frame(self):
-        trace = ('PEARL_HANDOFF_COMMITTED id=7 rect=[0, 0, 1, 1]\n'
-                 'UI_FRAME monotonic_ns=10 render_ms=1.0 companion=false\n'
-                 'UI_FRAME monotonic_ns=20 render_ms=1.0 companion=true\n')
-        self.assertEqual(proof.native_handoff_frame_ns(trace, 7), 20)
+    def test_handoff_uses_exact_product_commit_timestamp(self):
+        trace = ('PEARL_HANDOFF_COMMITTED id=7 rect=[0, 0, 1, 1] monotonic_ns=123456789\n'
+                 'UI_FRAME monotonic_ns=123456999 render_ms=1.0 companion=true\n')
+        self.assertEqual(proof.covered_handoff_commit_ns(trace, 7), 123456789)
 
-    def test_missing_handoff_marker_or_companion_frame_fails(self):
+    def test_missing_handoff_marker_or_exact_timestamp_fails(self):
         with self.assertRaisesRegex(RuntimeError, 'missing PEARL_HANDOFF_COMMITTED'):
-            proof.native_handoff_frame_ns('UI_FRAME monotonic_ns=20 companion=true', 7)
-        trace = 'PEARL_HANDOFF_COMMITTED id=7\nUI_FRAME monotonic_ns=20 companion=false'
-        with self.assertRaisesRegex(RuntimeError, 'no following companion UI_FRAME'):
-            proof.native_handoff_frame_ns(trace, 7)
+            proof.covered_handoff_commit_ns('UI_FRAME monotonic_ns=20 companion=true', 7)
+        with self.assertRaisesRegex(RuntimeError, 'no monotonic_ns'):
+            proof.covered_handoff_commit_ns('PEARL_HANDOFF_COMMITTED id=7', 7)
+
+    def test_ui_frame_samples_cover_drag_to_handoff_including_overlapping_prewarm(self):
+        trace = ('UI_FRAME monotonic_ns=110000000 render_ms=10.0 companion=true\n'
+                 'UI_FRAME monotonic_ns=130000000 render_ms=10.0 companion=true\n'
+                 'UI_FRAME monotonic_ns=120000000 render_ms=1.0 companion=false\n'
+                 'UI_FRAME monotonic_ns=150000000 render_ms=10.0 companion=true\n'
+                 'UI_FRAME monotonic_ns=90000000 render_ms=5.0 companion=true\n')
+        self.assertEqual(proof.ui_frame_render_ms(trace, 100000000, 140000000),
+                         [10.0, 10.0])
+
+    def test_timing_gate_uses_nearest_rank_over_all_trial_and_frame_samples(self):
+        result = proof.timing_gate_result([10.0] * 18 + [34.0, 35.0], [8.0] * 98 + [17.0, 18.0])
+        self.assertEqual(result['release_to_covered_handoff_commit']['sample_count'], 20)
+        self.assertEqual(result['release_to_covered_handoff_commit']['p95_ms'], 34.0)
+        self.assertEqual(result['drag_to_handoff_ui_frame']['p99_ms'], 17.0)
+        self.assertFalse(result['passed'])
+        self.assertEqual(len(result['failures']), 2)
+
+    def test_timing_gate_accepts_values_at_both_limits(self):
+        result = proof.timing_gate_result([33.0] * 20, [16.0] * 100)
+        self.assertTrue(result['passed'])
 
 
 if __name__ == '__main__':
