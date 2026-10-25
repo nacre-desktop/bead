@@ -1,0 +1,17 @@
+B0133 CI receipt
+Source commit: 5ddf9ce860802b6ce008213cdcf70d0ce80eb85d
+Job: complete .github/workflows/ci.yml check job
+Platform: remote Ubuntu 24.04 container, Rust 1.99.0, Cargo -j2, nice 10
+Command: bash .lead/integration-ci/run.sh (all workflow steps, each at nice 10)
+Result: exit 0; FULL_CI_OK
+Checks: cargo fmt --all --check; workspace/all-target Clippy with -D warnings;
+workspace tests and trace memory-policy tests; both renderer feature configurations;
+facade/minimal example; headless UI and Luau/generated schema; all capture-harness
+Python suites/py_compile, including test_fullscreen_lips.py; packaging; libmpv SHM smoke; private services and SNI/DBusMenu;
+cargo-deny workspace and independent bead-* dependency/license graphs.
+Focused proof: cargo test -p nacre-shell --locked -j2 welcome -- --nocapture
+Result: 10 passed, 0 failed, including 64 cached choices, cold availability and page fit.
+Decoded demo pixels: 12828672 bytes (allocation count).
+CI ran from a Git checkout of the exact source commit; archive-only harness
+failures were repaired by restoring Git metadata, with no skipped checks.
+CI log SHA256: 04c8ca5f3c04c2ece4c85fbbc8a715ac3a87076363827e36b7b12ad4bebd3d90

@@ -12,6 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
+| 0 | [B0133 Welcome fixes](0133-welcome-fixes.md) | Review candidate — themed logos, baked instant demo, 1100×800 page fit and shortcuts topic | Full remote CI and native page pairs pass; 12.23 MiB decoded app pixels; QML demo-start baseline defect and inherited parity limits recorded. |
 | 0 | [B0125 Fullscreen edge lips](0125-lips-fullscreen.md) | Validated — Top lips and notification cards covered with the frame; level OSD stays Overlay | Matched private QML/niri proof: pixels, mouse/keyboard delivery, hover/click and restoration; source-pinned evidence; no live deployment |
 | 0 | [B0109 Wallpaper picker repairs](0109-picker-fixes.md) | Review candidate — persisted layouts/Dynamic, QML carousel travel, early previews, reused video context and Current scene; full remote Arch CI and final integration proof pass | Five-pair memory gates fail; explicit smoothness trade with +0.586–1.156 MiB closed except Dynamic +11.301 MiB (mostly SHM). Known visual limits and source-pinned pairs recorded; no live/laptop acceptance. |
 | 0 | [B0118 Daemon recovery](0118-daemon-reconnect.md) | Validated — reconnecting bar status, late topic/method discovery, shared compositor subscription, late wallpaper startup | Full remote Arch CI passes; apply N0074 ordering/registry readback first |

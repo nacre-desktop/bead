@@ -780,6 +780,22 @@ os.execv(real, [real, *args])
             except OSError as error:
                 self.errors.append(f'closing {name}: {error}')
 
+    def welcome_ready(self, name):
+        """A cold app must be mapped on the requested page before its parity shot."""
+        page = 'welcome' if name == 'welcome-hero' else name.removeprefix('welcome-')
+        def ready():
+            try:
+                state = self.socket_call(self.runtime / 'app-welcome.sock', 'bead.window', 'state', [])['result']
+                windows = json.loads(self.run(['niri', 'msg', '-j', 'windows']).stdout)
+                mapped = any(window.get('app_id') == 'nacre-welcome' for window in windows)
+                return state if mapped and (state.get('stores') or {}).get('welcome.step') == page else None
+            except (OSError, ValueError, KeyError, TypeError):
+                return None
+        state = wait_until(ready, 20, 'mapped Welcome page ' + page)
+        time.sleep(0.2)  # allow the committed buffer to reach the nested compositor
+        return {'size': state['size'], 'page': state['stores']['welcome.step'],
+                'scroll': state['stores']['welcome.scroll']}
+
     def prompt_start(self, mode):
         """B0093: ask for a selection or a text through `menu-cli`, as `nacre-menu pick|input` does. The helper stays
         running (it waits for the answer) until `prompt_end` ends this exact PID."""
@@ -1211,6 +1227,8 @@ os.execv(real, [real, *args])
                         if not state.get('target_open') or not state.get('stores', {}).get('chat.pinned') or state.get('dismiss_active'):
                             raise RuntimeError('Bead pin did not survive outside click')
                     info['pinned_after_outside_click'] = True
+                if name.startswith('welcome-') and self.name == 'bead':
+                    info['window_state'] = self.welcome_ready(name)
                 if name.startswith('settings') and self.name == 'bead':
                     info['window_state'] = self.socket_call(self.runtime / 'app-settings.sock', 'bead.window', 'state', [])['result']
                 info['rss_kib'] = self.rss()
@@ -1254,7 +1272,7 @@ os.execv(real, [real, *args])
             results[name] = info
             (self.out / 'drive.json').write_text(json.dumps(results, indent=1))
             log(f'{self.name}: {name} {"ERRORS " + "; ".join(self.errors) if self.errors else "ok"}')
-            if (name.startswith('wallpaper-') or name in STATE_SETTLE or name in ('control-hover', 'control-pressed', 'lip-hover-right')) and self.errors:
+            if (name.startswith(('wallpaper-', 'welcome-')) or name in STATE_SETTLE or name in ('control-hover', 'control-pressed', 'lip-hover-right')) and self.errors:
                 raise RuntimeError(f'{name} failed: {"; ".join(self.errors)}')
         (self.out / 'drive.json').write_text(json.dumps(results, indent=1))
         try:  # B0095: which methods the private daemon offered (a missing control explains a dimmed button)

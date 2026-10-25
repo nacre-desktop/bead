@@ -1,0 +1,213 @@
+{
+  "capture_application_commit": "0085d5c6c0487aff57333afdecc9a91152b4b9bc",
+  "integration_commit": "5ddf9ce860802b6ce008213cdcf70d0ce80eb85d",
+  "qml_reference": "836df1a643eae6e2f54ec86967a83d2f27561d3d",
+  "bead_binary_sha256": "74c0aa5eb6e4ed0eb1dd31d831a9a8c508585fbae92a638b3dfc8d4f39f7ebe5",
+  "geometry": {
+    "physical": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "logical": [
+      1920,
+      1200
+    ]
+  },
+  "bead_backend": "CPU",
+  "arms": {
+    "qml": {
+      "capture_returncode": 0,
+      "scope_runner_returncode": 0,
+      "containment_verified": true,
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "swap_used_before_kib": 0,
+      "host_swapin_delta": 0
+    },
+    "bead": {
+      "capture_returncode": 0,
+      "scope_runner_returncode": 0,
+      "containment_verified": true,
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "swap_used_before_kib": 0,
+      "host_swapin_delta": 0
+    }
+  },
+  "states": {
+    "welcome-hero": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 12.965,
+        "changed_pct": 6.472,
+        "bar_rmse": 6.081,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      },
+      "window": {
+        "size": [
+          1100,
+          800
+        ],
+        "page": "welcome",
+        "scroll": 0.0
+      }
+    },
+    "welcome-colors": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 18.369,
+        "changed_pct": 16.558,
+        "bar_rmse": 6.081,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      },
+      "window": {
+        "size": [
+          1100,
+          800
+        ],
+        "page": "colors",
+        "scroll": 0.0
+      }
+    },
+    "welcome-shortcuts": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 12.68,
+        "changed_pct": 6.377,
+        "bar_rmse": 6.081,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      },
+      "window": {
+        "size": [
+          1100,
+          800
+        ],
+        "page": "shortcuts",
+        "scroll": 0.0
+      }
+    },
+    "welcome-apps": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 13.426,
+        "changed_pct": 7.303,
+        "bar_rmse": 6.081,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      },
+      "window": {
+        "size": [
+          1100,
+          800
+        ],
+        "page": "apps",
+        "scroll": 0.0
+      }
+    },
+    "welcome-ready": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 12.623,
+        "changed_pct": 6.371,
+        "bar_rmse": 6.082,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      },
+      "window": {
+        "size": [
+          1100,
+          800
+        ],
+        "page": "ready",
+        "scroll": 0.0
+      }
+    },
+    "welcome-help": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 14.543,
+        "changed_pct": 8.22,
+        "bar_rmse": 6.082,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      },
+      "window": {
+        "size": [
+          1100,
+          800
+        ],
+        "page": "help",
+        "scroll": 0.0
+      }
+    },
+    "colors-app": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 11.379,
+        "changed_pct": 5.698,
+        "bar_rmse": 6.407,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      }
+    },
+    "settings-appearance": {
+      "qml_errors": [],
+      "bead_errors": [],
+      "metrics": {
+        "rmse": 7.273,
+        "changed_pct": 2.596,
+        "bar_rmse": 6.285,
+        "bbox": [
+          15,
+          16,
+          2865,
+          1785
+        ]
+      }
+    }
+  },
+  "welcome_colors_adapters_and_shell_assets_unchanged_by_rebase": true
+}

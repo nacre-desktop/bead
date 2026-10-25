@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-25 — B0133 Welcome fixes
+
+Welcome and app headers use themed mother-of-pearl artwork. The four bundled
+scenes and 64 palettes are ready before the first frame; decoded pixels cost
+12.23 MiB in the on-demand app. The 1100×800 minimum fits all five tour pages.
+Welcome follows the shortcuts topic, with readable grouped rows and late updates.
+Full remote integration CI passes; native QML/Bead page pairs are reviewed.
+QML’s migrated demo-start command remains broken in the reference; inherited
+parity limits are explicit. [Evidence](specs/0133-welcome-fixes.md). No live deployment.
+
 ## 2026-10-25 — B0125 fullscreen edge lips
 
 Edge lips now share the bar/frame's Top layer, so niri fullscreen clients cover
