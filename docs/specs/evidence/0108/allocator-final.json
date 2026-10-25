@@ -1,0 +1,120 @@
+{
+  "control": {
+    "revision": "575afc78f367eda187154bcd5ee0416a6a7d7dd5",
+    "phases": {
+      "idle": {
+        "heap_bytes": {
+          "arena": 22974464,
+          "free": 6473712,
+          "live": 16500752,
+          "mapped": 0
+        },
+        "accounted_cache_bytes": 427533
+      },
+      "today": {
+        "heap_bytes": {
+          "arena": 37482496,
+          "free": 12136656,
+          "live": 25345840,
+          "mapped": 6455296
+        },
+        "accounted_cache_bytes": 12816690
+      },
+      "media": {
+        "heap_bytes": {
+          "arena": 34955264,
+          "free": 16827408,
+          "live": 18127856,
+          "mapped": 6455376
+        },
+        "accounted_cache_bytes": 7348631
+      },
+      "weather": {
+        "heap_bytes": {
+          "arena": 39497728,
+          "free": 19421408,
+          "live": 20076320,
+          "mapped": 6455376
+        },
+        "accounted_cache_bytes": 8816764
+      },
+      "system": {
+        "heap_bytes": {
+          "arena": 42876928,
+          "free": 23404288,
+          "live": 19472640,
+          "mapped": 6455376
+        },
+        "accounted_cache_bytes": 7797618
+      },
+      "closed": {
+        "heap_bytes": {
+          "arena": 41959424,
+          "free": 25098240,
+          "live": 16861184,
+          "mapped": 80
+        },
+        "accounted_cache_bytes": 401544
+      }
+    }
+  },
+  "candidate": {
+    "revision": "4a4ed0c86c6680ca68d6b5c9ca93987c12691ef9",
+    "phases": {
+      "idle": {
+        "heap_bytes": {
+          "arena": 23228416,
+          "free": 6670016,
+          "live": 16558400,
+          "mapped": 0
+        },
+        "accounted_cache_bytes": 410274
+      },
+      "today": {
+        "heap_bytes": {
+          "arena": 37748736,
+          "free": 12534176,
+          "live": 25214560,
+          "mapped": 6455296
+        },
+        "accounted_cache_bytes": 12684992
+      },
+      "media": {
+        "heap_bytes": {
+          "arena": 30105600,
+          "free": 11905856,
+          "live": 18199744,
+          "mapped": 6455312
+        },
+        "accounted_cache_bytes": 7308773
+      },
+      "weather": {
+        "heap_bytes": {
+          "arena": 30105600,
+          "free": 10360336,
+          "live": 19745264,
+          "mapped": 6455312
+        },
+        "accounted_cache_bytes": 8759727
+      },
+      "system": {
+        "heap_bytes": {
+          "arena": 30105600,
+          "free": 11301552,
+          "live": 18804048,
+          "mapped": 6455312
+        },
+        "accounted_cache_bytes": 7747676
+      },
+      "closed": {
+        "heap_bytes": {
+          "arena": 29970432,
+          "free": 13293440,
+          "live": 16676992,
+          "mapped": 16
+        },
+        "accounted_cache_bytes": 399850
+      }
+    }
+  }
+}

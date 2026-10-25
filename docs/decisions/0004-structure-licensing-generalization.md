@@ -187,7 +187,7 @@ After Bead's core switch on Nacre, plan support for:
   `Session::navigate` stages a selected entry/schema over durable stores without
   replacing its session; `PanelNavigated` updates catalog identity after commit
   without replacing the host surface. Page names and lease policy stay in the shell.
-  Workers retire unused rasters after a replacement resource generation is accepted.
+  Workers retire unused rasters and baker scratch after a resource generation is accepted.
 
 ## Housekeeping (later)
 

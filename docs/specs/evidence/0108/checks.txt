@@ -1,0 +1,20 @@
+Code revision: 4a4ed0c86c6680ca68d6b5c9ca93987c12691ef9
+Environment: remote ghcr.io/archlinux/archlinux:latest container; nice -n10; Cargo -j2.
+Command: nice -n 10 bash docs/specs/evidence/0108/check.sh
+Result: exit 0, CI_ALL_OK. Complete script is included, no laptop tests/builds.
+Passed: cargo fmt --all --check
+Passed: cargo clippy --workspace --all-targets --locked -j2 -- -D warnings
+Passed: service dependency boundary; cargo test --workspace --locked -j2
+Passed: trace memory-policy tests; no-default and workspace all-feature checks
+Passed: facade, shell schema, Luau analyzer and generated SDK verification
+Passed: all workflow spike regressions, packaging, wallpaper-video smoke
+Passed: private service lifecycle and SNI/DBusMenu integration
+Passed: cargo deny workspace and every independent framework manifest
+Passed: generation_retirement_keeps_current_rasters_at_every_scale
+Passed: navigation_loads_the_new_schema_atomically_and_keeps_the_last_good_entry
+Passed: tab_navigation_keeps_runtime_open_and_releases_previous_page_sources
+Goldens: 40 regenerated remotely, both scales visually inspected on four contact sheets.
+Memory: FAIL (five alternating pairs); Media +0.513672 MiB median > +0.500 MiB.
+Visual: earlier da5473b; 2880x1800/1.5; 25ms series; final visual rerun skipped at failed gate.
+No live desktop/install/config/unit changes. No main push: stopped at the memory gate.
+Cleanup: task CI container and remote build directory removed; no task tmux/process remains.

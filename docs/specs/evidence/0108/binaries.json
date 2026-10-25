@@ -1,0 +1,13 @@
+{
+  "backend": "cpu",
+  "build_flags": "cargo build -p nacre-shell --release --no-default-features --locked -j2",
+  "control_revision": "575afc78f367eda187154bcd5ee0416a6a7d7dd5",
+  "control_sha256": "59108e90c6376415bb5ac7a96932c3ee708257990090007aa8dfba9274d5ba60",
+  "final_candidate_revision": "4a4ed0c86c6680ca68d6b5c9ca93987c12691ef9",
+  "final_candidate_sha256": "13c89a203f67ce241951153fc3113fa52b4ff9f963e130846f33eb10ecf9469f",
+  "visual_candidate_revision": "da5473b12f3519811aea71c1661ba944c655a155",
+  "visual_candidate_sha256": "f09605313937da57a22cff16c909261f5cc05be269cc478f72563fbfcf1685fe",
+  "shared_helper_sha256": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+  "shared_decode_sha256": "3204cd25fea343896c6e8d19834f13b6fd3925a78f9e5aba52a4106112f871ba",
+  "shared_swaybg_sha256": "5becb0ae9dccbddf9d5bbc0c0fbcddfde9fba76a3987766434c126fc7b9ef6f0"
+}

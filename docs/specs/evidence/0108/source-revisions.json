@@ -1,0 +1,5 @@
+{
+  "bead_revision": "da5473b12f3519811aea71c1661ba944c655a155",
+  "bead_binary_sha256": "f09605313937da57a22cff16c909261f5cc05be269cc478f72563fbfcf1685fe",
+  "note": "Visual capture predates raster-scratch and deferred-heap fixes; final memory and CI revision is recorded separately. No final-revision visual pass is claimed."
+}

@@ -1,0 +1,676 @@
+{
+  "backend": "cpu",
+  "units": "MiB",
+  "definition": "unreclaimable = Pss_Anon + Pss_Shmem + DRM + SwapPss",
+  "pairs": [
+    {
+      "control": {
+        "revision": "575afc78f367eda187154bcd5ee0416a6a7d7dd5",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.5703125,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.5185546875,
+            "Pss": 47.6708984375,
+            "unreclaimable": 28.15234375
+          },
+          "today": {
+            "Pss_Anon": 34.46484375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.9765625,
+            "Pss": 72.15625,
+            "unreclaimable": 52.1796875
+          },
+          "media": {
+            "Pss_Anon": 25.73046875,
+            "Pss_Shmem": 17.451171875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.51953125,
+            "Pss": 62.701171875,
+            "unreclaimable": 43.181640625
+          },
+          "weather": {
+            "Pss_Anon": 27.30859375,
+            "Pss_Shmem": 17.4921875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.4560546875,
+            "Pss": 64.2568359375,
+            "unreclaimable": 44.80078125
+          },
+          "system": {
+            "Pss_Anon": 29.10546875,
+            "Pss_Shmem": 17.716796875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.8310546875,
+            "Pss": 66.6533203125,
+            "unreclaimable": 46.822265625
+          },
+          "closed": {
+            "Pss_Anon": 18.8046875,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.5751953125,
+            "Pss": 47.9619140625,
+            "unreclaimable": 29.38671875
+          }
+        }
+      },
+      "candidate": {
+        "revision": "754a353d4f004327c4ebab5dc1791b31d60f28df",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.64453125,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.1201171875,
+            "Pss": 47.3466796875,
+            "unreclaimable": 28.2265625
+          },
+          "today": {
+            "Pss_Anon": 36.49609375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.8271484375,
+            "Pss": 74.0380859375,
+            "unreclaimable": 54.2109375
+          },
+          "media": {
+            "Pss_Anon": 30.33203125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.9267578125,
+            "Pss": 67.9736328125,
+            "unreclaimable": 48.046875
+          },
+          "weather": {
+            "Pss_Anon": 30.0078125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.9306640625,
+            "Pss": 67.6533203125,
+            "unreclaimable": 47.72265625
+          },
+          "system": {
+            "Pss_Anon": 30.53125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.9931640625,
+            "Pss": 68.2392578125,
+            "unreclaimable": 48.24609375
+          },
+          "closed": {
+            "Pss_Anon": 18.7109375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.5380859375,
+            "Pss": 47.8310546875,
+            "unreclaimable": 29.29296875
+          }
+        }
+      }
+    },
+    {
+      "control": {
+        "revision": "575afc78f367eda187154bcd5ee0416a6a7d7dd5",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.65234375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.650390625,
+            "Pss": 47.884765625,
+            "unreclaimable": 28.234375
+          },
+          "today": {
+            "Pss_Anon": 34.46875,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.0400390625,
+            "Pss": 72.2236328125,
+            "unreclaimable": 52.18359375
+          },
+          "media": {
+            "Pss_Anon": 26.01953125,
+            "Pss_Shmem": 17.451171875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.6318359375,
+            "Pss": 63.1025390625,
+            "unreclaimable": 43.470703125
+          },
+          "weather": {
+            "Pss_Anon": 27.8203125,
+            "Pss_Shmem": 17.4921875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.568359375,
+            "Pss": 64.880859375,
+            "unreclaimable": 45.3125
+          },
+          "system": {
+            "Pss_Anon": 29.47265625,
+            "Pss_Shmem": 17.716796875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.943359375,
+            "Pss": 67.1328125,
+            "unreclaimable": 47.189453125
+          },
+          "closed": {
+            "Pss_Anon": 18.92578125,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.6328125,
+            "Pss": 48.140625,
+            "unreclaimable": 29.5078125
+          }
+        }
+      },
+      "candidate": {
+        "revision": "754a353d4f004327c4ebab5dc1791b31d60f28df",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.41796875,
+            "Pss": 47.625,
+            "unreclaimable": 28.20703125
+          },
+          "today": {
+            "Pss_Anon": 36.48828125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.14453125,
+            "Pss": 74.34765625,
+            "unreclaimable": 54.203125
+          },
+          "media": {
+            "Pss_Anon": 30.296875,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.189453125,
+            "Pss": 68.201171875,
+            "unreclaimable": 48.01171875
+          },
+          "weather": {
+            "Pss_Anon": 29.7890625,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.189453125,
+            "Pss": 67.693359375,
+            "unreclaimable": 47.50390625
+          },
+          "system": {
+            "Pss_Anon": 30.25,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.251953125,
+            "Pss": 68.216796875,
+            "unreclaimable": 47.96484375
+          },
+          "closed": {
+            "Pss_Anon": 18.49609375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.7958984375,
+            "Pss": 47.8740234375,
+            "unreclaimable": 29.078125
+          }
+        }
+      }
+    },
+    {
+      "control": {
+        "revision": "575afc78f367eda187154bcd5ee0416a6a7d7dd5",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.66796875,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.5986328125,
+            "Pss": 47.8486328125,
+            "unreclaimable": 28.25
+          },
+          "today": {
+            "Pss_Anon": 34.5,
+            "Pss_Shmem": 17.716796875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.0498046875,
+            "Pss": 72.2666015625,
+            "unreclaimable": 52.216796875
+          },
+          "media": {
+            "Pss_Anon": 25.84375,
+            "Pss_Shmem": 17.451171875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.5869140625,
+            "Pss": 62.8818359375,
+            "unreclaimable": 43.294921875
+          },
+          "weather": {
+            "Pss_Anon": 27.6796875,
+            "Pss_Shmem": 17.4921875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.5234375,
+            "Pss": 64.6953125,
+            "unreclaimable": 45.171875
+          },
+          "system": {
+            "Pss_Anon": 28.921875,
+            "Pss_Shmem": 17.716796875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.9609375,
+            "Pss": 66.599609375,
+            "unreclaimable": 46.638671875
+          },
+          "closed": {
+            "Pss_Anon": 19.50390625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.630859375,
+            "Pss": 48.716796875,
+            "unreclaimable": 30.0859375
+          }
+        }
+      },
+      "candidate": {
+        "revision": "754a353d4f004327c4ebab5dc1791b31d60f28df",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.6171875,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.294921875,
+            "Pss": 47.494140625,
+            "unreclaimable": 28.19921875
+          },
+          "today": {
+            "Pss_Anon": 36.48046875,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.9248046875,
+            "Pss": 74.1201171875,
+            "unreclaimable": 54.1953125
+          },
+          "media": {
+            "Pss_Anon": 30.3046875,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.990234375,
+            "Pss": 68.009765625,
+            "unreclaimable": 48.01953125
+          },
+          "weather": {
+            "Pss_Anon": 30.1953125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.9892578125,
+            "Pss": 67.8994140625,
+            "unreclaimable": 47.91015625
+          },
+          "system": {
+            "Pss_Anon": 30.58984375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.0517578125,
+            "Pss": 68.3564453125,
+            "unreclaimable": 48.3046875
+          },
+          "closed": {
+            "Pss_Anon": 18.65234375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.6630859375,
+            "Pss": 47.8974609375,
+            "unreclaimable": 29.234375
+          }
+        }
+      }
+    },
+    {
+      "control": {
+        "revision": "575afc78f367eda187154bcd5ee0416a6a7d7dd5",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.3984375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.521484375,
+            "Pss": 47.501953125,
+            "unreclaimable": 27.98046875
+          },
+          "today": {
+            "Pss_Anon": 34.15234375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.978515625,
+            "Pss": 71.845703125,
+            "unreclaimable": 51.8671875
+          },
+          "media": {
+            "Pss_Anon": 25.81640625,
+            "Pss_Shmem": 17.451171875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.578125,
+            "Pss": 62.845703125,
+            "unreclaimable": 43.267578125
+          },
+          "weather": {
+            "Pss_Anon": 27.56640625,
+            "Pss_Shmem": 17.4921875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.5146484375,
+            "Pss": 64.5732421875,
+            "unreclaimable": 45.05859375
+          },
+          "system": {
+            "Pss_Anon": 28.80078125,
+            "Pss_Shmem": 17.716796875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.8896484375,
+            "Pss": 66.4072265625,
+            "unreclaimable": 46.517578125
+          },
+          "closed": {
+            "Pss_Anon": 18.74609375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.5830078125,
+            "Pss": 47.9111328125,
+            "unreclaimable": 29.328125
+          }
+        }
+      },
+      "candidate": {
+        "revision": "754a353d4f004327c4ebab5dc1791b31d60f28df",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.61328125,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.2998046875,
+            "Pss": 47.4951171875,
+            "unreclaimable": 28.1953125
+          },
+          "today": {
+            "Pss_Anon": 36.5625,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.03515625,
+            "Pss": 74.3125,
+            "unreclaimable": 54.27734375
+          },
+          "media": {
+            "Pss_Anon": 30.48046875,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.072265625,
+            "Pss": 68.267578125,
+            "unreclaimable": 48.1953125
+          },
+          "weather": {
+            "Pss_Anon": 29.91015625,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.072265625,
+            "Pss": 67.697265625,
+            "unreclaimable": 47.625
+          },
+          "system": {
+            "Pss_Anon": 30.4453125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.134765625,
+            "Pss": 68.294921875,
+            "unreclaimable": 48.16015625
+          },
+          "closed": {
+            "Pss_Anon": 18.6484375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.6796875,
+            "Pss": 47.91015625,
+            "unreclaimable": 29.23046875
+          }
+        }
+      }
+    },
+    {
+      "control": {
+        "revision": "575afc78f367eda187154bcd5ee0416a6a7d7dd5",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.59375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.8583984375,
+            "Pss": 48.0341796875,
+            "unreclaimable": 28.17578125
+          },
+          "today": {
+            "Pss_Anon": 34.37109375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.248046875,
+            "Pss": 72.333984375,
+            "unreclaimable": 52.0859375
+          },
+          "media": {
+            "Pss_Anon": 26.02734375,
+            "Pss_Shmem": 17.451171875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.765625,
+            "Pss": 63.244140625,
+            "unreclaimable": 43.478515625
+          },
+          "weather": {
+            "Pss_Anon": 27.87109375,
+            "Pss_Shmem": 17.4921875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.7021484375,
+            "Pss": 65.0654296875,
+            "unreclaimable": 45.36328125
+          },
+          "system": {
+            "Pss_Anon": 29.609375,
+            "Pss_Shmem": 17.716796875,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.1396484375,
+            "Pss": 67.4658203125,
+            "unreclaimable": 47.326171875
+          },
+          "closed": {
+            "Pss_Anon": 19.19140625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.8095703125,
+            "Pss": 48.5830078125,
+            "unreclaimable": 29.7734375
+          }
+        }
+      },
+      "candidate": {
+        "revision": "754a353d4f004327c4ebab5dc1791b31d60f28df",
+        "phases": {
+          "idle": {
+            "Pss_Anon": 17.890625,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 19.3232421875,
+            "Pss": 47.7958984375,
+            "unreclaimable": 28.47265625
+          },
+          "today": {
+            "Pss_Anon": 36.65234375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.1083984375,
+            "Pss": 74.4755859375,
+            "unreclaimable": 54.3671875
+          },
+          "media": {
+            "Pss_Anon": 30.5703125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.150390625,
+            "Pss": 68.435546875,
+            "unreclaimable": 48.28515625
+          },
+          "weather": {
+            "Pss_Anon": 30.109375,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.1494140625,
+            "Pss": 67.9736328125,
+            "unreclaimable": 47.82421875
+          },
+          "system": {
+            "Pss_Anon": 30.76953125,
+            "Pss_Shmem": 17.71484375,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 20.2119140625,
+            "Pss": 68.6962890625,
+            "unreclaimable": 48.484375
+          },
+          "closed": {
+            "Pss_Anon": 18.859375,
+            "Pss_Shmem": 10.58203125,
+            "DRM": 0.0,
+            "SwapPss": 0.0,
+            "Pss_File": 18.7568359375,
+            "Pss": 48.1982421875,
+            "unreclaimable": 29.44140625
+          }
+        }
+      }
+    }
+  ],
+  "phase_summary": {
+    "idle": {
+      "paired_deltas": [
+        0.07421875,
+        -0.02734375,
+        -0.05078125,
+        0.21484375,
+        0.296875
+      ],
+      "median_delta": 0.07421875,
+      "pass": true
+    },
+    "today": {
+      "paired_deltas": [
+        2.03125,
+        2.01953125,
+        1.978515625,
+        2.41015625,
+        2.28125
+      ],
+      "median_delta": 2.03125,
+      "pass": false
+    },
+    "media": {
+      "paired_deltas": [
+        4.865234375,
+        4.541015625,
+        4.724609375,
+        4.927734375,
+        4.806640625
+      ],
+      "median_delta": 4.806640625,
+      "pass": false
+    },
+    "weather": {
+      "paired_deltas": [
+        2.921875,
+        2.19140625,
+        2.73828125,
+        2.56640625,
+        2.4609375
+      ],
+      "median_delta": 2.56640625,
+      "pass": false
+    },
+    "system": {
+      "paired_deltas": [
+        1.423828125,
+        0.775390625,
+        1.666015625,
+        1.642578125,
+        1.158203125
+      ],
+      "median_delta": 1.423828125,
+      "pass": false
+    },
+    "closed": {
+      "paired_deltas": [
+        -0.09375,
+        -0.4296875,
+        -0.8515625,
+        -0.09765625,
+        -0.33203125
+      ],
+      "median_delta": -0.33203125,
+      "pass": true
+    }
+  },
+  "pass": false
+}

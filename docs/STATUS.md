@@ -1,5 +1,17 @@
 # Status
 
+## 2026-10-25 — B0108 title/tabs, blocked at memory gate
+
+The local candidate centers measured title/tab groups, retains a real window title
+through panel focus loss, and switches dashboard pages in the resident surface.
+Full remote Arch CI passes on `4a4ed0c`; 40 updated goldens were inspected.
+Five alternating CPU pairs fail Media at +0.513672 MiB unreclaimable median
+(+0.500 MiB limit); all other phases pass. Work stopped without main integration
+or push. Native paired captures are from the earlier visual candidate `da5473b`;
+the final visual rerun did not start after the gate failed.
+[Candidate, failed measurements and proof limits](specs/0108-title-tabs.md).
+No live desktop, installed software or laptop-cap acceptance.
+
 ## 2026-10-25 — B0106 dashboard follow-up, review candidate
 
 First prepared content commits at 57.2 ms instead of 271.0 ms in matched release CPU runs.

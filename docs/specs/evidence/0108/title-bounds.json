@@ -1,0 +1,26 @@
+{
+  "qml": {
+    "visible_title_group_bounds_physical": [
+      1332,
+      27,
+      1551,
+      50
+    ],
+    "bounds_center": [
+      1441.5,
+      38.5
+    ]
+  },
+  "bead": {
+    "visible_title_group_bounds_physical": [
+      1329,
+      27,
+      1553,
+      49
+    ],
+    "bounds_center": [
+      1441.0,
+      38.0
+    ]
+  }
+}
