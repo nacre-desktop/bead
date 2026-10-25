@@ -355,7 +355,7 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
             }
             return;
         }
-        if state.window_presentation(data, &event) {
+        if state.window_presentation(data, &event) || state.overlay_presentation(data, &event) {
             return;
         }
         if let Some(id) = state.slot_of_surface(&data.surface) {

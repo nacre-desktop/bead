@@ -45,9 +45,7 @@ pub(super) struct Win {
     renderer: Box<dyn Renderer>,
     pool: Option<SlotPool>,
     buffers: Vec<Buffer>,
-    damage_history: bead_render::damage::FrameDamage,
-    pending_damage: Vec<Damage>,
-    surface_damage: Damage,
+    damage: crate::buffer_damage::BufferDamage,
     geometry: (i32, i32),
     size: (u32, u32),
     preferred_size: (u32, u32),
@@ -358,14 +356,7 @@ impl App {
             renderer,
             pool: None,
             buffers: Vec::new(),
-            damage_history: Default::default(),
-            pending_damage: Vec::new(),
-            surface_damage: Damage {
-                x: 0,
-                y: 0,
-                w: 0,
-                h: 0,
-            },
+            damage: Default::default(),
             geometry: (0, 0),
             size,
             preferred_size: size,
@@ -497,14 +488,7 @@ impl App {
             && win.scale120 != scale120
         {
             win.scale120 = scale120;
-            win.damage_history = Default::default();
-            win.pending_damage =
-                vec![
-                    Damage::full(win.geometry.0.max(0) as u32, win.geometry.1.max(0) as u32);
-                    win.buffers.len()
-                ];
-            win.surface_damage =
-                Damage::full(win.geometry.0.max(0) as u32, win.geometry.1.max(0) as u32);
+            win.damage.reset(win.geometry.0.max(0) as u32, win.geometry.1.max(0) as u32, win.buffers.len());
             self.window_ui(UiEvent::Relayout);
         }
     }
@@ -627,25 +611,11 @@ impl App {
             }
             win.pool = Some(pool);
             win.geometry = (w, h);
-            win.damage_history = Default::default();
-            win.pending_damage = vec![Damage::full(w as u32, h as u32); win.buffers.len()];
-            win.surface_damage = Damage::full(w as u32, h as u32);
+            win.damage.reset(w as u32, h as u32, win.buffers.len());
         }
         win.renderer.prepare(scene, scale)?;
-        let full = Damage::full(w as u32, h as u32);
-        let semantic = if let Some(frame) = win.renderer.prepared_frame() {
-            win.damage_history
-                .update(&frame, (0., 0.), scene.opacity, w as u32, h as u32)?
-        } else {
-            vec![full]
-        };
-        for damage in &semantic {
-            win.surface_damage = win.surface_damage.union(*damage);
-            for pending in &mut win.pending_damage {
-                *pending = pending.union(*damage);
-            }
-        }
-        if win.surface_damage.w == 0 || win.surface_damage.h == 0 {
+        win.damage.update(win.renderer.prepared_frame().as_deref(), scene.offset, scene.opacity, w as u32, h as u32)?;
+        if win.damage.surface.w == 0 || win.damage.surface.h == 0 {
             return Ok(());
         }
         let Some(slot) = win
@@ -654,7 +624,7 @@ impl App {
             .enumerate()
             .find(|(index, b)| {
                 !b.slot().has_active_buffers() && {
-                    let pending = win.pending_damage[*index];
+                    let pending = win.damage.pending[*index];
                     pending.w > 0 && pending.h > 0
                 }
             })
@@ -677,8 +647,8 @@ impl App {
             }
             return Ok(());
         };
-        let damage = win.pending_damage[slot];
-        let surface_damage = win.surface_damage;
+        let damage = win.damage.pending[slot];
+        let surface_damage = win.damage.surface;
         let pool = win.pool.as_mut().ok_or("window pool missing")?;
         let canvas = win.buffers[slot]
             .canvas(pool)
@@ -720,18 +690,7 @@ impl App {
         }
         win.buffers[slot].attach_to(surface)?;
         win.window.commit();
-        win.pending_damage[slot] = Damage {
-            x: 0,
-            y: 0,
-            w: 0,
-            h: 0,
-        };
-        win.surface_damage = Damage {
-            x: 0,
-            y: 0,
-            w: 0,
-            h: 0,
-        };
+        win.damage.committed(slot);
         // Pace render starts: measuring from completion adds the render cost
         // to every refresh interval and steadily undershoots the output rate.
         win.last_draw = Some(frame_started);

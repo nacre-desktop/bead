@@ -2,6 +2,7 @@
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
 mod accessibility;
 mod background;
+mod buffer_damage;
 mod canvas;
 mod capture;
 pub use capture::{

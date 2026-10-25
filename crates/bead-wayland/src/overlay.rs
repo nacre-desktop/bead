@@ -20,6 +20,9 @@ pub(super) struct Overlay {
     animations: bead_core::animation::Animations,
     pool: Option<SlotPool>,
     buffers: Vec<Buffer>,
+    damage: crate::buffer_damage::BufferDamage,
+    ui_serial: u64,
+    presented_update: Option<u64>,
     geometry: (i32, i32),
     /// Logical size last requested from the compositor and the one it configured.
     asked: (u32, u32),
@@ -75,6 +78,27 @@ fn content_size(scene: &Scene) -> (u32, u32) {
 }
 
 impl App {
+    pub(super) fn overlay_presentation(&mut self, data: &PresentationData, event: &wp_presentation_feedback::Event) -> bool {
+        let Some(o) = self.overlay.as_mut().filter(|o| o.epoch == data.source_epoch && o.layer.wl_surface() == &data.surface) else { return false; };
+        match event {
+            wp_presentation_feedback::Event::Presented {tv_sec_hi, tv_sec_lo, tv_nsec, refresh, ..} => {
+                crate::scroll::note_refresh(*refresh);
+                let ns = ((u64::from(*tv_sec_hi)<<32)|u64::from(*tv_sec_lo))*1_000_000_000+u64::from(*tv_nsec);
+                if bead_core::profile::frame_trace() {
+                    println!("WINDOW_PRESENTED monotonic_ns={ns} epoch={} update={} generation={} refresh_ns={} kind=overlay", o.epoch, data.update, data.generation, refresh);
+                }
+                if o.presented_update.is_none_or(|last| data.update>last) {
+                    o.source.presented(data.generation);
+                    o.presented_update=Some(data.update);
+                }
+            }
+            wp_presentation_feedback::Event::Discarded => {
+                bead_core::vprintln!("WINDOW_DISCARDED monotonic_ns={} epoch={} update={} generation={} kind=overlay", super::monotonic_ns(), o.epoch, data.update, data.generation);
+            }
+            _ => {}
+        }
+        true
+    }
     pub(super) fn overlay_surface(&self) -> Option<&wl_surface::WlSurface> {
         self.overlay.as_ref().map(|o| o.layer.wl_surface())
     }
@@ -230,6 +254,9 @@ impl App {
             animations: Default::default(),
             pool: None,
             buffers: Vec::new(),
+            damage: Default::default(),
+            ui_serial: 0,
+            presented_update: None,
             geometry: (0, 0),
             asked: size,
             size,
@@ -347,6 +374,7 @@ impl App {
             && o.scale120 != scale120
         {
             o.scale120 = scale120;
+            o.damage.reset(o.geometry.0.max(0) as u32, o.geometry.1.max(0) as u32, o.buffers.len());
             self.overlay_ui(UiEvent::Relayout);
         }
     }
@@ -384,9 +412,6 @@ impl App {
                 if !o.source.commit() {
                     return;
                 }
-                if self.options.trace_state {
-                    bead_core::vprintln!("UI_STATE {}", o.source.state_summary());
-                }
                 scene
             }
             Ok(None) => return,
@@ -396,6 +421,11 @@ impl App {
             }
         };
         o.scene = scene;
+        o.ui_serial = o.ui_serial.wrapping_add(1);
+        if self.options.trace_state {
+            bead_core::vprintln!("WINDOW_STATE monotonic_ns={} epoch={} update={} generation={} kind=overlay state={}",
+                super::monotonic_ns(), o.epoch, o.ui_serial, o.scene.resource_revision, o.source.state_summary());
+        }
         // A content change resizes the surface; the draw waits for its configure.
         let wanted = content_size(&o.scene);
         if wanted != o.asked {
@@ -409,7 +439,7 @@ impl App {
         }
         self.overlay_draw();
     }
-    fn overlay_retry(&mut self, after: u64) {
+    fn overlay_retry(&mut self, after: Duration) {
         let Some(o) = self.overlay.as_mut() else {
             return;
         };
@@ -419,7 +449,7 @@ impl App {
         o.timer = true;
         let epoch = o.epoch;
         let _ = self.loop_handle.insert_source(
-            Timer::from_duration(Duration::from_millis(after)),
+            Timer::from_duration(after),
             move |_, _, app| {
                 if let Some(o) = app.overlay.as_mut().filter(|o| o.epoch == epoch) {
                     o.timer = false;
@@ -436,16 +466,17 @@ impl App {
         if !o.configured || self.hidden {
             return;
         }
-        if o.last_draw
-            .is_some_and(|t| t.elapsed() < Duration::from_millis(8))
-        {
-            self.overlay_retry(8);
-            return;
+        if let Some(last) = o.last_draw {
+            let delay = super::scroll::tick().saturating_sub(last.elapsed());
+            if !delay.is_zero() {
+                self.overlay_retry(delay);
+                return;
+            }
         }
         match self.overlay_render() {
             Ok(animating) => {
                 if animating {
-                    self.overlay_retry(16);
+                    self.overlay_retry(super::scroll::tick());
                 }
             }
             Err(e) => eprintln!("OVERLAY_DRAW_ERROR {e}"),
@@ -453,6 +484,7 @@ impl App {
     }
     /// Draws one frame; true while a fade is still running.
     fn overlay_render(&mut self) -> Result<bool, Box<dyn Error>> {
+        let frame_started = Instant::now();
         let rgba = cfg!(target_endian = "little")
             && !self.options.force_argb
             && self.shm.formats().contains(&wl_shm::Format::Abgr8888);
@@ -544,17 +576,23 @@ impl App {
             }
             o.pool = Some(pool);
             o.geometry = (w, h);
+            o.damage.reset(w as u32, h as u32, o.buffers.len());
         }
+        o.renderer.prepare(scene, scale)?;
+        o.damage.update(o.renderer.prepared_frame().as_deref(), scene.offset, scene.opacity, w as u32, h as u32)?;
+        if o.damage.surface.w == 0 || o.damage.surface.h == 0 { return Ok(animating); }
         let pool = o.pool.as_mut().ok_or("overlay pool missing")?;
         let Some(slot) = o
             .buffers
             .iter()
-            .position(|b| !b.slot().has_active_buffers())
+            .enumerate()
+            .position(|(index, b)| !b.slot().has_active_buffers() && o.damage.pending[index].w > 0 && o.damage.pending[index].h > 0)
         else {
             // Every buffer is still held by the compositor: try again shortly.
             return Ok(true);
         };
-        o.renderer.prepare(scene, scale)?;
+        let damage = o.damage.pending[slot];
+        let surface_damage = o.damage.surface;
         let canvas = o.buffers[slot]
             .canvas(pool)
             .ok_or("compositor owns buffer")?;
@@ -567,7 +605,7 @@ impl App {
                 scale,
                 format,
             }),
-            Damage::full(w as u32, h as u32),
+            damage,
         )?;
         let surface = o.layer.wl_surface();
         if o.viewport.is_some() {
@@ -575,10 +613,23 @@ impl App {
         } else {
             surface.set_buffer_scale((o.scale120 / 120).max(1) as i32);
         }
-        surface.damage_buffer(0, 0, w, h);
+        surface.damage_buffer(surface_damage.x as i32, surface_damage.y as i32, surface_damage.w as i32, surface_damage.h as i32);
+        if let Some(presentation) = &self.presentation {
+            presentation.feedback(surface, &self.qh, PresentationData {
+                source_epoch: o.epoch, update: o.ui_serial, surface: surface.clone(), generation: scene.resource_revision,
+            });
+        }
         o.buffers[slot].attach_to(surface)?;
         o.layer.commit();
-        o.last_draw = Some(Instant::now());
+        o.damage.committed(slot);
+        o.last_draw = Some(frame_started);
+        if bead_core::profile::frame_trace() {
+            println!("WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} kind=overlay render_ms={:.3} damage={},{},{},{}",
+                super::monotonic_ns(), o.epoch, o.ui_serial, scene.resource_revision, frame_started.elapsed().as_secs_f64()*1000.,
+                surface_damage.x, surface_damage.y, surface_damage.w, surface_damage.h);
+            println!("WINDOW_COMMIT monotonic_ns={} epoch={} update={} generation={} kind=overlay",
+                super::monotonic_ns(), o.epoch, o.ui_serial, scene.resource_revision);
+        }
         Ok(animating)
     }
     /// `bead overlay`: residency and placement of the overlay slot (introspection).

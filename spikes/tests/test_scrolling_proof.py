@@ -194,6 +194,14 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(env["KEEP"], "value")
         self.assertNotIn("BEAD_APP_LOG_DIR", pacing.shell_trace_env("qml", self.root / "logs"))
 
+    def test_native_scroll_scenes_close_the_app_they_open(self):
+        for scene in ("colors-app", "colors-rail"):
+            for device in ("touchpad", "wheel"):
+                self.assertEqual(pacing.SCROLL_CLEANUPS[f"scroll-{scene}-{device}"], [("app_close", "colors")])
+        for scene in ("welcome-hero", "welcome-shortcuts", "welcome-apps", "welcome-ready", "welcome-help"):
+            for device in ("touchpad", "wheel"):
+                self.assertEqual(pacing.SCROLL_CLEANUPS[f"scroll-{scene}-{device}"], [("app_close", "welcome")])
+
     def test_scroll_notification_fixture_uses_long_ttl_and_closes_exact_ids(self):
         calls = []
 

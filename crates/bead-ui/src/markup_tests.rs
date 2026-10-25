@@ -293,25 +293,32 @@ fn nested_scroll_offset_cache_matches_full_layout_and_preserves_viewport_clips()
     let f = fixture();
     fs::write(
         f.0.join("ui/behavior.luau"),
-        r#"return {stores={query="",scroll=0,inner=0,selected=""},actions={},computed={}}"#,
+        r#"return {stores={query="",scroll=0,inner=0,selected=""},actions={select=function()end},computed={}}"#,
     )
     .unwrap();
     fs::write(
         f.0.join("ui/main.luau"),
         r#"local ui=require("bead.ui")
 return ui.Panel{id="panel",width=240,height=200,
+ ui.Box{id="outside-clip",position="absolute",left=5,top=5,width=40,height=32,clip_children=true,
+  ui.Button{id="outside-overflow",position="absolute",left=0,top=0,width=70,height=60,text="Outside",on_activate=ui.action("select","outside")}},
  ui.Scroll{id="outer",width=220,height=80,scroll=ui.bind("scroll"),
-  ui.Column{id="outer-content",gap=4,
+  ui.Box{id="outer-clip",width=220,height=280,shrink=0,clip_children=true,
+   ui.Column{id="outer-content",gap=4,
    ui.Button{id="before",height=30,text="Before"},
    ui.Scroll{id="inner",width=180,height=60,scroll=ui.bind("inner"),
-    ui.Column{id="inner-content",gap=3,
-     ui.Button{id="a",height=28,text="A"},ui.Button{id="b",height=28,text="B"},
-     ui.Button{id="c",height=28,text="C"},ui.Button{id="d",height=28,text="D"},
-     ui.Button{id="e",height=28,text="E"}}},
-   ui.Button{id="after",height=30,text="After"}}}}"#,
+    ui.Column{id="inner-content",gap=3,clip_children=true,
+     ui.Button{id="a",height=28,text="A",on_activate=ui.action("select","a")},
+     ui.Button{id="b",height=28,text="B",on_activate=ui.action("select","b")},
+     ui.Button{id="c",height=28,text="C",on_activate=ui.action("select","c")},
+     ui.Button{id="d",height=28,text="D",on_activate=ui.action("select","d")},
+     ui.Button{id="e",height=28,text="E",on_activate=ui.action("select","e")}}},
+    ui.Button{id="after",height=30,text="After"}}}}}"#,
     )
     .unwrap();
     let mut s = session(&f);
+    assert!(s.current_nodes.iter().find(|node| node.id.ends_with("outside-overflow")).unwrap().clip.is_some());
+    assert!(s.current_nodes.iter().find(|node| node.id.ends_with("a")).unwrap().clip.is_some());
     assert!(
         s.current_nodes
             .iter()

@@ -109,8 +109,9 @@ for _scene, (_prepare, _x, _y, _count, _seconds) in SCROLL_SCENES.items():
 SCROLL_CLEANUPS = {
     **{f'scroll-{name}-{device}': [('app_close', 'settings')]
        for name in ('settings-content', 'settings-nav') for device in ('touchpad', 'wheel')},
-    **{f'scroll-{name}-{device}': [('app_close', 'colors' if name == 'colors-app' else 'welcome')]
-       for name in ('colors-app', 'welcome-hero', 'welcome-shortcuts', 'welcome-apps')
+    **{f'scroll-{name}-{device}': [('app_close', 'colors' if name in ('colors-app', 'colors-rail') else 'welcome')]
+       for name in ('colors-app', 'colors-rail', 'welcome-hero', 'welcome-shortcuts', 'welcome-apps',
+                    'welcome-ready', 'welcome-help')
        for device in ('touchpad', 'wheel')},
     **{f'scroll-ai-chat-{device}': [('ui', 'nacre', 'left')]
        for device in ('touchpad', 'wheel')},
