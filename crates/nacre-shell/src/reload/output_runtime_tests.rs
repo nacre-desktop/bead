@@ -100,6 +100,27 @@ fn moving_a_window_between_outputs_cannot_leave_the_old_title() {
 }
 
 #[test]
+fn title_survives_transient_focus_clear_only_while_its_window_stays_active() {
+    let mut snapshot = snapshot();
+    let previous = snapshot.windows[0].id.clone();
+    snapshot.windows[0].focused = false;
+    let (title, remembered) = focused_title(&snapshot, Some("left"), Some(&previous));
+    assert_eq!(title, "Title 0");
+    assert_eq!(remembered, Some(previous.clone()));
+
+    snapshot.windows.remove(0);
+    snapshot.windows[1].focused = false;
+    let (title, remembered) = focused_title(&snapshot, Some("left"), Some(&previous));
+    assert!(title.is_empty(), "a workspace with no window shows Desktop");
+    assert_eq!(remembered, None);
+
+    snapshot.windows[0].focused = true;
+    let (title, remembered) = focused_title(&snapshot, Some("right"), Some(&previous));
+    assert_eq!(title, "Title 1", "a real focus change wins over retention");
+    assert_eq!(remembered, Some(snapshot.windows[0].id.clone()));
+}
+
+#[test]
 fn output_state_and_reload_failure_are_independent() -> Result<(), Box<dyn Error>> {
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?

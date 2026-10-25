@@ -86,6 +86,7 @@ pub struct Runtime {
     origins_subscription: Option<bead::core::source::Subscription>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
     subscription: Option<bead::backends::Subscription>,
+    last_focused_window: Option<bead::backends::Id>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
     desktop_subscription: Option<bead::services::Subscription>,
     desktop_revision: u64,
@@ -361,6 +362,7 @@ impl Runtime {
             origins_subscription: None,
             backend: None,
             subscription: None,
+            last_focused_window: None,
             desktop: None,
             desktop_subscription: None,
             desktop_revision: 0,
@@ -3337,11 +3339,19 @@ impl SceneSource for Runtime {
                     snapshot.workspaces.len(),
                     snapshot.windows.len()
                 );
-                self.session.update_model(backend_values(
+                let mut values = backend_values(
                     &snapshot,
                     self.output.as_deref(),
                     &self.workspaces,
-                )?)?
+                )?;
+                let (title, focused_window) = focused_title(
+                    &snapshot,
+                    self.output.as_deref(),
+                    self.last_focused_window.as_ref(),
+                );
+                self.last_focused_window = focused_window;
+                values.insert("bead.focused_title".into(), bead::core::Value::Text(title));
+                self.session.update_model(values)?
             }
             UiEvent::CompanionModel(_) => {
                 return Err("companion model reached primary script".into());
@@ -4274,15 +4284,7 @@ fn backend_values(
         ("bead.connected".into(), Value::Bool(snapshot.connected)),
         (
             "bead.focused_title".into(),
-            Value::Text(
-                snapshot
-                    .windows
-                    .iter()
-                    .filter(window_matches)
-                    .find(|w| w.focused)
-                    .map_or("", |w| w.title.as_str())
-                    .into(),
-            ),
+            Value::Text(focused_title(snapshot, output, None).0),
         ),
         (
             "bead.outputs".into(),
@@ -4314,6 +4316,62 @@ fn backend_values(
         values.insert(format!("bead.cap.{name}"), Value::Bool(*supported));
     }
     Ok(values)
+}
+
+/// Retains the last caption through a transient focus clear while its window
+/// remains on the active workspace, matching Nacre's bar title behavior.
+fn focused_title(
+    snapshot: &bead::backends::Snapshot,
+    output: Option<&str>,
+    previous: Option<&bead::backends::Id>,
+) -> (String, Option<bead::backends::Id>) {
+    let output_id = output.and_then(|name| {
+        snapshot
+            .outputs
+            .iter()
+            .find(|candidate| candidate.name == name)
+            .map(|candidate| &candidate.id)
+    });
+    let window_matches = |window: &&bead::backends::Window| {
+        output.is_none()
+            || output_id.is_some_and(|id| {
+                window.output.as_ref() == Some(id)
+                    || (window.output.is_none()
+                        && window.workspace.as_ref().is_some_and(|workspace_id| {
+                            snapshot.workspaces.iter().any(|workspace| {
+                                &workspace.id == workspace_id && workspace.output.as_ref() == Some(id)
+                            })
+                        }))
+            })
+    };
+    let focused = snapshot
+        .windows
+        .iter()
+        .filter(window_matches)
+        .find(|window| window.focused);
+    if let Some(window) = focused {
+        return (window.title.clone(), Some(window.id.clone()));
+    }
+
+    let active_workspace = snapshot.workspaces.iter().find(|workspace| {
+        (workspace.focused || workspace.active)
+            && (output_id.is_none() || workspace.output.as_ref() == output_id)
+    });
+    let retained = previous.and_then(|id| {
+        snapshot
+            .windows
+            .iter()
+            .filter(window_matches)
+            .find(|window| {
+                &window.id == id
+                    && window.workspace.as_ref()
+                        == active_workspace.map(|workspace| &workspace.id)
+            })
+    });
+    retained.map_or_else(
+        || (String::new(), None),
+        |window| (window.title.clone(), Some(window.id.clone())),
+    )
 }
 
 /// Exercises actual bar hit testing and native service routes on explicit proof buses.
