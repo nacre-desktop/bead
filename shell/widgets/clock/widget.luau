@@ -67,7 +67,7 @@ local function bar(props,settings,_data)
 end
 local function desktop(props,_settings,_data)
     local slot=props.instance.slot or {w=320,h=92}
-    return ui.Box{id="clock-desktop",width=slot.w,height=slot.h,padding=12,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=ui.action("view.open","calendar"),
+    return ui.Box{id="clock-desktop",width=slot.w,height=slot.h,padding=12,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("view.open","calendar") or nil,
         ui.Column{id="clock-content",width="fill",height="fill",align="center",justify="center",gap=6,
             status_glyph("calendar","calendar_month","calendar","tertiary"),
             clock_content(props.form_style),
