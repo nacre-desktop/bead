@@ -759,6 +759,28 @@ impl App {
             );
         }
         self.surfaces.retain(|s| !s.companion);
+        // The last companion update must not remain the active accessibility
+        // tree after its worker and surface retire. Restore this output's
+        // primary tree even when the bar has no pending visual update.
+        let primary_tree = self.panel_output.as_ref().and_then(|output| {
+            let id = self.output_id(output);
+            let source = if self.options.primary_factory.is_none()
+                || self.active_output.as_ref() == Some(&id)
+            {
+                self.runtime.as_ref()
+            } else {
+                self.output_sessions
+                    .get(&id)
+                    .and_then(|session| session.source.as_ref())
+            };
+            source.and_then(|source| source.accessibility_tree())
+        });
+        if let (Some(bridge), Some(tree)) = (&mut self.accessibility, primary_tree) {
+            if self.options.trace_state {
+                println!("PANEL_ACCESSIBILITY_RESTORED nodes={}", tree.nodes.len());
+            }
+            bridge.update(tree);
+        }
         self.panel_output = None;
         self.companion_policy = Default::default();
         self.release_timer = false;
