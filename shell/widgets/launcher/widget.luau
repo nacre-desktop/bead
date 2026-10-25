@@ -12,6 +12,6 @@ return {id="launcher",title="Launcher",icon="widgets",category="bar",data={topic
                 else props.icon=settings.icon=="custom" and settings.custom_path or settings.icon=="arch" and "distributor-logo-archlinux" or "cachyos" end
                 return ui.Image(props)
             end
-            local action=settings.action=="launcher" and ui.action("launcher.open") or ui.action("view.open",settings.action=="dashboard" and "dashboard" or settings.route)
+            local action=settings.action=="launcher" and ui.action("launcher.open") or ui.action("view.open",settings.action=="dashboard" and "dashboard-today" or settings.route)
             return launcher and kit.Button{id="brand",width=t.brand_size,height=t.brand_size,padding=0,fill="transparent",aria_label=ui.tr("bead.bar.open-launcher"),on_activate=action,image(nil)} or image("brand")
     end}}}

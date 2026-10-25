@@ -1194,3 +1194,42 @@ fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection()
     );
     Ok(())
 }
+
+#[test]
+fn widget_launcher_settings_select_dashboard_and_custom_view_routes() -> Result<()> {
+    let mut values = super::initial_models()?;
+    values.insert("bar.launcher".into(), Value::Bool(true));
+    let mut h = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 50,
+            scale: 1.5,
+        },
+    )?;
+    let mut preset: serde_json::Value =
+        serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
+    for (action, route, expected) in [
+        ("dashboard", "", "dashboard-today"),
+        ("custom", "calendar", "calendar"),
+    ] {
+        preset["hosts"]["top_bar"]["instances"][0]["settings"]["action"] = action.into();
+        preset["hosts"]["top_bar"]["instances"][0]["settings"]["route"] = route.into();
+        h.update(BTreeMap::from([(
+            "widgets.layout".into(),
+            Value::list(vec![preset.clone()]),
+        )]))?;
+        let node = h
+            .session
+            .view_nodes()
+            .iter()
+            .find(|n| n.id == "bar.left.brand")
+            .ok_or("launcher widget missing")?;
+        assert_eq!(node.action.as_deref(), Some("view.open"));
+        assert_eq!(node.action_arg, Some(Value::Text(expected.into())));
+    }
+    Ok(())
+}
