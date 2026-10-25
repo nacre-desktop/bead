@@ -1315,19 +1315,19 @@ impl Dashboard {
         );
         let mut held = self.poster.borrow_mut();
         let mut pending = self.poster_job.borrow_mut();
-        if let Some(pair) = pair.filter(|_| w > 0 && h > 0) {
-            if let Some(job) = pending.as_ref() {
-                match job.result.try_recv() {
-                    Ok(poster) => {
-                        *held = Some(poster);
-                        pending.take();
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        pending.take();
-                    }
-                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+        if let Some(job) = pending.as_ref() {
+            match job.result.try_recv() {
+                Ok(poster) => {
+                    *held = Some(poster);
+                    pending.take();
                 }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    pending.take();
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
+        }
+        if let Some(pair) = pair.filter(|_| w > 0 && h > 0) {
             if held
                 .as_ref()
                 .is_none_or(|(old, ow, oh, _)| old != &pair || *ow != w || *oh != h)
@@ -1368,7 +1368,8 @@ impl Dashboard {
                 }
             }
         } else {
-            pending.take();
+            // An unavailable source must not join an unfinished decode during
+            // projection. Poll it on later updates; retirement still joins it.
             *held = None;
         }
         out.insert(

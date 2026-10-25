@@ -237,3 +237,26 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
     std::fs::remove_dir_all(dir)?;
     Ok(())
 }
+
+#[test]
+fn unavailable_wallpaper_keeps_an_in_flight_poster_receiver() -> Result<()> {
+    let dashboard = Dashboard::new(
+        Page::Today,
+        Arc::new(FakeSource::new(fixture("calendar"))?),
+        None,
+        true,
+    );
+    let (_send, result) = std::sync::mpsc::channel();
+    *dashboard.poster_job.borrow_mut() = Some(PosterJob {
+        result,
+        thread: None,
+    });
+    let mut out = BTreeMap::new();
+    dashboard.project_wallpaper(&bead::core::Stores::default(), &mut out);
+    assert_eq!(out["dashboard.wallpaper"], Value::Bool(false));
+    assert!(
+        dashboard.poster_job.borrow().is_some(),
+        "an empty receiver must stay pending when the source or geometry disappears"
+    );
+    Ok(())
+}
