@@ -1483,6 +1483,14 @@ impl App {
                     self.gpu = None;
                 }
                 println!("RENDER_POLICY companion=true transition=gpu-to-cpu fallback=true");
+                if self
+                    .surfaces
+                    .iter()
+                    .filter(|surface| surface.companion)
+                    .all(|surface| surface.frames == 0)
+                {
+                    self.animations = Default::default();
+                }
                 let indices: Vec<_> = self
                     .surfaces
                     .iter()
@@ -1491,7 +1499,8 @@ impl App {
                     .map(|(index, _)| index)
                     .collect();
                 for index in indices {
-                    self.draw(index, qh);
+                    // draw() already selected the panel animation map for this call.
+                    self.draw_current(index, qh);
                 }
                 return;
             }
