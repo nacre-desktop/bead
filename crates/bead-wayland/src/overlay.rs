@@ -78,22 +78,48 @@ fn content_size(scene: &Scene) -> (u32, u32) {
 }
 
 impl App {
-    pub(super) fn overlay_presentation(&mut self, data: &PresentationData, event: &wp_presentation_feedback::Event) -> bool {
-        let Some(o) = self.overlay.as_mut().filter(|o| o.epoch == data.source_epoch && o.layer.wl_surface() == &data.surface) else { return false; };
+    pub(super) fn overlay_presentation(
+        &mut self,
+        data: &PresentationData,
+        event: &wp_presentation_feedback::Event,
+    ) -> bool {
+        let Some(o) = self
+            .overlay
+            .as_mut()
+            .filter(|o| o.epoch == data.source_epoch && o.layer.wl_surface() == &data.surface)
+        else {
+            return false;
+        };
         match event {
-            wp_presentation_feedback::Event::Presented {tv_sec_hi, tv_sec_lo, tv_nsec, refresh, ..} => {
+            wp_presentation_feedback::Event::Presented {
+                tv_sec_hi,
+                tv_sec_lo,
+                tv_nsec,
+                refresh,
+                ..
+            } => {
                 crate::scroll::note_refresh(*refresh);
-                let ns = ((u64::from(*tv_sec_hi)<<32)|u64::from(*tv_sec_lo))*1_000_000_000+u64::from(*tv_nsec);
+                let ns = ((u64::from(*tv_sec_hi) << 32) | u64::from(*tv_sec_lo)) * 1_000_000_000
+                    + u64::from(*tv_nsec);
                 if bead_core::profile::frame_trace() {
-                    println!("WINDOW_PRESENTED monotonic_ns={ns} epoch={} update={} generation={} refresh_ns={} kind=overlay", o.epoch, data.update, data.generation, refresh);
+                    println!(
+                        "WINDOW_PRESENTED monotonic_ns={ns} epoch={} update={} generation={} refresh_ns={} kind=overlay",
+                        o.epoch, data.update, data.generation, refresh
+                    );
                 }
-                if o.presented_update.is_none_or(|last| data.update>last) {
+                if o.presented_update.is_none_or(|last| data.update > last) {
                     o.source.presented(data.generation);
-                    o.presented_update=Some(data.update);
+                    o.presented_update = Some(data.update);
                 }
             }
             wp_presentation_feedback::Event::Discarded => {
-                bead_core::vprintln!("WINDOW_DISCARDED monotonic_ns={} epoch={} update={} generation={} kind=overlay", super::monotonic_ns(), o.epoch, data.update, data.generation);
+                bead_core::vprintln!(
+                    "WINDOW_DISCARDED monotonic_ns={} epoch={} update={} generation={} kind=overlay",
+                    super::monotonic_ns(),
+                    o.epoch,
+                    data.update,
+                    data.generation
+                );
             }
             _ => {}
         }
@@ -374,7 +400,11 @@ impl App {
             && o.scale120 != scale120
         {
             o.scale120 = scale120;
-            o.damage.reset(o.geometry.0.max(0) as u32, o.geometry.1.max(0) as u32, o.buffers.len());
+            o.damage.reset(
+                o.geometry.0.max(0) as u32,
+                o.geometry.1.max(0) as u32,
+                o.buffers.len(),
+            );
             self.overlay_ui(UiEvent::Relayout);
         }
     }
@@ -423,8 +453,14 @@ impl App {
         o.scene = scene;
         o.ui_serial = o.ui_serial.wrapping_add(1);
         if self.options.trace_state {
-            bead_core::vprintln!("WINDOW_STATE monotonic_ns={} epoch={} update={} generation={} kind=overlay state={}",
-                super::monotonic_ns(), o.epoch, o.ui_serial, o.scene.resource_revision, o.source.state_summary());
+            bead_core::vprintln!(
+                "WINDOW_STATE monotonic_ns={} epoch={} update={} generation={} kind=overlay state={}",
+                super::monotonic_ns(),
+                o.epoch,
+                o.ui_serial,
+                o.scene.resource_revision,
+                o.source.state_summary()
+            );
         }
         // A content change resizes the surface; the draw waits for its configure.
         let wanted = content_size(&o.scene);
@@ -448,16 +484,15 @@ impl App {
         }
         o.timer = true;
         let epoch = o.epoch;
-        let _ = self.loop_handle.insert_source(
-            Timer::from_duration(after),
-            move |_, _, app| {
+        let _ = self
+            .loop_handle
+            .insert_source(Timer::from_duration(after), move |_, _, app| {
                 if let Some(o) = app.overlay.as_mut().filter(|o| o.epoch == epoch) {
                     o.timer = false;
                     app.overlay_draw();
                 }
                 TimeoutAction::Drop
-            },
-        );
+            });
     }
     fn overlay_draw(&mut self) {
         let Some(o) = self.overlay.as_mut() else {
@@ -579,15 +614,22 @@ impl App {
             o.damage.reset(w as u32, h as u32, o.buffers.len());
         }
         o.renderer.prepare(scene, scale)?;
-        o.damage.update(o.renderer.prepared_frame().as_deref(), scene.offset, scene.opacity, w as u32, h as u32)?;
-        if o.damage.surface.w == 0 || o.damage.surface.h == 0 { return Ok(animating); }
+        o.damage.update(
+            o.renderer.prepared_frame().as_deref(),
+            scene.offset,
+            scene.opacity,
+            w as u32,
+            h as u32,
+        )?;
+        if o.damage.surface.w == 0 || o.damage.surface.h == 0 {
+            return Ok(animating);
+        }
         let pool = o.pool.as_mut().ok_or("overlay pool missing")?;
-        let Some(slot) = o
-            .buffers
-            .iter()
-            .enumerate()
-            .position(|(index, b)| !b.slot().has_active_buffers() && o.damage.pending[index].w > 0 && o.damage.pending[index].h > 0)
-        else {
+        let Some(slot) = o.buffers.iter().enumerate().position(|(index, b)| {
+            !b.slot().has_active_buffers()
+                && o.damage.pending[index].w > 0
+                && o.damage.pending[index].h > 0
+        }) else {
             // Every buffer is still held by the compositor: try again shortly.
             return Ok(true);
         };
@@ -613,22 +655,48 @@ impl App {
         } else {
             surface.set_buffer_scale((o.scale120 / 120).max(1) as i32);
         }
-        surface.damage_buffer(surface_damage.x as i32, surface_damage.y as i32, surface_damage.w as i32, surface_damage.h as i32);
+        surface.damage_buffer(
+            surface_damage.x as i32,
+            surface_damage.y as i32,
+            surface_damage.w as i32,
+            surface_damage.h as i32,
+        );
         if let Some(presentation) = &self.presentation {
-            presentation.feedback(surface, &self.qh, PresentationData {
-                source_epoch: o.epoch, update: o.ui_serial, surface: surface.clone(), generation: scene.resource_revision,
-            });
+            presentation.feedback(
+                surface,
+                &self.qh,
+                PresentationData {
+                    source_epoch: o.epoch,
+                    update: o.ui_serial,
+                    surface: surface.clone(),
+                    generation: scene.resource_revision,
+                },
+            );
         }
         o.buffers[slot].attach_to(surface)?;
         o.layer.commit();
         o.damage.committed(slot);
         o.last_draw = Some(frame_started);
         if bead_core::profile::frame_trace() {
-            println!("WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} kind=overlay render_ms={:.3} damage={},{},{},{}",
-                super::monotonic_ns(), o.epoch, o.ui_serial, scene.resource_revision, frame_started.elapsed().as_secs_f64()*1000.,
-                surface_damage.x, surface_damage.y, surface_damage.w, surface_damage.h);
-            println!("WINDOW_COMMIT monotonic_ns={} epoch={} update={} generation={} kind=overlay",
-                super::monotonic_ns(), o.epoch, o.ui_serial, scene.resource_revision);
+            println!(
+                "WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} kind=overlay render_ms={:.3} damage={},{},{},{}",
+                super::monotonic_ns(),
+                o.epoch,
+                o.ui_serial,
+                scene.resource_revision,
+                frame_started.elapsed().as_secs_f64() * 1000.,
+                surface_damage.x,
+                surface_damage.y,
+                surface_damage.w,
+                surface_damage.h
+            );
+            println!(
+                "WINDOW_COMMIT monotonic_ns={} epoch={} update={} generation={} kind=overlay",
+                super::monotonic_ns(),
+                o.epoch,
+                o.ui_serial,
+                scene.resource_revision
+            );
         }
         Ok(animating)
     }

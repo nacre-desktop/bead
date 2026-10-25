@@ -317,8 +317,22 @@ return ui.Panel{id="panel",width=240,height=200,
     )
     .unwrap();
     let mut s = session(&f);
-    assert!(s.current_nodes.iter().find(|node| node.id.ends_with("outside-overflow")).unwrap().clip.is_some());
-    assert!(s.current_nodes.iter().find(|node| node.id.ends_with("a")).unwrap().clip.is_some());
+    assert!(
+        s.current_nodes
+            .iter()
+            .find(|node| node.id.ends_with("outside-overflow"))
+            .unwrap()
+            .clip
+            .is_some()
+    );
+    assert!(
+        s.current_nodes
+            .iter()
+            .find(|node| node.id.ends_with("a"))
+            .unwrap()
+            .clip
+            .is_some()
+    );
     assert!(
         s.current_nodes
             .iter()

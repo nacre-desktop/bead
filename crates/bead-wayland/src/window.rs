@@ -488,7 +488,11 @@ impl App {
             && win.scale120 != scale120
         {
             win.scale120 = scale120;
-            win.damage.reset(win.geometry.0.max(0) as u32, win.geometry.1.max(0) as u32, win.buffers.len());
+            win.damage.reset(
+                win.geometry.0.max(0) as u32,
+                win.geometry.1.max(0) as u32,
+                win.buffers.len(),
+            );
             self.window_ui(UiEvent::Relayout);
         }
     }
@@ -614,7 +618,13 @@ impl App {
             win.damage.reset(w as u32, h as u32, win.buffers.len());
         }
         win.renderer.prepare(scene, scale)?;
-        win.damage.update(win.renderer.prepared_frame().as_deref(), scene.offset, scene.opacity, w as u32, h as u32)?;
+        win.damage.update(
+            win.renderer.prepared_frame().as_deref(),
+            scene.offset,
+            scene.opacity,
+            w as u32,
+            h as u32,
+        )?;
         if win.damage.surface.w == 0 || win.damage.surface.h == 0 {
             return Ok(());
         }
