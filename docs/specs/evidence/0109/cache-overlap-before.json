@@ -1,0 +1,78 @@
+{
+  "source": "7edbd65",
+  "kind": "logical admission accounting; not physical memory/PSS",
+  "status": "rejected: UI_ERROR retained cache byte budget exceeded",
+  "trace_state": true,
+  "samples": [
+    {
+      "phase": "idle-open",
+      "process_used_bytes": 341566,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 56124,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "idle-closed",
+      "process_used_bytes": 341566,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 56124,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "carousel-open",
+      "process_used_bytes": 7850242,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 7122006,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "carousel-closed",
+      "process_used_bytes": 6047458,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 5365878,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "spotlight-open",
+      "process_used_bytes": 50998726,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 50119762,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "spotlight-closed",
+      "process_used_bytes": 50998726,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 50119762,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "hexagons-open-rejected",
+      "process_used_bytes": 51086839,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 50119762,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "hexagons-closed",
+      "process_used_bytes": 51086839,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 50119762,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "dynamic-open",
+      "process_used_bytes": 9218656,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 8478284,
+      "raster_limit_bytes": 67108864
+    },
+    {
+      "phase": "dynamic-closed",
+      "process_used_bytes": 6069741,
+      "process_limit_bytes": 201326592,
+      "panel_raster_used_bytes": 5356826,
+      "raster_limit_bytes": 67108864
+    }
+  ]
+}

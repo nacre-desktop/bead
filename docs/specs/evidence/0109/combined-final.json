@@ -1,0 +1,184 @@
+{
+  "source": "c37951c",
+  "backend": "CPU UI / EGL video",
+  "status": "complete",
+  "capture_returncode": 0,
+  "scope_runner_returncode": 0,
+  "child_membership_verified": true,
+  "phases": {
+    "idle": {
+      "main_open_kib": {
+        "Pss_Anon": 19256,
+        "Pss_Shmem": 10836,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 19481,
+        "Pss": 49573
+      },
+      "main_closed_kib": {
+        "Pss_Anon": 19256,
+        "Pss_Shmem": 10836,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 19481,
+        "Pss": 49573
+      },
+      "apps_open_kib": {},
+      "apps_closed_kib": {}
+    },
+    "memory-carousel": {
+      "main_open_kib": {
+        "Pss_Anon": 30192,
+        "Pss_Shmem": 26082,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20745,
+        "Pss": 77019
+      },
+      "main_closed_kib": {
+        "Pss_Anon": 28208,
+        "Pss_Shmem": 23226,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20781,
+        "Pss": 72215
+      },
+      "apps_open_kib": {},
+      "apps_closed_kib": {}
+    },
+    "memory-spotlight": {
+      "main_open_kib": {
+        "Pss_Anon": 81624,
+        "Pss_Shmem": 46978,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20783,
+        "Pss": 149385
+      },
+      "main_closed_kib": {
+        "Pss_Anon": 71996,
+        "Pss_Shmem": 31048,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20783,
+        "Pss": 123827
+      },
+      "apps_open_kib": {},
+      "apps_closed_kib": {}
+    },
+    "memory-hexagons": {
+      "main_open_kib": {
+        "Pss_Anon": 80964,
+        "Pss_Shmem": 41290,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20783,
+        "Pss": 143037
+      },
+      "main_closed_kib": {
+        "Pss_Anon": 72616,
+        "Pss_Shmem": 31048,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20783,
+        "Pss": 124447
+      },
+      "apps_open_kib": {},
+      "apps_closed_kib": {}
+    },
+    "memory-dynamic": {
+      "main_open_kib": {
+        "Pss_Anon": 32396,
+        "Pss_Shmem": 26082,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20454,
+        "Pss": 78932
+      },
+      "main_closed_kib": {
+        "Pss_Anon": 29156,
+        "Pss_Shmem": 23226,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20454,
+        "Pss": 72836
+      },
+      "apps_open_kib": {
+        "wallpaper-video": {
+          "VmRSS": 194068,
+          "RssAnon": 53124,
+          "Pss": 111036,
+          "Pss_Anon": 53124,
+          "Pss_File": 57878,
+          "Pss_Shmem": 34,
+          "SwapPss": 0,
+          "DRM": 284032.0
+        }
+      },
+      "apps_closed_kib": {
+        "wallpaper-video": {
+          "VmRSS": 194108,
+          "RssAnon": 53164,
+          "Pss": 111076,
+          "Pss_Anon": 53164,
+          "Pss_File": 57878,
+          "Pss_Shmem": 34,
+          "SwapPss": 0,
+          "DRM": 284032.0
+        }
+      }
+    },
+    "memory-scene": {
+      "main_open_kib": {
+        "Pss_Anon": 29172,
+        "Pss_Shmem": 23226,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 12202,
+        "Pss": 64600
+      },
+      "main_closed_kib": {
+        "Pss_Anon": 29196,
+        "Pss_Shmem": 23226,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_File": 20525,
+        "Pss": 72947
+      },
+      "apps_open_kib": {
+        "settings": {
+          "VmRSS": 65632,
+          "RssAnon": 18084,
+          "Pss": 39179,
+          "Pss_Anon": 18084,
+          "Pss_File": 9493,
+          "Pss_Shmem": 11602,
+          "SwapPss": 0,
+          "DRM": 0
+        },
+        "wallpaper-video": {
+          "VmRSS": 194192,
+          "RssAnon": 53188,
+          "Pss": 110952,
+          "Pss_Anon": 53188,
+          "Pss_File": 57729,
+          "Pss_Shmem": 34,
+          "SwapPss": 0,
+          "DRM": 284032.0
+        }
+      },
+      "apps_closed_kib": {
+        "wallpaper-video": {
+          "VmRSS": 194256,
+          "RssAnon": 53252,
+          "Pss": 111240,
+          "Pss_Anon": 53252,
+          "Pss_File": 57954,
+          "Pss_Shmem": 34,
+          "SwapPss": 0,
+          "DRM": 284032.0
+        }
+      }
+    }
+  }
+}

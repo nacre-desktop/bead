@@ -57,7 +57,7 @@ m.STATES["current-scene-picker"] = ([*_scene_open, ("press", 1420, 852), ("relea
                                   [("ui", "nacre", "close"), ("app_close", "settings")], 0)
 m.STATE_SETTLE["current-scene-picker"] = 0
 
-for index, extension in [(1, "mp4"), (2, "webm"), (3, "mkv"), (4, "mov"), (5, "m4v")]:
+for index, extension in [(1, "mp4"), (2, "webm"), (3, "mkv"), (4, "mov"), (5, "m4v"), (6, "avi")]:
     state = "wallpaper-format-" + extension
     m.STATE_PREPARE[state] = [
         ("wallpaper-pref", "dynamic", "carousel"),
@@ -116,6 +116,28 @@ def spawn(self, command, name, env=None, cwd=None):
     return original_spawn(self, command, name, env, cwd)
 
 m.Arm.spawn = spawn
+original_app_rss = m.Arm.app_rss
+
+def app_rss(self):
+    result = original_app_rss(self)
+    if self.name != "bead":
+        return result
+    children = set()
+    for task in Path(f"/proc/{self.shell.pid}/task").glob("*"):
+        try:
+            children.update(int(pid) for pid in (task / "children").read_text().split())
+        except OSError:
+            pass
+    for pid in sorted(children):
+        try:
+            if Path(f"/proc/{pid}/exe").resolve().name == "bead-wallpaper-video":
+                key = "wallpaper-video" if "wallpaper-video" not in result else "wallpaper-video-extra"
+                result[key] = self.rss(pid)
+        except OSError:
+            pass
+    return result
+
+m.Arm.app_rss = app_rss
 original_start = m.Arm.start_shell
 
 def start(self):
@@ -132,10 +154,11 @@ def start(self):
     for index, extension, codec, size in [(2, "webm", "libvpx-vp9", "1280:720"),
                                           (3, "mkv", "libx264", "1920:1080"),
                                           (4, "mov", "libx264", "640:360"),
-                                          (5, "m4v", "libx264", "854:480")]:
+                                          (5, "m4v", "libx264", "854:480"),
+                                          (6, "avi", "mpeg4", "960:540")]:
         source = folder / "Dynamic" / f"motion-{index}.mp4"
         if source.exists():
-            colour = {2: "ff00ff", 3: "00ffff", 4: "ffff00", 5: "0000ff"}[index]
+            colour = {2: "ff00ff", 3: "00ffff", 4: "ffff00", 5: "0000ff", 6: "ffffff"}[index]
             filters = "scale=" + size + ",drawbox=x=iw/10:y=ih/5:w=iw/10:h=ih/10:color=0x" + colour + ":t=fill"
             self.run(["ffmpeg", "-v", "error", "-i", str(source), "-vf", filters,
                       "-c:v", codec, "-threads", "1", "-y", str(source.with_suffix("." + extension))], timeout=60)
@@ -165,7 +188,11 @@ original_steps = m.Arm.steps
 
 def steps(self, operations):
     for step in operations:
-        if step[0] == "preference-assert":
+        if step[0] == "shell" and step[2] == "settings":
+            reply = self.socket_call(self.runtime / "bead-command.sock", step[1], step[2], list(step[3:]))
+            if reply.get("error"):
+                raise RuntimeError("Settings open failed: " + str(reply["error"]))
+        elif step[0] == "preference-assert":
             data = self.call("settings.get", {"store": "wallpaper-picker"})["data"]
             if data.get(step[1]) != step[2]:
                 raise RuntimeError("toolbar did not persist " + step[1] + "=" + step[2])
@@ -177,6 +204,8 @@ def steps(self, operations):
         elif step[0] == "scene-window-assert":
             windows = json.loads(self.run(["niri", "msg", "--json", "windows"]).stdout)
             if not any("Settings" in window.get("title", "") and window.get("is_focused") for window in windows):
+                (self.out / "scene-windows.json").write_text(json.dumps(windows))
+                self.grab(self.out / "shots/current-scene-window-failed.png")
                 raise RuntimeError("Current scene is not a focused real Settings window")
         elif step[0] == "picker-open-assert":
             state = self.dispatch("nacre", "state")
@@ -208,7 +237,8 @@ def steps(self, operations):
                 # source is shown rather than merely an old clip still moving.
                 index = int(step[1].split("-", 1)[1].split(".", 1)[0])
                 markers = {2: ((255, 0, 255), (1280, 720)), 3: ((0, 255, 255), (1920, 1080)),
-                           4: ((255, 255, 0), (640, 360)), 5: ((0, 0, 255), (854, 480))}
+                           4: ((255, 255, 0), (640, 360)), 5: ((0, 0, 255), (854, 480)),
+                           6: ((255, 255, 255), (960, 540))}
                 if index in markers:
                     expected, (sw, sh) = markers[index]
                     width, height = a.size

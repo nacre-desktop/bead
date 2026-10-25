@@ -1,0 +1,35 @@
+{
+  "source": "7edbd65",
+  "units": "ms after synthetic key / sequence trigger; screenshot spawn clocks, not scanout",
+  "background_roi": [
+    50,
+    100,
+    2800,
+    1200
+  ],
+  "method": "normalized L1 distance from first frame; background endpoint final; crop reduced 8x; carousel duration/easing use configured clock and frame series, not striped-image distance",
+  "qml": {
+    "background": {
+      "t10": 306.97,
+      "t50": 342.0,
+      "t90": 375.4
+    },
+    "active_receive": 781.56
+  },
+  "bead": {
+    "background": {
+      "t10": 153.5,
+      "t50": 163.5,
+      "t90": 173.5
+    },
+    "active_receive": 806.78,
+    "marks": {
+      "wallpaper_selection_admitted": 38.41,
+      "wallpaper_decode_started": 39.02,
+      "wallpaper_decode_finished": 138.97,
+      "wallpaper_surface_committed": 158.25,
+      "wallpaper_selection_confirmed": 1296.61
+    },
+    "webm_first_submitted_frame": 326.94
+  }
+}

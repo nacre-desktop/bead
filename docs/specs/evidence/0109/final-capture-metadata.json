@@ -1,0 +1,91 @@
+{
+  "bead_source": "7edbd65",
+  "qml_source": "713d38b3",
+  "geometry": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "layout": "QML left; Bead right",
+  "pairs": {
+    "wallpaper-button-spotlight": {
+      "qml_sha256": "17dd7d61b195ece7fbd5b0613cb22cc135e783fe097b3b487f01cce9d68d2d5c",
+      "bead_sha256": "b3eebf904ba02416c8a8b24e2bed2fef996c6c8b8a31f7500d68e67cc2d4b305",
+      "paired_jpeg_sha256": "45a47f25fa25abd12fb6410be8e9e7a2466682128ddfc51a8e3bd11505508441"
+    },
+    "wallpaper-button-hexagons": {
+      "qml_sha256": "ccdcffcc0eafd70620d1e80e55ebbff962cfe5ed9a5e82f24b5404484cb8fe7e",
+      "bead_sha256": "e8d454d5795cb48c0ef6bc73af69036a76a763ab909ac1f3935ec8495a146fc7",
+      "paired_jpeg_sha256": "015aa2f2b079c1f496a386b3491c8d92585a6764c85980ff4aa31e24e270a335"
+    },
+    "wallpaper-button-dynamic": {
+      "qml_sha256": "68ab1a1823240c00c41cfd01fb37adf4b67ec36d4b62ba14dc54da7b4addf758",
+      "bead_sha256": "8417dc9a4be57571bfd6dfb7898d04741c3911fa70ed1f2e4ea2f77e02be9575",
+      "paired_jpeg_sha256": "4cce8448068985adc801a5f683eae36cd1dc27e5f09587cfa876761801d3dd16"
+    },
+    "current-scene-picker": {
+      "qml_sha256": "ff2d8e0b18f9ef1a2062b75fe6f33532abb4dc54318eaeb88a179a87805ba350",
+      "bead_sha256": "9817ecb5abd7dfcb4c0c4b8d13314f81b0f13cfaf2a9c2331d101f0f961b4ada",
+      "paired_jpeg_sha256": "2c42f956d55738fe7946cfab45aa14759fb2a30f5a7c1b8f3c471f2f7a7ff2b4"
+    },
+    "wallpaper-travel": {
+      "qml_sha256": "7023958bc1207843b83dc1d7cd271e788ee20e9da16d5487b5835a50de1fa7cc",
+      "bead_sha256": "b8b88f10de094d043b3b330adf63f43f3cf8460f81e3583b202e7f5641bd9cda",
+      "paired_jpeg_sha256": "29355dad3817555c911c6c8376b98ca01beba6e0309243f7f91a2399091141b7"
+    },
+    "wallpaper-format-webm": {
+      "qml_sha256": "67e18c97a75f5a2c77973dee05c93826c7c7ff28ef82a8ed043f7cc398e00d2e",
+      "bead_sha256": "e8944aa6e84aa4ce0593f0828141ee78b5a5b4d293107e6fa3eb82e56ad63b38",
+      "paired_jpeg_sha256": "f1c1d9e50c30d0f416378d733905422d331c059bcfcabd151f22f93e0176da99"
+    },
+    "wallpaper-format-avi": {
+      "qml_sha256": "1a85ea295d7ba3996cb60546c5ef6b7d5c16547d6b716d9a12ae691bd07e2977",
+      "bead_sha256": "4b57e7009bfeddab3eb3de7c738055c21102e3da977eae6a5d721128911eb9b3",
+      "paired_jpeg_sha256": "d5eceb8e31557a741fce6b3b84de55cc7741f2cc6483d8b10e8b9f95be68547c"
+    }
+  },
+  "wallpaper-travel": [
+    {
+      "requested_ms": 0,
+      "qml_ms": 0,
+      "bead_ms": 0
+    },
+    {
+      "requested_ms": 50,
+      "qml_ms": 50,
+      "bead_ms": 50
+    },
+    {
+      "requested_ms": 100,
+      "qml_ms": 100,
+      "bead_ms": 100
+    },
+    {
+      "requested_ms": 150,
+      "qml_ms": 151,
+      "bead_ms": 151
+    },
+    {
+      "requested_ms": 200,
+      "qml_ms": 201,
+      "bead_ms": 201
+    },
+    {
+      "requested_ms": 250,
+      "qml_ms": 251,
+      "bead_ms": 251
+    },
+    {
+      "requested_ms": 300,
+      "qml_ms": 301,
+      "bead_ms": 301
+    },
+    {
+      "requested_ms": 350,
+      "qml_ms": 351,
+      "bead_ms": 351
+    }
+  ],
+  "backend": "Bead CPU UI / EGL video; QML default Qt backend (not forced by --cpu)",
+  "travel_series_sha256": "e8acf76a092c5730d0b6a5b98e0fabc7fc97191336c7930a4858a42c451b59fc"
+}

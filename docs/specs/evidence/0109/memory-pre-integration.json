@@ -1,0 +1,2030 @@
+{
+  "backend": "CPU UI; EGL video worker reported separately",
+  "control_source": "718ca83",
+  "candidate_product_source": "c8f96ac",
+  "geometry": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "gated_fields": [
+    "Pss_Anon",
+    "Pss_Shmem",
+    "DRM",
+    "SwapPss"
+  ],
+  "informational_fields": [
+    "Pss_File",
+    "Pss"
+  ],
+  "units": "raw KiB; summary MiB",
+  "pair_order": "control then candidate, five alternating pairs",
+  "arms": [
+    {
+      "pair": 1,
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18652,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20214,
+            "Pss": 49702
+          },
+          "closed": {
+            "Pss_Anon": 18652,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20214,
+            "Pss": 49702
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29368,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21485,
+            "Pss": 76935
+          },
+          "closed": {
+            "Pss_Anon": 20480,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20269,
+            "Pss": 61709
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 71176,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21083,
+            "Pss": 133549
+          },
+          "closed": {
+            "Pss_Anon": 20700,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20271,
+            "Pss": 61931
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71600,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21083,
+            "Pss": 133973
+          },
+          "closed": {
+            "Pss_Anon": 20964,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20271,
+            "Pss": 62195
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29012,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21202,
+            "Pss": 76296
+          },
+          "closed": {
+            "Pss_Anon": 21128,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19942,
+            "Pss": 62030
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 20932,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11043,
+            "Pss": 52935
+          },
+          "closed": {
+            "Pss_Anon": 20956,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19951,
+            "Pss": 61867
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 64092,
+              "RssAnon": 15472,
+              "Pss": 37006,
+              "Pss_Anon": 15472,
+              "Pss_File": 9932,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19244,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19604,
+            "Pss": 49684
+          },
+          "closed": {
+            "Pss_Anon": 19244,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19604,
+            "Pss": 49684
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30596,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20896,
+            "Pss": 77574
+          },
+          "closed": {
+            "Pss_Anon": 21428,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19684,
+            "Pss": 62072
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 72372,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20491,
+            "Pss": 134153
+          },
+          "closed": {
+            "Pss_Anon": 21576,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19691,
+            "Pss": 62227
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 73200,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20491,
+            "Pss": 134981
+          },
+          "closed": {
+            "Pss_Anon": 21780,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19691,
+            "Pss": 62431
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 30784,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20607,
+            "Pss": 77473
+          },
+          "closed": {
+            "Pss_Anon": 22172,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19359,
+            "Pss": 62491
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 22208,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 10909,
+            "Pss": 54077
+          },
+          "closed": {
+            "Pss_Anon": 22212,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19361,
+            "Pss": 62533
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65764,
+              "RssAnon": 18124,
+              "Pss": 39071,
+              "Pss_Anon": 18124,
+              "Pss_File": 9345,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18640,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20126,
+            "Pss": 49602
+          },
+          "closed": {
+            "Pss_Anon": 18640,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20122,
+            "Pss": 49598
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29392,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21419,
+            "Pss": 76893
+          },
+          "closed": {
+            "Pss_Anon": 20584,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20238,
+            "Pss": 61782
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 71332,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21072,
+            "Pss": 133694
+          },
+          "closed": {
+            "Pss_Anon": 20756,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20240,
+            "Pss": 61956
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71672,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21072,
+            "Pss": 134034
+          },
+          "closed": {
+            "Pss_Anon": 21008,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20240,
+            "Pss": 62208
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29084,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21190,
+            "Pss": 76356
+          },
+          "closed": {
+            "Pss_Anon": 21188,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19910,
+            "Pss": 62058
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 21044,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11125,
+            "Pss": 53129
+          },
+          "closed": {
+            "Pss_Anon": 21032,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19904,
+            "Pss": 61896
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 63972,
+              "RssAnon": 15508,
+              "Pss": 36984,
+              "Pss_Anon": 15508,
+              "Pss_File": 9874,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19168,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19496,
+            "Pss": 49500
+          },
+          "closed": {
+            "Pss_Anon": 19168,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19496,
+            "Pss": 49500
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30436,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20764,
+            "Pss": 77282
+          },
+          "closed": {
+            "Pss_Anon": 21224,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19579,
+            "Pss": 61763
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 71812,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20385,
+            "Pss": 133487
+          },
+          "closed": {
+            "Pss_Anon": 21168,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19585,
+            "Pss": 61713
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 72828,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20417,
+            "Pss": 134535
+          },
+          "closed": {
+            "Pss_Anon": 21424,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19585,
+            "Pss": 61969
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 30928,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20520,
+            "Pss": 77530
+          },
+          "closed": {
+            "Pss_Anon": 21672,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19240,
+            "Pss": 61872
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 21524,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 10784,
+            "Pss": 53268
+          },
+          "closed": {
+            "Pss_Anon": 21324,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19246,
+            "Pss": 61530
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 66012,
+              "RssAnon": 18104,
+              "Pss": 39351,
+              "Pss_Anon": 18104,
+              "Pss_File": 9645,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18864,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20129,
+            "Pss": 49829
+          },
+          "closed": {
+            "Pss_Anon": 18864,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20129,
+            "Pss": 49829
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29540,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21361,
+            "Pss": 76983
+          },
+          "closed": {
+            "Pss_Anon": 20744,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20181,
+            "Pss": 61885
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 71312,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20952,
+            "Pss": 133554
+          },
+          "closed": {
+            "Pss_Anon": 20984,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20184,
+            "Pss": 62128
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 72656,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20943,
+            "Pss": 134889
+          },
+          "closed": {
+            "Pss_Anon": 21248,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20182,
+            "Pss": 62390
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29288,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21055,
+            "Pss": 76425
+          },
+          "closed": {
+            "Pss_Anon": 21452,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19839,
+            "Pss": 62251
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 21292,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11143,
+            "Pss": 53395
+          },
+          "closed": {
+            "Pss_Anon": 21028,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19854,
+            "Pss": 61842
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 63788,
+              "RssAnon": 15460,
+              "Pss": 36876,
+              "Pss_Anon": 15460,
+              "Pss_File": 9814,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19172,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19391,
+            "Pss": 49399
+          },
+          "closed": {
+            "Pss_Anon": 19172,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19391,
+            "Pss": 49399
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30100,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20748,
+            "Pss": 76930
+          },
+          "closed": {
+            "Pss_Anon": 21248,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19541,
+            "Pss": 61749
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 71896,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20344,
+            "Pss": 133530
+          },
+          "closed": {
+            "Pss_Anon": 21208,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19544,
+            "Pss": 61712
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 73020,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20344,
+            "Pss": 134654
+          },
+          "closed": {
+            "Pss_Anon": 21592,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19544,
+            "Pss": 62096
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 30696,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20476,
+            "Pss": 77254
+          },
+          "closed": {
+            "Pss_Anon": 21928,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19227,
+            "Pss": 62115
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 21780,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 10938,
+            "Pss": 53678
+          },
+          "closed": {
+            "Pss_Anon": 21776,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19238,
+            "Pss": 61974
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65608,
+              "RssAnon": 18104,
+              "Pss": 39186,
+              "Pss_Anon": 18104,
+              "Pss_File": 9480,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18644,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20393,
+            "Pss": 49873
+          },
+          "closed": {
+            "Pss_Anon": 18644,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20393,
+            "Pss": 49873
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29368,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21716,
+            "Pss": 77166
+          },
+          "closed": {
+            "Pss_Anon": 20356,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20480,
+            "Pss": 61796
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 71224,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21307,
+            "Pss": 133821
+          },
+          "closed": {
+            "Pss_Anon": 20728,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20483,
+            "Pss": 62171
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 72284,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21307,
+            "Pss": 134881
+          },
+          "closed": {
+            "Pss_Anon": 20972,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20483,
+            "Pss": 62415
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 30180,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21422,
+            "Pss": 77684
+          },
+          "closed": {
+            "Pss_Anon": 20884,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20150,
+            "Pss": 61994
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 20696,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11245,
+            "Pss": 52901
+          },
+          "closed": {
+            "Pss_Anon": 20544,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20138,
+            "Pss": 61642
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 63912,
+              "RssAnon": 15496,
+              "Pss": 36826,
+              "Pss_Anon": 15496,
+              "Pss_File": 9728,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19388,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19460,
+            "Pss": 49684
+          },
+          "closed": {
+            "Pss_Anon": 19388,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19460,
+            "Pss": 49684
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30972,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20843,
+            "Pss": 77897
+          },
+          "closed": {
+            "Pss_Anon": 21528,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19598,
+            "Pss": 62086
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 73516,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20412,
+            "Pss": 135218
+          },
+          "closed": {
+            "Pss_Anon": 21596,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19600,
+            "Pss": 62156
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 73588,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20412,
+            "Pss": 135290
+          },
+          "closed": {
+            "Pss_Anon": 21740,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19600,
+            "Pss": 62300
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 30104,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20525,
+            "Pss": 76711
+          },
+          "closed": {
+            "Pss_Anon": 21780,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19265,
+            "Pss": 62005
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 21616,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 10886,
+            "Pss": 53462
+          },
+          "closed": {
+            "Pss_Anon": 21608,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19272,
+            "Pss": 61840
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 66056,
+              "RssAnon": 18160,
+              "Pss": 39452,
+              "Pss_Anon": 18160,
+              "Pss_File": 9690,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18684,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20073,
+            "Pss": 49593
+          },
+          "closed": {
+            "Pss_Anon": 18684,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20073,
+            "Pss": 49593
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29356,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21345,
+            "Pss": 76783
+          },
+          "closed": {
+            "Pss_Anon": 20656,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20137,
+            "Pss": 61753
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 71180,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20934,
+            "Pss": 133404
+          },
+          "closed": {
+            "Pss_Anon": 20824,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20138,
+            "Pss": 61922
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 72392,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20934,
+            "Pss": 134616
+          },
+          "closed": {
+            "Pss_Anon": 21028,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20138,
+            "Pss": 62126
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29812,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21046,
+            "Pss": 76940
+          },
+          "closed": {
+            "Pss_Anon": 21304,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19802,
+            "Pss": 62066
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 21156,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 10833,
+            "Pss": 52949
+          },
+          "closed": {
+            "Pss_Anon": 20972,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19810,
+            "Pss": 61742
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 64368,
+              "RssAnon": 15492,
+              "Pss": 37208,
+              "Pss_Anon": 15496,
+              "Pss_File": 10110,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19360,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19402,
+            "Pss": 49598
+          },
+          "closed": {
+            "Pss_Anon": 19360,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19402,
+            "Pss": 49598
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30860,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20815,
+            "Pss": 77757
+          },
+          "closed": {
+            "Pss_Anon": 21408,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19580,
+            "Pss": 61948
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 73064,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20406,
+            "Pss": 134760
+          },
+          "closed": {
+            "Pss_Anon": 21424,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19582,
+            "Pss": 61966
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 73544,
+            "Pss_Shmem": 41290,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20386,
+            "Pss": 135220
+          },
+          "closed": {
+            "Pss_Anon": 21732,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19582,
+            "Pss": 62274
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 31164,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20509,
+            "Pss": 77755
+          },
+          "closed": {
+            "Pss_Anon": 21912,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19257,
+            "Pss": 62129
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 21956,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11044,
+            "Pss": 53960
+          },
+          "closed": {
+            "Pss_Anon": 21952,
+            "Pss_Shmem": 20960,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19259,
+            "Pss": 62171
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65568,
+              "RssAnon": 18148,
+              "Pss": 39149,
+              "Pss_Anon": 18148,
+              "Pss_File": 9399,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    }
+  ],
+  "summary": {
+    "idle-open": {
+      "control": [
+        28.796875,
+        28.78515625,
+        29.00390625,
+        28.7890625,
+        28.828125
+      ],
+      "candidate": [
+        29.375,
+        29.30078125,
+        29.3046875,
+        29.515625,
+        29.48828125
+      ],
+      "delta": [
+        0.578125,
+        0.515625,
+        0.30078125,
+        0.7265625,
+        0.66015625
+      ],
+      "anon_delta": [
+        0.578125,
+        0.515625,
+        0.30078125,
+        0.7265625,
+        0.66015625
+      ],
+      "file_delta": [
+        -0.595703125,
+        -0.615234375,
+        -0.720703125,
+        -0.9111328125,
+        -0.6552734375
+      ],
+      "pss_delta": [
+        -0.017578125,
+        -0.099609375,
+        -0.419921875,
+        -0.1845703125,
+        0.0048828125
+      ],
+      "control_median_mib": 28.796875,
+      "candidate_median_mib": 29.375,
+      "delta_median_mib": 0.578125,
+      "anon_delta_median_mib": 0.578125,
+      "file_delta_median_mib": -0.6552734375,
+      "pss_delta_median_mib": -0.099609375,
+      "difference_of_medians_mib": 0.578125,
+      "relative_gate_pass": false
+    },
+    "idle-closed": {
+      "control": [
+        28.796875,
+        28.78515625,
+        29.00390625,
+        28.7890625,
+        28.828125
+      ],
+      "candidate": [
+        29.375,
+        29.30078125,
+        29.3046875,
+        29.515625,
+        29.48828125
+      ],
+      "delta": [
+        0.578125,
+        0.515625,
+        0.30078125,
+        0.7265625,
+        0.66015625
+      ],
+      "anon_delta": [
+        0.578125,
+        0.515625,
+        0.30078125,
+        0.7265625,
+        0.66015625
+      ],
+      "file_delta": [
+        -0.595703125,
+        -0.611328125,
+        -0.720703125,
+        -0.9111328125,
+        -0.6552734375
+      ],
+      "pss_delta": [
+        -0.017578125,
+        -0.095703125,
+        -0.419921875,
+        -0.1845703125,
+        0.0048828125
+      ],
+      "control_median_mib": 28.796875,
+      "candidate_median_mib": 29.375,
+      "delta_median_mib": 0.578125,
+      "anon_delta_median_mib": 0.578125,
+      "file_delta_median_mib": -0.6552734375,
+      "pss_delta_median_mib": -0.095703125,
+      "difference_of_medians_mib": 0.578125,
+      "relative_gate_pass": false
+    },
+    "memory-carousel-open": {
+      "control": [
+        54.150390625,
+        54.173828125,
+        54.318359375,
+        54.150390625,
+        54.138671875
+      ],
+      "candidate": [
+        55.349609375,
+        55.193359375,
+        54.865234375,
+        55.716796875,
+        55.607421875
+      ],
+      "delta": [
+        1.19921875,
+        1.01953125,
+        0.546875,
+        1.56640625,
+        1.46875
+      ],
+      "anon_delta": [
+        1.19921875,
+        1.01953125,
+        0.546875,
+        1.56640625,
+        1.46875
+      ],
+      "file_delta": [
+        -0.5751953125,
+        -0.6396484375,
+        -0.5986328125,
+        -0.8525390625,
+        -0.517578125
+      ],
+      "pss_delta": [
+        0.6240234375,
+        0.3798828125,
+        -0.0517578125,
+        0.7138671875,
+        0.951171875
+      ],
+      "control_median_mib": 54.150390625,
+      "candidate_median_mib": 55.349609375,
+      "delta_median_mib": 1.19921875,
+      "anon_delta_median_mib": 1.19921875,
+      "file_delta_median_mib": -0.5986328125,
+      "pss_delta_median_mib": 0.6240234375,
+      "difference_of_medians_mib": 1.19921875,
+      "relative_gate_pass": false
+    },
+    "memory-carousel-closed": {
+      "control": [
+        40.46875,
+        40.5703125,
+        40.7265625,
+        40.34765625,
+        40.640625
+      ],
+      "candidate": [
+        41.39453125,
+        41.1953125,
+        41.21875,
+        41.4921875,
+        41.375
+      ],
+      "delta": [
+        0.92578125,
+        0.625,
+        0.4921875,
+        1.14453125,
+        0.734375
+      ],
+      "anon_delta": [
+        0.92578125,
+        0.625,
+        0.4921875,
+        1.14453125,
+        0.734375
+      ],
+      "file_delta": [
+        -0.5712890625,
+        -0.6435546875,
+        -0.625,
+        -0.861328125,
+        -0.5439453125
+      ],
+      "pss_delta": [
+        0.3544921875,
+        -0.0185546875,
+        -0.1328125,
+        0.283203125,
+        0.1904296875
+      ],
+      "control_median_mib": 40.5703125,
+      "candidate_median_mib": 41.375,
+      "delta_median_mib": 0.734375,
+      "anon_delta_median_mib": 0.734375,
+      "file_delta_median_mib": -0.625,
+      "pss_delta_median_mib": 0.1904296875,
+      "difference_of_medians_mib": 0.8046875,
+      "relative_gate_pass": false
+    },
+    "memory-spotlight-open": {
+      "control": [
+        109.830078125,
+        109.982421875,
+        109.962890625,
+        109.876953125,
+        109.833984375
+      ],
+      "candidate": [
+        110.998046875,
+        110.451171875,
+        110.533203125,
+        112.115234375,
+        111.673828125
+      ],
+      "delta": [
+        1.16796875,
+        0.46875,
+        0.5703125,
+        2.23828125,
+        1.83984375
+      ],
+      "anon_delta": [
+        1.16796875,
+        0.46875,
+        0.5703125,
+        2.23828125,
+        1.83984375
+      ],
+      "file_delta": [
+        -0.578125,
+        -0.6708984375,
+        -0.59375,
+        -0.8740234375,
+        -0.515625
+      ],
+      "pss_delta": [
+        0.58984375,
+        -0.2021484375,
+        -0.0234375,
+        1.3642578125,
+        1.32421875
+      ],
+      "control_median_mib": 109.876953125,
+      "candidate_median_mib": 110.998046875,
+      "delta_median_mib": 1.16796875,
+      "anon_delta_median_mib": 1.16796875,
+      "file_delta_median_mib": -0.59375,
+      "pss_delta_median_mib": 0.58984375,
+      "difference_of_medians_mib": 1.12109375,
+      "relative_gate_pass": false
+    },
+    "memory-spotlight-closed": {
+      "control": [
+        40.68359375,
+        40.73828125,
+        40.9609375,
+        40.7109375,
+        40.8046875
+      ],
+      "candidate": [
+        41.5390625,
+        41.140625,
+        41.1796875,
+        41.55859375,
+        41.390625
+      ],
+      "delta": [
+        0.85546875,
+        0.40234375,
+        0.21875,
+        0.84765625,
+        0.5859375
+      ],
+      "anon_delta": [
+        0.85546875,
+        0.40234375,
+        0.21875,
+        0.84765625,
+        0.5859375
+      ],
+      "file_delta": [
+        -0.56640625,
+        -0.6396484375,
+        -0.625,
+        -0.8623046875,
+        -0.54296875
+      ],
+      "pss_delta": [
+        0.2890625,
+        -0.2373046875,
+        -0.40625,
+        -0.0146484375,
+        0.04296875
+      ],
+      "control_median_mib": 40.73828125,
+      "candidate_median_mib": 41.390625,
+      "delta_median_mib": 0.5859375,
+      "anon_delta_median_mib": 0.5859375,
+      "file_delta_median_mib": -0.625,
+      "pss_delta_median_mib": -0.0146484375,
+      "difference_of_medians_mib": 0.65234375,
+      "relative_gate_pass": false
+    },
+    "memory-hexagons-open": {
+      "control": [
+        110.244140625,
+        110.314453125,
+        111.275390625,
+        110.912109375,
+        111.017578125
+      ],
+      "candidate": [
+        111.806640625,
+        111.443359375,
+        111.630859375,
+        112.185546875,
+        112.142578125
+      ],
+      "delta": [
+        1.5625,
+        1.12890625,
+        0.35546875,
+        1.2734375,
+        1.125
+      ],
+      "anon_delta": [
+        1.5625,
+        1.12890625,
+        0.35546875,
+        1.2734375,
+        1.125
+      ],
+      "file_delta": [
+        -0.578125,
+        -0.6396484375,
+        -0.5849609375,
+        -0.8740234375,
+        -0.53515625
+      ],
+      "pss_delta": [
+        0.984375,
+        0.4892578125,
+        -0.2294921875,
+        0.3994140625,
+        0.58984375
+      ],
+      "control_median_mib": 110.912109375,
+      "candidate_median_mib": 111.806640625,
+      "delta_median_mib": 1.12890625,
+      "anon_delta_median_mib": 1.12890625,
+      "file_delta_median_mib": -0.5849609375,
+      "pss_delta_median_mib": 0.4892578125,
+      "difference_of_medians_mib": 0.89453125,
+      "relative_gate_pass": false
+    },
+    "memory-hexagons-closed": {
+      "control": [
+        40.94140625,
+        40.984375,
+        41.21875,
+        40.94921875,
+        41.00390625
+      ],
+      "candidate": [
+        41.73828125,
+        41.390625,
+        41.5546875,
+        41.69921875,
+        41.69140625
+      ],
+      "delta": [
+        0.796875,
+        0.40625,
+        0.3359375,
+        0.75,
+        0.6875
+      ],
+      "anon_delta": [
+        0.796875,
+        0.40625,
+        0.3359375,
+        0.75,
+        0.6875
+      ],
+      "file_delta": [
+        -0.56640625,
+        -0.6396484375,
+        -0.623046875,
+        -0.8623046875,
+        -0.54296875
+      ],
+      "pss_delta": [
+        0.23046875,
+        -0.2333984375,
+        -0.287109375,
+        -0.1123046875,
+        0.14453125
+      ],
+      "control_median_mib": 40.984375,
+      "candidate_median_mib": 41.69140625,
+      "delta_median_mib": 0.6875,
+      "anon_delta_median_mib": 0.6875,
+      "file_delta_median_mib": -0.623046875,
+      "pss_delta_median_mib": -0.1123046875,
+      "difference_of_medians_mib": 0.70703125,
+      "relative_gate_pass": false
+    },
+    "memory-dynamic-open": {
+      "control": [
+        53.802734375,
+        53.873046875,
+        54.072265625,
+        54.943359375,
+        54.583984375
+      ],
+      "candidate": [
+        55.533203125,
+        55.673828125,
+        55.447265625,
+        54.869140625,
+        55.904296875
+      ],
+      "delta": [
+        1.73046875,
+        1.80078125,
+        1.375,
+        -0.07421875,
+        1.3203125
+      ],
+      "anon_delta": [
+        1.73046875,
+        1.80078125,
+        1.375,
+        -0.07421875,
+        1.3203125
+      ],
+      "file_delta": [
+        -0.5810546875,
+        -0.654296875,
+        -0.5654296875,
+        -0.8759765625,
+        -0.5244140625
+      ],
+      "pss_delta": [
+        1.1494140625,
+        1.146484375,
+        0.8095703125,
+        -0.9501953125,
+        0.7958984375
+      ],
+      "control_median_mib": 54.072265625,
+      "candidate_median_mib": 55.533203125,
+      "delta_median_mib": 1.375,
+      "anon_delta_median_mib": 1.375,
+      "file_delta_median_mib": -0.5810546875,
+      "pss_delta_median_mib": 0.8095703125,
+      "difference_of_medians_mib": 1.4609375,
+      "relative_gate_pass": false
+    },
+    "memory-dynamic-closed": {
+      "control": [
+        41.1015625,
+        41.16015625,
+        41.41796875,
+        40.86328125,
+        41.2734375
+      ],
+      "candidate": [
+        42.12109375,
+        41.6328125,
+        41.8828125,
+        41.73828125,
+        41.8671875
+      ],
+      "delta": [
+        1.01953125,
+        0.47265625,
+        0.46484375,
+        0.875,
+        0.59375
+      ],
+      "anon_delta": [
+        1.01953125,
+        0.47265625,
+        0.46484375,
+        0.875,
+        0.59375
+      ],
+      "file_delta": [
+        -0.5693359375,
+        -0.654296875,
+        -0.59765625,
+        -0.8642578125,
+        -0.5322265625
+      ],
+      "pss_delta": [
+        0.4501953125,
+        -0.181640625,
+        -0.1328125,
+        0.0107421875,
+        0.0615234375
+      ],
+      "control_median_mib": 41.16015625,
+      "candidate_median_mib": 41.8671875,
+      "delta_median_mib": 0.59375,
+      "anon_delta_median_mib": 0.59375,
+      "file_delta_median_mib": -0.59765625,
+      "pss_delta_median_mib": 0.0107421875,
+      "difference_of_medians_mib": 0.70703125,
+      "relative_gate_pass": false
+    },
+    "memory-scene-open": {
+      "control": [
+        40.91015625,
+        41.01953125,
+        41.26171875,
+        40.6796875,
+        41.12890625
+      ],
+      "candidate": [
+        42.15625,
+        41.48828125,
+        41.73828125,
+        41.578125,
+        41.91015625
+      ],
+      "delta": [
+        1.24609375,
+        0.46875,
+        0.4765625,
+        0.8984375,
+        0.78125
+      ],
+      "anon_delta": [
+        1.24609375,
+        0.46875,
+        0.4765625,
+        0.8984375,
+        0.78125
+      ],
+      "file_delta": [
+        -0.130859375,
+        -0.3330078125,
+        -0.2001953125,
+        -0.3505859375,
+        0.2060546875
+      ],
+      "pss_delta": [
+        1.115234375,
+        0.1357421875,
+        0.2763671875,
+        0.5478515625,
+        0.9873046875
+      ],
+      "control_median_mib": 41.01953125,
+      "candidate_median_mib": 41.73828125,
+      "delta_median_mib": 0.78125,
+      "anon_delta_median_mib": 0.78125,
+      "file_delta_median_mib": -0.2001953125,
+      "pss_delta_median_mib": 0.5478515625,
+      "difference_of_medians_mib": 0.71875,
+      "relative_gate_pass": false
+    },
+    "memory-scene-closed": {
+      "control": [
+        40.93359375,
+        41.0078125,
+        41.00390625,
+        40.53125,
+        40.94921875
+      ],
+      "candidate": [
+        42.16015625,
+        41.29296875,
+        41.734375,
+        41.5703125,
+        41.90625
+      ],
+      "delta": [
+        1.2265625,
+        0.28515625,
+        0.73046875,
+        1.0390625,
+        0.95703125
+      ],
+      "anon_delta": [
+        1.2265625,
+        0.28515625,
+        0.73046875,
+        1.0390625,
+        0.95703125
+      ],
+      "file_delta": [
+        -0.576171875,
+        -0.642578125,
+        -0.6015625,
+        -0.845703125,
+        -0.5380859375
+      ],
+      "pss_delta": [
+        0.650390625,
+        -0.357421875,
+        0.12890625,
+        0.193359375,
+        0.4189453125
+      ],
+      "control_median_mib": 40.94921875,
+      "candidate_median_mib": 41.734375,
+      "delta_median_mib": 0.95703125,
+      "anon_delta_median_mib": 0.95703125,
+      "file_delta_median_mib": -0.6015625,
+      "pss_delta_median_mib": 0.193359375,
+      "difference_of_medians_mib": 0.78515625,
+      "relative_gate_pass": false
+    }
+  }
+}

@@ -1,0 +1,3777 @@
+{
+  "backend": "CPU UI; EGL video worker reported separately",
+  "control_source": "2331552dc5ae758e7163118f809c6c7d6a78437d",
+  "candidate_product_source": "c37951cf4efb277c4072a292a2b055fde03122b4",
+  "geometry": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "gated_fields": [
+    "Pss_Anon",
+    "Pss_Shmem",
+    "DRM",
+    "SwapPss"
+  ],
+  "informational_fields": [
+    "Pss_File",
+    "Pss"
+  ],
+  "units": "raw KiB; summary MiB",
+  "pair_order": "five alternating pairs per layout, fresh private session per arm; 25 paired idle samples",
+  "arms": [
+    {
+      "pair": 1,
+      "case": "carousel",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18664,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19535,
+            "Pss": 49035
+          },
+          "closed": {
+            "Pss_Anon": 18664,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19535,
+            "Pss": 49035
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29152,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20865,
+            "Pss": 76099
+          },
+          "closed": {
+            "Pss_Anon": 27712,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20901,
+            "Pss": 71839
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "carousel",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19272,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19474,
+            "Pss": 49582
+          },
+          "closed": {
+            "Pss_Anon": 19272,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19474,
+            "Pss": 49582
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30844,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20737,
+            "Pss": 77663
+          },
+          "closed": {
+            "Pss_Anon": 28696,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20776,
+            "Pss": 72698
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "spotlight",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18628,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19383,
+            "Pss": 48847
+          },
+          "closed": {
+            "Pss_Anon": 18628,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19383,
+            "Pss": 48847
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70112,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20271,
+            "Pss": 121549
+          },
+          "closed": {
+            "Pss_Anon": 70172,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19539,
+            "Pss": 110635
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "spotlight",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19320,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19310,
+            "Pss": 49466
+          },
+          "closed": {
+            "Pss_Anon": 19320,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19310,
+            "Pss": 49466
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70836,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20258,
+            "Pss": 122260
+          },
+          "closed": {
+            "Pss_Anon": 71264,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19481,
+            "Pss": 111669
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "hexagons",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18640,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19351,
+            "Pss": 48827
+          },
+          "closed": {
+            "Pss_Anon": 18640,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19351,
+            "Pss": 48827
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71292,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20231,
+            "Pss": 122689
+          },
+          "closed": {
+            "Pss_Anon": 70864,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19443,
+            "Pss": 111231
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "hexagons",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19456,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19434,
+            "Pss": 49726
+          },
+          "closed": {
+            "Pss_Anon": 19456,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19434,
+            "Pss": 49726
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71540,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20336,
+            "Pss": 123042
+          },
+          "closed": {
+            "Pss_Anon": 72176,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19547,
+            "Pss": 112647
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "dynamic",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18680,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19520,
+            "Pss": 49036
+          },
+          "closed": {
+            "Pss_Anon": 18680,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19520,
+            "Pss": 49036
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 28404,
+            "Pss_Shmem": 15958,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20562,
+            "Pss": 64924
+          },
+          "closed": {
+            "Pss_Anon": 26936,
+            "Pss_Shmem": 13102,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20591,
+            "Pss": 60629
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194476,
+              "RssAnon": 53392,
+              "Pss": 111341,
+              "Pss_Anon": 53392,
+              "Pss_File": 57914,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194528,
+              "RssAnon": 53444,
+              "Pss": 111391,
+              "Pss_Anon": 53444,
+              "Pss_File": 57912,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "dynamic",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19376,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19342,
+            "Pss": 49554
+          },
+          "closed": {
+            "Pss_Anon": 19376,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19342,
+            "Pss": 49554
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29292,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20343,
+            "Pss": 75717
+          },
+          "closed": {
+            "Pss_Anon": 28384,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20374,
+            "Pss": 71984
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194512,
+              "RssAnon": 53336,
+              "Pss": 111367,
+              "Pss_Anon": 53336,
+              "Pss_File": 57997,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194552,
+              "RssAnon": 53376,
+              "Pss": 111414,
+              "Pss_Anon": 53376,
+              "Pss_File": 58004,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "scene",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18660,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19241,
+            "Pss": 48737
+          },
+          "closed": {
+            "Pss_Anon": 18660,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19241,
+            "Pss": 48737
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 18508,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11840,
+            "Pss": 41184
+          },
+          "closed": {
+            "Pss_Anon": 18524,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20171,
+            "Pss": 49531
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 63028,
+              "RssAnon": 15432,
+              "Pss": 36825,
+              "Pss_Anon": 15436,
+              "Pss_File": 9787,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "case": "scene",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19292,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19470,
+            "Pss": 49598
+          },
+          "closed": {
+            "Pss_Anon": 19292,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19470,
+            "Pss": 49598
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 19124,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11740,
+            "Pss": 41700
+          },
+          "closed": {
+            "Pss_Anon": 19164,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20329,
+            "Pss": 50329
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65796,
+              "RssAnon": 18076,
+              "Pss": 39377,
+              "Pss_Anon": 18080,
+              "Pss_File": 9695,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "carousel",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18380,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19985,
+            "Pss": 49201
+          },
+          "closed": {
+            "Pss_Anon": 18380,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19985,
+            "Pss": 49201
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29312,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20926,
+            "Pss": 76320
+          },
+          "closed": {
+            "Pss_Anon": 27424,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20962,
+            "Pss": 71612
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "carousel",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19248,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19498,
+            "Pss": 49582
+          },
+          "closed": {
+            "Pss_Anon": 19248,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19498,
+            "Pss": 49582
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 31024,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20851,
+            "Pss": 77957
+          },
+          "closed": {
+            "Pss_Anon": 28452,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20887,
+            "Pss": 72565
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "spotlight",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18688,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19675,
+            "Pss": 49199
+          },
+          "closed": {
+            "Pss_Anon": 18688,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19675,
+            "Pss": 49199
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70224,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20452,
+            "Pss": 121842
+          },
+          "closed": {
+            "Pss_Anon": 70280,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19730,
+            "Pss": 110934
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "spotlight",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19292,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19476,
+            "Pss": 49604
+          },
+          "closed": {
+            "Pss_Anon": 19292,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19476,
+            "Pss": 49604
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70772,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20403,
+            "Pss": 122341
+          },
+          "closed": {
+            "Pss_Anon": 70828,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19635,
+            "Pss": 111387
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "hexagons",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18672,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19299,
+            "Pss": 48807
+          },
+          "closed": {
+            "Pss_Anon": 18672,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19299,
+            "Pss": 48807
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71276,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20153,
+            "Pss": 122595
+          },
+          "closed": {
+            "Pss_Anon": 70736,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19800,
+            "Pss": 111460
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "hexagons",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19324,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19384,
+            "Pss": 49544
+          },
+          "closed": {
+            "Pss_Anon": 19072,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19704,
+            "Pss": 49612
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71836,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20269,
+            "Pss": 123271
+          },
+          "closed": {
+            "Pss_Anon": 72132,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20304,
+            "Pss": 113360
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "dynamic",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18644,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19676,
+            "Pss": 49156
+          },
+          "closed": {
+            "Pss_Anon": 18644,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19676,
+            "Pss": 49156
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 28440,
+            "Pss_Shmem": 15958,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20688,
+            "Pss": 65086
+          },
+          "closed": {
+            "Pss_Anon": 26904,
+            "Pss_Shmem": 13102,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20719,
+            "Pss": 60725
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194196,
+              "RssAnon": 53240,
+              "Pss": 111061,
+              "Pss_Anon": 53240,
+              "Pss_File": 57787,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194224,
+              "RssAnon": 53268,
+              "Pss": 111096,
+              "Pss_Anon": 53268,
+              "Pss_File": 57794,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "dynamic",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19308,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19292,
+            "Pss": 49436
+          },
+          "closed": {
+            "Pss_Anon": 19308,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19460,
+            "Pss": 49604
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29324,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20469,
+            "Pss": 75875
+          },
+          "closed": {
+            "Pss_Anon": 27880,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20502,
+            "Pss": 71608
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194064,
+              "RssAnon": 52944,
+              "Pss": 110938,
+              "Pss_Anon": 52944,
+              "Pss_File": 57959,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194116,
+              "RssAnon": 52996,
+              "Pss": 110995,
+              "Pss_Anon": 52996,
+              "Pss_File": 57965,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "scene",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18648,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19670,
+            "Pss": 49154
+          },
+          "closed": {
+            "Pss_Anon": 18648,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19670,
+            "Pss": 49154
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 18500,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11943,
+            "Pss": 41279
+          },
+          "closed": {
+            "Pss_Anon": 18524,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20536,
+            "Pss": 49896
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 62976,
+              "RssAnon": 15412,
+              "Pss": 36556,
+              "Pss_Anon": 15416,
+              "Pss_File": 9538,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "case": "scene",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19228,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19408,
+            "Pss": 49472
+          },
+          "closed": {
+            "Pss_Anon": 18984,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19764,
+            "Pss": 49584
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 19088,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11959,
+            "Pss": 41883
+          },
+          "closed": {
+            "Pss_Anon": 19124,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20308,
+            "Pss": 50268
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65588,
+              "RssAnon": 18112,
+              "Pss": 39470,
+              "Pss_Anon": 18116,
+              "Pss_File": 9752,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "carousel",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18692,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19448,
+            "Pss": 48976
+          },
+          "closed": {
+            "Pss_Anon": 18692,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19448,
+            "Pss": 48976
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29436,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20788,
+            "Pss": 76306
+          },
+          "closed": {
+            "Pss_Anon": 27540,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20824,
+            "Pss": 71590
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "carousel",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19328,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19620,
+            "Pss": 49784
+          },
+          "closed": {
+            "Pss_Anon": 19328,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19620,
+            "Pss": 49784
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30968,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20956,
+            "Pss": 78006
+          },
+          "closed": {
+            "Pss_Anon": 28980,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20992,
+            "Pss": 73198
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "spotlight",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18436,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19755,
+            "Pss": 49027
+          },
+          "closed": {
+            "Pss_Anon": 18436,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19755,
+            "Pss": 49027
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70212,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20288,
+            "Pss": 121666
+          },
+          "closed": {
+            "Pss_Anon": 70272,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20328,
+            "Pss": 111524
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "spotlight",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19200,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19594,
+            "Pss": 49630
+          },
+          "closed": {
+            "Pss_Anon": 19200,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19594,
+            "Pss": 49630
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70764,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20485,
+            "Pss": 122415
+          },
+          "closed": {
+            "Pss_Anon": 70672,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20009,
+            "Pss": 111605
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "hexagons",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18692,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19579,
+            "Pss": 49107
+          },
+          "closed": {
+            "Pss_Anon": 18692,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19579,
+            "Pss": 49107
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71320,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20468,
+            "Pss": 122954
+          },
+          "closed": {
+            "Pss_Anon": 70936,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19676,
+            "Pss": 111536
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "hexagons",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19228,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19504,
+            "Pss": 49568
+          },
+          "closed": {
+            "Pss_Anon": 19228,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19498,
+            "Pss": 49562
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 72008,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20402,
+            "Pss": 123576
+          },
+          "closed": {
+            "Pss_Anon": 71472,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19990,
+            "Pss": 112386
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "dynamic",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18672,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19330,
+            "Pss": 48838
+          },
+          "closed": {
+            "Pss_Anon": 18672,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19330,
+            "Pss": 48838
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 28376,
+            "Pss_Shmem": 15958,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20350,
+            "Pss": 64684
+          },
+          "closed": {
+            "Pss_Anon": 26848,
+            "Pss_Shmem": 13102,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20403,
+            "Pss": 60353
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194200,
+              "RssAnon": 53364,
+              "Pss": 111124,
+              "Pss_Anon": 53364,
+              "Pss_File": 57726,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194272,
+              "RssAnon": 53436,
+              "Pss": 111204,
+              "Pss_Anon": 53436,
+              "Pss_File": 57733,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "dynamic",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19004,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19746,
+            "Pss": 49586
+          },
+          "closed": {
+            "Pss_Anon": 19004,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19746,
+            "Pss": 49586
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29424,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20362,
+            "Pss": 75868
+          },
+          "closed": {
+            "Pss_Anon": 27852,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20394,
+            "Pss": 71472
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 193964,
+              "RssAnon": 53024,
+              "Pss": 110854,
+              "Pss_Anon": 53024,
+              "Pss_File": 57796,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194064,
+              "RssAnon": 53124,
+              "Pss": 110960,
+              "Pss_Anon": 53124,
+              "Pss_File": 57801,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "scene",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18712,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19276,
+            "Pss": 48824
+          },
+          "closed": {
+            "Pss_Anon": 18712,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19277,
+            "Pss": 48825
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 18556,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11567,
+            "Pss": 40959
+          },
+          "closed": {
+            "Pss_Anon": 18584,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20143,
+            "Pss": 49563
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 63384,
+              "RssAnon": 15420,
+              "Pss": 36986,
+              "Pss_Anon": 15424,
+              "Pss_File": 9960,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "case": "scene",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19392,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19386,
+            "Pss": 49614
+          },
+          "closed": {
+            "Pss_Anon": 19392,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19385,
+            "Pss": 49613
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 19216,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11804,
+            "Pss": 41856
+          },
+          "closed": {
+            "Pss_Anon": 19284,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20369,
+            "Pss": 50489
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65772,
+              "RssAnon": 18104,
+              "Pss": 39331,
+              "Pss_Anon": 18104,
+              "Pss_File": 9625,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "carousel",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18660,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19689,
+            "Pss": 49185
+          },
+          "closed": {
+            "Pss_Anon": 18660,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19689,
+            "Pss": 49185
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29336,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21024,
+            "Pss": 76442
+          },
+          "closed": {
+            "Pss_Anon": 27432,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21060,
+            "Pss": 71718
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "carousel",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19376,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19261,
+            "Pss": 49473
+          },
+          "closed": {
+            "Pss_Anon": 19376,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19261,
+            "Pss": 49473
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30932,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20629,
+            "Pss": 77643
+          },
+          "closed": {
+            "Pss_Anon": 28904,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20664,
+            "Pss": 72794
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "spotlight",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18708,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19495,
+            "Pss": 49039
+          },
+          "closed": {
+            "Pss_Anon": 18708,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19495,
+            "Pss": 49039
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70248,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20398,
+            "Pss": 121812
+          },
+          "closed": {
+            "Pss_Anon": 70304,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19602,
+            "Pss": 110830
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "spotlight",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19348,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19402,
+            "Pss": 49586
+          },
+          "closed": {
+            "Pss_Anon": 19348,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19402,
+            "Pss": 49586
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70820,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20268,
+            "Pss": 122254
+          },
+          "closed": {
+            "Pss_Anon": 71100,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19835,
+            "Pss": 111859
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "hexagons",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18628,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19619,
+            "Pss": 49083
+          },
+          "closed": {
+            "Pss_Anon": 18628,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19619,
+            "Pss": 49083
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 70932,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20436,
+            "Pss": 122534
+          },
+          "closed": {
+            "Pss_Anon": 70884,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19704,
+            "Pss": 111512
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "hexagons",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18996,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19877,
+            "Pss": 49709
+          },
+          "closed": {
+            "Pss_Anon": 18996,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19877,
+            "Pss": 49709
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71904,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20412,
+            "Pss": 123482
+          },
+          "closed": {
+            "Pss_Anon": 71516,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20448,
+            "Pss": 112888
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "dynamic",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18592,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19580,
+            "Pss": 49008
+          },
+          "closed": {
+            "Pss_Anon": 18592,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19580,
+            "Pss": 49008
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 28340,
+            "Pss_Shmem": 15958,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20525,
+            "Pss": 64823
+          },
+          "closed": {
+            "Pss_Anon": 26816,
+            "Pss_Shmem": 13102,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20558,
+            "Pss": 60476
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194208,
+              "RssAnon": 53108,
+              "Pss": 111222,
+              "Pss_Anon": 53108,
+              "Pss_File": 58080,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194288,
+              "RssAnon": 53188,
+              "Pss": 111308,
+              "Pss_Anon": 53188,
+              "Pss_File": 58086,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "dynamic",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19316,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19536,
+            "Pss": 49688
+          },
+          "closed": {
+            "Pss_Anon": 19316,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19536,
+            "Pss": 49688
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29272,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20554,
+            "Pss": 75908
+          },
+          "closed": {
+            "Pss_Anon": 28292,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20586,
+            "Pss": 72104
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194584,
+              "RssAnon": 53420,
+              "Pss": 111394,
+              "Pss_Anon": 53420,
+              "Pss_File": 57940,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194636,
+              "RssAnon": 53472,
+              "Pss": 111464,
+              "Pss_Anon": 53472,
+              "Pss_File": 57957,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "scene",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18652,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19259,
+            "Pss": 48747
+          },
+          "closed": {
+            "Pss_Anon": 18652,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19259,
+            "Pss": 48747
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 18496,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11653,
+            "Pss": 40985
+          },
+          "closed": {
+            "Pss_Anon": 18528,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20219,
+            "Pss": 49583
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 63348,
+              "RssAnon": 15372,
+              "Pss": 36958,
+              "Pss_Anon": 15376,
+              "Pss_File": 9980,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "case": "scene",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19252,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19446,
+            "Pss": 49534
+          },
+          "closed": {
+            "Pss_Anon": 19252,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19446,
+            "Pss": 49534
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 19096,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11939,
+            "Pss": 41871
+          },
+          "closed": {
+            "Pss_Anon": 19084,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20314,
+            "Pss": 50234
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65516,
+              "RssAnon": 18104,
+              "Pss": 39285,
+              "Pss_Anon": 18108,
+              "Pss_File": 9575,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "carousel",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18696,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19785,
+            "Pss": 49317
+          },
+          "closed": {
+            "Pss_Anon": 18444,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20141,
+            "Pss": 49421
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 29472,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21083,
+            "Pss": 76637
+          },
+          "closed": {
+            "Pss_Anon": 27560,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 21119,
+            "Pss": 71905
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "carousel",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19340,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19439,
+            "Pss": 49615
+          },
+          "closed": {
+            "Pss_Anon": 19340,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19439,
+            "Pss": 49615
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-carousel": {
+          "open": {
+            "Pss_Anon": 30880,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20768,
+            "Pss": 77730
+          },
+          "closed": {
+            "Pss_Anon": 28744,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20804,
+            "Pss": 72774
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "spotlight",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18644,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19605,
+            "Pss": 49085
+          },
+          "closed": {
+            "Pss_Anon": 18644,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19605,
+            "Pss": 49085
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70164,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20462,
+            "Pss": 121792
+          },
+          "closed": {
+            "Pss_Anon": 70216,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19698,
+            "Pss": 110838
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "spotlight",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19440,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19443,
+            "Pss": 49719
+          },
+          "closed": {
+            "Pss_Anon": 19188,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19799,
+            "Pss": 49823
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-spotlight": {
+          "open": {
+            "Pss_Anon": 70936,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20415,
+            "Pss": 122517
+          },
+          "closed": {
+            "Pss_Anon": 71368,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20453,
+            "Pss": 112745
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "hexagons",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18668,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19516,
+            "Pss": 49020
+          },
+          "closed": {
+            "Pss_Anon": 18668,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19516,
+            "Pss": 49020
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71268,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20406,
+            "Pss": 122840
+          },
+          "closed": {
+            "Pss_Anon": 71072,
+            "Pss_Shmem": 21640,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19994,
+            "Pss": 112706
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "hexagons",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19408,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19526,
+            "Pss": 49770
+          },
+          "closed": {
+            "Pss_Anon": 19408,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19526,
+            "Pss": 49770
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-hexagons": {
+          "open": {
+            "Pss_Anon": 71692,
+            "Pss_Shmem": 31166,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20421,
+            "Pss": 123279
+          },
+          "closed": {
+            "Pss_Anon": 72052,
+            "Pss_Shmem": 20924,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19625,
+            "Pss": 112601
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "dynamic",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18652,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19633,
+            "Pss": 49121
+          },
+          "closed": {
+            "Pss_Anon": 18652,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19633,
+            "Pss": 49121
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 28308,
+            "Pss_Shmem": 15958,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20563,
+            "Pss": 64829
+          },
+          "closed": {
+            "Pss_Anon": 26832,
+            "Pss_Shmem": 13102,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20595,
+            "Pss": 60529
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194400,
+              "RssAnon": 53200,
+              "Pss": 111353,
+              "Pss_Anon": 53200,
+              "Pss_File": 58118,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194468,
+              "RssAnon": 53268,
+              "Pss": 111426,
+              "Pss_Anon": 53268,
+              "Pss_File": 58124,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "dynamic",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19268,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19602,
+            "Pss": 49706
+          },
+          "closed": {
+            "Pss_Anon": 19268,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19602,
+            "Pss": 49706
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-dynamic": {
+          "open": {
+            "Pss_Anon": 29460,
+            "Pss_Shmem": 26082,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20600,
+            "Pss": 76142
+          },
+          "closed": {
+            "Pss_Anon": 28844,
+            "Pss_Shmem": 23226,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20632,
+            "Pss": 72702
+          },
+          "apps_open": {
+            "wallpaper-video": {
+              "VmRSS": 194276,
+              "RssAnon": 53180,
+              "Pss": 111229,
+              "Pss_Anon": 53180,
+              "Pss_File": 58015,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          },
+          "apps_closed": {
+            "wallpaper-video": {
+              "VmRSS": 194352,
+              "RssAnon": 53256,
+              "Pss": 111313,
+              "Pss_Anon": 53256,
+              "Pss_File": 58023,
+              "Pss_Shmem": 34,
+              "SwapPss": 0,
+              "DRM": 284032.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "scene",
+      "variant": "control",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 18648,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19627,
+            "Pss": 49111
+          },
+          "closed": {
+            "Pss_Anon": 18648,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19627,
+            "Pss": 49111
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 18492,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11951,
+            "Pss": 41279
+          },
+          "closed": {
+            "Pss_Anon": 18528,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20523,
+            "Pss": 49887
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 63056,
+              "RssAnon": 15400,
+              "Pss": 36641,
+              "Pss_Anon": 15404,
+              "Pss_File": 9635,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "case": "scene",
+      "variant": "candidate",
+      "guards_pass": true,
+      "phases": {
+        "idle": {
+          "open": {
+            "Pss_Anon": 19228,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19432,
+            "Pss": 49496
+          },
+          "closed": {
+            "Pss_Anon": 19228,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19432,
+            "Pss": 49496
+          },
+          "apps_open": {},
+          "apps_closed": {}
+        },
+        "memory-scene": {
+          "open": {
+            "Pss_Anon": 19052,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 11928,
+            "Pss": 41816
+          },
+          "closed": {
+            "Pss_Anon": 19060,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20297,
+            "Pss": 50193
+          },
+          "apps_open": {
+            "settings": {
+              "VmRSS": 65516,
+              "RssAnon": 18080,
+              "Pss": 39312,
+              "Pss_Anon": 18084,
+              "Pss_File": 9626,
+              "Pss_Shmem": 11602,
+              "SwapPss": 0,
+              "DRM": 0
+            }
+          },
+          "apps_closed": {}
+        }
+      }
+    }
+  ],
+  "summary": {
+    "idle-open": {
+      "control": [
+        28.80859375,
+        28.7734375,
+        28.78515625,
+        28.82421875,
+        28.8046875,
+        28.53125,
+        28.83203125,
+        28.81640625,
+        28.7890625,
+        28.79296875,
+        28.8359375,
+        28.5859375,
+        28.8359375,
+        28.81640625,
+        28.85546875,
+        28.8046875,
+        28.8515625,
+        28.7734375,
+        28.73828125,
+        28.796875,
+        28.83984375,
+        28.7890625,
+        28.8125,
+        28.796875,
+        28.79296875
+      ],
+      "candidate": [
+        29.40234375,
+        29.44921875,
+        29.58203125,
+        29.50390625,
+        29.421875,
+        29.37890625,
+        29.421875,
+        29.453125,
+        29.4375,
+        29.359375,
+        29.45703125,
+        29.33203125,
+        29.359375,
+        29.140625,
+        29.51953125,
+        29.50390625,
+        29.4765625,
+        29.1328125,
+        29.4453125,
+        29.3828125,
+        29.46875,
+        29.56640625,
+        29.53515625,
+        29.3984375,
+        29.359375
+      ],
+      "delta": [
+        0.59375,
+        0.67578125,
+        0.796875,
+        0.6796875,
+        0.6171875,
+        0.84765625,
+        0.58984375,
+        0.63671875,
+        0.6484375,
+        0.56640625,
+        0.62109375,
+        0.74609375,
+        0.5234375,
+        0.32421875,
+        0.6640625,
+        0.69921875,
+        0.625,
+        0.359375,
+        0.70703125,
+        0.5859375,
+        0.62890625,
+        0.77734375,
+        0.72265625,
+        0.6015625,
+        0.56640625
+      ],
+      "anon_delta": [
+        0.59375,
+        0.67578125,
+        0.796875,
+        0.6796875,
+        0.6171875,
+        0.84765625,
+        0.58984375,
+        0.63671875,
+        0.6484375,
+        0.56640625,
+        0.62109375,
+        0.74609375,
+        0.5234375,
+        0.32421875,
+        0.6640625,
+        0.69921875,
+        0.625,
+        0.359375,
+        0.70703125,
+        0.5859375,
+        0.62890625,
+        0.77734375,
+        0.72265625,
+        0.6015625,
+        0.56640625
+      ],
+      "file_delta": [
+        -0.0595703125,
+        -0.0712890625,
+        0.0810546875,
+        -0.173828125,
+        0.2236328125,
+        -0.4755859375,
+        -0.1943359375,
+        0.0830078125,
+        -0.375,
+        -0.255859375,
+        0.16796875,
+        -0.1572265625,
+        -0.0732421875,
+        0.40625,
+        0.107421875,
+        -0.41796875,
+        -0.0908203125,
+        0.251953125,
+        -0.04296875,
+        0.1826171875,
+        -0.337890625,
+        -0.158203125,
+        0.009765625,
+        -0.0302734375,
+        -0.1904296875
+      ],
+      "pss_delta": [
+        0.5341796875,
+        0.6044921875,
+        0.8779296875,
+        0.505859375,
+        0.8408203125,
+        0.3720703125,
+        0.3955078125,
+        0.7197265625,
+        0.2734375,
+        0.310546875,
+        0.7890625,
+        0.5888671875,
+        0.4501953125,
+        0.73046875,
+        0.771484375,
+        0.28125,
+        0.5341796875,
+        0.611328125,
+        0.6640625,
+        0.7685546875,
+        0.291015625,
+        0.619140625,
+        0.732421875,
+        0.5712890625,
+        0.3759765625
+      ],
+      "control_median_mib": 28.8046875,
+      "candidate_median_mib": 29.4375,
+      "delta_median_mib": 0.62890625,
+      "anon_delta_median_mib": 0.62890625,
+      "file_delta_median_mib": -0.0712890625,
+      "pss_delta_median_mib": 0.5888671875,
+      "difference_of_medians_mib": 0.6328125,
+      "relative_gate_pass": false
+    },
+    "idle-closed": {
+      "control": [
+        28.80859375,
+        28.7734375,
+        28.78515625,
+        28.82421875,
+        28.8046875,
+        28.53125,
+        28.83203125,
+        28.81640625,
+        28.7890625,
+        28.79296875,
+        28.8359375,
+        28.5859375,
+        28.8359375,
+        28.81640625,
+        28.85546875,
+        28.8046875,
+        28.8515625,
+        28.7734375,
+        28.73828125,
+        28.796875,
+        28.59375,
+        28.7890625,
+        28.8125,
+        28.796875,
+        28.79296875
+      ],
+      "candidate": [
+        29.40234375,
+        29.44921875,
+        29.58203125,
+        29.50390625,
+        29.421875,
+        29.37890625,
+        29.421875,
+        29.20703125,
+        29.4375,
+        29.12109375,
+        29.45703125,
+        29.33203125,
+        29.359375,
+        29.140625,
+        29.51953125,
+        29.50390625,
+        29.4765625,
+        29.1328125,
+        29.4453125,
+        29.3828125,
+        29.46875,
+        29.3203125,
+        29.53515625,
+        29.3984375,
+        29.359375
+      ],
+      "delta": [
+        0.59375,
+        0.67578125,
+        0.796875,
+        0.6796875,
+        0.6171875,
+        0.84765625,
+        0.58984375,
+        0.390625,
+        0.6484375,
+        0.328125,
+        0.62109375,
+        0.74609375,
+        0.5234375,
+        0.32421875,
+        0.6640625,
+        0.69921875,
+        0.625,
+        0.359375,
+        0.70703125,
+        0.5859375,
+        0.875,
+        0.53125,
+        0.72265625,
+        0.6015625,
+        0.56640625
+      ],
+      "anon_delta": [
+        0.59375,
+        0.67578125,
+        0.796875,
+        0.6796875,
+        0.6171875,
+        0.84765625,
+        0.58984375,
+        0.390625,
+        0.6484375,
+        0.328125,
+        0.62109375,
+        0.74609375,
+        0.5234375,
+        0.32421875,
+        0.6640625,
+        0.69921875,
+        0.625,
+        0.359375,
+        0.70703125,
+        0.5859375,
+        0.875,
+        0.53125,
+        0.72265625,
+        0.6015625,
+        0.56640625
+      ],
+      "file_delta": [
+        -0.0595703125,
+        -0.0712890625,
+        0.0810546875,
+        -0.173828125,
+        0.2236328125,
+        -0.4755859375,
+        -0.1943359375,
+        0.3955078125,
+        -0.2109375,
+        0.091796875,
+        0.16796875,
+        -0.1572265625,
+        -0.0791015625,
+        0.40625,
+        0.10546875,
+        -0.41796875,
+        -0.0908203125,
+        0.251953125,
+        -0.04296875,
+        0.1826171875,
+        -0.685546875,
+        0.189453125,
+        0.009765625,
+        -0.0302734375,
+        -0.1904296875
+      ],
+      "pss_delta": [
+        0.5341796875,
+        0.6044921875,
+        0.8779296875,
+        0.505859375,
+        0.8408203125,
+        0.3720703125,
+        0.3955078125,
+        0.7861328125,
+        0.4375,
+        0.419921875,
+        0.7890625,
+        0.5888671875,
+        0.4443359375,
+        0.73046875,
+        0.76953125,
+        0.28125,
+        0.5341796875,
+        0.611328125,
+        0.6640625,
+        0.7685546875,
+        0.189453125,
+        0.720703125,
+        0.732421875,
+        0.5712890625,
+        0.3759765625
+      ],
+      "control_median_mib": 28.796875,
+      "candidate_median_mib": 29.421875,
+      "delta_median_mib": 0.62109375,
+      "anon_delta_median_mib": 0.62109375,
+      "file_delta_median_mib": -0.04296875,
+      "pss_delta_median_mib": 0.5888671875,
+      "difference_of_medians_mib": 0.625,
+      "relative_gate_pass": false
+    },
+    "memory-carousel-open": {
+      "control": [
+        53.939453125,
+        54.095703125,
+        54.216796875,
+        54.119140625,
+        54.251953125
+      ],
+      "candidate": [
+        55.591796875,
+        55.767578125,
+        55.712890625,
+        55.677734375,
+        55.626953125
+      ],
+      "delta": [
+        1.65234375,
+        1.671875,
+        1.49609375,
+        1.55859375,
+        1.375
+      ],
+      "anon_delta": [
+        1.65234375,
+        1.671875,
+        1.49609375,
+        1.55859375,
+        1.375
+      ],
+      "file_delta": [
+        -0.125,
+        -0.0732421875,
+        0.1640625,
+        -0.3857421875,
+        -0.3076171875
+      ],
+      "pss_delta": [
+        1.52734375,
+        1.5986328125,
+        1.66015625,
+        1.1728515625,
+        1.0673828125
+      ],
+      "control_median_mib": 54.119140625,
+      "candidate_median_mib": 55.677734375,
+      "delta_median_mib": 1.55859375,
+      "anon_delta_median_mib": 1.55859375,
+      "file_delta_median_mib": -0.125,
+      "pss_delta_median_mib": 1.52734375,
+      "difference_of_medians_mib": 1.55859375,
+      "relative_gate_pass": false
+    },
+    "memory-carousel-closed": {
+      "control": [
+        49.744140625,
+        49.462890625,
+        49.576171875,
+        49.470703125,
+        49.595703125
+      ],
+      "candidate": [
+        50.705078125,
+        50.466796875,
+        50.982421875,
+        50.908203125,
+        50.751953125
+      ],
+      "delta": [
+        0.9609375,
+        1.00390625,
+        1.40625,
+        1.4375,
+        1.15625
+      ],
+      "anon_delta": [
+        0.9609375,
+        1.00390625,
+        1.40625,
+        1.4375,
+        1.15625
+      ],
+      "file_delta": [
+        -0.1220703125,
+        -0.0732421875,
+        0.1640625,
+        -0.38671875,
+        -0.3076171875
+      ],
+      "pss_delta": [
+        0.8388671875,
+        0.9306640625,
+        1.5703125,
+        1.05078125,
+        0.8486328125
+      ],
+      "control_median_mib": 49.576171875,
+      "candidate_median_mib": 50.751953125,
+      "delta_median_mib": 1.15625,
+      "anon_delta_median_mib": 1.15625,
+      "file_delta_median_mib": -0.1220703125,
+      "pss_delta_median_mib": 0.9306640625,
+      "difference_of_medians_mib": 1.17578125,
+      "relative_gate_pass": false
+    },
+    "memory-spotlight-open": {
+      "control": [
+        98.904296875,
+        99.013671875,
+        99.001953125,
+        99.037109375,
+        98.955078125
+      ],
+      "candidate": [
+        99.611328125,
+        99.548828125,
+        99.541015625,
+        99.595703125,
+        99.708984375
+      ],
+      "delta": [
+        0.70703125,
+        0.53515625,
+        0.5390625,
+        0.55859375,
+        0.75390625
+      ],
+      "anon_delta": [
+        0.70703125,
+        0.53515625,
+        0.5390625,
+        0.55859375,
+        0.75390625
+      ],
+      "file_delta": [
+        -0.0126953125,
+        -0.0478515625,
+        0.1923828125,
+        -0.126953125,
+        -0.0458984375
+      ],
+      "pss_delta": [
+        0.6943359375,
+        0.4873046875,
+        0.7314453125,
+        0.431640625,
+        0.7080078125
+      ],
+      "control_median_mib": 99.001953125,
+      "candidate_median_mib": 99.595703125,
+      "delta_median_mib": 0.55859375,
+      "anon_delta_median_mib": 0.55859375,
+      "file_delta_median_mib": -0.0458984375,
+      "pss_delta_median_mib": 0.6943359375,
+      "difference_of_medians_mib": 0.59375,
+      "relative_gate_pass": false
+    },
+    "memory-spotlight-closed": {
+      "control": [
+        88.9609375,
+        89.06640625,
+        89.05859375,
+        89.08984375,
+        89.00390625
+      ],
+      "candidate": [
+        90.02734375,
+        89.6015625,
+        89.44921875,
+        89.8671875,
+        90.12890625
+      ],
+      "delta": [
+        1.06640625,
+        0.53515625,
+        0.390625,
+        0.77734375,
+        1.125
+      ],
+      "anon_delta": [
+        1.06640625,
+        0.53515625,
+        0.390625,
+        0.77734375,
+        1.125
+      ],
+      "file_delta": [
+        -0.056640625,
+        -0.0927734375,
+        -0.3115234375,
+        0.2275390625,
+        0.7373046875
+      ],
+      "pss_delta": [
+        1.009765625,
+        0.4423828125,
+        0.0791015625,
+        1.0048828125,
+        1.8623046875
+      ],
+      "control_median_mib": 89.05859375,
+      "candidate_median_mib": 89.8671875,
+      "delta_median_mib": 0.77734375,
+      "anon_delta_median_mib": 0.77734375,
+      "file_delta_median_mib": -0.056640625,
+      "pss_delta_median_mib": 1.0048828125,
+      "difference_of_medians_mib": 0.80859375,
+      "relative_gate_pass": false
+    },
+    "memory-hexagons-open": {
+      "control": [
+        100.056640625,
+        100.041015625,
+        100.083984375,
+        99.705078125,
+        100.033203125
+      ],
+      "candidate": [
+        100.298828125,
+        100.587890625,
+        100.755859375,
+        100.654296875,
+        100.447265625
+      ],
+      "delta": [
+        0.2421875,
+        0.546875,
+        0.671875,
+        0.94921875,
+        0.4140625
+      ],
+      "anon_delta": [
+        0.2421875,
+        0.546875,
+        0.671875,
+        0.94921875,
+        0.4140625
+      ],
+      "file_delta": [
+        0.1025390625,
+        0.11328125,
+        -0.064453125,
+        -0.0234375,
+        0.0146484375
+      ],
+      "pss_delta": [
+        0.3447265625,
+        0.66015625,
+        0.607421875,
+        0.92578125,
+        0.4287109375
+      ],
+      "control_median_mib": 100.041015625,
+      "candidate_median_mib": 100.587890625,
+      "delta_median_mib": 0.546875,
+      "anon_delta_median_mib": 0.546875,
+      "file_delta_median_mib": 0.0146484375,
+      "pss_delta_median_mib": 0.607421875,
+      "difference_of_medians_mib": 0.546875,
+      "relative_gate_pass": false
+    },
+    "memory-hexagons-closed": {
+      "control": [
+        89.63671875,
+        89.51171875,
+        89.70703125,
+        89.65625,
+        90.5390625
+      ],
+      "candidate": [
+        90.91796875,
+        90.875,
+        90.23046875,
+        90.2734375,
+        90.796875
+      ],
+      "delta": [
+        1.28125,
+        1.36328125,
+        0.5234375,
+        0.6171875,
+        0.2578125
+      ],
+      "anon_delta": [
+        1.28125,
+        1.36328125,
+        0.5234375,
+        0.6171875,
+        0.95703125
+      ],
+      "file_delta": [
+        0.1015625,
+        0.4921875,
+        0.306640625,
+        0.7265625,
+        -0.3603515625
+      ],
+      "pss_delta": [
+        1.3828125,
+        1.85546875,
+        0.830078125,
+        1.34375,
+        -0.1025390625
+      ],
+      "control_median_mib": 89.65625,
+      "candidate_median_mib": 90.796875,
+      "delta_median_mib": 0.6171875,
+      "anon_delta_median_mib": 0.95703125,
+      "file_delta_median_mib": 0.306640625,
+      "pss_delta_median_mib": 1.34375,
+      "difference_of_medians_mib": 1.140625,
+      "relative_gate_pass": false
+    },
+    "memory-dynamic-open": {
+      "control": [
+        43.322265625,
+        43.357421875,
+        43.294921875,
+        43.259765625,
+        43.228515625
+      ],
+      "candidate": [
+        54.076171875,
+        54.107421875,
+        54.205078125,
+        54.056640625,
+        54.240234375
+      ],
+      "delta": [
+        10.75390625,
+        10.75,
+        10.91015625,
+        10.796875,
+        11.01171875
+      ],
+      "anon_delta": [
+        0.8671875,
+        0.86328125,
+        1.0234375,
+        0.91015625,
+        1.125
+      ],
+      "file_delta": [
+        -0.2138671875,
+        -0.2138671875,
+        0.01171875,
+        0.0283203125,
+        0.0361328125
+      ],
+      "pss_delta": [
+        10.5400390625,
+        10.5361328125,
+        10.921875,
+        10.8251953125,
+        11.0478515625
+      ],
+      "control_median_mib": 43.294921875,
+      "candidate_median_mib": 54.107421875,
+      "delta_median_mib": 10.796875,
+      "anon_delta_median_mib": 0.91015625,
+      "file_delta_median_mib": 0.01171875,
+      "pss_delta_median_mib": 10.8251953125,
+      "difference_of_medians_mib": 10.8125,
+      "relative_gate_pass": false
+    },
+    "memory-dynamic-closed": {
+      "control": [
+        39.099609375,
+        39.068359375,
+        39.013671875,
+        38.982421875,
+        38.998046875
+      ],
+      "candidate": [
+        50.400390625,
+        49.908203125,
+        49.880859375,
+        50.310546875,
+        50.849609375
+      ],
+      "delta": [
+        11.30078125,
+        10.83984375,
+        10.8671875,
+        11.328125,
+        11.8515625
+      ],
+      "anon_delta": [
+        1.4140625,
+        0.953125,
+        0.98046875,
+        1.44140625,
+        1.96484375
+      ],
+      "file_delta": [
+        -0.2119140625,
+        -0.2119140625,
+        -0.0087890625,
+        0.02734375,
+        0.0361328125
+      ],
+      "pss_delta": [
+        11.0888671875,
+        10.6279296875,
+        10.8583984375,
+        11.35546875,
+        11.8876953125
+      ],
+      "control_median_mib": 39.013671875,
+      "candidate_median_mib": 50.310546875,
+      "delta_median_mib": 11.30078125,
+      "anon_delta_median_mib": 1.4140625,
+      "file_delta_median_mib": -0.0087890625,
+      "pss_delta_median_mib": 11.0888671875,
+      "difference_of_medians_mib": 11.296875,
+      "relative_gate_pass": false
+    },
+    "memory-scene-open": {
+      "control": [
+        28.65625,
+        28.6484375,
+        28.703125,
+        28.64453125,
+        28.640625
+      ],
+      "candidate": [
+        29.2578125,
+        29.22265625,
+        29.34765625,
+        29.23046875,
+        29.1875
+      ],
+      "delta": [
+        0.6015625,
+        0.57421875,
+        0.64453125,
+        0.5859375,
+        0.546875
+      ],
+      "anon_delta": [
+        0.6015625,
+        0.57421875,
+        0.64453125,
+        0.5859375,
+        0.546875
+      ],
+      "file_delta": [
+        -0.09765625,
+        0.015625,
+        0.2314453125,
+        0.279296875,
+        -0.0224609375
+      ],
+      "pss_delta": [
+        0.50390625,
+        0.58984375,
+        0.8759765625,
+        0.865234375,
+        0.5244140625
+      ],
+      "control_median_mib": 28.6484375,
+      "candidate_median_mib": 29.23046875,
+      "delta_median_mib": 0.5859375,
+      "anon_delta_median_mib": 0.5859375,
+      "file_delta_median_mib": 0.015625,
+      "pss_delta_median_mib": 0.58984375,
+      "difference_of_medians_mib": 0.58203125,
+      "relative_gate_pass": false
+    },
+    "memory-scene-closed": {
+      "control": [
+        28.671875,
+        28.671875,
+        28.73046875,
+        28.67578125,
+        28.67578125
+      ],
+      "candidate": [
+        29.296875,
+        29.2578125,
+        29.4140625,
+        29.21875,
+        29.1953125
+      ],
+      "delta": [
+        0.625,
+        0.5859375,
+        0.68359375,
+        0.54296875,
+        0.51953125
+      ],
+      "anon_delta": [
+        0.625,
+        0.5859375,
+        0.68359375,
+        0.54296875,
+        0.51953125
+      ],
+      "file_delta": [
+        0.154296875,
+        -0.22265625,
+        0.220703125,
+        0.0927734375,
+        -0.220703125
+      ],
+      "pss_delta": [
+        0.779296875,
+        0.36328125,
+        0.904296875,
+        0.6357421875,
+        0.298828125
+      ],
+      "control_median_mib": 28.67578125,
+      "candidate_median_mib": 29.2578125,
+      "delta_median_mib": 0.5859375,
+      "anon_delta_median_mib": 0.5859375,
+      "file_delta_median_mib": 0.0927734375,
+      "pss_delta_median_mib": 0.6357421875,
+      "difference_of_medians_mib": 0.58203125,
+      "relative_gate_pass": false
+    }
+  },
+  "separate_process_summary": {
+    "dynamic-wallpaper-video-open": {
+      "control": [
+        329.548828125,
+        329.400390625,
+        329.521484375,
+        329.271484375,
+        329.361328125
+      ],
+      "candidate": [
+        329.494140625,
+        329.111328125,
+        329.189453125,
+        329.576171875,
+        329.341796875
+      ],
+      "delta": [
+        -0.0546875,
+        -0.2890625,
+        -0.33203125,
+        0.3046875,
+        -0.01953125
+      ],
+      "anon_delta": [
+        -0.0546875,
+        -0.2890625,
+        -0.33203125,
+        0.3046875,
+        -0.01953125
+      ],
+      "file_delta": [
+        0.0810546875,
+        0.16796875,
+        0.068359375,
+        -0.13671875,
+        -0.1005859375
+      ],
+      "pss_delta": [
+        0.025390625,
+        -0.1201171875,
+        -0.263671875,
+        0.16796875,
+        -0.12109375
+      ],
+      "control_median_mib": 329.400390625,
+      "candidate_median_mib": 329.341796875,
+      "delta_median_mib": -0.0546875,
+      "anon_delta_median_mib": -0.0546875,
+      "file_delta_median_mib": 0.068359375,
+      "pss_delta_median_mib": -0.1201171875
+    },
+    "dynamic-wallpaper-video-closed": {
+      "control": [
+        329.599609375,
+        329.427734375,
+        329.591796875,
+        329.349609375,
+        329.427734375
+      ],
+      "candidate": [
+        329.533203125,
+        329.162109375,
+        329.287109375,
+        329.626953125,
+        329.416015625
+      ],
+      "delta": [
+        -0.06640625,
+        -0.265625,
+        -0.3046875,
+        0.27734375,
+        -0.01171875
+      ],
+      "anon_delta": [
+        -0.06640625,
+        -0.265625,
+        -0.3046875,
+        0.27734375,
+        -0.01171875
+      ],
+      "file_delta": [
+        0.08984375,
+        0.1669921875,
+        0.06640625,
+        -0.1259765625,
+        -0.0986328125
+      ],
+      "pss_delta": [
+        0.0224609375,
+        -0.0986328125,
+        -0.23828125,
+        0.15234375,
+        -0.1103515625
+      ],
+      "control_median_mib": 329.427734375,
+      "candidate_median_mib": 329.416015625,
+      "delta_median_mib": -0.06640625,
+      "anon_delta_median_mib": -0.06640625,
+      "file_delta_median_mib": 0.06640625,
+      "pss_delta_median_mib": -0.0986328125
+    },
+    "scene-settings-open": {
+      "control": [
+        26.404296875,
+        26.384765625,
+        26.392578125,
+        26.345703125,
+        26.373046875
+      ],
+      "candidate": [
+        28.986328125,
+        29.021484375,
+        29.009765625,
+        29.013671875,
+        28.990234375
+      ],
+      "delta": [
+        2.58203125,
+        2.63671875,
+        2.6171875,
+        2.66796875,
+        2.6171875
+      ],
+      "anon_delta": [
+        2.58203125,
+        2.63671875,
+        2.6171875,
+        2.66796875,
+        2.6171875
+      ],
+      "file_delta": [
+        -0.08984375,
+        0.208984375,
+        -0.3271484375,
+        -0.3955078125,
+        -0.0087890625
+      ],
+      "pss_delta": [
+        2.4921875,
+        2.845703125,
+        2.2900390625,
+        2.2724609375,
+        2.6083984375
+      ],
+      "control_median_mib": 26.384765625,
+      "candidate_median_mib": 29.009765625,
+      "delta_median_mib": 2.6171875,
+      "anon_delta_median_mib": 2.6171875,
+      "file_delta_median_mib": -0.08984375,
+      "pss_delta_median_mib": 2.4921875
+    }
+  },
+  "settings_closed_release_pass": true,
+  "binary_sha256": {
+    "control": "d93cb44f4079a0a878aa95e7018990617adae41da43385a73dc7a6e187b7ae19",
+    "candidate": "71dc6b2d9a028da8a2cb5db8194f4ac4f1d479c6ea31976274e70d9175c28adf"
+  }
+}

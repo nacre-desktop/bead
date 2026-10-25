@@ -1,5 +1,19 @@
 # Status
 
+## 2026-10-25 — B0109 wallpaper picker repairs (review candidate)
+
+Toolbar layouts and Dynamic persist through the published provider contract;
+carousel travel follows QML's 300 ms OutCubic curve. Generation-fenced previews
+remove the palette-confirmation wait, video replacement reuses mpv's context,
+and Current scene loads its preview/name/kind lazily and opens the picker.
+The cold background t10 sample improves from 806 to 154 ms (paired QML 307 ms).
+Full remote Arch CI and final fifteen-state integration checks pass; paired captures
+cover six video formats. All five-pair CPU memory gates fail: closed deltas are
++0.586–1.156 MiB except Dynamic +11.301 MiB, including +9.887 MiB SHM consistent
+with a spare wallpaper slot. This is an explicit SMOOTHNESS FIRST/SPEND trade,
+not memory acceptance. [Evidence and remaining visual limits](specs/0109-picker-fixes.md).
+No live desktop, installed software, physical scanout or laptop-cap acceptance.
+
 ## 2026-10-25 — B0119 keyboard focus fixed
 
 Closed warm panels no longer reassert exclusive keyboard focus. Matched private

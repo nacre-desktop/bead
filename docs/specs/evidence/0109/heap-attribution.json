@@ -1,0 +1,434 @@
+{
+  "control_source": "2331552",
+  "candidate_source": "c37951c",
+  "backend": "CPU UI / EGL video",
+  "method": "One separate diagnostic alternating pair per phase; trace-state read-only mallinfo2/cache counters after RSS. Not a replacement for five-pair gate cohort.",
+  "arms": [
+    {
+      "case": "carousel",
+      "variant": "control",
+      "guards_pass": true,
+      "samples": {
+        "idle-open": {
+          "rss_kib": {
+            "VmRSS": 67940,
+            "RssAnon": 18464,
+            "Pss": 49232,
+            "Pss_Anon": 18464,
+            "Pss_File": 19932,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 25579520,
+            "free": 9110992,
+            "live": 16468528,
+            "mapped": 0
+          },
+          "cache_used_bytes": 344564
+        },
+        "idle-closed": {
+          "rss_kib": {
+            "VmRSS": 67940,
+            "RssAnon": 18464,
+            "Pss": 49232,
+            "Pss_Anon": 18464,
+            "Pss_File": 19932,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 25579520,
+            "free": 9100096,
+            "live": 16479424,
+            "mapped": 0
+          },
+          "cache_used_bytes": 344564
+        },
+        "phase-open": {
+          "rss_kib": {
+            "VmRSS": 110368,
+            "RssAnon": 29376,
+            "Pss": 76331,
+            "Pss_Anon": 29376,
+            "Pss_File": 20873,
+            "Pss_Shmem": 26082,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": true,
+          "heap_bytes": {
+            "arena": 41324544,
+            "free": 20587184,
+            "live": 20737360,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 7850004
+        },
+        "phase-closed": {
+          "rss_kib": {
+            "VmRSS": 102748,
+            "RssAnon": 27468,
+            "Pss": 71603,
+            "Pss_Anon": 27468,
+            "Pss_File": 20909,
+            "Pss_Shmem": 23226,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 40153088,
+            "free": 21211088,
+            "live": 18942000,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 6047220
+        }
+      }
+    },
+    {
+      "case": "carousel",
+      "variant": "candidate",
+      "guards_pass": true,
+      "samples": {
+        "idle-open": {
+          "rss_kib": {
+            "VmRSS": 69132,
+            "RssAnon": 19220,
+            "Pss": 50380,
+            "Pss_Anon": 19220,
+            "Pss_File": 20324,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 26968064,
+            "free": 10416976,
+            "live": 16551088,
+            "mapped": 0
+          },
+          "cache_used_bytes": 349339
+        },
+        "idle-closed": {
+          "rss_kib": {
+            "VmRSS": 69132,
+            "RssAnon": 19220,
+            "Pss": 50380,
+            "Pss_Anon": 19220,
+            "Pss_File": 20324,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 26968064,
+            "free": 10404736,
+            "live": 16563328,
+            "mapped": 0
+          },
+          "cache_used_bytes": 349339
+        },
+        "phase-open": {
+          "rss_kib": {
+            "VmRSS": 111576,
+            "RssAnon": 30596,
+            "Pss": 77282,
+            "Pss_Anon": 30596,
+            "Pss_File": 20604,
+            "Pss_Shmem": 26082,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": true,
+          "heap_bytes": {
+            "arena": 46997504,
+            "free": 26145568,
+            "live": 20851936,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 7853423
+        },
+        "phase-closed": {
+          "rss_kib": {
+            "VmRSS": 103940,
+            "RssAnon": 28672,
+            "Pss": 72757,
+            "Pss_Anon": 28672,
+            "Pss_File": 20859,
+            "Pss_Shmem": 23226,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 45510656,
+            "free": 26451488,
+            "live": 19059168,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 6050639
+        }
+      }
+    },
+    {
+      "case": "dynamic",
+      "variant": "control",
+      "guards_pass": true,
+      "samples": {
+        "idle-open": {
+          "rss_kib": {
+            "VmRSS": 67980,
+            "RssAnon": 18440,
+            "Pss": 49240,
+            "Pss_Anon": 18440,
+            "Pss_File": 19964,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 25542656,
+            "free": 9075376,
+            "live": 16467280,
+            "mapped": 0
+          },
+          "cache_used_bytes": 344547
+        },
+        "idle-closed": {
+          "rss_kib": {
+            "VmRSS": 67984,
+            "RssAnon": 18444,
+            "Pss": 49244,
+            "Pss_Anon": 18444,
+            "Pss_File": 19964,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 25542656,
+            "free": 9063136,
+            "live": 16479520,
+            "mapped": 0
+          },
+          "cache_used_bytes": 344547
+        },
+        "phase-open": {
+          "rss_kib": {
+            "VmRSS": 89204,
+            "RssAnon": 28396,
+            "Pss": 64937,
+            "Pss_Anon": 28396,
+            "Pss_File": 20583,
+            "Pss_Shmem": 15958,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": true,
+          "heap_bytes": {
+            "arena": 41746432,
+            "free": 21469760,
+            "live": 20276672,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 7470261
+        },
+        "phase-closed": {
+          "rss_kib": {
+            "VmRSS": 81972,
+            "RssAnon": 26876,
+            "Pss": 60594,
+            "Pss_Anon": 26876,
+            "Pss_File": 20616,
+            "Pss_Shmem": 13102,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 39804928,
+            "free": 20949760,
+            "live": 18855168,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 6036503
+        }
+      }
+    },
+    {
+      "case": "dynamic",
+      "variant": "candidate",
+      "guards_pass": true,
+      "samples": {
+        "idle-open": {
+          "rss_kib": {
+            "VmRSS": 68400,
+            "RssAnon": 19372,
+            "Pss": 49588,
+            "Pss_Anon": 19372,
+            "Pss_File": 19380,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 26996736,
+            "free": 10539520,
+            "live": 16457216,
+            "mapped": 0
+          },
+          "cache_used_bytes": 341606
+        },
+        "idle-closed": {
+          "rss_kib": {
+            "VmRSS": 68408,
+            "RssAnon": 19380,
+            "Pss": 49596,
+            "Pss_Anon": 19380,
+            "Pss_File": 19380,
+            "Pss_Shmem": 10836,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 26996736,
+            "free": 10526064,
+            "live": 16470672,
+            "mapped": 0
+          },
+          "cache_used_bytes": 341606
+        },
+        "phase-open": {
+          "rss_kib": {
+            "VmRSS": 110520,
+            "RssAnon": 29656,
+            "Pss": 76107,
+            "Pss_Anon": 29656,
+            "Pss_File": 20369,
+            "Pss_Shmem": 26082,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": true,
+          "heap_bytes": {
+            "arena": 44548096,
+            "free": 24153360,
+            "live": 20394736,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 7472133
+        },
+        "phase-closed": {
+          "rss_kib": {
+            "VmRSS": 103544,
+            "RssAnon": 28392,
+            "Pss": 72020,
+            "Pss_Anon": 28392,
+            "Pss_File": 20402,
+            "Pss_Shmem": 23226,
+            "SwapPss": 0,
+            "DRM": 0
+          },
+          "target_open": false,
+          "heap_bytes": {
+            "arena": 43618304,
+            "free": 24625488,
+            "live": 18992816,
+            "mapped": 4923392
+          },
+          "cache_used_bytes": 6038375
+        }
+      }
+    }
+  ],
+  "deltas_bytes": {
+    "carousel": {
+      "idle-open": {
+        "arena": 1388544,
+        "free": 1305984,
+        "live": 82560,
+        "mapped": 0,
+        "cache_used": 4775,
+        "resident_anon": 774144,
+        "pss_shmem": 0
+      },
+      "idle-closed": {
+        "arena": 1388544,
+        "free": 1304640,
+        "live": 83904,
+        "mapped": 0,
+        "cache_used": 4775,
+        "resident_anon": 774144,
+        "pss_shmem": 0
+      },
+      "phase-open": {
+        "arena": 5672960,
+        "free": 5558384,
+        "live": 114576,
+        "mapped": 0,
+        "cache_used": 3419,
+        "resident_anon": 1249280,
+        "pss_shmem": 0
+      },
+      "phase-closed": {
+        "arena": 5357568,
+        "free": 5240400,
+        "live": 117168,
+        "mapped": 0,
+        "cache_used": 3419,
+        "resident_anon": 1232896,
+        "pss_shmem": 0
+      }
+    },
+    "dynamic": {
+      "idle-open": {
+        "arena": 1454080,
+        "free": 1464144,
+        "live": -10064,
+        "mapped": 0,
+        "cache_used": -2941,
+        "resident_anon": 954368,
+        "pss_shmem": 0
+      },
+      "idle-closed": {
+        "arena": 1454080,
+        "free": 1462928,
+        "live": -8848,
+        "mapped": 0,
+        "cache_used": -2941,
+        "resident_anon": 958464,
+        "pss_shmem": 0
+      },
+      "phase-open": {
+        "arena": 2801664,
+        "free": 2683600,
+        "live": 118064,
+        "mapped": 0,
+        "cache_used": 1872,
+        "resident_anon": 1290240,
+        "pss_shmem": 10366976
+      },
+      "phase-closed": {
+        "arena": 3813376,
+        "free": 3675728,
+        "live": 137648,
+        "mapped": 0,
+        "cache_used": 1872,
+        "resident_anon": 1552384,
+        "pss_shmem": 10366976
+      }
+    }
+  }
+}
