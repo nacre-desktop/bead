@@ -1193,16 +1193,16 @@ fn paint_with_scratch(
                 let transform = Transform::from_scale(scale, scale)
                     .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
                 scratch.stroke_path(&path, &paint, &stroke, transform, None);
-                target.draw_pixmap(
+                let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
+                    .ok_or("invalid arc SHM strip")?;
+                strip.draw_pixmap(
                     x as i32,
                     y as i32 - damage.y as i32,
                     scratch.as_ref(),
                     &PixmapPaint::default(),
                     Transform::identity(),
-                    Some(&mask),
+                    mask_needed.then_some(&mask),
                 );
-                target = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
-                    .ok_or("invalid restored SHM strip")?;
                 painted = true;
             }
         } else if let Primitive::Rounded {
@@ -1539,6 +1539,37 @@ impl Renderer for TreeCpuRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unclipped_arc_remains_visible_without_a_damage_mask() {
+        let mut scene = scene();
+        scene.layers.clear();
+        scene.primitives = vec![Primitive::Arc {
+            rect: Rect::new(0., 0., 24., 24.),
+            start_angle: 0.,
+            sweep_angle: 270.,
+            stroke_width: 4.,
+            color: [255, 255, 255, 255],
+            round_caps: true,
+        }];
+        let mut renderer = TreeCpuRenderer::default();
+        renderer.prepare(&scene, 1.).unwrap();
+        let mut bytes = vec![0; 24 * 24 * 4];
+        renderer
+            .render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: 24,
+                    height: 24,
+                    scale: 1.,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(24, 24),
+            )
+            .unwrap();
+        assert!(bytes.as_chunks::<4>().0.iter().any(|pixel| pixel[3] != 0));
+    }
+
     #[test]
     fn repair_scratch_is_region_sized_reused_capped_and_released_when_idle() {
         let mut scratch = RepairScratch::default();
