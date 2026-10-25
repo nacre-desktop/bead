@@ -956,7 +956,6 @@ fn start(
         )?);
         frame_gate.configure_frame(frame_config, views.keys().cloned());
         // B0048: detachable panels, remembered beside the other durable panel state.
-        views.insert(pearls::GUIDE_VIEW.into(), pearls::guide_spec(&colors)?);
         options.pearls = Some(pearls::options(
             state::File::path()
                 .ok()
@@ -973,6 +972,9 @@ fn start(
                 primary.renderer = renderer;
             }
         }
+        // Drag guides are transient utility surfaces; keep their CPU renderer
+        // even when benchmarking the content panels with GL.
+        views.insert(pearls::GUIDE_VIEW.into(), pearls::guide_spec(&colors)?);
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
         // B0052: Settings and the AI sidebar are separate on-demand processes.
         if let Some(socket) = &options.command_socket {

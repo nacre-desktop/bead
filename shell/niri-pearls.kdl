@@ -2,6 +2,8 @@
 window-rule {
     match app-id="^bead[.]pearl$"
     open-floating true
+    // A transparent prewarm must not take focus from the open panel.
+    open-focused false
     // Keep the hidden bootstrap pose integral for exact commit-time offsets.
     default-floating-position x=0 y=0 relative-to="top-left"
     border { off; }
