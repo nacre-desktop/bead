@@ -461,6 +461,19 @@ type Poster = (
     u32,
     Option<Arc<[u8]>>,
 );
+// The decode never runs on the panel preparation thread. Retirement joins it so
+// an old page cannot leave a decoder or an image allocation behind.
+struct PosterJob {
+    result: std::sync::mpsc::Receiver<Poster>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+impl Drop for PosterJob {
+    fn drop(&mut self) {
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
 type Notify = Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>;
 
 #[path = "dashboard_controls.rs"]
@@ -476,6 +489,7 @@ pub struct Dashboard {
     wallpaper: Option<Arc<dyn Source>>,
     summary_updates: Option<Arc<dyn Source>>,
     poster: std::cell::RefCell<Option<Poster>>,
+    poster_job: std::cell::RefCell<Option<PosterJob>>,
     /// Thumbnail of the active player's art, decoded once per path while visible.
     art: std::cell::RefCell<Option<Art>>,
     /// The Weather page's daemon city photo, held only while the page is shown.
@@ -509,6 +523,7 @@ impl Dashboard {
             wallpaper: None,
             summary_updates: None,
             poster: Default::default(),
+            poster_job: Default::default(),
             art: Default::default(),
             photo: Default::default(),
             shots: Default::default(),
@@ -548,7 +563,7 @@ impl Dashboard {
         let fahrenheit = self.prefs().is_some_and(|p| p.fahrenheit);
         number(
             value.map(|v| (if fahrenheit { v * 9. / 5. + 32. } else { v } + 0.5).floor()),
-            "°",
+            if fahrenheit { "°F" } else { "°C" },
         )
     }
     #[cfg(test)]
@@ -577,12 +592,14 @@ impl Dashboard {
     }
     pub fn project_with_stores(&self, stores: &bead::core::Stores) -> BTreeMap<String, Value> {
         let mut values = self.project();
-        if self.page == Page::Today {
+        let open = stores.get("panel.open") != Some(&Value::Bool(false));
+        if self.page == Page::Today && open {
             self.project_wallpaper(stores, &mut values);
+        } else if !open {
+            self.poster.borrow_mut().take();
         }
         // The countdown redraws once a second only while a session runs in an open panel;
         // the mini player on Today shows no position and needs no wake.
-        let open = stores.get("panel.open") != Some(&Value::Bool(false));
         let live = matches!(values.get("dashboard.state"), Some(Value::Text(t)) if t == "running" || (t == "playing" && self.page == Page::Media))
             && open;
         self.tick(live);
@@ -883,12 +900,57 @@ impl Dashboard {
                     ),
                     96,
                 );
+                let day = current
+                    .days
+                    .order
+                    .first()
+                    .and_then(|id| current.days.items.get(id));
+                let hour = current
+                    .hours
+                    .order
+                    .first()
+                    .and_then(|id| current.hours.items.get(id));
+                let metrics = [
+                    ("wind", current.wind, " km/h"),
+                    ("humidity", current.humidity, "%"),
+                    ("uv", day.and_then(|d| d.uv), ""),
+                    ("rain", hour.and_then(|h| h.rain), "%"),
+                    ("air-quality", current.aqi, " AQI"),
+                    ("pressure", current.pressure, " hPa"),
+                ]
+                .into_iter()
+                .map(|(id, value, suffix)| {
+                    json!({"id":id,
+                    "label":tr(&format!("bead.dashboard.weather-{id}"), &[]),
+                    "value":number(value, suffix)})
+                })
+                .collect();
+                out.insert("dashboard.weather.metrics".into(), Value::list(metrics));
+                let time = |value: Option<&str>| {
+                    value
+                        .and_then(|v| v.rsplit('T').next())
+                        .and_then(|v| v.get(..5))
+                        .unwrap_or("—")
+                        .to_owned()
+                };
+                let rise = time(day.and_then(|d| d.sunrise.as_deref()));
+                let set = time(day.and_then(|d| d.sunset.as_deref()));
+                text(
+                    &mut out,
+                    "weather.sun_times",
+                    &tr(
+                        "bead.dashboard.weather-sun-times",
+                        &[("rise", &rise), ("set", &set)],
+                    ),
+                    80,
+                );
                 let rain = tr("bead.dashboard.weather-rain-unit", &[]);
                 let hours = current.hours.order.iter().take(8).filter_map(|id| current.hours.items.get(id).map(|h| json!({
                     "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"value":self.degrees(h.temperature),"detail":number(h.rain,&rain)
                 }))).collect();
                 let days = current.days.order.iter().take(7).filter_map(|id| current.days.items.get(id).map(|d| json!({
-                    "id":id,"label":line(&d.date,20),"value":format!("{} / {}",self.degrees(d.low),self.degrees(d.high)),"detail":number(d.rain,&rain)
+                    "id":id,"label":line(&d.date,20),"low":d.low,"high":d.high,"code":d.wmo,
+                    "low_text":self.degrees(d.low),"high_text":self.degrees(d.high),"rain_text":number(d.rain,"%"),"value":format!("{} / {}",self.degrees(d.low),self.degrees(d.high)),"detail":number(d.rain,&rain)
                 }))).collect();
                 out.insert("dashboard.rows".into(), Value::list(hours));
                 out.insert("dashboard.secondary".into(), Value::list(days));
@@ -955,7 +1017,15 @@ impl Dashboard {
                 }))).collect();
                 out.insert("dashboard.rows".into(), Value::list(rows));
                 out.insert("dashboard.secondary".into(), Value::list(disks));
-                out.insert("dashboard.gauges".into(), Value::list(controls::gauges(&s)));
+                out.insert("dashboard.gauges".into(), Value::list({
+                    let mut gauges = controls::gauges(&s);
+                    let disk = s.disks.order.iter().find_map(|id| s.disks.items.get(id));
+                    gauges.push(json!({"id":"storage","label":tr("bead.dashboard.gauge-storage", &[]),"icon":"hard_drive",
+                        "value":disk.map_or("—".into(), |d| format!("{:.0}%", d.used as f64 * 100. / d.total as f64)),
+                        "fraction":disk.map(|d| (d.used as f64 / d.total as f64).clamp(0.,1.)),
+                        "detail":disk.map_or(String::new(), |d| format!("{} / {}", bytes(d.used), bytes(d.total)))}));
+                    gauges
+                }));
                 controls::traffic(&s, &mut out);
                 controls::host(&s, self.now, &mut out);
             }
@@ -1190,22 +1260,57 @@ impl Dashboard {
             dimension("dashboard.hero.height"),
         );
         let mut held = self.poster.borrow_mut();
+        let mut pending = self.poster_job.borrow_mut();
         if let Some(pair) = pair.filter(|_| w > 0 && h > 0) {
+            if let Some(job) = pending.as_ref() {
+                match job.result.try_recv() {
+                    Ok(poster) => {
+                        *held = Some(poster);
+                        pending.take();
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        pending.take();
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+            }
             if held
                 .as_ref()
                 .is_none_or(|(old, ow, oh, _)| old != &pair || *ow != w || *oh != h)
             {
-                // The hero is an aspect-cropped photo card in QML, independently
-                // of the desktop wallpaper's fit/fill preference.
-                let mut request = pair.clone();
-                request.presentation = nacre_protocol::wallpaper::Presentation::Crop;
-                let bytes = crate::wallpaper::decode_pair(request, w, h)
-                    .ok()
-                    .and_then(|decoded| image::RgbaImage::from_raw(w, h, decoded.rgba))
-                    .and_then(|image| crate::player_art::encode(&image));
-                *held = Some((pair, w, h, bytes));
+                *held = None;
+                // At most one job per page, even when the published pair or size
+                // changes during decode. Stale results are discarded above.
+                if pending.is_none() {
+                    let (send, result) = std::sync::mpsc::channel();
+                    let notify = self.notify.borrow().clone();
+                    let thread = std::thread::Builder::new()
+                        .name("dashboard-poster".into())
+                        .spawn(move || {
+                            bead::core::profile::mark("dashboard_poster_start");
+                            let mut request = pair.clone();
+                            request.presentation = nacre_protocol::wallpaper::Presentation::Crop;
+                            let bytes = crate::wallpaper::decode_pair(request, w, h)
+                                .ok()
+                                .and_then(|decoded| image::RgbaImage::from_raw(w, h, decoded.rgba))
+                                .and_then(|image| crate::player_art::encode(&image));
+                            bead::core::profile::mark("dashboard_poster_ready");
+                            if send.send((pair, w, h, bytes)).is_ok()
+                                && let Some(notify) = notify
+                            {
+                                notify(bead::wayland::UiEvent::Model(BTreeMap::new()));
+                            }
+                        });
+                    if let Ok(thread) = thread {
+                        *pending = Some(PosterJob {
+                            result,
+                            thread: Some(thread),
+                        });
+                    }
+                }
             }
         } else {
+            pending.take();
             *held = None;
         }
         out.insert(

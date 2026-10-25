@@ -391,7 +391,7 @@ fn system_with_metrics() -> Json {
         json!({"used": 6 * 1024 * 1024 * 1024_u64, "total": 16 * 1024 * 1024 * 1024_u64});
     data["gpu"] = json!({"percent": 12.0});
     // Booted 25 h before `fixed_now`.
-    data["host"] = json!({"user":"siverteh","os":"Arch Linux","kernel":"6.12.1-arch1-1",
+    data["host"] = json!({"user":"fixture","os":"Fixture Linux","kernel":"6.0.0-fixture",
         "uptime_s": 1, "boot_ms": fixed_now() - 90_000_000});
     data
 }
@@ -448,10 +448,15 @@ fn system_gauges_show_published_readings_and_never_invent_zero() {
     assert_eq!(cards[1]["value"], json!("38%"));
     assert_eq!(cards[1]["detail"], json!("6.0 GiB / 16.0 GiB"));
     assert_eq!(cards[2]["value"], json!("12%"));
-    assert_eq!(cards.len(), 3, "the placeholder disk card is gone");
+    assert_eq!(
+        cards.len(),
+        4,
+        "storage uses the published filesystem reading"
+    );
+    assert_eq!(cards[3]["id"], json!("storage"));
     // The frozen fixture has none of the new members: every gauge stays unknown.
     let unknown = page_view(Page::System, fixture("system")).project();
-    for card in rows(&unknown, "dashboard.gauges") {
+    for card in rows(&unknown, "dashboard.gauges").iter().take(3) {
         assert_eq!(card["value"], json!("—"), "{card}");
     }
 }
@@ -466,11 +471,11 @@ fn host_card_counts_uptime_locally_and_is_absent_without_a_host_block() {
     assert_eq!(
         card,
         [
-            "siverteh",
-            "Arch Linux",
+            "fixture",
+            "Fixture Linux",
             "Hyprland",
             "Up 1d 1h 0m",
-            "6.12.1-arch1-1"
+            "6.0.0-fixture"
         ]
     );
     // Only the daemon's boot-relative reading: members are independent and optional.
@@ -1242,7 +1247,7 @@ fn live_prefs() -> (
 
 #[test]
 fn weather_rounds_half_degrees_like_the_reference() {
-    for (degrees, expected) in [(8.5, "9°"), (-8.5, "-8°"), (-8.6, "-9°")] {
+    for (degrees, expected) in [(8.5, "9°C"), (-8.5, "-8°C"), (-8.6, "-9°C")] {
         let mut data = fixture("weather");
         data["current"]["temperature"] = json!(degrees);
         let shown = page_view(Page::Weather, data).project();
@@ -1267,18 +1272,18 @@ fn weather_follows_the_fahrenheit_preference_live() {
     };
     // 10 C; the store is empty, so Celsius like Nacre's default.
     let celsius = weather(Some(prefs.clone()));
-    assert_eq!(text(&celsius, "dashboard.metric"), "10°");
+    assert_eq!(text(&celsius, "dashboard.metric"), "10°C");
     desktop
         .publish(json!({"store":"desktop","rev":2,"exists":true,"dirty":false,"data":{"weatherFahrenheit":true}}))
         .unwrap();
     let fahrenheit = weather(Some(prefs));
-    assert_eq!(text(&fahrenheit, "dashboard.metric"), "50°");
+    assert_eq!(text(&fahrenheit, "dashboard.metric"), "50°F");
     assert_ne!(
         serde_json::to_string(&rows(&fahrenheit, "dashboard.rows")).unwrap(),
         serde_json::to_string(&rows(&celsius, "dashboard.rows")).unwrap()
     );
     // Without a preferences source (preview) the page stays Celsius.
-    assert_eq!(text(&weather(None), "dashboard.metric"), "10°");
+    assert_eq!(text(&weather(None), "dashboard.metric"), "10°C");
 }
 
 #[test]

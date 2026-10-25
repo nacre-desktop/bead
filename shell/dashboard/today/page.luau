@@ -74,8 +74,7 @@ return function()
         },
         ui.Row{id="palette",position="absolute",left=l.heroInset,top=l.hero-37,width=180,height=19,gap=10,
             ui.Box{width=19,height=19,radius=10,fill="primary"},ui.Box{width=19,height=19,radius=10,fill="secondary"},
-            ui.Box{width=19,height=19,radius=10,fill="tertiary"},ui.Box{width=19,height=19,radius=10,fill="surfaceContainerHigh"},
-            ui.Box{width=19,height=19,radius=10,fill="onSurface"}},
+            ui.Box{width=19,height=19,radius=10,fill="tertiary"},ui.Box{width=19,height=19,radius=10,fill="surfaceContainerHigh"}},
     }
     local hostRows={}
     local hostRowHeight=#host+1>5 and l.hostRowHeight or l.hostSmallRowHeight

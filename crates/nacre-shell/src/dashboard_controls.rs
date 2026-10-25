@@ -359,6 +359,10 @@ impl Dashboard {
                 out.entry(format!("dashboard.{key}"))
                     .or_insert_with(|| Value::Text(tr(value, &[])));
             }
+            for key in ["artist", "album", "player_identity"] {
+                out.entry(format!("dashboard.{key}"))
+                    .or_insert_with(|| Value::Text(String::new()));
+            }
             for key in ["can_previous", "can_toggle", "can_next", "can_seek", "art"] {
                 out.entry(format!("dashboard.{key}"))
                     .or_insert(Value::Bool(false));
@@ -418,6 +422,18 @@ impl Dashboard {
             },
             64,
         );
+        text(
+            out,
+            "artist",
+            if p.artist.is_empty() {
+                &p.identity
+            } else {
+                &p.artist
+            },
+            96,
+        );
+        text(out, "album", &p.album, 96);
+        text(out, "player_identity", &p.identity, 64);
         let who = if self.page == Page::Today {
             p.artist.clone()
         } else {

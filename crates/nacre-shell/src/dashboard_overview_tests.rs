@@ -115,6 +115,25 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
         },
     )?;
     let values = dashboard.project_with_stores(&h.session.stores);
+    assert_eq!(
+        values["dashboard.wallpaper"],
+        Value::Bool(false),
+        "first projection returns the layout without waiting for image decoding"
+    );
+    let finish = |stores: &bead::core::Stores| {
+        dashboard
+            .poster_job
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .thread
+            .take()
+            .unwrap()
+            .join()
+            .unwrap();
+        dashboard.project_with_stores(stores)
+    };
+    let values = finish(&h.session.stores);
     assert_eq!(values["dashboard.wallpaper"], Value::Bool(true));
     let held = dashboard.poster.borrow();
     let poster = held.as_ref().unwrap();
@@ -183,6 +202,7 @@ fn today_projects_host_storage_and_releases_overview_sources_and_poster() -> Res
     assert!(bytes.upgrade().is_none(), "disconnect releases the poster");
     wallpaper.publish((*wallpaper.snapshot().data).clone())?;
     dashboard.project_with_stores(&h.session.stores);
+    finish(&h.session.stores);
     let closing = Arc::downgrade(
         dashboard
             .poster

@@ -32,18 +32,21 @@ return function()
             font_size=15*4/3,color="onSurfaceVariant"}
     end
 
-    local identity=ui.Row{id="identity",position="absolute",left=22,top=16,width=190,height=38,
-        padding_left=12,padding_right=12,gap=8,align="center",radius=19,fill=ui.alpha("primary",.12),
-        ui.Text{text="music_note",family="Material Symbols Rounded",font_size=18,width=22,height=22,color="primary"},
-        ui.Text{text=ui.bind("dashboard.title"),width=140,height=22,font_size=12*4/3,color="onSurface"}}
+    local player=ui.resolve_for_check(ui.bind("dashboard.player_identity"))
+    local identityWidth=math.min(280,math.max(96,#player*8+24))
+    local identity=ui.Row{id="identity",position="absolute",left=22,top=16,width=identityWidth,height=38,
+        padding_left=12,padding_right=12,align="center",justify="center",radius=19,fill=ui.alpha("primary",.12),
+        ui.Text{text=player,width=identityWidth-24,height=22,font_size=16,font_weight=600,text_align="center",color="onSurface"}}
 
     local coverSize=280.176
     local metadata=ui.Column{id="metadata",position="absolute",left=302.176,top=22,width=236.624,height=280.176,
         gap=12,justify="center",
-        ui.Text{id="title",text=ui.bind("dashboard.track"),width=236.624,height=90,font_size=23*4/3,
+        ui.Text{id="title",text=ui.bind("dashboard.track"),width=236.624,font_size=23*4/3,
             font_weight=600,color="onSurface"},
-        ui.Text{id="description",text=ui.bind("dashboard.track_detail"),width=236.624,height=52,
+        ui.Text{id="description",text=ui.bind("dashboard.artist"),width=236.624,
             font_size=13*4/3,color="secondary"},
+        ui.Text{id="album",text=ui.bind("dashboard.album"),width=236.624,height=20,
+            font_size=10*4/3,color="onSurfaceVariant"},
     }
     local artwork=ui.Box{id="artwork",position="absolute",left=0,top=36.912,width=coverSize,height=coverSize,
         radius=14,fill="surfaceContainerHigh",
@@ -76,17 +79,27 @@ return function()
             op("player.play_pause","dashboard.can_toggle"),56,true),
         iconButton("next","skip_next",ui.tr("bead.dashboard.media-next"),op("player.next","dashboard.can_next"),42),
     }
+    local hasLyrics=#rows>0 or ui.resolve_for_check(ui.bind("dashboard.detail"))~=""
+    local clock=ui.resolve_for_check(ui.bind("dashboard.metric"))
+    local duration=string.match(clock,"/ (.+)$") or "—"
+    local details=ui.Column{id="track-details",width=303,height=348,gap=20,
+        ui.Text{text=ui.bind("dashboard.album"),width=303,font_size=24,font_weight=600,color="onSurface"},
+        ui.Text{text=ui.bind("dashboard.artist"),width=303,font_size=12,color="onSurfaceVariant"},
+        ui.Text{text=ui.tr("bead.dashboard.media-duration",{value=duration}),width=303,font_size=12,color="onSurfaceVariant"},
+        ui.Text{text=player,width=303,font_size=12,color="onSurfaceVariant"}}
     return ui.Box{id="media",width=940,height=562,radius=20,fill="surfaceContainer",
+        ui.Box{id="rim",position="absolute",left=0,top=0,width=940,height=562,radius=20,fill="transparent",
+            border_width=1,border_color=ui.alpha("primary",.25)},
         identity,
         ui.Box{id="player",position="absolute",left=22,top=60,width=538.8,height=480,
             artwork,metadata,seeking,seekDuration,transport},
         ui.Column{id="lyrics",position="absolute",left=583,top=60,width=335,height=480,
             padding=16,gap=12,radius=16,fill="surfaceContainerLow",
-            ui.Text{id="heading",text=ui.bind("dashboard.heading"),width=303,height=28,font_size=10*4/3,
+            ui.Text{id="heading",text=hasLyrics and ui.bind("dashboard.heading") or ui.tr("bead.dashboard.media-track-details"),width=303,height=28,font_size=10*4/3,
                 color="onSurfaceVariant"},
-            ui.Text{id="message",text=ui.bind("dashboard.summary"),width=303,height=48,font_size=12*4/3,
-                color="onSurfaceVariant"},
-            lyricBody,
+            hasLyrics and ui.Text{id="message",text=ui.bind("dashboard.summary"),width=303,height=48,font_size=12*4/3,
+                color="onSurfaceVariant"} or nil,
+            hasLyrics and lyricBody or details,
         },
     }
 end

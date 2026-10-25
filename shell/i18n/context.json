@@ -822,5 +822,14 @@
   "bead.welcome.skip-tour": "Bead Welcome footer: left button on the first page; closes the tour.",
   "bead.welcome.start": "Bead Welcome footer: right button on the last page; closes the tour.",
   "bead.welcome.step": "Bead Welcome footer: accessible name of a step dot; {number} is the step position and {name} the page name.",
-  "bead.welcome.title": "Bead Welcome window: title of the window and of its header; the product name followed by the word Welcome."
+  "bead.welcome.title": "Bead Welcome window: title of the window and of its header; the product name followed by the word Welcome.",
+  "bead.dashboard.weather-wind": "Dashboard weather wind label, using published weather readings.",
+  "bead.dashboard.weather-humidity": "Dashboard weather humidity label, using published weather readings.",
+  "bead.dashboard.weather-uv": "Dashboard weather uv label, using published weather readings.",
+  "bead.dashboard.weather-rain": "Dashboard weather rain label, using published weather readings.",
+  "bead.dashboard.weather-air-quality": "Dashboard weather air-quality label, using published weather readings.",
+  "bead.dashboard.weather-pressure": "Dashboard weather pressure label, using published weather readings.",
+  "bead.dashboard.weather-sun-times": "Dashboard weather sun-times label, using published weather readings.",
+  "bead.dashboard.media-track-details": "Dashboard Media card heading when no lyrics are available.",
+  "bead.dashboard.media-duration": "Dashboard Media track details: duration, formatted as minutes:seconds."
 }

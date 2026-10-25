@@ -834,5 +834,14 @@
   "bead.welcome.skip-tour": "Skip tour",
   "bead.welcome.start": "Start using Nacre",
   "bead.welcome.step": "Step {number}: {name}",
-  "bead.welcome.title": "Nacre Welcome"
+  "bead.welcome.title": "Nacre Welcome",
+  "bead.dashboard.weather-wind": "Wind",
+  "bead.dashboard.weather-humidity": "Humidity",
+  "bead.dashboard.weather-uv": "UV",
+  "bead.dashboard.weather-rain": "Rain chance",
+  "bead.dashboard.weather-air-quality": "Air quality",
+  "bead.dashboard.weather-pressure": "Pressure",
+  "bead.dashboard.weather-sun-times": "Sunrise {rise} · Sunset {set}",
+  "bead.dashboard.media-track-details": "Track details",
+  "bead.dashboard.media-duration": "Duration  {value}"
 }

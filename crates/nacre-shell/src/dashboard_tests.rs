@@ -505,7 +505,7 @@ fn dashboard_long_rows_scroll_without_clipping() -> Result<()> {
         .primitives
         .iter()
         .find_map(|primitive| match primitive {
-            bead::render::Primitive::Text { text, rect, .. } if text == "2024-03-06" => Some(rect),
+            bead::render::Primitive::Text { text, rect, .. } if text == "Wed" => Some(rect),
             _ => None,
         })
         .ok_or("last bounded daily forecast row is absent")?;
