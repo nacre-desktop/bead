@@ -86,6 +86,7 @@ function M.rows(item,package,action_factory)
     local rows={id="settings-fields",width="fill",gap=sp.sm,shrink=0}
     for _,key in sorted_keys(package.settings) do
         local schema=package.settings[key]
+        if schema.hidden then continue end
         local value=(item.settings or {})[key]
         if value==nil then value=package.defaults[key] end
         local row=M.row(item,key,schema,value,action_factory)

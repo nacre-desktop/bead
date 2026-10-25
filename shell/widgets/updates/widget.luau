@@ -22,11 +22,11 @@ local function desktop(props,_settings,_data)
     local slot=props.instance.slot or {w=280,h=80}
     local width=slot.w
     local height=slot.h
-    return ui.Box{id="updates-desktop",width=width,height=height,padding=12,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("status.pill.open","updates") or nil,
-        ui.Row{id="content",width="fill",height="fill",gap=12,align="center",
+    return ui.Box{id="updates-desktop",width=width,height=height,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("status.pill.open","updates") or nil,
+        ui.Row{id="content",width="fill",height="fill",gap=kit.tokens.spacing.md,align="center",
             status_glyph("package","package_2","package","primary"),
-            ui.Column{id="labels",width="fill",gap=4,ui.Text{id="title",text="Updates",font_size=16,color="onSurface"},
-                ui.Text{id="count",text=ui.bind("bar.updates.text"),font_size=24,color="primary"}},
+            ui.Column{id="labels",width="fill",gap=kit.tokens.spacing.xs,ui.Text{id="title",text="Updates",font_size=kit.tokens.text.body*4/3,color="onSurface"},
+                ui.Text{id="count",text=ui.bind("bar.updates.text"),font_size=kit.tokens.text.title*4/3,color="primary"}},
         }}
 end
 local function style(title,preferred,render)

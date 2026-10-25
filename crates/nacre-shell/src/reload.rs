@@ -5192,9 +5192,11 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
-            let wants_seconds = self
-                .widget_seed()
-                .is_some_and(|seed| seed["widget_clock_seconds"] == true);
+            let wants_seconds = (self.bar || self.widget_canvas)
+                && self.session.view_nodes().iter().any(|node| {
+                    matches!(&node.metadata, Some(bead::core::Value::List(records))
+                        if records.first().is_some_and(|seed| seed["widget_clock_seconds"] == true))
+                });
             if wants_seconds {
                 if self.clock_seconds_lease.is_none() {
                     self.clock_seconds_lease = self

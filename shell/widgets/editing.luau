@@ -4,7 +4,21 @@ local c=require("context")
 local ui,kit=c.ui,c.kit
 local sp=kit.tokens.spacing
 local M={}
-function M.seed(document,width,height)
+function M.requires(document,placement,binding)
+    local host=document.hosts[placement=="desktop" and "canvas" or "top_bar"]
+    local function scan(items)
+        for _,item in items or {} do
+            local package=require("registry").catalogue[item.widget]
+            local form=package and package.forms[placement]
+            local style=form and form.styles[item.style or form.default_style]
+            if style and style.requires and table.find(style.requires,binding) then return true end
+            if scan(item.children) then return true end
+        end
+        return false
+    end
+    return host and scan(host.instances) or false
+end
+function M.seed(document,width,height,placement)
     local reservations={}
     for _,item in document.hosts.top_bar.instances do
         local package=require("registry").catalogue[item.widget]
@@ -16,6 +30,7 @@ function M.seed(document,width,height)
         end
     end
     return {{widget_layout=true,document=document,initial=require("default")(width),rev=ui.resolve_for_check(ui.bind("widgets.rev")),
+        widget_clock_seconds=placement~=nil and M.requires(document,placement,"bead.desktop.clock.seconds") or false,
         geometry=ui.resolve_for_check(ui.bind("widgets.geometry")),reservations=reservations,canvas_width=width,canvas_height=height}}
 end
 function M.request(_document,extra)

@@ -18,11 +18,11 @@ local function bar(props,settings,_data)
 end
 local function desktop(props,_settings,_data)
     local slot=props.instance.slot or {w=280,h=80}
-    return ui.Box{id="audio-desktop",width=slot.w,height=slot.h,padding=12,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("status.pill.open","audio") or ui.action("services.audio"),
-        ui.Row{id="content",width="fill",height="fill",gap=12,align="center",
+    return ui.Box{id="audio-desktop",width=slot.w,height=slot.h,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("status.pill.open","audio") or ui.action("services.audio"),
+        ui.Row{id="content",width="fill",height="fill",gap=kit.tokens.spacing.md,align="center",
             status_glyph("glyph",ui.bind("bead.desktop.audio"),"audio"),
-            ui.Column{id="labels",width="fill",gap=4,ui.Text{id="title",text="Sound",font_size=16,color="onSurface"},
-                ui.Text{id="value",text=ui.bind("bead.desktop.audio.label"),font_size=24,color="primary"}},
+            ui.Column{id="labels",width="fill",gap=kit.tokens.spacing.xs,ui.Text{id="title",text="Sound",font_size=kit.tokens.text.body*4/3,color="onSurface"},
+                ui.Text{id="value",text=ui.bind("bead.desktop.audio.label"),font_size=kit.tokens.text.title*4/3,color="primary"}},
         }}
 end
 local function style(title,preferred,render)

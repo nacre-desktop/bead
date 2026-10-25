@@ -13,7 +13,7 @@ if editing then
     local ghost=require("../editing").ghost(document,registry.catalogue,render)
     if ghost then table.insert(targets,ghost) end
 end
-return ui.Host{id="desktop-widgets",shape="canvas",layout=canvas,catalogue=registry.catalogue,metadata=require("../editing").seed(document,ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("bead.viewport.height"))),
+return ui.Host{id="desktop-widgets",shape="canvas",layout=canvas,catalogue=registry.catalogue,metadata=require("../editing").seed(document,ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("bead.viewport.height")),"desktop"),
     render=function(item,variant)
         local node=render(item,variant)
         return node

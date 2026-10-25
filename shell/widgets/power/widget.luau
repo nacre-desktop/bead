@@ -14,8 +14,8 @@ local function bar(props,settings,_data)
 end
 local function desktop(props,_settings,_data)
     local slot=props.instance.slot or {w=280,h=80}
-    return kit.Button{id="power-desktop",width=slot.w,height=slot.h,padding=12,fill="surfaceContainer",radius=kit.tokens.radii.medium,
-        on_activate=ui.action("view.open","session"),ui.Row{id="content",width="fill",height="fill",gap=12,align="center",
+    return kit.Button{id="power-desktop",width=slot.w,height=slot.h,padding=kit.tokens.spacing.md,fill="surfaceContainer",radius=kit.tokens.radii.medium,
+        on_activate=ui.action("view.open","session"),ui.Row{id="content",width="fill",height="fill",gap=kit.tokens.spacing.md,align="center",
             status_glyph("glyph","power_settings_new","power","error"),ui.Text{id="label",text="Power",font_size=20,color="error"}}}
 end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end

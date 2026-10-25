@@ -30,7 +30,7 @@ local function make_variant(package,placement,form)
     local default=form.styles[form.default_style]
     assert(type(default)=="table","missing default "..placement.." style: "..package.id)
     local minimum,maximum=math.huge,0
-    local reserved=0
+    local has_reservation=false
     for name,style in form.styles do
         assert(type(name)=="string" and type(style)=="table" and type(style.title)=="string"
             and type(style.render)=="function","invalid "..placement.." style: "..package.id.."/"..tostring(name))
@@ -44,12 +44,18 @@ local function make_variant(package,placement,form)
         end
         minimum=math.min(minimum,style.min_span)
         maximum=math.max(maximum,style.max_span)
-        if style.reserve_width then reserved=math.max(reserved,style.reserve_width(package.defaults)) end
+        if style.reserve_width then has_reservation=true end
     end
     assert(default.min_span and default.max_span and default.preferred_span,"incomplete default style")
     return {
         min_span=minimum,max_span=maximum,preferred_span=default.preferred_span,
-        reserve_width=reserved>0 and function(_) return reserved end or nil,
+        reserve_width=has_reservation and function(values)
+            local reserved=0
+            for _,style in form.styles do
+                if style.reserve_width then reserved=math.max(reserved,style.reserve_width(values)) end
+            end
+            return reserved
+        end or nil,
         render=function(props,settings,data)
             local instance=props.instance or {}
             local name=instance.style or form.default_style
