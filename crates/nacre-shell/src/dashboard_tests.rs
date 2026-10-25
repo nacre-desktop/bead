@@ -236,7 +236,7 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
     use std::sync::atomic::{AtomicUsize, Ordering};
     let harness = Harness::load(
         &root(),
-        Path::new("dashboard/main.luau"),
+        Path::new("dashboard/today/main.luau"),
         &root().join("palette.json"),
         BTreeMap::new(),
         Config {
@@ -300,7 +300,7 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
     assert_eq!(std::ptr::from_ref(&runtime.session), identity);
     assert_eq!(runtime.session.stores.get("panel.open"), Some(&Value::Bool(true)));
     assert_eq!(runtime.session.stores.get("dashboard.page"), Some(&Value::Text("weather".into())));
-    assert_eq!(runtime.session.stores.get("dashboard.pearl.target"), Some(&Value::Number(111.)));
+    assert_eq!(runtime.session.stores.get("dashboard.pearl.target"), Some(&Value::Number(345.)));
     assert!(emitted.lock().unwrap().iter().any(|event| {
         matches!(event, UiEvent::PanelNavigated(view) if view == "dashboard-weather")
     }));

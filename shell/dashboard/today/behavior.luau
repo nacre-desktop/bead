@@ -95,6 +95,7 @@ local dashboard={stores={
     ["dashboard.rows"]={},["dashboard.secondary"]={},
     ["dashboard.updates"]=tr("bead.dashboard.updates-unavailable"),["dashboard.updates_detail"]="",
     ["dashboard.tabs"]={{id="today",title=tr("bead.dashboard.page-today"),icon="dashboard"},{id="weather",title=tr("bead.dashboard.page-weather"),icon="partly_cloudy_day"},{id="media",title=tr("bead.dashboard.page-media"),icon="music_note"},{id="system",title=tr("bead.dashboard.page-system"),icon="monitoring"}},
+    ["dashboard.pearl.x"]=0,["dashboard.pearl.target"]=0,["dashboard.pearl.moving"]=false,["dashboard.pearl.duration"]=0.18,["dashboard.pearl.curve"]="out-cubic",
     ["dashboard.control"]=false,["dashboard.busy"]=false,["dashboard.message"]="",["dashboard.confirm"]=false,
         ["dashboard.artist"]="",["dashboard.album"]="",["dashboard.player_identity"]="",["dashboard.track"]=tr("bead.dashboard.playback-unavailable"),["dashboard.track_detail"]=tr("bead.dashboard.playback-unavailable-detail"),
     ["dashboard.can_previous"]=false,["dashboard.can_toggle"]=false,["dashboard.can_next"]=false,
@@ -105,6 +106,26 @@ local dashboard={stores={
 },actions={close=function(s) s["panel.open"]=false end},computed={}}
 
 for key,value in pairs(dashboard.stores) do base.stores[key]=value end
+base.actions["dashboard.select"]=function(s,id)
+    local tabs=s["dashboard.tabs"]
+    local count=math.max(1,#tabs)
+    local width=math.floor(936/count)
+    if not s["dashboard.pearl.moving"] then
+        for index,tab in ipairs(tabs) do
+            if tab.id==s["dashboard.page"] then
+                s["dashboard.pearl.x"]=(index-1)*width+(width-12)/2
+                break
+            end
+        end
+    end
+    for index,tab in ipairs(tabs) do
+        if tab.id==id then
+            s["dashboard.pearl.target"]=(index-1)*width+(width-12)/2
+            s["dashboard.pearl.moving"]=true
+            return
+        end
+    end
+end
 base.computed["dashboard.date"]=function(s)
     local y,m,d=string.match(s["calendar.today"],"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
     if not y then return tr("bead.dashboard.date-unavailable") end

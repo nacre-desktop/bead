@@ -1997,7 +1997,8 @@ impl Runtime {
             changes.insert("dashboard.pearl.x".into(), bead::core::Value::Number(target));
             changes.insert("dashboard.pearl.moving".into(), bead::core::Value::Bool(false));
         }
-        let scene = match self.session.update(changes) {
+        let entry = format!("dashboard/{}/main.luau", page.name()).into();
+        let scene = match self.session.navigate(entry, changes) {
             Ok(scene) => scene,
             Err(error) => {
                 *current.borrow_mut() = previous;
@@ -2020,10 +2021,8 @@ impl Runtime {
             self.dashboard_pearl_animation = None;
             self.dashboard_pearl_deadline = None;
         }
-        if scene.is_some() {
-            self.pending_panel_navigation = Some(format!("dashboard-{}", page.name()));
-        }
-        Ok(scene)
+        self.pending_panel_navigation = Some(format!("dashboard-{}", page.name()));
+        Ok(Some(scene))
     }
 
     fn advance_dashboard_pearl(&mut self) -> Option<(f64, bool)> {

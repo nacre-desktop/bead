@@ -310,7 +310,7 @@ pub fn spec(
             let initial = factory(page)?;
             let session = bead::ui::Session::new(
                 "shell".into(),
-                "dashboard/main.luau".into(),
+                format!("dashboard/{}/main.luau", page.name()).into(),
                 (*palette).clone(),
                 (*colors).clone(),
                 cold.clone(),
