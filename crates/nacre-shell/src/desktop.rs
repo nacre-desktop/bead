@@ -310,6 +310,41 @@ mod tests {
             .collect();
         (widths, texts)
     }
+    /// B0101: the blended pearl colours are tint expressions under `ui.alpha`/`ui.tint` inside `ui.Repeat`; the bar must keep
+    /// rendering while workspaces are added, removed, occupied and activated live.
+    #[test]
+    fn pearl_blends_survive_live_workspace_model_updates() {
+        let rows = |count: u32, active: u32, occupied: &[u32]| -> Vec<serde_json::Value> {
+            (1..=count)
+                .map(|i| {
+                    serde_json::json!({"id":format!("w{i}"),"name":i.to_string(),"label":i.to_string(),
+                        "index":i,"active":i==active,"icon":"","icon_mode":false,"occupied":occupied.contains(&i),
+                        "shown":0,"overflow":"","hinted":false,"app1":"","app2":"","app3":""})
+                })
+                .collect()
+        };
+        let (mut session, scene) = bar_session(rows(6, 2, &[1, 2]));
+        session.commit(scene);
+        for (count, active, occupied) in [
+            (6, 3, vec![1, 3, 5]),
+            (7, 7, vec![7]),
+            (3, 1, vec![]),
+            (1, 1, vec![1]),
+            (9, 4, vec![2, 4, 9]),
+            (6, 6, vec![1, 2, 3, 4, 5, 6]),
+        ] {
+            let update = BTreeMap::from([(
+                "bead.workspaces".to_owned(),
+                Value::list(rows(count, active, &occupied)),
+            )]);
+            if let Some(scene) = session
+                .update(update)
+                .expect("bar renders after a workspace change")
+            {
+                session.commit(scene);
+            }
+        }
+    }
     #[test]
     fn workspace_capsule_draws_icon_mode_cells_and_window_hints_from_row_fields() {
         let row = |i: u32, extra: serde_json::Value| {
