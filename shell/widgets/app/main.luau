@@ -36,6 +36,14 @@ local function document_value(value)
     if type(value.hosts)=="table" then return value end
     return nil
 end
+local function wallpaper_preview(rows)
+    for _,row in rows or {} do
+        if row.kind=="wallpaper-scene" and type(row.preview)=="string" then return row.preview end
+        local nested=wallpaper_preview(row.rows)
+        if nested~="" then return nested end
+    end
+    return ""
+end
 local width=get("bead.viewport.width",1280)
 local height=get("bead.viewport.height",800)
 local screen_w=math.max(1,get("widgets.screen_width",1920))
@@ -57,6 +65,7 @@ local message=get("widgets.message","")
 local error_message=get("widgets.error","")
 local busy=get("widgets.busy",false)
 local wallpaper=get("widgets.wallpaper","")
+if wallpaper=="" then wallpaper=wallpaper_preview(get("settings.items",{})) end
 
 local function navigate(op,value)
     return ui.action("widgets.navigate",{{op=op,value=value,document=doc,initial=initial,rev=rev,catalogue=catalogue}})
@@ -326,7 +335,7 @@ local function detail()
     local settings=active_settings(package,entry,instance)
     local desktop_available=package.forms.desktop~=nil
     local stage_w=math.max(1,width-2*spacing.lg)
-    local stage_h=math.clamp(height*.38,spacing.huge*4,spacing.huge*7)
+    local stage_h=math.min(stage_w*screen_h/screen_w,math.max(spacing.huge*4,height*.38))
     local stage_scale=math.min(stage_w/screen_w,stage_h/screen_h)
     local mini_w,mini_h=screen_w*stage_scale,screen_h*stage_scale
     local mini_left,mini_top=(stage_w-mini_w)/2,(stage_h-mini_h)/2

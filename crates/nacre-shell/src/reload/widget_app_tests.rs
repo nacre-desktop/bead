@@ -347,3 +347,57 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
         );
     }
 }
+
+#[test]
+fn widget_app_stage_uses_the_settings_wallpaper_thumbnail() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let dir=std::env::temp_dir().join(format!("widget-app-wallpaper-{}",std::process::id()));
+    let _=std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let thumbnail=dir.join("thumbnail.png");
+    image::DynamicImage::new_rgb8(32,18).save(&thumbnail).unwrap();
+    let preview=format!("wallpaper:current:{}",thumbnail.display());
+    let mut stores=crate::desktop::values(&Default::default(),"");
+    stores.insert("widgets.selected".into(),Value::Text("clock".into()));
+    stores.insert("settings.items".into(),Value::list(vec![json!({
+        "id":"section:wallpaper.scene","kind":"section","rows":[
+            {"id":"wallpaper-scene","kind":"wallpaper-scene","preview":preview}
+        ]
+    })]));
+    let mut icons=BTreeMap::new();
+    icons.insert(preview,thumbnail.clone());
+    let harness=Harness::load_with_icons(
+        &root,
+        Path::new("widgets/app/main.luau"),
+        &root.join("palette.json"),
+        stores,
+        Config{width:1200,height:800,scale:1.},
+        icons,
+    ).unwrap();
+    let images:Vec<_>=harness.scene().primitives.iter().filter_map(|primitive|match primitive {
+        bead::render::Primitive::Image{path,fit,..} if path==&thumbnail=>Some(*fit),_=>None,
+    }).collect();
+    assert_eq!(images.len(),1,"the stage renders the current Settings thumbnail once");
+    assert!(matches!(images[0],bead::render::ImageFit::Cover));
+    let stage=harness.session.view_nodes().iter().find(|node|node.id.ends_with("stage-background"))
+        .expect("screen-sized wallpaper stage node");
+    let stage_rect=bead::ui::rect(&stage.draw);
+    assert!(stage_rect.w>500.,"the output preview should use the taller available stage area");
+    assert!((stage_rect.w/stage_rect.h-1920./1080.).abs()<0.01,"stage preserves the output aspect ratio");
+    drop(harness);
+
+    let mut plain_stores=crate::desktop::values(&Default::default(),"");
+    plain_stores.insert("widgets.selected".into(),Value::Text("clock".into()));
+    let plain=Harness::load(
+        &root,
+        Path::new("widgets/app/main.luau"),
+        &root.join("palette.json"),
+        plain_stores,
+        Config{width:1200,height:800,scale:1.},
+    ).unwrap();
+    assert!(!plain.scene().primitives.iter().any(|primitive|matches!(primitive,
+        bead::render::Primitive::Image{path,..} if path.to_string_lossy().contains("wallpaper:current:"))),
+        "without the live Settings row, the fake preview remains unchanged");
+    drop(plain);
+    std::fs::remove_dir_all(dir).unwrap();
+}
