@@ -128,6 +128,18 @@ def start_daemon(self):
 
 m.Arm.start_daemon = start_daemon
 
+_orig_start_shell = m.Arm.start_shell
+
+
+def start_shell(self):
+    _orig_start_shell(self)
+    if self.name == 'bead':
+        m.wait_until(lambda: 'PRESENTATION clock_id=1' in (self.logs / 'shell.log').read_text(errors='replace'),
+                     10, 'CLOCK_MONOTONIC presentation feedback clock')
+
+
+m.Arm.start_shell = start_shell
+
 _orig_app_rss = m.Arm.app_rss
 
 
@@ -390,6 +402,89 @@ def window_commit_metrics(log_paths, start_ns, end_ns):
             'drop_rate': round(dropped / max(1, dropped + len(intervals)), 3)}
 
 
+def presented_cadence(log_paths, rows, start_ns, end_ns, start_rel, end_rel):
+    """Actual wp_presentation feedback cadence, grouped by presented surface."""
+    groups = {}
+    for path in log_paths:
+        for line in path.read_text(errors='replace').splitlines():
+            if line.startswith(('WINDOW_PRESENTED ', 'UI_PRESENTED ')):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                if 'monotonic_ns' not in fields:
+                    continue
+                stamp = int(fields['monotonic_ns'])
+                if not start_ns <= stamp <= end_ns:
+                    continue
+                if line.startswith('WINDOW_PRESENTED '):
+                    key = ('window', path.name, fields.get('epoch'))
+                else:
+                    key = ('ui', path.name, fields.get('companion'))
+                group = groups.setdefault(key, {'stamps': [], 'refresh_ns': [], 'discarded': 0})
+                group['stamps'].append(stamp)
+                if fields.get('refresh_ns', '').isdigit():
+                    group['refresh_ns'].append(int(fields['refresh_ns']))
+            elif line.startswith(('WINDOW_DISCARDED ', 'UI_DISCARDED ')):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                stamp = int(fields['monotonic_ns']) if fields.get('monotonic_ns', '').isdigit() else None
+                if stamp is not None and start_ns <= stamp <= end_ns:
+                    key = (('window', path.name, fields.get('epoch')) if line.startswith('WINDOW_DISCARDED ')
+                           else ('ui', path.name, fields.get('companion')))
+                    groups.setdefault(key, {'stamps': [], 'refresh_ns': [], 'discarded': 0})['discarded'] += 1
+    if groups:
+        windows = {key: value for key, value in groups.items() if key[0] == 'window' and value['stamps']}
+        ui = {key: value for key, value in groups.items() if key[0] == 'ui' and value['stamps']}
+        pool = windows or {key: value for key, value in ui.items() if key[2] == 'true'} or ui
+        if pool:
+            key, chosen = max(pool.items(), key=lambda item: len(item[1]['stamps']))
+            source = f'{key[0]}:{key[1]}:{key[2]}'
+        else:
+            chosen = None
+            source = None
+    else:
+        chosen = None
+        source = None
+    # QML has no Bead-specific trace. Its client-side presentation event still gives
+    # real compositor feedback timestamps, although multiple QML surfaces share the log.
+    if chosen is None:
+        by_client = {}
+        for stamp, request, interface, ident, event, args in rows:
+            if not request and interface == 'wp_presentation_feedback' and event in ('presented', 'discarded'):
+                parts = [part.strip() for part in args.split(',')]
+                if event == 'presented' and len(parts) >= 4:
+                    ns = ((int(parts[0], 0) << 32) | int(parts[1], 0)) * 1_000_000_000 + int(parts[2], 0)
+                    if start_ns <= ns <= end_ns:
+                        key = ident.split(':', 1)[0]
+                        group = by_client.setdefault(key, {'stamps': [], 'refresh_ns': [], 'discarded': 0})
+                        group['stamps'].append(ns)
+                        group['refresh_ns'].append(int(parts[3], 0))
+                elif event == 'discarded' and start_rel <= stamp <= end_rel:
+                    key = ident.split(':', 1)[0]
+                    by_client.setdefault(key, {'stamps': [], 'refresh_ns': [], 'discarded': 0})['discarded'] += 1
+        if by_client:
+            key, chosen = max(by_client.items(), key=lambda item: len(item[1]['stamps']))
+            source = f'wayland-client:{key}'
+    if not chosen or len(chosen['stamps']) < 2:
+        return {'presentation_source': source, 'presented_frames': len(chosen['stamps']) if chosen else None,
+                'presentation_interval_ms': None, 'presented_dropped': None,
+                'presented_drop_rate': None, 'presented_discarded': chosen['discarded'] if chosen else None,
+                'presented_refresh_ns': percentile(chosen['refresh_ns'], .5) if chosen and chosen['refresh_ns'] else None}
+    stamps = sorted(chosen['stamps'])
+    intervals = [(b - a) / 1e6 for a, b in zip(stamps, stamps[1:]) if (b - a) / 1e6 < IDLE_GAP_MS]
+    if not intervals:
+        return {'presentation_source': source, 'presented_frames': len(stamps),
+                'presentation_interval_ms': None, 'presented_dropped': None,
+                'presented_drop_rate': None, 'presented_discarded': chosen['discarded'],
+                'presented_refresh_ns': percentile(chosen['refresh_ns'], .5) if chosen['refresh_ns'] else None}
+    dropped = sum(max(0, round(interval / VSYNC_MS) - 1)
+                  for interval in intervals if interval > 1.5 * VSYNC_MS)
+    return {'presentation_source': source, 'presented_frames': len(stamps),
+            'presentation_interval_ms': {key: round(percentile(intervals, p), 2)
+                                         for key, p in (('p50', .5), ('p95', .95), ('p99', .99))},
+            'presented_dropped': dropped,
+            'presented_drop_rate': round(dropped / max(1, dropped + len(intervals)), 3),
+            'presented_discarded': chosen['discarded'],
+            'presented_refresh_ns': percentile(chosen['refresh_ns'], .5) if chosen['refresh_ns'] else None}
+
+
 def input_cadence(path, start_ns, end_ns):
     stamps = []
     if path.is_file():
@@ -422,7 +517,7 @@ def parse_trace(path, real_ref):
             if not hit:
                 continue
             hh, mm, ss, micro, arrow, interface, ident, event, args = hit.groups()
-            if event not in ('commit', 'done', 'presented', 'attach', 'damage', 'damage_buffer'):
+            if event not in ('commit', 'done', 'presented', 'discarded', 'attach', 'damage', 'damage_buffer'):
                 continue
             sod = int(hh) * 3600 + int(mm) * 60 + int(ss) + int(micro) / 1e6
             # Surface ids are process-local, so retain the log's process name in the key.
@@ -516,6 +611,7 @@ def pace_drive(self, names):
                 time.sleep(0.8)
                 self.steps(prepare)
                 screenshot_base = None
+                screenshot_mid_enabled = os.environ.get('PACING_CAPTURE_MID') == '1'
                 if name.startswith('scroll-') and repeat == 0:
                     screenshot_base = self.out / 'scroll-evidence' / name
                     screenshot_base.parent.mkdir(parents=True, exist_ok=True)
@@ -525,7 +621,7 @@ def pace_drive(self, names):
                     start = time.time()
                     mono = time.monotonic()
                     try:
-                        if screenshot_base is not None and phase == 'open':
+                        if screenshot_base is not None and screenshot_mid_enabled and phase == 'open':
                             self.scroll_mid_capture = lambda: self.grab(
                                 screenshot_base.with_name(name + '-mid.png'), scale=0.5)
                         self.steps(phase_steps)
@@ -536,7 +632,8 @@ def pace_drive(self, names):
                     windows.append({'animation': name, 'phase': phase, 'repeat': repeat,
                                     'start': start - real_ref, 'end': time.time() - real_ref,
                                     'mono_start': mono - mono_ref, 'mono_start_ns': int(mono * 1e9),
-                                    'mono_end_ns': int(time.monotonic() * 1e9)})
+                                    'mono_end_ns': int(time.monotonic() * 1e9),
+                                    'screenshot_sampled': bool(screenshot_base is not None and screenshot_mid_enabled)})
                     time.sleep(0.5)
                     if screenshot_base is not None and phase == 'open':
                         self.grab(screenshot_base.with_name(name + '-after.png'), scale=0.5)
@@ -568,7 +665,9 @@ def pace_drive(self, names):
         lines = source.read_text(errors='replace').splitlines()
         selected = [line for line in lines if line.startswith((
             'UI_STATE ', 'UI_COMMIT ', 'UI_PRESENTED ', 'AXIS_DELIVER ', 'UI_FRAME ',
-            'WINDOW_STATE ', 'WINDOW_COMMIT ', 'WINDOW_FRAME ', 'WINDOW_PRESENTED '))]
+            'WINDOW_STATE ', 'WINDOW_COMMIT ', 'WINDOW_FRAME ', 'WINDOW_PRESENTED ',
+            'WINDOW_DISCARDED ', 'UI_DISCARDED ', 'PRESENTATION clock_id=',
+            'QML_PRESENTATION clock_id='))]
         if selected:
             trace_dir.mkdir(parents=True, exist_ok=True)
             target = trace_dir / source.name
@@ -591,6 +690,8 @@ def pace_drive(self, names):
         committed = window_commit_metrics(trace_paths, window['mono_start_ns'], window['mono_end_ns'])
         if committed:
             metrics.update(committed)
+        metrics.update(presented_cadence(trace_paths, rows, window['mono_start_ns'], window['mono_end_ns'],
+                                          window['start'], window['end']))
         if window['animation'].startswith('scroll-'):
             metrics['input_cadence'] = input_cadence(self.out / 'axis-input.log',
                                                       window['mono_start_ns'], window['mono_end_ns'])
@@ -600,8 +701,34 @@ def pace_drive(self, names):
         if later and later[0] <= window['mono_start'] + (window['end'] - window['start']):
             metrics['content_commit_ms'] = round((later[0] - window['mono_start']) * 1000, 1)
         results.append({**window, **metrics})
+    presentation_clock_ids = sorted({
+        line.split('clock_id=', 1)[1].split()[0]
+        for path in trace_paths for line in path.read_text(errors='replace').splitlines()
+        if line.startswith(('PRESENTATION clock_id=', 'QML_PRESENTATION clock_id='))
+    })
+    refresh_values = []
+    presentation_discarded = 0
+    discarded_trace_collected = False
+    for path in trace_paths:
+        for line in path.read_text(errors='replace').splitlines():
+            if line.startswith(('WINDOW_DISCARDED ', 'UI_DISCARDED ')):
+                presentation_discarded += 1
+            if line.startswith(('WINDOW_FRAME ', 'WINDOW_PRESENTED ', 'UI_FRAME ', 'UI_PRESENTED ')):
+                discarded_trace_collected = True
+            if line.startswith(('UI_PRESENTED ', 'WINDOW_PRESENTED ')):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                if fields.get('refresh_ns', '').isdigit():
+                    refresh_values.append(int(fields['refresh_ns']))
+    presented_refresh_ns = percentile(refresh_values, .5) if refresh_values else None
     (self.out / 'pacing.json').write_text(json.dumps({'arm': self.name, 'hz': HZ, 'real_ref': real_ref, 'vsync_ms': VSYNC_MS,
                                                       'backend': 'cpu' if self.args.cpu else 'default',
+                                                      'presentation_clock_ids': presentation_clock_ids,
+                                                      'presented_refresh_ns_median': presented_refresh_ns,
+                                                      'presented_refresh_hz': round(1e9 / presented_refresh_ns, 3) if presented_refresh_ns else None,
+                                                      'presented_refresh_matches_requested_hz': bool(presented_refresh_ns and
+                                                                                                     abs(presented_refresh_ns - round(1e9 / HZ)) <= round(1e9 / HZ * .05)),
+                                                      'presentation_discarded': presentation_discarded if discarded_trace_collected else None,
+                                                      'presentation_discarded_trace_collected': discarded_trace_collected,
                                                       'errors': self.errors, 'memory_kib': memory,
                                                       'memory_phase_kib': memory_phase, 'windows': results}, indent=1))
     m.log(f'{self.name}: pacing {len(results)} windows, {len(self.errors)} errors')
@@ -635,19 +762,41 @@ def summarize(args, names):
                     if value is not None:
                         values.append(value)
                 return percentile(values, .5) if values else None
-            row = {'n': len(good), 'commits': med('commits'), 'dropped': sum(w['dropped'] for w in good) / len(good),
-                   'drop_rate': med('drop_rate'), 'p99': med('interval_ms', 'p99'),
-                   'p95': med('interval_ms', 'p95'), 'p50': med('interval_ms', 'p50'),
+            clean = [window for window in good if not window.get('screenshot_sampled')]
+            dropped = [window.get('dropped') for window in good]
+            row = {'n': len(good), 'commits': med('commits'),
+                   'commit_dropped': sum(dropped) / len(good) if all(value is not None for value in dropped) else None,
+                   'commit_drop_rate': med('drop_rate'), 'commit_p99': med('interval_ms', 'p99'),
+                   'commit_p95': med('interval_ms', 'p95'), 'commit_p50': med('interval_ms', 'p50'),
+                   'presented_dropped': med('presented_dropped'),
+                   'presented_discarded': med('presented_discarded'),
+                   'presented_drop_rate': med('presented_drop_rate'),
+                   'presented_p95': med('presentation_interval_ms', 'p95'),
+                   'presented_p99': med('presentation_interval_ms', 'p99'),
                    'gap': med('longest_gap_ms'), 'first': med('first_frame_ms'),
                    'render_p95': med('render_ms', 'p95'), 'render_p99': med('render_ms', 'p99'),
                    'input_p95': med('input_cadence', 'interval_ms.p95'),
-                   'reversal_ms': med('reversal', 'delivery_to_visible_ms')}
+                   'reversal_ms': med('reversal', 'delivery_to_visible_ms'),
+                   'screenshot_sampled': sum(bool(window.get('screenshot_sampled')) for window in good),
+                   'unperturbed_n': len(clean),
+                   'unperturbed_render_p95': percentile([w['render_ms']['p95'] for w in clean
+                                                         if w.get('render_ms')], .5),
+                   'unperturbed_commit_p95': percentile([w['interval_ms']['p95'] for w in clean
+                                                         if w.get('interval_ms')], .5),
+                   'unperturbed_presented_p95': percentile([w['presentation_interval_ms']['p95'] for w in clean
+                                                             if w.get('presentation_interval_ms')], .5)}
             rows[f'{animation}/{phase}/{arm}'] = row
-            lines.append(f"{animation} {phase} {arm}: n={row['n']} commits={row['commits']} dropped={row['dropped']:.1f} "
-                         f"commit_p50={row['p50']} commit_p95={row['p95']} commit_p99={row['p99']} "
+            commit_drop_text = '-' if row['commit_dropped'] is None else f"{row['commit_dropped']:.1f}"
+            lines.append(f"{animation} {phase} {arm}: n={row['n']} commits={row['commits']} commit_dropped={commit_drop_text} "
+                         f"presented_dropped={row['presented_dropped']} present_p95={row['presented_p95']} "
+                         f"presented_discarded={row['presented_discarded']} "
+                         f"present_p99={row['presented_p99']} commit_p50={row['commit_p50']} "
+                         f"commit_p95={row['commit_p95']} commit_p99={row['commit_p99']} "
                          f"gap={row['gap']} first={row['first']} "
                          f"render_p95={row['render_p95']} render_p99={row['render_p99']} "
-                         f"input_p95={row['input_p95']} reversal_ms={row['reversal_ms']}")
+                         f"input_p95={row['input_p95']} reversal_ms={row['reversal_ms']} "
+                         f"sampled={row['screenshot_sampled']} clean_render95={row['unperturbed_render_p95']} "
+                         f"clean_present95={row['unperturbed_presented_p95']}")
     (Path(args.out) / f'pacing-summary-{HZ}hz.json').write_text(json.dumps(rows, indent=1))
     print('\n'.join(lines))
     return rows
@@ -664,7 +813,7 @@ def report(specs):
             columns.setdefault((window['animation'], window['phase']), {}).setdefault(label, []).append(window)
     labels = [spec.partition('=')[0] for spec in specs]
     print('animation/phase'.ljust(26) + ''.join(label.ljust(40) for label in labels))
-    print(''.ljust(26) + ''.join('drop% commit95 commit99 gap first content render95 reversal'.ljust(66) for _ in labels))
+    print(''.ljust(26) + ''.join('present_drop% pdrop# present95 present99 commit95 commit99 gap first content render95 all/clean reversal'.ljust(100) for _ in labels))
     for key, by_label in sorted(columns.items()):
         cells = []
         for label in labels:
@@ -672,10 +821,11 @@ def report(specs):
             if not good:
                 cells.append('-'.ljust(40))
                 continue
-            def med(field, sub=None):
+            clean = [window for window in good if not window.get('screenshot_sampled')]
+            def med(field, sub=None, items=None):
                 # A window with no dropped frame is a zero, not a missing value: it belongs in the median.
                 values = []
-                for window in good:
+                for window in good if items is None else items:
                     value = window.get(field)
                     for key in sub.split('.') if sub else ():
                         value = value.get(key) if isinstance(value, dict) else None
@@ -684,8 +834,9 @@ def report(specs):
                 return percentile(values, .5) if values else None
             def fmt(v):
                 return '-' if v is None else f'{v:.1f}'
-            rate = med('drop_rate')
-            cells.append(f"{fmt(None if rate is None else rate * 100)} {fmt(med('interval_ms', 'p95'))} {fmt(med('interval_ms', 'p99'))} {fmt(med('longest_gap_ms'))} {fmt(med('first_frame_ms'))} {fmt(med('content_commit_ms'))} {fmt(med('render_ms', 'p95'))} {fmt(med('reversal', 'delivery_to_visible_ms'))}".ljust(66))
+            rate = med('presented_drop_rate')
+            clean_render = med('render_ms', 'p95', clean) if clean else None
+            cells.append(f"{fmt(None if rate is None else rate * 100)} {fmt(med('presented_dropped'))} {fmt(med('presentation_interval_ms', 'p95'))} {fmt(med('presentation_interval_ms', 'p99'))} {fmt(med('interval_ms', 'p95'))} {fmt(med('interval_ms', 'p99'))} {fmt(med('longest_gap_ms'))} {fmt(med('first_frame_ms'))} {fmt(med('content_commit_ms'))} {fmt(med('render_ms', 'p95'))}/{fmt(clean_render)} {fmt(med('reversal', 'delivery_to_visible_ms'))}".ljust(100))
         print('/'.join(key).ljust(26) + ''.join(cells))
 
 

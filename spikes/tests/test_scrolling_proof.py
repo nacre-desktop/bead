@@ -133,6 +133,25 @@ class ScrollReversalProofTests(unittest.TestCase):
         proof = self.proof(log)
         self.assertEqual(proof["status"], "missing")
 
+    def test_presented_cadence_counts_feedback_discards_not_commits(self):
+        log = self.root / "presentation.log"
+        log.write_text(
+            "\n".join(
+                [
+                    "WINDOW_PRESENTED monotonic_ns=100000000 refresh_ns=8333333 epoch=3 update=1 generation=9",
+                    "WINDOW_PRESENTED monotonic_ns=108333333 refresh_ns=8333333 epoch=3 update=2 generation=9",
+                    "WINDOW_DISCARDED monotonic_ns=110000000 epoch=3 update=3 generation=9",
+                    "WINDOW_PRESENTED monotonic_ns=116666666 refresh_ns=8333333 epoch=3 update=4 generation=9",
+                ]
+            )
+            + "\n"
+        )
+        metrics = pacing.presented_cadence([log], [], 90_000_000, 125_000_000, 0.09, 0.125)
+        self.assertEqual(metrics["presentation_source"], "window:presentation.log:3")
+        self.assertEqual(metrics["presentation_interval_ms"]["p95"], 8.33)
+        self.assertEqual(metrics["presented_dropped"], 0)
+        self.assertEqual(metrics["presented_discarded"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
