@@ -843,19 +843,26 @@ impl SeatHandler for App {
                     Err(e) => self.fail(e),
                 }
             }
-            Capability::Pointer if self.pointer.is_none() => match self.seat.get_pointer(qh, &seat)
-            {
-                Ok(p) => {
-                    if let Some(manager) = &self.relative_manager {
-                        self.relative_pointer = Some(manager.get_relative_pointer(&p, qh, ()));
-                    }
-                    if let Some(manager) = &self.cursor_manager {
-                        self.cursor_device = Some(manager.get_pointer(&p, qh, ()));
-                    }
-                    self.pointer = Some(p)
+            Capability::Pointer if self.pointer.is_none() => {
+                // This callback already validated the live seat capability.
+                let p = seat.get_pointer(
+                    qh,
+                    ReadyPointer {
+                        inner: smithay_client_toolkit::seat::pointer::PointerData::new(
+                            seat.clone(),
+                            (),
+                        ),
+                        batch: Default::default(),
+                    },
+                );
+                if let Some(manager) = &self.relative_manager {
+                    self.relative_pointer = Some(manager.get_relative_pointer(&p, qh, ()));
                 }
-                Err(e) => self.fail(e),
-            },
+                if let Some(manager) = &self.cursor_manager {
+                    self.cursor_device = Some(manager.get_pointer(&p, qh, ()));
+                }
+                self.pointer = Some(p);
+            }
             _ => {}
         }
     }
@@ -887,15 +894,129 @@ impl SeatHandler for App {
     }
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
 }
+/// SCTK still assembles logical button/axis frames. An established drag can
+/// consume its motion prefix on fd dispatch without waiting for wl_pointer.frame.
+struct ReadyPointer {
+    inner: smithay_client_toolkit::seat::pointer::PointerData<()>,
+    batch: std::sync::Mutex<ReadyPointerBatch>,
+}
+#[derive(Default)]
+struct ReadyPointerBatch {
+    surface: Option<wl_surface::WlSurface>,
+    blocked: bool,
+    fast_motions: usize,
+}
+impl ReadyPointerBatch {
+    fn motion(&mut self, eligible: bool) -> bool {
+        if !self.blocked && eligible {
+            self.fast_motions = self.fast_motions.saturating_add(1);
+            true
+        } else {
+            self.blocked = true;
+            false
+        }
+    }
+}
+impl smithay_client_toolkit::dispatch2::Dispatch2<wl_pointer::WlPointer, App> for ReadyPointer {
+    fn event(
+        &self,
+        app: &mut App,
+        pointer: &wl_pointer::WlPointer,
+        event: wl_pointer::Event,
+        conn: &Connection,
+        qh: &QueueHandle<App>,
+    ) {
+        match &event {
+            wl_pointer::Event::Motion {
+                time,
+                surface_x,
+                surface_y,
+            } => {
+                bead_core::profile::position("pointer_wire", *surface_x as f32, *surface_y as f32);
+                bead_core::profile::mark("pointer_wire");
+                let surface = {
+                    let batch = self.batch.lock().unwrap();
+                    (!batch.blocked).then(|| batch.surface.clone()).flatten()
+                };
+                let fast = surface.is_some_and(|surface| {
+                    app.ready_drag_motion(&PointerEvent {
+                        surface,
+                        position: (*surface_x, *surface_y),
+                        kind: PointerEventKind::Motion { time: *time },
+                    })
+                });
+                self.batch.lock().unwrap().motion(fast);
+            }
+            wl_pointer::Event::Frame => {}
+            other => {
+                let mut batch = self.batch.lock().unwrap();
+                batch.blocked = true;
+                match other {
+                    wl_pointer::Event::Enter { surface, .. } => {
+                        batch.surface = Some(surface.clone())
+                    }
+                    wl_pointer::Event::Leave { .. } => batch.surface = None,
+                    _ => {}
+                }
+            }
+        }
+        let frame = matches!(event, wl_pointer::Event::Frame);
+        self.inner.event(app, pointer, event, conn, qh);
+        if frame {
+            self.batch.lock().unwrap().blocked = false;
+        }
+    }
+}
+#[cfg(test)]
+mod ready_pointer_tests {
+    use super::*;
+    #[test]
+    fn fast_motion_is_a_prefix_and_buttons_or_axes_are_barriers() {
+        let mut batch = ReadyPointerBatch::default();
+        assert!(batch.motion(true));
+        assert!(batch.motion(true));
+        batch.blocked = true;
+        assert!(!batch.motion(true));
+        assert_eq!(batch.fast_motions, 2);
+        batch.blocked = false;
+        batch.fast_motions = 0;
+        assert!(batch.motion(true));
+    }
+    #[test]
+    fn an_unaccelerated_motion_keeps_the_remaining_frame_in_order() {
+        let mut batch = ReadyPointerBatch::default();
+        assert!(!batch.motion(false));
+        assert!(!batch.motion(true));
+        assert_eq!(batch.fast_motions, 0);
+    }
+}
+
 impl PointerHandler for App {
     fn pointer_frame(
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &wl_pointer::WlPointer,
+        pointer: &wl_pointer::WlPointer,
         events: &[PointerEvent],
     ) {
-        for event in events {
+        let mut early = pointer.data::<ReadyPointer>().map_or(0, |data| {
+            std::mem::take(&mut data.batch.lock().unwrap().fast_motions)
+        });
+        for (index, event) in events.iter().enumerate() {
+            if early > 0 && matches!(event.kind, PointerEventKind::Motion { .. }) {
+                early -= 1;
+                continue;
+            }
+            // Only consecutive same-surface motions are replaceable. Buttons,
+            // crossing a surface and scroll/enter/leave events remain barriers.
+            if matches!(event.kind, PointerEventKind::Motion { .. })
+                && events.get(index + 1).is_some_and(|next| {
+                    next.surface == event.surface
+                        && matches!(next.kind, PointerEventKind::Motion { .. })
+                })
+            {
+                continue;
+            }
             // B0048: a held Super+drag belongs to the gesture, wherever the panel is now.
             if self.gesture_owns(&event.surface) {
                 if let PointerEventKind::Release { button: 0x110, .. } = event.kind {
@@ -918,6 +1039,27 @@ impl PointerHandler for App {
     }
 }
 impl App {
+    fn ready_drag_motion(&mut self, event: &PointerEvent) -> bool {
+        if let Some(id) = self.slot_of_surface(&event.surface) {
+            return self
+                .in_slot(id, |app| app.ready_drag_motion(event))
+                .unwrap_or(false);
+        }
+        if !self.pointer_pressed
+            || self.gesture_owns(&event.surface)
+            || !self.surfaces.iter().any(|surface| {
+                surface.wl_surface() == &event.surface
+                    && surface
+                        .pointer_visual
+                        .as_ref()
+                        .is_some_and(|v| v.accepts_motion())
+            })
+        {
+            return false;
+        }
+        self.pointer_event(event);
+        true
+    }
     fn pointer_event(&mut self, event: &PointerEvent) {
         bead_core::profile::position(
             "pointer_received",

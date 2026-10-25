@@ -12,6 +12,7 @@ pub(super) struct Visual {
     _pool: SlotPool,
     x: f32,
     dirty: bool,
+    commit_queued: bool,
     received: u64,
     pending: Option<(f32, f32)>,
     timer: bool,
@@ -31,6 +32,9 @@ impl Drop for Visual {
     }
 }
 impl Visual {
+    pub(super) fn accepts_motion(&self) -> bool {
+        !self.released && !self.retiring
+    }
     pub(super) fn stage_commit(&mut self) -> Result<(), Box<dyn Error>> {
         if self.retiring {
             self.surface.attach(None, 0, 0);
@@ -283,6 +287,7 @@ impl App {
             _pool: pool,
             x: target,
             dirty: true,
+            commit_queued: false,
             received: monotonic_ns(),
             pending: None,
             timer: false,
@@ -350,6 +355,8 @@ impl App {
         }
     }
     pub(super) fn pointer_visual_release(&mut self, index: usize) {
+        // A release is an ordering barrier, not another replaceable motion.
+        self.pointer_visual_commit_now(index);
         self.pointer_visual_flush(index);
         if let Some(visual) = &mut self.surfaces[index].pointer_visual {
             visual.released = true;
@@ -367,14 +374,40 @@ impl App {
             visual.dirty = false;
         }
     }
+    /// Submit the newest pose after this ready-fd dispatch has drained, before sleep.
     pub(super) fn pointer_visual_commit(&mut self, index: usize) {
+        let surface = &mut self.surfaces[index];
+        if surface.callbacks.pending || surface.redraw {
+            return;
+        }
+        let Some(visual) = &mut surface.pointer_visual else {
+            return;
+        };
+        if !visual.dirty || !visual.mapped || visual.retiring || visual.commit_queued {
+            return;
+        }
+        visual.commit_queued = true;
+        let parent = surface.wl_surface().clone();
+        let epoch = self.panel_epoch;
+        self.loop_handle.insert_idle(move |app| {
+            app.with_epoch(epoch, |app| {
+                if let Some(index) = app.surfaces.iter().position(|s| s.wl_surface() == &parent) {
+                    if let Some(visual) = &mut app.surfaces[index].pointer_visual {
+                        visual.commit_queued = false;
+                    }
+                    app.pointer_visual_commit_now(index);
+                }
+            });
+        });
+    }
+    fn pointer_visual_commit_now(&mut self, index: usize) {
         let surface = &self.surfaces[index];
         if surface.callbacks.pending
             || surface.redraw
             || !surface
                 .pointer_visual
                 .as_ref()
-                .is_some_and(|v| v.dirty && v.mapped)
+                .is_some_and(|v| v.dirty && v.mapped && !v.retiring)
         {
             return;
         }

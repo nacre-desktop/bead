@@ -7,13 +7,24 @@ immediate fd dispatch, shared slider pose, then slider-only updates. The prior
 
 The preserved
 [patch](evidence/0126/compositor-knob.rejected.patch) applies to `61e73507`.
-It is evidence for further investigation, not an accepted implementation.
+It records the measured implementation; the product version omits diagnostic renderer pins.
 
-The gates are pointer→present p95 ≤21 ms at 60 Hz and ≤12 ms at 120 Hz,
+The historical gates were pointer→present p95 ≤21 ms at 60 Hz and ≤12 ms at 120 Hz,
 moving pixel error at 2000 physical px/s strictly below QML, first-key UI CPU
 ≤8 ms, and ≤1 MiB added unreclaimable memory. Unreclaimable means anonymous
 + SHM + DRM + SwapPss. File-backed PSS is informational. Five alternating
 control/candidate pairs are required for memory acceptance.
+
+## Continuation: dispatch
+
+Established slider motions are handled in the Wayland protocol dispatch, before
+SCTK waits for `wl_pointer.frame`; SCTK still owns button/axis ordering and seat
+serials. Non-motion events are ordering barriers. Only the latest stored pose is
+submitted after the ready fd drains, before the event loop sleeps; no motion timer
+or next-frame callback delays input dispatch. The existing single outstanding
+parent callback still paces commits. Raw-wire/handler clocks distinguish client
+queueing from the upstream nested input path. Full Arch CI passes; fresh matched
+120 Hz captures are pending, so no new latency win is claimed here.
 
 ## Experiment
 
