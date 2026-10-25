@@ -1,4 +1,4 @@
-{"t":"snap","topic":"dashboard.updates","seq":0,"data":{"health":{"available":true,"stale":false},"refreshing":false,"checked":1800000000,"count":3,"text":"3"}}
+{"t":"snap","topic":"dashboard.updates","seq":0,"data":{"health":{"available":true,"stale":false},"refreshing":false,"checked":1800000000,"count":3,"text":"3","packages":[{"name":"firefox","old":"128.0-1","new":"129.0-1","repo":"extra"},{"name":"linux","old":"6.1-1","new":"6.2-1","repo":"core"},{"name":"ripgrep","old":"14.1-1","new":"14.1-2","repo":"aur"}],"truncated":false}}
 {"t":"call","id":0,"m":"dashboard.updates.refresh","p":{},"timeout":10000}
 {"t":"ret","id":0,"ok":{"changed":false}}
 {"t":"patch","topic":"dashboard.updates","base":0,"seq":1,"data":{"health":{"available":false,"stale":true,"error":{"code":"unavailable","message":"Service unavailable","retry":true}}}}

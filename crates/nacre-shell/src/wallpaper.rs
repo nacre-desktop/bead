@@ -684,6 +684,7 @@ mod tests {
         let active = WallpaperActive {
             available: true,
             stale: false,
+            previous_available: false,
             revision: 2,
             current: Some(second.clone()),
             outputs: BTreeMap::from([("DP-1".into(), second.clone())]),
@@ -699,6 +700,7 @@ mod tests {
                 .observe(&WallpaperActive {
                     available: false,
                     stale: true,
+                    previous_available: false,
                     revision: 1,
                     current: None,
                     outputs: Default::default(),
@@ -828,6 +830,7 @@ mod tests {
         let state = WallpaperActive {
             available: true,
             stale: false,
+            previous_available: false,
             revision: 1,
             current: Some(pair.clone()),
             outputs: BTreeMap::from([("DP-1".into(), pair.clone())]),
@@ -1024,6 +1027,7 @@ mod tests {
         WallpaperActive {
             available: true,
             stale: false,
+            previous_available: false,
             revision: pair.revision,
             current: Some(pair.clone()),
             outputs: BTreeMap::from([("DP-1".into(), pair)]),

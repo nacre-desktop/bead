@@ -1047,8 +1047,13 @@ async fn player_controls_resolve_the_active_player_and_obey_can_flags() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Result<()> {
-    let methods = ["ui.dispatch", "settings.provider", "wallpaper.next"];
-    let (dir, client, mut calls) = lab(&methods, &[], vec![ok(), ok(), ok()]).await;
+    let methods = [
+        "ui.dispatch",
+        "settings.provider",
+        "wallpaper.previous",
+        "wallpaper.next",
+    ];
+    let (dir, client, mut calls) = lab(&methods, &[], vec![ok(), ok(), ok(), ok(), ok()]).await;
     let pair = json!({
             "revision":4,"palette_revision":4,"path":"/fixture/current.png",
             "file_identity":{"device":"1","inode":"4","size":4096,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
@@ -1058,10 +1063,10 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
                 "file_identity":{"device":"1","inode":"5","size":8192,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0}}
     });
     let active = json!({
-        "available":true,"stale":false,"revision":4,
+        "available":true,"stale":false,"previous_available":true,"revision":4,
         "current":pair.clone(),"outputs":{"fixture":pair}
     });
-    let wallpaper = Arc::new(FakeSource::new(active)?);
+    let wallpaper = Arc::new(FakeSource::new(active.clone())?);
     let wallpaper_settings = Arc::new(FakeSource::new(json!({
         "store":"wallpaper-picker","rev":9,
         "data":{"version":1,"kind":"dynamic","layout":"carousel","paused":true,"future":"preserve"}
@@ -1072,18 +1077,15 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
         None,
         false,
     )
-    .with_overview(None, Some(wallpaper), None)
-    .with_wallpaper_settings(Some(wallpaper_settings))
+    .with_overview(None, Some(wallpaper.clone()), None)
+    .with_wallpaper_settings(Some(wallpaper_settings.clone()))
     .with_controls(
         None,
         Some(controls::Controls::new(client.clone())),
         Some(client.clone()),
     );
     let state = dashboard.project();
-    assert_eq!(
-        state["dashboard.can_wallpaper_previous"],
-        Value::Bool(false)
-    );
+    assert_eq!(state["dashboard.can_wallpaper_previous"], Value::Bool(true));
     assert_eq!(state["dashboard.can_wallpaper_next"], Value::Bool(true));
     assert_eq!(state["dashboard.wallpaper_dynamic"], Value::Bool(true));
     assert_eq!(state["dashboard.wallpaper_paused"], Value::Bool(true));
@@ -1093,6 +1095,7 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
     for (operation, size) in [
         ("wallpapers.open", (111., 36.)),
         ("colors.open", (111., 36.)),
+        ("wallpaper.previous", (74., 32.)),
         ("wallpaper.pause", (74., 32.)),
         ("wallpaper.next", (74., 32.)),
     ] {
@@ -1110,27 +1113,6 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
         assert_eq!((rect.w, rect.h), size, "{operation}");
         assert!(node.activate_on_release, "{operation}");
     }
-    let previous = harness
-        .scene()
-        .layers
-        .iter()
-        .find(|layer| layer.id.ends_with(".wallpaper-previous"))
-        .expect("previous wallpaper remains visible");
-    let previous_rect = previous.bounds;
-    assert_eq!((previous_rect.w, previous_rect.h), (74., 32.));
-    assert!(
-        !harness
-            .session
-            .view_nodes()
-            .iter()
-            .any(|node| { node.id.ends_with(".wallpaper-previous") && node.action.is_some() }),
-        "previous is disabled until contract publication"
-    );
-    dashboard.act("wallpaper.previous", wake());
-    assert!(
-        calls.try_recv().is_err(),
-        "previous has no daemon call before the history contract"
-    );
 
     for (operation, expected) in [
         (
@@ -1140,6 +1122,7 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
                 json!({"target":"nacre","method":"mode","args":["wallpaper"]}),
             ),
         ),
+        ("wallpaper.previous", ("wallpaper.previous", json!({}))),
         ("wallpaper.next", ("wallpaper.next", json!({}))),
     ] {
         dashboard.act(operation, wake());
@@ -1156,6 +1139,74 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
         )
     );
     settle(&dashboard).await;
+    // The generic settings store starts empty; Media's effective paused default is false.
+    wallpaper_settings
+        .publish(json!({"store":"wallpaper-picker","rev":10,"data":{"future":"preserve"}}))?;
+    let defaulted = dashboard.project();
+    assert_eq!(defaulted["dashboard.wallpaper_paused"], Value::Bool(false));
+    assert_eq!(
+        defaulted["dashboard.can_wallpaper_pause"],
+        Value::Bool(true)
+    );
+    dashboard.act("wallpaper.pause", wake());
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        (
+            "settings.provider".into(),
+            json!({"store":"wallpaper-picker","rev":10,"value":{"version":1,"future":"preserve","paused":true}})
+        )
+    );
+    settle(&dashboard).await;
+    wallpaper_settings
+        .publish(json!({"store":"wallpaper-picker","rev":11,"data":{"paused":"invalid"}}))?;
+    assert_eq!(
+        dashboard.project()["dashboard.can_wallpaper_pause"],
+        Value::Bool(false)
+    );
+    dashboard.act("wallpaper.pause", wake());
+    assert!(
+        calls.try_recv().is_err(),
+        "invalid paused values cannot be written"
+    );
+    // Older daemons omit readiness; locked, stale and unavailable topics also fail closed.
+    for patch in [
+        json!({"previous_available":false}),
+        json!({"available":false,"stale":true,"previous_available":false}),
+        json!({"available":false,"current":null,"outputs":{},"revision":0,"previous_available":false}),
+    ] {
+        let mut inactive = active.clone();
+        inactive
+            .as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        serde_json::from_value::<nacre_protocol::wallpaper::WallpaperActive>(inactive.clone())?
+            .validate()
+            .unwrap();
+        wallpaper.publish(inactive)?;
+        let state = dashboard.project();
+        for operation in ["wallpaper.previous", "wallpaper.next"] {
+            assert_eq!(
+                state[&format!("dashboard.can_{}", operation.replace('.', "_"))],
+                Value::Bool(false)
+            );
+            dashboard.act(operation, wake());
+        }
+        assert!(
+            calls.try_recv().is_err(),
+            "unavailable navigation cannot call the daemon"
+        );
+    }
+    let mut older = active;
+    older.as_object_mut().unwrap().remove("previous_available");
+    wallpaper.publish(older)?;
+    for operation in ["wallpaper.previous", "wallpaper.next"] {
+        assert_eq!(
+            dashboard.project()[&format!("dashboard.can_{}", operation.replace('.', "_"))],
+            Value::Bool(false)
+        );
+        dashboard.act(operation, wake());
+    }
+    assert!(calls.try_recv().is_err());
     std::fs::remove_dir_all(dir).ok();
     Ok(())
 }

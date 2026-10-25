@@ -102,7 +102,7 @@ def sample_full(env, raw, compositor, stop):
         if presentation:  # read-only copy of one record; the image it names is only read
             shutil.copyfile(presentation, root / 'state/nacre/presentation.json')
             (root / 'state/nacre/presentation.json').chmod(0o600)
-        daemon = subprocess.Popen([str(helper), 'daemon', '--notifications=daemon'], cwd=root, env=private,
+        daemon = subprocess.Popen([str(helper), 'daemon', '--notifications=daemon', '--behaviours=daemon'], cwd=root, env=private,
                                   stdout=(raw / 'preview-daemon.log').open('w'), stderr=subprocess.STDOUT,
                                   start_new_session=True)
 

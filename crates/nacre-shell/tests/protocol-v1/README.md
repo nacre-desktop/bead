@@ -1,20 +1,13 @@
 # Nacre protocol v1 fixtures
 
-GPL-3.0-only; generated Nacre contract data, retained in the GPL application.
-The v1 fixtures are pinned to nacre-desktop/nacre commit
-`294d3f4034e0ffc8c6ee4fe38a3ed4109aa56c84`, `protocol/fixtures`. This includes
-the core `ui.dispatch` timeout update, the matching calls transcript, and the
-N0027 `wallpaper-active.jsonl` topic/activation golden.
+GPL-3.0-only; generated Nacre contract data retained in the GPL application.
+The Rust contract crate is pinned in `crates/nacre-shell/Cargo.toml` to published
+Nacre `70459b21c7010fb2422c7778c953b58ccf8011f0`. B0136 copies its
+`wallpaper-active.jsonl` (manual-navigation readiness) and
+`core-dashboard-updates.jsonl` (the published bounded package list).
 
-They are reserved contracts, not proof of runtime service availability.
-Tests parse these committed bytes and compare their JSON wire objects with the
-pinned crate's exports before replaying. Object key order is not a wire contract;
-array order and every field remain checked. Update only with a reviewed protocol pin.
-No protocol dependency or fixture is embedded in a Bead framework crate.
-
-B0020 adds the six `notifications-*.jsonl` producer transcripts from Nacre
-`652d6c4f` (N0017 default-action marker included); `notice_service` tests replay
-them through the bounded mirror.
-
-B0089 moves the pin to the Nacre N0063 commit (`8b704fb1`); the `menu-palette.jsonl` transcript
-(Nacre N0061-era `menu_transcripts()` addition) is copied from its `protocol/fixtures`.
+Tests compare exact JSON wire objects with the pinned producer exports before
+replay where applicable. Older compatibility captures are retained deliberately.
+Object key order is not a wire contract; array order and fields remain checked.
+These contracts do not imply runtime service availability. No protocol dependency
+or fixture is embedded in a Bead framework crate.

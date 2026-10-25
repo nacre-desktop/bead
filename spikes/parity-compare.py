@@ -577,7 +577,7 @@ class Arm:
             self.env['PATH'] = f'{stub}:' + self.env['PATH']
         command = [str(Path(a.bead_bin).resolve() / 'nacre-helper'), 'daemon']
         if self.name == 'bead':
-            command.append('--notifications=daemon')
+            command.extend(['--notifications=daemon', '--behaviours=daemon'])
         else:
             self.env['NACRE_DAEMON_CLIENT'] = '1'
         self.daemon = self.spawn(command, 'daemon')

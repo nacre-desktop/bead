@@ -68,13 +68,10 @@ impl Controls {
         let Some(rev) = data.get("rev").and_then(Json::as_u64) else {
             return;
         };
-        let Some(paused) = data
-            .get("data")
-            .and_then(Json::as_object)
-            .and_then(|values| values.get("paused"))
-            .and_then(Json::as_bool)
-        else {
-            return;
+        let paused = match data["data"].get("paused") {
+            None => false,
+            Some(Json::Bool(paused)) => *paused,
+            _ => return,
         };
         let mut value = data["data"].clone();
         let Some(document) = value.as_object_mut() else {
@@ -158,7 +155,9 @@ impl Dashboard {
             (Page::Focus, "focus.pause" | "focus.resume" | "focus.stop") => {
                 c.submit(op, json!({}), wake)
             }
-            (Page::Today, "wallpaper.next") if self.wallpaper_next_available() => {
+            (Page::Today, "wallpaper.previous" | "wallpaper.next")
+                if self.wallpaper_navigation_available(op) =>
+            {
                 c.submit(op, json!({}), wake)
             }
             (Page::Today, "wallpaper.pause") if self.wallpaper_dynamic() => {
@@ -221,7 +220,8 @@ impl Dashboard {
             _ => {}
         }
     }
-    fn wallpaper_next_available(&self) -> bool {
+    // The producer's previous_available is QML rotationReady for both manual arrows.
+    fn wallpaper_navigation_available(&self, method: &str) -> bool {
         let topic = self.wallpaper.as_ref().is_some_and(|source| {
             let snapshot = source.snapshot();
             let Ok(state) = serde_json::from_value::<nacre_protocol::wallpaper::WallpaperActive>(
@@ -229,13 +229,17 @@ impl Dashboard {
             ) else {
                 return false;
             };
-            snapshot.connected && state.available && !state.stale && state.validate().is_ok()
+            snapshot.connected
+                && state.available
+                && !state.stale
+                && state.previous_available
+                && state.validate().is_ok()
         });
         topic
             && self
                 .controls
                 .as_ref()
-                .is_some_and(|c| !c.busy() && c.ready("wallpaper.next").is_some())
+                .is_some_and(|c| !c.busy() && c.ready(method).is_some())
     }
     fn wallpaper_dynamic(&self) -> bool {
         self.wallpaper.as_ref().is_some_and(|source| {
@@ -260,7 +264,7 @@ impl Dashboard {
             && data
                 .get("data")
                 .and_then(Json::as_object)
-                .is_some_and(|values| values.get("paused").and_then(Json::as_bool).is_some())
+                .is_some_and(|values| values.get("paused").is_none_or(Json::is_boolean))
     }
     /// Notification controls go through the same revision-checked plan as the
     /// resident stack; the snapshot on screen decides what may be sent.
@@ -453,15 +457,13 @@ impl Dashboard {
                 "dashboard.can_colors".into(),
                 Value::Bool(!busy && can("ui.dispatch")),
             );
-            // B0136's previous action remains visibly disabled until the daemon-owned
-            // history contract is published and integrated.
             out.insert(
                 "dashboard.can_wallpaper_previous".into(),
-                Value::Bool(false),
+                Value::Bool(self.wallpaper_navigation_available("wallpaper.previous")),
             );
             out.insert(
                 "dashboard.can_wallpaper_next".into(),
-                Value::Bool(self.wallpaper_next_available()),
+                Value::Bool(self.wallpaper_navigation_available("wallpaper.next")),
             );
             let settings = self
                 .wallpaper_settings
