@@ -1,0 +1,30 @@
+B0132 — final integrated full remote Arch CI-equivalent, exit 0
+Code: 1904f96c1def5bb6304bcc5f909dee9caffcb17f (after B0125, B0133 and panel-animation fixes)
+Exact tested tree: d484164b21dfb20e74b99430402cfb6a4420d17b
+CI-only snapshot: fca057eef4f2114765474988a10eabb67eadfba9 (identical tree)
+Container: ghcr.io/archlinux/archlinux:latest, 8 CPU / 12 GiB, remote build host.
+Command: docker exec b0132-ci nice -n 10 bash /w/final-ci.sh
+Results: CI_ALL_OK; B0132_CI_OK; exit 0.
+The wrapper formats, refreshes dashboard goldens and snapshots Git metadata, then runs:
+  bash docs/specs/evidence/0108/check.sh (inherits nice 10)
+  python3 -m unittest discover -s spikes/tests -p test_fullscreen_lips.py — 3 passed
+  cargo build -p nacre-shell --locked -j2
+Focused: BEAD_UPDATE_GOLDENS=1 cargo test -p nacre-shell --locked -j2 dashboard:: — 64 passed.
+All current workflow stages pass: fmt; Clippy -D warnings; service boundary;
+workspace and trace tests; CPU/all-features checks; facade/headless UI; generated
+Luau/schema; capture harness; packaging; wallpaper smoke; private services/tray;
+and cargo-deny for root and independent framework graphs. No dependency added.
+Four 1×/1.5× Today goldens were refreshed and visually inspected.
+Integration retained the still-used Colors accessible label removed by Welcome
+cleanup; the test finds Colors targets by action rather than English text.
+Initial archive-only harness checks needed Git metadata and the workflow's
+safe.directory setup; the final exact-tree rerun above includes both.
+
+Capture/memory unit-only source: f0c431eb (base 99640153 plus this unit)
+Exact unit tree: 607a2aaf2775b92e1ad6191bfc2c4b5a531d2107
+Original full-CI snapshot: 8d1fb1d576450d8c1f3dd8af769949a1afb161b1 (same tree), exit 0.
+Private desktop: bash capture-pair.sh — exit 0, six QML/Bead states, playing MPRIS.
+Private CPU memory: bash memory-pairs.sh — exit 0, five alternating control/candidate pairs.
+Analysis: nice -n 10 python3 analyze-memory.py — exit 0; all four medians pass +0.5 MiB.
+Per-command blocking flock, swap/containment/watchdog/source/geometry gates pass.
+Raw receipts are retained privately; public samples/provenance are in memory.json and parity.json.

@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-25 — B0132 Today controls
+
+Today has the Colors button and clickable palette dots through the existing app
+route. Media transport retains its geometry, follows live player state and uses
+QML's disabled opacity. Fake-daemon calls, four goldens, full remote CI and paired
+private interaction captures pass. Five-pair CPU unreclaimable deltas pass the
++0.5 MiB gate: idle +0.168, open +0.117, closed +0.066 MiB (unit-only snapshot).
+[Evidence and remaining parity limits](specs/0132-today-controls.md). No live change.
+
+
 ## 2026-10-25 — B0133 Welcome fixes
 
 Welcome and app headers use themed mother-of-pearl artwork. The four bundled

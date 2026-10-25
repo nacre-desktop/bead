@@ -1,0 +1,2956 @@
+{
+  "presentation": {
+    "record_sha256": "de824a7bf57db78459ae94e7e70823927e05678a8645fa1f9ad6c09d8e05fe6b",
+    "poster_sha256": "c0a71ce95d06dc77184d09dcb47c755c6ac49d1e6022c2ba1b492abb63ca2ab9",
+    "both_sources_unchanged_since_before_first_arm": true
+  },
+  "control": "99640153",
+  "candidate": "f0c431eb",
+  "renderer": "cpu",
+  "build": "cargo build -p nacre-shell --locked -j2; debug, stripped; identical source/output paths",
+  "output": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "settle_after_close_s": 6,
+  "budget_mib": 1,
+  "pairs": [
+    {
+      "pair": 1,
+      "control": {
+        "idle": {
+          "Unreclaimable": 40.40234375,
+          "Pss_Anon": 29.8203125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.8798828125,
+          "Pss": 93.2822265625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.40234375,
+          "Pss_Anon": 29.8203125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.8798828125,
+          "Pss": 93.2822265625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30536,
+              "Pss": 95521,
+              "Pss_Anon": 30536,
+              "Pss_File": 54149,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41372,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.173828125,
+          "Pss_Anon": 51.45703125,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.7138671875,
+          "Pss": 122.8876953125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151792,
+              "RssAnon": 52692,
+              "Pss": 125837,
+              "Pss_Anon": 52692,
+              "Pss_File": 55003,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151792,
+              "RssAnon": 52692,
+              "Pss": 125837,
+              "Pss_Anon": 52692,
+              "Pss_File": 55003,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151792,
+              "RssAnon": 52692,
+              "Pss": 125837,
+              "Pss_Anon": 52692,
+              "Pss_File": 55003,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151792,
+              "RssAnon": 52692,
+              "Pss": 125837,
+              "Pss_Anon": 52692,
+              "Pss_File": 55003,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151792,
+              "RssAnon": 52692,
+              "Pss": 125837,
+              "Pss_Anon": 52692,
+              "Pss_File": 55003,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70834,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.345703125,
+          "Pss_Anon": 45.55078125,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.7490234375,
+          "Pss": 113.0947265625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 137984,
+              "RssAnon": 46644,
+              "Pss": 115809,
+              "Pss_Anon": 46644,
+              "Pss_File": 55039,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60770,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137984,
+              "RssAnon": 46644,
+              "Pss": 115809,
+              "Pss_Anon": 46644,
+              "Pss_File": 55039,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60770,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137984,
+              "RssAnon": 46644,
+              "Pss": 115809,
+              "Pss_Anon": 46644,
+              "Pss_File": 55039,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60770,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137984,
+              "RssAnon": 46644,
+              "Pss": 115809,
+              "Pss_Anon": 46644,
+              "Pss_File": 55039,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60770,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137924,
+              "RssAnon": 46584,
+              "Pss": 115749,
+              "Pss_Anon": 46584,
+              "Pss_File": 55039,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60710,
+              "processes": 1
+            }
+          ]
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Unreclaimable": 40.44140625,
+          "Pss_Anon": 29.859375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.951171875,
+          "Pss": 93.392578125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30576,
+              "Pss": 95634,
+              "Pss_Anon": 30576,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41412,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30576,
+              "Pss": 95634,
+              "Pss_Anon": 30576,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41412,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30576,
+              "Pss": 95634,
+              "Pss_Anon": 30576,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41412,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30576,
+              "Pss": 95634,
+              "Pss_Anon": 30576,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41412,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30576,
+              "Pss": 95634,
+              "Pss_Anon": 30576,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41412,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.21484375,
+          "Pss_Anon": 29.6328125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.951171875,
+          "Pss": 93.166015625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114092,
+              "RssAnon": 30344,
+              "Pss": 95402,
+              "Pss_Anon": 30344,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41180,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114092,
+              "RssAnon": 30344,
+              "Pss": 95402,
+              "Pss_Anon": 30344,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41180,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114092,
+              "RssAnon": 30344,
+              "Pss": 95402,
+              "Pss_Anon": 30344,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41180,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114092,
+              "RssAnon": 30344,
+              "Pss": 95402,
+              "Pss_Anon": 30344,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41180,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114092,
+              "RssAnon": 30344,
+              "Pss": 95402,
+              "Pss_Anon": 30344,
+              "Pss_File": 54222,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41180,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 70.201171875,
+          "Pss_Anon": 51.453125,
+          "Pss_Shmem": 18.748046875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.6572265625,
+          "Pss": 123.8583984375,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151544,
+              "RssAnon": 52688,
+              "Pss": 126831,
+              "Pss_Anon": 52688,
+              "Pss_File": 54945,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71886,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151544,
+              "RssAnon": 52688,
+              "Pss": 126831,
+              "Pss_Anon": 52688,
+              "Pss_File": 54945,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71886,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151544,
+              "RssAnon": 52688,
+              "Pss": 126831,
+              "Pss_Anon": 52688,
+              "Pss_File": 54945,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71886,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151544,
+              "RssAnon": 52688,
+              "Pss": 126831,
+              "Pss_Anon": 52688,
+              "Pss_File": 54945,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71886,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151544,
+              "RssAnon": 52688,
+              "Pss": 126831,
+              "Pss_Anon": 52688,
+              "Pss_File": 54945,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71886,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.193359375,
+          "Pss_Anon": 45.3984375,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.705078125,
+          "Pss": 112.8984375,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46488,
+              "Pss": 115610,
+              "Pss_Anon": 46488,
+              "Pss_File": 54996,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46488,
+              "Pss": 115608,
+              "Pss_Anon": 46488,
+              "Pss_File": 54994,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46488,
+              "Pss": 115608,
+              "Pss_Anon": 46488,
+              "Pss_File": 54994,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46488,
+              "Pss": 115608,
+              "Pss_Anon": 46488,
+              "Pss_File": 54994,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 139348,
+              "RssAnon": 48188,
+              "Pss": 117308,
+              "Pss_Anon": 48188,
+              "Pss_File": 54994,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 62314,
+              "processes": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "control": {
+        "idle": {
+          "Unreclaimable": 40.33203125,
+          "Pss_Anon": 29.75,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.9892578125,
+          "Pss": 93.3212890625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.33203125,
+          "Pss_Anon": 29.75,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.9892578125,
+          "Pss": 93.3212890625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114272,
+              "RssAnon": 30464,
+              "Pss": 95561,
+              "Pss_Anon": 30464,
+              "Pss_File": 54261,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41300,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.287109375,
+          "Pss_Anon": 51.5703125,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 54.00390625,
+          "Pss": 123.291015625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 152172,
+              "RssAnon": 52808,
+              "Pss": 126250,
+              "Pss_Anon": 52808,
+              "Pss_File": 55300,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70950,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152172,
+              "RssAnon": 52808,
+              "Pss": 126250,
+              "Pss_Anon": 52808,
+              "Pss_File": 55300,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70950,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152172,
+              "RssAnon": 52808,
+              "Pss": 126250,
+              "Pss_Anon": 52808,
+              "Pss_File": 55300,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70950,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152172,
+              "RssAnon": 52808,
+              "Pss": 126250,
+              "Pss_Anon": 52808,
+              "Pss_File": 55300,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70950,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152172,
+              "RssAnon": 52808,
+              "Pss": 126250,
+              "Pss_Anon": 52808,
+              "Pss_File": 55300,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70950,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.193359375,
+          "Pss_Anon": 45.3984375,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 54.0380859375,
+          "Pss": 113.2314453125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 138092,
+              "RssAnon": 46488,
+              "Pss": 115949,
+              "Pss_Anon": 46488,
+              "Pss_File": 55335,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138092,
+              "RssAnon": 46488,
+              "Pss": 115949,
+              "Pss_Anon": 46488,
+              "Pss_File": 55335,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138092,
+              "RssAnon": 46488,
+              "Pss": 115949,
+              "Pss_Anon": 46488,
+              "Pss_File": 55335,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138092,
+              "RssAnon": 46488,
+              "Pss": 115949,
+              "Pss_Anon": 46488,
+              "Pss_File": 55335,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60614,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138060,
+              "RssAnon": 46456,
+              "Pss": 115917,
+              "Pss_Anon": 46456,
+              "Pss_File": 55335,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60582,
+              "processes": 1
+            }
+          ]
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Unreclaimable": 40.48046875,
+          "Pss_Anon": 29.8984375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.1298828125,
+          "Pss": 93.6103515625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114560,
+              "RssAnon": 30616,
+              "Pss": 95857,
+              "Pss_Anon": 30616,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41452,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114560,
+              "RssAnon": 30616,
+              "Pss": 95857,
+              "Pss_Anon": 30616,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41452,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114560,
+              "RssAnon": 30616,
+              "Pss": 95851,
+              "Pss_Anon": 30616,
+              "Pss_File": 54399,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41452,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114560,
+              "RssAnon": 30616,
+              "Pss": 95857,
+              "Pss_Anon": 30616,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41452,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114560,
+              "RssAnon": 30616,
+              "Pss": 95857,
+              "Pss_Anon": 30616,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41452,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.25,
+          "Pss_Anon": 29.66796875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.1298828125,
+          "Pss": 93.3798828125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30380,
+              "Pss": 95621,
+              "Pss_Anon": 30380,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41216,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30380,
+              "Pss": 95621,
+              "Pss_Anon": 30380,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41216,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30380,
+              "Pss": 95621,
+              "Pss_Anon": 30380,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41216,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30380,
+              "Pss": 95621,
+              "Pss_Anon": 30380,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41216,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114324,
+              "RssAnon": 30380,
+              "Pss": 95621,
+              "Pss_Anon": 30380,
+              "Pss_File": 54405,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41216,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.021484375,
+          "Pss_Anon": 51.3046875,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.9677734375,
+          "Pss": 122.9892578125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151844,
+              "RssAnon": 52536,
+              "Pss": 125941,
+              "Pss_Anon": 52536,
+              "Pss_File": 55263,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70678,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151844,
+              "RssAnon": 52536,
+              "Pss": 125941,
+              "Pss_Anon": 52536,
+              "Pss_File": 55263,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70678,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151844,
+              "RssAnon": 52536,
+              "Pss": 125941,
+              "Pss_Anon": 52536,
+              "Pss_File": 55263,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70678,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151844,
+              "RssAnon": 52536,
+              "Pss": 125941,
+              "Pss_Anon": 52536,
+              "Pss_File": 55263,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70678,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151844,
+              "RssAnon": 52536,
+              "Pss": 125941,
+              "Pss_Anon": 52536,
+              "Pss_File": 55263,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70678,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.333984375,
+          "Pss_Anon": 45.5390625,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 54.0029296875,
+          "Pss": 113.3369140625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 138180,
+              "RssAnon": 46632,
+              "Pss": 116057,
+              "Pss_Anon": 46632,
+              "Pss_File": 55299,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138180,
+              "RssAnon": 46632,
+              "Pss": 116057,
+              "Pss_Anon": 46632,
+              "Pss_File": 55299,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138180,
+              "RssAnon": 46632,
+              "Pss": 116057,
+              "Pss_Anon": 46632,
+              "Pss_File": 55299,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138180,
+              "RssAnon": 46632,
+              "Pss": 116057,
+              "Pss_Anon": 46632,
+              "Pss_File": 55299,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138148,
+              "RssAnon": 46600,
+              "Pss": 116025,
+              "Pss_Anon": 46600,
+              "Pss_File": 55299,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60726,
+              "processes": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "control": {
+        "idle": {
+          "Unreclaimable": 40.453125,
+          "Pss_Anon": 29.87109375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.076171875,
+          "Pss": 93.529296875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.453125,
+          "Pss_Anon": 29.87109375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.076171875,
+          "Pss": 93.529296875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114456,
+              "RssAnon": 30588,
+              "Pss": 95774,
+              "Pss_Anon": 30588,
+              "Pss_File": 54350,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.185546875,
+          "Pss_Anon": 51.46875,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.9892578125,
+          "Pss": 123.1748046875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151956,
+              "RssAnon": 52704,
+              "Pss": 126131,
+              "Pss_Anon": 52704,
+              "Pss_File": 55285,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70846,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151956,
+              "RssAnon": 52704,
+              "Pss": 126131,
+              "Pss_Anon": 52704,
+              "Pss_File": 55285,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70846,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151956,
+              "RssAnon": 52704,
+              "Pss": 126131,
+              "Pss_Anon": 52704,
+              "Pss_File": 55285,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70846,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151956,
+              "RssAnon": 52704,
+              "Pss": 126131,
+              "Pss_Anon": 52704,
+              "Pss_File": 55285,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70846,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151956,
+              "RssAnon": 52704,
+              "Pss": 126131,
+              "Pss_Anon": 52704,
+              "Pss_File": 55285,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70846,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.232421875,
+          "Pss_Anon": 45.4375,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 54.0244140625,
+          "Pss": 113.2568359375,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 138020,
+              "RssAnon": 46528,
+              "Pss": 115975,
+              "Pss_Anon": 46528,
+              "Pss_File": 55321,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138020,
+              "RssAnon": 46528,
+              "Pss": 115975,
+              "Pss_Anon": 46528,
+              "Pss_File": 55321,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138020,
+              "RssAnon": 46528,
+              "Pss": 115975,
+              "Pss_Anon": 46528,
+              "Pss_File": 55321,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138020,
+              "RssAnon": 46528,
+              "Pss": 115975,
+              "Pss_Anon": 46528,
+              "Pss_File": 55321,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137992,
+              "RssAnon": 46500,
+              "Pss": 115947,
+              "Pss_Anon": 46500,
+              "Pss_File": 55321,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60626,
+              "processes": 1
+            }
+          ]
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Unreclaimable": 40.71875,
+          "Pss_Anon": 30.13671875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.7578125,
+          "Pss": 93.4765625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.71875,
+          "Pss_Anon": 30.13671875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.7578125,
+          "Pss": 93.4765625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114432,
+              "RssAnon": 30860,
+              "Pss": 95720,
+              "Pss_Anon": 30860,
+              "Pss_File": 54024,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41696,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.302734375,
+          "Pss_Anon": 51.5859375,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.6337890625,
+          "Pss": 122.9365234375,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151776,
+              "RssAnon": 52824,
+              "Pss": 125887,
+              "Pss_Anon": 52824,
+              "Pss_File": 54921,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70966,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151776,
+              "RssAnon": 52824,
+              "Pss": 125887,
+              "Pss_Anon": 52824,
+              "Pss_File": 54921,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70966,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151776,
+              "RssAnon": 52824,
+              "Pss": 125887,
+              "Pss_Anon": 52824,
+              "Pss_File": 54921,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70966,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151776,
+              "RssAnon": 52824,
+              "Pss": 125887,
+              "Pss_Anon": 52824,
+              "Pss_File": 54921,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70966,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151776,
+              "RssAnon": 52824,
+              "Pss": 125887,
+              "Pss_Anon": 52824,
+              "Pss_File": 54921,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70966,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.298828125,
+          "Pss_Anon": 45.50390625,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.66796875,
+          "Pss": 112.966796875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 137788,
+              "RssAnon": 46596,
+              "Pss": 115678,
+              "Pss_Anon": 46596,
+              "Pss_File": 54956,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60722,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137788,
+              "RssAnon": 46596,
+              "Pss": 115678,
+              "Pss_Anon": 46596,
+              "Pss_File": 54956,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60722,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137788,
+              "RssAnon": 46596,
+              "Pss": 115678,
+              "Pss_Anon": 46596,
+              "Pss_File": 54956,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60722,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137788,
+              "RssAnon": 46596,
+              "Pss": 115678,
+              "Pss_Anon": 46596,
+              "Pss_File": 54956,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60722,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137732,
+              "RssAnon": 46540,
+              "Pss": 115622,
+              "Pss_Anon": 46540,
+              "Pss_File": 54956,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60666,
+              "processes": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "control": {
+        "idle": {
+          "Unreclaimable": 39.796875,
+          "Pss_Anon": 29.21484375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.8828125,
+          "Pss": 92.6796875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 39.796875,
+          "Pss_Anon": 29.21484375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.8828125,
+          "Pss": 92.6796875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94904,
+              "Pss_Anon": 29916,
+              "Pss_File": 54152,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            },
+            {
+              "VmRSS": 113604,
+              "RssAnon": 29916,
+              "Pss": 94899,
+              "Pss_Anon": 29916,
+              "Pss_File": 54147,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 40752,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 68.560546875,
+          "Pss_Anon": 50.84375,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.8974609375,
+          "Pss": 122.4580078125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151308,
+              "RssAnon": 52064,
+              "Pss": 125397,
+              "Pss_Anon": 52064,
+              "Pss_File": 55191,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70206,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151308,
+              "RssAnon": 52064,
+              "Pss": 125397,
+              "Pss_Anon": 52064,
+              "Pss_File": 55191,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70206,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151308,
+              "RssAnon": 52064,
+              "Pss": 125397,
+              "Pss_Anon": 52064,
+              "Pss_File": 55191,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70206,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151308,
+              "RssAnon": 52064,
+              "Pss": 125397,
+              "Pss_Anon": 52064,
+              "Pss_File": 55191,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70206,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151308,
+              "RssAnon": 52064,
+              "Pss": 125397,
+              "Pss_Anon": 52064,
+              "Pss_File": 55191,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70206,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 64.291015625,
+          "Pss_Anon": 50.49609375,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.9326171875,
+          "Pss": 118.2236328125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 143192,
+              "RssAnon": 51708,
+              "Pss": 121061,
+              "Pss_Anon": 51708,
+              "Pss_File": 55227,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 65834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 143192,
+              "RssAnon": 51708,
+              "Pss": 121061,
+              "Pss_Anon": 51708,
+              "Pss_File": 55227,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 65834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 143192,
+              "RssAnon": 51708,
+              "Pss": 121061,
+              "Pss_Anon": 51708,
+              "Pss_File": 55227,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 65834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 143192,
+              "RssAnon": 51708,
+              "Pss": 121061,
+              "Pss_Anon": 51708,
+              "Pss_File": 55227,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 65834,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138924,
+              "RssAnon": 47440,
+              "Pss": 116793,
+              "Pss_Anon": 47440,
+              "Pss_File": 55227,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 61566,
+              "processes": 1
+            }
+          ]
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Unreclaimable": 40.453125,
+          "Pss_Anon": 29.87109375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.953125,
+          "Pss": 93.40625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114424,
+              "RssAnon": 30588,
+              "Pss": 95648,
+              "Pss_Anon": 30588,
+              "Pss_File": 54224,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114424,
+              "RssAnon": 30588,
+              "Pss": 95648,
+              "Pss_Anon": 30588,
+              "Pss_File": 54224,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114424,
+              "RssAnon": 30588,
+              "Pss": 95648,
+              "Pss_Anon": 30588,
+              "Pss_File": 54224,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114424,
+              "RssAnon": 30588,
+              "Pss": 95648,
+              "Pss_Anon": 30588,
+              "Pss_File": 54224,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114424,
+              "RssAnon": 30588,
+              "Pss": 95648,
+              "Pss_Anon": 30588,
+              "Pss_File": 54224,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41424,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.2109375,
+          "Pss_Anon": 29.62890625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.9521484375,
+          "Pss": 93.1630859375,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114176,
+              "RssAnon": 30340,
+              "Pss": 95399,
+              "Pss_Anon": 30340,
+              "Pss_File": 54223,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41176,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114176,
+              "RssAnon": 30340,
+              "Pss": 95399,
+              "Pss_Anon": 30340,
+              "Pss_File": 54223,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41176,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114176,
+              "RssAnon": 30340,
+              "Pss": 95399,
+              "Pss_Anon": 30340,
+              "Pss_File": 54223,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41176,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114176,
+              "RssAnon": 30340,
+              "Pss": 95399,
+              "Pss_Anon": 30340,
+              "Pss_File": 54223,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41176,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114176,
+              "RssAnon": 30340,
+              "Pss": 95399,
+              "Pss_Anon": 30340,
+              "Pss_File": 54223,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41176,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.365234375,
+          "Pss_Anon": 51.6484375,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.7783203125,
+          "Pss": 123.1435546875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151960,
+              "RssAnon": 52888,
+              "Pss": 126099,
+              "Pss_Anon": 52888,
+              "Pss_File": 55069,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71030,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151960,
+              "RssAnon": 52888,
+              "Pss": 126099,
+              "Pss_Anon": 52888,
+              "Pss_File": 55069,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71030,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151960,
+              "RssAnon": 52888,
+              "Pss": 126099,
+              "Pss_Anon": 52888,
+              "Pss_File": 55069,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71030,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151960,
+              "RssAnon": 52888,
+              "Pss": 126096,
+              "Pss_Anon": 52888,
+              "Pss_File": 55066,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71030,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151960,
+              "RssAnon": 52888,
+              "Pss": 126094,
+              "Pss_Anon": 52888,
+              "Pss_File": 55064,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71030,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.333984375,
+          "Pss_Anon": 45.5390625,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.8134765625,
+          "Pss": 113.1474609375,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 137944,
+              "RssAnon": 46632,
+              "Pss": 115863,
+              "Pss_Anon": 46632,
+              "Pss_File": 55105,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137944,
+              "RssAnon": 46632,
+              "Pss": 115863,
+              "Pss_Anon": 46632,
+              "Pss_File": 55105,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137944,
+              "RssAnon": 46632,
+              "Pss": 115863,
+              "Pss_Anon": 46632,
+              "Pss_File": 55105,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137944,
+              "RssAnon": 46632,
+              "Pss": 115863,
+              "Pss_Anon": 46632,
+              "Pss_File": 55105,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60758,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137892,
+              "RssAnon": 46580,
+              "Pss": 115811,
+              "Pss_Anon": 46580,
+              "Pss_File": 55105,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60706,
+              "processes": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "control": {
+        "idle": {
+          "Unreclaimable": 40.25390625,
+          "Pss_Anon": 29.671875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.8896484375,
+          "Pss": 93.1435546875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 116320,
+              "RssAnon": 31724,
+              "Pss": 97435,
+              "Pss_Anon": 31724,
+              "Pss_File": 54159,
+              "Pss_Shmem": 11552,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 43276,
+              "processes": 1
+            },
+            {
+              "VmRSS": 115664,
+              "RssAnon": 31912,
+              "Pss": 97329,
+              "Pss_Anon": 31912,
+              "Pss_File": 54159,
+              "Pss_Shmem": 11258,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 43170,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.25390625,
+          "Pss_Anon": 29.671875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.8896484375,
+          "Pss": 93.1435546875,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114136,
+              "RssAnon": 30384,
+              "Pss": 95379,
+              "Pss_Anon": 30384,
+              "Pss_File": 54159,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41220,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.974609375,
+          "Pss_Anon": 51.2265625,
+          "Pss_Shmem": 18.748046875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.7021484375,
+          "Pss": 123.6767578125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 151508,
+              "RssAnon": 52456,
+              "Pss": 126645,
+              "Pss_Anon": 52456,
+              "Pss_File": 54991,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151508,
+              "RssAnon": 52456,
+              "Pss": 126645,
+              "Pss_Anon": 52456,
+              "Pss_File": 54991,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151508,
+              "RssAnon": 52456,
+              "Pss": 126645,
+              "Pss_Anon": 52456,
+              "Pss_File": 54991,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151508,
+              "RssAnon": 52456,
+              "Pss": 126645,
+              "Pss_Anon": 52456,
+              "Pss_File": 54991,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71654,
+              "processes": 1
+            },
+            {
+              "VmRSS": 151508,
+              "RssAnon": 52456,
+              "Pss": 126645,
+              "Pss_Anon": 52456,
+              "Pss_File": 54991,
+              "Pss_Shmem": 19198,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 71654,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.064453125,
+          "Pss_Anon": 45.26953125,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.7373046875,
+          "Pss": 112.8017578125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46356,
+              "Pss": 115509,
+              "Pss_Anon": 46356,
+              "Pss_File": 55027,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60482,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46356,
+              "Pss": 115509,
+              "Pss_Anon": 46356,
+              "Pss_File": 55027,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60482,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46356,
+              "Pss": 115509,
+              "Pss_Anon": 46356,
+              "Pss_File": 55027,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60482,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137648,
+              "RssAnon": 46356,
+              "Pss": 115509,
+              "Pss_Anon": 46356,
+              "Pss_File": 55027,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60482,
+              "processes": 1
+            },
+            {
+              "VmRSS": 137628,
+              "RssAnon": 46336,
+              "Pss": 115489,
+              "Pss_Anon": 46336,
+              "Pss_File": 55027,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60462,
+              "processes": 1
+            }
+          ]
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Unreclaimable": 40.421875,
+          "Pss_Anon": 29.83984375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.0859375,
+          "Pss": 93.5078125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            }
+          ]
+        },
+        "idle-closed": {
+          "Unreclaimable": 40.421875,
+          "Pss_Anon": 29.83984375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.0859375,
+          "Pss": 93.5078125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            },
+            {
+              "VmRSS": 114500,
+              "RssAnon": 30556,
+              "Pss": 95752,
+              "Pss_Anon": 30556,
+              "Pss_File": 54360,
+              "Pss_Shmem": 10836,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 41392,
+              "processes": 1
+            }
+          ]
+        },
+        "today-open": {
+          "Unreclaimable": 69.244140625,
+          "Pss_Anon": 51.52734375,
+          "Pss_Shmem": 17.716796875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 54.0029296875,
+          "Pss": 123.2470703125,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 152136,
+              "RssAnon": 52764,
+              "Pss": 126205,
+              "Pss_Anon": 52764,
+              "Pss_File": 55299,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70906,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152136,
+              "RssAnon": 52764,
+              "Pss": 126205,
+              "Pss_Anon": 52764,
+              "Pss_File": 55299,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70906,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152136,
+              "RssAnon": 52764,
+              "Pss": 126205,
+              "Pss_Anon": 52764,
+              "Pss_File": 55299,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70906,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152136,
+              "RssAnon": 52764,
+              "Pss": 126205,
+              "Pss_Anon": 52764,
+              "Pss_File": 55299,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70906,
+              "processes": 1
+            },
+            {
+              "VmRSS": 152136,
+              "RssAnon": 52764,
+              "Pss": 126205,
+              "Pss_Anon": 52764,
+              "Pss_File": 55299,
+              "Pss_Shmem": 18142,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 70906,
+              "processes": 1
+            }
+          ]
+        },
+        "today-closed-idle": {
+          "Unreclaimable": 59.318359375,
+          "Pss_Anon": 45.5234375,
+          "Pss_Shmem": 13.794921875,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 54.03515625,
+          "Pss": 113.353515625,
+          "raw_samples_kib": [
+            {
+              "VmRSS": 138228,
+              "RssAnon": 46616,
+              "Pss": 116074,
+              "Pss_Anon": 46616,
+              "Pss_File": 55332,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60742,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138228,
+              "RssAnon": 46616,
+              "Pss": 116076,
+              "Pss_Anon": 46616,
+              "Pss_File": 55334,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60742,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138228,
+              "RssAnon": 46616,
+              "Pss": 116076,
+              "Pss_Anon": 46616,
+              "Pss_File": 55334,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60742,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138228,
+              "RssAnon": 46616,
+              "Pss": 116073,
+              "Pss_Anon": 46616,
+              "Pss_File": 55331,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60742,
+              "processes": 1
+            },
+            {
+              "VmRSS": 138216,
+              "RssAnon": 46604,
+              "Pss": 116057,
+              "Pss_Anon": 46604,
+              "Pss_File": 55327,
+              "Pss_Shmem": 14126,
+              "SwapPss": 0,
+              "DRM": 0,
+              "Unreclaimable": 60730,
+              "processes": 1
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "phases": {
+    "idle": {
+      "control_median_mib": 40.33203125,
+      "candidate_median_mib": 40.453125,
+      "paired_deltas_mib": [
+        0.0390625,
+        0.1484375,
+        0.265625,
+        0.65625,
+        0.16796875
+      ],
+      "median_paired_delta_mib": 0.16796875,
+      "within_feature_budget": true,
+      "within_half_mib": true
+    },
+    "idle-closed": {
+      "control_median_mib": 40.33203125,
+      "candidate_median_mib": 40.25,
+      "paired_deltas_mib": [
+        -0.1875,
+        -0.08203125,
+        0.265625,
+        0.4140625,
+        0.16796875
+      ],
+      "median_paired_delta_mib": 0.16796875,
+      "within_feature_budget": true,
+      "within_half_mib": true
+    },
+    "today-open": {
+      "control_median_mib": 69.185546875,
+      "candidate_median_mib": 69.302734375,
+      "paired_deltas_mib": [
+        1.02734375,
+        -0.265625,
+        0.1171875,
+        0.8046875,
+        -0.73046875
+      ],
+      "median_paired_delta_mib": 0.1171875,
+      "within_feature_budget": true,
+      "within_half_mib": true
+    },
+    "today-closed-idle": {
+      "control_median_mib": 59.232421875,
+      "candidate_median_mib": 59.318359375,
+      "paired_deltas_mib": [
+        -0.15234375,
+        0.140625,
+        0.06640625,
+        -4.95703125,
+        0.25390625
+      ],
+      "median_paired_delta_mib": 0.06640625,
+      "within_feature_budget": true,
+      "within_half_mib": true
+    }
+  },
+  "control_binary_sha256": "e7fd3a04c7d02cbb6aaf4fdf0b2e74486c3f992d62c4233110ad9f1703d02500",
+  "candidate_binary_sha256": "a11039e1001cfc7aa11f06a55b5f43c7c2a7001f601fb46511f3ff2249ec4f9a",
+  "pass": true
+}

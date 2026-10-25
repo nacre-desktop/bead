@@ -1,0 +1,369 @@
+{
+  "qml_reference": "836df1a643eae6e2f54ec86967a83d2f27561d3d",
+  "renderer": "cpu",
+  "output": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "fixture": "private playing MPRIS; synthetic host display values",
+  "dashboard_crop": [
+    702,
+    75,
+    2178,
+    1050
+  ],
+  "states": {
+    "idle": {
+      "native_png_sha256": {
+        "qml": "8a3b2a7c72b445fd66c78063b7ef8c98b9d4ca016c605177211f9e739fe3e61c",
+        "bead": "42893ef5b6137ff3a9ea664ab7506fd7c14a0227e27fd0e95c3742083e196fda"
+      },
+      "whole_rgb_rmse_0_255": 9.7243,
+      "paired_images": [
+        "idle-whole.jpg"
+      ],
+      "native_pair_crop": null
+    },
+    "dashboard-0": {
+      "native_png_sha256": {
+        "qml": "353c73e7e0c74ea2b148e139904d9fc6d7eefc624f7b50d6a903fb4c79550e41",
+        "bead": "8dd0a499571a68fde65e6c1ff2815ef0e7884c589469cc147a7a6dc0e8bb31d3"
+      },
+      "whole_rgb_rmse_0_255": 16.9426,
+      "paired_images": [
+        "dashboard-0-whole.jpg",
+        "dashboard-0.png"
+      ],
+      "native_pair_crop": [
+        702,
+        75,
+        2178,
+        1050
+      ]
+    },
+    "today-media-hover": {
+      "native_png_sha256": {
+        "qml": "026bcfd4a2f7c0c0a50d8b914c8b99f473aacd470f5ec69b57b6cfb0347d8a41",
+        "bead": "067054bf476f4f1be77d11ac5b7fb53c801c34ada92ef84c784eee4e5629674e"
+      },
+      "whole_rgb_rmse_0_255": 16.9406,
+      "paired_images": [
+        "today-media-hover.png"
+      ],
+      "native_pair_crop": [
+        1730,
+        850,
+        2145,
+        1020
+      ]
+    },
+    "today-media-pressed": {
+      "native_png_sha256": {
+        "qml": "8c5d9936a359289bc2d6d6d9bd1258f1f40d6dc35d7b0726c4815bec2c7f10b3",
+        "bead": "4b7f51a4f63121ab729fb2eb35744ec70349ce2a3e4e69b01b7b4c9227ec15ce"
+      },
+      "whole_rgb_rmse_0_255": 16.9395,
+      "paired_images": [
+        "today-media-pressed.png"
+      ],
+      "native_pair_crop": [
+        1730,
+        850,
+        2145,
+        1020
+      ]
+    },
+    "today-colors-hover": {
+      "native_png_sha256": {
+        "qml": "657e050df8ffaaeff181464af34942515045a3777a30e17fda2c99d393f188eb",
+        "bead": "bce7cc4033a9f74f839dc15ef433f822cc337bc048d0108dbd6ea9081cf0b70b"
+      },
+      "whole_rgb_rmse_0_255": 17.1227,
+      "paired_images": [
+        "today-colors-hover.png"
+      ],
+      "native_pair_crop": [
+        1900,
+        400,
+        2145,
+        510
+      ]
+    },
+    "today-colors-pressed": {
+      "native_png_sha256": {
+        "qml": "563a3d717b8967efc0ac2c69efe75673e9b2aad447016397219926194c4f7d73",
+        "bead": "02bb42ddb4b56232360934fc70a32d56d5c0ee544c5a1a053aee65c5bff8f02b"
+      },
+      "whole_rgb_rmse_0_255": 17.1243,
+      "paired_images": [
+        "today-colors-pressed.png"
+      ],
+      "native_pair_crop": [
+        1900,
+        400,
+        2145,
+        510
+      ]
+    }
+  },
+  "qml": {
+    "host_swap": {
+      "swap_used_before_kib": 0,
+      "pswpin_delta": 0
+    },
+    "errors": [],
+    "nacre_shell_sha256": null
+  },
+  "bead": {
+    "host_swap": {
+      "swap_used_before_kib": 0,
+      "pswpin_delta": 0
+    },
+    "errors": [],
+    "nacre_shell_sha256": "a11039e1001cfc7aa11f06a55b5f43c7c2a7001f601fb46511f3ff2249ec4f9a"
+  },
+  "helper_sha256": "edb33b6780ff9db4b65ee95737beec4f28644b3daec77039e4401385699aae76",
+  "capture_safety": "complete",
+  "motion": {
+    "note": "QML top / Bead bottom; 25 ms nominal screencopy launch stamps, not scanout timing",
+    "samples": {
+      "open": {
+        "qml": [
+          0,
+          25,
+          50,
+          75,
+          101,
+          126,
+          151,
+          176,
+          201,
+          226,
+          251,
+          276,
+          301,
+          326,
+          351,
+          376,
+          401,
+          426,
+          451,
+          476,
+          502,
+          527,
+          552,
+          577,
+          602,
+          627,
+          652,
+          677,
+          702,
+          727,
+          752,
+          777,
+          802,
+          827,
+          852,
+          877,
+          903,
+          928,
+          953,
+          978,
+          1003,
+          1028,
+          1053,
+          1078,
+          1103,
+          1128,
+          1153,
+          1178,
+          1203,
+          1228,
+          1253,
+          1278,
+          1303,
+          1329,
+          1354,
+          1379
+        ],
+        "bead": [
+          0,
+          25,
+          50,
+          75,
+          100,
+          126,
+          151,
+          176,
+          201,
+          226,
+          251,
+          276,
+          301,
+          326,
+          351,
+          376,
+          401,
+          426,
+          451,
+          476,
+          501,
+          527,
+          552,
+          577,
+          602,
+          627,
+          652,
+          677,
+          702,
+          727,
+          752,
+          777,
+          802,
+          827,
+          852,
+          877,
+          902,
+          927,
+          952,
+          978,
+          1003,
+          1028,
+          1053,
+          1078,
+          1103,
+          1128,
+          1153,
+          1178,
+          1203,
+          1228,
+          1253,
+          1278,
+          1303,
+          1328,
+          1353,
+          1378
+        ]
+      },
+      "close": {
+        "qml": [
+          0,
+          25,
+          50,
+          75,
+          100,
+          125,
+          151,
+          176,
+          201,
+          226,
+          251,
+          276,
+          301,
+          326,
+          351,
+          376,
+          401,
+          426,
+          451,
+          476,
+          501,
+          526,
+          551,
+          577,
+          602,
+          627,
+          652,
+          677,
+          702,
+          727,
+          752,
+          777,
+          802,
+          827,
+          852,
+          877,
+          902,
+          927,
+          952,
+          977,
+          1002,
+          1028,
+          1053,
+          1078,
+          1103,
+          1128,
+          1153,
+          1178,
+          1203,
+          1228,
+          1253,
+          1278,
+          1303,
+          1328,
+          1353,
+          1378
+        ],
+        "bead": [
+          0,
+          25,
+          50,
+          75,
+          100,
+          125,
+          151,
+          176,
+          201,
+          226,
+          251,
+          276,
+          301,
+          326,
+          351,
+          376,
+          401,
+          426,
+          451,
+          476,
+          501,
+          526,
+          551,
+          577,
+          602,
+          627,
+          652,
+          677,
+          702,
+          727,
+          752,
+          777,
+          802,
+          827,
+          852,
+          877,
+          902,
+          927,
+          952,
+          977,
+          1003,
+          1028,
+          1053,
+          1078,
+          1103,
+          1128,
+          1153,
+          1178,
+          1203,
+          1228,
+          1253,
+          1278,
+          1303,
+          1328,
+          1353,
+          1378
+        ]
+      }
+    }
+  }
+}
