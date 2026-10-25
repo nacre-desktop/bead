@@ -112,6 +112,8 @@ pub struct Runtime {
     subscription: Option<bead::backends::Subscription>,
     last_focused_window: Option<bead::backends::Id>,
     desktop: Option<std::sync::Arc<bead::services::Desktop>>,
+    /// Held only while the committed view actually renders a seconds-resolution clock form.
+    clock_seconds_lease: Option<bead::services::ClockSecondsLease>,
     desktop_subscription: Option<bead::services::Subscription>,
     desktop_revision: u64,
     notification_hover: Option<String>,
@@ -574,6 +576,7 @@ impl Runtime {
             subscription: None,
             last_focused_window: None,
             desktop: None,
+            clock_seconds_lease: None,
             desktop_subscription: None,
             desktop_revision: 0,
             notification_hover: None,
@@ -5189,6 +5192,19 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            let wants_seconds = self
+                .widget_seed()
+                .is_some_and(|seed| seed["widget_clock_seconds"] == true);
+            if wants_seconds {
+                if self.clock_seconds_lease.is_none() {
+                    self.clock_seconds_lease = self
+                        .desktop
+                        .as_ref()
+                        .map(|desktop| desktop.clock_seconds_lease());
+                }
+            } else {
+                self.clock_seconds_lease = None;
+            }
             if self.widget_canvas
                 && self.status_pill_route.is_some()
                 && let Err(error) = self.sync_status_peek_route()
