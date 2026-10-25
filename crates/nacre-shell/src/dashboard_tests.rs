@@ -231,6 +231,92 @@ fn every_dashboard_page_handles_bar_pointer_and_timer_events() -> Result<()> {
 }
 
 #[test]
+fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let harness = Harness::load(
+        &root(),
+        Path::new("dashboard/main.luau"),
+        &root().join("palette.json"),
+        BTreeMap::new(),
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.5,
+        },
+    )?;
+    let first = Arc::new(FakeSource::new(fixture("today"))?);
+    let next_sources = Arc::new(std::sync::Mutex::new(Vec::<Arc<FakeSource>>::new()));
+    let datasets = BTreeMap::from([
+        ("weather", fixture("weather")),
+        ("media", fixture("media")),
+        ("system", fixture("system")),
+    ]);
+    let observed_sources = next_sources.clone();
+    let factory: crate::dashboard::Factory = Arc::new(move |page| {
+        let data = datasets
+            .get(page.name())
+            .cloned()
+            .ok_or_else(|| format!("missing test fixture for {}", page.name()))?;
+        let source = Arc::new(FakeSource::new(data).map_err(|error| error.to_string())?);
+        observed_sources.lock().unwrap().push(source.clone());
+        Ok(Dashboard::new(page, source, None, true))
+    });
+    let mut runtime = crate::reload::Runtime::new(harness.session).with_dashboard_factory(
+        Dashboard::new(Page::Today, first.clone(), None, true),
+        factory,
+    )?;
+    let notifications = Arc::new(AtomicUsize::new(0));
+    let emitted = Arc::new(std::sync::Mutex::new(Vec::<UiEvent>::new()));
+    let observed = notifications.clone();
+    let events = emitted.clone();
+    runtime.services(Box::new(move |event| {
+        observed.fetch_add(1, Ordering::Relaxed);
+        events.lock().unwrap().push(event);
+    }));
+    let identity = std::ptr::from_ref(&runtime.session);
+    if let Some(scene) = runtime.stage(UiEvent::Model(BTreeMap::new()))? {
+        drop(scene);
+        runtime.commit();
+    }
+    assert_eq!(runtime.session.stores.get("panel.open"), Some(&Value::Bool(true)));
+    let tab = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| {
+            node.action.as_deref() == Some("dashboard.select")
+                && node.action_arg == Some(Value::Text("weather".into()))
+        })
+        .ok_or("Weather tab action")?;
+    let rect = bead::ui::rect(&tab.draw);
+    if let Some(scene) = runtime.stage(UiEvent::Click {
+        x: rect.x + rect.w / 2.,
+        y: rect.y + rect.h / 2.,
+    })? {
+        runtime.commit();
+        drop(scene);
+    }
+    assert_eq!(std::ptr::from_ref(&runtime.session), identity);
+    assert_eq!(runtime.session.stores.get("panel.open"), Some(&Value::Bool(true)));
+    assert_eq!(runtime.session.stores.get("dashboard.page"), Some(&Value::Text("weather".into())));
+    assert_eq!(runtime.session.stores.get("dashboard.pearl.target"), Some(&Value::Number(111.)));
+    assert!(emitted.lock().unwrap().iter().any(|event| {
+        matches!(event, UiEvent::PanelNavigated(view) if view == "dashboard-weather")
+    }));
+    let constructed = next_sources.lock().unwrap().len();
+    assert!(runtime.select_dashboard_page(Page::Weather)?.is_none());
+    assert_eq!(next_sources.lock().unwrap().len(), constructed);
+    let before_old_publish = notifications.load(Ordering::Relaxed);
+    first.publish(fixture("today"))?;
+    assert_eq!(notifications.load(Ordering::Relaxed), before_old_publish);
+    let current = next_sources.lock().unwrap()[0].clone();
+    current.publish(fixture("weather"))?;
+    assert!(notifications.load(Ordering::Relaxed) > before_old_publish);
+    Ok(())
+}
+
+#[test]
 fn dashboard_four_tabs_have_complete_state_defaults() -> Result<()> {
     for page in Page::ALL {
         let harness = Harness::load(
@@ -376,7 +462,7 @@ fn dashboard_navigation_routes_every_core_tab() -> Result<()> {
                 );
                 assert!(
                     !harness.session.view_nodes().iter().any(|node| {
-                        node.action.as_deref() == Some("view.open")
+                        node.action.as_deref() == Some("dashboard.select")
                             && node.action_arg == Some(Value::Text(route.clone()))
                     }),
                     "selected tab is not an action"
@@ -384,9 +470,9 @@ fn dashboard_navigation_routes_every_core_tab() -> Result<()> {
             } else {
                 assert!(
                     harness.session.view_nodes().iter().any(|node| {
-                        node.action.as_deref() == Some("view.open")
+                        node.action.as_deref() == Some("dashboard.select")
                             && node.action_arg
-                                == Some(Value::Text(format!("dashboard-{}", tab.name())))
+                                == Some(Value::Text(tab.name().into()))
                     }),
                     "unselected {} tab must open its dashboard route",
                     tab.name()
@@ -718,7 +804,7 @@ fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Re
                 assert!(
                     matches!(
                         node.action.as_deref(),
-                        None | Some("view.open" | "calendar_month")
+                        None | Some("view.open" | "dashboard.select" | "calendar_month")
                     ),
                     "no hidden device/update/playback executor"
                 );
@@ -1014,7 +1100,7 @@ fn today_calendar_navigation_uses_real_input() -> Result<()> {
             .view_nodes()
             .iter()
             .filter_map(|n| n.action.as_deref())
-            .all(|a| matches!(a, "view.open" | "calendar_month"))
+            .all(|a| matches!(a, "view.open" | "dashboard.select" | "calendar_month"))
     );
     Ok(())
 }
@@ -1230,7 +1316,7 @@ fn dashboard_extras_have_deterministic_pixels_and_only_navigation_actions() -> R
             let mut h = extra_harness(page, model, scale)?;
             for node in h.session.view_nodes() {
                 assert!(
-                    matches!(node.action.as_deref(), None | Some("view.open")),
+                    matches!(node.action.as_deref(), None | Some("view.open" | "dashboard.select")),
                     "extras execute nothing"
                 );
             }

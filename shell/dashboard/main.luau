@@ -5,7 +5,10 @@ local page=ui.resolve_for_check(ui.bind("dashboard.page"))
 local preview=ui.resolve_for_check(ui.bind("dashboard.preview"))
 local stale=ui.resolve_for_check(ui.bind("dashboard.stale"))
 local ok,content=pcall(require,"./"..page.."/page")
-if not ok then content=require("./page") end
+if not ok then
+    local fallback_ok,fallback=pcall(require,"./page")
+    if fallback_ok then content=fallback else error(content) end
+end
 local nav={}
 local tabs=ui.resolve_for_check(ui.bind("dashboard.tabs"))
 local message=ui.resolve_for_check(ui.bind("dashboard.message"))
@@ -14,6 +17,10 @@ local customize=ui.resolve_for_check(ui.bind("dashboard.customize"))
 local count=math.max(1,#tabs)
 local tw=math.floor(936/count)
 local labeled=tw>=94
+local selected_slot=nil
+for index,tab in ipairs(tabs) do if tab.id==page then selected_slot=index break end end
+local moving=ui.resolve_for_check(ui.bind("dashboard.pearl.moving"))
+local pearl_left=selected_slot and (moving and ui.bind("dashboard.pearl.x") or (selected_slot-1)*tw+(tw-12)/2) or nil
 -- QML NacreDashboardNavigation: icon + title centred at y=6, accent icon / ink title when selected, an 8 px pearl (12 px halo) under the selected slot; no pill.
 for _,tab in ipairs(tabs) do
     local title=tab.id=="today" and ui.tr("bead.dashboard.nav-dashboard") or tab.title
@@ -36,7 +43,7 @@ end
 return kit.Panel{id="dashboard",edge="top",open=ui.bind("panel.open"),duration=.36,transition="ease-in-out",fade=false,reveal=true,
     width=984,height=650,padding=0,radius=18,fill="surface",
     ui.Row{id="navigation",position="absolute",left=24,top=12,width=936,height=44,table.unpack(nav),
-        ui.Box{id="tab-halo",position="absolute",left=ui.bind("dashboard.pearl.x"),top=29,width=12,height=12,radius=6,fill=ui.alpha("primary",0.12),
+        pearl_left and ui.Box{id="tab-halo",position="absolute",left=pearl_left,top=29,width=12,height=12,radius=6,fill=ui.alpha("primary",0.12),
             ui.Box{id="tab-pearl",position="absolute",left=2,top=2,width=8,height=8,radius=4,fill="primary"}},
     },
     ui.Box{id="stage",position="absolute",left=22,top=68,width=940,height=562,content()},

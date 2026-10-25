@@ -313,6 +313,22 @@ impl App {
         self.panel_name = Some(name);
         Ok(())
     }
+
+    pub(super) fn panel_navigated(&mut self, name: String) {
+        let Some(panels) = &self.options.panels else {
+            return;
+        };
+        let Ok((resolved, spec)) = panels.resolve(Some(&name)) else {
+            eprintln!("PANEL_NAVIGATION_ERROR view={name}");
+            return;
+        };
+        let resolved = resolved.to_owned();
+        let mut spec = spec.clone();
+        spec.initial_open = false;
+        self.panel_name = Some(resolved.clone());
+        self.options.panel_spec = Some(spec);
+        self.notify_panel_owner(UiEvent::PanelNavigated(resolved));
+    }
     pub(super) fn request_panel(
         &mut self,
         name: Option<&str>,

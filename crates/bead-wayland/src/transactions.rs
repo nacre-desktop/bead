@@ -5,6 +5,7 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
     matches!(
         event,
         UiEvent::CompanionSelect { .. }
+            | UiEvent::PanelNavigated(_)
             | UiEvent::CompanionOffer { .. }
             | UiEvent::CompanionVisibility(true)
             | UiEvent::ShellHidden(_)
@@ -301,6 +302,10 @@ impl App {
                     // Panel Runtime emits host commands through its wakeup sender.
                     // After the epoch check, dispatch those commands at the App
                     // level instead of feeding them back into the panel script.
+                    if let UiEvent::PanelNavigated(view) = &*event {
+                        self.panel_navigated(view.clone());
+                        return;
+                    }
                     self.ui(*event);
                     return;
                 }
@@ -925,6 +930,9 @@ mod panel_event_routing_tests {
             center: None,
         };
         assert!(panel_event_belongs_to_host(&event));
+        assert!(panel_event_belongs_to_host(&UiEvent::PanelNavigated(
+            "dashboard-weather".into()
+        )));
         assert!(panel_event_belongs_to_host(&UiEvent::CompanionVisibility(
             true
         )));

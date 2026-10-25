@@ -241,6 +241,8 @@ pub enum UiEvent {
     PointerRegion(bool),
     PanelDismissed,
     PanelSelected(String),
+    /// Update the active view name without replacing the panel surface or worker.
+    PanelNavigated(String),
     CompanionSelect {
         view: String,
         output: Option<String>,

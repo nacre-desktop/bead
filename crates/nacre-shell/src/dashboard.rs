@@ -713,10 +713,6 @@ impl Dashboard {
                 "dashboard.page".into(),
                 Value::Text(self.page.name().into()),
             ),
-            (
-                "dashboard.reduce_motion".into(),
-                Value::Bool(self.prefs().is_some_and(|prefs| prefs.reduce_motion)),
-            ),
             ("dashboard.title".into(), Value::Text(self.page.title())),
             ("dashboard.preview".into(), Value::Bool(self.preview)),
             ("dashboard.ready".into(), Value::Bool(false)),

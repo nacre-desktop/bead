@@ -254,7 +254,7 @@ fn pages_have_deterministic_pixels_and_only_declared_actions() -> Result<()> {
                 assert!(
                     matches!(
                         node.action.as_deref(),
-                        None | Some("view.open" | "dashboard.do" | "focus_minutes")
+                        None | Some("view.open" | "dashboard.select" | "dashboard.do" | "focus_minutes")
                     ),
                     "{page:?}: {:?}",
                     node.action
