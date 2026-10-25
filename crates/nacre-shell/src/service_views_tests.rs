@@ -1765,9 +1765,11 @@ fn title_width_reservation_uses_configured_instance_settings() -> Result<()> {
 
 #[test]
 fn status_value_styles_keep_icons_and_values_on_the_same_bar_line() -> Result<()> {
-    let mut document: serde_json::Value = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
+    let mut document: serde_json::Value =
+        serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
     for index in [1, 2, 3] {
-        document["hosts"]["top_bar"]["instances"][3]["children"][index]["style"] = "icon+value".into();
+        document["hosts"]["top_bar"]["instances"][3]["children"][index]["style"] =
+            "icon+value".into();
     }
     let mut values = super::initial_models()?;
     values.extend(BTreeMap::from([
@@ -1776,19 +1778,41 @@ fn status_value_styles_keep_icons_and_values_on_the_same_bar_line() -> Result<()
         ("bead.desktop.audio".into(), Value::Text("volume_up".into())),
         ("bead.desktop.audio.label".into(), Value::Text("45%".into())),
         ("bead.desktop.network".into(), Value::Text("wifi".into())),
-        ("bead.desktop.bluetooth".into(), Value::Text("bluetooth".into())),
+        (
+            "bead.desktop.bluetooth".into(),
+            Value::Text("bluetooth".into()),
+        ),
     ]));
-    let bar = Harness::load(&root(), Path::new("bar/main.luau"), &root().join("palette.json"), values,
-        Config {width:1920,height:70,scale:1.5})?;
-    let text_rect = |value: &str| bar.scene().primitives.iter().find_map(|primitive| match primitive {
-        bead::render::Primitive::Text {text,rect,..} if text == value => Some(*rect),
-        _ => None,
-    }).expect("status text missing");
-    for (icon,value) in [("volume_up","45%"),("wifi","Connected"),("bluetooth","On")] {
+    let bar = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 70,
+            scale: 1.5,
+        },
+    )?;
+    let text_rect = |value: &str| {
+        bar.scene()
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                bead::render::Primitive::Text { text, rect, .. } if text == value => Some(*rect),
+                _ => None,
+            })
+            .expect("status text missing")
+    };
+    for (icon, value) in [
+        ("volume_up", "45%"),
+        ("wifi", "Connected"),
+        ("bluetooth", "On"),
+    ] {
         let icon = text_rect(icon);
         let value = text_rect(value);
         assert!(value.x > icon.x);
-        assert!((value.y+value.h/2. - icon.y-icon.h/2.).abs() < 2.5);
+        assert!((value.y + value.h / 2. - icon.y - icon.h / 2.).abs() < 2.5);
     }
     Ok(())
 }

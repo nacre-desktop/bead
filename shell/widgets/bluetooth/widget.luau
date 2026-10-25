@@ -24,7 +24,7 @@ local function desktop(props,_settings,_data)
     return ui.Box{id="bluetooth-desktop",width=slot.w,height=slot.h,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("status.pill.open","bluetooth") or nil,
         ui.Row{id="content",width="fill",height="fill",gap=kit.tokens.spacing.md,align="center",status_glyph("glyph",ui.bind("bead.desktop.bluetooth"),"bluetooth"),
             ui.Column{id="labels",width="fill",gap=kit.tokens.spacing.xs,ui.Text{id="title",text="Bluetooth",font_size=kit.tokens.text.body*4/3,color="onSurface"},
-                ui.Text{id="value",text=glyph=="bluetooth" and "On" or "Off",font_size=20,color="primary"}},
+                ui.Text{id="value",text=glyph=="bluetooth" and "On" or "Off",font_size=kit.tokens.text.title*4/3,color="primary"}},
         }}
 end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end
