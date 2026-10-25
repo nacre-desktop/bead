@@ -60,3 +60,47 @@ One matched cold next-image sample reached the active-topic receiver in 1,206 ms
 The baseline background image-progress proxy reaches 10–90% at 245–305 ms
 (QML) / 806–838 ms (Bead), exposing the earlier QML preview despite its later
 palette publication. Final timings, captures, CI and memory medians follow below.
+
+The Settings picker action exposed two additional cold-path defects: release-only
+kit actions were not dispatched by the Settings host, and pruning an unavailable
+image left retained layer/clip indices stale. Release now follows the Session
+input contract. Generic `Scene::retain_primitives` remaps all indexed metadata;
+a CPU preparation regression covers nested layers, clipping and reveal parts.
+
+Matched single-key results, milliseconds from the synthetic key send:
+
+| Stage / image-distance proxy | QML | Bead control | Bead candidate |
+| --- | ---: | ---: | ---: |
+| Background t10 / t50 / t90 | 245 / 266 / 305 | 806 / 822 / 838 | 154 / 164 / 174 |
+| Card travel t10 / t50 / t90 | 85 / 127 / 201 | 4 / 20 / 36 | 157 / 170 / 245 |
+| Active-topic receive | 1,206 | 723 | 799 |
+
+The candidate's own matched QML arm measured background 341 / 417 / 447,
+card travel 110 / 157 / 241 and active-topic receive 785 ms. These are individual
+cold samples, not population percentiles. Background progress is normalized L1
+image distance in a clear backdrop crop; card progress uses the card strip before
+palette publication. Candidate numeric marks put admission at 42 ms, bounded
+image decode at 43–147 ms and first surface commit at 168 ms. Palette-confirmed
+decode/commit still follows at about 800–975 ms; it no longer delays the preview.
+The three-key burst lands on its final selection. Motion references and native
+paired screenshots are in [evidence/0109](evidence/0109/); the contact sheets use
+nearest observed frame times, which are recorded in `capture-metadata.json`.
+
+For MP4 / WebM / MKV / MOV / M4V, candidate key-to-first-video-frame marks are
+258 / 32 / 75 / 36 / 40 ms; admission is 4–6 ms. These marks indicate the first
+new mpv frame submitted by the renderer, not compositor scanout. The first MP4
+also creates the player; subsequent formats reuse it. Source-specific colour
+markers and two changing full-window frames verify replacement identity and
+actual playback, rather than accepting an unchanged old video. Return activates
+the selection again through the existing public picker contract; both requests
+complete, and the preview remains continuous while palette work finishes.
+
+Known parity limits: CPU font shaping and thumbnail sampling differ slightly;
+the Bead Settings title/section spacing inherits its existing host layout.
+Current scene additionally displays the requested filename and kind. Fullscreen
+backdrop/side-card transitions and in-panel dynamic posters retain B0100's gaps.
+Video samples are not synchronized to a common media clock, and the Bead video
+composition has a small colour/lightness difference (a saturated marker can
+acquire about 39/255 in another channel). Identity checks allow 64/255 per channel;
+the markers differ by 255 in at least one channel. These are not pixel-parity or
+physical smoothness acceptance claims. No live desktop or laptop-cap test ran.

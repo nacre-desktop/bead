@@ -67,8 +67,8 @@ for index, extension in [(1, "mp4"), (2, "webm"), (3, "mkv"), (4, "mov"), (5, "m
     m.STATES[state] = ([("selection-key", "Right"), ("key", "Return"), ("sleep", 4),
                        ("video-assert", f"motion-{index}.{extension}")], [("ui", "nacre", "close")], 1.5 if extension in ("mp4", "webm") else 0)
 
-# Closed-memory phases reuse the same guarded driver. Each phase already waits
-# seven seconds after closing, so no additional picker retirement delay is needed.
+# Open/closed memory phases reuse the same guarded driver, waiting seven seconds
+# after closing before the driver's additional closed-settle interval.
 for state, kind, layout, operations in [
     ("memory-carousel", "static", "carousel", [("selection-key", "Right"), ("sleep", .4), ("press", 960, 944), ("release",),
                                                    ("type", "generated-2"), ("selection-key", "Right"), ("sleep", 4)]),
@@ -80,9 +80,12 @@ for state, kind, layout, operations in [
     if state == "memory-carousel": operations.append(("active-assert", "generated-2.jpg"))
     if state == "memory-dynamic": operations.append(("active-assert", "motion-2.webm"))
     m.STATE_PREPARE[state] = [("wallpaper-pref", kind, layout)]
-    m.STATES[state] = ([("ui", "nacre", "launcher", ">wallpaper "), ("sleep", 2), *operations,
-                       ("ui", "nacre", "close"), ("sleep", 7), ("closed-assert",)], [], 0)
+    m.STATES[state] = ([("ui", "nacre", "launcher", ">wallpaper "), ("sleep", 2), *operations],
+                      [("ui", "nacre", "close"), ("sleep", 7), ("closed-assert",)], 0)
     m.STATE_SETTLE[state] = 0
+
+m.STATES["memory-scene"] = (_scene_open, [("app_close", "settings"), ("sleep", 7), ("closed-assert",)], 0)
+m.STATE_SETTLE["memory-scene"] = 0
 
 original_sequence = m.Arm.sequence
 

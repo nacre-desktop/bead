@@ -1,0 +1,151 @@
+{
+  "geometry": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "layout": "QML left; Bead right",
+  "backend": "CPU UI; EGL video",
+  "pairs": {
+    "wallpaper-button-spotlight": {
+      "qml_sha256": "92ac5210a81431cf416a7e2cbfa45d06a03418826b3202a66f76984c98cf15c1",
+      "bead_sha256": "2ef201a23464f7873ff3d81e99679c7a7d502b979795aab7f4367278e29fe48e"
+    },
+    "wallpaper-button-hexagons": {
+      "qml_sha256": "504869684cdb5b4f5bf75d9d541311b5ed5425129a5cd8f31b2236f9aff830a1",
+      "bead_sha256": "9bdc8b75157d11e650c3372ed2a2cff9d63794b709bf67ed025444ab0190e22d"
+    },
+    "wallpaper-button-dynamic": {
+      "qml_sha256": "8cf26989687734a820f3393317f713ec8780439c04b5a33db9156307dff25182",
+      "bead_sha256": "2aa43ec24947a813ebb52975ea6e07f096c74a43b60bdaaa5dc774077e34c4d7"
+    },
+    "wallpaper-hover": {
+      "qml_sha256": "5670d38d4e437750d6ecd2b6bbc64b8e4ed8b94d8882fe78f3393f80a0297e54",
+      "bead_sha256": "714d1d04e502b6e0f54de30316d8a8c308f1688cc49d9188e62f480c357cb2d2"
+    },
+    "wallpaper-pressed": {
+      "qml_sha256": "e7761aa16c22e8efa0a366a9ff22eb136591ff2a645c1b6db35b6d3ccef958a4",
+      "bead_sha256": "5353aa56234388e1f2eb7f1a0f5f75875bf8ffafafccd7963949900882da7d3f"
+    },
+    "current-scene": {
+      "qml_sha256": "a96f18a65988d164285ba9f0f13879ef3da11e0d3f13383e44245801889dad08",
+      "bead_sha256": "f933f69df31a9b41696d4394d9e1ec9f8bdcbf2c959ced8723fa35f254809038"
+    },
+    "current-scene-hover": {
+      "qml_sha256": "dd0dd4fa73e03f67ecfd854f24294f402dcae335459c3c7e67473c135bfa968e",
+      "bead_sha256": "b7e0aff693a5a800851c6cb09a02eac8a687bf6e615d2725d359206f63543ccb"
+    },
+    "current-scene-pressed": {
+      "qml_sha256": "fbc3e41b93d156d957f3a9b884f0ee1a972b50de47c31a7a21a8eabf3b3cee67",
+      "bead_sha256": "1561e6dba7260884442a6bfe1bfa8a105bd5b5224f6fcc7904319ce5792f381c"
+    },
+    "current-scene-picker": {
+      "qml_sha256": "dd97858a18f27530a3669f87e7c6e4b66ec734d2dc393f6c84d66b70aae9455a",
+      "bead_sha256": "ba5c40a0ffd550389add59fdbf4b1547f9c1b43f459ec54c2f9c28f77fe82a46"
+    },
+    "wallpaper-format-mp4": {
+      "qml_sha256": "a244729438df4325f66e2958df8fb2ead82c8650bd0f6ff76769e0f1350aeffa",
+      "bead_sha256": "a2e77419380bbef8c0c98aaf56c37fa8fe7c774ee21edb57de8430376fa68529"
+    },
+    "wallpaper-format-webm": {
+      "qml_sha256": "49702f4eecc1b0344cb0b7d76f662b9fe844c7fb94697eaad34b0458e64db319",
+      "bead_sha256": "767155c36b1d921450b1ab3d550f12a95d7a55b7e38992ab7a0d94080038c235"
+    },
+    "wallpaper-format-mkv": {
+      "qml_sha256": "613a1107af676c16e7357895ad77edcf3567189337ab3d030f48b1235cc4669b",
+      "bead_sha256": "4653ac77cbf2de386aff9b6621f8524c048e099ce849a284b469be46f8fee7e4"
+    },
+    "wallpaper-format-mov": {
+      "qml_sha256": "9f3ce17d6b7b3eea2791899d124a1e693a6639ee644e5c75bd0fd2421d13533a",
+      "bead_sha256": "71861c286c4a936ba7b4a94844d26255475dad0f5423e22a930b6c0ec430a58f"
+    },
+    "wallpaper-format-m4v": {
+      "qml_sha256": "a90a5b5e84851a14bfdd7d55e7d885a246c3b68633548f3e3d729587b863f433",
+      "bead_sha256": "bc58ab400506f78a0c09320704a8a6c51ee79904c32f7c66cd016123c95821e3"
+    }
+  },
+  "wallpaper-travel": [
+    {
+      "requested_ms": 0,
+      "qml_ms": 0,
+      "bead_ms": 0
+    },
+    {
+      "requested_ms": 50,
+      "qml_ms": 50,
+      "bead_ms": 50
+    },
+    {
+      "requested_ms": 100,
+      "qml_ms": 101,
+      "bead_ms": 101
+    },
+    {
+      "requested_ms": 150,
+      "qml_ms": 151,
+      "bead_ms": 151
+    },
+    {
+      "requested_ms": 200,
+      "qml_ms": 201,
+      "bead_ms": 201
+    },
+    {
+      "requested_ms": 250,
+      "qml_ms": 251,
+      "bead_ms": 251
+    },
+    {
+      "requested_ms": 300,
+      "qml_ms": 301,
+      "bead_ms": 301
+    },
+    {
+      "requested_ms": 350,
+      "qml_ms": 351,
+      "bead_ms": 351
+    }
+  ],
+  "wallpaper-travel-burst": [
+    {
+      "requested_ms": 0,
+      "qml_ms": 0,
+      "bead_ms": 0
+    },
+    {
+      "requested_ms": 50,
+      "qml_ms": 50,
+      "bead_ms": 51
+    },
+    {
+      "requested_ms": 100,
+      "qml_ms": 100,
+      "bead_ms": 101
+    },
+    {
+      "requested_ms": 150,
+      "qml_ms": 151,
+      "bead_ms": 151
+    },
+    {
+      "requested_ms": 200,
+      "qml_ms": 201,
+      "bead_ms": 201
+    },
+    {
+      "requested_ms": 250,
+      "qml_ms": 251,
+      "bead_ms": 251
+    },
+    {
+      "requested_ms": 300,
+      "qml_ms": 301,
+      "bead_ms": 301
+    },
+    {
+      "requested_ms": 350,
+      "qml_ms": 352,
+      "bead_ms": 352
+    }
+  ]
+}
