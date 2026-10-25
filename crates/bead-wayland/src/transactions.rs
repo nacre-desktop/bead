@@ -450,6 +450,11 @@ impl App {
         }
     }
     pub(super) fn ui_inner(&mut self, event: UiEvent) -> bool {
+        let palette_commit = match &event {
+            UiEvent::WallpaperPalette(_) => true,
+            UiEvent::Worker(packet) => packet.wallpaper_palette().is_some(),
+            _ => false,
+        };
         if matches!(&event, UiEvent::Remote(_)) {
             bead_core::profile::mark("dispatch_received");
         }
@@ -842,7 +847,7 @@ impl App {
                     active_output.as_deref().unwrap_or("shared")
                 );
                 bead_core::vprintln!(
-                    "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={} companion={} source_error={} output={}",
+                    "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={} companion={} source_error={} output={} wallpaper_palette={}",
                     self.scene.resource_revision,
                     reload,
                     started.elapsed().as_secs_f64() * 1000.,
@@ -850,7 +855,8 @@ impl App {
                     self.ui_serial,
                     self.processing_panel,
                     source_error,
-                    self.active_output.as_deref().unwrap_or("shared")
+                    self.active_output.as_deref().unwrap_or("shared"),
+                    palette_commit
                 );
             }
             Ok(None) => {

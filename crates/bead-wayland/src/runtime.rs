@@ -1143,6 +1143,11 @@ impl App {
                     width: surface.width,
                     height: surface.height,
                     logical,
+                    feedback: self
+                        .presentation
+                        .as_ref()
+                        .filter(|_| bead_core::profile::enabled())
+                        .map(|p| (p, &self.qh, frame.revision)),
                 },
                 &frame.rgba,
             )
@@ -1240,6 +1245,12 @@ impl App {
                     width: surface.width,
                     height: surface.height,
                     logical,
+                    feedback: self
+                        .presentation
+                        .as_ref()
+                        .filter(|_| bead_core::profile::enabled())
+                        .zip(transition.commit.as_ref())
+                        .map(|(p, (revision, _))| (p, &self.qh, *revision)),
                 },
                 &transition.pixels,
             )
@@ -1752,6 +1763,7 @@ struct WallpaperBufferTarget<'a> {
     width: u32,
     height: u32,
     logical: Option<(i32, i32)>,
+    feedback: Option<(&'a WpPresentation, &'a QueueHandle<App>, u64)>,
 }
 
 fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Result<(), String> {
@@ -1764,6 +1776,7 @@ fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Re
         width,
         height,
         logical,
+        feedback,
     } = target;
     let expected = (width as usize)
         .checked_mul(height as usize)
@@ -1811,6 +1824,18 @@ fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Re
     buffer
         .attach_to(layer.wl_surface())
         .map_err(|_| "wallpaper buffer still active")?;
+    if let Some((presentation, qh, revision)) = feedback {
+        presentation.feedback(
+            layer.wl_surface(),
+            qh,
+            PresentationData {
+                surface: layer.wl_surface().clone(),
+                generation: revision,
+                source_epoch: 0,
+                update: revision,
+            },
+        );
+    }
     layer.wl_surface().damage_buffer(
         0,
         0,

@@ -299,6 +299,28 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
         conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
+        if let Some(surface) = state
+            .wallpaper_surfaces
+            .iter()
+            .find(|surface| surface.layer.wl_surface() == &data.surface)
+        {
+            if let wp_presentation_feedback::Event::Presented {
+                tv_sec_hi,
+                tv_sec_lo,
+                tv_nsec,
+                refresh,
+                ..
+            } = event
+            {
+                let ns = ((u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo)) * 1_000_000_000
+                    + u64::from(tv_nsec);
+                println!(
+                    "WALLPAPER_PRESENTED output={} revision={} monotonic_ns={ns} refresh_ns={refresh}",
+                    surface.name, data.update
+                );
+            }
+            return;
+        }
         if let Some(id) = state.slot_of_surface(&data.surface) {
             state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
             return;
