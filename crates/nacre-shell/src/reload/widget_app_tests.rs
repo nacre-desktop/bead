@@ -399,13 +399,15 @@ fn widget_app_stage_uses_the_settings_wallpaper_thumbnail() {
         "the stage renders the current Settings thumbnail once"
     );
     assert!(matches!(images[0], bead::render::ImageFit::Cover));
-    let stage = harness
-        .session
-        .view_nodes()
+    let stage_rect = harness
+        .scene()
+        .primitives
         .iter()
-        .find(|node| node.id.ends_with("stage-background"))
-        .expect("screen-sized wallpaper stage node");
-    let stage_rect = bead::ui::rect(&stage.draw);
+        .find_map(|primitive| match primitive {
+            bead::render::Primitive::Image { path, rect, .. } if path == &thumbnail => Some(*rect),
+            _ => None,
+        })
+        .expect("screen-sized wallpaper stage image");
     assert!(
         stage_rect.w > 500.,
         "the output preview should use the taller available stage area"
