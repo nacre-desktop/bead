@@ -1,4 +1,5 @@
-Code revision: 4a4ed0c86c6680ca68d6b5c9ca93987c12691ef9
+Initial measured-code CI: 4a4ed0c86c6680ca68d6b5c9ca93987c12691ef9
+Font-policy correction CI: 72b849805ba59adb1fbb0b8a1f2d7c77fa2db746
 Environment: remote ghcr.io/archlinux/archlinux:latest container; nice -n10; Cargo -j2.
 Command: nice -n 10 bash docs/specs/evidence/0108/check.sh
 Result: exit 0, CI_ALL_OK. Complete script is included, no laptop tests/builds.
@@ -22,3 +23,9 @@ Cleanup: task CI container and remote build directory removed; no task tmux/proc
 Rebase onto origin/main 575afc7 was a no-op; product tree matches full-CI revision 4a4ed0c.
 Final-code quick refresh after lead acceptance: idle/title-open/Media states PASS; arm and harness exit 0; title retention/containment PASS.
 Refresh initially failed only private GVFS cleanup; retried with GVFS_DISABLE_FUSE=1 GIO_USE_VFS=local in the private arm.
+Exact-head GitHub CI on ad73814 exposed seven host-font golden mismatches on Ubuntu.
+Correction 72b8498: per-session font policy, fixed harness fonts before first layout; no golden regeneration.
+Ubuntu 24.04 regression + 65 dashboard tests + bar golden test PASS (UBUNTU_FONT_GOLDENS_OK); see ubuntu-font-checks.txt.
+Correction 72b8498 full remote Arch CI-equivalent PASS: nice -n 10 bash docs/specs/evidence/0108/check.sh -> exit 0 / CI_ALL_OK.
+New session font isolation/reload/preservation regression PASS in Arch and Ubuntu; existing goldens unchanged.
+Both correction CI containers and all remote task build/toolchain directories removed after checks.

@@ -182,7 +182,7 @@ After Bead's core switch on Nacre, plan support for:
   Nacre titles, helper calls and daemon snapshot decoding stay in the shell adapter.
 
 - B0108: `ui.text_width(text, family, size)` measures regular-weight labels with the
-  renderer's shaper and a host-supplied font picker; the frontend owns the bounded
+  renderer's shaper and a session-owned host font picker; the frontend owns the bounded
   width cache. Shell markup chooses which labels to measure and their geometry.
   `Session::navigate` stages a selected entry/schema over durable stores without
   replacing its session; `PanelNavigated` updates catalog identity after commit

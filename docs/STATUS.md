@@ -4,7 +4,10 @@
 
 The local candidate centers measured title/tab groups, retains a real window title
 through panel focus loss, and switches dashboard pages in the resident surface.
-Full remote Arch CI passes on `4a4ed0c`; 40 updated goldens were inspected.
+Full remote Arch CI passes on `72b8498`; 40 updated goldens were inspected.
+The initial GitHub run exposed host-font-dependent measurements; session-owned
+font policy and bundled harness fonts now pass unchanged Ubuntu dashboard/bar
+goldens as well.
 Five alternating CPU pairs measure Media at +0.513672 MiB unreclaimable median
 (+0.500 MiB limit); all other phases pass. **Lead-accepted 2026-10-25:** the lead
 judged the 14 KiB excess within measurement noise and authorized integration.

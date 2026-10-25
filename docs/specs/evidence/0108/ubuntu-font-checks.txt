@@ -1,0 +1,12 @@
+Code: 72b8498 (session-owned font measurement policy)
+Environment: remote ubuntu:24.04 container, Rust 1.99.0, workflow system dependencies.
+Commands ran at nice -n10; Cargo -j2. No goldens regenerated or comparison tolerance changed.
+cargo test -p bead-ui --locked -j2 text_measurement_uses_each_sessions_own_font_picker
+PASS: 1 test; independent session pickers, reload and explicit-policy preservation.
+cargo test -p nacre-shell --locked -j2 dashboard
+PASS: 65 dashboard tests, including every dashboard golden that failed the initial GitHub run.
+cargo test -p nacre-shell --locked -j2 bar_counts_share_icon_hit_areas_and_centered_line_boxes
+PASS: 1 test, including the bar goldens that failed the initial GitHub run.
+Final sentinel: UBUNTU_FONT_GOLDENS_OK.
+Initial GitHub run: https://github.com/nacre-desktop/bead/actions/runs/40167607985
+Initial result: seven host-font-dependent golden failures; corrected by matching measurement/painting font policy before layout.

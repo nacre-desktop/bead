@@ -66,11 +66,19 @@ focused SHM pool compaction delay is preserved; this trim never repaints the poo
 Both failed five-pair results and allocator diagnostics are retained in the evidence.
 No host swap-in, process SwapPss, OOM or containment failure is accepted.
 
-Rebase onto current `origin/main` (`575afc7`) was a no-op; the product tree remains
-identical to the tested code, so no repeat container CI run was needed.
+Rebase onto `origin/main` (`575afc7`) was a no-op. The exact-head GitHub run on
+`ad73814` then exposed seven Ubuntu golden mismatches: intrinsic widths had used
+host fonts before the headless harness supplied its bundled painting fonts.
+`72b8498` makes the measurement policy session-owned and installs the harness's
+bundled fonts before its first layout. Native sessions retain the existing host
+selection policy. A regression checks two-session isolation, reloads and explicit
+policy preservation. Full remote Arch CI passes on `72b8498`; Ubuntu 24.04 also
+passes the new regression, all 65 dashboard tests and the bar golden test without
+regenerating goldens. Existing native/memory captures remain pinned to `4a4ed0c`.
 
 Full remote Arch CI-equivalent `bash docs/specs/evidence/0108/check.sh` passes
-on `4a4ed0c` (`CI_ALL_OK`), including fmt, clippy −D warnings, workspace/trace
+on both `4a4ed0c` and correction `72b8498` (`CI_ALL_OK`), including fmt,
+clippy −D warnings, workspace/trace
 and feature checks, Luau schema/analyzer, spike and packaging suites, wallpaper,
 service/DBus proofs and all dependency graphs. Forty changed goldens at scales
 1 and 1.5 were regenerated remotely and visually inspected. Tests cover focus
