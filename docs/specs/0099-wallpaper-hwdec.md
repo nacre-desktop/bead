@@ -95,7 +95,13 @@ about 50x cheaper than before. The old shm path was never close because the cost
 scale/convert, not the decode: even with hardware decode it needs more than one core at 4K. The fallback path
 is unchanged and, as measured, still costs what it did.
 
-RELEASED_ROW
+**Released** (decoder dropped after a long pause, last frame kept; second desktop run, 4K clip): GPU path 0.0 % CPU,
+PSS 66.5-69.8 MiB (anon 31-34, file 36), against 10.8 MiB for the shm path released in the CI container. This is
+the EGL context and window surfaces that stay alive; renderer memory is reported separately from the UI gate.
+A second run reproduced playing CPU of 1.3-2.1 % (default flags 2.1 %, iGPU pinned 1.3 %), covered 0 %, resumed
+1.2-1.9 %, and the shm fallback 117.9 % / 122.3 %. QML at 1080p with Qt defaults (CUDA) was 3.8 % playing,
+PSS 451 MiB. On this desktop a default launch (no flags) already lands on the iGPU: `EGL presentation,
+GL_RENDERER=AMD Ryzen 5 7600 ... radeonsi`, `hwdec` event `vaapi`, mpv `Using hardware decoding (vaapi)`.
 
 Backend of every Bead "after" row: render backend = GPU (EGL + OpenGL, Mesa radeonsi), no CPU rasteriser; the
 fallback rows are CPU (libmpv software render, wl_shm). The `hwdec` event of the GPU runs reported `vaapi`;
@@ -131,7 +137,7 @@ None. The shared-memory path is not a legacy copy: it is the permanent fallback 
 ## Known gaps / follow-ups
 
 - Laptop (Intel xe) not measured by this unit, see above.
-- GPU path keeps the EGL context while the decoder is released (a few tens of MiB, GPU memory not counted in PSS);
+- GPU path keeps the EGL context while the decoder is released (about 66-70 MiB PSS vs 10.8 MiB for shm);
   tearing it down on release and re-creating on resume is possible but was not needed for the cost target.
 - Fractional-scale-exact buffers are still the output's native mode scaled by the compositor (B0046).
 - `wp_presentation` feedback is not used; pacing remains frame callbacks.
