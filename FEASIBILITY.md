@@ -1,5 +1,22 @@
 # Feasibility
 
+## 2026-10-25 — B0119 keyboard focus and title churn
+
+A closed warm panel could reclaim exclusive keyboard focus on its next update.
+Drawing now owns keyboard policy; close releases input and the keyboard immediately.
+Bound text measurements keep equal-width title changes out of the markup VM and layout.
+Matched private niri sessions use 2880×1800 / 1.5; no live desktop changes.
+
+| Run | Keyboard delivery | Shell CPU, % core | Niri CPU, % core |
+| --- | ---: | ---: | ---: |
+| Control (protocol tracing) | 0/10 | 1.233 | 0.500 |
+| QML, normal logging | 100/100 | 1.033 | 0.500 |
+| Final Bead CPU renderer, normal logging | 100/100 | 0.400 | 0.533 |
+
+The first focus-only fix used 1.033% core and failed the 1% gate; the bound-width
+cache closes that gap. Final inputs share identical palette and wallpaper hashes.
+Full CI passes. [Source-pinned evidence and limits](docs/specs/0119-click-focus.md).
+
 ## 2026-10-25 — B0106 dashboard review candidate
 
 Asynchronous poster preparation removes the long first-content wait.

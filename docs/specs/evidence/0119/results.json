@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "control_revision": "2331552dc5ae758e7163118f809c6c7d6a78437d",
+  "candidate_revision": "8c638275d1ed3e49270f5f707b37a8cbe32794e3",
+  "qml_revision": "30892db70264d3a0000ea7f1cc828c4a2209c46e",
+  "qml_shell_blob_match": "371/371; zero missing, different or extra files",
+  "candidate_binary_sha256": "043a0498c312c45bb8e67d47900c8e95d13dbd84c2032f3ce82d61297f02cc8c",
+  "geometry": {
+    "pixels": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "logical": [
+      1920,
+      1200
+    ]
+  },
+  "session": "private headless labwc parent, nested niri, focus-follows-mouse",
+  "title_rate_hz": 4,
+  "cpu_window_seconds": 30,
+  "runs": [
+    {
+      "name": "control-traced",
+      "shell": "bead",
+      "renderer": "cpu",
+      "protocol_trace": true,
+      "trials": 10,
+      "focus_and_input_passed": 0,
+      "keyboard_after_30s": false,
+      "cpu": {
+        "niri": {
+          "seconds": 0.15,
+          "core_percent": 0.5
+        },
+        "shell": {
+          "seconds": 0.37,
+          "core_percent": 1.233
+        }
+      },
+      "backend_update_logs_during_30s": 120,
+      "verified_client_bounds": [
+        1061.3333333333333,
+        140.0,
+        1906.6666666666667,
+        1189.3333333333333
+      ]
+    },
+    {
+      "name": "qml-matched",
+      "shell": "qml",
+      "renderer": "default",
+      "protocol_trace": false,
+      "trials": 100,
+      "focus_and_input_passed": 100,
+      "keyboard_after_30s": true,
+      "cpu": {
+        "niri": {
+          "seconds": 0.15,
+          "core_percent": 0.5
+        },
+        "shell": {
+          "seconds": 0.31,
+          "core_percent": 1.033
+        }
+      },
+      "backend_update_logs_during_30s": 0,
+      "verified_client_bounds": [
+        1061.3333333333333,
+        140.0,
+        1906.6666666666667,
+        1189.3333333333333
+      ]
+    },
+    {
+      "name": "focus-fix-normal",
+      "shell": "bead",
+      "renderer": "cpu",
+      "protocol_trace": false,
+      "trials": 100,
+      "focus_and_input_passed": 100,
+      "keyboard_after_30s": true,
+      "cpu": {
+        "niri": {
+          "seconds": 0.16,
+          "core_percent": 0.533
+        },
+        "shell": {
+          "seconds": 0.31,
+          "core_percent": 1.033
+        }
+      },
+      "backend_update_logs_during_30s": 0,
+      "verified_client_bounds": [
+        1061.3333333333333,
+        140.0,
+        1906.6666666666667,
+        1189.3333333333333
+      ]
+    },
+    {
+      "name": "optimized-normal",
+      "shell": "bead",
+      "renderer": "cpu",
+      "protocol_trace": false,
+      "trials": 100,
+      "focus_and_input_passed": 100,
+      "keyboard_after_30s": true,
+      "cpu": {
+        "niri": {
+          "seconds": 0.15,
+          "core_percent": 0.5
+        },
+        "shell": {
+          "seconds": 0.12,
+          "core_percent": 0.4
+        }
+      },
+      "backend_update_logs_during_30s": 0,
+      "verified_client_bounds": [
+        1061.3333333333333,
+        140.0,
+        1906.6666666666667,
+        1189.3333333333333
+      ]
+    },
+    {
+      "name": "widget-integrated-matched",
+      "shell": "bead",
+      "renderer": "cpu",
+      "protocol_trace": false,
+      "trials": 100,
+      "focus_and_input_passed": 100,
+      "keyboard_after_30s": true,
+      "cpu": {
+        "niri": {
+          "seconds": 0.16,
+          "core_percent": 0.533
+        },
+        "shell": {
+          "seconds": 0.12,
+          "core_percent": 0.4
+        }
+      },
+      "backend_update_logs_during_30s": 0,
+      "verified_client_bounds": [
+        1061.3333333333333,
+        140.0,
+        1906.6666666666667,
+        1189.3333333333333
+      ]
+    }
+  ],
+  "matched_inputs": {
+    "palette_equal": true,
+    "wallpaper_equal": true,
+    "wallpaper_sha256": "f82111ed58752dcde7d2232a7fdf5f25d5755cce79fe700f274db9c3e264d2a0"
+  }
+}

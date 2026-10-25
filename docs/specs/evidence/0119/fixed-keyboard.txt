@@ -1,0 +1,8 @@
+[10:37:52.520348]  -> zwlr_layer_surface_v1#73.set_keyboard_interactivity(0)
+PANEL_INPUT visible=false
+[10:37:52.529644]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(0)
+PANEL_INPUT visible=true
+[10:37:52.543431]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(1)
+[10:37:52.575381] wl_keyboard#30.enter(28, wl_surface#143, array[0])
+[10:37:53.500236]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(0)
+[10:37:53.506431] wl_keyboard#30.leave(30, wl_surface#143)

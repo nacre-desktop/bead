@@ -1,5 +1,13 @@
 # Status
 
+## 2026-10-25 — B0119 keyboard focus fixed
+
+Closed warm panels no longer reassert exclusive keyboard focus. Matched private
+niri runs deliver keyboard input 100/100 times versus control 0/10; the 4 Hz title
+spinner costs 0.400% core, with no per-title backend log or same-width title layout.
+Full remote CI passes; widget-host and B0120 changes are preserved. No live change.
+[Cause, measurements and traces](specs/0119-click-focus.md).
+
 ## 2026-10-25 — B0120 pill spacing and wallpaper backdrop
 
 Status widgets now use optical-width tokens: native gaps are 17–19 physical px

@@ -1,0 +1,12 @@
+[10:34:45.375151]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(1)
+[10:34:45.378759]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(1)
+PANEL_INPUT visible=true
+[10:34:45.379350]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(1)
+[10:34:45.395288] wl_keyboard#30.enter(28, wl_surface#143, array[0])
+PANEL_INPUT visible=false
+[10:34:46.339692]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(0)
+[10:34:46.342190] wl_keyboard#30.leave(30, wl_surface#143)
+[10:34:46.367421]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(1)
+[10:34:46.393135] wl_keyboard#30.enter(33, wl_surface#143, array[0])
+[10:34:47.968081]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(1)
+[10:34:47.974771]  -> zwlr_layer_surface_v1#147.set_keyboard_interactivity(1)
