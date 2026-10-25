@@ -692,8 +692,22 @@ impl App {
         if open {
             self.add_output(&qh, output);
         }
-        if let Some(palette) = self.wallpaper_palette.clone() {
-            self.panel_ui(UiEvent::WallpaperPalette(palette));
+        let palette = if let Some(waiting) = &mut self.wallpaper_palette_outputs {
+            // A panel opened/replaced during preparation joins the current fence.
+            waiting.join_panel(epoch);
+            Some(waiting.palette.clone())
+        } else {
+            self.wallpaper_palette.clone()
+        };
+        if let Some(palette) = palette {
+            self.panel_ui(UiEvent::WallpaperPalette(palette.clone()));
+            if !self
+                .panel_runtime
+                .as_ref()
+                .is_some_and(|source| source.wallpaper_palette_pending())
+            {
+                self.wallpaper_panel_palette_settled(epoch, &palette, true);
+            }
         }
         self.panel_ui(UiEvent::Reload);
         if !open {

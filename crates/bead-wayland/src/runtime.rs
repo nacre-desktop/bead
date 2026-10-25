@@ -142,6 +142,18 @@ pub(super) struct PendingPalette {
     pub(super) panel_settled: bool,
 }
 impl PendingPalette {
+    pub(super) fn join_panel(&mut self, epoch: u64) {
+        self.panel_epoch = Some(epoch);
+        self.panel_settled = false;
+    }
+    fn settle_panel(&mut self, epoch: u64, accepted: bool) -> bool {
+        if self.panel_epoch != Some(epoch) {
+            return false;
+        }
+        self.panel_settled = true;
+        self.accepted &= accepted;
+        true
+    }
     pub(super) fn ready(&self) -> bool {
         self.expected.is_subset(&self.settled) && (self.panel_epoch.is_none() || self.panel_settled)
     }
@@ -1117,15 +1129,12 @@ impl App {
         accepted: bool,
     ) {
         if let Some(waiting) = &mut self.wallpaper_palette_outputs
-            && waiting.panel_epoch == Some(epoch)
             && waiting.palette == *palette
+            && waiting.settle_panel(epoch, accepted)
+            && waiting.ready()
         {
-            waiting.panel_settled = true;
-            waiting.accepted &= accepted;
-            if waiting.ready() {
-                let waiting = self.wallpaper_palette_outputs.take().unwrap();
-                self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
-            }
+            let waiting = self.wallpaper_palette_outputs.take().unwrap();
+            self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
         }
     }
 
@@ -1969,6 +1978,26 @@ mod palette_barrier_tests {
             group.settled.insert("output".to_owned());
             assert!(group.ready());
         }
+    }
+
+    #[test]
+    fn panel_opened_or_replaced_during_palette_prepare_joins_current_group() {
+        let mut group = PendingPalette {
+            palette: Default::default(),
+            expected: ["output".to_owned()].into_iter().collect(),
+            settled: ["output".to_owned()].into_iter().collect(),
+            accepted: true,
+            panel_epoch: None,
+            panel_settled: false,
+        };
+        assert!(group.ready());
+        group.join_panel(7);
+        assert!(!group.ready());
+        group.join_panel(8);
+        assert!(!group.settle_panel(7, true));
+        assert!(!group.ready());
+        assert!(group.settle_panel(8, true));
+        assert!(group.ready());
     }
 
     #[test]
