@@ -334,6 +334,14 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
         runtime.session.stores.get("dashboard.pearl.target"),
         Some(&Value::Number(358.))
     );
+    assert_eq!(
+        runtime.session.stores.get("dashboard.pearl.x"),
+        Some(&Value::Number(358.))
+    );
+    assert_eq!(
+        runtime.session.stores.get("dashboard.pearl.moving"),
+        Some(&Value::Bool(false))
+    );
     let weather = Harness::load(
         &root(),
         Path::new("dashboard/weather/main.luau"),

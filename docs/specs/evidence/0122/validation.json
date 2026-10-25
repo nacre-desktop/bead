@@ -1,0 +1,26 @@
+{
+  "qml": {
+    "states_passed": 9,
+    "host_swap_in_pages": 0,
+    "swap_used_before_kib": 0
+  },
+  "bead": {
+    "states_passed": 9,
+    "host_swap_in_pages": 0,
+    "swap_used_before_kib": 0
+  },
+  "repeat": {
+    "rate": 20,
+    "delay_ms": 300,
+    "held_backspace_ms": 850,
+    "before": "abcdefghijklmnopqrstuvwx",
+    "after": "abcdefghijkl",
+    "held_left_ms": 650,
+    "left_result": "Xabcdef",
+    "release_stopped": true
+  },
+  "dot": {
+    "states": 61,
+    "moving_states": 0
+  }
+}

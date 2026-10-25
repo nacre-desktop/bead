@@ -778,7 +778,7 @@ impl SeatHandler for App {
     }
     fn new_capability(
         &mut self,
-        _: &Connection,
+        conn: &Connection,
         qh: &QueueHandle<Self>,
         seat: wl_seat::WlSeat,
         capability: Capability,
@@ -797,7 +797,25 @@ impl SeatHandler for App {
                     println!("IME_PROTOCOL text_input_v3=true");
                 }
 
-                match self.seat.get_keyboard(qh, &seat, None) {
+                // Older compositors send repeat_info, not repeated key events.
+                // SCTK owns the timer, keymap repeatability and release/focus cancellation.
+                let repeat_conn = conn.clone();
+                let repeat_qh = qh.clone();
+                match self.seat.get_keyboard_with_repeat(
+                    qh,
+                    &seat,
+                    None,
+                    self.loop_handle.clone(),
+                    Box::new(move |app, keyboard, event| {
+                        app.repeat_key(
+                            &repeat_conn,
+                            &repeat_qh,
+                            keyboard,
+                            app.last_input_serial,
+                            event,
+                        );
+                    }),
+                ) {
                     Ok(k) => self.keyboard = Some(k),
                     Err(e) => self.fail(e),
                 }
@@ -1167,6 +1185,7 @@ impl KeyboardHandler for App {
         serial: u32,
         event: KeyEvent,
     ) {
+        self.last_input_serial = serial;
         if let Some(id) = self
             .keyboard_surface
             .clone()
@@ -1179,7 +1198,6 @@ impl KeyboardHandler for App {
             self.close_panel();
             return;
         }
-        self.last_input_serial = serial;
         if bead_core::profile::enabled() {
             println!(
                 "INPUT_RECEIVED monotonic_ns={} cpu_ns={}",

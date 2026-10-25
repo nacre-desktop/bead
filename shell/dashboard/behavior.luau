@@ -3,7 +3,7 @@ return {stores={
     ["panel.open"]=true,["view.edge"]="top",
     ["dashboard.weather.metrics"]={},["dashboard.weather.sun_times"]="—",["dashboard.weather.photos_enabled"]=true,["dashboard.weather.photo"]=false,["dashboard.weather.photo_w"]=0,["dashboard.weather.photo_h"]=0,["dashboard.weather.photo_author"]="",["dashboard.weather.photo_license"]="",["dashboard.weather.photo_link"]=false,["dashboard.weather.city"]="",["dashboard.weather.code"]=-1,["dashboard.weather.day"]=true,["dashboard.weather.scroll"]=0,
     ["dashboard.page"]="system",["dashboard.title"]=tr("bead.dashboard.page-system"),
-    ["dashboard.pearl.x"]=0,["dashboard.pearl.target"]=0,["dashboard.pearl.moving"]=false,["dashboard.pearl.duration"]=0.18,["dashboard.pearl.curve"]="out-cubic",
+    ["dashboard.pearl.x"]=0,["dashboard.pearl.target"]=0,["dashboard.pearl.moving"]=false,["dashboard.pearl.duration"]=0,["dashboard.pearl.curve"]="out-cubic",
     ["dashboard.preview"]=false,["dashboard.ready"]=false,["dashboard.stale"]=false,
     ["dashboard.heading"]=tr("bead.dashboard.page-unavailable",{page=tr("bead.dashboard.page-system")}),["dashboard.summary"]=tr("bead.dashboard.data-pending"),
     ["dashboard.detail"]="",["dashboard.metric"]="—",

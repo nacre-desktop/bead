@@ -45,11 +45,9 @@ fn network(snapshot: &Snapshot) -> Value {
                 && !state.health.stale
                 && CoreSnapshot::Network(state.clone()).valid()
                 && state.wireless_enabled
-                && state
-                    .connections
-                    .items
-                    .values()
-                    .any(|connection| connection.active && connection.kind == "wireless")
+                && state.devices.items.values().any(|device| {
+                    device.connected && matches!(device.kind.as_str(), "wifi" | "wireless")
+                })
         });
     Value::Text(if connected { "wifi" } else { "wifi_off" }.into())
 }
@@ -270,6 +268,42 @@ mod tests {
         assert_eq!(
             battery(&snapshot(battery_data, false))[KEYS[2]],
             Value::Text("battery_unknown".into())
+        );
+    }
+
+    #[test]
+    fn connected_wifi_device_does_not_require_a_profile_or_access_point() {
+        // Real daemon shape: device kind is "wifi"; profile/AP discovery may be empty.
+        let data = serde_json::json!({
+            "health":{"available":true,"stale":false}, "wireless_enabled":true,
+            "devices":{"items":{"wlan0":{"name":"wlan0","kind":"wifi","connected":true}},"order":["wlan0"]},
+            "access_points":{"items":{},"order":[]},
+            "connections":{"items":{},"order":[]}, "primary_connection":null
+        });
+        assert_eq!(
+            super::network(&snapshot(data.clone(), true)),
+            Value::Text("wifi".into())
+        );
+        for (field, value) in [
+            ("wireless_enabled", serde_json::json!(false)),
+            ("health", serde_json::json!({"available":true,"stale":true})),
+            (
+                "devices",
+                serde_json::json!({"items":{"eth0":{"name":"Wired","kind":"ethernet","connected":true}},"order":["eth0"]}),
+            ),
+        ] {
+            let mut off = data.clone();
+            off[field] = value;
+            assert_eq!(
+                super::network(&snapshot(off, true)),
+                Value::Text("wifi_off".into())
+            );
+        }
+        let mut disconnected = data;
+        disconnected["devices"]["items"]["wlan0"]["connected"] = serde_json::json!(false);
+        assert_eq!(
+            super::network(&snapshot(disconnected, true)),
+            Value::Text("wifi_off".into())
         );
     }
 

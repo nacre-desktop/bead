@@ -95,7 +95,7 @@ local dashboard={stores={
     ["dashboard.rows"]={},["dashboard.secondary"]={},
     ["dashboard.updates"]=tr("bead.dashboard.updates-unavailable"),["dashboard.updates_detail"]="",
     ["dashboard.tabs"]={{id="today",title=tr("bead.dashboard.page-today"),icon="dashboard"},{id="weather",title=tr("bead.dashboard.page-weather"),icon="partly_cloudy_day"},{id="media",title=tr("bead.dashboard.page-media"),icon="music_note"},{id="system",title=tr("bead.dashboard.page-system"),icon="monitoring"}},
-    ["dashboard.pearl.x"]=0,["dashboard.pearl.target"]=0,["dashboard.pearl.moving"]=false,["dashboard.pearl.duration"]=0.18,["dashboard.pearl.curve"]="out-cubic",
+    ["dashboard.pearl.x"]=0,["dashboard.pearl.target"]=0,["dashboard.pearl.moving"]=false,["dashboard.pearl.duration"]=0,["dashboard.pearl.curve"]="out-cubic",
     ["dashboard.control"]=false,["dashboard.busy"]=false,["dashboard.message"]="",["dashboard.confirm"]=false,
         ["dashboard.artist"]="",["dashboard.album"]="",["dashboard.player_identity"]="",["dashboard.track"]=tr("bead.dashboard.playback-unavailable"),["dashboard.track_detail"]=tr("bead.dashboard.playback-unavailable-detail"),
     ["dashboard.can_previous"]=false,["dashboard.can_toggle"]=false,["dashboard.can_next"]=false,
