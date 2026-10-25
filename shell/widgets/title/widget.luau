@@ -42,7 +42,7 @@ return {id="title",title="Title",icon="widgets",category="bar",data={topics={},a
     },
     defaults={min_width=title_min_width,max_width=t.title_max_width,display="window title",behavior="hover"},
     budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
-    variants={bar={min_span=1,max_span=math.ceil((t.title_max_width+t.icon_width+t.title_gap)/32),preferred_span=math.ceil((t.title_max_width+t.icon_width+t.title_gap)/32),reserve_width=function(settings) return (settings.max_width or t.title_max_width)+t.icon_width+t.title_gap end,render=function(props,settings,data)
+    forms={bar={default_style="window-title",styles={["window-title"]={title="Window title",min_span=1,max_span=math.ceil((t.title_max_width+t.icon_width+t.title_gap)/32),preferred_span=math.ceil((t.title_max_width+t.icon_width+t.title_gap)/32),reserve_width=function(settings) return (settings.max_width or t.title_max_width)+t.icon_width+t.title_gap end,render=function(props,settings,data)
             settings=settings or {}
             local min_width=settings.min_width or title_min_width
             local max_width=settings.max_width or t.title_max_width
@@ -116,4 +116,4 @@ return {id="title",title="Title",icon="widgets",category="bar",data={topics={},a
             table.insert(kids,ui.Row(row))
             kids.id="title-root"
             return ui.Group(kids)
-    end}}}
+    end}}}},panel={styles={dashboard={view="dashboard-today"}}}}

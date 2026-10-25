@@ -9,7 +9,7 @@ local focus_on=c.focus_on
 local thread=c.thread
 local pearl_accent=c.pearl_accent
 return {id="workspaces",title="Workspaces",icon="widgets",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
-    variants={bar={min_span=1,max_span=60,preferred_span=1,render=function(props,settings,data)
+    forms={bar={default_style="pearls",styles={pearls={title="Workspaces",min_span=1,max_span=60,preferred_span=1,render=function(props,settings,data)
             return ui.Row{id="capsule",height=34,padding_left=5,padding_right=5,gap=2,radius=17,fill="surfaceContainer",align="center",
             -- QML workspaceThread: a 1 px primary -> secondary -> tertiary line at 12 % behind the pearls, inset 16 px.
             thread and kit.tokens.gradients and ui.Image{id="thread",position="absolute",left=21,right=21,top=16.5,height=1,path="bar/assets/workspace-thread.themed.svg"} or ui.Box{id="thread",width=0,height=0,shrink=0,visible=false},
@@ -99,4 +99,4 @@ return {id="workspaces",title="Workspaces",icon="widgets",category="bar",data={t
                 return ui.Box{id="cell",width=gs+width,height=t.workspace_height,shrink=0,table.unpack(kids)}
             end},
         }
-    end}}}
+    end}}}}}
