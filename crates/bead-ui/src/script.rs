@@ -15,7 +15,23 @@ use std::{
 #[serde(transparent)]
 struct OpaqueInteger(serde_json::Number);
 impl mlua::UserData for OpaqueInteger {}
+fn needs_exact_integer(json: &serde_json::Value) -> bool {
+    match json {
+        serde_json::Value::Number(number) => {
+            number.as_u64().is_some_and(|n| n > 9_007_199_254_740_991)
+                || number.as_i64().is_some_and(|n| n < -9_007_199_254_740_991)
+        }
+        serde_json::Value::Array(items) => items.iter().any(needs_exact_integer),
+        serde_json::Value::Object(items) => items.values().any(needs_exact_integer),
+        _ => false,
+    }
+}
 fn json_array(lua: &Lua, items: &[serde_json::Value]) -> mlua::Result<mlua::Value> {
+    // mlua's bulk serializer holds the VM lock once. Keep ordinary hot lists
+    // on that path; only opaque wide integers need per-value userdata.
+    if !items.iter().any(needs_exact_integer) {
+        return lua.to_value(items);
+    }
     let table = lua.create_table_with_capacity(items.len(), 0)?;
     table.set_metatable(Some(lua.array_metatable()))?;
     for (index, item) in items.iter().enumerate() {
@@ -24,6 +40,9 @@ fn json_array(lua: &Lua, items: &[serde_json::Value]) -> mlua::Result<mlua::Valu
     Ok(mlua::Value::Table(table))
 }
 pub(crate) fn json_value(lua: &Lua, json: &serde_json::Value) -> mlua::Result<mlua::Value> {
+    if !needs_exact_integer(json) {
+        return lua.to_value(json);
+    }
     match json {
         serde_json::Value::Array(items) => json_array(lua, items),
         serde_json::Value::Object(items) => {
