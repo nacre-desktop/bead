@@ -1472,6 +1472,13 @@ fn control_center_slider_drag_visual_maps_thumb_to_hit_range() -> bead_test::Res
             < 0.01
     );
 
+    let fill_visual = visual.fill.as_ref().expect("shared slider fill descriptor");
+    assert!(fill_visual.id.ends_with(".level"));
+    assert!(
+        (fill_visual.rect.x + fill_visual.minimum - visual.travel.0 - rect.w / 2.).abs() < 0.001,
+        "fill end and handle center share one origin"
+    );
+
     let press_x = rect.x + rect.w / 2.;
     let press_y = visual.grab.y + visual.grab.h / 2.;
     runtime.stage(UiEvent::Click {
@@ -2738,6 +2745,27 @@ fn notification_dropdown_scrolls_every_published_row() -> bead_test::Result<()> 
             "toolbar stays visible while history scrolls"
         );
         golden("notifications-scrolled", &mut h, scale)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn shared_slider_origins_match_at_fractional_scale() -> bead_test::Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    for scale in [1., 1.5, 2.] {
+        let h = harness(base(), "home", scale)?;
+        let mut runtime = crate::reload::Runtime::new(h.session).with_control_center(offline())?;
+        runtime.stage(UiEvent::Relayout)?;
+        runtime.commit();
+        let visuals = runtime.drag_visuals();
+        assert!(!visuals.is_empty());
+        for visual in visuals {
+            let fill = visual.fill.expect("kit exports its shared fill");
+            assert!(
+                (fill.rect.x + fill.minimum - visual.travel.0 - 4.).abs() < 0.001,
+                "scale={scale}"
+            );
+        }
     }
     Ok(())
 }

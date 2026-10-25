@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Pointer poses: one small synchronized child, no motion-time raster.
+//! Pointer poses: one small synchronized child, isolated from panel rendering.
 use super::*;
 
 pub(super) struct Visual {
@@ -8,8 +8,11 @@ pub(super) struct Visual {
     surface: wl_surface::WlSurface,
     role: wl_subsurface::WlSubsurface,
     viewport: WpViewport,
-    _buffer: Buffer,
-    _pool: SlotPool,
+    buffers: Vec<Buffer>,
+    pool: SlotPool,
+    bounds: Rect,
+    opacity: f32,
+    release_target: u64,
     x: f32,
     dirty: bool,
     commit_queued: bool,
@@ -41,8 +44,51 @@ impl Visual {
             self.surface.commit();
             return Ok(());
         }
-        if !self.mapped && !self.retiring {
-            self._buffer.attach_to(&self.surface)?;
+        if self.spec.fill.is_some() && (self.dirty || !self.mapped) {
+            let free = self
+                .buffers
+                .iter()
+                .position(|buffer| buffer.canvas(&mut self.pool).is_some());
+            let slot = if let Some(slot) = free {
+                slot
+            } else if self.buffers.len() < 2 {
+                let (buffer, _) = self.pool.create_buffer(
+                    self.pixels.0 as i32,
+                    self.pixels.1 as i32,
+                    self.pixels.0 as i32 * 4,
+                    wl_shm::Format::Argb8888,
+                )?;
+                self.buffers.push(buffer);
+                self.buffers.len() - 1
+            } else {
+                // Keep the previous coherent slider; the parent's next callback retries.
+                return Ok(());
+            };
+            let bytes = self.buffers[slot]
+                .canvas(&mut self.pool)
+                .ok_or("slider slot became busy")?;
+            paint_child(
+                &mut ShmTarget {
+                    bytes,
+                    width: self.pixels.0,
+                    height: self.pixels.1,
+                    scale: self.scale120 as f32 / 120.,
+                    format: PixelFormat::Bgra,
+                },
+                &self.spec,
+                &self.draw,
+                self.bounds,
+                self.x,
+                self.opacity,
+            )?;
+            self.buffers[slot].attach_to(&self.surface)?;
+            self.surface
+                .damage_buffer(0, 0, self.pixels.0 as i32, self.pixels.1 as i32);
+            self.surface.commit();
+            self.dirty = false;
+            self.mapped = true;
+        } else if !self.mapped {
+            self.buffers[0].attach_to(&self.surface)?;
             self.surface
                 .damage_buffer(0, 0, self.pixels.0 as i32, self.pixels.1 as i32);
             self.surface.commit();
@@ -56,7 +102,7 @@ impl Visual {
         parent: &wl_surface::WlSurface,
         qh: &QueueHandle<App>,
     ) {
-        if !self.retiring {
+        if !self.retiring && !self.dirty {
             presentation.feedback(
                 parent,
                 qh,
@@ -128,26 +174,124 @@ fn painted_layer(scene: &Scene, id: &str) -> Option<bead_render::Primitive> {
         _ => None,
     }
 }
-fn raster_scene(parent: &Scene, draw: &bead_render::Primitive) -> Scene {
-    let bounds = rect(draw);
-    let mut scene = parent.clone();
-    let mut primitive = draw.clone();
-    if let bead_render::Primitive::Rounded { rect, .. } = &mut primitive {
-        rect.x = 0.;
-        rect.y = 0.;
+fn paint_child(
+    target: &mut ShmTarget<'_>,
+    spec: &DragVisual,
+    draw: &bead_render::Primitive,
+    bounds: Rect,
+    x: f32,
+    opacity: f32,
+) -> Result<(), Box<dyn Error>> {
+    target.bytes.fill(0);
+    let alpha = |mut color: [u8; 4]| {
+        color[3] = (color[3] as f32 * opacity.clamp(0., 1.)).round() as u8;
+        color
+    };
+    if let Some(fill) = &spec.fill {
+        let width = fill.minimum + x - spec.travel.0;
+        let to = if width < fill.gradient_min {
+            fill.from
+        } else {
+            fill.to
+        };
+        bead_render::pointer_paint::rounded_gradient(
+            target,
+            Rect::new(
+                fill.rect.x - bounds.x,
+                fill.rect.y - bounds.y,
+                width,
+                fill.rect.h,
+            ),
+            fill.radius,
+            alpha(fill.from),
+            alpha(to),
+            None,
+        )?;
     }
-    scene.primitives = vec![primitive];
-    scene.layers.clear();
-    scene.clips.clear();
-    scene.prepared.clear();
-    scene.font_files.clear();
-    scene.asset_data.clear();
-    scene.motion = None;
-    scene.slide = None;
-    scene.offset = (0., 0.);
-    scene.width = bounds.w;
-    scene.bounds = Rect::new(0., 0., bounds.w, bounds.h);
-    scene
+    let bead_render::Primitive::Rounded {
+        rect,
+        radius,
+        fill,
+        border,
+    } = draw
+    else {
+        return Err("unsupported pointer paint".into());
+    };
+    let left = if spec.fill.is_some() {
+        x - bounds.x
+    } else {
+        0.
+    };
+    let top = if spec.fill.is_some() {
+        rect.y - bounds.y
+    } else {
+        0.
+    };
+    bead_render::pointer_paint::rounded_gradient(
+        target,
+        Rect::new(left, top, rect.w, rect.h),
+        *radius,
+        alpha(*fill),
+        alpha(*fill),
+        border.map(|(color, width)| (alpha(color), width)),
+    )?;
+    if bead_core::profile::enabled()
+        && let Some(fill) = &spec.fill
+    {
+        println!(
+            "SLIDER_PAINT id={} received_x={x} fill_end={} handle_center={}",
+            spec.id,
+            fill.rect.x + fill.minimum + x - spec.travel.0,
+            x + rect.w / 2.
+        );
+    }
+    Ok(())
+}
+fn fill_skin(a: &Option<crate::DragFill>, b: &Option<crate::DragFill>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            a.id == b.id
+                && a.rect.x == b.rect.x
+                && a.rect.y == b.rect.y
+                && a.rect.h == b.rect.h
+                && a.minimum == b.minimum
+                && a.radius == b.radius
+                && a.gradient_min == b.gradient_min
+                && a.from == b.from
+                && a.to == b.to
+        }
+        _ => false,
+    }
+}
+fn overlay_safe(scene: &Scene, spec: &DragVisual, bounds: Rect) -> bool {
+    let Some(thumb) = scene.layers.iter().find(|l| l.id == spec.id) else {
+        return false;
+    };
+    let mut ranges = vec![thumb.own.clone()];
+    if let Some(fill) = &spec.fill {
+        let Some(layer) = scene.layers.iter().find(|l| l.id == fill.id) else {
+            return false;
+        };
+        ranges.push(layer.own.start..layer.subtree_end);
+    }
+    if ranges.iter().flat_map(|r| r.clone()).any(|i| {
+        scene.clip_at(i).is_some_and(|clip| {
+            bounds.x < clip.x
+                || bounds.y < clip.y
+                || bounds.x + bounds.w > clip.x + clip.w
+                || bounds.y + bounds.h > clip.y + clip.h
+        })
+    }) {
+        return false;
+    }
+    let first = ranges.iter().map(|r| r.start).min().unwrap();
+    !scene.primitives.iter().enumerate().skip(first).any(|(i,draw)| {
+        if ranges.iter().any(|range|range.contains(&i)) { return false; }
+        if matches!(draw,bead_render::Primitive::Rounded {fill,border,..} if fill[3]==0 && border.is_none()) { return false; }
+        let r=rect(draw);
+        r.x<bounds.x+bounds.w && r.x+r.w>bounds.x && r.y<bounds.y+bounds.h && r.y+r.h>bounds.y
+    })
 }
 fn same_skin(a: &bead_render::Primitive, b: &bead_render::Primitive) -> bool {
     match (a, b) {
@@ -231,40 +375,92 @@ impl App {
         {
             return Ok(());
         }
+        let bounds = if let Some(fill) = &spec.fill {
+            if ![
+                fill.rect.x,
+                fill.rect.y,
+                fill.rect.w,
+                fill.rect.h,
+                fill.minimum,
+                fill.radius,
+                fill.gradient_min,
+            ]
+            .iter()
+            .all(|v| v.is_finite())
+                || fill.rect.w <= 0.
+                || fill.gradient_min < 0.
+                || fill.minimum <= 0.
+                || fill.radius < 0.
+                || fill.rect.h <= 0.
+                || (fill.rect.x + fill.minimum - spec.travel.0 - rect.w / 2.).abs() > 0.001
+            {
+                return Ok(());
+            }
+            Rect::new(
+                spec.travel.0,
+                rect.y,
+                spec.travel.1 - spec.travel.0 + rect.w,
+                rect.h,
+            )
+            .union(Rect::new(
+                fill.rect.x,
+                fill.rect.y,
+                fill.minimum + spec.travel.1 - spec.travel.0,
+                fill.rect.h,
+            ))
+        } else {
+            Rect::new(0., 0., rect.w, rect.h)
+        };
+        let swept = if spec.fill.is_some() {
+            bounds
+        } else {
+            Rect::new(
+                spec.travel.0,
+                rect.y,
+                spec.travel.1 - spec.travel.0 + rect.w,
+                rect.h,
+            )
+        };
+        if ![swept.x, swept.y, swept.w, swept.h]
+            .iter()
+            .all(|n| n.is_finite())
+            || swept.w <= 0.
+            || swept.h <= 0.
+            || !overlay_safe(original, &spec, swept)
+        {
+            return Ok(());
+        }
         let scale = self.surfaces[index].scale120 as f32 / 120.;
-        let width = (rect.w.ceil() * scale).ceil() as u32;
-        let height = (rect.h.ceil() * scale).ceil() as u32;
+        let width = (bounds.w.ceil() * scale).ceil() as u32;
+        let height = (bounds.h.ceil() * scale).ceil() as u32;
         let Some(bytes) = (width as usize)
             .checked_mul(height as usize)
             .and_then(|area| area.checked_mul(4))
-            .filter(|bytes| *bytes <= 64 * 1024)
+            .filter(|bytes| *bytes > 0 && *bytes <= 64 * 1024)
         else {
             return Ok(());
         };
-        let mut pool = SlotPool::new(bytes.max(4096), &self.shm)?;
+        let mut pool = SlotPool::new((bytes * 2).max(4096), &self.shm)?;
         let (buffer, pixels) = pool.create_buffer(
             width as i32,
             height as i32,
             width as i32 * 4,
             wl_shm::Format::Argb8888,
         )?;
-        let scene = raster_scene(original, &draw);
-        let mut renderer = bead_render::CpuRenderer::default();
-        renderer.render(
-            &scene,
-            ShmTarget {
+        let target = pose(&spec, x);
+        paint_child(
+            &mut ShmTarget {
                 bytes: pixels,
                 width,
                 height,
                 scale,
                 format: PixelFormat::Bgra,
             },
-            Damage {
-                x: 0,
-                y: 0,
-                w: width,
-                h: height,
-            },
+            &spec,
+            &draw,
+            bounds,
+            target,
+            original.opacity,
         )?;
         let subcompositor = self.subcompositor.as_ref().ok_or("missing subcompositor")?;
         let viewporter = self.viewporter.as_ref().ok_or("missing viewporter")?;
@@ -272,19 +468,23 @@ impl App {
         let role =
             subcompositor.get_subsurface(&child, self.surfaces[index].wl_surface(), &self.qh, ());
         let viewport = viewporter.get_viewport(&child, &self.qh, ());
-        viewport.set_destination(rect.w.ceil() as i32, rect.h.ceil() as i32);
+        viewport.set_destination(bounds.w.ceil() as i32, bounds.h.ceil() as i32);
         let empty = Region::new(&self.compositor)?;
         child.set_input_region(Some(empty.wl_region()));
         role.set_sync();
         let target = pose(&spec, x);
+        let release_target = spec.release_serial;
         self.surfaces[index].pointer_visual = Some(Visual {
             spec,
             draw,
             surface: child,
             role,
             viewport,
-            _buffer: buffer,
-            _pool: pool,
+            buffers: vec![buffer],
+            pool,
+            bounds,
+            opacity: original.opacity,
+            release_target,
             x: target,
             dirty: true,
             commit_queued: false,
@@ -359,6 +559,9 @@ impl App {
         self.pointer_visual_commit_now(index);
         self.pointer_visual_flush(index);
         if let Some(visual) = &mut self.surfaces[index].pointer_visual {
+            if !visual.released {
+                visual.release_target = visual.release_target.wrapping_add(1);
+            }
             visual.released = true;
             visual.token = monotonic_ns();
         }
@@ -367,11 +570,17 @@ impl App {
         let offset = self.surfaces[index].offset;
         if let Some(visual) = &mut self.surfaces[index].pointer_visual {
             let rect = rect(&visual.draw);
-            visual.role.set_position(
-                (visual.x + offset.0).round() as i32,
-                (rect.y + offset.1).round() as i32,
-            );
-            visual.dirty = false;
+            let (x, y) = if visual.spec.fill.is_some() {
+                (visual.bounds.x, visual.bounds.y)
+            } else {
+                (visual.x, rect.y)
+            };
+            visual
+                .role
+                .set_position((x + offset.0).round() as i32, (y + offset.1).round() as i32);
+            if visual.spec.fill.is_none() {
+                visual.dirty = false;
+            }
         }
     }
     /// Submit the newest pose after this ready-fd dispatch has drained, before sleep.
@@ -412,6 +621,12 @@ impl App {
             return;
         }
         self.pointer_visual_position(index);
+        if let Some(visual) = &mut self.surfaces[index].pointer_visual
+            && let Err(error) = visual.stage_commit()
+        {
+            self.fail(error);
+            return;
+        }
         let s = &mut self.surfaces[index];
         let parent = s.wl_surface().clone();
         let generation = self.companion.as_ref().map_or(0, |c| c.0.resource_revision);
@@ -425,16 +640,10 @@ impl App {
             },
         );
         if let Some(presentation) = &self.presentation {
-            let visual = s.pointer_visual.as_ref().unwrap();
-            presentation.feedback(
-                &parent,
-                &self.qh,
-                Feedback {
-                    x: visual.x,
-                    received: visual.received,
-                    committed: monotonic_ns(),
-                },
-            );
+            s.pointer_visual
+                .as_ref()
+                .unwrap()
+                .feedback(presentation, &parent, &self.qh);
         }
         bead_core::profile::mark("pointer_visual_commit");
         parent.commit();
@@ -447,63 +656,98 @@ impl App {
             .spec
             .id
             .clone();
-        let live = self.panel_runtime.as_ref().is_some_and(|source| {
-            source.drag_visuals().iter().any(|v| {
-                v.id == id
-                    && v.grab
-                        == self.surfaces[index]
-                            .pointer_visual
-                            .as_ref()
-                            .unwrap()
-                            .spec
-                            .grab
-            })
-        });
+        let live = self
+            .panel_runtime
+            .as_ref()
+            .and_then(|source| source.drag_visuals().into_iter().find(|v| v.id == id));
         let s = &mut self.surfaces[index];
         let visual = s.pointer_visual.as_mut()?;
         let mut scene = self.companion.as_ref()?.0.clone();
         let layer = scene.layers.iter().find(|layer| layer.id == visual.spec.id);
-        let final_pose = layer
-            .and_then(|layer| scene.primitives.get(layer.own.start))
-            .map(|p| rect(p).x);
         visual.retiring |= !self.panel_target
             || self.animations.active(self.started.elapsed().as_secs_f64())
             || visual.scale120 != s.scale120
             || visual.generation != scene.resource_revision
             || layer.is_none()
-            || !live
+            || live.as_ref().is_none_or(|v| {
+                v.grab != visual.spec.grab || !fill_skin(&v.fill, &visual.spec.fill)
+            })
+            || !overlay_safe(
+                &scene,
+                &visual.spec,
+                if visual.spec.fill.is_some() {
+                    visual.bounds
+                } else {
+                    let r = rect(&visual.draw);
+                    Rect::new(
+                        visual.spec.travel.0,
+                        r.y,
+                        visual.spec.travel.1 - visual.spec.travel.0 + r.w,
+                        r.h,
+                    )
+                },
+            )
             || !painted_layer(&scene, &visual.spec.id)
                 .as_ref()
                 .is_some_and(|draw| same_skin(draw, &visual.draw))
-            || (visual.released && final_pose.is_some_and(|x| (x - visual.x).abs() <= 0.5));
+            || (visual.released
+                && live
+                    .as_ref()
+                    .is_some_and(|v| v.release_serial == visual.release_target));
         if visual.retiring {
+            // Preserve the final value across a moved stable control; never replay
+            // old coordinates into a view that removed that control.
+            if let Some((x, _)) = visual.pending {
+                visual.pending = live.as_ref().map(|next| {
+                    let fraction = ((x - visual.spec.pointer.0)
+                        / (visual.spec.pointer.1 - visual.spec.pointer.0))
+                        .clamp(0., 1.);
+                    (
+                        next.pointer.0 + fraction * (next.pointer.1 - next.pointer.0),
+                        next.grab.y + next.grab.h / 2.,
+                    )
+                });
+            }
             // Destruction itself is immediate in Wayland. Unmap synchronously first,
             // restore the parent's copy, then destroy only after that parent commits.
             return None;
         }
         let layer = layer.unwrap();
         let removed = layer.own.clone();
+        let fill = visual
+            .spec
+            .fill
+            .as_ref()
+            .and_then(|fill| scene.layers.iter().find(|l| l.id == fill.id))
+            .map(|l| l.own.start..l.subtree_end);
         let mut index = 0;
         scene.retain_primitives(|_| {
-            let keep = !removed.contains(&index);
+            let keep =
+                !removed.contains(&index) && !fill.as_ref().is_some_and(|r| r.contains(&index));
             index += 1;
             keep
         });
         scene.prepared.clear();
         Some(scene)
     }
-    pub(super) fn pointer_visual_retire(&mut self, index: usize) -> Option<(f32, f32)> {
-        if self.surfaces[index]
+    pub(super) fn pointer_visual_retire(&mut self, index: usize) -> Vec<UiEvent> {
+        if !self.surfaces[index]
             .pointer_visual
             .as_ref()
             .is_some_and(|v| v.retiring)
         {
-            return self.surfaces[index]
-                .pointer_visual
-                .take()
-                .and_then(|v| v.pending);
+            return Vec::new();
         }
-        None
+        let visual = self.surfaces[index].pointer_visual.take().unwrap();
+        let mut events = Vec::with_capacity(2);
+        if let Some((x, y)) = visual.pending {
+            events.push(UiEvent::Drag { x, y });
+        }
+        if !visual.released {
+            self.pointer_pressed = false;
+            events.push(UiEvent::Release);
+        }
+        events
     }
 }
 
@@ -522,11 +766,74 @@ mod tests {
             },
             travel: (6., 86.),
             pointer: (10., 90.),
+            fill: None,
+            release_serial: 0,
         };
         assert_eq!(pose(&spec, -200.), 6.);
         assert_eq!(pose(&spec, 200.), 86.);
         assert_eq!(pose(&spec, 42.25), 38.25);
         assert_eq!(pose(&spec, 10.), 6.);
+    }
+
+    #[test]
+    fn every_progress_frame_has_one_value_and_no_fill_handle_gap() {
+        let bounds = Rect::new(0., 0., 108., 16.);
+        let draw = bead_render::Primitive::Rounded {
+            rect: Rect::new(0., 0., 8., 16.),
+            radius: 3.,
+            fill: [40, 220, 120, 255],
+            border: None,
+        };
+        let spec = DragVisual {
+            id: "slider.thumb".into(),
+            grab: bounds,
+            travel: (0., 100.),
+            pointer: (4., 104.),
+            release_serial: 0,
+            fill: Some(crate::DragFill {
+                id: "slider.fill".into(),
+                rect: Rect::new(0., 5., 4., 6.),
+                minimum: 4.,
+                radius: 3.,
+                gradient_min: 16.,
+                from: [220, 40, 40, 255],
+                to: [40, 40, 220, 255],
+            }),
+        };
+        for scale in [1., 1.5] {
+            let width = (108. * scale) as u32;
+            let height = (16. * scale) as u32;
+            let mut pixels = vec![0; width as usize * height as usize * 4];
+            for step in 0..=100 {
+                let x = step as f32;
+                paint_child(
+                    &mut ShmTarget {
+                        bytes: &mut pixels,
+                        width,
+                        height,
+                        scale,
+                        format: PixelFormat::Bgra,
+                    },
+                    &spec,
+                    &draw,
+                    bounds,
+                    x,
+                    1.,
+                )
+                .unwrap();
+                let y = (8. * scale) as usize;
+                let alpha = |px: usize| pixels[(y * width as usize + px) * 4 + 3];
+                for px in (2. * scale).ceil() as usize..((x + 6.) * scale).floor() as usize {
+                    assert!(
+                        alpha(px) > 0,
+                        "transparent gap at step={step}, scale={scale}, pixel={px}"
+                    );
+                }
+                for px in ((x + 8.) * scale).ceil() as usize + 1..width as usize {
+                    assert_eq!(alpha(px), 0, "stale paint beyond handle");
+                }
+            }
+        }
     }
 
     #[test]
@@ -559,23 +866,30 @@ mod tests {
             bounds: Rect::new(-32., -32., 500., 900.),
         };
         let draw = painted_layer(&scene, "thumb").expect("painted layer");
-        let child = raster_scene(&scene, &draw);
+        let spec = DragVisual {
+            id: "thumb".into(),
+            grab: bounds,
+            travel: (92., 192.),
+            pointer: (92., 192.),
+            fill: None,
+            release_serial: 0,
+        };
         let mut pixels = vec![0; 12 * 24 * 4];
-        let mut renderer = bead_render::CpuRenderer::default();
-        renderer.prepare(&child, 1.5).unwrap();
-        renderer
-            .render(
-                &child,
-                ShmTarget {
-                    bytes: &mut pixels,
-                    width: 12,
-                    height: 24,
-                    scale: 1.5,
-                    format: PixelFormat::Bgra,
-                },
-                Damage::full(12, 24),
-            )
-            .unwrap();
+        paint_child(
+            &mut ShmTarget {
+                bytes: &mut pixels,
+                width: 12,
+                height: 24,
+                scale: 1.5,
+                format: PixelFormat::Bgra,
+            },
+            &spec,
+            &draw,
+            Rect::new(0., 0., 8., 16.),
+            92.,
+            1.,
+        )
+        .unwrap();
         let center = (12 * 12 + 6) * 4;
         assert_eq!(&pixels[center..center + 4], &[120, 180, 40, 255]);
         assert_eq!(pixels[3], 0, "rounded corner stays transparent");

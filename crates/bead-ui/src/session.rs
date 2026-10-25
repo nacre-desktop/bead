@@ -883,6 +883,27 @@ impl Session {
         });
         Ok(Some(scene))
     }
+    /// Accepted layout bounds by stable authored ID, including noninteractive views.
+    pub fn paint_bounds(&self, id: &str) -> Option<Rect> {
+        self.current
+            .layers
+            .iter()
+            .find(|layer| layer.id == id)
+            .map(|layer| layer.bounds)
+    }
+    /// Resolve a view-authored paint expression against the accepted palette.
+    pub fn paint_color(&self, value: &serde_json::Value) -> Option<[u8; 4]> {
+        super::layout::color(
+            Some(value),
+            [0; 4],
+            &self.palette,
+            &super::layout::Source {
+                file: self.entry.display().to_string(),
+                line: 1,
+            },
+        )
+        .ok()
+    }
     pub fn view_nodes(&self) -> &[Node] {
         &self.current_nodes
     }

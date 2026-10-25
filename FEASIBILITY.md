@@ -1,5 +1,19 @@
 # Feasibility
 
+## 2026-10-25 — B0126 shared slider paint
+
+Fill and handle now share one value and one small buffer, preventing independent lag.
+The paint borrows SHM directly and avoids constructing a font system or panel scene.
+Full Arch CI passes; presented-frame latency and five-pair memory checks remain open.
+Dispatch-only timing is unchanged; the 25 ms gate has not passed.
+
+| Check | Result |
+| --- | ---: |
+| Shared-paint pixel poses | 101 at 1× and 1.5× |
+| Descriptor origin scales | 1× / 1.5× / 2× |
+| Child SHM bound | ≤128 KiB, two slots |
+| Dispatch-only CPU p95 before / after | 35.863 / 35.869 ms |
+
 ## 2026-10-25 — B0123 Spotlight retention and palette
 
 Spotlight now floats over the desktop and waits for real thumbnails before publishing.

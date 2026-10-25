@@ -18,6 +18,7 @@ pub mod damage;
 pub mod gl;
 #[cfg(feature = "wgpu")]
 pub mod gpu;
+pub mod pointer_paint;
 pub mod retained;
 pub mod tree;
 fn normal_weight() -> u16 {

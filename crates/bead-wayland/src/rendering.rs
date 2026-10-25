@@ -469,8 +469,7 @@ impl App {
                 self.companion.as_mut().unwrap().0 = scene;
             }
             let pending = (self.surfaces[index].frames > previous_frames)
-                .then(|| self.pointer_visual_retire(index))
-                .flatten();
+                .then(|| self.pointer_visual_retire(index));
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].gl_prepare_pending {
@@ -509,8 +508,8 @@ impl App {
                     }
                 }
             }
-            if let Some((x, y)) = pending {
-                self.view_event(true, UiEvent::Drag { x, y });
+            for event in pending.into_iter().flatten() {
+                self.view_event(true, event);
             }
             return;
         }
@@ -926,6 +925,14 @@ impl App {
                         },
                     );
                     s.callbacks.pending = true;
+                    if let Some(visual) = &mut s.pointer_visual {
+                        visual.stage_commit()?;
+                    }
+                    if let Some(presentation) = &self.presentation
+                        && let Some(visual) = &s.pointer_visual
+                    {
+                        visual.feedback(presentation, &wl_surface, qh);
+                    }
                     wl_surface.commit();
                     s.frames += 1;
                     return Ok(());

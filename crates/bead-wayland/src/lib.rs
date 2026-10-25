@@ -426,6 +426,19 @@ pub struct DragVisual {
     pub grab: Rect,
     pub travel: (f32, f32),
     pub pointer: (f32, f32),
+    pub fill: Option<DragFill>,
+    /// Source-owned accepted release count, used for atomic visual handover.
+    pub release_serial: u64,
+}
+#[derive(Clone, PartialEq)]
+pub struct DragFill {
+    pub id: String,
+    pub rect: Rect,
+    pub minimum: f32,
+    pub radius: f32,
+    pub gradient_min: f32,
+    pub from: [u8; 4],
+    pub to: [u8; 4],
 }
 pub trait SceneSource {
     fn drag_visuals(&self) -> Vec<DragVisual> {

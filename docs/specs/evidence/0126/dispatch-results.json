@@ -1,0 +1,1451 @@
+{
+  "method": "same-host CPU 120 Hz parent, nested niri advertises 60 Hz; one matched pair; timing only, not memory gate",
+  "control_revision": "312c63e7",
+  "candidate_revision": "c7772734",
+  "control": {
+    "method": "exact same-gesture injected coordinate joined to received pointer coordinate; visual feedback carries latest receipt and commit clocks",
+    "gestures_calibrated": 12,
+    "samples": [
+      {
+        "gesture": "pointer-01.log",
+        "x": 205.9,
+        "injection_ns": 835935735534643,
+        "dispatch_ns": 835935738724851,
+        "received_ns": 835935738727271,
+        "commit_ns": 835935750671074,
+        "presented_ns": 835935795033028
+      },
+      {
+        "gesture": "pointer-01.log",
+        "x": 268.56406,
+        "injection_ns": 835935781987195,
+        "dispatch_ns": 835935795175408,
+        "received_ns": 835935795178528,
+        "commit_ns": 835935807258331,
+        "presented_ns": 835935876088471
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 258.33594,
+        "injection_ns": 835936393183492,
+        "dispatch_ns": 835936396568480,
+        "received_ns": 835936396570710,
+        "commit_ns": 835936413625560,
+        "presented_ns": 835936426474063
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 227.0,
+        "injection_ns": 835936416410598,
+        "dispatch_ns": 835936426521013,
+        "received_ns": 835936426524323,
+        "commit_ns": 835936426540363,
+        "presented_ns": 835936442492253
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 206.33594,
+        "injection_ns": 835936431891329,
+        "dispatch_ns": 835936442538333,
+        "received_ns": 835936442541243,
+        "commit_ns": 835936452891037,
+        "presented_ns": 835936466518069
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 175.66797,
+        "injection_ns": 835936455118496,
+        "dispatch_ns": 835936466571249,
+        "received_ns": 835936466574739,
+        "commit_ns": 835936466590619,
+        "presented_ns": 835936482544990
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 149.66797,
+        "injection_ns": 835936474475145,
+        "dispatch_ns": 835936482602300,
+        "received_ns": 835936482605620,
+        "commit_ns": 835936493079654,
+        "presented_ns": 835936506566006
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 118.33592,
+        "injection_ns": 835936497698531,
+        "dispatch_ns": 835936506610366,
+        "received_ns": 835936506612736,
+        "commit_ns": 835936506625446,
+        "presented_ns": 835936522615497
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 108.33592,
+        "injection_ns": 835936505439667,
+        "dispatch_ns": 835936514632491,
+        "received_ns": 835936514635501,
+        "commit_ns": 835936532420791,
+        "presented_ns": 835936538637078
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 128.66406,
+        "injection_ns": 835937123286509,
+        "dispatch_ns": 835937132513404,
+        "received_ns": 835937132521654,
+        "commit_ns": 835937144283717,
+        "presented_ns": 835937156471400
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 159.33203,
+        "injection_ns": 835937146512156,
+        "dispatch_ns": 835937156524490,
+        "received_ns": 835937156529830,
+        "commit_ns": 835937156543640,
+        "presented_ns": 835937172495181
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 180.0,
+        "injection_ns": 835937161995627,
+        "dispatch_ns": 835937172543821,
+        "received_ns": 835937172546921,
+        "commit_ns": 835937184380434,
+        "presented_ns": 835937196508287
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 211.33203,
+        "injection_ns": 835937185221323,
+        "dispatch_ns": 835937196550857,
+        "received_ns": 835937196553367,
+        "commit_ns": 835937196564807,
+        "presented_ns": 835937212532527
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 232.0,
+        "injection_ns": 835937200707254,
+        "dispatch_ns": 835937212578657,
+        "received_ns": 835937212582017,
+        "commit_ns": 835937224089331,
+        "presented_ns": 835937236559574
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 268.66406,
+        "injection_ns": 835937227801789,
+        "dispatch_ns": 835937236600584,
+        "received_ns": 835937236604064,
+        "commit_ns": 835937236616354,
+        "presented_ns": 835937244586449
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 247.66797,
+        "injection_ns": 835937845767451,
+        "dispatch_ns": 835937854985016,
+        "received_ns": 835937854992686,
+        "commit_ns": 835937866714038,
+        "presented_ns": 835937878950542
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 217.0,
+        "injection_ns": 835937868993967,
+        "dispatch_ns": 835937879008111,
+        "received_ns": 835937879011351,
+        "commit_ns": 835937879025201,
+        "presented_ns": 835937894970752
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 196.33594,
+        "injection_ns": 835937884477658,
+        "dispatch_ns": 835937895022842,
+        "received_ns": 835937895026242,
+        "commit_ns": 835937907196825,
+        "presented_ns": 835937918987148
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 165.0,
+        "injection_ns": 835937907702925,
+        "dispatch_ns": 835937919033408,
+        "received_ns": 835937919036228,
+        "commit_ns": 835937919051238,
+        "presented_ns": 835937935012199
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 144.33594,
+        "injection_ns": 835937923186966,
+        "dispatch_ns": 835937935062309,
+        "received_ns": 835937935065359,
+        "commit_ns": 835937946661372,
+        "presented_ns": 835937959031505
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 108.33592,
+        "injection_ns": 835937950283900,
+        "dispatch_ns": 835937959073125,
+        "received_ns": 835937959076805,
+        "commit_ns": 835937959088655,
+        "presented_ns": 835937967057291
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 128.66406,
+        "injection_ns": 835938568004693,
+        "dispatch_ns": 835938577214147,
+        "received_ns": 835938577223727,
+        "commit_ns": 835938589117341,
+        "presented_ns": 835938601183223
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 159.33203,
+        "injection_ns": 835938591253649,
+        "dispatch_ns": 835938601231853,
+        "received_ns": 835938601234743,
+        "commit_ns": 835938601248973,
+        "presented_ns": 835938617209194
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 180.0,
+        "injection_ns": 835938606739420,
+        "dispatch_ns": 835938617261534,
+        "received_ns": 835938617265004,
+        "commit_ns": 835938629239267,
+        "presented_ns": 835938641229780
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 211.33203,
+        "injection_ns": 835938629963407,
+        "dispatch_ns": 835938641279440,
+        "received_ns": 835938641282670,
+        "commit_ns": 835938641296840,
+        "presented_ns": 835938657255291
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 232.0,
+        "injection_ns": 835938645447278,
+        "dispatch_ns": 835938657305301,
+        "received_ns": 835938657308691,
+        "commit_ns": 835938668997164,
+        "presented_ns": 835938681281437
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 268.66406,
+        "injection_ns": 835938672545132,
+        "dispatch_ns": 835938681333587,
+        "received_ns": 835938681337067,
+        "commit_ns": 835938681350567,
+        "presented_ns": 835938689297543
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 247.66797,
+        "injection_ns": 835939290502944,
+        "dispatch_ns": 835939299778269,
+        "received_ns": 835939299787539,
+        "commit_ns": 835939311639122,
+        "presented_ns": 835939323733565
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 217.0,
+        "injection_ns": 835939313728481,
+        "dispatch_ns": 835939323783495,
+        "received_ns": 835939323786475,
+        "commit_ns": 835939323800355,
+        "presented_ns": 835939339757076
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 196.33594,
+        "injection_ns": 835939329212952,
+        "dispatch_ns": 835939339811106,
+        "received_ns": 835939339814396,
+        "commit_ns": 835939352451439,
+        "presented_ns": 835939363785222
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 165.0,
+        "injection_ns": 835939352439339,
+        "dispatch_ns": 835939363836932,
+        "received_ns": 835939363840272,
+        "commit_ns": 835939363852782,
+        "presented_ns": 835939379800593
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 138.99998,
+        "injection_ns": 835939371794327,
+        "dispatch_ns": 835939379854983,
+        "received_ns": 835939379857663,
+        "commit_ns": 835939391614226,
+        "presented_ns": 835939403833769
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 108.33592,
+        "injection_ns": 835939395005224,
+        "dispatch_ns": 835939403882219,
+        "received_ns": 835939403884999,
+        "commit_ns": 835939403896599,
+        "presented_ns": 835939411846374
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 128.66406,
+        "injection_ns": 835940013109636,
+        "dispatch_ns": 835940022339521,
+        "received_ns": 835940022347561,
+        "commit_ns": 835940034247604,
+        "presented_ns": 835940046305467
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 159.33203,
+        "injection_ns": 835940036336012,
+        "dispatch_ns": 835940046356287,
+        "received_ns": 835940046359497,
+        "commit_ns": 835940046372367,
+        "presented_ns": 835940062328887
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 180.0,
+        "injection_ns": 835940051819254,
+        "dispatch_ns": 835940062380347,
+        "received_ns": 835940062383797,
+        "commit_ns": 835940074480231,
+        "presented_ns": 835940086340074
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 211.33203,
+        "injection_ns": 835940075006220,
+        "dispatch_ns": 835940086383084,
+        "received_ns": 835940086385764,
+        "commit_ns": 835940086397644,
+        "presented_ns": 835940102366064
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 232.0,
+        "injection_ns": 835940090529001,
+        "dispatch_ns": 835940102418864,
+        "received_ns": 835940102422554,
+        "commit_ns": 835940114735487,
+        "presented_ns": 835940126400750
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 268.66406,
+        "injection_ns": 835940117627175,
+        "dispatch_ns": 835940126452370,
+        "received_ns": 835940126455480,
+        "commit_ns": 835940126468720,
+        "presented_ns": 835940134400436
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 247.66797,
+        "injection_ns": 835940735923287,
+        "dispatch_ns": 835940745148252,
+        "received_ns": 835940745156972,
+        "commit_ns": 835940756966215,
+        "presented_ns": 835940769092678
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 217.0,
+        "injection_ns": 835940759147594,
+        "dispatch_ns": 835940769139888,
+        "received_ns": 835940769142868,
+        "commit_ns": 835940769155678,
+        "presented_ns": 835940785115369
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 196.33594,
+        "injection_ns": 835940774631535,
+        "dispatch_ns": 835940785166469,
+        "received_ns": 835940785169849,
+        "commit_ns": 835940797150012,
+        "presented_ns": 835940809129935
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 165.0,
+        "injection_ns": 835940797857322,
+        "dispatch_ns": 835940809174985,
+        "received_ns": 835940809177685,
+        "commit_ns": 835940809189725,
+        "presented_ns": 835940825155766
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 144.33594,
+        "injection_ns": 835940813341133,
+        "dispatch_ns": 835940825210486,
+        "received_ns": 835940825214336,
+        "commit_ns": 835940836940859,
+        "presented_ns": 835940849204182
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 108.33592,
+        "injection_ns": 835940840439697,
+        "dispatch_ns": 835940849269312,
+        "received_ns": 835940849273462,
+        "commit_ns": 835940849287162,
+        "presented_ns": 835940857197048
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 128.66406,
+        "injection_ns": 835941458286540,
+        "dispatch_ns": 835941467526284,
+        "received_ns": 835941467534194,
+        "commit_ns": 835941479346507,
+        "presented_ns": 835941491477900
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 159.33203,
+        "injection_ns": 835941481513606,
+        "dispatch_ns": 835941491528930,
+        "received_ns": 835941491531980,
+        "commit_ns": 835941491545070,
+        "presented_ns": 835941507501891
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 180.0,
+        "injection_ns": 835941496997387,
+        "dispatch_ns": 835941507553181,
+        "received_ns": 835941507556571,
+        "commit_ns": 835941519238194,
+        "presented_ns": 835941531520157
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 211.33203,
+        "injection_ns": 835941520222323,
+        "dispatch_ns": 835941531569897,
+        "received_ns": 835941531574637,
+        "commit_ns": 835941531588047,
+        "presented_ns": 835941547544518
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 237.33203,
+        "injection_ns": 835941539577832,
+        "dispatch_ns": 835941547598747,
+        "received_ns": 835941547601637,
+        "commit_ns": 835941559383761,
+        "presented_ns": 835941571574374
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 268.66406,
+        "injection_ns": 835941562801949,
+        "dispatch_ns": 835941571622394,
+        "received_ns": 835941571625324,
+        "commit_ns": 835941571638824,
+        "presented_ns": 835941579587779
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 247.66797,
+        "injection_ns": 835942180554701,
+        "dispatch_ns": 835942189803356,
+        "received_ns": 835942189810966,
+        "commit_ns": 835942201541119,
+        "presented_ns": 835942213757442
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 217.0,
+        "injection_ns": 835942203780998,
+        "dispatch_ns": 835942213801072,
+        "received_ns": 835942213803662,
+        "commit_ns": 835942213814862,
+        "presented_ns": 835942229794373
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 196.33594,
+        "injection_ns": 835942219264189,
+        "dispatch_ns": 835942229846033,
+        "received_ns": 835942229849373,
+        "commit_ns": 835942242077235,
+        "presented_ns": 835942253808279
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 165.0,
+        "injection_ns": 835942242490395,
+        "dispatch_ns": 835942253856909,
+        "received_ns": 835942253859929,
+        "commit_ns": 835942253871849,
+        "presented_ns": 835942269842329
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 138.99998,
+        "injection_ns": 835942261846684,
+        "dispatch_ns": 835942269893529,
+        "received_ns": 835942269896279,
+        "commit_ns": 835942281738013,
+        "presented_ns": 835942293873156
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 108.33592,
+        "injection_ns": 835942285072751,
+        "dispatch_ns": 835942293925846,
+        "received_ns": 835942293930116,
+        "commit_ns": 835942293943906,
+        "presented_ns": 835942301886411
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 128.66406,
+        "injection_ns": 835942902842113,
+        "dispatch_ns": 835942912061968,
+        "received_ns": 835942912069328,
+        "commit_ns": 835942923724471,
+        "presented_ns": 835942936052354
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 159.33203,
+        "injection_ns": 835942926067120,
+        "dispatch_ns": 835942936102834,
+        "received_ns": 835942936106124,
+        "commit_ns": 835942936119784,
+        "presented_ns": 835942952079514
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 180.0,
+        "injection_ns": 835942941551011,
+        "dispatch_ns": 835942952130104,
+        "received_ns": 835942952133564,
+        "commit_ns": 835942964332557,
+        "presented_ns": 835942976104581
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 211.33203,
+        "injection_ns": 835942964778397,
+        "dispatch_ns": 835942976156321,
+        "received_ns": 835942976159481,
+        "commit_ns": 835942976173931,
+        "presented_ns": 835942992129591
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 237.33203,
+        "injection_ns": 835942984133726,
+        "dispatch_ns": 835942992186721,
+        "received_ns": 835942992189421,
+        "commit_ns": 835943004010525,
+        "presented_ns": 835943016159717
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 268.66406,
+        "injection_ns": 835943007358122,
+        "dispatch_ns": 835943016210817,
+        "received_ns": 835943016214007,
+        "commit_ns": 835943016228287,
+        "presented_ns": 835943024197663
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 247.66797,
+        "injection_ns": 835943625063365,
+        "dispatch_ns": 835943634301220,
+        "received_ns": 835943634309740,
+        "commit_ns": 835943646062663,
+        "presented_ns": 835943658256826
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 217.0,
+        "injection_ns": 835943648286021,
+        "dispatch_ns": 835943658297826,
+        "received_ns": 835943658300216,
+        "commit_ns": 835943658310956,
+        "presented_ns": 835943674293067
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 196.33594,
+        "injection_ns": 835943663770242,
+        "dispatch_ns": 835943674342826,
+        "received_ns": 835943674345996,
+        "commit_ns": 835943687090449,
+        "presented_ns": 835943698323102
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 165.0,
+        "injection_ns": 835943686997789,
+        "dispatch_ns": 835943698373212,
+        "received_ns": 835943698383142,
+        "commit_ns": 835943698402032,
+        "presented_ns": 835943714338303
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 138.99998,
+        "injection_ns": 835943706351458,
+        "dispatch_ns": 835943714396453,
+        "received_ns": 835943714399693,
+        "commit_ns": 835943726246796,
+        "presented_ns": 835943738369889
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 108.33592,
+        "injection_ns": 835943729575605,
+        "dispatch_ns": 835943738413009,
+        "received_ns": 835943738416089,
+        "commit_ns": 835943738428759,
+        "presented_ns": 835943746381155
+      }
+    ],
+    "injection_to_dispatch_ms": {
+      "n": 69,
+      "p50": 10.014144,
+      "p95": 11.871403,
+      "p99": 13.188213
+    },
+    "dispatch_to_commit_ms": {
+      "n": 69,
+      "p50": 10.477354,
+      "p95": 12.640333,
+      "p99": 17.7883
+    },
+    "commit_to_feedback_ms": {
+      "n": 69,
+      "p50": 12.236504,
+      "p95": 15.982111,
+      "p99": 68.83014
+    },
+    "injection_to_feedback_ms": {
+      "n": 69,
+      "p50": 32.018431,
+      "p95": 35.863049,
+      "p99": 94.101276
+    },
+    "source_hashes": {
+      "nacre_shell": "400569785fe77bc7c387364f51d1e4a404f6da56ce8da6b55f6be341ea4f6cbc",
+      "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+      "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+      "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff",
+      "bead_shell_tree": "d93dbffa8578f08567c6125bb174e53c96eea834e8f277e461286e4d89424ad7",
+      "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+      "capture_driver": "b4d909afe076db6bc1051b061eaf1b4ba27aa9a31a1006511274f6e62713de5c",
+      "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+    },
+    "memory": {
+      "idle": {
+        "pss_mib": 40.12890625,
+        "pss_anon_mib": 19.32421875,
+        "pss_file_mib": 20.111328125,
+        "pss_shmem_mib": 0.693359375,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 20.017578125
+      },
+      "open": {
+        "pss_mib": 56.08203125,
+        "pss_anon_mib": 29.3828125,
+        "pss_file_mib": 20.962890625,
+        "pss_shmem_mib": 5.736328125,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 35.119140625
+      },
+      "open_after_drags": {
+        "pss_mib": 59.228515625,
+        "pss_anon_mib": 32.53125,
+        "pss_file_mib": 20.9609375,
+        "pss_shmem_mib": 5.736328125,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 38.267578125
+      },
+      "closed": {
+        "pss_mib": 59.150390625,
+        "pss_anon_mib": 32.49609375,
+        "pss_file_mib": 20.9609375,
+        "pss_shmem_mib": 5.693359375,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 38.189453125
+      }
+    },
+    "requested_hz": 120,
+    "nested_niri_refresh_hz": 60.0,
+    "host_swapin": {
+      "pswpin_before": 4593526,
+      "pswpin_after": 4593526,
+      "pswpin_delta_pages": 0
+    },
+    "shell_trace_lines": {
+      "ui_commit": 87,
+      "ui_frame": 156,
+      "panel_presented": 156,
+      "pointer_visual_presented": 103,
+      "input_received": 0,
+      "qml_pointer": 0,
+      "qml_ui_presented": 0
+    },
+    "status": "captured"
+  },
+  "candidate": {
+    "method": "exact same-gesture injected coordinate joined to received pointer coordinate; visual feedback carries latest receipt and commit clocks",
+    "gestures_calibrated": 12,
+    "samples": [
+      {
+        "gesture": "pointer-01.log",
+        "x": 195.9,
+        "injection_ns": 835719442192494,
+        "dispatch_ns": 835719456178205,
+        "received_ns": 835719456180705,
+        "commit_ns": 835719468940028,
+        "presented_ns": 835719545117534
+      },
+      {
+        "gesture": "pointer-01.log",
+        "x": 268.56406,
+        "injection_ns": 835719496384982,
+        "dispatch_ns": 835719545238844,
+        "received_ns": 835719545240904,
+        "commit_ns": 835719556978517,
+        "presented_ns": 835719586727379
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 258.33594,
+        "injection_ns": 835720108364566,
+        "dispatch_ns": 835720111608974,
+        "received_ns": 835720111611044,
+        "commit_ns": 835720128443654,
+        "presented_ns": 835720141684536
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 227.0,
+        "injection_ns": 835720131592302,
+        "dispatch_ns": 835720141738836,
+        "received_ns": 835720141743446,
+        "commit_ns": 835720141764036,
+        "presented_ns": 835720157698477
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 206.33594,
+        "injection_ns": 835720147074963,
+        "dispatch_ns": 835720157747427,
+        "received_ns": 835720157750137,
+        "commit_ns": 835720168750820,
+        "presented_ns": 835720181720643
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 175.66797,
+        "injection_ns": 835720170300709,
+        "dispatch_ns": 835720181768593,
+        "received_ns": 835720181770873,
+        "commit_ns": 835720181785593,
+        "presented_ns": 835720197747404
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 149.66797,
+        "injection_ns": 835720189655258,
+        "dispatch_ns": 835720197806313,
+        "received_ns": 835720197808743,
+        "commit_ns": 835720208110497,
+        "presented_ns": 835720221759219
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 118.33592,
+        "injection_ns": 835720212879915,
+        "dispatch_ns": 835720221808619,
+        "received_ns": 835720221811799,
+        "commit_ns": 835720221830859,
+        "presented_ns": 835720237793130
+      },
+      {
+        "gesture": "pointer-02.log",
+        "x": 108.33592,
+        "injection_ns": 835720220620830,
+        "dispatch_ns": 835720229822605,
+        "received_ns": 835720229825645,
+        "commit_ns": 835720247978234,
+        "presented_ns": 835720253807251
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 128.66406,
+        "injection_ns": 835720838276790,
+        "dispatch_ns": 835720847547615,
+        "received_ns": 835720847554985,
+        "commit_ns": 835720859169848,
+        "presented_ns": 835720871480891
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 159.33203,
+        "injection_ns": 835720861503937,
+        "dispatch_ns": 835720871537731,
+        "received_ns": 835720871540361,
+        "commit_ns": 835720871554451,
+        "presented_ns": 835720887505601
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 180.0,
+        "injection_ns": 835720876987358,
+        "dispatch_ns": 835720887563931,
+        "received_ns": 835720887566821,
+        "commit_ns": 835720900140304,
+        "presented_ns": 835720911513738
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 211.33203,
+        "injection_ns": 835720900211294,
+        "dispatch_ns": 835720911562828,
+        "received_ns": 835720911565068,
+        "commit_ns": 835720911580758,
+        "presented_ns": 835720927540748
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 232.0,
+        "injection_ns": 835720915695705,
+        "dispatch_ns": 835720927599798,
+        "received_ns": 835720927603038,
+        "commit_ns": 835720939509331,
+        "presented_ns": 835720951565144
+      },
+      {
+        "gesture": "pointer-03.log",
+        "x": 268.66406,
+        "injection_ns": 835720942791879,
+        "dispatch_ns": 835720951614924,
+        "received_ns": 835720951617844,
+        "commit_ns": 835720951634984,
+        "presented_ns": 835720967597085
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 247.66797,
+        "injection_ns": 835721560586769,
+        "dispatch_ns": 835721569773704,
+        "received_ns": 835721569781994,
+        "commit_ns": 835721581454317,
+        "presented_ns": 835721593716150
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 217.0,
+        "injection_ns": 835721583811536,
+        "dispatch_ns": 835721593766120,
+        "received_ns": 835721593768400,
+        "commit_ns": 835721593783540,
+        "presented_ns": 835721609743041
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 196.33594,
+        "injection_ns": 835721599295737,
+        "dispatch_ns": 835721609801301,
+        "received_ns": 835721609804031,
+        "commit_ns": 835721621796744,
+        "presented_ns": 835721633756497
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 165.0,
+        "injection_ns": 835721622524023,
+        "dispatch_ns": 835721633812926,
+        "received_ns": 835721633815556,
+        "commit_ns": 835721633829746,
+        "presented_ns": 835721649774607
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 144.33594,
+        "injection_ns": 835721638005224,
+        "dispatch_ns": 835721649825007,
+        "received_ns": 835721649827577,
+        "commit_ns": 835721661592730,
+        "presented_ns": 835721673811403
+      },
+      {
+        "gesture": "pointer-04.log",
+        "x": 108.33592,
+        "injection_ns": 835721665104418,
+        "dispatch_ns": 835721673880503,
+        "received_ns": 835721673883993,
+        "commit_ns": 835721673904453,
+        "presented_ns": 835721689832574
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 128.66406,
+        "injection_ns": 835722283144718,
+        "dispatch_ns": 835722292360613,
+        "received_ns": 835722292365753,
+        "commit_ns": 835722304262686,
+        "presented_ns": 835722316319969
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 159.33203,
+        "injection_ns": 835722306372345,
+        "dispatch_ns": 835722316377689,
+        "received_ns": 835722316380669,
+        "commit_ns": 835722316397939,
+        "presented_ns": 835722332358430
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 180.0,
+        "injection_ns": 835722321855956,
+        "dispatch_ns": 835722332417700,
+        "received_ns": 835722332420440,
+        "commit_ns": 835722344219973,
+        "presented_ns": 835722356373866
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 211.33203,
+        "injection_ns": 835722345082182,
+        "dispatch_ns": 835722356426336,
+        "received_ns": 835722356429156,
+        "commit_ns": 835722356445406,
+        "presented_ns": 835722372396476
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 232.0,
+        "injection_ns": 835722360564363,
+        "dispatch_ns": 835722372457596,
+        "received_ns": 835722372461086,
+        "commit_ns": 835722384243659,
+        "presented_ns": 835722396422152
+      },
+      {
+        "gesture": "pointer-05.log",
+        "x": 268.66406,
+        "injection_ns": 835722387661077,
+        "dispatch_ns": 835722396489062,
+        "received_ns": 835722396492362,
+        "commit_ns": 835722396512992,
+        "presented_ns": 835722412442663
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 247.66797,
+        "injection_ns": 835723005394978,
+        "dispatch_ns": 835723014563412,
+        "received_ns": 835723014568982,
+        "commit_ns": 835723026227755,
+        "presented_ns": 835723038513928
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 217.0,
+        "injection_ns": 835723028620774,
+        "dispatch_ns": 835723038574988,
+        "received_ns": 835723038578268,
+        "commit_ns": 835723038595978,
+        "presented_ns": 835723054550689
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 196.33594,
+        "injection_ns": 835723044104735,
+        "dispatch_ns": 835723054606089,
+        "received_ns": 835723054610559,
+        "commit_ns": 835723066775632,
+        "presented_ns": 835723078565575
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 165.0,
+        "injection_ns": 835723067333251,
+        "dispatch_ns": 835723078627115,
+        "received_ns": 835723078630615,
+        "commit_ns": 835723078648915,
+        "presented_ns": 835723094590156
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 144.33594,
+        "injection_ns": 835723082817642,
+        "dispatch_ns": 835723094647185,
+        "received_ns": 835723094649945,
+        "commit_ns": 835723106704178,
+        "presented_ns": 835723118617311
+      },
+      {
+        "gesture": "pointer-06.log",
+        "x": 108.33592,
+        "injection_ns": 835723109913207,
+        "dispatch_ns": 835723118680781,
+        "received_ns": 835723118686451,
+        "commit_ns": 835723118705731,
+        "presented_ns": 835723126625457
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 128.66406,
+        "injection_ns": 835723728004106,
+        "dispatch_ns": 835723737061841,
+        "received_ns": 835723737066941,
+        "commit_ns": 835723748847884,
+        "presented_ns": 835723761031937
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 159.33203,
+        "injection_ns": 835723751235493,
+        "dispatch_ns": 835723761081837,
+        "received_ns": 835723761084137,
+        "commit_ns": 835723761101147,
+        "presented_ns": 835723777055158
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 180.0,
+        "injection_ns": 835723766719664,
+        "dispatch_ns": 835723777112088,
+        "received_ns": 835723777114918,
+        "commit_ns": 835723788780351,
+        "presented_ns": 835723801072804
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 211.33203,
+        "injection_ns": 835723789943720,
+        "dispatch_ns": 835723801126014,
+        "received_ns": 835723801128794,
+        "commit_ns": 835723801144954,
+        "presented_ns": 835723817089834
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 232.0,
+        "injection_ns": 835723805428571,
+        "dispatch_ns": 835723817150504,
+        "received_ns": 835723817153824,
+        "commit_ns": 835723828863788,
+        "presented_ns": 835723841107970
+      },
+      {
+        "gesture": "pointer-07.log",
+        "x": 268.66406,
+        "injection_ns": 835723832524495,
+        "dispatch_ns": 835723841152990,
+        "received_ns": 835723841155270,
+        "commit_ns": 835723841169840,
+        "presented_ns": 835723857141031
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 247.66797,
+        "injection_ns": 835724450385105,
+        "dispatch_ns": 835724459595260,
+        "received_ns": 835724459599980,
+        "commit_ns": 835724471351943,
+        "presented_ns": 835724483569056
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 217.0,
+        "injection_ns": 835724473609112,
+        "dispatch_ns": 835724483624406,
+        "received_ns": 835724483627296,
+        "commit_ns": 835724483643486,
+        "presented_ns": 835724499595827
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 196.33594,
+        "injection_ns": 835724489094663,
+        "dispatch_ns": 835724499651247,
+        "received_ns": 835724499653927,
+        "commit_ns": 835724511717650,
+        "presented_ns": 835724523612873
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 165.0,
+        "injection_ns": 835724512319549,
+        "dispatch_ns": 835724523673223,
+        "received_ns": 835724523676523,
+        "commit_ns": 835724523696713,
+        "presented_ns": 835724539637733
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 144.33594,
+        "injection_ns": 835724527802070,
+        "dispatch_ns": 835724539699143,
+        "received_ns": 835724539704433,
+        "commit_ns": 835724551512476,
+        "presented_ns": 835724563664770
+      },
+      {
+        "gesture": "pointer-08.log",
+        "x": 108.33592,
+        "injection_ns": 835724554899015,
+        "dispatch_ns": 835724563718150,
+        "received_ns": 835724563721220,
+        "commit_ns": 835724563740160,
+        "presented_ns": 835724579693390
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 128.66406,
+        "injection_ns": 835725173105464,
+        "dispatch_ns": 835725182331509,
+        "received_ns": 835725182336189,
+        "commit_ns": 835725194125052,
+        "presented_ns": 835725206277015
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 159.33203,
+        "injection_ns": 835725196332481,
+        "dispatch_ns": 835725206328595,
+        "received_ns": 835725206331455,
+        "commit_ns": 835725206348335,
+        "presented_ns": 835725222321696
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 180.0,
+        "injection_ns": 835725211815072,
+        "dispatch_ns": 835725222379986,
+        "received_ns": 835725222382656,
+        "commit_ns": 835725234145859,
+        "presented_ns": 835725246338482
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 211.33203,
+        "injection_ns": 835725235005789,
+        "dispatch_ns": 835725246389852,
+        "received_ns": 835725246392652,
+        "commit_ns": 835725246410412,
+        "presented_ns": 835725262371412
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 232.0,
+        "injection_ns": 835725250524189,
+        "dispatch_ns": 835725262427012,
+        "received_ns": 835725262429702,
+        "commit_ns": 835725273968536,
+        "presented_ns": 835725286400958
+      },
+      {
+        "gesture": "pointer-09.log",
+        "x": 268.66406,
+        "injection_ns": 835725277622033,
+        "dispatch_ns": 835725286454448,
+        "received_ns": 835725286456808,
+        "commit_ns": 835725286471788,
+        "presented_ns": 835725294416304
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 247.66797,
+        "injection_ns": 835725895511084,
+        "dispatch_ns": 835725904727138,
+        "received_ns": 835725904734148,
+        "commit_ns": 835725916785141,
+        "presented_ns": 835725928662464
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 217.0,
+        "injection_ns": 835725918736660,
+        "dispatch_ns": 835725928714394,
+        "received_ns": 835725928717304,
+        "commit_ns": 835725928734954,
+        "presented_ns": 835725944686275
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 196.33594,
+        "injection_ns": 835725934221221,
+        "dispatch_ns": 835725944741725,
+        "received_ns": 835725944744395,
+        "commit_ns": 835725956943848,
+        "presented_ns": 835725968702611
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 165.0,
+        "injection_ns": 835725957446767,
+        "dispatch_ns": 835725968755581,
+        "received_ns": 835725968758511,
+        "commit_ns": 835725968776981,
+        "presented_ns": 835725984723342
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 144.33594,
+        "injection_ns": 835725972930758,
+        "dispatch_ns": 835725984780452,
+        "received_ns": 835725984783722,
+        "commit_ns": 835725996755555,
+        "presented_ns": 835726008759217
+      },
+      {
+        "gesture": "pointer-10.log",
+        "x": 108.33592,
+        "injection_ns": 835726000005343,
+        "dispatch_ns": 835726008810727,
+        "received_ns": 835726008813037,
+        "commit_ns": 835726008829347,
+        "presented_ns": 835726016765873
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 128.66406,
+        "injection_ns": 835726618283862,
+        "dispatch_ns": 835726627582887,
+        "received_ns": 835726627589207,
+        "commit_ns": 835726639292480,
+        "presented_ns": 835726651516503
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 159.33203,
+        "injection_ns": 835726641509349,
+        "dispatch_ns": 835726651560733,
+        "received_ns": 835726651562963,
+        "commit_ns": 835726651576453,
+        "presented_ns": 835726667545784
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 180.0,
+        "injection_ns": 835726656993160,
+        "dispatch_ns": 835726667602514,
+        "received_ns": 835726667605214,
+        "commit_ns": 835726679501487,
+        "presented_ns": 835726691565270
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 211.33203,
+        "injection_ns": 835726680218276,
+        "dispatch_ns": 835726691633490,
+        "received_ns": 835726691636790,
+        "commit_ns": 835726691655940,
+        "presented_ns": 835726707595780
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 237.33203,
+        "injection_ns": 835726699574295,
+        "dispatch_ns": 835726707654820,
+        "received_ns": 835726707657310,
+        "commit_ns": 835726719315934,
+        "presented_ns": 835726731615926
+      },
+      {
+        "gesture": "pointer-11.log",
+        "x": 268.66406,
+        "injection_ns": 835726722799271,
+        "dispatch_ns": 835726731661126,
+        "received_ns": 835726731663386,
+        "commit_ns": 835726731677776,
+        "presented_ns": 835726739628192
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 247.66797,
+        "injection_ns": 835727341003801,
+        "dispatch_ns": 835727350265316,
+        "received_ns": 835727350271996,
+        "commit_ns": 835727362104449,
+        "presented_ns": 835727374230942
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 217.0,
+        "injection_ns": 835727364274548,
+        "dispatch_ns": 835727374285872,
+        "received_ns": 835727374288632,
+        "commit_ns": 835727374305272,
+        "presented_ns": 835727390255103
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 196.33594,
+        "injection_ns": 835727379757099,
+        "dispatch_ns": 835727390313933,
+        "received_ns": 835727390316613,
+        "commit_ns": 835727402544326,
+        "presented_ns": 835727414309728
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 165.0,
+        "injection_ns": 835727402981335,
+        "dispatch_ns": 835727414359438,
+        "received_ns": 835727414361748,
+        "commit_ns": 835727414375668,
+        "presented_ns": 835727430331489
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 138.99998,
+        "injection_ns": 835727422337344,
+        "dispatch_ns": 835727430388049,
+        "received_ns": 835727430390399,
+        "commit_ns": 835727442285102,
+        "presented_ns": 835727454359515
+      },
+      {
+        "gesture": "pointer-12.log",
+        "x": 108.33592,
+        "injection_ns": 835727445563311,
+        "dispatch_ns": 835727454411995,
+        "received_ns": 835727454414945,
+        "commit_ns": 835727454432045,
+        "presented_ns": 835727462371351
+      }
+    ],
+    "injection_to_dispatch_ms": {
+      "n": 69,
+      "p50": 10.033794,
+      "p95": 11.902823,
+      "p99": 48.853862
+    },
+    "dispatch_to_commit_ms": {
+      "n": 69,
+      "p50": 11.003393,
+      "p95": 12.576373,
+      "p99": 18.155629
+    },
+    "commit_to_feedback_ms": {
+      "n": 69,
+      "p50": 12.311043,
+      "p95": 15.971191,
+      "p99": 76.177506
+    },
+    "injection_to_feedback_ms": {
+      "n": 69,
+      "p50": 32.041631,
+      "p95": 35.869439,
+      "p99": 102.92504
+    },
+    "source_hashes": {
+      "nacre_shell": "28ff9fc35f081a7ea2e4eb50332a1233c64231908910489cfdafe50057c86637",
+      "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+      "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+      "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff",
+      "bead_shell_tree": "d93dbffa8578f08567c6125bb174e53c96eea834e8f277e461286e4d89424ad7",
+      "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+      "capture_driver": "b4d909afe076db6bc1051b061eaf1b4ba27aa9a31a1006511274f6e62713de5c",
+      "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+    },
+    "memory": {
+      "idle": {
+        "pss_mib": 40.220703125,
+        "pss_anon_mib": 19.46484375,
+        "pss_file_mib": 20.0625,
+        "pss_shmem_mib": 0.693359375,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 20.158203125
+      },
+      "open": {
+        "pss_mib": 56.2607421875,
+        "pss_anon_mib": 29.515625,
+        "pss_file_mib": 21.0087890625,
+        "pss_shmem_mib": 5.736328125,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 35.251953125
+      },
+      "open_after_drags": {
+        "pss_mib": 58.5947265625,
+        "pss_anon_mib": 31.8515625,
+        "pss_file_mib": 21.0068359375,
+        "pss_shmem_mib": 5.736328125,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 37.587890625
+      },
+      "closed": {
+        "pss_mib": 58.9462890625,
+        "pss_anon_mib": 32.24609375,
+        "pss_file_mib": 21.0068359375,
+        "pss_shmem_mib": 5.693359375,
+        "swap_pss_mib": 0.0,
+        "drm_mib": 0,
+        "unreclaimable_mib": 37.939453125
+      }
+    },
+    "requested_hz": 120,
+    "nested_niri_refresh_hz": 60.0,
+    "host_swapin": {
+      "pswpin_before": 4593526,
+      "pswpin_after": 4593526,
+      "pswpin_delta_pages": 0
+    },
+    "painted_thumb_frames": {
+      "visible": 40,
+      "total": 41
+    },
+    "shell_trace_lines": {
+      "ui_commit": 89,
+      "ui_frame": 156,
+      "panel_presented": 156,
+      "pointer_visual_presented": 103,
+      "input_received": 0,
+      "qml_pointer": 0,
+      "qml_ui_presented": 0
+    },
+    "status": "captured"
+  },
+  "wire": {
+    "method": "same-coordinate wire motion joined to first following handler within 5ms",
+    "n": 372,
+    "wire_to_handler_ms": {
+      "p50": 0.00293,
+      "p95": 0.00616,
+      "p99": 0.00749
+    },
+    "max_ms": 0.01348
+  }
+}

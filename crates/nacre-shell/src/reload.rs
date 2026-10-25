@@ -169,6 +169,7 @@ pub struct Runtime {
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     slider_sent: Option<std::time::Instant>,
     slider_pending: Option<UiEvent>,
+    slider_release_serial: u64,
     launcher_memory: Option<crate::launcher::Memory>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
@@ -648,6 +649,7 @@ impl Runtime {
             dashboard_subscription: Vec::new(),
             slider_sent: None,
             slider_pending: None,
+            slider_release_serial: 0,
             launcher_memory: None,
             connection_status: None,
             connection_subscription: None,
@@ -2674,8 +2676,32 @@ impl SceneSource for Runtime {
                 for hit in hits {
                     grab = grab.union(bead::ui::rect(&hit.draw));
                 }
+                let fill = motion.get("fill").and_then(|fill| {
+                    let id = format!("{scope}.{}", fill.get("id")?.as_str()?);
+                    let rect = self.session.paint_bounds(&id)?;
+                    Some(bead::wayland::DragFill {
+                        id,
+                        rect,
+                        minimum: fill.get("minimum")?.as_f64()? as f32,
+                        radius: fill.get("radius")?.as_f64()? as f32,
+                        gradient_min: fill.get("gradient_min")?.as_f64()? as f32,
+                        from: self.session.paint_color(fill.get("from")?)?,
+                        to: self.session.paint_color(fill.get("to")?)?,
+                    })
+                });
+                if motion.get("fill").is_some() && fill.is_none() {
+                    return None;
+                }
                 let inset = first.preview_inset;
-                let start = thumb_rect.x - fraction * travel;
+                let start = motion
+                    .get("origin")
+                    .and_then(|origin| origin.as_f64())
+                    .and_then(|origin| {
+                        self.session
+                            .paint_bounds(scope)
+                            .map(|rect| rect.x + origin as f32)
+                    })
+                    .unwrap_or(thumb_rect.x - fraction * travel);
                 let end = start + travel;
                 let pointer = (grab.x + inset, grab.x + grab.w - inset);
                 (travel.is_finite()
@@ -2692,6 +2718,8 @@ impl SceneSource for Runtime {
                         grab,
                         travel: (start, end),
                         pointer,
+                        fill,
+                        release_serial: self.slider_release_serial,
                     })
             })
             .collect()
@@ -3201,6 +3229,11 @@ impl SceneSource for Runtime {
         self.session.watch(wakeup)
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        if matches!(event, UiEvent::Release)
+            && self.session.stores.get("bead.pressed") == Some(&bead::core::Value::Bool(true))
+        {
+            self.slider_release_serial = self.slider_release_serial.wrapping_add(1);
+        }
         if let UiEvent::Click { x, y } | UiEvent::Drag { x, y } | UiEvent::Hover { x, y } = &event {
             self.pointer_at = (*x, *y);
         }

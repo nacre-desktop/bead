@@ -19,7 +19,9 @@ The continuation targets immediate dispatch, shared fill/handle pose and local
 slider updates, with a revised 120 Hz total p95 ≤25 ms gate.
 The first continuation handles established drag motion directly on Wayland event
 dispatch and submits the latest pose after fd drain; full Arch CI passes. Fresh
-matched timing, coherent fill and local-update work continue.
+matched timing records no end-to-end improvement (35.863→35.869 ms p95).
+Shared fill and handle now use one value/buffer; pixel and full Arch CI checks
+pass. Fresh presented-frame checks and the no-layout continuation remain open.
 Five-pair median costs peak at +0.711 MiB CPU / +0.914 MiB pinned GL,
 within the declared 1 MiB budget; absolute GL retention is substantial. Pixel
 error, general dragging and complete smoothness remain unproven.

@@ -23,8 +23,25 @@ serials. Non-motion events are ordering barriers. Only the latest stored pose is
 submitted after the ready fd drains, before the event loop sleeps; no motion timer
 or next-frame callback delays input dispatch. The existing single outstanding
 parent callback still paces commits. Raw-wire/handler clocks distinguish client
-queueing from the upstream nested input path. Full Arch CI passes; fresh matched
-120 Hz captures are pending, so no new latency win is claimed here.
+queueing from the upstream nested input path. Full Arch CI passes. A fresh matched
+CPU pair gives total p50/p95 32.018/35.863 ms before and 32.042/35.869 ms after;
+no measurable end-to-end gain. Wire→handler p95 is 0.006 ms (372 motions).
+The parent is 120 Hz while nested niri still advertises 60 Hz; this does not
+establish physical 120 Hz performance. The new 25 ms gate remains open.
+[Exact joined timing records and source hashes](evidence/0126/dispatch-results.json).
+
+## Continuation: shared slider paint
+
+The toolkit exports one stable slider scope, its fill style and its travel origin.
+Fill and handle are painted from the same pose into one synchronized SHM child;
+only its 16 px-high damage region is repainted. Two reusable slots are bounded
+at 128 KiB total. No font system or panel scene is constructed for this paint.
+Clip/occlusion changes safely restore ordinary rendering. Release uses an accepted
+transaction serial, preserving the final pending value before restoring the parent.
+Pixel tests cover 101 poses at scales 1 and 1.5; descriptor origins also pass at
+1, 1.5 and 2. Full Arch CI passes; presented-frame and memory results follow.
+The child uses a continuous linear gradient like QML; idle kit Fill retains its
+stepped approximation, a known color-interpolation difference on handover.
 
 ## Experiment
 
