@@ -215,5 +215,7 @@ both the text-width and pointer-region generalization entries are retained.
 The sidebar runtime/edge routes and all three caption-pearl calculations carry
 over unchanged; status widgets keep their stable peek kinds and shared reveal
 configuration. Existing evidence remains pinned to its measured source revisions.
-Fresh full remote CI is required for this integrated tree; no new desktop capture
-or live-session change is part of the lead integration decision.
+Full remote Arch CI on `f6e4e85` passes: exit 0, `CI_ALL_OK`, 608 nacre-shell
+tests passed / 0 failed / 1 ignored, and all renderer, facade, lifecycle and
+dependency/license stages completed. No new desktop capture or live-session
+change is part of the lead integration decision.

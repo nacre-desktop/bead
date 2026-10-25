@@ -49,5 +49,9 @@
     "memory-warm-delayed.json"
   ],
   "integration_base": "a396a830d5bb0aec3bcfd371b30761691959d65a",
-  "integration_limit": "Earlier captures remain source-pinned; integrated widget/spacing tree receives fresh full remote CI."
+  "integration_limit": "Earlier captures remain source-pinned; integrated widget/spacing tree receives fresh full remote CI.",
+  "integrated_ci_source": "f6e4e85311a25b35c136cd580ceb57555dbac6b0",
+  "integrated_ci_tree": "5a8089c1758d439f2cc1fcadc79d669f5ad993fc",
+  "integrated_ci_snapshot": "afd8b363d94e5d63077840035722e2ad20c8968b",
+  "integrated_ci_result": "exit 0, CI_ALL_OK; 608 nacre-shell tests passed, 0 failed, 1 ignored; all current stages completed"
 }

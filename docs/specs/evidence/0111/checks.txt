@@ -1,3 +1,21 @@
+Lead-accepted integration — 2026-10-25
+Source: f6e4e85311a25b35c136cd580ceb57555dbac6b0
+Base: a396a830d5bb0aec3bcfd371b30761691959d65a (B0113/B0118/B0120/B0119)
+Exact tree: 5a8089c1758d439f2cc1fcadc79d669f5ad993fc
+Private exact-tree snapshot: afd8b363d94e5d63077840035722e2ad20c8968b
+Command: nice -n 10 bash docs/specs/evidence/0108/check.sh
+Result: exit 0, CI_ALL_OK; nacre-shell 608 passed, 0 failed, 1 ignored.
+All current workflow-equivalent stages completed, including renderer feature
+configurations, facade/Luau, capture-window, packaging, wallpaper smoke, private
+service/SNI/DBusMenu lifecycles and all cargo-deny graphs.
+The source rebase preserved widget/bar files and B0120 bar goldens. Both appended
+ADR notes were retained in the only conflict; no integration source repair needed.
+An earlier CI session ended without an exit record and is excluded. The complete
+rerun used a detached host nohup/setsid wrapper because host tmux was unavailable;
+no shared host package was installed. Container remained capped at 8 CPU/12 GiB.
+
+Historical source-pinned validation follows:
+
 B0111 final remote Arch CI-equivalent
 Source: 4f9590bbb7820cf3dee795599cb1d56cbfebeeb4
 Private exact-tree CI snapshot: 02dbe9ef0d1976aa3e41fa589117a87c5b3ea52f

@@ -7,11 +7,13 @@ niri runs deliver keyboard input 100/100 times versus control 0/10; the 4 Hz tit
 spinner costs 0.400% core, with no per-title backend log or same-width title layout.
 Full remote CI passes; widget-host and B0120 changes are preserved. No live change.
 [Cause, measurements and traces](specs/0119-click-focus.md).
+
 ## 2026-10-25 — B0111 lead-accepted integration
 
 Notifications share the permanent daemon source; sidebar hover/cached visibility
 and caption-centred dashboard pearls are accepted for integration with B0113 widgets
-and B0120 spacing. Full remote CI is being rerun on the integrated tree.
+and B0120 spacing, retaining B0119 focus fixes. Full remote Arch CI passes on
+`f6e4e85` (608 nacre-shell tests passed, zero failed).
 lead-accepted 2026-10-25: Today/Quick closed deltas +0.6..+2.6 MiB; consolidated memory review follows
 Failed measurements and keybind/peek proof limits remain in the
 [spec and evidence](specs/0111-live-bugs.md). No live deployment.
